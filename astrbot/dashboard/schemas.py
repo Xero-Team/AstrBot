@@ -182,7 +182,6 @@ class GhProxyTestRequest(BaseModel):
 class OpenApiChatRequest(OpenModel):
     message: Any = None
     session_id: str | None = None
-    conversation_id: str | None = None
     username: str | None = Field(
         default=None,
         description=(

@@ -51,7 +51,7 @@ import asyncio
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, PlatformMetadata, MessageType
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain, Image, Record # Message chain components, import as needed
-from astrbot.core.platform.message_session import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
@@ -69,7 +69,7 @@ class FakePlatformAdapter(Platform):
         self.config = platform_config # The default config above; filled in by the user and passed here
         self.settings = platform_settings # platform_settings: platform settings
     
-    async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
+    async def send_by_session(self, session: MessageSession, message_chain: MessageChain):
         # Must be implemented
         await super().send_by_session(session, message_chain)
     
@@ -159,7 +159,6 @@ Platform adapters do not need to reimplement media parsing for every platform. C
 - HTTP(S) URL, such as `https://example.com/a.jpg`
 - `base64://`, such as `base64://iVBORw0KGgo...`
 - Data URI, such as `data:image/png;base64,iVBORw0KGgo...`
-- Legacy bare base64, such as `iVBORw0KGgo...`; supported for compatibility, but new code should not generate it intentionally
 
 If you already have a local file, prefer the component factory methods. They generate standard `file:` URIs:
 

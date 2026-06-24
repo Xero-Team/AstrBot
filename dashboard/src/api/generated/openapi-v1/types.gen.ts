@@ -86,12 +86,11 @@ export type ChatProjectRequest = {
 };
 
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
-    /**
-     * Deprecated alias for session_id.
-     */
-    conversation_id?: string;
     message: (string | Array<MessagePart>);
     config_id?: string;
     config_name?: string;
@@ -1710,39 +1709,6 @@ export type SetPluginEnabledByIdResponse = (SuccessEnvelope);
 
 export type SetPluginEnabledByIdError = unknown;
 
-export type ListPluginPagesByIdData = {
-    query: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesByIdResponse = (SuccessEnvelope);
-
-export type ListPluginPagesByIdError = unknown;
-
-export type GetPluginPageByIdData = {
-    query: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageByIdResponse = (string);
-
-export type GetPluginPageByIdError = unknown;
-
-export type GetPluginPageAssetByIdData = {
-    query: {
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetByIdResponse = (unknown);
-
-export type GetPluginPageAssetByIdError = unknown;
-
 export type GetPluginData = {
     body?: {
         delete_config?: boolean;
@@ -2028,105 +1994,6 @@ export type DeletePluginSourceByIdData = {
 export type DeletePluginSourceByIdResponse = (SuccessEnvelope);
 
 export type DeletePluginSourceByIdError = unknown;
-
-export type ListPluginPagesData = {
-    path: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesResponse = (SuccessEnvelope);
-
-export type ListPluginPagesError = unknown;
-
-export type GetPluginPageData = {
-    path: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageResponse = (string);
-
-export type GetPluginPageError = unknown;
-
-export type GetPluginPageAssetData = {
-    path: {
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetResponse = (unknown);
-
-export type GetPluginPageAssetError = unknown;
-
-export type GetPluginPageBridgeSdkResponse = (string);
-
-export type GetPluginPageBridgeSdkError = unknown;
-
-export type GetPluginExtensionRouteData = {
-    path: {
-        /**
-         * Plugin extension path after /api/plug/. It may contain slash-separated segments.
-         */
-        plugin_path: string;
-    };
-};
-
-export type GetPluginExtensionRouteResponse = (SuccessEnvelope);
-
-export type GetPluginExtensionRouteError = unknown;
-
-export type PostPluginExtensionRouteData = {
-    body?: DynamicConfig;
-    path: {
-        /**
-         * Plugin extension path after /api/plug/. It may contain slash-separated segments.
-         */
-        plugin_path: string;
-    };
-};
-
-export type PostPluginExtensionRouteResponse = (SuccessEnvelope);
-
-export type PostPluginExtensionRouteError = unknown;
-
-export type PutPluginExtensionRouteData = {
-    body?: DynamicConfig;
-    path: {
-        plugin_path: string;
-    };
-};
-
-export type PutPluginExtensionRouteResponse = (SuccessEnvelope);
-
-export type PutPluginExtensionRouteError = unknown;
-
-export type PatchPluginExtensionRouteData = {
-    body?: DynamicConfig;
-    path: {
-        plugin_path: string;
-    };
-};
-
-export type PatchPluginExtensionRouteResponse = (SuccessEnvelope);
-
-export type PatchPluginExtensionRouteError = unknown;
-
-export type DeletePluginExtensionRouteData = {
-    path: {
-        plugin_path: string;
-    };
-};
-
-export type DeletePluginExtensionRouteResponse = (SuccessEnvelope);
-
-export type DeletePluginExtensionRouteError = unknown;
 
 export type ListCommandsData = {
     query?: {

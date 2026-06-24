@@ -12,13 +12,14 @@
 目前，AstrBot 的沙盒环境驱动器支持：
 
 - `Shipyard Neo`（当前推荐）
-- `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
+
+旧版 `Shipyard` 驱动器已移除，不再支持部署、配置或运行时兼容。
 
 在当前版本的 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
 
 - `Computer Use Runtime` = `sandbox`
-- `沙箱环境驱动器` = `Shipyard Neo`、`Shipyard` 或 `CUA`
+- `沙箱环境驱动器` = `Shipyard Neo` 或 `CUA`
 
 其中，`Shipyard Neo` 是当前默认驱动器。它由 Bay、Ship、Gull 三部分组成：
 
@@ -372,44 +373,6 @@ gc:
 
 关于 TTL 与数据持久化的更详细说明，请参考下文的“关于 `Shipyard Neo Sandbox TTL`”与“关于沙盒环境的数据持久化”小节。
 
-## 旧方案：Shipyard
-
-以下内容为旧版 `Shipyard` 驱动器的部署与配置说明，仍然保留，供兼容旧部署方案时参考。
-
-### 使用 Docker Compose 部署 AstrBot 和 Shipyard
-
-如果您还没有部署 AstrBot，或者想更换为我们推荐的带沙盒环境的部署方式，推荐使用 Docker Compose 来部署 AstrBot，代码如下：
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot
-cd AstrBot
-# 修改 compose-with-shipyard.yml 文件中的环境变量配置，例如 Shipyard 的 access token 等
-docker compose -f compose-with-shipyard.yml up -d
-docker pull soulter/shipyard-ship:latest
-```
-
-这会启动一个包含 AstrBot 主程序和沙盒环境的 Docker Compose 服务。
-
-### 单独部署 Shipyard
-
-如果您已经部署了 AstrBot，但没有部署沙盒环境，可以单独部署 Shipyard。
-
-代码如下：
-
-```bash
-mkdir astrbot-shipyard
-cd astrbot-shipyard
-wget https://raw.githubusercontent.com/AstrBotDevs/shipyard/refs/heads/main/pkgs/bay/docker-compose.yml -O docker-compose.yml
-# 修改 compose-with-shipyard.yml 文件中的环境变量配置，例如 Shipyard 的 access token 等
-docker compose -f docker-compose.yml up -d
-docker pull soulter/shipyard-ship:latest
-```
-
-部署成功后，上述命令会启动一个 Shipyard 服务，默认监听在 `http://<your-host>:8156`。
-
-> [!TIP]
-> 如果您使用 Docker 部署 AstrBot，您也可以修改上面的 Compose 文件，将 Shipyard 的网络与 AstrBot 放在同一个 Docker 网络中，这样就不需要暴露 Shipyard 的端口到宿主机。
-
 ## 配置 AstrBot 使用沙盒环境
 
 > [!TIP]
@@ -418,7 +381,7 @@ docker pull soulter/shipyard-ship:latest
 在 AstrBot 控制台，进入 “AI 配置” -> “Agent Computer Use”。
 
 1. 将 `Computer Use Runtime` 设为 `sandbox`
-2. 在 `沙箱环境驱动器` 中选择 `Shipyard Neo` 或 `Shipyard`
+2. 在 `沙箱环境驱动器` 中选择 `Shipyard Neo` 或 `CUA`
 3. 根据驱动器填写对应配置项
 4. 点击右下角“保存”
 
@@ -438,20 +401,6 @@ docker pull soulter/shipyard-ship:latest
 - `Shipyard Neo Sandbox TTL`
   - sandbox 生命周期上限，默认值为 3600 秒（1 小时）
 
-### 配置 Shipyard（旧方案）
-
-如果您选择的是旧版 `Shipyard`，配置项如下：
-
-- `Shipyard API Endpoint`
-  - 如果您使用上述 Docker Compose 部署方式，填写 `http://shipyard:8156` 即可
-  - 如果您是单独部署的 Shipyard，请填写对应地址，例如 `http://<your-host>:8156`
-- `Shipyard Access Token`
-  - 请填写部署 Shipyard 时配置的访问令牌
-- `Shipyard Ship 存活时间(秒)`
-  - 定义每个沙箱环境实例的存活时间，默认值为 3600 秒（1 小时）
-- `Shipyard Ship 会话复用上限`
-  - 定义每个沙箱环境实例可以复用的最大会话数，默认值为 10
-
 ## 关于 `Shipyard Neo Sandbox TTL`
 
 在 `Shipyard Neo` 中：
@@ -460,15 +409,6 @@ docker pull soulter/shipyard-ship:latest
 - profile 还会定义一个独立的空闲超时（`idle_timeout`）
 - AstrBot 发起能力调用时，通常会刷新空闲超时，而不是直接延长 TTL
 - `keepalive` 只会延长空闲超时，不会自动启动新的 session，也不会延长 TTL
-
-## 关于 `Shipyard Ship 存活时间(秒)`
-
-以下说明仅适用于旧版 `Shipyard`：
-
-沙箱环境实例的存活时间定义了每个实例在被销毁之前可以存在的最长时间，这个时间的设置需要根据您的使用场景以及资源来决定。
-
-- 新的会话加入已有的沙箱环境实例时，该实例会自动延长存活时间到这个会话请求的 TTL。
-- 当对沙箱环境实例执行操作后，该实例会自动延长存活时间到当前时间加上 TTL。
 
 ## 关于沙盒环境的数据持久化
 
@@ -481,12 +421,6 @@ docker pull soulter/shipyard-ship:latest
 - 文件系统数据保存在 Cargo 中，并挂载到 `/workspace`
 - 即使底层 Session 被停止或重建，Cargo 中的数据通常仍可保留
 - 对于带浏览器能力的 profile，浏览器状态也可能会一起持久化，例如 `/workspace/.browser/profile/`
-
-### Shipyard（旧方案）
-
-Shipyard 会给每个会话分配一个工作目录，在 `/home/<会话唯一 ID>` 目录下。
-
-Shipyard 会自动将沙盒环境中的 /home 目录挂载到宿主机的 `${PWD}/data/shipyard/ship_mnt_data` 目录下，当沙盒环境实例被销毁后，如果某个会话继续请求调用沙箱，Shipyard 会重新创建一个新的沙盒环境实例，并将之前持久化的数据重新挂载进去，保证数据的连续性。
 
 ## 其他同类社区插件
 

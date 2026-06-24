@@ -311,15 +311,6 @@ async def send_im_message(
     return ok()
 
 
-@router.post("/im/message", include_in_schema=False)
-async def send_im_message_alias(
-    payload: ImMessageRequest,
-    auth: AuthContext = Depends(require_im_scope),
-    service: OpenApiService = Depends(get_service),
-):
-    return await send_im_message(payload, auth, service)
-
-
 @router.get("/im/bots")
 async def list_im_bots(
     _request: Request,

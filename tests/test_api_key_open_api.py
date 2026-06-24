@@ -31,7 +31,7 @@ async def _create_api_key(
 ) -> tuple[str, str]:
     test_client = app.test_client()
     create_res = await test_client.post(
-        "/api/apikey/create",
+        "/api/v1/api-keys",
         json={"name": f"{name_prefix}-{uuid.uuid4().hex[:8]}", "scopes": scopes},
         headers=authenticated_header,
     )
@@ -100,7 +100,7 @@ async def authenticated_header(
 ):
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
             "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -159,8 +159,7 @@ async def test_api_key_scope_and_revoke(
     assert denied_res.status_code == 403
 
     revoke_res = await test_client.post(
-        "/api/apikey/revoke",
-        json={"key_id": key_id},
+        f"/api/v1/api-keys/{key_id}/revoke",
         headers=authenticated_header,
     )
     assert revoke_res.status_code == 200
@@ -188,7 +187,7 @@ async def test_open_send_message_with_api_key(
     )
 
     send_res = await test_client.post(
-        "/api/v1/im/message",
+        "/api/v1/im/messages",
         json={
             "umo": "webchat:FriendMessage:open_api_test_session",
             "message": "hello",
@@ -428,7 +427,7 @@ async def test_open_api_auth_validation_and_key_carriers(
 
 
 @pytest.mark.asyncio
-async def test_open_chat_send_conversation_alias_and_blank_username(
+async def test_open_chat_rejects_blank_username_and_uses_session_id(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -443,10 +442,7 @@ async def test_open_chat_send_conversation_alias_and_blank_username(
     )
 
     async def fake_chat_response(_chat_service, _username: str, post_data: dict):
-        resolved_session_id = post_data.get("session_id") or post_data.get(
-            "conversation_id"
-        )
-        return ok({"session_id": resolved_session_id})
+        return ok({"session_id": post_data.get("session_id")})
 
     monkeypatch.setattr(
         open_api_routes,
@@ -454,13 +450,13 @@ async def test_open_chat_send_conversation_alias_and_blank_username(
         fake_chat_response,
     )
 
-    conversation_id = f"open_api_conversation_{uuid.uuid4().hex[:10]}"
+    session_id = f"open_api_session_{uuid.uuid4().hex[:10]}"
     send_res = await test_client.post(
         "/api/v1/chat",
         json={
             "message": "hello",
             "username": "alias-user",
-            "conversation_id": conversation_id,
+            "session_id": session_id,
             "enable_streaming": False,
         },
         headers={"X-API-Key": raw_key},
@@ -468,10 +464,10 @@ async def test_open_chat_send_conversation_alias_and_blank_username(
     assert send_res.status_code == 200
     send_data = await send_res.get_json()
     assert send_data["status"] == "ok"
-    assert send_data["data"]["session_id"] == conversation_id
+    assert send_data["data"]["session_id"] == session_id
 
     created_session = await core_lifecycle_td.db.get_platform_session_by_id(
-        conversation_id
+        session_id
     )
     assert created_session is not None
     assert created_session.creator == "alias-user"
@@ -720,7 +716,7 @@ async def test_open_send_message_error_paths(
     )
 
     missing_message_res = await test_client.post(
-        "/api/v1/im/message",
+        "/api/v1/im/messages",
         json={
             "umo": f"webchat:FriendMessage:open_api_im_{uuid.uuid4().hex[:8]}",
             "message": None,
@@ -732,7 +728,7 @@ async def test_open_send_message_error_paths(
     assert missing_message_data["message"] == "Missing key: message"
 
     missing_umo_res = await test_client.post(
-        "/api/v1/im/message",
+        "/api/v1/im/messages",
         json={"message": "hello"},
         headers={"X-API-Key": raw_key},
     )
@@ -741,7 +737,7 @@ async def test_open_send_message_error_paths(
     assert missing_umo_data["message"] == "Missing key: umo"
 
     invalid_umo_res = await test_client.post(
-        "/api/v1/im/message",
+        "/api/v1/im/messages",
         json={"umo": "broken-umo", "message": "hello"},
         headers={"X-API-Key": raw_key},
     )
@@ -750,7 +746,7 @@ async def test_open_send_message_error_paths(
     assert invalid_umo_data["message"].startswith("Invalid umo:")
 
     missing_platform_res = await test_client.post(
-        "/api/v1/im/message",
+        "/api/v1/im/messages",
         json={
             "umo": f"platform-not-running:FriendMessage:{uuid.uuid4().hex[:8]}",
             "message": "hello",
@@ -772,7 +768,7 @@ async def test_open_api_key_scope_normalization(
     test_client = app.test_client()
 
     config_res = await test_client.post(
-        "/api/apikey/create",
+        "/api/v1/api-keys",
         json={"name": "config-contained-scopes-key", "scopes": ["config"]},
         headers=authenticated_header,
     )
@@ -783,7 +779,7 @@ async def test_open_api_key_scope_normalization(
     assert set(config_data["data"]["scopes"]) == {"config", "bot", "provider"}
 
     extra_scope_res = await test_client.post(
-        "/api/apikey/create",
+        "/api/v1/api-keys",
         json={"name": "mcp-skill-scope-key", "scopes": ["mcp", "skill"]},
         headers=authenticated_header,
     )
@@ -801,7 +797,7 @@ async def test_file_scope_is_available_for_developer_api_key(
 ):
     test_client = app.test_client()
     create_res = await test_client.post(
-        "/api/apikey/create",
+        "/api/v1/api-keys",
         json={"name": "file-scope-key", "scopes": ["file"]},
         headers=authenticated_header,
     )

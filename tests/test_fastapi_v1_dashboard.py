@@ -8,19 +8,11 @@ import jwt
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
 
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
-from astrbot.dashboard.asgi_runtime import (
-    FastAPIAppAdapter,
-    g,
-)
-from astrbot.dashboard.asgi_runtime import (
-    request as dashboard_request,
-)
-from astrbot.dashboard.responses import ok
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.skills_service import SkillArchive
@@ -600,238 +592,6 @@ async def _request_json(request: Request, *, silent: bool = False):
         raise
 
 
-def _register_dashboard_alias_routes(
-    app: FastAPI,
-    config: dict,
-    provider_manager: FakeProviderManager,
-) -> None:
-    def _alias_username(request: Request) -> str:
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.removeprefix("Bearer ").strip()
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload["username"]
-
-    def alias_get(path: str):
-        return app.get(path, include_in_schema=False)
-
-    def alias_post(path: str):
-        return app.post(path, include_in_schema=False)
-
-    def alias_api_route(path: str, methods: list[str]):
-        return app.api_route(path, methods=methods, include_in_schema=False)
-
-    @alias_get("/api/config/platform/list")
-    async def dashboard_alias_platform_list():
-        return ok({"platforms": config["platform"]})
-
-    @alias_get("/api/config/provider/list")
-    async def dashboard_alias_provider_list(request: Request):
-        provider_type = request.query_params.get("provider_type")
-        provider_types = provider_type.split(",") if provider_type else []
-        provider_source_types = {
-            source["id"]: source.get("provider_type", "chat_completion")
-            for source in provider_manager.provider_sources_config
-        }
-        providers = []
-        for provider in provider_manager.providers_config:
-            source_id = provider.get("provider_source_id")
-            if source_id:
-                if provider_source_types.get(source_id) in provider_types:
-                    providers.append(
-                        provider_manager.get_merged_provider_config(provider)
-                    )
-                continue
-            if provider.get("provider_type") in provider_types:
-                providers.append(provider)
-        return ok(providers)
-
-    @alias_get("/api/stat/start-time")
-    async def dashboard_alias_start_time():
-        return ok({"start_time": 1234567890})
-
-    @alias_get("/api/session/active-umos")
-    async def dashboard_alias_active_umos():
-        return ok(
-            {
-                "umos": ["webchat:FriendMessage:webchat!user!session-1"],
-                "umo_infos": [
-                    {
-                        "umo": "webchat:FriendMessage:webchat!user!session-1",
-                        "platform": "webchat",
-                        "message_type": "FriendMessage",
-                        "session_id": "webchat!user!session-1",
-                    }
-                ],
-            }
-        )
-
-    @alias_get("/api/plugin/get")
-    async def dashboard_alias_plugin_list(request: Request):
-        return ok(
-            {
-                "plugins": [{"name": "astrbot_plugin_demo"}],
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_post("/api/plugin/off")
-    async def dashboard_alias_plugin_off(request: Request):
-        return ok(
-            {
-                "payload": await _request_json(request),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_post("/api/plugin/on")
-    async def dashboard_alias_plugin_on(request: Request):
-        return ok(
-            {
-                "payload": await _request_json(request),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_get("/api/plugin/detail")
-    async def dashboard_alias_plugin_detail(request: Request):
-        return ok({"name": request.query_params.get("name")})
-
-    @alias_post("/api/plugin/uninstall")
-    async def dashboard_alias_plugin_uninstall(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_get("/api/plugin/readme")
-    async def dashboard_alias_plugin_readme(request: Request):
-        return ok({"name": request.query_params.get("name"), "content": "readme"})
-
-    @alias_get("/api/plugin/changelog")
-    async def dashboard_alias_plugin_changelog(request: Request):
-        return ok({"name": request.query_params.get("name"), "content": "changes"})
-
-    @alias_post("/api/plugin/reload")
-    async def dashboard_alias_plugin_reload(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/plugin/update")
-    async def dashboard_alias_plugin_update(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/plugin/check-compat")
-    async def dashboard_alias_plugin_version_support(request: Request):
-        return ok(
-            {
-                "payload": await _request_json(request),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_get("/api/config/get")
-    async def dashboard_alias_config_get(request: Request):
-        return ok(
-            {
-                "plugin_name": request.query_params.get("plugin_name"),
-                "schema": {"type": "object"},
-            }
-        )
-
-    @alias_post("/api/config/plugin/update")
-    async def dashboard_alias_plugin_config_update(request: Request):
-        return ok(
-            {
-                "plugin_name": request.query_params.get("plugin_name"),
-                "payload": await _request_json(request),
-            }
-        )
-
-    @alias_api_route("/api/plug/{plugin_path:path}", methods=["GET", "POST"])
-    async def dashboard_alias_plugin_extension(plugin_path: str, request: Request):
-        return ok(
-            {
-                "plugin_path": plugin_path,
-                "method": request.method,
-                "payload": await _request_json(request, silent=True),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_get("/api/config/file/get")
-    async def dashboard_alias_config_file_get(request: Request):
-        return ok(
-            {
-                "scope": request.query_params.get("scope"),
-                "name": request.query_params.get("name"),
-                "key": request.query_params.get("key"),
-            }
-        )
-
-    @alias_post("/api/config/file/upload")
-    async def dashboard_alias_config_file_upload(request: Request):
-        return ok(
-            {
-                "scope": request.query_params.get("scope"),
-                "name": request.query_params.get("name"),
-                "key": request.query_params.get("key"),
-                "payload": await _request_json(request, silent=True),
-            }
-        )
-
-    @alias_post("/api/config/file/delete")
-    async def dashboard_alias_config_file_delete(request: Request):
-        return ok(
-            {
-                "scope": request.query_params.get("scope"),
-                "name": request.query_params.get("name"),
-                "payload": await _request_json(request),
-            }
-        )
-
-    @alias_get("/api/skills")
-    async def dashboard_alias_skill_list():
-        return ok({"skills": [{"name": "demo_skill"}], "runtime": "local"})
-
-    @alias_post("/api/skills/update")
-    async def dashboard_alias_skill_update(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/skills/delete")
-    async def dashboard_alias_skill_delete(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_get("/api/skills/download")
-    async def dashboard_alias_skill_download(request: Request):
-        return ok({"name": request.query_params.get("name")})
-
-    @alias_get("/api/skills/files")
-    async def dashboard_alias_skill_files(request: Request):
-        return ok(
-            {
-                "name": request.query_params.get("name"),
-                "path": request.query_params.get("path"),
-            }
-        )
-
-    @alias_get("/api/skills/file")
-    async def dashboard_alias_skill_file_get(request: Request):
-        return ok(
-            {
-                "name": request.query_params.get("name"),
-                "path": request.query_params.get("path"),
-            }
-        )
-
-    @alias_post("/api/skills/file")
-    async def dashboard_alias_skill_file_update(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/config/provider/get_embedding_dim")
-    async def dashboard_alias_provider_embedding_dim(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_get("/api/file/{file_token}")
-    async def dashboard_alias_token_file(file_token: str):
-        return PlainTextResponse(f"token:{file_token}")
-
-
 @pytest.fixture
 def fake_db() -> FakeDb:
     return FakeDb()
@@ -892,16 +652,6 @@ def fake_core_lifecycle():
     def validate_astrbot_version_specifier(version_spec: str):
         return True, f"supported: {version_spec}"
 
-    async def plugin_extension(plugin_path: str):
-        return ok(
-            {
-                "plugin_path": plugin_path,
-                "method": dashboard_request.method,
-                "payload": await dashboard_request.get_json(silent=True),
-                "username": g.username,
-            }
-        )
-
     return SimpleNamespace(
         astrbot_config=config,
         astrbot_updator=FakeAstrBotUpdator(),
@@ -937,11 +687,7 @@ def fake_core_lifecycle():
             reload=reload_plugin,
             _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
         ),
-        star_context=SimpleNamespace(
-            registered_web_apis=[
-                ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
-            ]
-        ),
+        star_context=SimpleNamespace(registered_web_apis=[]),
         kb_manager=None,
     )
 
@@ -954,11 +700,6 @@ def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
         jwt_secret=JWT_SECRET,
     )
     app.state.dashboard_app_adapter = FastAPIAppAdapter(app)
-    _register_dashboard_alias_routes(
-        app,
-        fake_core_lifecycle.astrbot_config,
-        fake_core_lifecycle.provider_manager,
-    )
     return app
 
 
@@ -1175,46 +916,6 @@ async def test_v1_conversation_detail_requires_user_id(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_alias_conversation_detail_uses_fastapi_service(
-    asgi_client: httpx.AsyncClient,
-):
-    response = await asgi_client.post(
-        "/api/conversation/detail",
-        json={
-            "user_id": "webchat:FriendMessage:webchat!user!session-1",
-            "cid": "conversation/with/slash",
-        },
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "ok"
-    assert payload["data"]["cid"] == "conversation/with/slash"
-
-
-@pytest.mark.asyncio
-async def test_v1_bots_matches_dashboard_platform_alias_list(
-    asgi_client: httpx.AsyncClient,
-):
-    headers = _jwt_headers()
-
-    dashboard_alias_response = await asgi_client.get(
-        "/api/config/platform/list",
-        headers=headers,
-    )
-    v1_response = await asgi_client.get("/api/v1/bots", headers=headers)
-
-    assert dashboard_alias_response.status_code == 200
-    assert v1_response.status_code == 200
-    dashboard_alias_data = dashboard_alias_response.json()
-    v1_data = v1_response.json()
-    assert dashboard_alias_data["status"] == "ok"
-    assert v1_data["status"] == "ok"
-    assert v1_data["data"]["bots"] == dashboard_alias_data["data"]["platforms"]
-
-
-@pytest.mark.asyncio
 async def test_v1_bot_stats_match_platform_manager(asgi_client: httpx.AsyncClient):
     response = await asgi_client.get("/api/v1/bots/stats", headers=_jwt_headers())
 
@@ -1327,30 +1028,6 @@ async def test_v1_system_config_returns_system_metadata(
 
 
 @pytest.mark.asyncio
-async def test_v1_providers_matches_dashboard_provider_alias_list(
-    asgi_client: httpx.AsyncClient,
-):
-    headers = _jwt_headers()
-
-    dashboard_alias_response = await asgi_client.get(
-        "/api/config/provider/list?provider_type=chat_completion",
-        headers=headers,
-    )
-    v1_response = await asgi_client.get(
-        "/api/v1/providers?capability=chat",
-        headers=headers,
-    )
-
-    assert dashboard_alias_response.status_code == 200
-    assert v1_response.status_code == 200
-    dashboard_alias_data = dashboard_alias_response.json()
-    v1_data = v1_response.json()
-    assert dashboard_alias_data["status"] == "ok"
-    assert v1_data["status"] == "ok"
-    assert v1_data["data"]["providers"] == dashboard_alias_data["data"]
-
-
-@pytest.mark.asyncio
 async def test_v1_provider_source_rename_updates_provider_refs(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1414,34 +1091,6 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
     assert fake_core_lifecycle.provider_manager.reloaded_providers == [
         config["provider"][0]
     ]
-
-
-@pytest.mark.asyncio
-async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
-    asgi_client: httpx.AsyncClient,
-    fake_core_lifecycle,
-):
-    response = await asgi_client.post(
-        "/api/v1/providers",
-        json={
-            "config": {
-                "id": "tts-main",
-                "type": "edge_tts",
-                "provider_type": "text_to_speech",
-                "enable": True,
-            }
-        },
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    assert fake_core_lifecycle.astrbot_config["provider"][-1] == {
-        "id": "tts-main",
-        "type": "edge_tts",
-        "provider_type": "text_to_speech",
-        "enable": True,
-    }
 
 
 @pytest.mark.asyncio
@@ -1629,18 +1278,6 @@ async def test_v1_config_scope_includes_bot_and_provider(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_alias_route_still_works_through_asgi_app(
-    asgi_client: httpx.AsyncClient,
-):
-    response = await asgi_client.get("/api/stat/start-time")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["data"]["start_time"] == 1234567890
-
-
-@pytest.mark.asyncio
 async def test_v1_plugins_accept_api_key(
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
@@ -1765,121 +1402,6 @@ async def test_v1_plugin_update_all_hides_internal_exceptions(
     assert "update_plugin" not in str(data)
 
 
-@pytest.mark.asyncio
-async def test_v1_plugin_extension_maps_nested_plugin_path(
-    asgi_client: httpx.AsyncClient,
-):
-    response = await asgi_client.post(
-        "/api/v1/plugins/extensions/astrbot_plugin_demo/api/action",
-        json={"value": "demo"},
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["data"] == {
-        "plugin_path": "astrbot_plugin_demo/api/action",
-        "method": "POST",
-        "payload": {"value": "demo"},
-        "username": "fastapi-v1-test",
-    }
-
-
-@pytest.mark.asyncio
-async def test_v1_plugin_extension_supports_astrbot_web_api(
-    asgi_client: httpx.AsyncClient,
-    fake_core_lifecycle,
-):
-    from astrbot.api.web import json_response
-    from astrbot.api.web import request as plugin_request
-
-    async def astrbot_web_plugin_extension(item_id: str):
-        return json_response(
-            {
-                "item_id": item_id,
-                "path_value": plugin_request.path_params["item_id"],
-                "path": plugin_request.path,
-                "method": plugin_request.method,
-                "limit": plugin_request.query.get("limit", 20, type=int),
-                "tags": plugin_request.query.getlist("tag"),
-                "payload": await plugin_request.json(default={}),
-                "username": plugin_request.username,
-                "plugin_name": plugin_request.plugin_name,
-            },
-            status_code=201,
-        )
-
-    fake_core_lifecycle.star_context.registered_web_apis = [
-        ("/web/<item_id>", astrbot_web_plugin_extension, ["POST"], "web")
-    ]
-
-    response = await asgi_client.post(
-        "/api/v1/plugins/extensions/web/demo-item?limit=7&tag=one&tag=two",
-        json={"value": "demo"},
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 201
-    data = response.json()
-    assert data == {
-        "item_id": "demo-item",
-        "path_value": "demo-item",
-        "path": "/api/v1/plugins/extensions/web/demo-item",
-        "method": "POST",
-        "limit": 7,
-        "tags": ["one", "two"],
-        "payload": {"value": "demo"},
-        "username": "fastapi-v1-test",
-        "plugin_name": "web",
-    }
-
-
-@pytest.mark.asyncio
-async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
-    asgi_client: httpx.AsyncClient,
-    fake_core_lifecycle,
-):
-    from astrbot.api.web import PluginUploadFile, json_response
-    from astrbot.api.web import request as plugin_request
-
-    async def astrbot_web_upload_extension():
-        form = await plugin_request.form()
-        files = await plugin_request.files()
-        upload: PluginUploadFile | None = files.get("file")
-        assert isinstance(upload, PluginUploadFile)
-        return json_response(
-            {
-                "tags": form.getlist("tag"),
-                "filename": upload.filename,
-                "content_type": upload.content_type,
-                "content": (await upload.read()).decode("utf-8"),
-            }
-        )
-
-    fake_core_lifecycle.star_context.registered_web_apis = [
-        ("/upload", astrbot_web_upload_extension, ["POST"], "upload")
-    ]
-
-    response = await asgi_client.post(
-        "/api/v1/plugins/extensions/upload",
-        files=[
-            ("tag", (None, "one")),
-            ("tag", (None, "two")),
-            ("file", ("demo.txt", b"hello", "text/plain")),
-        ],
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "tags": ["one", "two"],
-        "filename": "demo.txt",
-        "content_type": "text/plain",
-        "content": "hello",
-    }
-
-
 def test_astrbot_web_request_requires_plugin_context():
     from astrbot.api.web import request as plugin_request
 
@@ -1903,54 +1425,6 @@ def test_astrbot_web_request_proxy_exposes_typed_methods():
         get_type_hints(type(plugin_request).files)["return"]
         == PluginMultiDict[PluginUploadFile]
     )
-
-
-@pytest.mark.asyncio
-async def test_v1_plugin_extension_supports_quart_request_context(
-    asgi_client: httpx.AsyncClient,
-    fake_core_lifecycle,
-):
-    from quart import g as quart_g
-    from quart import jsonify as quart_jsonify
-    from quart import request as quart_request
-
-    async def quart_plugin_extension(item_id: str):
-        return quart_jsonify(
-            {
-                "status": "ok",
-                "data": {
-                    "item_id": item_id,
-                    "path": quart_request.path,
-                    "method": quart_request.method,
-                    "source": quart_request.args.get("source"),
-                    "payload": await quart_request.get_json(),
-                    "username": quart_g.username,
-                },
-            }
-        )
-
-    fake_core_lifecycle.star_context.registered_web_apis = [
-        ("/quart/<item_id>", quart_plugin_extension, ["POST"], "quart")
-    ]
-
-    response = await asgi_client.post(
-        "/api/v1/plugins/extensions/quart/demo-item?source=v1",
-        json={"value": "demo"},
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/json")
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["data"] == {
-        "item_id": "demo-item",
-        "path": "/api/plug/quart/demo-item",
-        "method": "POST",
-        "source": "v1",
-        "payload": {"value": "demo"},
-        "username": "fastapi-v1-test",
-    }
 
 
 @pytest.mark.asyncio
@@ -2207,25 +1681,10 @@ async def test_v1_token_file_is_public(
     assert response.headers["content-type"].startswith("text/plain")
 
 
-def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):
+def test_v1_openapi_websocket_routes_are_mounted(asgi_app):
     assert str(asgi_app.url_path_for("chat_ws")) == "/api/v1/chat/ws"
     assert str(asgi_app.url_path_for("live_chat_ws")) == "/api/v1/live-chat/ws"
     assert str(asgi_app.url_path_for("unified_chat_ws")) == "/api/v1/unified-chat/ws"
-
-
-def test_dashboard_config_aliases_are_registered_on_fastapi(asgi_app):
-    assert (
-        str(asgi_app.url_path_for("dashboard_alias_platform_list"))
-        == "/api/config/platform/list"
-    )
-    assert (
-        str(asgi_app.url_path_for("dashboard_alias_provider_list"))
-        == "/api/config/provider/list"
-    )
-    assert (
-        str(asgi_app.url_path_for("update_dashboard_alias_provider_source"))
-        == "/api/config/provider_sources/update"
-    )
 
 
 @pytest.mark.asyncio

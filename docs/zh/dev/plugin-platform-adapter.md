@@ -51,7 +51,7 @@ import asyncio
 from astrbot.api.platform import Platform, AstrBotMessage, MessageMember, PlatformMetadata, MessageType
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain, Image, Record # 消息链中的组件，可以根据需要导入
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
@@ -69,7 +69,7 @@ class FakePlatformAdapter(Platform):
         self.config = platform_config # 上面的默认配置，用户填写后会传到这里
         self.settings = platform_settings # platform_settings 平台设置。
     
-    async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
+    async def send_by_session(self, session: MessageSession, message_chain: MessageChain):
         # 必须实现
         await super().send_by_session(session, message_chain)
     
@@ -158,7 +158,6 @@ class FakePlatformEvent(AstrMessageEvent):
 - HTTP(S) URL，例如 `https://example.com/a.jpg`
 - `base64://`，例如 `base64://iVBORw0KGgo...`
 - Data URI，例如 `data:image/png;base64,iVBORw0KGgo...`
-- 历史兼容的裸 base64，例如 `iVBORw0KGgo...`，但新代码不推荐主动生成这种格式
 
 如果你手上已经是本地文件，推荐使用组件提供的构造方法，它会生成标准 `file:` URI：
 

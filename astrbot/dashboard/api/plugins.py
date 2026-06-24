@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-import re
-from collections.abc import Callable
 from typing import Any
-from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, Query, Request
-from fastapi.responses import PlainTextResponse, Response
 
-from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
-from astrbot.dashboard.asgi_runtime import (
-    DashboardRequestState,
-    call_request_view,
-)
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.schemas import (
@@ -33,11 +24,6 @@ from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
 )
-from astrbot.dashboard.services.plugin_page_service import (
-    PluginPageContentPayload,
-    PluginPageService,
-    PluginPageServiceError,
-)
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_OPERATION_FAILED_MESSAGE,
     PluginService,
@@ -45,11 +31,10 @@ from astrbot.dashboard.services.plugin_service import (
     PluginServiceWarning,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, require_scope
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Plugins"])
-legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
 async def require_plugin_scope(request: Request) -> AuthContext:
@@ -58,10 +43,6 @@ async def require_plugin_scope(request: Request) -> AuthContext:
 
 def get_service(request: Request) -> PluginService:
     return request.app.state.services.plugins
-
-
-def get_page_service(request: Request) -> PluginPageService:
-    return request.app.state.services.plugin_pages
 
 
 def get_config_display_service(request: Request) -> ConfigDisplayService:
@@ -130,227 +111,13 @@ async def _run_service(operation, *, log_label: str | None = None):
         }
 
 
-async def _run_json(
-    request: Request,
-    operation: Callable[[dict[str, Any]], Any],
-    *,
-    log_label: str | None = None,
-):
-    body = await _json_or_empty(request)
-    return await _run_service(lambda: operation(body), log_label=log_label)
-
-
-def _normalize_plugin_api_route(route: str) -> str:
-    route = route.strip()
-    if not route.startswith("/"):
-        route = f"/{route}"
-    return route
-
-
-def _plugin_api_route_pattern(route: str) -> str:
-    normalized = _normalize_plugin_api_route(route)
-    chunks = []
-    pos = 0
-    for match in re.finditer(r"<(?:(path):)?([A-Za-z_][A-Za-z0-9_]*)>", normalized):
-        chunks.append(re.escape(normalized[pos : match.start()]))
-        name = match.group(2)
-        chunks.append(f"(?P<{name}>.*)" if match.group(1) else f"(?P<{name}>[^/]+)")
-        pos = match.end()
-    chunks.append(re.escape(normalized[pos:]))
-    return "".join(chunks)
-
-
-def _match_registered_web_api(registered_web_apis, subpath: str, method: str):
-    request_path = f"/{subpath.lstrip('/')}"
-    request_method = method.upper()
-
-    for route, view_handler, methods, _ in registered_web_apis:
-        allowed_methods = [item.upper() for item in methods]
-        if request_method not in allowed_methods:
-            continue
-
-        pattern = _plugin_api_route_pattern(route)
-        matched = re.fullmatch(pattern, request_path)
-        if matched:
-            return view_handler, matched.groupdict()
-    return None
-
-
-def _plugin_extension_legacy_path(plugin_path: str, request: Request) -> str:
-    encoded_path = quote(plugin_path.lstrip("/"), safe="/:@!$&'()*+,;=-._~")
-    path = f"/api/plug/{encoded_path}"
-    if request.url.query:
-        return f"{path}?{request.url.query}"
-    return path
-
-
-async def _call_plugin_extension(
-    plugin_path: str,
-    request: Request,
-    username: str,
-):
-    registered_web_apis = (
-        request.app.state.core_lifecycle.star_context.registered_web_apis
-    )
-    matched_api = _match_registered_web_api(
-        registered_web_apis,
-        plugin_path,
-        request.method,
-    )
-    if not matched_api:
-        return {"status": "error", "message": "未找到该路由", "data": {}}
-
-    view_handler, path_values = matched_api
-    plugin_name = plugin_path.strip("/").split("/", 1)[0].strip() or None
-    plugin_request = PluginRequest(
-        request,
-        path_params=path_values,
-        plugin_name=plugin_name,
-        username=username,
-    )
-    app_adapter = getattr(request.app.state, "dashboard_app_adapter", None)
-    if app_adapter is None:
-        with bind_request_context(plugin_request):
-            return await run_maybe_async(lambda: view_handler(**path_values))
-
-    g_obj = DashboardRequestState()
-    g_obj.username = username
-    with bind_request_context(plugin_request):
-        return await call_request_view(
-            request,
-            app_adapter,
-            view_handler,
-            path_values,
-            g_obj=g_obj,
-            quart_compat_path=_plugin_extension_legacy_path(plugin_path, request),
-        )
-
-
-def _get_request_locale(request: Request, default: str = "zh-CN") -> str:
-    raw_locale = request.headers.get("Accept-Language", "").strip()
-    locale = raw_locale.split(",", 1)[0].split(";", 1)[0].strip()
-    if not locale or len(locale) > 32:
-        return default
-    return locale
-
-
-def _get_request_theme(request: Request) -> str | None:
-    theme = request.query_params.get("theme", "").strip()
-    return theme if theme in ("dark", "light") else None
-
-
-def _plugin_page_error_response(status_code: int, message: str):
-    return PlainTextResponse(
-        message,
-        status_code=status_code,
-        headers={
-            "Cache-Control": "no-store",
-            "Referrer-Policy": "no-referrer",
-        },
-    )
-
-
-def _plugin_page_payload_response(payload: PluginPageContentPayload):
-    return Response(
-        content=payload.content,
-        media_type=payload.content_type,
-        headers=PluginPageService.build_security_headers(),
-    )
-
-
-async def _serve_plugin_page_content(
-    *,
-    request: Request,
-    page_service: PluginPageService,
-    username: str | None,
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-):
-    try:
-        payload = await page_service.serve_page_content(
-            plugin_name=plugin_id,
-            page_name=page_name,
-            asset_path=asset_path,
-            asset_token=request.query_params.get("asset_token", "").strip(),
-            username=username,
-            locale=_get_request_locale(request),
-            theme=_get_request_theme(request),
-        )
-    except PluginPageServiceError as exc:
-        return _plugin_page_error_response(exc.status_code, exc.public_message)
-    return _plugin_page_payload_response(payload)
-
-
-async def _serve_plugin_page_bridge_sdk(
-    *,
-    request: Request,
-    page_service: PluginPageService,
-):
-    try:
-        payload = await page_service.serve_bridge_sdk(
-            asset_token=request.query_params.get("asset_token", "").strip(),
-            locale=_get_request_locale(request),
-            theme=_get_request_theme(request),
-        )
-    except PluginPageServiceError as exc:
-        return _plugin_page_error_response(exc.status_code, exc.public_message)
-    return _plugin_page_payload_response(payload)
-
-
-async def _get_plugin_page_entry_config(
-    *,
-    request: Request,
-    page_service: PluginPageService,
-    username: str | None,
-    plugin_id: str | None,
-    page_name: str | None,
-):
-    try:
-        return ok(
-            await page_service.get_plugin_page_entry_config(
-                plugin_name=plugin_id,
-                page_name=page_name,
-                username=username,
-                locale=_get_request_locale(request),
-            )
-        )
-    except PluginPageServiceError as exc:
-        return {"status": "error", "message": exc.public_message, "data": {}}
-
-
-async def _list_plugins(
-    *,
-    request: Request,
+async def _check_plugin_version_support_payload(
+    payload: dict[str, Any],
     service: PluginService,
-    page_service: PluginPageService,
 ):
     return await _run_service(
-        service.list_plugins_from_dashboard_query(
-            plugin_name=request.query_params.get("name")
-            or request.query_params.get("plugin_id"),
-            logo_token_resolver=service.get_plugin_logo_token,
-            installed_at_resolver=service.get_plugin_installed_at,
-            discover_pages=page_service.discover_plugin_pages,
-        ),
-        log_label="/api/plugin/get",
-    )
-
-
-async def _get_plugin_detail(
-    *,
-    plugin_id: str | None,
-    service: PluginService,
-    page_service: PluginPageService,
-):
-    return await _run_service(
-        service.get_plugin_detail(
-            plugin_name=plugin_id,
-            logo_token_resolver=service.get_plugin_logo_token,
-            installed_at_resolver=service.get_plugin_installed_at,
-            serialize_pages=page_service.serialize_plugin_pages,
-        ),
-        log_label="/api/plugin/detail",
+        lambda: service.check_plugin_version_support(payload),
+        log_label="/api/v1/plugins/version-support/check",
     )
 
 
@@ -371,51 +138,6 @@ async def _install_plugin_upload(
         )
 
     return await _run_service(operation, log_label=log_label)
-
-
-@router.get("/plugins/extensions/{plugin_path:path}")
-async def get_plugin_extension_route(
-    plugin_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-):
-    return await _call_plugin_extension(plugin_path, request, auth.username)
-
-
-@router.post("/plugins/extensions/{plugin_path:path}")
-async def post_plugin_extension_route(
-    plugin_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-):
-    return await _call_plugin_extension(plugin_path, request, auth.username)
-
-
-@router.put("/plugins/extensions/{plugin_path:path}")
-async def put_plugin_extension_route(
-    plugin_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-):
-    return await _call_plugin_extension(plugin_path, request, auth.username)
-
-
-@router.patch("/plugins/extensions/{plugin_path:path}")
-async def patch_plugin_extension_route(
-    plugin_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-):
-    return await _call_plugin_extension(plugin_path, request, auth.username)
-
-
-@router.delete("/plugins/extensions/{plugin_path:path}")
-async def delete_plugin_extension_route(
-    plugin_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-):
-    return await _call_plugin_extension(plugin_path, request, auth.username)
 
 
 @router.get("/plugins/failed")
@@ -442,7 +164,7 @@ async def update_plugins(
                     **{key: value for key, value in body.items() if key != "plugin_id"},
                 }
             ),
-            log_label="/api/plugin/update",
+            log_label="/api/v1/plugins/update",
         )
     return await _run_service(
         service.update_all_plugins(
@@ -451,27 +173,7 @@ async def update_plugins(
                 "names": body.get("names") or body.get("plugin_ids") or [],
             }
         ),
-        log_label="/api/plugin/update-all",
-    )
-
-
-async def _check_plugin_version_support_payload(
-    payload: dict[str, Any],
-    service: PluginService,
-):
-    return await _run_service(
-        lambda: service.check_plugin_version_support(payload),
-        log_label="/api/plugin/version-support/check",
-    )
-
-
-async def _check_plugin_version_support_request(
-    request: Request,
-    service: PluginService,
-):
-    return await _check_plugin_version_support_payload(
-        await _json_or_empty(request),
-        service,
+        log_label="/api/v1/plugins/update-all",
     )
 
 
@@ -503,7 +205,7 @@ async def install_plugin_from_github(
         install_payload["download_url"] = body["download_url"]
     return await _run_service(
         service.install_plugin(install_payload),
-        log_label="/api/plugin/install",
+        log_label="/api/v1/plugins/install/github",
     )
 
 
@@ -525,7 +227,7 @@ async def install_plugin_from_url(
                 "ignore_version_check": body.get("ignore_version_check", False),
             }
         ),
-        log_label="/api/plugin/install",
+        log_label="/api/v1/plugins/install/url",
     )
 
 
@@ -538,7 +240,7 @@ async def install_plugin_from_upload(
     return await _install_plugin_upload(
         request,
         service,
-        log_label="/api/plugin/install-upload",
+        log_label="/api/v1/plugins/install/upload",
     )
 
 
@@ -553,7 +255,7 @@ async def list_plugin_market(
             custom_registry=request.query_params.get("custom_registry"),
             force_refresh=request.query_params.get("force_refresh", "false"),
         ),
-        log_label="/api/plugin/market_list",
+        log_label="/api/v1/plugins/market",
     )
 
 
@@ -620,29 +322,20 @@ async def delete_plugin_source(
     )
 
 
-@router.get("/plugins/page-bridge-sdk.js")
-async def get_plugin_page_bridge_sdk(
-    request: Request,
-    _auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_bridge_sdk(
-        request=request,
-        page_service=page_service,
-    )
-
-
 @router.get("/plugins")
 async def list_plugins(
     request: Request,
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
 ):
-    return await _list_plugins(
-        request=request,
-        service=service,
-        page_service=page_service,
+    return await _run_service(
+        service.list_plugins_from_dashboard_query(
+            plugin_name=request.query_params.get("name")
+            or request.query_params.get("plugin_id"),
+            logo_token_resolver=service.get_plugin_logo_token,
+            installed_at_resolver=service.get_plugin_installed_at,
+        ),
+        log_label="/api/v1/plugins",
     )
 
 
@@ -651,12 +344,14 @@ async def get_plugin_by_id(
     plugin_id: str = Query(...),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
 ):
-    return await _get_plugin_detail(
-        plugin_id=plugin_id,
-        service=service,
-        page_service=page_service,
+    return await _run_service(
+        service.get_plugin_detail(
+            plugin_name=plugin_id,
+            logo_token_resolver=service.get_plugin_logo_token,
+            installed_at_resolver=service.get_plugin_installed_at,
+        ),
+        log_label="/api/v1/plugins/by-id",
     )
 
 
@@ -670,7 +365,7 @@ async def uninstall_plugin_by_id(
     body = _model_dict(payload)
     return await _run_service(
         service.uninstall_plugin({"name": plugin_id, **body}),
-        log_label="/api/plugin/uninstall",
+        log_label="/api/v1/plugins/by-id",
     )
 
 
@@ -769,7 +464,7 @@ async def get_plugin_readme_by_id(
 ):
     return await _run_service(
         lambda: service.get_plugin_readme(plugin_id),
-        log_label="/api/plugin/readme",
+        log_label="/api/v1/plugins/readme",
     )
 
 
@@ -781,7 +476,7 @@ async def get_plugin_changelog_by_id(
 ):
     return await _run_service(
         lambda: service.get_plugin_changelog(plugin_id),
-        log_label="/api/plugin/changelog",
+        log_label="/api/v1/plugins/changelog",
     )
 
 
@@ -794,7 +489,7 @@ async def reload_plugin_by_id(
     plugin_id = _plugin_id_from_body(_model_dict(payload))
     return await _run_service(
         service.reload_plugin({"name": plugin_id}),
-        log_label="/api/plugin/reload",
+        log_label="/api/v1/plugins/reload",
     )
 
 
@@ -810,57 +505,9 @@ async def set_plugin_enabled_by_id(
         service.set_plugin_enabled(
             {"name": plugin_id}, enabled=bool(body.get("enabled"))
         ),
-        log_label="/api/plugin/on" if body.get("enabled") else "/api/plugin/off",
-    )
-
-
-@router.get("/plugins/pages")
-async def list_plugin_pages_by_id(
-    plugin_id: str = Query(...),
-    _auth: AuthContext = Depends(require_plugin_scope),
-    service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _get_plugin_detail(
-        plugin_id=plugin_id,
-        service=service,
-        page_service=page_service,
-    )
-
-
-@router.get("/plugins/page")
-async def get_plugin_page_by_id(
-    request: Request,
-    plugin_id: str = Query(...),
-    page_name: str = Query(...),
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _get_plugin_page_entry_config(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-    )
-
-
-@router.get("/plugins/page/assets")
-async def get_plugin_page_asset_by_id(
-    request: Request,
-    plugin_id: str = Query(...),
-    page_name: str = Query(...),
-    asset_path: str = Query(...),
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
+        log_label="/api/v1/plugins/enabled:on"
+        if body.get("enabled")
+        else "/api/v1/plugins/enabled:off",
     )
 
 
@@ -869,12 +516,14 @@ async def get_plugin(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
 ):
-    return await _get_plugin_detail(
-        plugin_id=plugin_id,
-        service=service,
-        page_service=page_service,
+    return await _run_service(
+        service.get_plugin_detail(
+            plugin_name=plugin_id,
+            logo_token_resolver=service.get_plugin_logo_token,
+            installed_at_resolver=service.get_plugin_installed_at,
+        ),
+        log_label="/api/v1/plugins/{plugin_id}",
     )
 
 
@@ -888,7 +537,7 @@ async def uninstall_plugin(
     body = _model_dict(payload)
     return await _run_service(
         service.uninstall_plugin({"name": plugin_id, **body}),
-        log_label="/api/plugin/uninstall",
+        log_label="/api/v1/plugins/{plugin_id}",
     )
 
 
@@ -902,7 +551,7 @@ async def uninstall_failed_plugin(
     body = _model_dict(payload)
     return await _run_service(
         service.uninstall_failed_plugin({"dir_name": plugin_id, **body}),
-        log_label="/api/plugin/uninstall-failed",
+        log_label="/api/v1/plugins/failed/{plugin_id}",
     )
 
 
@@ -914,7 +563,7 @@ async def reload_failed_plugin(
 ):
     return await _run_service(
         service.reload_failed_plugin({"dir_name": plugin_id}),
-        log_label="/api/plugin/reload-failed",
+        log_label="/api/v1/plugins/failed/{plugin_id}/reload",
     )
 
 
@@ -1013,7 +662,7 @@ async def get_plugin_readme(
 ):
     return await _run_service(
         lambda: service.get_plugin_readme(plugin_id),
-        log_label="/api/plugin/readme",
+        log_label="/api/v1/plugins/{plugin_id}/readme",
     )
 
 
@@ -1025,7 +674,7 @@ async def get_plugin_changelog(
 ):
     return await _run_service(
         lambda: service.get_plugin_changelog(plugin_id),
-        log_label="/api/plugin/changelog",
+        log_label="/api/v1/plugins/{plugin_id}/changelog",
     )
 
 
@@ -1037,7 +686,7 @@ async def reload_plugin(
 ):
     return await _run_service(
         service.reload_plugin({"name": plugin_id}),
-        log_label="/api/plugin/reload",
+        log_label="/api/v1/plugins/{plugin_id}/reload",
     )
 
 
@@ -1050,7 +699,9 @@ async def set_plugin_enabled(
 ):
     return await _run_service(
         service.set_plugin_enabled({"name": plugin_id}, enabled=payload.enabled),
-        log_label="/api/plugin/on" if payload.enabled else "/api/plugin/off",
+        log_label="/api/v1/plugins/{plugin_id}/enabled:on"
+        if payload.enabled
+        else "/api/v1/plugins/{plugin_id}/enabled:off",
     )
 
 
@@ -1064,363 +715,5 @@ async def update_plugin(
     body = _model_dict(payload)
     return await _run_service(
         service.update_plugin({"name": plugin_id, **body}),
-        log_label="/api/plugin/update",
+        log_label="/api/v1/plugins/{plugin_id}/update",
     )
-
-
-@router.get("/plugins/{plugin_id}/pages")
-async def list_plugin_pages(
-    plugin_id: str,
-    _auth: AuthContext = Depends(require_plugin_scope),
-    service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _get_plugin_detail(
-        plugin_id=plugin_id,
-        service=service,
-        page_service=page_service,
-    )
-
-
-@router.get("/plugins/{plugin_id}/pages/{page_name}")
-async def get_plugin_page(
-    plugin_id: str,
-    page_name: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _get_plugin_page_entry_config(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-    )
-
-
-@router.get("/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path:path}")
-async def get_plugin_page_asset(
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
-    )
-
-
-@legacy_router.get("/api/plugin/get")
-async def dashboard_list_plugins(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _list_plugins(
-        request=request,
-        service=service,
-        page_service=page_service,
-    )
-
-
-@legacy_router.get("/api/plugin/detail")
-async def dashboard_get_plugin_detail(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _get_plugin_detail(
-        plugin_id=request.query_params.get("name"),
-        service=service,
-        page_service=page_service,
-    )
-
-
-@legacy_router.post("/api/plugin/check-compat")
-async def dashboard_check_plugin_version_support(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _check_plugin_version_support_request(request, service)
-
-
-@legacy_router.get("/api/plugin/page/entry")
-async def dashboard_get_plugin_page_entry_config(
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _get_plugin_page_entry_config(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=request.query_params.get("name"),
-        page_name=request.query_params.get("page"),
-    )
-
-
-@legacy_router.post("/api/plugin/install")
-async def dashboard_install_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.install_plugin,
-        log_label="/api/plugin/install",
-    )
-
-
-@legacy_router.post("/api/plugin/install-upload")
-async def dashboard_install_plugin_upload(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _install_plugin_upload(
-        request,
-        service,
-        log_label="/api/plugin/install-upload",
-    )
-
-
-@legacy_router.post("/api/plugin/update")
-async def dashboard_update_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.update_plugin,
-        log_label="/api/plugin/update",
-    )
-
-
-@legacy_router.post("/api/plugin/update-all")
-async def dashboard_update_all_plugins(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.update_all_plugins,
-        log_label="/api/plugin/update-all",
-    )
-
-
-@legacy_router.post("/api/plugin/uninstall")
-async def dashboard_uninstall_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.uninstall_plugin,
-        log_label="/api/plugin/uninstall",
-    )
-
-
-@legacy_router.post("/api/plugin/uninstall-failed")
-async def dashboard_uninstall_failed_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.uninstall_failed_plugin,
-        log_label="/api/plugin/uninstall-failed",
-    )
-
-
-@legacy_router.get("/api/plugin/market_list")
-async def dashboard_list_plugin_market(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_service(
-        service.get_online_plugins_from_dashboard_query(
-            custom_registry=request.query_params.get("custom_registry"),
-            force_refresh=request.query_params.get("force_refresh", "false"),
-        ),
-        log_label="/api/plugin/market_list",
-    )
-
-
-@legacy_router.post("/api/plugin/off")
-async def dashboard_disable_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        lambda data: service.set_plugin_enabled(data, enabled=False),
-        log_label="/api/plugin/off",
-    )
-
-
-@legacy_router.post("/api/plugin/on")
-async def dashboard_enable_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        lambda data: service.set_plugin_enabled(data, enabled=True),
-        log_label="/api/plugin/on",
-    )
-
-
-@legacy_router.post("/api/plugin/reload-failed")
-async def dashboard_reload_failed_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.reload_failed_plugin,
-        log_label="/api/plugin/reload-failed",
-    )
-
-
-@legacy_router.post("/api/plugin/reload")
-async def dashboard_reload_plugin(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.reload_plugin,
-        log_label="/api/plugin/reload",
-    )
-
-
-@legacy_router.get("/api/plugin/readme")
-async def dashboard_get_plugin_readme(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_service(
-        lambda: service.get_plugin_readme(request.query_params.get("name")),
-        log_label="/api/plugin/readme",
-    )
-
-
-@legacy_router.get("/api/plugin/changelog")
-async def dashboard_get_plugin_changelog(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_service(
-        lambda: service.get_plugin_changelog(request.query_params.get("name")),
-        log_label="/api/plugin/changelog",
-    )
-
-
-@legacy_router.get("/api/plugin/source/get")
-async def dashboard_get_custom_source(
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_service(service.get_custom_sources)
-
-
-@legacy_router.post("/api/plugin/source/save")
-async def dashboard_save_custom_source(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_json(
-        request,
-        service.save_custom_sources,
-        log_label="/api/plugin/source/save",
-    )
-
-
-@legacy_router.get("/api/plugin/source/get-failed-plugins")
-async def dashboard_get_failed_plugins(
-    _username: str = Depends(require_dashboard_user),
-    service: PluginService = Depends(get_service),
-):
-    return await _run_service(service.get_failed_plugins)
-
-
-@legacy_router.get("/api/plugin/page/bridge-sdk.js")
-async def dashboard_get_plugin_page_bridge_sdk(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_bridge_sdk(
-        request=request,
-        page_service=page_service,
-    )
-
-
-@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/")
-async def dashboard_get_plugin_page_entry(
-    plugin_id: str,
-    page_name: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path="",
-    )
-
-
-@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/{asset_path:path}")
-async def dashboard_get_plugin_page_asset(
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
-    )
-
-
-@legacy_router.api_route("/api/plug/{plugin_path:path}", methods=["GET", "POST"])
-async def dashboard_plugin_extension_route(
-    plugin_path: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-):
-    return await _call_plugin_extension(plugin_path, request, username)

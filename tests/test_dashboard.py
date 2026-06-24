@@ -2,7 +2,6 @@ import asyncio
 import copy
 import io
 import os
-import re
 import shutil
 import sys
 import uuid
@@ -10,7 +9,6 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pyotp
 import pytest
@@ -32,7 +30,7 @@ from astrbot.core.utils.totp import (
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     generate_recovery_code,
 )
-from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter, jsonify
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
@@ -42,7 +40,6 @@ from astrbot.dashboard.password_state import (
 )
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
-from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
@@ -57,11 +54,6 @@ PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
 
 def _removed_md5_hint_alias_key() -> str:
     return "le" + "gacy_pwd_hint"
-
-
-def _strip_query(url: str) -> str:
-    parsed = urlsplit(url)
-    return urlunsplit(("", "", parsed.path, "", parsed.fragment))
 
 
 def _assert_cookie_samesite_strict(cookie_header: str) -> None:
@@ -90,7 +82,7 @@ async def _wait_for_update_progress(
     """
     for _ in range(100):
         response = await test_client.get(
-            f"/api/update/progress?id={progress_id}",
+            f"/api/v1/updates/progress/{progress_id}",
             headers=authenticated_header,
         )
         data = await response.get_json()
@@ -382,7 +374,7 @@ async def authenticated_header(
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
             "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -405,14 +397,14 @@ async def test_auth_login(
 
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"username": "wrong", "password": "password"},
     )
     data = await response.get_json()
     assert data["status"] == "error"
 
     response = await test_client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
             "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -441,7 +433,7 @@ async def test_auth_login_secure_cookie_override(
 
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
             "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -482,11 +474,11 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
         client = app.test_client()
         h = {"X-Forwarded-For": "198.51.100.10"}
         r1 = await client.post(
-            "/api/auth/login", json={"username": "u", "password": "p"}, headers=h
+            "/api/v1/auth/login", json={"username": "u", "password": "p"}, headers=h
         )
         assert r1.status_code != 429, "first request from IP should not be rate limited"
 
-        r2 = await client.post("/api/auth/totp/setup", json={}, headers=h)
+        r2 = await client.post("/api/v1/auth/totp/setup", json={}, headers=h)
         assert r2.status_code == 429, (
             "second request from same IP should be rate limited"
         )
@@ -517,14 +509,14 @@ async def test_auth_rate_limit_separates_different_client_ips(
     try:
         client = app.test_client()
         r_a = await client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.10"},
         )
         assert r_a.status_code != 429
 
         r_b = await client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.10"},
         )
@@ -533,7 +525,7 @@ async def test_auth_rate_limit_separates_different_client_ips(
         )
 
         r_c = await client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.11"},
         )
@@ -605,14 +597,14 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     try:
         client = app.test_client()
         r1 = await client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.20"},
         )
         assert r1.status_code != 429
 
         r2 = await client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.21"},
         )
@@ -643,7 +635,7 @@ async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
             "recovery_code_hash": recovery_code_hash,
         }
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -679,7 +671,7 @@ async def test_auth_login_accepts_valid_totp_code(
             "recovery_code_hash": recovery_code_hash,
         }
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -717,7 +709,7 @@ async def test_auth_login_rejects_invalid_totp_code(
         valid_code = pyotp.TOTP(secret).now()
         invalid_code = str((int(valid_code) + 1) % 1_000_000).zfill(6)
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -753,7 +745,7 @@ async def test_auth_login_with_recovery_code_disables_totp(
             "recovery_code_hash": recovery_code_hash,
         }
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -793,7 +785,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
             "recovery_code_hash": recovery_code_hash,
         }
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -815,7 +807,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
         assert trusted_cookie_header
         assert "HttpOnly" in trusted_cookie_header
         _assert_cookie_samesite_strict(trusted_cookie_header)
-        assert "Path=/api/auth" in trusted_cookie_header
+        assert "Path=/api/v1/auth" in trusted_cookie_header
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -842,7 +834,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
             "recovery_code_hash": recovery_code_hash,
         }
         first_login = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -854,7 +846,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
         assert first_data["status"] == "ok"
 
         second_login = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -895,10 +887,10 @@ async def test_config_save_requires_two_factor_for_protected_totp_changes(
             "secret": "",
             "recovery_code_hash": "",
         }
-        response = await test_client.post(
-            "/api/config/astrbot/update",
+        response = await test_client.put(
+            "/api/v1/system-config",
             headers=authenticated_header,
-            json={"conf_id": "default", "config": post_config},
+            json=post_config,
         )
         data = await response.get_json()
         assert response.status_code == 401
@@ -941,13 +933,13 @@ async def test_config_save_accepts_totp_code_for_protected_totp_changes(
             "secret": "",
             "recovery_code_hash": "",
         }
-        response = await test_client.post(
-            "/api/config/astrbot/update",
+        response = await test_client.put(
+            "/api/v1/system-config",
             headers={
                 **authenticated_header,
                 "X-2FA-Code": pyotp.TOTP(secret).now(),
             },
-            json={"conf_id": "default", "config": post_config},
+            json=post_config,
         )
         data = await response.get_json()
         assert data["status"] == "ok"
@@ -988,13 +980,13 @@ async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
             "secret": "",
             "recovery_code_hash": recovery_code_hash,
         }
-        response = await test_client.post(
-            "/api/config/astrbot/update",
+        response = await test_client.put(
+            "/api/v1/system-config",
             headers={
                 **authenticated_header,
                 "X-2FA-Code": recovery_code,
             },
-            json={"conf_id": "default", "config": post_config},
+            json=post_config,
         )
         data = await response.get_json()
         assert response.status_code == 401
@@ -1020,7 +1012,7 @@ async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
     test_client = app.test_client()
     secret = pyotp.random_base32()
     response = await test_client.post(
-        "/api/auth/totp/setup",
+        "/api/v1/auth/totp/setup",
         headers=authenticated_header,
         json={"secret": secret, "code": pyotp.TOTP(secret).now()},
     )
@@ -1058,7 +1050,7 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         )
 
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "astrbot", "password": md5_password},
         )
         data = await response.get_json()
@@ -1078,8 +1070,8 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         assert _removed_md5_hint_alias_key() not in data["data"]
         assert data["data"]["password_upgrade_required"] is True
 
-        response = await test_client.post(
-            "/api/auth/account/edit",
+        response = await test_client.patch(
+            "/api/v1/auth/account",
             json={
                 "password": md5_password,
                 "new_password": "",
@@ -1097,8 +1089,8 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
             is False
         )
 
-        response = await test_client.post(
-            "/api/auth/account/edit",
+        response = await test_client.patch(
+            "/api/v1/auth/account",
             json={
                 "password": md5_password,
                 "new_password": changed_password,
@@ -1155,7 +1147,7 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
         )
 
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "astrbot", "password": "WrongPassword123"},
         )
         data = await response.get_json()
@@ -1197,7 +1189,7 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         )
 
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={"username": "astrbot", "password": md5_password},
         )
         data = await response.get_json()
@@ -1229,16 +1221,6 @@ async def test_version_endpoints_use_md5_password_hint(
 
     response = await test_client.get(
         "/api/v1/stats/version",
-        headers=authenticated_header,
-    )
-    data = await response.get_json()
-
-    assert data["status"] == "ok"
-    assert "md5_pwd_hint" in data["data"]
-    assert _removed_md5_hint_alias_key() not in data["data"]
-
-    response = await test_client.get(
-        "/api/stat/version",
         headers=authenticated_header,
     )
     data = await response.get_json()
@@ -1284,7 +1266,7 @@ async def test_generated_password_requires_password_change_until_changed(
         await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
         response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -1294,8 +1276,8 @@ async def test_generated_password_requires_password_change_until_changed(
         assert data["status"] == "ok"
         assert data["data"]["change_pwd_hint"] is True
 
-        response = await test_client.post(
-            "/api/auth/account/edit",
+        response = await test_client.patch(
+            "/api/v1/auth/account",
             json={
                 "password": _resolve_dashboard_password(core_lifecycle_td),
                 "new_password": "",
@@ -1315,8 +1297,8 @@ async def test_generated_password_requires_password_change_until_changed(
             is True
         )
 
-        response = await test_client.post(
-            "/api/auth/account/edit",
+        response = await test_client.patch(
+            "/api/v1/auth/account",
             json={
                 "password": _resolve_dashboard_password(core_lifecycle_td),
                 "new_password": changed_password,
@@ -1360,14 +1342,14 @@ async def test_local_setup_can_skip_default_password_auth(
         core_lifecycle_td.astrbot_config["dashboard"]["host"] = "127.0.0.1"
         await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
-        response = await test_client.get("/api/auth/setup-status")
+        response = await test_client.get("/api/v1/auth/setup-status")
         data = await response.get_json()
         assert data["status"] == "ok"
         assert data["data"]["setup_required"] is True
         assert data["data"]["skip_default_password_auth"] is True
 
         response = await test_client.post(
-            "/api/auth/setup",
+            "/api/v1/auth/setup",
             json={
                 "username": setup_username,
                 "password": setup_password,
@@ -1419,7 +1401,7 @@ async def test_authenticated_default_password_login_can_complete_setup(
         await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
         login_response = await test_client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -1431,7 +1413,7 @@ async def test_authenticated_default_password_login_can_complete_setup(
         token = login_data["data"]["token"]
 
         response = await test_client.post(
-            "/api/auth/setup-authenticated",
+            "/api/v1/auth/setup",
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "username": setup_username,
@@ -1480,14 +1462,14 @@ async def test_setup_skip_requires_local_host(
         core_lifecycle_td.astrbot_config["dashboard"]["host"] = "0.0.0.0"
         await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
-        response = await test_client.get("/api/auth/setup-status")
+        response = await test_client.get("/api/v1/auth/setup-status")
         data = await response.get_json()
         assert data["status"] == "ok"
         assert data["data"]["setup_required"] is True
         assert data["data"]["skip_default_password_auth"] is False
 
         response = await test_client.post(
-            "/api/auth/setup",
+            "/api/v1/auth/setup",
             json={
                 "username": "astrbot-admin",
                 "password": "AstrbotSetup123",
@@ -1504,66 +1486,14 @@ async def test_setup_skip_requires_local_host(
 
 
 @pytest.mark.asyncio
-async def test_plugin_web_api_supports_dynamic_route(
-    app: FastAPIAppAdapter,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    authenticated_header: dict[str, str],
-    monkeypatch: pytest.MonkeyPatch,
-):
-    calls = []
-
-    async def group_detail(name: str):
-        calls.append(name)
-        return jsonify({"name": name})
-
-    monkeypatch.setattr(
-        core_lifecycle_td.star_context,
-        "registered_web_apis",
-        [
-            (
-                f"/{PLUGIN_PAGE_DEMO_NAME}/groups/<name>",
-                group_detail,
-                ["GET"],
-                "Group detail",
-            ),
-        ],
-    )
-
-    test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plug/{PLUGIN_PAGE_DEMO_NAME}/groups/example",
-        headers=authenticated_header,
-    )
-    data = await response.get_json()
-
-    assert response.status_code == 200
-    assert data == {"name": "example"}
-    assert calls == ["example"]
-
-
-def test_plugin_page_content_path_escapes_plugin_name():
-    assert (
-        PluginPageService.build_plugin_page_content_path(
-            "plugin with space", "main page"
-        )
-        == "/api/plugin/page/content/plugin%20with%20space/main%20page/"
-    )
-    assert (
-        PluginPageService.build_plugin_page_content_path(
-            "plugin with space", "main page", "assets/main file.js"
-        )
-        == "/api/plugin/page/content/plugin%20with%20space/main%20page/assets/main%20file.js"
-    )
-
-
-@pytest.mark.asyncio
-async def test_plugin_get_excludes_scanned_pages(
+async def test_plugin_get_does_not_expose_scanned_pages(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
+    del registered_plugin_page
     test_client = app.test_client()
-    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    response = await test_client.get("/api/v1/plugins", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
@@ -1573,20 +1503,19 @@ async def test_plugin_get_excludes_scanned_pages(
     )
     assert plugin["activated"] is True
     assert "page" not in plugin
-    assert "pages" in plugin
-    assert isinstance(plugin["pages"], list)
-    assert PLUGIN_PAGE_DEMO_PAGE_NAME in plugin["pages"]
+    assert "pages" not in plugin
 
 
 @pytest.mark.asyncio
-async def test_plugin_detail_includes_scanned_page_component(
+async def test_plugin_detail_does_not_include_scanned_page_component(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
+    del registered_plugin_page
     test_client = app.test_client()
     response = await test_client.get(
-        f"/api/plugin/detail?name={PLUGIN_PAGE_DEMO_NAME}",
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}",
         headers=authenticated_header,
     )
     assert response.status_code == 200
@@ -1598,392 +1527,15 @@ async def test_plugin_detail_includes_scanned_page_component(
         for component in data["data"]["components"]
         if component["type"] == "page"
     ]
-    assert page_components == [
-        {
-            "type": "page",
-            "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
-            "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
-            "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
-            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
-            "description": "Plugin Page entry",
-            "plugin_name": PLUGIN_PAGE_DEMO_NAME,
-            "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_entry_returns_signed_content_path(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    test_client = app.test_client()
-    response = await test_client.get(
-        (
-            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
-            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
-        ),
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
-    assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
-    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
-    assert data["data"]["content_path"].startswith(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
-    assert "asset_token=" in data["data"]["content_path"]
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_requires_auth(
-    app: FastAPIAppAdapter,
-    registered_plugin_page: StarMetadata,
-):
-    test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
-    assert response.status_code == 401
-    data = await response.get_json()
-    assert data["status"] == "error"
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_supports_cookie_auth(
-    app: FastAPIAppAdapter,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    registered_plugin_page: StarMetadata,
-):
-    test_client = app.test_client()
-    login_response = await test_client.post(
-        "/api/auth/login",
-        json={
-            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": _resolve_dashboard_password(core_lifecycle_td),
-        },
-    )
-    assert login_response.status_code == 200
-
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
-    assert response.status_code == 200
-    content = (await response.get_data()).decode("utf-8")
-    assert "Single plugin Page with internal navigation" in content
-    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
-    assert response.headers["Cache-Control"] == "no-store"
-    assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
-    assert "asset_token=" in content
-
-    asset_url_match = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        content,
-    )
-    assert asset_url_match is not None
-    asset_response = await test_client.get(asset_url_match.group(1))
-    assert asset_response.status_code == 200
-    asset_content = (await asset_response.get_data()).decode("utf-8")
-    assert "renderTabs" in asset_content
-    assert 'from "react"' in asset_content
-    assert (
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/shared/common.js"
-        in asset_content
-    )
-    assert "asset_token=" in asset_content
-
-    bridge_url_match = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        content,
-    )
-    assert bridge_url_match is not None
-    bridge_response = await test_client.get(bridge_url_match.group(1))
-    assert bridge_response.status_code == 200
-    bridge_content = (await bridge_response.get_data()).decode("utf-8")
-    assert "AstrBotPluginPage" in bridge_content
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_issues_scoped_asset_token(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-
-    app_js_url = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        html_text,
-    )
-    bridge_sdk_url = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
-    )
-    css_url = re.search(
-        r'href="([^"]+/base\.css[^"]*)"',
-        html_text,
-    )
-    assert app_js_url is not None
-    assert bridge_sdk_url is not None
-    assert css_url is not None
-    assert "asset_token=" in app_js_url.group(1)
-    assert "asset_token=" in bridge_sdk_url.group(1)
-    assert "asset_token=" in css_url.group(1)
-
-    query = parse_qs(urlsplit(app_js_url.group(1)).query)
-    asset_token = query.get("asset_token", [""])[0]
-    assert asset_token
-
-    anonymous_client = app.test_client()
-    app_js_response = await anonymous_client.get(app_js_url.group(1))
-    assert app_js_response.status_code == 200
-    bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
-    assert bridge_response.status_code == 200
-    bridge_js = (await bridge_response.get_data()).decode("utf-8")
-    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
-    assert '"locale": "zh-CN"' in bridge_js
-    assert '"displayName": "插件页面演示"' in bridge_js
-    assert '"pageTitle": "Bridge 演示页"' in bridge_js
-    css_response = await anonymous_client.get(css_url.group(1))
-    assert css_response.status_code == 200
-
-    out_of_scope_response = await anonymous_client.get(
-        f"/api/plugin/get?asset_token={asset_token}"
-    )
-    assert out_of_scope_response.status_code == 401
-
-    cross_plugin_response = await anonymous_client.get(
-        f"/api/plugin/page/content/another_plugin/{PLUGIN_PAGE_DEMO_PAGE_NAME}/app.js?asset_token={asset_token}"
-    )
-    assert cross_plugin_response.status_code == 401
-
-    cross_page_response = await anonymous_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/another-page/app.js?asset_token={asset_token}"
-    )
-    assert cross_page_response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    """Bridge SDK initial context should include isDark based on ?theme= query param."""
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-    bridge_sdk_url = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
-    )
-    assert bridge_sdk_url is not None
-
-    anonymous_client = app.test_client()
-
-    # theme=dark → isDark: true
-    dark_response = await anonymous_client.get(bridge_sdk_url.group(1) + "&theme=dark")
-    assert dark_response.status_code == 200
-    dark_js = (await dark_response.get_data()).decode("utf-8")
-    assert '"isDark": true' in dark_js
-
-    # theme=light → isDark: false
-    light_response = await anonymous_client.get(
-        bridge_sdk_url.group(1) + "&theme=light"
-    )
-    assert light_response.status_code == 200
-    light_js = (await light_response.get_data()).decode("utf-8")
-    assert '"isDark": false' in light_js
-
-    # no theme param → isDark: false (default)
-    base_response = await anonymous_client.get(bridge_sdk_url.group(1))
-    assert base_response.status_code == 200
-    base_js = (await base_response.get_data()).decode("utf-8")
-    assert '"isDark": false' in base_js
-
-    # invalid theme value → should NOT be treated as dark
-    invalid_response = await anonymous_client.get(
-        bridge_sdk_url.group(1) + "&theme=invalid"
-    )
-    assert invalid_response.status_code == 200
-    invalid_js = (await invalid_response.get_data()).decode("utf-8")
-    assert '"isDark": false' in invalid_js
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    """Theme query param should be propagated through rewritten asset and bridge URLs."""
-    test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=&theme=dark",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-
-    # Verify theme=dark appears in bridge SDK URL in rewritten HTML
-    bridge_sdk_url_match = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
-    )
-    assert bridge_sdk_url_match is not None
-    bridge_query = parse_qs(urlsplit(bridge_sdk_url_match.group(1)).query)
-    assert bridge_query.get("theme") == ["dark"]
-
-    # Verify theme=dark appears in CSS asset URL in rewritten HTML
-    css_url_match = re.search(
-        r'href="([^"]+/base\.css[^"]*)"',
-        html_text,
-    )
-    assert css_url_match is not None
-    css_query = parse_qs(urlsplit(css_url_match.group(1)).query)
-    assert css_query.get("theme") == ["dark"]
-
-    # Verify data-theme is injected on <html> tag to prevent flash
-    assert 'data-theme="dark"' in html_text
-    # Verify color-scheme meta tag is injected for browser-level default styles
-    assert '<meta name="color-scheme" content="dark">' in html_text
-
-    # theme=light → data-theme="light" on <html> and color-scheme meta
-    light_response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=&theme=light",
-        headers=authenticated_header,
-    )
-    assert light_response.status_code == 200
-    light_html = (await light_response.get_data()).decode("utf-8")
-    assert 'data-theme="light"' in light_html
-    assert '<meta name="color-scheme" content="light">' in light_html
-
-    # no theme param → no data-theme or color-scheme meta on <html>
-    no_theme_response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-        "?asset_token=",
-        headers=authenticated_header,
-    )
-    assert no_theme_response.status_code == 200
-    no_theme_html = (await no_theme_response.get_data()).decode("utf-8")
-    assert "data-theme=" not in no_theme_html
-    assert "color-scheme" not in no_theme_html
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_assets_require_dashboard_auth(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    authorized_client = app.test_client()
-    response = await authorized_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-
-    app_js_url = re.search(
-        r'src="([^"]+/app\.js[^"]*)"',
-        html_text,
-    )
-    bridge_sdk_url = re.search(
-        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
-        html_text,
-    )
-    assert app_js_url is not None
-    assert bridge_sdk_url is not None
-
-    anonymous_client = app.test_client()
-    app_js_response = await anonymous_client.get(_strip_query(app_js_url.group(1)))
-    assert app_js_response.status_code == 401
-    bridge_response = await anonymous_client.get(_strip_query(bridge_sdk_url.group(1)))
-    assert bridge_response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_plugin_page_content_blocks_path_traversal(
-    app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    registered_plugin_page: StarMetadata,
-):
-    test_client = app.test_client()
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/..%2Fmain.py",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_logout_clears_cookie_for_plugin_page(
-    app: FastAPIAppAdapter,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    registered_plugin_page: StarMetadata,
-):
-    test_client = app.test_client()
-    response = await test_client.post(
-        "/api/auth/login",
-        json={
-            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": _resolve_dashboard_password(core_lifecycle_td),
-        },
-    )
-    assert response.status_code == 200
-
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
-    assert response.status_code == 200
-    html_text = (await response.get_data()).decode("utf-8")
-    asset_url_match = re.search(r'src="([^"]+/app\.js[^"]*)"', html_text)
-    assert asset_url_match is not None
-
-    logout_response = await test_client.post("/api/auth/logout")
-    assert logout_response.status_code == 200
-    clear_cookie_header = next(
-        (
-            value
-            for value in logout_response.headers.getlist("Set-Cookie")
-            if DASHBOARD_JWT_COOKIE_NAME in value
-        ),
-        "",
-    )
-    assert clear_cookie_header
-    assert f"{DASHBOARD_JWT_COOKIE_NAME}=;" in clear_cookie_header
-    assert "Max-Age=0" in clear_cookie_header
-    _assert_cookie_samesite_strict(clear_cookie_header)
-
-    response = await test_client.get(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
-    )
-    assert response.status_code == 401
-    asset_response = await test_client.get(_strip_query(asset_url_match.group(1)))
-    assert asset_response.status_code == 401
+    assert page_components == []
 
 
 @pytest.mark.asyncio
 async def test_get_stat(app: FastAPIAppAdapter, authenticated_header: dict):
     test_client = app.test_client()
-    response = await test_client.get("/api/stat/get")
+    response = await test_client.get("/api/v1/stats")
     assert response.status_code == 401
-    response = await test_client.get("/api/stat/get", headers=authenticated_header)
+    response = await test_client.get("/api/v1/stats", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok" and "platform" in data["data"]
@@ -2066,8 +1618,8 @@ async def test_subagent_config_accepts_default_persona(
     }
 
     try:
-        response = await test_client.post(
-            "/api/subagent/config",
+        response = await test_client.put(
+            "/api/v1/subagents/config",
             json=payload,
             headers=authenticated_header,
         )
@@ -2076,15 +1628,15 @@ async def test_subagent_config_accepts_default_persona(
         assert data["status"] == "ok"
 
         get_response = await test_client.get(
-            "/api/subagent/config", headers=authenticated_header
+            "/api/v1/subagents/config", headers=authenticated_header
         )
         assert get_response.status_code == 200
         get_data = await get_response.get_json()
         assert get_data["status"] == "ok"
         assert get_data["data"]["agents"][0]["persona_id"] == "default"
     finally:
-        await test_client.post(
-            "/api/subagent/config",
+        await test_client.put(
+            "/api/v1/subagents/config",
             json=old_cfg,
             headers=authenticated_header,
         )
@@ -2097,15 +1649,14 @@ async def test_batch_delete_sessions_rejects_non_object_payload(
 ):
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/chat/batch_delete_sessions",
+        "/api/v1/chat/sessions/batch-delete",
         json=payload,
         headers=authenticated_header,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     data = await response.get_json()
-    assert data["status"] == "error"
-    assert data["message"] == "Invalid JSON body: expected object"
+    assert "detail" in data
 
 
 @pytest.mark.asyncio
@@ -2115,7 +1666,7 @@ async def test_batch_delete_sessions_masks_internal_error(
     test_client = app.test_client()
 
     create_session_response = await test_client.get(
-        "/api/chat/new_session", headers=authenticated_header
+        "/api/v1/chat/sessions/new", headers=authenticated_header
     )
     assert create_session_response.status_code == 200
     create_session_data = await create_session_response.get_json()
@@ -2130,7 +1681,7 @@ async def test_batch_delete_sessions_masks_internal_error(
     )
 
     response = await test_client.post(
-        "/api/chat/batch_delete_sessions",
+        "/api/v1/chat/sessions/batch-delete",
         json={"session_ids": [session_id]},
         headers=authenticated_header,
     )
@@ -2155,7 +1706,7 @@ async def test_batch_delete_sessions_uses_batch_lookup(
     db = core_lifecycle_td.db
 
     create_session_response = await test_client.get(
-        "/api/chat/new_session", headers=authenticated_header
+        "/api/v1/chat/sessions/new", headers=authenticated_header
     )
     assert create_session_response.status_code == 200
     create_session_data = await create_session_response.get_json()
@@ -2180,7 +1731,7 @@ async def test_batch_delete_sessions_uses_batch_lookup(
     )
 
     response = await test_client.post(
-        "/api/chat/batch_delete_sessions",
+        "/api/v1/chat/sessions/batch-delete",
         json={"session_ids": [session_id]},
         headers=authenticated_header,
     )
@@ -2204,7 +1755,7 @@ async def test_plugins(
     test_client = app.test_client()
 
     # 已经安装的插件
-    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    response = await test_client.get("/api/v1/plugins", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
@@ -2219,7 +1770,7 @@ async def test_plugins(
 
     # 插件市场
     response = await test_client.get(
-        "/api/plugin/market_list",
+        "/api/v1/plugins/market",
         headers=authenticated_header,
     )
     assert response.status_code == 200
@@ -2250,7 +1801,7 @@ async def test_plugins(
     try:
         # 插件安装
         response = await test_client.post(
-            "/api/plugin/install",
+            "/api/v1/plugins/install/github",
             json={"url": test_repo_url},
             headers=authenticated_header,
         )
@@ -2261,7 +1812,7 @@ async def test_plugins(
         )
 
         response = await test_client.get(
-            f"/api/plugin/get?name={test_plugin_name}",
+            f"/api/v1/plugins?name={test_plugin_name}",
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -2279,7 +1830,7 @@ async def test_plugins(
         datetime.fromisoformat(installed_at)
 
         response = await test_client.get(
-            f"/api/plugin/detail?name={test_plugin_name}",
+            f"/api/v1/plugins/{test_plugin_name}",
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -2295,8 +1846,8 @@ async def test_plugins(
 
         # 插件更新
         response = await test_client.post(
-            "/api/plugin/update",
-            json={"name": test_plugin_name},
+            f"/api/v1/plugins/{test_plugin_name}/update",
+            json={},
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -2308,9 +1859,8 @@ async def test_plugins(
         assert (plugin_dir / ".updated").exists()
 
         # 插件卸载
-        response = await test_client.post(
-            "/api/plugin/uninstall",
-            json={"name": test_plugin_name},
+        response = await test_client.delete(
+            f"/api/v1/plugins/{test_plugin_name}",
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -2341,7 +1891,7 @@ async def test_plugins_when_installed_at_unresolved(
 
     monkeypatch.setattr(PluginService, "get_plugin_installed_at", lambda *_args: None)
 
-    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    response = await test_client.get("/api/v1/plugins", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
@@ -2357,8 +1907,8 @@ async def test_commands_api(app: FastAPIAppAdapter, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()
 
-    # GET /api/commands - list commands
-    response = await test_client.get("/api/commands", headers=authenticated_header)
+    # GET /api/v1/commands - list commands
+    response = await test_client.get("/api/v1/commands", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
@@ -2369,9 +1919,9 @@ async def test_commands_api(app: FastAPIAppAdapter, authenticated_header: dict):
     assert "disabled" in summary
     assert "conflicts" in summary
 
-    # GET /api/commands/conflicts - list conflicts
+    # GET /api/v1/commands/conflicts - list conflicts
     response = await test_client.get(
-        "/api/commands/conflicts", headers=authenticated_header
+        "/api/v1/commands/conflicts", headers=authenticated_header
     )
     assert response.status_code == 200
     data = await response.get_json()
@@ -2393,7 +1943,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
     try:
         for name in ("sync-a", "sync-b"):
             response = await test_client.post(
-                "/api/config/abconf/new",
+                "/api/v1/config-profiles",
                 json={"name": name},
                 headers=authenticated_header,
             )
@@ -2403,7 +1953,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
             created_conf_ids.append(data["data"]["conf_id"])
 
         response = await test_client.post(
-            "/api/t2i/templates/create",
+            "/api/v1/t2i/templates",
             json={
                 "name": template_name,
                 "content": "<html><body>{{ text }}</body></html>",
@@ -2414,8 +1964,8 @@ async def test_t2i_set_active_template_syncs_all_configs(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        response = await test_client.post(
-            "/api/t2i/templates/set_active",
+        response = await test_client.put(
+            "/api/v1/t2i/templates/active",
             json={"name": template_name},
             headers=authenticated_header,
         )
@@ -2430,19 +1980,18 @@ async def test_t2i_set_active_template_syncs_all_configs(
             assert conf.get("t2i_active_template") == template_name
             assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
     finally:
-        await test_client.post(
-            "/api/t2i/templates/set_active",
+        await test_client.put(
+            "/api/v1/t2i/templates/active",
             json={"name": "base"},
             headers=authenticated_header,
         )
         await test_client.delete(
-            f"/api/t2i/templates/{template_name}",
+            f"/api/v1/t2i/templates/{template_name}",
             headers=authenticated_header,
         )
         for conf_id in created_conf_ids:
-            await test_client.post(
-                "/api/config/abconf/delete",
-                json={"id": conf_id},
+            await test_client.delete(
+                f"/api/v1/config-profiles/{conf_id}",
                 headers=authenticated_header,
             )
 
@@ -2460,7 +2009,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
     try:
         for name in ("reset-a", "reset-b"):
             response = await test_client.post(
-                "/api/config/abconf/new",
+                "/api/v1/config-profiles",
                 json={"name": name},
                 headers=authenticated_header,
             )
@@ -2470,7 +2019,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
             created_conf_ids.append(data["data"]["conf_id"])
 
         response = await test_client.post(
-            "/api/t2i/templates/create",
+            "/api/v1/t2i/templates",
             json={
                 "name": template_name,
                 "content": "<html><body>{{ text }} reset</body></html>",
@@ -2481,15 +2030,15 @@ async def test_t2i_reset_default_template_syncs_all_configs(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        response = await test_client.post(
-            "/api/t2i/templates/set_active",
+        response = await test_client.put(
+            "/api/v1/t2i/templates/active",
             json={"name": template_name},
             headers=authenticated_header,
         )
         assert response.status_code == 200
 
         response = await test_client.post(
-            "/api/t2i/templates/reset_default",
+            "/api/v1/t2i/templates/default/reset",
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -2503,19 +2052,18 @@ async def test_t2i_reset_default_template_syncs_all_configs(
             assert conf.get("t2i_active_template") == "base"
             assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
     finally:
-        await test_client.post(
-            "/api/t2i/templates/set_active",
+        await test_client.put(
+            "/api/v1/t2i/templates/active",
             json={"name": "base"},
             headers=authenticated_header,
         )
         await test_client.delete(
-            f"/api/t2i/templates/{template_name}",
+            f"/api/v1/t2i/templates/{template_name}",
             headers=authenticated_header,
         )
         for conf_id in created_conf_ids:
-            await test_client.post(
-                "/api/config/abconf/delete",
-                json={"id": conf_id},
+            await test_client.delete(
+                f"/api/v1/config-profiles/{conf_id}",
                 headers=authenticated_header,
             )
 
@@ -2533,7 +2081,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
     try:
         for name in ("update-a", "update-b"):
             response = await test_client.post(
-                "/api/config/abconf/new",
+                "/api/v1/config-profiles",
                 json={"name": name},
                 headers=authenticated_header,
             )
@@ -2543,7 +2091,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
             created_conf_ids.append(data["data"]["conf_id"])
 
         response = await test_client.post(
-            "/api/t2i/templates/create",
+            "/api/v1/t2i/templates",
             json={
                 "name": template_name,
                 "content": "<html><body>{{ text }} v1</body></html>",
@@ -2552,8 +2100,8 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
         )
         assert response.status_code == 201
 
-        response = await test_client.post(
-            "/api/t2i/templates/set_active",
+        response = await test_client.put(
+            "/api/v1/t2i/templates/active",
             json={"name": template_name},
             headers=authenticated_header,
         )
@@ -2566,7 +2114,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
         }
 
         response = await test_client.put(
-            f"/api/t2i/templates/{template_name}",
+            f"/api/v1/t2i/templates/{template_name}",
             json={"content": "<html><body>{{ text }} v2</body></html>"},
             headers=authenticated_header,
         )
@@ -2581,19 +2129,18 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
                 is not old_schedulers[conf_id]
             )
     finally:
-        await test_client.post(
-            "/api/t2i/templates/set_active",
+        await test_client.put(
+            "/api/v1/t2i/templates/active",
             json={"name": "base"},
             headers=authenticated_header,
         )
         await test_client.delete(
-            f"/api/t2i/templates/{template_name}",
+            f"/api/v1/t2i/templates/{template_name}",
             headers=authenticated_header,
         )
         for conf_id in created_conf_ids:
-            await test_client.post(
-                "/api/config/abconf/delete",
-                json={"id": conf_id},
+            await test_client.delete(
+                f"/api/v1/config-profiles/{conf_id}",
                 headers=authenticated_header,
             )
 
@@ -2629,7 +2176,9 @@ async def test_check_update(
         mock_get_dashboard_version,
     )
 
-    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    response = await test_client.get(
+        "/api/v1/updates/check", headers=authenticated_header
+    )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "success"
@@ -2707,7 +2256,7 @@ async def test_do_update(
     )
 
     response = await test_client.post(
-        "/api/update/do",
+        "/api/v1/updates/core",
         headers=authenticated_header,
         json={"version": "v3.4.0", "reboot": False, "progress_id": "test-progress"},
     )
@@ -2783,7 +2332,7 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     )
 
     response = await test_client.post(
-        "/api/update/do",
+        "/api/v1/updates/core",
         headers=authenticated_header,
         json={"version": "v3.4.0", "reboot": False, "progress_id": "atomic-fail"},
     )
@@ -2851,7 +2400,7 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     )
 
     response = await test_client.post(
-        "/api/update/do",
+        "/api/v1/updates/core",
         headers=authenticated_header,
         json={"version": "v3.4.0", "reboot": False, "progress_id": "invalid-zip"},
     )
@@ -2900,7 +2449,7 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
     )
 
     response = await test_client.post(
-        "/api/update/do",
+        "/api/v1/updates/core",
         headers=authenticated_header,
         json={"version": "v3.4.0", "reboot": False, "progress_id": "failed-progress"},
     )
@@ -2940,7 +2489,7 @@ async def test_install_pip_package_returns_generic_error_message(
     )
 
     response = await test_client.post(
-        "/api/update/pip-install",
+        "/api/v1/pip/install",
         headers=authenticated_header,
         json={"package": "demo-package"},
     )
@@ -3054,7 +2603,7 @@ async def test_neo_skills_routes(
     test_client = app.test_client()
 
     response = await test_client.get(
-        "/api/skills/neo/candidates", headers=authenticated_header
+        "/api/v1/skills/neo/candidates", headers=authenticated_header
     )
     assert response.status_code == 200
     data = await response.get_json()
@@ -3063,7 +2612,7 @@ async def test_neo_skills_routes(
     assert data["data"][0]["id"] == "cand-1"
 
     response = await test_client.get(
-        "/api/skills/neo/releases", headers=authenticated_header
+        "/api/v1/skills/neo/releases", headers=authenticated_header
     )
     assert response.status_code == 200
     data = await response.get_json()
@@ -3072,7 +2621,7 @@ async def test_neo_skills_routes(
     assert data["data"][0]["id"] == "rel-1"
 
     response = await test_client.get(
-        "/api/skills/neo/payload?payload_ref=pref-1", headers=authenticated_header
+        "/api/v1/skills/neo/payload?payload_ref=pref-1", headers=authenticated_header
     )
     assert response.status_code == 200
     data = await response.get_json()
@@ -3080,7 +2629,7 @@ async def test_neo_skills_routes(
     assert data["data"]["payload_ref"] == "pref-1"
 
     response = await test_client.post(
-        "/api/skills/neo/evaluate",
+        "/api/v1/skills/neo/evaluate",
         json={"candidate_id": "cand-1", "passed": True, "score": 0.95},
         headers=authenticated_header,
     )
@@ -3091,7 +2640,7 @@ async def test_neo_skills_routes(
     assert data["data"]["passed"] is True
 
     response = await test_client.post(
-        "/api/skills/neo/evaluate",
+        "/api/v1/skills/neo/evaluate",
         json={"candidate_id": "cand-1", "passed": "false", "score": 0.0},
         headers=authenticated_header,
     )
@@ -3101,7 +2650,7 @@ async def test_neo_skills_routes(
     assert data["data"]["passed"] is False
 
     response = await test_client.post(
-        "/api/skills/neo/promote",
+        "/api/v1/skills/neo/promote",
         json={"candidate_id": "cand-1", "stage": "stable"},
         headers=authenticated_header,
     )
@@ -3112,7 +2661,7 @@ async def test_neo_skills_routes(
     assert data["data"]["sync"]["local_skill_name"] == "neo_demo"
 
     response = await test_client.post(
-        "/api/skills/neo/rollback",
+        "/api/v1/skills/neo/rollback",
         json={"release_id": "rel-2"},
         headers=authenticated_header,
     )
@@ -3122,7 +2671,7 @@ async def test_neo_skills_routes(
     assert data["data"]["rolled_back_release_id"] == "rel-2"
 
     response = await test_client.post(
-        "/api/skills/neo/sync",
+        "/api/v1/skills/neo/sync",
         json={"release_id": "rel-2"},
         headers=authenticated_header,
     )
@@ -3140,7 +2689,7 @@ async def test_batch_upload_skills_returns_error_when_all_files_invalid(
     test_client = app.test_client()
 
     response = await test_client.post(
-        "/api/skills/batch-upload",
+        "/api/v1/skills/batch",
         headers=authenticated_header,
         files={
             "files": FileStorage(
@@ -3188,7 +2737,7 @@ async def test_batch_upload_skills_accepts_zip_files(
     test_client = app.test_client()
 
     response = await test_client.post(
-        "/api/skills/batch-upload",
+        "/api/v1/skills/batch",
         headers=authenticated_header,
         files={
             "files": FileStorage(
@@ -3262,7 +2811,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
     test_client = app.test_client()
 
     response = await test_client.post(
-        "/api/skills/batch-upload",
+        "/api/v1/skills/batch",
         headers=authenticated_header,
         files={
             "files": FileStorage(
@@ -3334,7 +2883,7 @@ async def test_batch_upload_skills_partial_success(
     headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
 
     response = await test_client.post(
-        "/api/skills/batch-upload",
+        "/api/v1/skills/batch",
         headers=headers,
         data=body,
     )
@@ -3390,7 +2939,7 @@ async def test_skill_file_browser_and_editor_security(
     test_client = app.test_client()
 
     list_response = await test_client.get(
-        "/api/skills/files?name=demo_skill",
+        "/api/v1/skills/files?skill_name=demo_skill",
         headers=authenticated_header,
     )
     list_data = await list_response.get_json()
@@ -3400,17 +2949,17 @@ async def test_skill_file_browser_and_editor_security(
     assert "outside-link.txt" not in listed_paths
 
     read_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=SKILL.md",
+        "/api/v1/skills/file?skill_name=demo_skill&path=SKILL.md",
         headers=authenticated_header,
     )
     read_data = await read_response.get_json()
     assert read_data["status"] == "ok"
     assert "# Demo" in read_data["data"]["content"]
 
-    update_response = await test_client.post(
-        "/api/skills/file",
+    update_response = await test_client.put(
+        "/api/v1/skills/file",
         json={
-            "name": "demo_skill",
+            "skill_name": "demo_skill",
             "path": "SKILL.md",
             "content": "# Updated\n",
         },
@@ -3421,21 +2970,21 @@ async def test_skill_file_browser_and_editor_security(
     assert skill_md.read_text(encoding="utf-8") == "# Updated\n"
 
     traversal_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=../outside.txt",
+        "/api/v1/skills/file?skill_name=demo_skill&path=../outside.txt",
         headers=authenticated_header,
     )
     traversal_data = await traversal_response.get_json()
     assert traversal_data["status"] == "error"
 
     symlink_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=outside-link.txt",
+        "/api/v1/skills/file?skill_name=demo_skill&path=outside-link.txt",
         headers=authenticated_header,
     )
     symlink_data = await symlink_response.get_json()
     assert symlink_data["status"] == "error"
 
     large_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=large.md",
+        "/api/v1/skills/file?skill_name=demo_skill&path=large.md",
         headers=authenticated_header,
     )
     large_data = await large_response.get_json()
@@ -3443,7 +2992,7 @@ async def test_skill_file_browser_and_editor_security(
     assert large_data["message"] == "File is too large"
 
     binary_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=binary.md",
+        "/api/v1/skills/file?skill_name=demo_skill&path=binary.md",
         headers=authenticated_header,
     )
     binary_data = await binary_response.get_json()

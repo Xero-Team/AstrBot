@@ -83,13 +83,7 @@ class MyPlugin(Star):
 ```
 
 > [!WARNING]
-> `context.register_llm_tool()` is deprecated. Do not use it in new plugins.
->
-> If you must use it for legacy compatibility, `func_args` must be a **list of dicts** in this format:
-> ```py
-> func_args = [{"type": "string", "name": "arg_name", "description": "..."}, ...]
-> ```
-> Passing a list of strings or any other format will raise `AttributeError: 'str' object has no attribute 'pop'`.
+> `context.register_llm_tool()` has been removed. Use `@filter.llm_tool(...)` or `self.context.add_llm_tools(...)` instead.
 
 ### Registering Tools via Decorator
 
@@ -559,14 +553,12 @@ class Persona(SQLModel, table=True):
 class Personality(TypedDict):
     """LLM Persona class.
 
-    Starting from v4.0.0 and later, it's recommended to use the Persona class above. Additionally, the mood_imitation_dialogs field has been deprecated.
+    Starting from v4.0.0 and later, it's recommended to use the Persona class above.
     """
 
     prompt: str
     name: str
     begin_dialogs: list[str]
-    mood_imitation_dialogs: list[str]
-    """Mood imitation dialog preset. Deprecated since v4.0.0 and later."""
     tools: list[str] | None
     """Tool list. None means use all tools, empty list means don't use any tools"""
 ```

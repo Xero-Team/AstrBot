@@ -10,7 +10,7 @@ from uuid import uuid4
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.platform.message_session import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_message_chain_from_payload,
     strip_message_parts_path_fields,
@@ -134,7 +134,7 @@ class OpenApiService:
         if not effective_username:
             raise OpenApiServiceError("Invalid username")
 
-        raw_session_id = post_data.get("session_id", post_data.get("conversation_id"))
+        raw_session_id = post_data.get("session_id")
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
         if not session_id:
             session_id = str(uuid4())
@@ -608,7 +608,7 @@ class OpenApiService:
             raise OpenApiServiceError("Missing key: umo")
 
         try:
-            session = MessageSesion.from_str(str(umo))
+            session = MessageSession.from_str(str(umo))
         except Exception as exc:
             raise OpenApiServiceError(f"Invalid umo: {exc}") from exc
 

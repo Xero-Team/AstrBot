@@ -38,8 +38,6 @@ const { tm, router } = props.state;
 const {
   pluginName,
   pluginDesc: resolvePluginDesc,
-  pluginPageTitle,
-  pluginPageDescription,
 } = usePluginI18n();
 
 const markdown = new MarkdownIt({
@@ -317,17 +315,9 @@ const normalizeHandlerList = (source) => {
   return [];
 };
 
-const componentGroupOrder = [
-  "page",
-  "skill",
-  "command",
-  "llm_tool",
-  "listener",
-  "hook",
-];
+const componentGroupOrder = ["skill", "command", "llm_tool", "listener", "hook"];
 
 const componentGroupIcons = {
-  page: "mdi-monitor-dashboard",
   skill: "mdi-lightning-bolt",
   command: "mdi-console-line",
   llm_tool: "mdi-tools",
@@ -432,16 +422,6 @@ const getHandlerCommand = (handler) =>
   ).trim();
 
 const getHandlerDisplayName = (handler, groupKey) => {
-  if (groupKey === "page") {
-    return pluginPageTitle(
-      pluginData.value,
-      handler,
-      handler?.title ||
-        handler?.name ||
-        handler?.page_name ||
-        tm("status.unknown"),
-    );
-  }
   if (handler?.name) {
     return handler.name;
   }
@@ -467,27 +447,9 @@ const toggleCommandGroup = (key) => {
 };
 
 const getComponentDescription = (component) => {
-  const fallback =
-    component?.description || component?.desc || tm("status.unknown");
-  if (getComponentGroupKey(component) === "page") {
-    return String(
-      pluginPageDescription(pluginData.value, component, fallback),
-    ).trim();
-  }
-  return String(fallback).trim();
-};
-
-const openComponentPage = (component) => {
-  const targetPluginName = component?.plugin_name || pluginData.value?.name;
-  const targetPageName = component?.page_name || component?.name;
-  if (!targetPluginName || !targetPageName) return;
-  router.push({
-    name: "PluginPage",
-    params: {
-      pluginName: targetPluginName,
-      pageName: targetPageName,
-    },
-  });
+  return String(
+    component?.description || component?.desc || tm("status.unknown"),
+  ).trim();
 };
 
 const getCommandRowKey = (component, path) =>
@@ -921,17 +883,6 @@ onBeforeUnmount(() => {
                         {{ getHandlerTiming(component) }}
                       </span>
                       <span>{{ getComponentDescription(component) }}</span>
-                      <v-btn
-                        v-if="group.key === 'page'"
-                        color="primary"
-                        size="small"
-                        variant="tonal"
-                        prepend-icon="mdi-open-in-new"
-                        class="ml-2"
-                        @click="openComponentPage(component)"
-                      >
-                        {{ tm("buttons.openPage") }}
-                      </v-btn>
                     </div>
                   </td>
                 </tr>

@@ -139,10 +139,8 @@ The default AstrBot configuration is as follows:
     "trace_enable": False,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
-    "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
-    "default_kb_collection": "",  # Default knowledge base name
     "plugin_set": ["*"],  # "*" means use all available plugins, empty list means none
 }
 ```
@@ -558,12 +556,6 @@ Arguments for `pip install`. E.g., `-i https://mirrors.tuna.tsinghua.edu.cn/pypi
 
 PyPI index URL. Default is `https://mirrors.aliyun.com/pypi/simple/`.
 
-### `persona`
-
-*This configuration item has been deprecated since v4.0.0. Please use the WebUI to configure personalities.*
-
-List of configured personalities. Each personality contains `id`, `name`, `description`, and `system_prompt` fields.
-
 ### `timezone`
 
 Timezone setting. Please fill in an IANA timezone name, such as Asia/Shanghai. If empty, the system default timezone is used. See all timezones at: [IANA Time Zone Database](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab).
@@ -571,10 +563,6 @@ Timezone setting. Please fill in an IANA timezone name, such as Asia/Shanghai. I
 ### `callback_api_base`
 
 Base address for the AstrBot API. Used for file services, plugin callbacks, etc. E.g., `http://example.com:6185`. Default is empty, meaning file services and plugin callbacks are disabled.
-
-### `default_kb_collection`
-
-Default knowledge base name. Used for RAG. If empty, no knowledge base is used.
 
 ### `plugin_set`
 

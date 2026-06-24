@@ -192,8 +192,8 @@ class SessionManagementService:
         kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
 
         available_personas = [
-            {"name": p["name"], "prompt": p.get("prompt", "")}
-            for p in getattr(persona_mgr, "personas_v3", [])
+            {"name": p.persona_id, "prompt": p.system_prompt}
+            for p in getattr(persona_mgr, "personas", [])
         ]
         available_plugins = []
         if plugin_manager and getattr(plugin_manager, "context", None):

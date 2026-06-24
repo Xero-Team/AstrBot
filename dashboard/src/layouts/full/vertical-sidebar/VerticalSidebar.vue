@@ -1,40 +1,20 @@
 <script setup>
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue';
 import { useTheme } from 'vuetify';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
-import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
-import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 
 const { t, locale } = useI18n();
+const ChangelogDialog = defineAsyncComponent(() => import('@/components/shared/ChangelogDialog.vue'));
 
 const customizer = useCustomizerStore();
 const theme = useTheme();
-const { pluginItems } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
-  const base = applySidebarCustomization(sidebarItems);
-  if (!pluginItems.value?.children?.length) return base;
-
-  const result = [];
-
-  for (const item of base) {
-    if (item.title === MORE_GROUP_KEY) {
-      result.push(pluginItems.value);
-      result.push(item);
-    } else {
-      result.push(item);
-    }
-  }
-
-  if (!base.some((item) => item.title === MORE_GROUP_KEY)) {
-    result.push(pluginItems.value);
-  }
-
-  return result;
+  return applySidebarCustomization(sidebarItems);
 }
 
 function collectGroupValues(items, values = new Set()) {
@@ -72,12 +52,6 @@ const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
 watch(openedItems, (val) => {
   localStorage.setItem('sidebar_openedItems', JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
 }, { deep: true });
-
-// 当插件项变化时（如插件启用/停用），刷新菜单
-watch(pluginItems, () => {
-  sidebarMenu.value = buildSidebarMenu();
-  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
-});
 
 function refreshSidebarMenu() {
   sidebarMenu.value = buildSidebarMenu();

@@ -3,13 +3,12 @@ import { router } from '@/router';
 import {
   authApi,
   providerApi,
+  statsApi,
   systemConfigApi,
   UPGRADE_RECOVERY_EVENT,
   UPGRADE_RECOVERY_TOKEN_KEY,
-  type ApiEnvelope,
   type VersionData,
 } from '@/api/v1';
-import { httpClient } from '@/api/http';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -74,17 +73,14 @@ export const useAuthStore = defineStore("auth", {
           return Promise.reject(res.data.message);
         }
 
-        const legacyToken = String(res.data.data?.token || '');
-        if (res.legacyFallback && legacyToken) {
-          const versionRes = await httpClient.get<ApiEnvelope<VersionData>>(
-            '/api/stat/version',
-            {
-              headers: {
-                Authorization: `Bearer ${legacyToken}`,
-              },
-              validateStatus: () => true,
+        const sessionToken = String(res.data.data?.token || '');
+        if (sessionToken) {
+          const versionRes = await statsApi.version({
+            headers: {
+              Authorization: `Bearer ${sessionToken}`,
             },
-          );
+            validateStatus: () => true,
+          });
           const versionData = versionRes.data?.data || {};
           const coreVersion = String(versionData.version || '')
             .trim()
@@ -98,7 +94,7 @@ export const useAuthStore = defineStore("auth", {
             dashboardVersion &&
             coreVersion !== dashboardVersion
           ) {
-            sessionStorage.setItem(UPGRADE_RECOVERY_TOKEN_KEY, legacyToken);
+            sessionStorage.setItem(UPGRADE_RECOVERY_TOKEN_KEY, sessionToken);
             window.dispatchEvent(
               new CustomEvent(UPGRADE_RECOVERY_EVENT, {
                 detail: {

@@ -139,10 +139,8 @@ AstrBot 默认配置如下：
     "trace_enable": False,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
-    "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
-    "default_kb_collection": "",  # 默认知识库名称
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
 }
 ```
@@ -558,12 +556,6 @@ AstrBot WebUI 配置。
 
 PyPI 镜像源地址。默认为 `https://mirrors.aliyun.com/pypi/simple/`。
 
-### `persona`
-
-*此配置项已经在 v4.0.0 版本之后被废弃。请使用 WebUI 来配置人格。*
-
-已配置的人格列表。每个人格包含 `id`, `name`, `description`, `system_prompt` 四个字段。
-
 ### `timezone`
 
 时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: [IANA Time Zone Database](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)。
@@ -571,10 +563,6 @@ PyPI 镜像源地址。默认为 `https://mirrors.aliyun.com/pypi/simple/`。
 ### `callback_api_base`
 
 AstrBot API 的基础地址。用于文件服务和插件回调等功能。如 `http://example.com:6185`。默认为空，表示不启用文件服务和插件回调功能。
-
-### `default_kb_collection`
-
-默认知识库名称。用于 RAG 功能。如果为空，则不使用知识库。
 
 ### `plugin_set`
 

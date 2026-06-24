@@ -19,14 +19,9 @@ from astrbot.dashboard.services.conversation_service import (
     ConversationServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Conversations"])
-legacy_router = APIRouter(
-    prefix="/api/conversation",
-    tags=["Dashboard Conversations"],
-    include_in_schema=False,
-)
 
 
 def get_service(request: Request) -> ConversationService:
@@ -35,14 +30,6 @@ def get_service(request: Request) -> ConversationService:
 
 async def require_data_scope(request: Request) -> AuthContext:
     return await require_scope(request, "data")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _model_dict(payload) -> dict[str, Any]:
@@ -213,76 +200,3 @@ async def delete_conversation(
             {"user_id": user_id, "cid": conversation_id}
         )
     )
-
-
-@legacy_router.get("/list")
-async def list_dashboard_conversations(
-    page: int = Query(default=1),
-    page_size: int = Query(default=20),
-    platforms: str = Query(default=""),
-    message_types: str = Query(default=""),
-    search: str = Query(default=""),
-    exclude_ids: str = Query(default=""),
-    exclude_platforms: str = Query(default=""),
-    _username: str = Depends(require_dashboard_user),
-    service: ConversationService = Depends(get_service),
-):
-    return await _list_conversations(
-        service,
-        page=page,
-        page_size=page_size,
-        platforms=platforms,
-        message_types=message_types,
-        search=search,
-        exclude_ids=exclude_ids,
-        exclude_platforms=exclude_platforms,
-    )
-
-
-@legacy_router.post("/detail")
-async def get_dashboard_conversation_detail(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: ConversationService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(lambda: service.get_conversation_detail(body))
-
-
-@legacy_router.post("/update")
-async def update_dashboard_conversation(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: ConversationService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(lambda: service.update_conversation(body))
-
-
-@legacy_router.post("/delete")
-async def delete_dashboard_conversation(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: ConversationService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(lambda: service.delete_conversation(body))
-
-
-@legacy_router.post("/update_history")
-async def update_dashboard_conversation_history(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: ConversationService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(lambda: service.update_history(body))
-
-
-@legacy_router.post("/export")
-async def export_dashboard_conversations(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: ConversationService = Depends(get_service),
-):
-    return await _export_conversations(await _json_or_empty(request), service)

@@ -2,18 +2,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ok
 from astrbot.dashboard.schemas import BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
 
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Bots"])
-legacy_router = APIRouter(
-    prefix="/api/config/platform",
-    tags=["Dashboard Bots"],
-    include_in_schema=False,
-)
 
 
 async def require_bot_scope(request: Request) -> AuthContext:
@@ -22,14 +17,6 @@ async def require_bot_scope(request: Request) -> AuthContext:
 
 def get_service(request: Request) -> BotConfigService:
     return request.app.state.services.bots
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _required_text(value: object, name: str) -> str:
@@ -48,10 +35,6 @@ def _config_from_body(body: dict) -> dict:
         for key, value in body.items()
         if key not in {"bot_id", "config", "enabled"}
     }
-
-
-def _alias_error(message: str):
-    return error(message)
 
 
 @router.get("/bot-types")
@@ -190,64 +173,3 @@ async def delete_bot(
 ):
     await service.delete_bot(bot_id)
     return ok(message="删除平台配置成功~")
-
-
-@legacy_router.get("/list")
-async def list_dashboard_alias_platforms(
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    return ok({"platforms": service.list_bots()["bots"]})
-
-
-@legacy_router.post("/new")
-async def create_dashboard_alias_platform(
-    payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    try:
-        await service.create_bot(payload.to_dashboard_config())
-        return ok(message="新增平台配置成功~")
-    except ValueError as exc:
-        return _alias_error(str(exc))
-
-
-@legacy_router.post("/update")
-async def update_dashboard_alias_platform(
-    request: Request,
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    bot_id = body.get("id")
-    config = body.get("config")
-    if not bot_id or not isinstance(config, dict):
-        return _alias_error("参数错误")
-    try:
-        await service.update_bot(
-            str(bot_id),
-            BotConfigRequest(config=config).to_dashboard_config(
-                fallback_id=str(bot_id)
-            ),
-        )
-        return ok(message="更新平台配置成功~")
-    except ValueError as exc:
-        return _alias_error(str(exc))
-
-
-@legacy_router.post("/delete")
-async def delete_dashboard_alias_platform(
-    request: Request,
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    bot_id = body.get("id")
-    if not bot_id:
-        return _alias_error("缺少参数 id")
-    try:
-        await service.delete_bot(str(bot_id))
-        return ok(message="删除平台配置成功~")
-    except ValueError as exc:
-        return _alias_error(str(exc))

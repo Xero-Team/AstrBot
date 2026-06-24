@@ -213,22 +213,6 @@
                     "cua_api_key": {
                         "description": "CUA API Key",
                         "hint": "API key для облачной песочницы CUA. Требуется только если локальная песочница отключена. Также можно передать через переменную окружения CUA_API_KEY."
-                    },
-                    "shipyard_endpoint": {
-                        "description": "Эндпоинт Shipyard API",
-                        "hint": "Адрес API для доступа к сервису Shipyard."
-                    },
-                    "shipyard_access_token": {
-                        "description": "Токен доступа Shipyard",
-                        "hint": "Токен доступа для работы с сервисом Shipyard."
-                    },
-                    "shipyard_ttl": {
-                        "description": "TTL сессии Shipyard",
-                        "hint": "Время жизни сессии в секундах."
-                    },
-                    "shipyard_max_sessions": {
-                        "description": "Макс. количество сессий Shipyard",
-                        "hint": "Максимальное количество сессий Shipyard, которое может поддерживать экземпляр."
                     }
                 }
             }

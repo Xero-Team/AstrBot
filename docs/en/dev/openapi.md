@@ -37,7 +37,7 @@ When creating an API Key, you can configure `scopes`. Each scope controls the ra
 | `bot` | Manage bot/platform configurations | `GET /api/v1/bot-types`, `GET/POST /api/v1/bots`, `PATCH /api/v1/bots/enabled` |
 | `provider` | Manage model providers and provider sources | `GET/POST /api/v1/providers`, `GET/PUT/DELETE /api/v1/provider-sources/by-id` |
 | `persona` | Manage personas and persona folders | `GET/POST /api/v1/personas`, `GET/POST /api/v1/persona-folders` |
-| `im` | Send proactive IM messages and query bot/platform list | `POST /api/v1/im/message`, `GET /api/v1/im/bots` |
+| `im` | Send proactive IM messages and query bot/platform list | `POST /api/v1/im/messages`, `GET /api/v1/im/bots` |
 | `config` | Manage config profiles, system config, and shared configuration. This scope also includes `bot` and `provider` access. | `GET /api/v1/configs`, `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles` |
 | `chat` | Access chat capabilities and query sessions | `POST /api/v1/chat`, `GET /api/v1/chat/sessions` |
 | `file` | Upload and download chat attachments | `POST /api/v1/file`, `GET /api/v1/file`, `POST /api/v1/files` |
@@ -78,12 +78,12 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 
 **Proactive IM Messages**
 
-- `POST /api/v1/im/message`: send a proactive message via UMO
+- `POST /api/v1/im/messages`: send a proactive message via UMO
 - `GET /api/v1/im/bots`: list bot/platform IDs
 
 ## `message` Field Format (Important)
 
-The `message` field in `POST /api/v1/chat` and `POST /api/v1/im/message` supports two formats:
+The `message` field in `POST /api/v1/chat` and `POST /api/v1/im/messages` supports two formats:
 
 1. String: plain text message
 2. Array: message segments (message chain)
@@ -118,7 +118,7 @@ Supported `type` values:
 | `file` | `attachment_id` | - | Generic file segment |
 | `video` | `attachment_id` | - | Video attachment segment |
 
-* The `reply` segment is currently only supported for `/api/v1/chat`, not for `POST /api/v1/im/message`.
+* The `reply` segment is currently only supported for `/api/v1/chat`, not for `POST /api/v1/im/messages`.
 
 Notes:
 
@@ -146,7 +146,7 @@ Notes:
 
 ### `message` Usage in IM Message API
 
-`POST /api/v1/im/message` requires `umo` + `message`.
+`POST /api/v1/im/messages` requires `umo` + `message`.
 
 ```json
 {

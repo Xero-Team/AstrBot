@@ -13,14 +13,9 @@ from astrbot.dashboard.services.platform_service import (
     PlatformServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Platforms"])
-legacy_router = APIRouter(
-    prefix="/api/platform",
-    tags=["Dashboard Platforms"],
-    include_in_schema=False,
-)
 
 
 def get_service(request: Request) -> PlatformService:
@@ -29,14 +24,6 @@ def get_service(request: Request) -> PlatformService:
 
 async def require_config_scope(request: Request) -> AuthContext:
     return await require_scope(request, "config")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _raise_platform_error(exc: PlatformServiceError) -> None:
@@ -86,36 +73,4 @@ async def receive_platform_webhook(
 ):
     return await _run(
         lambda: service.handle_webhook_callback(webhook_uuid, DashboardRequest(request))
-    )
-
-
-@legacy_router.api_route("/webhook/{webhook_uuid}", methods=["GET", "POST"])
-async def dashboard_platform_webhook(
-    webhook_uuid: str,
-    request: Request,
-    service: PlatformService = Depends(get_service),
-):
-    return await _run(
-        lambda: service.handle_webhook_callback(webhook_uuid, DashboardRequest(request))
-    )
-
-
-@legacy_router.get("/stats")
-async def get_dashboard_platform_stats(
-    _username: str = Depends(require_dashboard_user),
-    service: PlatformService = Depends(get_service),
-):
-    return await _run(service.get_platform_stats)
-
-
-@legacy_router.post("/registration/{platform_type}")
-async def handle_dashboard_platform_registration(
-    platform_type: str,
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: PlatformService = Depends(get_service),
-):
-    payload = await _json_or_empty(request)
-    return await _run(
-        lambda: service.handle_platform_registration(platform_type, payload)
     )

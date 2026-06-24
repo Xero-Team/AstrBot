@@ -24,7 +24,6 @@ PUBLIC_OPEN_API_TAGS = {
     "Files",
     "Plugins",
     "Plugin Sources",
-    "Plugin Pages",
     "MCP",
     "Skills",
     "Personas",

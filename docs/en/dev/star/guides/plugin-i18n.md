@@ -20,11 +20,10 @@ When the current locale has no translation, a field is missing, or the locale fi
 
 - Plugin names, card short descriptions, and descriptions fall back to `display_name`, `short_desc`, and `desc` in `metadata.yaml`.
 - Configuration text falls back to `description`, `hint`, and `labels` in `_conf_schema.json`.
-- Page text falls back to the Page directory name, default Page title, or fallback text provided by page code.
 
 ## Metadata
 
-`metadata` overrides the plugin name, card short description, and description shown on plugin pages.
+`metadata` overrides the plugin name, card short description, and description shown in plugin listings.
 
 ```json
 {
@@ -78,51 +77,9 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
 
 `options` are stored configuration values and should usually not be translated. Use `labels` for select display text.
 
-## Plugin Pages
+## Removed Support
 
-`pages` overrides plugin Dashboard Page titles, descriptions, and custom text inside plugin pages. The structure is nested by Page directory name.
-
-Example plugin page directory:
-
-```text
-pages/
-  settings/
-    index.html
-```
-
-Corresponding `.astrbot-plugin/i18n/en-US.json`:
-
-```json
-{
-  "pages": {
-    "settings": {
-      "title": "Settings",
-      "description": "Manage advanced settings for this plugin.",
-      "save": "Save",
-      "reset": "Reset"
-    }
-  }
-}
-```
-
-`title` is used by the WebUI shell title and the Page component name on the plugin detail page. `description` is used by the Page component description on the plugin detail page. Other fields are read by the page through the bridge:
-
-```js
-const bridge = window.AstrBotPluginPage;
-
-function render() {
-  document.getElementById("save").textContent = bridge.t(
-    "pages.settings.save",
-    "Save",
-  );
-}
-
-await bridge.ready();
-render();
-bridge.onContext(render);
-```
-
-Use `onContext()` to react to WebUI language changes; with this listener, the Page usually does not need a refresh.
+This fork no longer supports plugin Dashboard Pages or plugin Web UI bridges, so `pages` i18n entries are ignored.
 
 ## Nested Configuration
 

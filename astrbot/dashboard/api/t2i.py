@@ -8,14 +8,9 @@ from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import T2iActiveTemplateRequest, T2iTemplateRequest
 from astrbot.dashboard.services.t2i_service import T2iService, T2iServiceError
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Text To Image"])
-legacy_router = APIRouter(
-    prefix="/api/t2i",
-    tags=["Dashboard Text To Image"],
-    include_in_schema=False,
-)
 
 
 def get_service(request: Request) -> T2iService:
@@ -24,14 +19,6 @@ def get_service(request: Request) -> T2iService:
 
 async def require_config_scope(request: Request) -> AuthContext:
     return await require_scope(request, "config")
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _raise_t2i_error(exc: T2iServiceError) -> None:
@@ -144,89 +131,6 @@ async def update_t2i_template(
 async def delete_t2i_template(
     name: str,
     _auth: AuthContext = Depends(require_config_scope),
-    service: T2iService = Depends(get_service),
-):
-    return await _run(
-        lambda: service.delete_template(name),
-        message="Template deleted successfully.",
-    )
-
-
-@legacy_router.get("/templates")
-async def list_dashboard_t2i_templates(
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    return await _run(service.list_templates)
-
-
-@legacy_router.get("/templates/active")
-async def get_dashboard_active_t2i_template(
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    return await _run(service.get_active_template)
-
-
-@legacy_router.post("/templates/create")
-async def create_dashboard_t2i_template(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(
-        lambda: service.create_template(body.get("name"), body.get("content")),
-        message="Template created successfully.",
-        status_code=201,
-    )
-
-
-@legacy_router.post("/templates/reset_default")
-async def reset_dashboard_default_t2i_template(
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    return await _run(service.reset_default_template, result_as_message=True)
-
-
-@legacy_router.post("/templates/set_active")
-async def set_dashboard_active_t2i_template(
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(
-        lambda: service.set_active_template(body.get("name")),
-        result_as_message=True,
-    )
-
-
-@legacy_router.get("/templates/{name:path}")
-async def get_dashboard_t2i_template(
-    name: str,
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    return await _run(lambda: service.get_template(name))
-
-
-@legacy_router.put("/templates/{name:path}")
-async def update_dashboard_t2i_template(
-    name: str,
-    request: Request,
-    _username: str = Depends(require_dashboard_user),
-    service: T2iService = Depends(get_service),
-):
-    body = await _json_or_empty(request)
-    return await _run(lambda: service.update_template(name, body.get("content")))
-
-
-@legacy_router.delete("/templates/{name:path}")
-async def delete_dashboard_t2i_template(
-    name: str,
-    _username: str = Depends(require_dashboard_user),
     service: T2iService = Depends(get_service),
 ):
     return await _run(

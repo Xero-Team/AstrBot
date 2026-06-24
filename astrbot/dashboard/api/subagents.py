@@ -9,14 +9,9 @@ from astrbot.dashboard.services.subagent_service import (
     SubAgentServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Subagents"])
-legacy_router = APIRouter(
-    prefix="/api/subagent",
-    tags=["Dashboard Subagents"],
-    include_in_schema=False,
-)
 
 
 async def require_config_scope(request: Request) -> AuthContext:
@@ -77,31 +72,6 @@ async def update_subagent_config(
 @router.get("/subagents/available-tools")
 async def get_subagent_tools(
     _auth: AuthContext = Depends(require_config_scope),
-    service: SubAgentService = Depends(get_service),
-):
-    return await _get_available_tools(service)
-
-
-@legacy_router.get("/config")
-async def get_dashboard_subagent_config(
-    _username: str = Depends(require_dashboard_user),
-    service: SubAgentService = Depends(get_service),
-):
-    return await _get_config(service)
-
-
-@legacy_router.post("/config")
-async def update_dashboard_subagent_config(
-    payload: SubAgentConfigRequest,
-    _username: str = Depends(require_dashboard_user),
-    service: SubAgentService = Depends(get_service),
-):
-    return await _update_config(payload, service)
-
-
-@legacy_router.get("/available-tools")
-async def get_dashboard_subagent_tools(
-    _username: str = Depends(require_dashboard_user),
     service: SubAgentService = Depends(get_service),
 ):
     return await _get_available_tools(service)

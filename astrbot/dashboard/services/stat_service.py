@@ -127,23 +127,49 @@ class StatService:
 
     async def get_stat(self, offset_sec: int) -> dict:
         try:
-            stat = self.db_helper.get_base_stats(offset_sec)
+            stat = await self.db_helper.get_platform_stats(offset_sec)
             now = int(time.time())
             start_time = now - offset_sec
             message_time_based_stats = []
+            platform_stats = sorted(
+                stat,
+                key=lambda item: int(self._ensure_aware_utc(item.timestamp).timestamp()),
+            )
 
             idx = 0
             for bucket_end in range(start_time, now, 3600):
                 cnt = 0
                 while (
-                    idx < len(stat.platform)
-                    and stat.platform[idx].timestamp < bucket_end
+                    idx < len(platform_stats)
+                    and int(
+                        self._ensure_aware_utc(platform_stats[idx].timestamp).timestamp()
+                    )
+                    < bucket_end
                 ):
-                    cnt += stat.platform[idx].count
+                    cnt += platform_stats[idx].count
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
 
-            stat_dict = stat.__dict__
+            grouped_platform = []
+            grouped_counts: dict[str, int] = defaultdict(int)
+            grouped_timestamps: dict[str, int] = {}
+            for item in platform_stats:
+                timestamp = int(self._ensure_aware_utc(item.timestamp).timestamp())
+                grouped_counts[item.platform_id] += item.count
+                grouped_timestamps[item.platform_id] = max(
+                    grouped_timestamps.get(item.platform_id, 0),
+                    timestamp,
+                )
+            for platform_id, count in grouped_counts.items():
+                grouped_platform.append(
+                    {
+                        "name": platform_id,
+                        "count": count,
+                        "timestamp": grouped_timestamps[platform_id],
+                    }
+                )
+
+            stat_dict = {"platform": grouped_platform}
 
             cpu_percent = psutil.cpu_percent(interval=0.5)
             thread_count = threading.active_count()
@@ -161,13 +187,11 @@ class StatService:
             running_time = self.get_running_time_components(
                 int(time.time()) - self.core_lifecycle.start_time,
             )
+            message_count = sum(item.count for item in platform_stats)
 
             stat_dict.update(
                 {
-                    "platform": self.db_helper.get_grouped_base_stats(
-                        offset_sec,
-                    ).platform,
-                    "message_count": self.db_helper.get_total_message_count() or 0,
+                    "message_count": message_count,
                     "platform_count": len(
                         self.core_lifecycle.platform_manager.get_insts(),
                     ),

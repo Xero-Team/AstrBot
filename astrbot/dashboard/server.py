@@ -34,15 +34,11 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.responses import error
 
 from .api.app import create_dashboard_asgi_app
-from .plugin_page_auth import PluginPageAuth
 from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
-        "/api/config/astrbot/update",
-        "/api/auth/totp/setup",
         "/api/v1/auth/totp/setup",
-        "/api/auth/login",
         "/api/v1/auth/login",
     }
 )
@@ -260,42 +256,21 @@ class AstrBotDashboard:
         if path.startswith("/api/v1"):
             return None
 
-        allowed_exact_endpoints = {
-            "/api/auth/login",
-            "/api/auth/logout",
-            "/api/auth/setup-status",
-            "/api/auth/setup",
-        }
+        allowed_exact_endpoints = {}
         allowed_endpoint_prefixes = [
-            "/api/file",
             "/api/v1/files/tokens",
-            "/api/platform/webhook",
-            "/api/stat/start-time",
-            "/api/backup/download",  # 备份下载使用 URL 参数传递 token
         ]
         if path in allowed_exact_endpoints or any(
             path.startswith(prefix) for prefix in allowed_endpoint_prefixes
         ):
             return None
-        is_plugin_page_path = PluginPageAuth.is_protected_path(path)
         token = self._extract_dashboard_jwt(current_request)
-        if not token and is_plugin_page_path:
-            token = PluginPageAuth.extract_asset_token(current_request.query_params)
         if not token:
             r = JSONResponse(error("未授权"))
             r.status_code = 401
             return r
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            if PluginPageAuth.is_asset_token(
-                payload
-            ) and not PluginPageAuth.is_scope_valid(
-                payload,
-                path,
-            ):
-                r = JSONResponse(error("Token 无效"))
-                r.status_code = 401
-                return r
 
             username = payload.get("username")
             if not isinstance(username, str) or not username.strip():

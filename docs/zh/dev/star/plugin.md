@@ -1425,7 +1425,7 @@ async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEv
 >
 > ```py
 > func_tool = self.context.get_llm_tool_manager() # 获取 AstrBot 的 LLM Tool Manager，包含了所有插件和 MCP 注册的 Tool
-> tool = func_tool.get_func("xxx")
+> tool = func_tool.get_tool("xxx")
 > if tool:
 >     tool_set = ToolSet()
 >     tool_set.add_tool(tool)
@@ -1691,14 +1691,12 @@ class Persona(SQLModel, table=True):
 class Personality(TypedDict):
     """LLM 人格类。
 
-    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
+    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。
     """
 
     prompt: str
     name: str
     begin_dialogs: list[str]
-    mood_imitation_dialogs: list[str]
-    """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
     tools: list[str] | None
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
 ```

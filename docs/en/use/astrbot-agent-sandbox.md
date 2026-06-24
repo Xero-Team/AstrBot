@@ -12,12 +12,14 @@ Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environmen
 AstrBot currently supports the following sandbox drivers:
 
 - `Shipyard Neo` (recommended)
-- `Shipyard` (legacy option, still supported)
+- `CUA` (local or cloud computer-use sandbox for GUI-heavy workflows)
+
+The legacy `Shipyard` driver has been removed and is no longer supported for deployment, configuration, or runtime compatibility.
 
 In the current AstrBot console, go to **AI Settings** -> **Agent Computer Use** and select:
 
 - `Computer Use Runtime` = `sandbox`
-- `Sandbox Driver` = `Shipyard Neo` or `Shipyard`
+- `Sandbox Driver` = `Shipyard Neo` or `CUA`
 
 `Shipyard Neo` is now the default driver. It consists of Bay, Ship, and Gull:
 
@@ -269,42 +271,6 @@ From AstrBot's perspective, the current implementation caches the sandbox booter
 
 For more detailed explanations of TTL and persistence behavior, see the later sections on “`Shipyard Neo Sandbox TTL`” and “Data Persistence in the Sandbox Environment”.
 
-## Legacy Option: Shipyard
-
-The following content describes the older `Shipyard` driver. It is kept for compatibility with existing legacy deployments.
-
-### Deploying AstrBot and Shipyard with Docker Compose
-
-If you have not deployed AstrBot yet, or want to use the older recommended deployment method with sandbox support, you can still deploy AstrBot with Docker Compose using the following commands:
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot
-cd AstrBot
-# Modify the environment variables in compose-with-shipyard.yml, such as the Shipyard access token
-docker compose -f compose-with-shipyard.yml up -d
-docker pull soulter/shipyard-ship:latest
-```
-
-This starts a Docker Compose stack containing the AstrBot main program and the sandbox environment.
-
-### Deploying Shipyard Separately
-
-If AstrBot is already deployed but the sandbox environment is not, you can deploy Shipyard separately.
-
-```bash
-mkdir astrbot-shipyard
-cd astrbot-shipyard
-wget https://raw.githubusercontent.com/AstrBotDevs/shipyard/refs/heads/main/pkgs/bay/docker-compose.yml -O docker-compose.yml
-# Modify the environment variables in docker-compose.yml, such as the Shipyard access token
-docker compose -f docker-compose.yml up -d
-docker pull soulter/shipyard-ship:latest
-```
-
-After successful deployment, Shipyard listens on `http://<your-host>:8156` by default.
-
-> [!TIP]
-> If you deploy AstrBot with Docker, you can also place Shipyard on the same Docker network as AstrBot so you do not need to expose Shipyard's port to the host.
-
 ## Configuring AstrBot to Use the Sandbox Environment
 
 > [!TIP]
@@ -313,7 +279,7 @@ After successful deployment, Shipyard listens on `http://<your-host>:8156` by de
 In the AstrBot console, go to **AI Settings** -> **Agent Computer Use**.
 
 1. Set `Computer Use Runtime` to `sandbox`
-2. Select `Shipyard Neo` or `Shipyard` as the sandbox driver
+2. Select `Shipyard Neo` or `CUA` as the sandbox driver
 3. Fill in the corresponding configuration values for the selected driver
 4. Click **Save**
 
@@ -332,20 +298,6 @@ If you choose `Shipyard Neo`, the main configuration items are:
 - `Shipyard Neo Sandbox TTL`
   - The upper lifetime limit of the sandbox, defaulting to 3600 seconds (1 hour)
 
-### Configuring Shipyard (Legacy)
-
-If you choose the legacy `Shipyard` driver, the relevant configuration items are:
-
-- `Shipyard API Endpoint`
-  - If you use the Docker Compose deployment above, set it to `http://shipyard:8156`
-  - If Shipyard is deployed separately, use the corresponding address, such as `http://<your-host>:8156`
-- `Shipyard Access Token`
-  - Fill in the access token you configured when deploying Shipyard
-- `Shipyard Ship Lifetime (seconds)`
-  - Defines the lifetime of each sandbox instance, default 3600 seconds (1 hour)
-- `Shipyard Ship Session Reuse Limit`
-  - Defines the maximum number of sessions that can reuse the same sandbox instance, default 10
-
 ## About `Shipyard Neo Sandbox TTL`
 
 In `Shipyard Neo`:
@@ -354,15 +306,6 @@ In `Shipyard Neo`:
 - The selected profile also defines a separate idle timeout (`idle_timeout`)
 - Capability calls from AstrBot usually refresh the idle timeout, rather than directly extending the TTL
 - `keepalive` only extends the idle timeout; it does not automatically start a new session and does not extend the TTL
-
-## About `Shipyard Ship Lifetime (seconds)`
-
-The following explanation applies only to the legacy `Shipyard` driver:
-
-The lifetime of a sandbox instance defines the maximum amount of time that instance can exist before being destroyed. This value should be chosen according to your use case and available resources.
-
-- When a new session joins an existing sandbox instance, the instance automatically extends its lifetime to the TTL requested by that session
-- When an operation is performed on a sandbox instance, the instance automatically extends its lifetime to the current time plus TTL
 
 ## About Data Persistence in the Sandbox Environment
 
@@ -375,12 +318,6 @@ Persistence is provided by Cargo:
 - Filesystem data is stored in Cargo and mounted at `/workspace`
 - Even if the underlying Session is stopped or rebuilt, the data in Cargo is usually retained
 - For profiles with browser capability, browser state may also be persisted together, for example under `/workspace/.browser/profile/`
-
-### Shipyard (Legacy)
-
-Shipyard allocates a working directory for each session under `/home/<unique session ID>`.
-
-Shipyard automatically mounts the `/home` directory from the sandbox environment to `${PWD}/data/shipyard/ship_mnt_data` on the host. When a sandbox instance is destroyed and a session later requests the sandbox again, Shipyard recreates a new instance and remounts the previously persisted data to preserve continuity.
 
 ## Other Community Plugins
 

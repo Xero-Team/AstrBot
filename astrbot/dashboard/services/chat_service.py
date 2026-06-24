@@ -693,11 +693,11 @@ class ChatService:
     ) -> AsyncIterator[str]:
         if "message" not in post_data and "files" not in post_data:
             raise ChatServiceError("Missing key: message or files")
-        if "session_id" not in post_data and "conversation_id" not in post_data:
-            raise ChatServiceError("Missing key: session_id or conversation_id")
+        if "session_id" not in post_data:
+            raise ChatServiceError("Missing key: session_id")
 
         message = post_data.get("message", post_data.get("files", []))
-        session_id = post_data.get("session_id", post_data.get("conversation_id"))
+        session_id = post_data.get("session_id")
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)

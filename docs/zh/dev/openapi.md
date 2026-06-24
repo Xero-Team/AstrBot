@@ -37,7 +37,7 @@ X-API-Key: abk_xxx
 | `bot` | 管理机器人/平台配置 | `GET /api/v1/bot-types`、`GET/POST /api/v1/bots`、`PATCH /api/v1/bots/enabled` |
 | `provider` | 管理模型提供商和提供商源 | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/by-id` |
 | `persona` | 管理人格和人格文件夹 | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders` |
-| `im` | 主动发 IM 消息、查询 bot/platform 列表 | `POST /api/v1/im/message`、`GET /api/v1/im/bots` |
+| `im` | 主动发 IM 消息、查询 bot/platform 列表 | `POST /api/v1/im/messages`、`GET /api/v1/im/bots` |
 | `config` | 管理配置文件、系统配置和通用配置。该 scope 同时包含 `bot` 和 `provider` 访问权限。 | `GET /api/v1/configs`、`GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles` |
 | `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
 | `file` | 上传和下载对话附件 | `POST /api/v1/file`、`GET /api/v1/file`、`POST /api/v1/files` |
@@ -78,12 +78,12 @@ X-API-Key: abk_xxx
 
 **IM 消息发送**
 
-- `POST /api/v1/im/message`：按 UMO 主动发消息
+- `POST /api/v1/im/messages`：按 UMO 主动发消息
 - `GET /api/v1/im/bots`：获取 bot/platform ID 列表
 
 ## `message` 字段格式（重点）
 
-`POST /api/v1/chat` 和 `POST /api/v1/im/message` 的 `message` 字段支持两种格式：
+`POST /api/v1/chat` 和 `POST /api/v1/im/messages` 的 `message` 字段支持两种格式：
 
 1. 字符串：纯文本消息
 2. 数组：消息段（message chain）
@@ -118,7 +118,7 @@ X-API-Key: abk_xxx
 | `file` | `attachment_id` | - | 通用文件段 |
 | `video` | `attachment_id` | - | 视频附件段 |
 
-* reply 消息段目前仅适配 `/api/v1/chat`，不适用于 `POST /api/v1/im/message`。
+* reply 消息段目前仅适配 `/api/v1/chat`，不适用于 `POST /api/v1/im/messages`。
 
 
 说明：
@@ -147,7 +147,7 @@ X-API-Key: abk_xxx
 
 ### IM Message API 的 `message` 用法
 
-`POST /api/v1/im/message` 需要 `umo` + `message`。
+`POST /api/v1/im/messages` 需要 `umo` + `message`。
 
 ```json
 {

@@ -82,13 +82,7 @@ class MyPlugin(Star):
 ```
 
 > [!WARNING]
-> `context.register_llm_tool()` 已被弃用，请勿在新插件中使用。
->
-> 如需通过该方法注册（旧插件兼容），`func_args` 必须是 **字典列表**，格式为：
-> ```py
-> func_args = [{"type": "string", "name": "arg_name", "description": "参数描述"}, ...]
-> ```
-> 传入字符串列表或其他格式会导致 `AttributeError: 'str' object has no attribute 'pop'`。
+> `context.register_llm_tool()` 已移除。请改用 `@filter.llm_tool(...)` 或 `self.context.add_llm_tools(...)`。
 
 ### 通过装饰器定义 Tool 和注册 Tool
 
@@ -556,14 +550,12 @@ class Persona(SQLModel, table=True):
 class Personality(TypedDict):
     """LLM 人格类。
 
-    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
+    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。
     """
 
     prompt: str
     name: str
     begin_dialogs: list[str]
-    mood_imitation_dialogs: list[str]
-    """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
     tools: list[str] | None
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
 ```

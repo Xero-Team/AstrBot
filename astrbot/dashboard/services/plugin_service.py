@@ -44,8 +44,6 @@ PLUGIN_COMPONENT_TYPE_ORDER = {
 
 LogoTokenResolver = Callable[[str], Awaitable[str | None]]
 InstalledAtResolver = Callable[[StarMetadata], str | None]
-PluginPagesResolver = Callable[[StarMetadata], Awaitable[list]]
-PluginPagesSerializer = Callable[[StarMetadata], Awaitable[list[dict]]]
 
 
 @dataclass
@@ -161,7 +159,6 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
     ) -> tuple[list[dict], str | None]:
         plugins = [
             plugin
@@ -171,12 +168,11 @@ class PluginService:
 
         async def process_plugin(plugin: StarMetadata):
             logo_url = await self.resolve_plugin_logo_url(plugin, logo_token_resolver)
-            pages = await discover_pages(plugin)
-            return plugin, logo_url, pages
+            return plugin, logo_url
 
         results = await asyncio.gather(*(process_plugin(plugin) for plugin in plugins))
         payload = []
-        for plugin, logo_url, pages in results:
+        for plugin, logo_url in results:
             if self.is_ghost_plugin(plugin):
                 continue
             payload.append(
@@ -186,7 +182,6 @@ class PluginService:
                         logo_url=logo_url,
                         installed_at=installed_at_resolver(plugin),
                     ),
-                    "pages": [page.name for page in pages],
                 }
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
@@ -197,13 +192,11 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
     ) -> tuple[list[dict], str | None]:
         return await self.list_plugins(
             plugin_name=plugin_name,
             logo_token_resolver=logo_token_resolver,
             installed_at_resolver=installed_at_resolver,
-            discover_pages=discover_pages,
         )
 
     async def get_plugin_detail(
@@ -212,7 +205,6 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        serialize_pages: PluginPagesSerializer,
     ) -> dict:
         if not plugin_name:
             raise PluginServiceError("缺少插件名")
@@ -228,10 +220,7 @@ class PluginService:
                     logo_url=logo_url,
                     installed_at=installed_at_resolver(plugin),
                 ),
-                "components": await self.get_plugin_components_info(
-                    plugin,
-                    serialize_pages,
-                ),
+                "components": await self.get_plugin_components_info(plugin),
             }
 
         raise PluginServiceError("插件不存在")
@@ -242,13 +231,11 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        serialize_pages: PluginPagesSerializer,
     ) -> dict:
         return await self.get_plugin_detail(
             plugin_name=plugin_name,
             logo_token_resolver=logo_token_resolver,
             installed_at_resolver=installed_at_resolver,
-            serialize_pages=serialize_pages,
         )
 
     async def resolve_plugin_logo_url(
@@ -259,7 +246,7 @@ class PluginService:
         if not plugin.logo_path:
             return None
         logo_token = await logo_token_resolver(plugin.logo_path)
-        return f"/api/file/{logo_token}" if logo_token else None
+        return f"/api/v1/files/tokens/{logo_token}" if logo_token else None
 
     async def get_plugin_logo_token(self, logo_path: str) -> str | None:
         try:
@@ -344,10 +331,8 @@ class PluginService:
     async def get_plugin_components_info(
         self,
         plugin: StarMetadata,
-        serialize_pages: PluginPagesSerializer,
     ) -> list[dict]:
         components = [
-            *await self.get_plugin_page_components(plugin, serialize_pages),
             *self.get_plugin_skill_components(plugin),
             *await self.get_plugin_handler_components(plugin.star_handler_full_names),
         ]
@@ -355,26 +340,6 @@ class PluginService:
             components,
             key=lambda item: PLUGIN_COMPONENT_TYPE_ORDER.get(item["type"], 99),
         )
-
-    async def get_plugin_page_components(
-        self,
-        plugin: StarMetadata,
-        serialize_pages: PluginPagesSerializer,
-    ) -> list[dict]:
-        pages = await serialize_pages(plugin)
-        return [
-            {
-                "type": "page",
-                "name": page["title"],
-                "title": page["title"],
-                "page_name": page["name"],
-                "i18n_key": page["i18n_key"],
-                "description": "Plugin Page entry",
-                "plugin_name": plugin.name,
-                "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
-            }
-            for page in pages
-        ]
 
     async def get_plugin_handler_components(
         self,
@@ -982,7 +947,7 @@ class PluginService:
                     return {"name": name, "status": "ok", "message": "更新成功"}
                 except Exception:
                     logger.error(
-                        f"/api/plugin/update-all: 更新插件 {name} 失败",
+                        f"/api/v1/plugins/update-all: 更新插件 {name} 失败",
                         exc_info=True,
                     )
                     return {
@@ -1000,7 +965,7 @@ class PluginService:
                 raise result
             if isinstance(result, BaseException):
                 logger.error(
-                    f"/api/plugin/update-all: 更新插件 {name} 任务失败: {result!r}"
+                    f"/api/v1/plugins/update-all: 更新插件 {name} 任务失败: {result!r}"
                 )
                 results.append(
                     {

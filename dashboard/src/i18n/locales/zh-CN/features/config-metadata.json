@@ -215,22 +215,6 @@
           "cua_api_key": {
             "description": "CUA API Key",
             "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。"
-          },
-          "shipyard_endpoint": {
-            "description": "Shipyard API Endpoint",
-            "hint": "Shipyard 服务的 API 访问地址。"
-          },
-          "shipyard_access_token": {
-            "description": "Shipyard 访问令牌",
-            "hint": "用于访问 Shipyard 服务的访问令牌。"
-          },
-          "shipyard_ttl": {
-            "description": "Shipyard Ship 存活时间(秒)",
-            "hint": "Shipyard 会话的生存时间（秒）。"
-          },
-          "shipyard_max_sessions": {
-            "description": "Shipyard Ship 会话复用上限",
-            "hint": "决定了一个实例承载的最大会话数量。"
           }
         }
       }

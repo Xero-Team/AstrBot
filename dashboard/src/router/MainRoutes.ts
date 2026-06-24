@@ -27,11 +27,6 @@ const MainRoutes = {
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
-      name: 'PluginPage',
-      path: '/plugin-page/:pluginName/:pageName',
-      component: () => import('@/views/PluginPagePage.vue')
-    },
-    {
       name: EXTENSION_DETAILS_ROUTE_NAME,
       path: '/extension/:pluginId',
       component: () => import('@/views/ExtensionPage.vue')
@@ -129,34 +124,6 @@ const MainRoutes = {
       ]
     },
 
-    // 旧版本的知识库路由
-    {
-      name: 'KnowledgeBase',
-      path: '/alkaid/knowledge-base',
-      component: () => import('@/views/alkaid/KnowledgeBase.vue'),
-    },
-    // {
-    //   name: 'Alkaid',
-    //   path: '/alkaid',
-    //   component: () => import('@/views/AlkaidPage.vue'),
-    //   children: [
-    //     {
-    //       path: 'knowledge-base',
-    //       name: 'KnowledgeBase',
-    //       component: () => import('@/views/alkaid/KnowledgeBase.vue')
-    //     },
-    //     {
-    //       path: 'long-term-memory',
-    //       name: 'LongTermMemory',
-    //       component: () => import('@/views/alkaid/LongTermMemory.vue')
-    //     },
-    //     {
-    //       path: 'other',
-    //       name: 'OtherFeatures',
-    //       component: () => import('@/views/alkaid/Other.vue')
-    //     }
-    //   ]
-    // },
     {
       name: 'Chat',
       path: '/chat',

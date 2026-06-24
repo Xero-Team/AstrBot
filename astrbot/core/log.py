@@ -93,6 +93,33 @@ def _patch_record(record: "Record") -> None:
 _loguru = _raw_loguru_logger.patch(_patch_record)
 
 
+class _SafeConsoleStream:
+    """Write console logs without crashing on stream encoding mismatches."""
+
+    def __init__(self, stream) -> None:
+        self._stream = stream
+
+    def write(self, message: str) -> None:
+        try:
+            self._stream.write(message)
+        except UnicodeEncodeError:
+            encoding = getattr(self._stream, "encoding", None) or "utf-8"
+            safe_bytes = message.encode(encoding, errors="backslashreplace")
+            if hasattr(self._stream, "buffer"):
+                self._stream.buffer.write(safe_bytes)
+            else:
+                self._stream.write(safe_bytes.decode(encoding, errors="ignore"))
+
+    def flush(self) -> None:
+        if hasattr(self._stream, "flush"):
+            self._stream.flush()
+
+    def isatty(self) -> bool:
+        if hasattr(self._stream, "isatty"):
+            return bool(self._stream.isatty())
+        return False
+
+
 class _LoguruInterceptHandler(logging.Handler):
     """将 logging 记录转发到 loguru。"""
 
@@ -200,7 +227,7 @@ class LogManager:
 
         _loguru.remove()
         cls._console_sink_id = _loguru.add(
-            sys.stdout,
+            _SafeConsoleStream(sys.stdout),
             level="DEBUG",
             colorize=True,
             filter=lambda record: not record["extra"].get("is_trace", False),
@@ -353,15 +380,9 @@ class LogManager:
             except Exception:
                 logger.setLevel(logging.INFO)
 
-        if "log_file" in config:
-            file_conf = config.get("log_file") or {}
-            enable_file = bool(file_conf.get("enable", False))
-            file_path = file_conf.get("path")
-            max_mb = file_conf.get("max_mb")
-        else:
-            enable_file = bool(config.get("log_file_enable", False))
-            file_path = config.get("log_file_path")
-            max_mb = config.get("log_file_max_mb")
+        enable_file = bool(config.get("log_file_enable", False))
+        file_path = config.get("log_file_path")
+        max_mb = config.get("log_file_max_mb")
 
         cls._remove_sink(cls._file_sink_id)
         cls._file_sink_id = None
@@ -385,16 +406,9 @@ class LogManager:
         if not config:
             return
 
-        enable = bool(
-            config.get("trace_log_enable")
-            or (config.get("log_file", {}) or {}).get("trace_enable", False)
-        )
+        enable = bool(config.get("trace_log_enable"))
         path = config.get("trace_log_path")
         max_mb = config.get("trace_log_max_mb")
-        if "log_file" in config:
-            legacy = config.get("log_file") or {}
-            path = path or legacy.get("trace_path")
-            max_mb = max_mb or legacy.get("trace_max_mb")
 
         trace_logger = logging.getLogger("astrbot.trace")
         cls._ensure_logger_enricher_filter(trace_logger)

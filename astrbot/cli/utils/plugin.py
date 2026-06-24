@@ -1,8 +1,9 @@
 import shutil
 import tempfile
-from enum import Enum
+from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
+from typing import TypedDict
 from zipfile import ZipFile
 
 import click
@@ -12,65 +13,101 @@ import yaml
 from .version_comparator import VersionComparator
 
 
-class PluginStatus(str, Enum):
+class PluginStatus(StrEnum):
     INSTALLED = "installed"
     NEED_UPDATE = "needs-update"
     NOT_INSTALLED = "not-installed"
     NOT_PUBLISHED = "unpublished"
 
 
-def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
-    """Download code from a Git repository and extract to the specified path"""
-    temp_dir = Path(tempfile.mkdtemp())
+class PluginRecord(TypedDict):
+    name: str
+    desc: str
+    version: str
+    author: str
+    repo: str
+    status: PluginStatus
+    local_path: str | None
+
+
+def _resolve_download_url(url: str, proxy: str | None = None) -> str:
+    """Resolve the preferred archive URL for a GitHub repository.
+
+    Args:
+        url: Repository URL or direct archive URL.
+        proxy: Optional proxy prefix or HTTP proxy address.
+
+    Returns:
+        The archive URL to download.
+    """
+    repo_namespace = url.split("/")[-2:]
+    if len(repo_namespace) != 2:
+        return url
+
+    author, repo = repo_namespace
+    release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
     try:
-        # Parse repository info
-        repo_namespace = url.split("/")[-2:]
-        author = repo_namespace[0]
-        repo = repo_namespace[1]
-
-        # Try to get the latest release
-        release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-        try:
-            with httpx.Client(
-                proxy=proxy if proxy else None,
-                follow_redirects=True,
-            ) as client:
-                resp = client.get(release_url)
-                resp.raise_for_status()
-                releases = resp.json()
-
-                if releases:
-                    # Use the latest release
-                    download_url = releases[0]["zipball_url"]
-                else:
-                    # No release found, use default branch
-                    click.echo(f"Downloading {author}/{repo} from default branch")
-                    download_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
-        except Exception as e:
-            click.echo(f"Failed to get release info: {e}. Using provided URL directly")
-            download_url = url
-
-        # Apply proxy
-        if proxy:
-            download_url = f"{proxy}/{download_url}"
-
-        # Download and extract
         with httpx.Client(
             proxy=proxy if proxy else None,
             follow_redirects=True,
         ) as client:
-            resp = client.get(download_url)
-            if (
-                resp.status_code == 404
-                and "archive/refs/heads/master.zip" in download_url
-            ):
-                alt_url = download_url.replace("master.zip", "main.zip")
-                click.echo("Branch 'master' not found, trying 'main' branch")
-                resp = client.get(alt_url)
-                resp.raise_for_status()
-            else:
-                resp.raise_for_status()
-            zip_content = BytesIO(resp.content)
+            resp = client.get(release_url)
+            resp.raise_for_status()
+            releases = resp.json()
+    except Exception as e:
+        click.echo(f"Failed to get release info: {e}. Using provided URL directly")
+        return url
+
+    if releases:
+        return str(releases[0]["zipball_url"])
+
+    click.echo(f"Downloading {author}/{repo} from default branch")
+    return f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
+
+
+def _download_plugin_archive(
+    download_url: str,
+    proxy: str | None = None,
+) -> BytesIO:
+    """Download a plugin archive and return it as an in-memory ZIP stream.
+
+    Args:
+        download_url: Archive URL to fetch.
+        proxy: Optional proxy prefix or HTTP proxy address.
+
+    Returns:
+        Downloaded archive bytes wrapped in ``BytesIO``.
+    """
+    if proxy:
+        download_url = f"{proxy}/{download_url}"
+
+    with httpx.Client(
+        proxy=proxy if proxy else None,
+        follow_redirects=True,
+    ) as client:
+        resp = client.get(download_url)
+        if resp.status_code == 404 and "archive/refs/heads/master.zip" in download_url:
+            alt_url = download_url.replace("master.zip", "main.zip")
+            click.echo("Branch 'master' not found, trying 'main' branch")
+            resp = client.get(alt_url)
+        resp.raise_for_status()
+        return BytesIO(resp.content)
+
+
+def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
+    """Download code from a Git repository and extract to the specified path.
+
+    Args:
+        url: Repository URL or direct archive URL.
+        target_path: Local target directory for extracted content.
+        proxy: Optional proxy prefix or HTTP proxy address.
+    """
+    temp_dir = Path(tempfile.mkdtemp())
+    try:
+        zip_content = _download_plugin_archive(
+            _resolve_download_url(url, proxy),
+            proxy,
+        )
         with ZipFile(zip_content) as z:
             z.extractall(temp_dir)
             namelist = z.namelist()
@@ -102,67 +139,130 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
     return {}
 
 
-def build_plug_list(plugins_dir: Path) -> list:
-    """Build plugin list containing local and online plugin information
+def _build_plugin_record(
+    *,
+    name: str,
+    desc: str,
+    version: str,
+    author: str,
+    repo: str,
+    status: PluginStatus,
+    local_path: str | None,
+) -> PluginRecord:
+    return {
+        "name": name,
+        "desc": desc,
+        "version": version,
+        "author": author,
+        "repo": repo,
+        "status": status,
+        "local_path": local_path,
+    }
 
-    Args:
-        plugins_dir (Path): Plugin directory path
 
-    Returns:
-        list: List of dicts containing plugin information
+def _load_local_plugin(plugin_dir: Path) -> PluginRecord | None:
+    metadata = load_yaml_metadata(plugin_dir)
+    required_keys = {"name", "desc", "version", "author", "repo"}
+    if not metadata or not required_keys.issubset(metadata):
+        return None
 
-    """
-    # Get local plugin info
-    result = []
-    if plugins_dir.is_dir():
-        for plugin_dir in plugins_dir.iterdir():
-            if not plugin_dir.is_dir():
-                continue
+    return _build_plugin_record(
+        name=str(metadata.get("name", "")),
+        desc=str(metadata.get("desc", "")),
+        version=str(metadata.get("version", "")),
+        author=str(metadata.get("author", "")),
+        repo=str(metadata.get("repo", "")),
+        status=PluginStatus.INSTALLED,
+        local_path=str(plugin_dir),
+    )
 
-            # Load metadata from metadata.yaml
-            metadata = load_yaml_metadata(plugin_dir)
 
-            # If metadata loaded successfully, add to result list
-            if metadata and all(
-                k in metadata for k in ["name", "desc", "version", "author", "repo"]
-            ):
-                result.append(
-                    {
-                        "name": str(metadata.get("name", "")),
-                        "desc": str(metadata.get("desc", "")),
-                        "version": str(metadata.get("version", "")),
-                        "author": str(metadata.get("author", "")),
-                        "repo": str(metadata.get("repo", "")),
-                        "status": PluginStatus.INSTALLED,
-                        "local_path": str(plugin_dir),
-                    },
-                )
-
-    # Get online plugin list
-    online_plugins_dict = {}
+def _fetch_online_plugins() -> dict[str, PluginRecord]:
+    online_plugins: dict[str, PluginRecord] = {}
     try:
         with httpx.Client() as client:
             resp = client.get("https://api.soulter.top/astrbot/plugins")
             resp.raise_for_status()
             data = resp.json()
-            for plugin_id, plugin_info in data.items():
-                online_plugins_dict[str(plugin_id)] = {
-                    "name": str(plugin_id),
-                    "desc": str(plugin_info.get("desc", "")),
-                    "version": str(plugin_info.get("version", "")),
-                    "author": str(plugin_info.get("author", "")),
-                    "repo": str(plugin_info.get("repo", "")),
-                    "status": PluginStatus.NOT_INSTALLED,
-                    "local_path": None,
-                }
     except Exception as e:
         click.echo(f"Failed to get online plugin list: {e}", err=True)
+        return online_plugins
 
-    # Compare with online plugins and update status
+    for plugin_id, plugin_info in data.items():
+        online_plugins[str(plugin_id)] = _build_plugin_record(
+            name=str(plugin_id),
+            desc=str(plugin_info.get("desc", "")),
+            version=str(plugin_info.get("version", "")),
+            author=str(plugin_info.get("author", "")),
+            repo=str(plugin_info.get("repo", "")),
+            status=PluginStatus.NOT_INSTALLED,
+            local_path=None,
+        )
+    return online_plugins
+
+
+def _get_plugin_target_paths(
+    plugin: PluginRecord,
+    plugins_dir: Path,
+    *,
+    is_update: bool,
+) -> tuple[str, str, Path, Path | None]:
+    plugin_name = plugin["name"]
+    repo_url = plugin["repo"]
+    local_path = plugin.get("local_path")
+    target_path = (
+        Path(local_path) if is_update and local_path else plugins_dir / plugin_name
+    )
+    backup_path = (
+        target_path.with_name(f"{target_path.name}_backup") if is_update else None
+    )
+    return plugin_name, repo_url, target_path, backup_path
+
+
+def _prepare_plugin_backup(target_path: Path, backup_path: Path | None) -> None:
+    if backup_path is None:
+        return
+    if backup_path.exists():
+        shutil.rmtree(backup_path)
+    shutil.copytree(target_path, backup_path)
+
+
+def _cleanup_plugin_backup(backup_path: Path | None) -> None:
+    if backup_path is not None and backup_path.exists():
+        shutil.rmtree(backup_path)
+
+
+def _restore_plugin_backup(target_path: Path, backup_path: Path | None) -> None:
+    if target_path.exists():
+        shutil.rmtree(target_path, ignore_errors=True)
+    if backup_path is not None and backup_path.exists():
+        shutil.move(backup_path, target_path)
+
+
+def build_plug_list(plugins_dir: Path) -> list[PluginRecord]:
+    """Build plugin list containing local and online plugin information
+
+    Args:
+        plugins_dir: Plugin directory path
+
+    Returns:
+        List of dicts containing plugin information.
+    """
+    result: list[PluginRecord] = []
+    if plugins_dir.is_dir():
+        for plugin_dir in plugins_dir.iterdir():
+            if not plugin_dir.is_dir():
+                continue
+            plugin_record = _load_local_plugin(plugin_dir)
+            if plugin_record is not None:
+                result.append(plugin_record)
+
+    online_plugins_dict = _fetch_online_plugins()
+
     for local_plugin in result:
-        online_plugin = online_plugins_dict.pop(local_plugin["name"], None)
+        plugin_name = str(local_plugin["name"])
+        online_plugin = online_plugins_dict.pop(plugin_name, None)
         if online_plugin is None:
-            # Local plugin is not published online
             local_plugin["status"] = PluginStatus.NOT_PUBLISHED
             continue
 
@@ -175,49 +275,36 @@ def build_plug_list(plugins_dir: Path) -> list:
         ):
             local_plugin["status"] = PluginStatus.NEED_UPDATE
 
-    # Add uninstalled online plugins
     result.extend(online_plugins_dict.values())
-
     return result
 
 
 def manage_plugin(
-    plugin: dict,
+    plugin: PluginRecord,
     plugins_dir: Path,
     is_update: bool = False,
     proxy: str | None = None,
 ) -> None:
-    """Install or update a plugin
+    """Install or update a plugin.
 
     Args:
-        plugin (dict): Plugin info dict
-        plugins_dir (Path): Plugins directory
-        is_update (bool, optional): Whether this is an update operation. Defaults to False
-        proxy (str, optional): Proxy server address
-
+        plugin: Plugin info dict.
+        plugins_dir: Plugins directory.
+        is_update: Whether this is an update operation.
+        proxy: Proxy server address.
     """
-    plugin_name = plugin["name"]
-    repo_url = plugin["repo"]
+    plugin_name, repo_url, target_path, backup_path = _get_plugin_target_paths(
+        plugin,
+        plugins_dir,
+        is_update=is_update,
+    )
 
-    # If updating and local path exists, use it directly
-    if is_update and plugin.get("local_path"):
-        target_path = Path(plugin["local_path"])
-    else:
-        target_path = plugins_dir / plugin_name
-
-    backup_path = Path(f"{target_path}_backup") if is_update else None
-
-    # Check if plugin exists
     if is_update and not target_path.exists():
         raise click.ClickException(
             f"Plugin {plugin_name} is not installed and cannot be updated"
         )
 
-    # Backup existing plugin
-    if is_update and backup_path is not None and backup_path.exists():
-        shutil.rmtree(backup_path)
-    if is_update and backup_path is not None:
-        shutil.copytree(target_path, backup_path)
+    _prepare_plugin_backup(target_path, backup_path)
 
     try:
         click.echo(
@@ -225,17 +312,12 @@ def manage_plugin(
         )
         get_git_repo(repo_url, target_path, proxy)
 
-        # Update succeeded, delete backup
-        if is_update and backup_path is not None and backup_path.exists():
-            shutil.rmtree(backup_path)
+        _cleanup_plugin_backup(backup_path)
         click.echo(
             f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully"
         )
     except Exception as e:
-        if target_path.exists():
-            shutil.rmtree(target_path, ignore_errors=True)
-        if is_update and backup_path is not None and backup_path.exists():
-            shutil.move(backup_path, target_path)
+        _restore_plugin_backup(target_path, backup_path)
         raise click.ClickException(
             f"Error {'updating' if is_update else 'installing'} plugin {plugin_name}: {e}",
         )

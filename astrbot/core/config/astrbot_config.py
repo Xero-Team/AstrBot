@@ -50,21 +50,9 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
 
-        if schema:
-            default_config = self._config_schema_to_default_config(schema)
-
-        if not self.check_exist():
-            """不存在时载入默认配置"""
-            self.update(default_config)
-            self.save_config(indent=4)
-            object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
-
-        with open(config_path, encoding="utf-8-sig") as f:
-            conf_str = f.read()
-            # Handle UTF-8 BOM if present
-            if conf_str.startswith("\ufeff"):
-                conf_str = conf_str[1:]
-            conf = json.loads(conf_str)
+        default_config = self._resolve_default_config(default_config, schema)
+        self._ensure_config_file(default_config)
+        conf = self._load_config_dict(config_path)
         dashboard_conf = conf.get("dashboard")
         stored_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
@@ -78,23 +66,11 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
-        reset_dashboard_password = self._consume_reset_dashboard_password_flag()
-        if reset_dashboard_password and "dashboard" in conf:
-            self._reset_generated_dashboard_password(conf)
-            has_new = True
-        elif (
-            "dashboard" in conf
-            and isinstance(conf["dashboard"], dict)
-            and not conf["dashboard"].get("pbkdf2_password")
-            and not conf["dashboard"].get("password")
-        ):
-            self._reset_generated_dashboard_password(conf)
-            has_new = True
-        elif (
-            "dashboard" in conf
-            and isinstance(conf["dashboard"], dict)
-            and stored_dashboard_password_change_required
-            and conf["dashboard"].get("pbkdf2_password")
+        if self._should_reset_dashboard_password(
+            conf,
+            stored_dashboard_password_change_required=(
+                stored_dashboard_password_change_required
+            ),
         ):
             self._reset_generated_dashboard_password(conf)
             has_new = True
@@ -103,6 +79,48 @@ class AstrBotConfig(dict):
             self.save_config()
 
         self.update(conf)
+
+    def _resolve_default_config(
+        self, default_config: dict, schema: dict | None
+    ) -> dict:
+        if schema:
+            return self._config_schema_to_default_config(schema)
+        return default_config
+
+    def _ensure_config_file(self, default_config: dict) -> None:
+        if self.check_exist():
+            return
+        self.update(default_config)
+        self.save_config(indent=4)
+        object.__setattr__(self, "first_deploy", True)
+
+    @staticmethod
+    def _load_config_dict(config_path: str) -> dict:
+        with open(config_path, encoding="utf-8-sig") as f:
+            conf_str = f.read()
+        if conf_str.startswith("\ufeff"):
+            conf_str = conf_str[1:]
+        return json.loads(conf_str)
+
+    def _should_reset_dashboard_password(
+        self,
+        conf: dict,
+        *,
+        stored_dashboard_password_change_required: bool,
+    ) -> bool:
+        dashboard_conf = conf.get("dashboard")
+        if not isinstance(dashboard_conf, dict):
+            return False
+        if self._consume_reset_dashboard_password_flag():
+            return True
+        if not dashboard_conf.get("pbkdf2_password") and not dashboard_conf.get(
+            "password"
+        ):
+            return True
+        return bool(
+            stored_dashboard_password_change_required
+            and dashboard_conf.get("pbkdf2_password")
+        )
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()
@@ -170,57 +188,81 @@ class AstrBotConfig(dict):
         # 创建一个新的有序字典以保持参考配置的顺序
         new_conf = {}
 
-        # 先按照参考配置的顺序添加配置项
-        for key, value in refer_conf.items():
-            if key not in conf:
-                # 配置项不存在，插入默认值
-                path_ = path + "." + key if path else key
-                logger.info("Config key missing; added default.")
-                new_conf[key] = value
-                has_new = True
-            elif conf[key] is None:
-                # 配置项为 None，使用默认值
-                new_conf[key] = value
-                has_new = True
-            elif isinstance(value, dict):
-                # 递归检查子配置项
-                if not isinstance(conf[key], dict):
-                    # 类型不匹配，使用默认值
-                    new_conf[key] = value
-                    has_new = True
-                else:
-                    # 递归检查并同步顺序
-                    child_has_new = self.check_config_integrity(
-                        value,
-                        conf[key],
-                        path + "." + key if path else key,
-                    )
-                    new_conf[key] = conf[key]
-                    has_new |= child_has_new
-            else:
-                # 直接使用现有配置
-                new_conf[key] = conf[key]
-
-        # 检查是否存在参考配置中没有的配置项
-        for key in list(conf.keys()):
-            if key not in refer_conf:
-                path_ = path + "." + key if path else key
-                logger.info("Config key removed: %s", path_)
-                has_new = True
-
-        # 顺序不一致也算作变更
-        if list(conf.keys()) != list(new_conf.keys()):
-            if path:
-                logger.info("Config key order fixed: %s", path)
-            else:
-                logger.info("Config key order fixed")
-            has_new = True
+        has_new |= self._sync_config_against_reference(
+            refer_conf=refer_conf,
+            conf=conf,
+            new_conf=new_conf,
+            path=path,
+        )
+        has_new |= self._remove_unknown_config_keys(
+            refer_conf=refer_conf,
+            conf=conf,
+            path=path,
+        )
+        has_new |= self._fix_config_key_order(conf=conf, new_conf=new_conf, path=path)
 
         # 更新原始配置
         conf.clear()
         conf.update(new_conf)
 
         return has_new
+
+    def _sync_config_against_reference(
+        self,
+        *,
+        refer_conf: dict,
+        conf: dict,
+        new_conf: dict,
+        path: str,
+    ) -> bool:
+        has_new = False
+        for key, value in refer_conf.items():
+            current_path = path + "." + key if path else key
+            if key not in conf:
+                logger.info("Config key missing; added default.")
+                new_conf[key] = value
+                has_new = True
+                continue
+            if conf[key] is None:
+                new_conf[key] = value
+                has_new = True
+                continue
+            if not isinstance(value, dict):
+                new_conf[key] = conf[key]
+                continue
+            if not isinstance(conf[key], dict):
+                new_conf[key] = value
+                has_new = True
+                continue
+            child_has_new = self.check_config_integrity(value, conf[key], current_path)
+            new_conf[key] = conf[key]
+            has_new |= child_has_new
+        return has_new
+
+    def _remove_unknown_config_keys(
+        self,
+        *,
+        refer_conf: dict,
+        conf: dict,
+        path: str,
+    ) -> bool:
+        has_new = False
+        for key in list(conf.keys()):
+            if key in refer_conf:
+                continue
+            current_path = path + "." + key if path else key
+            logger.info("Config key removed: %s", current_path)
+            has_new = True
+        return has_new
+
+    def _fix_config_key_order(self, *, conf: dict, new_conf: dict, path: str) -> bool:
+        if list(conf.keys()) == list(new_conf.keys()):
+            return False
+        if path:
+            logger.info("Config key order fixed: %s", path)
+        else:
+            logger.info("Config key order fixed")
+        return True
 
     def save_config(
         self, replace_config: dict | None = None, *, indent: int = 2

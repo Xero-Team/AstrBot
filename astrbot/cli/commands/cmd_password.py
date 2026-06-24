@@ -25,14 +25,15 @@ def password(username: str | None) -> None:
         confirmation_prompt=True,
     )
     validated_password = _validate_dashboard_password(new_password)
+    updated_username: str | None = None
 
     if username is not None:
-        validated_username = _validate_dashboard_username(username.strip())
-        _set_nested_item(config, "dashboard.username", validated_username)
+        updated_username = _validate_dashboard_username(username.strip())
+        _set_nested_item(config, "dashboard.username", updated_username)
 
     _set_dashboard_password(config, validated_password)
     _save_config(config)
 
     click.echo("Dashboard password updated.")
-    if username is not None:
-        click.echo(f"Dashboard username updated: {validated_username}")
+    if updated_username is not None:
+        click.echo(f"Dashboard username updated: {updated_username}")

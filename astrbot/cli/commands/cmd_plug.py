@@ -1,5 +1,6 @@
 import re
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 
 import click
@@ -12,6 +13,7 @@ from ..utils import (
     get_git_repo,
     manage_plugin,
 )
+from ..utils.plugin import PluginRecord
 
 
 @click.group()
@@ -43,6 +45,20 @@ def display_plugins(plugins, title=None, color=None) -> None:
             f"{p['name']:<20} {p['version']:<10} {p['status']:<10} "
             f"{p['author']:<15} {desc:<30}",
         )
+
+
+def _get_plugins_by_status(
+    plugins: Sequence[PluginRecord],
+) -> dict[PluginStatus, list[PluginRecord]]:
+    grouped_plugins = {
+        PluginStatus.NOT_PUBLISHED: [],
+        PluginStatus.NEED_UPDATE: [],
+        PluginStatus.INSTALLED: [],
+        PluginStatus.NOT_INSTALLED: [],
+    }
+    for plugin in plugins:
+        grouped_plugins[plugin["status"]].append(plugin)
+    return grouped_plugins
 
 
 @plug.command()
@@ -123,42 +139,33 @@ def new(name: str) -> None:
 
 
 @plug.command()
-@click.option("--all", "-a", is_flag=True, help="List uninstalled plugins")
-def list(all: bool) -> None:
+@click.option("--all", "show_all", "-a", is_flag=True, help="List uninstalled plugins")
+def list(show_all: bool) -> None:
     """List plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
-    # Unpublished plugins
-    not_published_plugins = [
-        p for p in plugins if p["status"] == PluginStatus.NOT_PUBLISHED
-    ]
-    if not_published_plugins:
-        display_plugins(not_published_plugins, "Unpublished Plugins", "red")
-
-    # Plugins needing update
-    need_update_plugins = [
-        p for p in plugins if p["status"] == PluginStatus.NEED_UPDATE
-    ]
-    if need_update_plugins:
-        display_plugins(need_update_plugins, "Plugins Needing Update", "yellow")
-
-    # Installed plugins
-    installed_plugins = [p for p in plugins if p["status"] == PluginStatus.INSTALLED]
-    if installed_plugins:
-        display_plugins(installed_plugins, "Installed Plugins", "green")
-
-    # Uninstalled plugins
-    not_installed_plugins = [
-        p for p in plugins if p["status"] == PluginStatus.NOT_INSTALLED
-    ]
-    if not_installed_plugins and all:
-        display_plugins(not_installed_plugins, "Uninstalled Plugins", "blue")
-
-    if (
-        not any([not_published_plugins, need_update_plugins, installed_plugins])
-        and not all
+    plugins_by_status = _get_plugins_by_status(plugins)
+    displayed_installed_sections = False
+    for status, title, color in (
+        (PluginStatus.NOT_PUBLISHED, "Unpublished Plugins", "red"),
+        (PluginStatus.NEED_UPDATE, "Plugins Needing Update", "yellow"),
+        (PluginStatus.INSTALLED, "Installed Plugins", "green"),
     ):
+        items = plugins_by_status[status]
+        if not items:
+            continue
+        display_plugins(items, title, color)
+        displayed_installed_sections = True
+
+    if show_all and plugins_by_status[PluginStatus.NOT_INSTALLED]:
+        display_plugins(
+            plugins_by_status[PluginStatus.NOT_INSTALLED],
+            "Uninstalled Plugins",
+            "blue",
+        )
+
+    if not displayed_installed_sections and not show_all:
         click.echo("No plugins installed")
 
 
@@ -197,7 +204,9 @@ def remove(name: str) -> None:
     if not plugin or not plugin.get("local_path"):
         raise click.ClickException(f"Plugin {name} does not exist or is not installed")
 
-    plugin_path = plugin["local_path"]
+    plugin_path = plugin.get("local_path")
+    if plugin_path is None:
+        raise click.ClickException(f"Plugin {name} does not exist or is not installed")
 
     click.confirm(
         f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True

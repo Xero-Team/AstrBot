@@ -8,7 +8,6 @@ from astrbot.core.star.register import register_llm_tool as llm_tool
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     MessageChain,
-    CommandResult,
     EventResultType,
 )
 from astrbot.core.platform import AstrMessageEvent
@@ -28,9 +27,6 @@ from astrbot.core.star.filter.event_message_type import (
 from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterTypeFilter,
     PlatformAdapterType,
-)
-from astrbot.core.star.register import (
-    register_star as register,  # 注册插件（Star）
 )
 from astrbot.core.star import Context, Star
 from astrbot.core.star.config import *

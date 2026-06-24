@@ -781,27 +781,6 @@ class DocumentStorage:
             else document.updated_at,
         }
 
-    async def tuple_to_dict(self, row):
-        """Convert a tuple to a dictionary.
-
-        Args:
-            row (tuple): The row to convert.
-
-        Returns:
-            dict: The converted dictionary.
-
-        Note: This method is kept for backward compatibility but is no longer used internally.
-
-        """
-        return {
-            "id": row[0],
-            "doc_id": row[1],
-            "text": row[2],
-            "metadata": row[3],
-            "created_at": row[4],
-            "updated_at": row[5],
-        }
-
     async def close(self) -> None:
         """Close the connection to the SQLite database."""
         if self.engine:

@@ -173,10 +173,6 @@ DEFAULT_CONFIG = {
         "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard_neo",
-            "shipyard_endpoint": "",
-            "shipyard_access_token": "",
-            "shipyard_ttl": 3600,
-            "shipyard_max_sessions": 10,
             "shipyard_neo_endpoint": "",
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
@@ -300,10 +296,8 @@ DEFAULT_CONFIG = {
     "trace_log_max_mb": 20,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
-    "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
-    "default_kb_collection": "",  # 默认知识库名称, 已经过时
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
@@ -948,7 +942,7 @@ CONFIG_METADATA_2 = {
                     "unified_webhook_mode": {
                         "description": "统一 Webhook 模式",
                         "type": "bool",
-                        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
+                        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/v1/webhooks/platforms/{webhook_uuid}。",
                     },
                     **PERSONAL_WECHAT_CONFIG_METADATA,
                     "webhook_uuid": {
@@ -3068,9 +3062,6 @@ CONFIG_METADATA_2 = {
             "pypi_index_url": {
                 "type": "string",
             },
-            "default_kb_collection": {
-                "type": "string",
-            },
             "kb_names": {"type": "list", "items": {"type": "string"}},
             "kb_fusion_top_k": {"type": "int", "default": 20},
             "kb_final_top_k": {"type": "int", "default": 5},
@@ -3382,8 +3373,8 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard_neo", "shipyard", "cua"],
-                        "labels": ["Shipyard Neo", "Shipyard", "CUA"],
+                        "options": ["shipyard_neo", "cua"],
+                        "labels": ["Shipyard Neo", "CUA"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
@@ -3480,43 +3471,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "cua",
                             "provider_settings.sandbox.cua_local": False,
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_endpoint": {
-                        "description": "Shipyard API Endpoint",
-                        "type": "string",
-                        "hint": "Shipyard 服务的 API 访问地址。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                        "_special": "check_shipyard_connection",
-                    },
-                    "provider_settings.sandbox.shipyard_access_token": {
-                        "description": "Shipyard Access Token",
-                        "type": "string",
-                        "hint": "用于访问 Shipyard 服务的访问令牌。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_ttl": {
-                        "description": "Shipyard Session TTL",
-                        "type": "int",
-                        "hint": "Shipyard 会话的生存时间（秒）。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_max_sessions": {
-                        "description": "Shipyard Max Sessions",
-                        "type": "int",
-                        "hint": "Shipyard 最大会话数量。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
                         },
                     },
                 },

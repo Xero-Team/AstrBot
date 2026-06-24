@@ -22,7 +22,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core import sp
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
@@ -110,7 +110,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def send_by_session(
         self,
-        session: MessageSesion,
+        session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
         robot_code = self.client_id
@@ -139,17 +139,9 @@ class DingtalkPlatformAdapter(Platform):
 
     async def send_with_session(
         self,
-        session: MessageSesion,
+        session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
-        await self.send_by_session(session, message_chain)
-
-    async def send_with_sesison(
-        self,
-        session: MessageSesion,
-        message_chain: MessageChain,
-    ) -> None:
-        # backward typo compatibility
         await self.send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
@@ -318,7 +310,7 @@ class DingtalkPlatformAdapter(Platform):
                 sender_staff_id = cast(str, message.sender_staff_id or "")
                 if sender_staff_id:
                     umo = str(
-                        MessageSesion(
+                        MessageSession(
                             platform_name=self.meta().id,
                             message_type=abm.type,
                             session_id=sender_id,
@@ -411,7 +403,7 @@ class DingtalkPlatformAdapter(Platform):
                 data = await resp.json()
                 return cast(str, data.get("data", {}).get("accessToken", ""))
 
-    async def _get_sender_staff_id(self, session: MessageSesion) -> str:
+    async def _get_sender_staff_id(self, session: MessageSession) -> str:
         try:
             staff_id = await sp.get_async(
                 "global",
@@ -737,7 +729,7 @@ class DingtalkPlatformAdapter(Platform):
                 # at_str=at_str,
             )
         else:
-            session = MessageSesion(
+            session = MessageSession(
                 platform_name=self.meta().id,
                 message_type=MessageType.FRIEND_MESSAGE,
                 session_id=normalized_sender_id,

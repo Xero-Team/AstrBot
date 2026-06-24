@@ -92,7 +92,6 @@ class TestAstrMessageEventInit:
     def test_init_platform_reference(self, astr_message_event, platform_meta):
         """Test platform reference initialization."""
         assert astr_message_event.platform_meta == platform_meta
-        assert astr_message_event.platform == platform_meta  # back compatibility
 
     def test_init_created_at(self, astr_message_event):
         """Test created_at timestamp is set."""

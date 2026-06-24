@@ -39,11 +39,11 @@ def mock_context():
     ctx.get_config.return_value = {}
     ctx.conversation_manager = MagicMock()
     ctx.persona_manager = MagicMock()
-    ctx.persona_manager.personas_v3 = []
+    ctx.persona_manager.runtime_personas = []
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
         return_value=(None, None, None, False)
     )
-    ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
+    ctx.persona_manager.get_runtime_persona_by_id = MagicMock(return_value=None)
     tool_mgr = MagicMock()
     tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     ctx.get_llm_tool_manager.return_value = tool_mgr
@@ -763,7 +763,7 @@ class TestEnsurePersonaAndSkills:
         """Test applying persona from session service config."""
         module = ama
         persona = {"name": "test-persona", "prompt": "You are helpful."}
-        mock_context.persona_manager.personas_v3 = [persona]
+        mock_context.persona_manager.runtime_personas = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("test-persona", persona, "test-persona", False)
         )
@@ -780,7 +780,7 @@ class TestEnsurePersonaAndSkills:
         """Test applying persona from conversation setting."""
         module = ama
         persona = {"name": "conv-persona", "prompt": "Custom persona."}
-        mock_context.persona_manager.personas_v3 = [persona]
+        mock_context.persona_manager.runtime_personas = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("conv-persona", persona, None, False)
         )
@@ -795,7 +795,7 @@ class TestEnsurePersonaAndSkills:
     async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
         """Test that [%None] persona is explicitly set to no persona."""
         module = ama
-        mock_context.persona_manager.personas_v3 = []
+        mock_context.persona_manager.runtime_personas = []
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("[%None]", None, None, False)
         )
@@ -994,7 +994,7 @@ class TestEnsurePersonaAndSkills:
         mock_tool.name = "test_tool"
         mock_tool.active = True
         persona = {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
-        mock_context.persona_manager.personas_v3 = [persona]
+        mock_context.persona_manager.runtime_personas = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("persona", persona, None, False)
         )
@@ -1113,7 +1113,7 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
         )
-        mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
+        mock_context.persona_manager.get_runtime_persona_by_id = MagicMock(
             return_value={"name": "default", "tools": ["tool_a"]}
         )
 
@@ -2424,69 +2424,25 @@ class TestApplySandboxTools:
         assert "send_to_user=true" in req.system_prompt
         assert "focused and empty or safe to append" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
-        """Test sandbox tools with shipyard booter configuration."""
+    def test_apply_sandbox_tools_with_shipyard_neo_adds_path_rule(
+        self, mock_context
+    ):
+        """Test Shipyard Neo sandbox guidance adds workspace path rule."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "test-token",
+                "booter": "shipyard_neo",
             },
         )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
-        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
+        req = ProviderRequest(prompt="Test", func_tool=None, system_prompt="Original")
 
         module._apply_sandbox_tools(config, req, "session-123")
 
-        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
-        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
-
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self, mock_context):
-        """Test that shipyard config is skipped when endpoint is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "",
-                "shipyard_access_token": "test-token",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
-        assert (
-            "Shipyard sandbox configuration is incomplete"
-            in mock_logger.error.call_args[0][0]
-        )
-
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self, mock_context):
-        """Test that shipyard config is skipped when access token is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
+        assert "[Shipyard Neo File Path Rule]" in req.system_prompt
+        assert "baidu_homepage.png" in req.system_prompt
+        assert "/workspace/baidu_homepage.png" in req.system_prompt
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""

@@ -303,3 +303,29 @@ async def test_ensure_vec_db_sets_init_error_on_failure(
         # Verify: init_error should NOT be cleared (still has previous error)
         # Note: _ensure_vec_db doesn't set init_error; that's done by the caller
         assert helper.init_error is not None
+
+
+@pytest.mark.asyncio
+async def test_init_kb_database_does_not_run_legacy_migration(
+    stub_provider_manager_module,
+    mock_provider_manager,
+):
+    """Test KB initialization only creates the current schema."""
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+
+    mock_db = MagicMock()
+    mock_db.initialize = AsyncMock()
+    mock_db.migrate_to_v1 = AsyncMock()
+
+    with patch(
+        "astrbot.core.knowledge_base.kb_mgr.KBSQLiteDatabase",
+        return_value=mock_db,
+    ):
+        await KnowledgeBaseManager._init_kb_database(kb_mgr)
+
+    mock_db.initialize.assert_awaited_once()
+    mock_db.migrate_to_v1.assert_not_called()
+    assert kb_mgr.kb_db is mock_db

@@ -70,9 +70,7 @@ class AstrBotMessage:
 
     @property
     def group_id(self) -> str:
-        """向后兼容的 group_id 属性
-        群组id，如果为私聊，则为空
-        """
+        """Return the current group id, or an empty string for private chats."""
         if self.group:
             return self.group.group_id
         return ""

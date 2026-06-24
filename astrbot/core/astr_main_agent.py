@@ -89,7 +89,6 @@ from astrbot.core.tools.web_search_tools import (
     FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
-    normalize_legacy_web_search_config,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
@@ -535,7 +534,7 @@ async def _ensure_persona_and_skills(
         persona_toolset = ToolSet()
         if persona["tools"]:
             for tool_name in persona["tools"]:
-                tool = tmgr.get_func(tool_name)
+                tool = tmgr.get_tool(tool_name)
                 if tool and tool.active:
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
@@ -560,7 +559,9 @@ async def _ensure_persona_and_skills(
                 persona_tools = None
                 pid = a.get("persona_id")
                 if pid:
-                    persona = plugin_context.persona_manager.get_persona_v3_by_id(pid)
+                    persona = plugin_context.persona_manager.get_runtime_persona_by_id(
+                        pid
+                    )
                     if persona is not None:
                         persona_tools = persona.get("tools")
                 tools = a.get("tools", [])
@@ -700,6 +701,7 @@ async def _append_video_attachment(
 ) -> None:
     try:
         video_path = await video.convert_to_file_path()
+        video_path = video_path.replace("\\", "/")
     except Exception as exc:  # noqa: BLE001
         if quoted:
             logger.debug(
@@ -1082,14 +1084,6 @@ def _apply_sandbox_tools(
     if req.system_prompt is None:
         req.system_prompt = ""
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
-    if booter == "shipyard":
-        ep = config.sandbox_cfg.get("shipyard_endpoint", "")
-        at = config.sandbox_cfg.get("shipyard_access_token", "")
-        if not ep or not at:
-            logger.error("Shipyard sandbox configuration is incomplete.")
-            return
-        os.environ["SHIPYARD_ENDPOINT"] = ep
-        os.environ["SHIPYARD_ACCESS_TOKEN"] = at
 
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
@@ -1184,7 +1178,6 @@ async def _apply_web_search_tools(
     plugin_context: Context,
 ) -> None:
     cfg = plugin_context.get_config(umo=event.unified_msg_origin)
-    normalize_legacy_web_search_config(cfg)
     prov_settings = cfg.get("provider_settings", {})
 
     if not prov_settings.get("web_search", False):

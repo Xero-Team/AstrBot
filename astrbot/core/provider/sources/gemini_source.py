@@ -200,7 +200,7 @@ class ProviderGoogleGenAI(Provider):
                 tool_list.append(types.Tool(url_context=types.UrlContext()))
 
         if tools:
-            func_desc = tools.get_func_desc_google_genai_style()
+            func_desc = tools.google_schema()
             tool_list.append(
                 types.Tool(function_declarations=func_desc["function_declarations"]),
             )

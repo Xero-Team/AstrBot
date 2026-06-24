@@ -28,7 +28,7 @@ from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
 from .astrbot_message import AstrBotMessage, Group
-from .message_session import MessageSesion, MessageSession  # noqa
+from .message_session import MessageSession
 from .platform_metadata import PlatformMetadata
 
 
@@ -96,10 +96,6 @@ class AstrMessageEvent(abc.ABC):
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
-
-        # back_compability
-        self.platform = platform_meta
-
     @property
     def unified_msg_origin(self) -> str:
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""

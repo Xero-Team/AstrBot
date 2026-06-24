@@ -42,8 +42,7 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str, version: str = "1
     with open(plugin_path / "metadata.yaml", "w", encoding="utf-8") as f:
         yaml.dump(metadata, f)
     with open(plugin_path / "main.py", "w", encoding="utf-8") as f:
-        f.write("from astrbot.api.star import Star, Context, StarManager\n")
-        f.write("@StarManager.register\n")
+        f.write("from astrbot.api.star import Star, Context\n")
         f.write("class HelloWorld(Star):\n")
         f.write("    def __init__(self, context: Context): ...\n")
 
@@ -122,6 +121,44 @@ def test_load_plugin_metadata_includes_pages(tmp_path: Path):
 
     assert loaded_metadata is not None
     assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
+
+
+def test_load_plugin_metadata_raises_without_metadata_yaml(tmp_path: Path):
+    plugin_path = tmp_path / "legacy_plugin"
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "main.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    with pytest.raises(Exception, match="未找到 metadata.yaml"):
+        PluginManager._load_plugin_metadata(str(plugin_path))
+
+
+def test_load_plugin_metadata_rejects_description_alias(tmp_path: Path):
+    plugin_path = tmp_path / "legacy_plugin"
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": TEST_PLUGIN_NAME,
+                "repo": TEST_PLUGIN_REPO,
+                "version": "1.0.0",
+                "author": "AstrBot Team",
+                "description": "Legacy alias description",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(Exception, match="插件元数据信息不完整"):
+        PluginManager._load_plugin_metadata(str(plugin_path))
+
+
+def test_get_modules_ignores_directory_name_entrypoint(tmp_path: Path):
+    plugin_root = tmp_path / "plugins"
+    plugin_dir = plugin_root / "legacy_plugin"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "legacy_plugin.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    assert PluginManager._get_modules(str(plugin_root)) == []
 
 
 def test_loaded_metadata_can_copy_i18n_into_existing_star_metadata(tmp_path: Path):
@@ -641,6 +678,7 @@ async def test_load_reports_unregistered_plugin_without_index_error(
     assert success is False
     assert error is not None
     assert "未通过 Star 注册" in error
+    assert "继承自 Star 的插件主类" in error
     assert "list index out of range" not in error
     assert plugin_name in plugin_manager_pm.failed_plugin_dict
 

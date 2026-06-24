@@ -46,7 +46,7 @@ class ProviderManager:
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
-        # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
+        # Kept only because some runtime code still reads the current default persona name directly.
         self.default_persona_name = persona_mgr.default_persona
 
         self.provider_insts: list[Provider] = []
@@ -73,21 +73,10 @@ class ProviderManager:
         self.curr_tts_provider_inst: TTSProvider | None = None
         """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
-        self._provider_change_callback: (
-            Callable[[str, ProviderType, str | None], None] | None
-        ) = None
         self._provider_change_hooks: list[
             Callable[[str, ProviderType, str | None], None]
         ] = []
         self._mcp_init_task: asyncio.Task | None = None
-
-    def set_provider_change_callback(
-        self,
-        cb: Callable[[str, ProviderType, str | None], None] | None,
-    ) -> None:
-        # Backward-compatible single-callback setter.
-        # This callback coexists with register_provider_change_hook subscriptions.
-        self._provider_change_callback = cb
 
     def register_provider_change_hook(
         self,
@@ -102,19 +91,7 @@ class ProviderManager:
         provider_type: ProviderType,
         umo: str | None,
     ) -> None:
-        if self._provider_change_callback is not None:
-            try:
-                self._provider_change_callback(provider_id, provider_type, umo)
-            except Exception as e:
-                logger.warning(
-                    "调用 provider 变更回调失败: provider_id=%s, type=%s, err=%s",
-                    provider_id,
-                    provider_type,
-                    safe_error("", e),
-                )
         for hook in list(self._provider_change_hooks):
-            if hook is self._provider_change_callback:
-                continue
             try:
                 hook(provider_id, provider_type, umo)
             except Exception as e:
@@ -124,21 +101,6 @@ class ProviderManager:
                     provider_type,
                     safe_error("", e),
                 )
-
-    @property
-    def persona_configs(self) -> list:
-        """动态获取最新的 persona 配置"""
-        return self.persona_mgr.persona_v3_config
-
-    @property
-    def personas(self) -> list:
-        """动态获取最新的 personas 列表"""
-        return self.persona_mgr.personas_v3
-
-    @property
-    def selected_default_persona(self):
-        """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
-        return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
         self,

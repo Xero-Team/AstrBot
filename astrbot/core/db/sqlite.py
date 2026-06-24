@@ -1,5 +1,3 @@
-import asyncio
-import threading
 import typing as T
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
@@ -29,12 +27,6 @@ from astrbot.core.db.po import (
     UmoAlias,
     WebChatThread,
 )
-from astrbot.core.db.po import (
-    Platform as DeprecatedPlatformStat,
-)
-from astrbot.core.db.po import (
-    Stats as DeprecatedStats,
-)
 from astrbot.core.sentinels import NOT_GIVEN
 
 TxResult = T.TypeVar("TxResult")
@@ -59,74 +51,7 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
-            # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
-            await self._ensure_persona_folder_columns(conn)
-            await self._ensure_persona_skills_column(conn)
-            await self._ensure_persona_custom_error_message_column(conn)
-            await self._ensure_platform_message_history_checkpoint_column(conn)
             await conn.commit()
-
-    async def _ensure_persona_folder_columns(self, conn) -> None:
-        """确保 personas 表有 folder_id 和 sort_order 列。
-
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
-        """
-        result = await conn.execute(text("PRAGMA table_info(personas)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "folder_id" not in columns:
-            await conn.execute(
-                text(
-                    "ALTER TABLE personas ADD COLUMN folder_id VARCHAR(36) DEFAULT NULL"
-                )
-            )
-        if "sort_order" not in columns:
-            await conn.execute(
-                text("ALTER TABLE personas ADD COLUMN sort_order INTEGER DEFAULT 0")
-            )
-
-    async def _ensure_persona_skills_column(self, conn) -> None:
-        """确保 personas 表有 skills 列。
-
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
-        """
-        result = await conn.execute(text("PRAGMA table_info(personas)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "skills" not in columns:
-            await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
-
-    async def _ensure_persona_custom_error_message_column(self, conn) -> None:
-        """确保 personas 表有 custom_error_message 列。"""
-        result = await conn.execute(text("PRAGMA table_info(personas)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "custom_error_message" not in columns:
-            await conn.execute(
-                text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
-            )
-
-    async def _ensure_platform_message_history_checkpoint_column(self, conn) -> None:
-        """Ensure platform_message_history has llm_checkpoint_id."""
-        result = await conn.execute(text("PRAGMA table_info(platform_message_history)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "llm_checkpoint_id" not in columns:
-            await conn.execute(
-                text(
-                    "ALTER TABLE platform_message_history "
-                    "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL"
-                )
-            )
-            await conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS "
-                    "ix_platform_message_history_llm_checkpoint_id "
-                    "ON platform_message_history (llm_checkpoint_id)"
-                )
-            )
 
     # ====
     # Platform Statistics
@@ -1515,102 +1440,6 @@ class SQLiteDatabase(BaseDatabase):
             )
 
         await self._run_in_tx(_op)
-
-    # ====
-    # Deprecated Methods
-    # ====
-
-    def get_base_stats(self, offset_sec=86400):
-        """Get base statistics within the specified offset in seconds."""
-
-        async def _inner():
-            async with self.get_db() as session:
-                session: AsyncSession
-                now = datetime.now()
-                start_time = now - timedelta(seconds=offset_sec)
-                result = await session.execute(
-                    select(PlatformStat).where(PlatformStat.timestamp >= start_time),
-                )
-                all_datas = result.scalars().all()
-                deprecated_stats = DeprecatedStats()
-                for data in all_datas:
-                    deprecated_stats.platform.append(
-                        DeprecatedPlatformStat(
-                            name=data.platform_id,
-                            count=data.count,
-                            timestamp=int(data.timestamp.timestamp()),
-                        ),
-                    )
-                return deprecated_stats
-
-        result = None
-
-        def runner() -> None:
-            nonlocal result
-            result = asyncio.run(_inner())
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-        return result
-
-    def get_total_message_count(self):
-        """Get the total message count from platform statistics."""
-
-        async def _inner():
-            async with self.get_db() as session:
-                session: AsyncSession
-                result = await session.execute(
-                    select(func.sum(PlatformStat.count)).select_from(PlatformStat),
-                )
-                total_count = result.scalar_one_or_none()
-                return total_count if total_count is not None else 0
-
-        result = None
-
-        def runner() -> None:
-            nonlocal result
-            result = asyncio.run(_inner())
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-        return result
-
-    def get_grouped_base_stats(self, offset_sec=86400):
-        # group by platform_id
-        async def _inner():
-            async with self.get_db() as session:
-                session: AsyncSession
-                now = datetime.now()
-                start_time = now - timedelta(seconds=offset_sec)
-                result = await session.execute(
-                    select(PlatformStat.platform_id, func.sum(PlatformStat.count))
-                    .where(PlatformStat.timestamp >= start_time)
-                    .group_by(PlatformStat.platform_id),
-                )
-                grouped_stats = result.all()
-                deprecated_stats = DeprecatedStats()
-                for platform_id, count in grouped_stats:
-                    deprecated_stats.platform.append(
-                        DeprecatedPlatformStat(
-                            name=platform_id,
-                            count=count,
-                            timestamp=int(start_time.timestamp()),
-                        ),
-                    )
-                return deprecated_stats
-
-        result = None
-
-        def runner() -> None:
-            nonlocal result
-            result = asyncio.run(_inner())
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-        return result
 
     # ====
     # Platform Session Management

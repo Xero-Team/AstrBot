@@ -6,26 +6,6 @@ import pytest
 from astrbot.core.tools import web_search_tools as tools
 
 
-class _FakeConfig(dict):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.saved = False
-
-    def save_config(self):
-        self.saved = True
-
-
-def test_normalize_legacy_web_search_config_migrates_firecrawl_key():
-    config = _FakeConfig(
-        {"provider_settings": {"websearch_firecrawl_key": "firecrawl-key"}}
-    )
-
-    tools.normalize_legacy_web_search_config(config)
-
-    assert config["provider_settings"]["websearch_firecrawl_key"] == ["firecrawl-key"]
-    assert config.saved is True
-
-
 @pytest.mark.asyncio
 async def test_firecrawl_search_maps_web_results(monkeypatch):
     async def fake_firecrawl_search(provider_settings, payload):

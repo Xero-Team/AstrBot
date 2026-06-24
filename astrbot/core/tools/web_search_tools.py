@@ -8,7 +8,7 @@ import aiohttp
 from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from astrbot.core import logger, sp
+from astrbot.core import sp
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
@@ -76,37 +76,6 @@ _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
-
-
-def normalize_legacy_web_search_config(cfg) -> None:
-    provider_settings = cfg.get("provider_settings")
-    if not provider_settings:
-        return
-
-    changed = False
-    if provider_settings.get(
-        "websearch_provider"
-    ) == "default" and provider_settings.get("web_search", False):
-        provider_settings["web_search"] = False
-        changed = True
-        logger.warning(
-            "The default websearch provider is no longer supported. "
-            "Web search has been disabled and the config was saved.",
-        )
-
-    for setting_name in (
-        "websearch_tavily_key",
-        "websearch_bocha_key",
-        "websearch_brave_key",
-        "websearch_firecrawl_key",
-    ):
-        value = provider_settings.get(setting_name)
-        if isinstance(value, str):
-            provider_settings[setting_name] = [value] if value else []
-            changed = True
-
-    if changed:
-        cfg.save_config()
 
 
 def _get_runtime(context) -> tuple[dict, dict, str]:
@@ -810,5 +779,4 @@ __all__ = [
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",
-    "normalize_legacy_web_search_config",
 ]

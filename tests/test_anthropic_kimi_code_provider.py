@@ -457,7 +457,7 @@ def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
 class _FakeToolSet:
     """模拟包含工具的 ToolSet"""
 
-    def get_func_desc_anthropic_style(self):
+    def anthropic_schema(self):
         return [{"name": "get_weather", "description": "Get weather"}]
 
     def empty(self):
@@ -467,7 +467,7 @@ class _FakeToolSet:
 class _EmptyToolSet:
     """模拟空工具列表的 ToolSet，用于验证无工具时不设置 tool_choice"""
 
-    def get_func_desc_anthropic_style(self):
+    def anthropic_schema(self):
         return []
 
     def empty(self):
@@ -593,8 +593,8 @@ async def test_tool_choice_none_converts_to_dict(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_tool_choice_required_legacy_compat(monkeypatch):
-    """tool_choice='required'(OpenAI 命名) 应兼容转换为 {'type': 'any'}"""
+async def test_tool_choice_required_falls_back_to_auto(monkeypatch):
+    """tool_choice='required' 不再做兼容映射，应回退为 {'type': 'auto'}"""
     provider = _setup_provider_with_mock_client(monkeypatch)
 
     await provider.text_chat(
@@ -603,7 +603,7 @@ async def test_tool_choice_required_legacy_compat(monkeypatch):
         tool_choice="required",
     )
 
-    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "any"}
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "auto"}
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -37,3 +38,63 @@ async def test_file_component_download_sanitizes_remote_name(monkeypatch, tmp_pa
     assert path.name.startswith("fileseg_report________")
     assert path.suffix == ".pdf"
     assert downloaded_paths == [path]
+
+
+@pytest.mark.asyncio
+async def test_file_component_registers_v1_file_token_url(monkeypatch, tmp_path):
+    file_path = tmp_path / "report.txt"
+    file_path.write_text("payload", encoding="utf-8")
+
+    async def fake_register_file(path: str) -> str:
+        assert path == str(file_path)
+        return "token-123"
+
+    monkeypatch.setattr(
+        components,
+        "astrbot_config",
+        SimpleNamespace(
+            get=lambda key, default=None: (
+                "https://example.com" if key == "callback_api_base" else default
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        components.file_token_service, "register_file", fake_register_file
+    )
+
+    component = components.File(name="report.txt", file=str(file_path))
+
+    url = await component.register_to_file_service()
+
+    assert url == "https://example.com/api/v1/files/tokens/token-123"
+
+
+@pytest.mark.asyncio
+async def test_file_component_to_dict_uses_v1_file_token_url(monkeypatch, tmp_path):
+    file_path = tmp_path / "report.txt"
+    file_path.write_text("payload", encoding="utf-8")
+
+    async def fake_register_file(path: str) -> str:
+        assert path == str(file_path)
+        return "token-456"
+
+    monkeypatch.setattr(
+        components,
+        "astrbot_config",
+        SimpleNamespace(
+            get=lambda key, default=None: (
+                "https://example.com/" if key == "callback_api_base" else default
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        components.file_token_service, "register_file", fake_register_file
+    )
+
+    component = components.File(name="report.txt", file=str(file_path))
+
+    payload = await component.to_dict()
+
+    assert (
+        payload["data"]["file"] == "https://example.com/api/v1/files/tokens/token-456"
+    )

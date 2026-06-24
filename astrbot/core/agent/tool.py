@@ -4,7 +4,6 @@ from typing import Any, Generic
 
 import jsonschema
 import mcp
-from deprecated import deprecated
 from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
 
@@ -159,42 +158,6 @@ class ToolSet:
             )
         return ToolSet(param_tools)
 
-    @deprecated(reason="Use add_tool() instead", version="4.0.0")
-    def add_func(
-        self,
-        name: str,
-        func_args: list,
-        desc: str,
-        handler: Callable[..., Awaitable[Any]],
-    ) -> None:
-        """Add a function tool to the set."""
-        params = {
-            "type": "object",  # hard-coded here
-            "properties": {},
-        }
-        for param in func_args:
-            params["properties"][param["name"]] = {
-                "type": param["type"],
-                "description": param["description"],
-            }
-        _func = FunctionTool(
-            name=name,
-            parameters=params,
-            description=desc,
-            handler=handler,
-        )
-        self.add_tool(_func)
-
-    @deprecated(reason="Use remove_tool() instead", version="4.0.0")
-    def remove_func(self, name: str) -> None:
-        """Remove a function tool by its name."""
-        self.remove_tool(name)
-
-    @deprecated(reason="Use get_tool() instead", version="4.0.0")
-    def get_func(self, name: str) -> FunctionTool | None:
-        """Get all function tools."""
-        return self.get_tool(name)
-
     @property
     def func_list(self) -> list[FunctionTool]:
         """Get the list of function tools."""
@@ -328,18 +291,6 @@ class ToolSet:
         if tools:
             declarations["function_declarations"] = tools
         return declarations
-
-    @deprecated(reason="Use openai_schema() instead", version="4.0.0")
-    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
-        return self.openai_schema(omit_empty_parameter_field)
-
-    @deprecated(reason="Use anthropic_schema() instead", version="4.0.0")
-    def get_func_desc_anthropic_style(self):
-        return self.anthropic_schema()
-
-    @deprecated(reason="Use google_schema() instead", version="4.0.0")
-    def get_func_desc_google_genai_style(self):
-        return self.google_schema()
 
     def names(self) -> list[str]:
         """获取所有工具的名称列表"""

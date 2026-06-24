@@ -10,12 +10,10 @@ DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
     name="default",
     begin_dialogs=[],
-    mood_imitation_dialogs=[],
     tools=None,
     skills=None,
     custom_error_message=None,
     _begin_dialogs_processed=[],
-    _mood_imitation_dialogs_processed="",
 )
 
 
@@ -26,15 +24,12 @@ class PersonaManager:
         default_ps = acm.default_conf.get("provider_settings", {})
         self.default_persona: str = default_ps.get("default_personality", "default")
         self.personas: list[Persona] = []
-        self.selected_default_persona: Persona | None = None
-
-        self.personas_v3: list[Personality] = []
-        self.selected_default_persona_v3: Personality | None = None
-        self.persona_v3_config: list[dict] = []
+        self.runtime_personas: list[Personality] = []
+        self.selected_runtime_persona: Personality | None = None
 
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
-        self.get_v3_persona_data()
+        self._refresh_runtime_personas()
         logger.info("Loaded %s personas.", len(self.personas))
 
     async def get_persona(self, persona_id: str):
@@ -44,23 +39,27 @@ class PersonaManager:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         return persona
 
-    def get_persona_v3_by_id(self, persona_id: str | None) -> Personality | None:
-        """Resolve a v3 persona object by id.
+    def get_runtime_persona_by_id(self, persona_id: str | None) -> Personality | None:
+        """Resolve a runtime persona object by id.
 
         - None/empty id returns None.
         - "default" maps to in-memory DEFAULT_PERSONALITY.
-        - Otherwise search in personas_v3 by persona name.
+        - Otherwise search in runtime_personas by persona name.
         """
         if not persona_id:
             return None
         if persona_id == "default":
             return DEFAULT_PERSONALITY
         return next(
-            (persona for persona in self.personas_v3 if persona["name"] == persona_id),
+            (
+                persona
+                for persona in self.runtime_personas
+                if persona["name"] == persona_id
+            ),
             None,
         )
 
-    async def get_default_persona_v3(
+    async def get_default_runtime_persona(
         self,
         umo: str | MessageSession | None = None,
     ) -> Personality:
@@ -70,7 +69,7 @@ class PersonaManager:
             "default_personality",
             "default",
         )
-        return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
+        return self.get_runtime_persona_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
     async def resolve_selected_persona(
         self,
@@ -110,7 +109,7 @@ class PersonaManager:
                 persona_id = (provider_settings or {}).get("default_personality")
 
         persona = next(
-            (item for item in self.personas_v3 if item["name"] == persona_id),
+            (item for item in self.runtime_personas if item["name"] == persona_id),
             None,
         )
 
@@ -132,7 +131,7 @@ class PersonaManager:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         await self.db.delete_persona(persona_id)
         self.personas = [p for p in self.personas if p.persona_id != persona_id]
-        self.get_v3_persona_data()
+        self._refresh_runtime_personas()
 
     async def update_persona(
         self,
@@ -166,7 +165,7 @@ class PersonaManager:
                 if p.persona_id == persona_id:
                     self.personas[i] = persona
                     break
-        self.get_v3_persona_data()
+        self._refresh_runtime_personas()
         return persona
 
     async def get_all_personas(self) -> list[Persona]:
@@ -271,7 +270,7 @@ class PersonaManager:
         await self.db.batch_update_sort_order(items)
         # 刷新缓存
         self.personas = await self.get_all_personas()
-        self.get_v3_persona_data()
+        self._refresh_runtime_personas()
 
     async def get_folder_tree(self) -> list[dict]:
         """获取文件夹树形结构
@@ -347,43 +346,20 @@ class PersonaManager:
             sort_order=sort_order,
         )
         self.personas.append(new_persona)
-        self.get_v3_persona_data()
+        self._refresh_runtime_personas()
         return new_persona
 
-    def get_v3_persona_data(
-        self,
-    ) -> tuple[list[dict], list[Personality], Personality]:
-        """获取 AstrBot <4.0.0 版本的 persona 数据。
+    def _refresh_runtime_personas(self) -> None:
+        runtime_personas: list[Personality] = []
+        selected_runtime_persona: Personality | None = None
 
-        Returns:
-            - list[dict]: 包含 persona 配置的字典列表。
-            - list[Personality]: 包含 Personality 对象的列表。
-            - Personality: 默认选择的 Personality 对象。
-
-        """
-        v3_persona_config = [
-            {
-                "prompt": persona.system_prompt,
-                "name": persona.persona_id,
-                "begin_dialogs": persona.begin_dialogs or [],
-                "mood_imitation_dialogs": [],  # deprecated
-                "tools": persona.tools,
-                "skills": persona.skills,
-                "custom_error_message": persona.custom_error_message,
-            }
-            for persona in self.personas
-        ]
-
-        personas_v3: list[Personality] = []
-        selected_default_persona: Personality | None = None
-
-        for persona_cfg in v3_persona_config:
-            begin_dialogs = persona_cfg.get("begin_dialogs", [])
+        for persona in self.personas:
+            begin_dialogs = persona.begin_dialogs or []
             bd_processed = []
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        f"{persona_cfg['name']} 人格情景预设对话格式不对，条数应该为偶数。",
+                        f"{persona.persona_id} 人格情景预设对话格式不对，条数应该为偶数。",
                     )
                     begin_dialogs = []
                 user_turn = True
@@ -398,35 +374,27 @@ class PersonaManager:
                     user_turn = not user_turn
 
             try:
-                persona = Personality(
-                    **persona_cfg,
+                runtime_persona = Personality(
+                    prompt=persona.system_prompt,
+                    name=persona.persona_id,
+                    begin_dialogs=begin_dialogs,
+                    tools=persona.tools,
+                    skills=persona.skills,
+                    custom_error_message=persona.custom_error_message,
                     _begin_dialogs_processed=bd_processed,
-                    _mood_imitation_dialogs_processed="",  # deprecated
                 )
-                if persona["name"] == self.default_persona:
-                    selected_default_persona = persona
-                personas_v3.append(persona)
+                if runtime_persona["name"] == self.default_persona:
+                    selected_runtime_persona = runtime_persona
+                runtime_personas.append(runtime_persona)
             except Exception as e:
                 logger.error(f"解析 Persona 配置失败：{e}")
 
-        if not selected_default_persona and len(personas_v3) > 0:
-            # 默认选择第一个
-            selected_default_persona = personas_v3[0]
+        if not selected_runtime_persona and runtime_personas:
+            selected_runtime_persona = runtime_personas[0]
 
-        if not selected_default_persona:
-            selected_default_persona = DEFAULT_PERSONALITY
-            personas_v3.append(selected_default_persona)
+        if not selected_runtime_persona:
+            selected_runtime_persona = DEFAULT_PERSONALITY
+            runtime_personas.append(selected_runtime_persona)
 
-        self.personas_v3 = personas_v3
-        self.selected_default_persona_v3 = selected_default_persona
-        self.persona_v3_config = v3_persona_config
-        self.selected_default_persona = Persona(
-            persona_id=selected_default_persona["name"],
-            system_prompt=selected_default_persona["prompt"],
-            begin_dialogs=selected_default_persona["begin_dialogs"],
-            tools=selected_default_persona["tools"] or None,
-            skills=selected_default_persona["skills"] or None,
-            custom_error_message=selected_default_persona["custom_error_message"],
-        )
-
-        return v3_persona_config, personas_v3, selected_default_persona
+        self.runtime_personas = runtime_personas
+        self.selected_runtime_persona = selected_runtime_persona

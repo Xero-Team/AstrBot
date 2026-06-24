@@ -12,7 +12,7 @@ from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
-from .shipyard import ShipyardFileSystemWrapper
+from .shipyard_fs import ShipyardFileSystemWrapper
 
 
 class MockShipyardSandboxClient:

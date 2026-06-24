@@ -661,7 +661,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
         if not registering_agent:
             doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-            llm_tools.add_func(llm_tool_name, args, doc_desc, md.handler)
+            llm_tools.add_tool(llm_tool_name, args, doc_desc, md.handler)
         else:
             assert isinstance(registering_agent, RegisteringAgent)
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)

@@ -300,38 +300,17 @@ class TestGetBooterRebuild:
 
     @pytest.mark.asyncio
     async def test_stale_non_neo_booter_calls_plain_shutdown(self, monkeypatch):
-        """Non-neo booter (e.g. shipyard) → plain shutdown() without delete_sandbox."""
+        """Non-neo booter types use plain shutdown() without delete_sandbox."""
         from astrbot.core.computer import computer_client
 
-        ctx = self._make_fake_context(booter_type="shipyard")
+        ctx = self._make_fake_context(booter_type="unknown_type")
 
         stale = SimpleNamespace(shutdown=AsyncMock())
         stale.available = AsyncMock(return_value=False)
 
         monkeypatch.setitem(computer_client.session_booter, "session-1", stale)
 
-        # Patch ShipyardBooter entirely to skip its __init__ validation
-        class _FakeShipyardBooter:
-            def __init__(self, **kwargs):
-                pass
-
-            async def boot(self, _sid):
-                self._sandbox = SimpleNamespace(  # type: ignore[assignment]
-                    refresh=AsyncMock(),
-                    status=SimpleNamespace(value="ready"),
-                )
-                self._shell = SimpleNamespace()  # type: ignore[assignment]
-                self._fs = SimpleNamespace()  # type: ignore[assignment]
-                self._python = SimpleNamespace()  # type: ignore[assignment]
-
-            async def shutdown(self, **kwargs):
-                pass
-
         with (
-            patch(
-                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
-                _FakeShipyardBooter,
-            ),
             patch(
                 "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
                 AsyncMock(),
@@ -339,7 +318,8 @@ class TestGetBooterRebuild:
         ):
             from astrbot.core.computer.computer_client import get_booter
 
-            await get_booter(ctx, "session-1")
+            with pytest.raises(ValueError, match="Unknown booter type"):
+                await get_booter(ctx, "session-1")
 
         stale.shutdown.assert_awaited_once()
         # No delete_sandbox kwarg for non-neo booters

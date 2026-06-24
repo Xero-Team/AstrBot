@@ -21,8 +21,8 @@ class ComputerBooter:
     def capabilities(self) -> tuple[str, ...] | None:
         """Sandbox capabilities (e.g. ('python', 'shell', 'filesystem', 'browser')).
 
-        Returns None if the booter doesn't support capability introspection
-        (backward-compatible default).  Subclasses override after boot.
+        Returns None when the booter does not expose capability introspection.
+        Subclasses override this after boot.
         """
         return None
 

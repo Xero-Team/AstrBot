@@ -311,7 +311,7 @@ async def mock_context(
     conversation_manager = MagicMock()
     message_history_manager = MagicMock()
     persona_manager = MagicMock()
-    persona_manager.personas_v3 = []
+    persona_manager.runtime_personas = []
     astrbot_config_mgr = MagicMock()
     knowledge_base_manager = MagicMock()
     cron_manager = MagicMock()

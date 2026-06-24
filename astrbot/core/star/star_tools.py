@@ -1,14 +1,13 @@
 import inspect
 import os
 import uuid
-from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -32,7 +31,7 @@ class StarTools:
     @classmethod
     async def send_message(
         cls,
-        session: str | MessageSesion,
+        session: str | MessageSession,
         message_chain: MessageChain,
     ) -> bool:
         """Sends a message to a session by unified message origin.
@@ -109,8 +108,7 @@ class StarTools:
 
         Args:
             abm: Message object to submit. Create it with create_message first.
-            platform: Platform ID or adapter name. Defaults to aiocqhttp for
-                backward compatibility.
+            platform: Platform ID or adapter name. Defaults to aiocqhttp.
             is_wake: Whether to mark the event as a wake event. Only wake events
                 receive LLM responses.
 
@@ -164,43 +162,6 @@ class StarTools:
         if cls._context is None:
             raise ValueError("StarTools not initialized")
         return cls._context.deactivate_llm_tool(name)
-
-    @classmethod
-    def register_llm_tool(
-        cls,
-        name: str,
-        func_args: list,
-        desc: str,
-        func_obj: Callable[..., Awaitable[Any]],
-    ) -> None:
-        """Registers a function-calling tool.
-
-        Args:
-            name: Tool name.
-            func_args: Function argument definitions.
-            desc: Tool description.
-            func_obj: Function object. It must be async.
-
-        Raises:
-            ValueError: If StarTools is not initialized.
-        """
-        if cls._context is None:
-            raise ValueError("StarTools not initialized")
-        cls._context.register_llm_tool(name, func_args, desc, func_obj)
-
-    @classmethod
-    def unregister_llm_tool(cls, name: str) -> None:
-        """Unregisters a function-calling tool.
-
-        Args:
-            name: Tool name.
-
-        Raises:
-            ValueError: If StarTools is not initialized.
-        """
-        if cls._context is None:
-            raise ValueError("StarTools not initialized")
-        cls._context.unregister_llm_tool(name)
 
     @classmethod
     def get_data_dir(cls, plugin_name: str | None = None) -> Path:

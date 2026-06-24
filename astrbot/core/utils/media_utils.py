@@ -92,7 +92,7 @@ DEFAULT_MEDIA_SUFFIXES = {
 MediaRefStr: TypeAlias = str
 """
 A media reference string accepted by MediaResolver: local path, file URI, HTTP(S),
-base64://, data URI, or legacy bare base64.
+base64://, or data URI.
 
 Examples:
     Local path: ``/tmp/image.png``
@@ -100,7 +100,6 @@ Examples:
     HTTP(S) URL: ``https://example.com/image.png``
     base64:// payload: ``base64://iVBORw0KGgo...``
     Data URI: ``data:image/png;base64,iVBORw0KGgo...``
-    Legacy bare base64: ``iVBORw0KGgo...``
 """
 
 
@@ -212,8 +211,10 @@ def file_uri_to_path(file_uri: MediaRefStr) -> str:
         return file_uri
 
     parsed = urlparse(file_uri)
-    netloc = parsed.netloc or ""
+    netloc = unquote(parsed.netloc or "")
     path = parsed.path or ""
+    if netloc.lower().startswith("localhost") and len(netloc) > len("localhost"):
+        netloc = netloc[len("localhost") :]
     if netloc and netloc.lower() != "localhost":
         if len(netloc) == 2 and netloc[1] == ":" and netloc[0].isalpha():
             return str(Path(url2pathname(f"{netloc}{path}")))
@@ -335,25 +336,6 @@ def describe_media_ref(media_ref: object | None) -> str:
         filename = Path(file_uri_to_path(media_ref)).name
         return f"file URI name={filename!r} len={ref_len}"
 
-    media_path_exists = False
-    try:
-        media_path_exists = Path(media_ref).exists()
-    except OSError:
-        pass
-    if not media_path_exists:
-        compact = "".join(media_ref.split())
-        if compact:
-            try:
-                _decode_base64_payload(
-                    compact,
-                    error_message="invalid bare base64 media payload",
-                    validate=True,
-                )
-            except ValueError:
-                pass
-            else:
-                return f"bare base64 media payload_len={len(compact)}"
-
     return f"local media path name={Path(media_ref).name!r} len={ref_len}"
 
 
@@ -406,7 +388,7 @@ async def _materialize_media_ref(
     """Resolve a plugin-facing media reference to a local file.
 
     Supported references: local paths, file:// URIs, http(s) URLs, base64://,
-    data:*;base64,... URIs, and legacy bare base64 payloads.
+    and data:*;base64,... URIs.
 
     Args:
         media_ref: Original media reference from a platform, plugin, or history.
@@ -479,7 +461,7 @@ async def _materialize_media_ref(
     compact_media_ref = "".join(media_ref.split())
     if compact_media_ref:
         try:
-            media_bytes = _decode_base64_payload(
+            _decode_base64_payload(
                 compact_media_ref,
                 error_message="invalid bare base64 media payload",
                 validate=True,
@@ -487,14 +469,10 @@ async def _materialize_media_ref(
         except ValueError:
             pass
         else:
-            target_path = _temp_media_path(media_type, suffix)
-            cleanup_paths.append(target_path)
-            try:
-                target_path.write_bytes(media_bytes)
-            except Exception:
-                _cleanup_paths(cleanup_paths)
-                raise
-            return _LocalMediaFile(path=target_path, cleanup_paths=cleanup_paths)
+            raise ValueError(
+                "bare base64 media payload is no longer supported; "
+                "use base64:// or a data URI instead"
+            )
 
     return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
@@ -503,14 +481,13 @@ class MediaResolver:
     """Resolve, convert, and export media references.
 
     The resolver accepts local paths, file:// URIs, http(s) URLs, base64:// payloads,
-    data:*;base64,... URIs, and legacy bare base64 payloads. Temporary paths are
+    and data:*;base64,... URIs. Temporary paths are
     cleaned when using as_path(), while to_path() intentionally leaves returned
     paths alive for callers that need to hand them to platform SDKs.
 
     Args:
         media_ref: Source media reference. It may be a local path, ``file://`` URI,
-            HTTP(S) URL, ``base64://`` payload, base64 data URI, or legacy bare
-            base64 payload.
+            HTTP(S) URL, ``base64://`` payload, or base64 data URI.
         media_type: Logical media family. ``audio`` enables format conversion and
             defaults to WAV output; ``image`` enables image MIME detection.
         default_suffix: Fallback suffix for temporary files when the source does
@@ -701,56 +678,47 @@ class MediaResolver:
             target_format: Optional output format for audio conversion.
             preserve_mp3: Keep existing MP3 audio as MP3 when no target format is
                 provided; otherwise audio defaults to WAV.
-            default_mime_type: Fallback MIME type for legacy image base64 payloads
+            default_mime_type: Fallback MIME type for base64:// image payloads
                 whose bytes cannot be identified.
         """
         if self.media_type == "image":
-            async with self.as_path(target_format=target_format) as resolved:
-                try:
-                    media_bytes = resolved.read_bytes()
-                except OSError:
-                    if strict:
-                        raise
-                    return None
-
-                mime_type = detect_image_mime_type(
-                    media_bytes,
-                    default_mime_type=None,
-                )
-                if (
-                    not mime_type
-                    and resolved.mime_type
-                    and resolved.mime_type.startswith("image/")
-                ):
-                    mime_type = resolved.mime_type
-                is_legacy_base64_ref = self.media_ref.startswith("base64://")
-                is_remote_or_data_ref = self.media_ref.startswith(
-                    ("http://", "https://", "data:")
-                ) or is_file_uri(self.media_ref)
-                if not is_legacy_base64_ref and not is_remote_or_data_ref:
+            try:
+                resolved_context = self.as_path(target_format=target_format)
+                async with resolved_context as resolved:
                     try:
-                        _decode_base64_payload(
-                            "".join(self.media_ref.split()),
-                            error_message="invalid bare base64 media payload",
-                            validate=True,
-                        )
-                    except ValueError:
-                        is_legacy_base64_ref = False
-                    else:
-                        is_legacy_base64_ref = True
-                if not mime_type and is_legacy_base64_ref:
-                    mime_type = default_mime_type
-                if not mime_type:
-                    if strict:
-                        raise ValueError(
-                            f"Invalid image file: {describe_media_ref(self.media_ref)}"
-                        )
-                    return None
+                        media_bytes = resolved.read_bytes()
+                    except OSError:
+                        if strict:
+                            raise
+                        return None
 
-                return ResolvedMediaData(
-                    base64_data=base64.b64encode(media_bytes).decode("utf-8"),
-                    mime_type=mime_type,
-                )
+                    mime_type = detect_image_mime_type(
+                        media_bytes,
+                        default_mime_type=None,
+                    )
+                    if (
+                        not mime_type
+                        and resolved.mime_type
+                        and resolved.mime_type.startswith("image/")
+                    ):
+                        mime_type = resolved.mime_type
+                    if not mime_type and self.media_ref.startswith("base64://"):
+                        mime_type = default_mime_type
+                    if not mime_type:
+                        if strict:
+                            raise ValueError(
+                                f"Invalid image file: {describe_media_ref(self.media_ref)}"
+                            )
+                        return None
+
+                    return ResolvedMediaData(
+                        base64_data=base64.b64encode(media_bytes).decode("utf-8"),
+                        mime_type=mime_type,
+                    )
+            except ValueError:
+                if strict:
+                    raise
+                return None
 
         async with self.as_path(
             target_format=target_format,
@@ -862,7 +830,7 @@ async def resolve_media_ref_to_base64_data(
     """Resolve a media reference to base64 data through one shared entrypoint.
 
     This helper keeps provider sources from knowing whether a reference is local,
-    HTTP(S), ``base64://``, a data URI, or a legacy bare base64 payload.
+    HTTP(S), ``base64://``, or a data URI.
     """
 
     if media_type == "image":

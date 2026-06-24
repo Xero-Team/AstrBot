@@ -113,7 +113,7 @@ class Provider(AbstractProvider):
 
         Args:
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
-            session_id: 会话 ID(此属性已经被废弃)
+            session_id: 保留参数，留空即可
             image_urls: 图片 URL 列表
             audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
@@ -151,7 +151,7 @@ class Provider(AbstractProvider):
 
         Args:
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
-            session_id: 会话 ID(此属性已经被废弃)
+            session_id: 保留参数，留空即可
             image_urls: 图片 URL 列表
             audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set

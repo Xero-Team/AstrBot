@@ -13,24 +13,6 @@ from astrbot.core.utils.media_utils import (
 from .deerflow_stream_utils import extract_text
 
 
-def is_likely_base64_image(value: str) -> bool:
-    if " " in value:
-        return False
-
-    compact = value.replace("\n", "").replace("\r", "")
-    if not compact or len(compact) < 32 or len(compact) % 4 != 0:
-        return False
-
-    base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-    if any(ch not in base64_chars for ch in compact):
-        return False
-    try:
-        base64.b64decode(compact, validate=True)
-    except Exception:
-        return False
-    return True
-
-
 def build_user_content(prompt: str, image_urls: list[str]) -> Any:
     if not image_urls:
         return prompt
@@ -59,17 +41,16 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
             content.append({"type": "image_url", "image_url": {"url": url}})
             any_valid_image = True
             continue
-        if not is_likely_base64_image(url):
+        if not url.startswith("base64://"):
             skipped_invalid_images += 1
             logger.debug(
-                "Skipped DeerFlow image input because it is neither URL/data URI nor valid base64."
+                "Skipped DeerFlow image input because it is neither URL/data URI nor base64://."
             )
             continue
-        compact_base64 = url.replace("\n", "").replace("\r", "")
         content.append(
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{compact_base64}"},
+                "image_url": {"url": url},
             },
         )
         any_valid_image = True
@@ -92,7 +73,7 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
                 skipped_invalid_images,
             )
         logger.debug(
-            "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
+            "Skipped %d DeerFlow image inputs that were neither URL/data URI nor base64://.",
             skipped_invalid_images,
         )
     return content
@@ -104,7 +85,7 @@ async def build_user_content_resolved(prompt: str, image_urls: list[str]) -> Any
     Args:
         prompt: User text to include before image blocks.
         image_urls: Image references from plugins or message attachments. Supports
-            local paths, HTTP(S), file URIs, base64://, data URIs, and bare base64.
+            local paths, HTTP(S), file URIs, base64://, and data URIs.
 
     Returns:
         Plain text when no images are present; otherwise a multimodal content list.

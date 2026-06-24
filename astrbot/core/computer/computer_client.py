@@ -392,10 +392,7 @@ print(
 
 
 def _build_sync_and_scan_command() -> str:
-    """Legacy combined command kept for backward compatibility.
-
-    New code paths should prefer apply + scan split helpers.
-    """
+    """Build the combined sync command used by the sandbox skill flow."""
     return f"{_build_apply_sync_command()}\n{_build_scan_command()}"
 
 
@@ -483,8 +480,8 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
 async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     """Sync local skills to sandbox and refresh cache.
 
-    Backward-compatible orchestrator: keep historical behavior while internally
-    splitting into `apply` and `scan` phases.
+    The flow keeps two explicit phases: apply filesystem changes, then scan
+    metadata for cache refresh.
     """
     sync_skill_dirs = _collect_sync_skill_dirs()
 
@@ -516,8 +513,8 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             )
             await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
 
-        # Keep backward-compatible behavior while splitting lifecycle into two
-        # observable phases: apply (filesystem mutation) + scan (metadata read).
+        # Split the sync into two observable phases: apply filesystem mutation,
+        # then scan metadata for cache refresh.
         await _apply_skills_to_sandbox(booter)
         payload = await _scan_sandbox_skills(booter)
         _update_sandbox_skills_cache(payload)
@@ -581,18 +578,7 @@ async def get_booter(
         logger.info(
             f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
         )
-        if booter_type == "shipyard":
-            from .booters.shipyard import ShipyardBooter
-
-            ep = sandbox_cfg.get("shipyard_endpoint", "")
-            token = sandbox_cfg.get("shipyard_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_ttl", 3600)
-            max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
-
-            client = ShipyardBooter(
-                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions
-            )
-        elif booter_type == "shipyard_neo":
+        if booter_type == "shipyard_neo":
             from .booters.shipyard_neo import ShipyardNeoBooter
 
             ep = sandbox_cfg.get("shipyard_neo_endpoint", "")

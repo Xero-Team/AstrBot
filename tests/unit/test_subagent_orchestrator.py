@@ -29,7 +29,7 @@ async def test_reload_from_config_default_persona_is_resolved():
         "tools": None,
         "_begin_dialogs_processed": [],
     }
-    persona_mgr.get_persona_v3_by_id.return_value = deepcopy(default_persona)
+    persona_mgr.get_runtime_persona_by_id.return_value = deepcopy(default_persona)
     orchestrator = SubAgentOrchestrator(tool_mgr=tool_mgr, persona_mgr=persona_mgr)
 
     await orchestrator.reload_from_config(_build_cfg({"persona_id": "default"}))
@@ -45,7 +45,7 @@ async def test_reload_from_config_default_persona_is_resolved():
 async def test_reload_from_config_missing_persona_falls_back_to_inline_and_warns():
     tool_mgr = MagicMock()
     persona_mgr = MagicMock()
-    persona_mgr.get_persona_v3_by_id.return_value = None
+    persona_mgr.get_runtime_persona_by_id.return_value = None
     orchestrator = SubAgentOrchestrator(tool_mgr=tool_mgr, persona_mgr=persona_mgr)
 
     with patch("astrbot.core.subagent_orchestrator.logger") as mock_logger:
@@ -67,7 +67,7 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
     tool_mgr = MagicMock()
     persona_mgr = MagicMock()
     processed_dialogs = [{"role": "user", "content": "hello", "_no_save": True}]
-    persona_mgr.get_persona_v3_by_id.return_value = {
+    persona_mgr.get_runtime_persona_by_id.return_value = {
         "name": "custom",
         "prompt": "persona prompt",
         "tools": ["tool_from_persona"],
@@ -96,7 +96,7 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
 async def test_reload_from_config_tool_normalization(raw_tools, expected_tools):
     tool_mgr = MagicMock()
     persona_mgr = MagicMock()
-    persona_mgr.get_persona_v3_by_id.return_value = {
+    persona_mgr.get_runtime_persona_by_id.return_value = {
         "name": "custom",
         "prompt": "persona prompt",
         "tools": raw_tools,

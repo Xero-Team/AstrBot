@@ -48,7 +48,7 @@ class SubAgentOrchestrator:
             persona_id = item.get("persona_id")
             if persona_id is not None:
                 persona_id = str(persona_id).strip() or None
-            persona_data = self._persona_mgr.get_persona_v3_by_id(persona_id)
+            persona_data = self._persona_mgr.get_runtime_persona_by_id(persona_id)
             if persona_id and persona_data is None:
                 logger.warning(
                     "SubAgent persona %s not found, fallback to inline prompt.",

@@ -19,7 +19,7 @@ from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
-from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
+from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
@@ -87,17 +87,6 @@ def _registered_plugin_module_path(root_dir_name: str, flag: str | None) -> str 
     return None
 
 
-def _legacy_plugin_module_path(parts: list[str]) -> str:
-    resolved_parts = []
-    for index, part in enumerate(parts):
-        resolved_parts.append(part)
-        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
-            resolved_parts.append(parts[index + 1])
-            resolved_parts.append("main")
-            break
-    return ".".join(resolved_parts)
-
-
 def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
     module_path = getattr(tool, "__module__", None)
     module_parts = _split_module_path(module_path)
@@ -108,7 +97,7 @@ def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
     if root_info:
         flag, root_dir_name = root_info
         registered_module_path = _registered_plugin_module_path(root_dir_name, flag)
-        return registered_module_path or _legacy_plugin_module_path(module_parts)
+        return registered_module_path or ".".join(module_parts)
 
     registered_module_path = _registered_plugin_module_path(module_parts[0], "plugins")
     return registered_module_path or ".".join(module_parts)
@@ -124,7 +113,6 @@ class Context:
 
     registered_web_apis: list[RegisteredWebApi] = []
 
-    # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
     _star_manager = None
 
@@ -505,7 +493,7 @@ class Context:
 
     async def send_message(
         self,
-        session: str | MessageSesion,
+        session: str | MessageSession,
         message_chain: MessageChain,
     ) -> bool:
         """根据 session(unified_msg_origin) 主动发送消息。
@@ -521,12 +509,12 @@ class Context:
             ValueError: session 字符串不合法时抛出。
 
         Note:
-            当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
+            当 session 为字符串时，会尝试解析为 MessageSession 对象。
             qq_official(QQ 官方 API 平台) 不支持此方法。
         """
         if isinstance(session, str):
             try:
-                session = MessageSesion.from_str(session)
+                session = MessageSession.from_str(session)
             except BaseException as e:
                 raise ValueError("不合法的 session 字符串: " + str(e))
 
@@ -562,7 +550,7 @@ class Context:
 
             if tool.name in tool_name:
                 logger.warning("替换已存在的 LLM 工具: " + tool.name)
-                self.provider_manager.llm_tools.remove_func(tool.name)
+                self.provider_manager.llm_tools.remove_tool(tool.name)
             self.provider_manager.llm_tools.func_list.append(tool)
 
     def register_web_api(
@@ -652,50 +640,6 @@ class Context:
             provider: 提供者实例。
         """
         self.provider_manager.provider_insts.append(provider)
-
-    def register_llm_tool(
-        self,
-        name: str,
-        func_args: list,
-        desc: str,
-        func_obj: Callable[..., Awaitable[Any]],
-    ) -> None:
-        """[DEPRECATED]为函数调用（function-calling / tools-use）添加工具。
-
-        Args:
-            name: 函数名。
-            func_args: 函数参数列表，格式为
-                [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]。
-            desc: 函数描述。
-            func_obj: 异步处理函数。
-
-        Note:
-            异步处理函数会接收到额外的关键词参数：event: AstrMessageEvent, context: Context。
-            该方法已弃用，请使用新的注册方式。
-        """
-        md = StarHandlerMetadata(
-            event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
-            handler_module_path=func_obj.__module__,
-            handler=func_obj,
-            event_filters=[],
-            desc=desc,
-        )
-        star_handlers_registry.append(md)
-        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
-
-    def unregister_llm_tool(self, name: str) -> None:
-        """[DEPRECATED]删除一个函数调用工具。
-
-        Args:
-            name: 工具名称。
-
-        Note:
-            如果再要启用，需要重新注册。
-            该方法已弃用。
-        """
-        self.provider_manager.llm_tools.remove_func(name)
 
     def register_commands(
         self,

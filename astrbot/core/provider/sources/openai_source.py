@@ -479,7 +479,7 @@ class ProviderOpenAIOfficial(Provider):
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
-            tool_list = tools.get_func_desc_openai_style(
+            tool_list = tools.openai_schema(
                 omit_empty_parameter_field=omit_empty_param_field,
             )
             if tool_list:
@@ -538,7 +538,7 @@ class ProviderOpenAIOfficial(Provider):
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
-            tool_list = tools.get_func_desc_openai_style(
+            tool_list = tools.openai_schema(
                 omit_empty_parameter_field=omit_empty_param_field,
             )
             if tool_list:

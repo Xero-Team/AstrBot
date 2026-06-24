@@ -468,8 +468,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 "messages": self._build_messages(prompt, image_urls, system_prompt),
             },
             "stream_mode": ["values", "messages-tuple", "custom"],
-            # DeerFlow 2.0 consumes runtime overrides from config.configurable.
-            # Keep the legacy context mirror for older compat paths.
+            # DeerFlow 2.0 reads runtime overrides from config.configurable.
+            # Keep context mirrored until all backends read only config.
             "context": dict(runtime_configurable),
             "config": {
                 "recursion_limit": self.recursion_limit,

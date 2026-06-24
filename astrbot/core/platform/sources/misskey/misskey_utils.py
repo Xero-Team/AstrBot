@@ -172,16 +172,6 @@ def resolve_message_visibility(
 
     return visibility, visible_user_ids
 
-
-# 保留旧函数名作为向后兼容的别名
-def resolve_visibility_from_raw_message(
-    raw_message: dict[str, Any],
-    self_id: str | None = None,
-) -> tuple[str, list[str] | None]:
-    """从原始消息数据中解析可见性设置（已弃用，使用 resolve_message_visibility 替代）"""
-    return resolve_message_visibility(raw_message=raw_message, self_id=self_id)
-
-
 def is_valid_user_session_id(session_id: str | Any) -> bool:
     """检查 session_id 是否是有效的聊天用户 session_id (仅限chat%前缀)"""
     if not isinstance(session_id, str) or "%" not in session_id:

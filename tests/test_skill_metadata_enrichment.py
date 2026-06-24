@@ -496,7 +496,9 @@ def test_list_workspace_skills_parses_workspace_skill(tmp_path: Path):
     assert skill.path.endswith("workspace/skills/workspace-skill/SKILL.md")
 
 
-def test_list_workspace_skills_skips_invalid_names_and_legacy_files(tmp_path: Path):
+def test_list_workspace_skills_skips_invalid_names_and_noncanonical_skill_files(
+    tmp_path: Path,
+):
     skills_root = tmp_path / "skills"
     plugins_root = tmp_path / "plugins"
     workspace_root = tmp_path / "workspace"
@@ -507,15 +509,15 @@ def test_list_workspace_skills_skips_invalid_names_and_legacy_files(tmp_path: Pa
     invalid_dir.mkdir(parents=True)
     invalid_dir.joinpath("SKILL.md").write_text("# bad", encoding="utf-8")
 
-    legacy_dir = workspace_root / "skills" / "legacy-skill"
-    legacy_dir.mkdir(parents=True)
-    legacy_dir.joinpath("skill.md").write_text("# legacy", encoding="utf-8")
+    noncanonical_dir = workspace_root / "skills" / "legacy-skill"
+    noncanonical_dir.mkdir(parents=True)
+    noncanonical_dir.joinpath("skill.md").write_text("# legacy", encoding="utf-8")
 
     mgr = SkillManager(skills_root=str(skills_root), plugins_root=str(plugins_root))
 
     assert mgr.list_workspace_skills(workspace_root) == []
-    assert (legacy_dir / "skill.md").exists()
-    assert {entry.name for entry in legacy_dir.iterdir()} == {"skill.md"}
+    assert (noncanonical_dir / "skill.md").exists()
+    assert {entry.name for entry in noncanonical_dir.iterdir()} == {"skill.md"}
 
 
 def test_list_workspace_skills_reads_frontmatter_with_limit(tmp_path: Path):

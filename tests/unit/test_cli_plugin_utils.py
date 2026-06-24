@@ -109,3 +109,24 @@ def test_build_plug_list_non_existent_path(monkeypatch, tmp_path):
 
     assert [plugin["name"] for plugin in plugins] == ["local-plugin", "remote-only"]
     assert all(plugin["status"] == PluginStatus.NOT_INSTALLED for plugin in plugins)
+
+
+def test_build_plug_list_rejects_description_alias(monkeypatch, tmp_path):
+    plugin_dir = tmp_path / "legacy-plugin"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    plugin_dir.joinpath("metadata.yaml").write_text(
+        """
+name: legacy-plugin
+description: legacy description alias
+version: 1.0.0
+author: legacy-author
+repo: https://example.com/legacy-plugin
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+
+    plugins = build_plug_list(tmp_path)
+
+    assert all(plugin["name"] != "legacy-plugin" for plugin in plugins)

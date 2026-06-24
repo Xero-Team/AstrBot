@@ -274,26 +274,19 @@ class PluginManager:
         modules = []
 
         dirs = os.listdir(path)
-        # 遍历文件夹，找到 main.py 或者和文件夹同名的文件
+        # 遍历文件夹，仅接受 main.py 作为插件入口。
         for d in dirs:
             if os.path.isdir(os.path.join(path, d)):
-                if os.path.exists(os.path.join(path, d, "main.py")):
-                    module_str = "main"
-                elif os.path.exists(os.path.join(path, d, d + ".py")):
-                    module_str = d
-                else:
-                    logger.info(f"插件 {d} 未找到 main.py 或者 {d}.py，跳过。")
+                if not os.path.exists(os.path.join(path, d, "main.py")):
+                    logger.info(f"插件 {d} 未找到 main.py，跳过。")
                     continue
-                if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
-                    os.path.join(path, d, d + ".py"),
-                ):
-                    modules.append(
-                        {
-                            "pname": d,
-                            "module": module_str,
-                            "module_path": os.path.join(path, d, module_str),
-                        },
-                    )
+                modules.append(
+                    {
+                        "pname": d,
+                        "module": "main",
+                        "module_path": os.path.join(path, d, "main"),
+                    },
+                )
         return modules
 
     def _get_plugin_modules(self) -> list[dict]:
@@ -460,72 +453,62 @@ class PluginManager:
             return __import__(path, fromlist=[module_str])
 
     @staticmethod
-    def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
-        """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
-
-        Notes: 旧版本 AstrBot 插件可能使用的是 info() 函数来获取元数据。
-        """
-        metadata = None
-
+    def _load_plugin_metadata(plugin_path: str) -> StarMetadata:
+        """Load plugin metadata from metadata.yaml."""
         if not os.path.exists(plugin_path):
             raise Exception("插件不存在。")
 
-        if os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
-            with open(
-                os.path.join(plugin_path, "metadata.yaml"),
-                encoding="utf-8",
-            ) as f:
-                metadata = yaml.safe_load(f)
-        elif plugin_obj and hasattr(plugin_obj, "info"):
-            # 使用 info() 函数
-            metadata = plugin_obj.info()
+        metadata_path = os.path.join(plugin_path, "metadata.yaml")
+        if not os.path.exists(metadata_path):
+            raise Exception("未找到 metadata.yaml。")
 
-        if isinstance(metadata, dict):
-            if "desc" not in metadata and "description" in metadata:
-                metadata["desc"] = metadata["description"]
+        with open(
+            metadata_path,
+            encoding="utf-8",
+        ) as f:
+            metadata = yaml.safe_load(f)
 
-            if (
-                "name" not in metadata
-                or "desc" not in metadata
-                or "version" not in metadata
-                or "author" not in metadata
-            ):
-                raise Exception(
-                    "插件元数据信息不完整。name, desc, version, author 是必须的字段。",
-                )
-            metadata = StarMetadata(
-                name=metadata["name"],
-                author=metadata["author"],
-                desc=metadata["desc"],
-                short_desc=(
-                    metadata["short_desc"]
-                    if isinstance(metadata.get("short_desc"), str)
-                    else None
-                ),
-                version=metadata["version"],
-                repo=metadata["repo"] if "repo" in metadata else None,
-                display_name=metadata.get("display_name", None),
-                support_platforms=(
-                    [
-                        platform_id
-                        for platform_id in metadata["support_platforms"]
-                        if isinstance(platform_id, str)
-                    ]
-                    if isinstance(metadata.get("support_platforms"), list)
-                    else []
-                ),
-                astrbot_version=(
-                    metadata["astrbot_version"]
-                    if isinstance(metadata.get("astrbot_version"), str)
-                    else None
-                ),
-                pages=metadata["pages"]
-                if isinstance(metadata.get("pages"), list)
-                else [],
-                i18n=PluginManager._load_plugin_i18n(plugin_path),
+        if not isinstance(metadata, dict):
+            raise Exception("metadata.yaml 格式错误。")
+
+        if (
+            "name" not in metadata
+            or "desc" not in metadata
+            or "version" not in metadata
+            or "author" not in metadata
+        ):
+            raise Exception(
+                "插件元数据信息不完整。name, desc, version, author 是必须的字段。",
             )
-
-        return metadata
+        return StarMetadata(
+            name=metadata["name"],
+            author=metadata["author"],
+            desc=metadata["desc"],
+            short_desc=(
+                metadata["short_desc"]
+                if isinstance(metadata.get("short_desc"), str)
+                else None
+            ),
+            version=metadata["version"],
+            repo=metadata["repo"] if "repo" in metadata else None,
+            display_name=metadata.get("display_name", None),
+            support_platforms=(
+                [
+                    platform_id
+                    for platform_id in metadata["support_platforms"]
+                    if isinstance(platform_id, str)
+                ]
+                if isinstance(metadata.get("support_platforms"), list)
+                else []
+            ),
+            astrbot_version=(
+                metadata["astrbot_version"]
+                if isinstance(metadata.get("astrbot_version"), str)
+                else None
+            ),
+            pages=metadata["pages"] if isinstance(metadata.get("pages"), list) else [],
+            i18n=PluginManager._load_plugin_i18n(plugin_path),
+        )
 
     @staticmethod
     def _load_plugin_i18n(plugin_path: str) -> dict[str, dict]:
@@ -999,28 +982,20 @@ class PluginManager:
                 if path in star_map:
                     # 通过 __init__subclass__ 注册插件
                     metadata = star_map[path]
-
-                    try:
-                        # yaml 文件的元数据优先
-                        metadata_yaml = self._load_plugin_metadata(
-                            plugin_path=plugin_dir_path,
-                        )
-                        if metadata_yaml:
-                            metadata.name = metadata_yaml.name
-                            metadata.author = metadata_yaml.author
-                            metadata.desc = metadata_yaml.desc
-                            metadata.short_desc = metadata_yaml.short_desc
-                            metadata.version = metadata_yaml.version
-                            metadata.repo = metadata_yaml.repo
-                            metadata.display_name = metadata_yaml.display_name
-                            metadata.support_platforms = metadata_yaml.support_platforms
-                            metadata.astrbot_version = metadata_yaml.astrbot_version
-                            metadata.pages = metadata_yaml.pages
-                            metadata.i18n = metadata_yaml.i18n
-                    except Exception as e:
-                        logger.warning(
-                            f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
-                        )
+                    metadata_yaml = self._load_plugin_metadata(
+                        plugin_path=plugin_dir_path,
+                    )
+                    metadata.name = metadata_yaml.name
+                    metadata.author = metadata_yaml.author
+                    metadata.desc = metadata_yaml.desc
+                    metadata.short_desc = metadata_yaml.short_desc
+                    metadata.version = metadata_yaml.version
+                    metadata.repo = metadata_yaml.repo
+                    metadata.display_name = metadata_yaml.display_name
+                    metadata.support_platforms = metadata_yaml.support_platforms
+                    metadata.astrbot_version = metadata_yaml.astrbot_version
+                    metadata.pages = metadata_yaml.pages
+                    metadata.i18n = metadata_yaml.i18n
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -1115,65 +1090,10 @@ class PluginManager:
                                 ft.active = False
 
                 else:
-                    # v3.4.0 以前的方式注册插件
-                    logger.debug(
-                        f"插件 {path} 未通过装饰器注册。尝试通过旧版本方式载入。",
+                    raise Exception(
+                        f"插件 {root_dir_name} 未通过 Star 注册。"
+                        "请确保 main.py 中存在继承自 Star 的插件主类。",
                     )
-                    classes = self._get_classes(module)
-                    if not classes:
-                        raise Exception(
-                            f"插件 {root_dir_name} 未通过 Star 注册，也没有找到旧版插件类。"
-                            "请确认插件主类继承 astrbot.api.star.Star，或类名以 Plugin 结尾 / 命名为 Main。",
-                        )
-
-                    plugin_cls = getattr(module, classes[0])
-                    obj = None
-
-                    if path not in inactivated_plugins:
-                        # 只有没有禁用插件时才实例化插件类
-                        if plugin_config:
-                            try:
-                                obj = plugin_cls(
-                                    context=self.context,
-                                    config=plugin_config,
-                                )  # 实例化插件类
-                            except TypeError as _:
-                                obj = plugin_cls(
-                                    context=self.context,
-                                )  # 实例化插件类
-                        else:
-                            obj = plugin_cls(
-                                context=self.context,
-                            )  # 实例化插件类
-
-                    metadata = self._load_plugin_metadata(
-                        plugin_path=plugin_dir_path,
-                        plugin_obj=obj,
-                    )
-                    if not metadata:
-                        raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
-
-                    if not ignore_version_check:
-                        is_valid, error_message = (
-                            self._validate_astrbot_version_specifier(
-                                metadata.astrbot_version,
-                            )
-                        )
-                        if not is_valid:
-                            raise PluginVersionUnsupportedError(
-                                error_message
-                                or "The plugin does not support the current AstrBot version."
-                            )
-
-                    metadata.star_cls = obj
-                    metadata.config = plugin_config
-                    metadata.module = module
-                    metadata.root_dir_name = root_dir_name
-                    metadata.reserved = reserved
-                    metadata.star_cls_type = plugin_cls
-                    metadata.module_path = path
-                    star_map[path] = metadata
-                    star_registry.append(metadata)
 
                 # 禁用/启用插件
                 if metadata.module_path in inactivated_plugins:

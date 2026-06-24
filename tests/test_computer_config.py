@@ -200,7 +200,7 @@ class TestLogComputerConfigChanges:
     @patch("astrbot.dashboard.services.config_service.logger")
     def test_logs_sandbox_key_change(self, mock_logger) -> None:
         """Detects sandbox sub-key change."""
-        old = {"provider_settings": {"sandbox": {"booter": "shipyard"}}}
+        old = {"provider_settings": {"sandbox": {"booter": "cua"}}}
         new = {"provider_settings": {"sandbox": {"booter": "shipyard_neo"}}}
 
         _log_computer_config_changes(old, new)
@@ -211,7 +211,7 @@ class TestLogComputerConfigChanges:
         for call in mock_logger.info.call_args_list:
             args = call[0]  # positional args: (fmt, key, old_val, new_val)
             if len(args) >= 4 and args[1] == "booter":
-                assert args[2] == "shipyard"
+                assert args[2] == "cua"
                 assert args[3] == "shipyard_neo"
                 found = True
                 break

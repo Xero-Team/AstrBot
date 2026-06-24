@@ -532,31 +532,31 @@ async def test_cua_idle_timeout_zero_disables_proactive_shutdown(monkeypatch):
 async def test_non_cua_booter_does_not_schedule_idle_cleanup(monkeypatch):
     from astrbot.core.computer import computer_client
 
-    class FakeShipyardBooter:
+    class FakeNonCuaBooter:
         async def available(self):
             return True
 
-    _clear_cua_session_state(computer_client, "shipyard-session")
-    computer_client.session_booter["shipyard-session"] = FakeShipyardBooter()
+    _clear_cua_session_state(computer_client, "sandbox-session")
+    computer_client.session_booter["sandbox-session"] = FakeNonCuaBooter()
 
     ctx = FakeContext(
         {
             "provider_settings": {
                 "computer_use_runtime": "sandbox",
                 "sandbox": {
-                    "booter": "shipyard",
-                    "shipyard_endpoint": "http://localhost:8080",
-                    "shipyard_access_token": "token",
+                    "booter": "shipyard_neo",
+                    "shipyard_neo_endpoint": "http://localhost:8114",
+                    "shipyard_neo_access_token": "token",
                     "cua_idle_timeout": 0.01,
                 },
             }
         }
     )
 
-    booter = await computer_client.get_booter(ctx, "shipyard-session")
+    booter = await computer_client.get_booter(ctx, "sandbox-session")
 
-    assert isinstance(booter, FakeShipyardBooter)
-    assert "shipyard-session" not in computer_client.cua_idle_state
+    assert isinstance(booter, FakeNonCuaBooter)
+    assert "sandbox-session" not in computer_client.cua_idle_state
 
 
 @pytest.mark.asyncio

@@ -93,8 +93,8 @@ class TestToolSetAddTool:
         assert len(toolset.tools) == 1
 
 
-class TestFunctionToolManagerGetFunc:
-    """Tests for FunctionToolManager.get_func with conflict resolution."""
+class TestFunctionToolManagerGetTool:
+    """Tests for FunctionToolManager.get_tool with conflict resolution."""
 
     def test_returns_last_active_tool(self):
         """Should return the last active tool when multiple have same name."""
@@ -104,7 +104,7 @@ class TestFunctionToolManagerGetFunc:
             make_tool("web_search", active=True),
         ]
 
-        result = manager.get_func("web_search")
+        result = manager.get_tool("web_search")
         assert result is not None
         # Should return the last one (reversed order)
         assert result is manager.func_list[1]
@@ -117,7 +117,7 @@ class TestFunctionToolManagerGetFunc:
             make_tool("web_search", active=True),
         ]
 
-        result = manager.get_func("web_search")
+        result = manager.get_tool("web_search")
         assert result is not None
         assert result.active is True
         assert result is manager.func_list[1]
@@ -130,7 +130,7 @@ class TestFunctionToolManagerGetFunc:
             make_tool("web_search", active=False),
         ]
 
-        result = manager.get_func("web_search")
+        result = manager.get_tool("web_search")
         assert result is not None
         assert result.active is True
         assert result is manager.func_list[0]
@@ -143,7 +143,7 @@ class TestFunctionToolManagerGetFunc:
             make_tool("web_search", active=False),
         ]
 
-        result = manager.get_func("web_search")
+        result = manager.get_tool("web_search")
         assert result is not None
         # Should return the last one (reversed order in fallback)
         assert result is manager.func_list[1]
@@ -153,7 +153,7 @@ class TestFunctionToolManagerGetFunc:
         manager = FunctionToolManager()
         manager.func_list = [make_tool("other_tool")]
 
-        result = manager.get_func("web_search")
+        result = manager.get_tool("web_search")
         assert result is None
 
 
@@ -206,8 +206,8 @@ class TestFunctionToolManagerGetFullToolSet:
             make_tool("web_search", active=True),  # MCP, enabled
         ]
 
-        # get_func should return the MCP tool (active one)
-        result = manager.get_func("web_search")
+        # get_tool should return the MCP tool (active one)
+        result = manager.get_tool("web_search")
         assert result is not None
         assert result.active is True
         assert result is manager.func_list[1]
@@ -225,7 +225,7 @@ class TestFunctionToolManagerGetFullToolSet:
             make_tool("web_search", active=False),  # MCP, disabled
         ]
 
-        result = manager.get_func("web_search")
+        result = manager.get_tool("web_search")
         assert result is not None
         assert result.active is True
         assert result is manager.func_list[0]

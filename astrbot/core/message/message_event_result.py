@@ -2,8 +2,6 @@ import enum
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 
-from typing_extensions import deprecated
-
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -50,7 +48,7 @@ class MessageChain:
         """添加一条文本消息到消息链 `chain` 中。
 
         Example:
-            CommandResult().message("Hello ").message("world!")
+            MessageEventResult().message("Hello ").message("world!")
             # 输出 Hello world!
 
         """
@@ -61,7 +59,7 @@ class MessageChain:
         """添加一条 At 消息到消息链 `chain` 中。
 
         Example:
-            CommandResult().at("张三", "12345678910")
+            MessageEventResult().at("张三", "12345678910")
             # 输出 @张三
 
         """
@@ -72,22 +70,11 @@ class MessageChain:
         """添加一条 AtAll 消息到消息链 `chain` 中。
 
         Example:
-            CommandResult().at_all()
+            MessageEventResult().at_all()
             # 输出 @所有人
 
         """
         self.chain.append(AtAll())
-        return self
-
-    @deprecated("请使用 message 方法代替。")
-    def error(self, message: str):
-        """添加一条错误消息到消息链 `chain` 中
-
-        Example:
-            CommandResult().error("解析失败")
-
-        """
-        self.chain.append(Plain(message))
         return self
 
     def url_image(self, url: str):
@@ -97,7 +84,7 @@ class MessageChain:
             如果需要发送本地图片，请使用 `file_image` 方法。
 
         Example:
-            CommandResult().image("https://example.com/image.jpg")
+            MessageEventResult().image("https://example.com/image.jpg")
 
         """
         self.chain.append(Image.fromURL(url))
@@ -109,7 +96,7 @@ class MessageChain:
         Note:
             如果需要发送网络图片，请使用 `url_image` 方法。
 
-        CommandResult().image("image.jpg")
+        MessageEventResult().image("image.jpg")
 
         """
         self.chain.append(Image.fromFileSystem(path))
@@ -119,7 +106,7 @@ class MessageChain:
         """添加一条图片消息（base64 编码字符串）到消息链 `chain` 中。
         Example:
 
-            CommandResult().base64_image("iVBORw0KGgoAAAANSUhEUgAAAAUA...")
+            MessageEventResult().base64_image("iVBORw0KGgoAAAANSUhEUgAAAAUA...")
         """
         self.chain.append(Image.fromBase64(base64_str))
         return self
@@ -282,7 +269,3 @@ class MessageEventResult(MessageChain):
             ResultContentType.LLM_RESULT,
             ResultContentType.AGENT_RUNNER_ERROR,
         )
-
-
-# 为了兼容旧版代码，保留 CommandResult 的别名
-CommandResult = MessageEventResult

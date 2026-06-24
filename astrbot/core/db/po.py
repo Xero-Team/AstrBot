@@ -1,5 +1,5 @@
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TypedDict
 
@@ -555,14 +555,12 @@ class Conversation:
 class Personality(TypedDict):
     """LLM 人格类。
 
-    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
+    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。
     """
 
     prompt: str
     name: str
     begin_dialogs: list[str]
-    mood_imitation_dialogs: list[str]
-    """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
     tools: list[str] | None
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
     skills: list[str] | None
@@ -572,23 +570,4 @@ class Personality(TypedDict):
 
     # cache
     _begin_dialogs_processed: list[dict]
-    _mood_imitation_dialogs_processed: str
 
-
-# ====
-# Deprecated, and will be removed in future versions.
-# ====
-
-
-@dataclass
-class Platform:
-    """平台使用统计数据"""
-
-    name: str
-    count: int
-    timestamp: int
-
-
-@dataclass
-class Stats:
-    platform: list[Platform] = field(default_factory=list)

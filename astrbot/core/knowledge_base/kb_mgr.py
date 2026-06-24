@@ -58,7 +58,6 @@ class KnowledgeBaseManager:
     async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
         await self.kb_db.initialize()
-        await self.kb_db.migrate_to_v1()
         logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
 
     async def load_kbs(self) -> None:

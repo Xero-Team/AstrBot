@@ -115,18 +115,13 @@ async def test_resolve_audio_ref_to_base64_data_ignores_internal_whitespace(
 
 
 @pytest.mark.asyncio
-async def test_record_convert_to_file_path_accepts_bare_base64(tmp_path, monkeypatch):
+async def test_record_convert_to_file_path_rejects_bare_base64(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
     audio_base64 = base64.b64encode(audio_bytes).decode()
 
-    audio_path = await Record(file=audio_base64).convert_to_file_path()
-
-    try:
-        assert Path(audio_path).exists()
-        assert Path(audio_path).read_bytes() == audio_bytes
-    finally:
-        Path(audio_path).unlink(missing_ok=True)
+    with pytest.raises((FileNotFoundError, OSError, ValueError)):
+        await Record(file=audio_base64).convert_to_file_path()
 
 
 @pytest.mark.asyncio
@@ -218,7 +213,7 @@ async def test_resolve_image_ref_to_base64_data_keeps_base64_scheme_fallback(
 
 
 @pytest.mark.asyncio
-async def test_resolve_image_ref_to_base64_data_accepts_bare_base64(
+async def test_resolve_image_ref_to_base64_data_rejects_bare_base64(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
@@ -228,9 +223,7 @@ async def test_resolve_image_ref_to_base64_data_accepts_bare_base64(
         media_type="image",
     )
 
-    assert resolved is not None
-    assert resolved.base64_data == "abcd"
-    assert resolved.mime_type == "image/jpeg"
+    assert resolved is None
     assert not list(tmp_path.iterdir())
 
 
@@ -425,7 +418,7 @@ def test_file_uri_to_path_supports_localhost_and_encoded_paths(tmp_path):
     media_path.write_bytes(b"audio")
     file_uri = f"file://localhost{quote(media_path.as_posix())}"
 
-    assert media_utils.file_uri_to_path(file_uri) == str(media_path)
+    assert Path(media_utils.file_uri_to_path(file_uri)) == media_path
 
 
 def test_file_uri_to_path_supports_standard_and_legacy_posix_file_uris(tmp_path):

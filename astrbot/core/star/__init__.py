@@ -1,4 +1,3 @@
-# 兼容导出: Provider 从 provider 模块重新导出
 from astrbot.core.provider import Provider
 
 from .base import Star

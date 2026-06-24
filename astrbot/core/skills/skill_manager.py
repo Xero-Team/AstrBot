@@ -6,7 +6,6 @@ import re
 import shlex
 import shutil
 import tempfile
-import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -67,33 +66,10 @@ def _is_ignored_zip_entry(name: str) -> bool:
     return parts[0] == "__MACOSX"
 
 
-def _normalize_skill_markdown_path(
-    skill_dir: Path,
-    *,
-    rename_legacy: bool = True,
-) -> Path | None:
-    """Return the canonical `SKILL.md` path for a skill directory.
-
-    If only legacy `skill.md` exists, it is renamed to `SKILL.md` in-place.
-    """
+def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
+    """Return the canonical `SKILL.md` path for a skill directory."""
     canonical = skill_dir / "SKILL.md"
-    entries = set()
-    if skill_dir.exists():
-        entries = {entry.name for entry in skill_dir.iterdir()}
-    if "SKILL.md" in entries:
-        return canonical
-    legacy = skill_dir / "skill.md"
-    if "skill.md" not in entries:
-        return None
-    try:
-        if not rename_legacy:
-            return legacy
-        tmp = skill_dir / f".{uuid.uuid4().hex}.tmp_skill_md"
-        legacy.rename(tmp)
-        tmp.rename(canonical)
-    except OSError:
-        return legacy
-    return canonical
+    return canonical if canonical.exists() else None
 
 
 @dataclass
@@ -198,7 +174,8 @@ def _build_skill_read_command_example(path: str) -> str:
         return f"cat {path}"
     if _is_windows_prompt_path(path):
         command = "type"
-        path_arg = f'"{os.path.normpath(path)}"'
+        normalized_path = path.replace("\\", "/")
+        path_arg = f'"{normalized_path}"'
     else:
         command = "cat"
         path_arg = shlex.quote(path)
@@ -312,10 +289,7 @@ class SkillManager:
             if not skills_dir.is_dir():
                 continue
 
-            direct_skill_md = _normalize_skill_markdown_path(
-                skills_dir,
-                rename_legacy=False,
-            )
+            direct_skill_md = _normalize_skill_markdown_path(skills_dir)
             if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
                 result.append((plugin_name, plugin_name, skills_dir))
 
@@ -325,10 +299,7 @@ class SkillManager:
                 skill_name = skill_dir.name
                 if not _SKILL_NAME_RE.match(skill_name):
                     continue
-                if (
-                    _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
-                    is None
-                ):
+                if _normalize_skill_markdown_path(skill_dir) is None:
                     continue
                 result.append((skill_name, plugin_name, skill_dir))
         return result
@@ -568,7 +539,7 @@ class SkillManager:
         for skill_name, plugin_name, skill_dir in self._iter_plugin_skill_dirs():
             if skill_name in skills_by_name:
                 continue
-            skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+            skill_md = _normalize_skill_markdown_path(skill_dir)
             if skill_md is None:
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
@@ -743,8 +714,7 @@ class SkillManager:
                 raise ValueError("Zip archive is empty.")
 
             has_root_skill_md = any(
-                len(parts := PurePosixPath(name).parts) == 1
-                and parts[0] in {"SKILL.md", "skill.md"}
+                len(parts := PurePosixPath(name).parts) == 1 and parts[0] == "SKILL.md"
                 for name in file_names
             )
             root_mode = has_root_skill_md
@@ -770,10 +740,7 @@ class SkillManager:
                 top_dirs = {PurePosixPath(n).parts[0] for n in file_names if n.strip()}
                 conflict_dirs: list[str] = []
                 for src_dir_name in top_dirs:
-                    if (
-                        f"{src_dir_name}/SKILL.md" not in file_names
-                        and f"{src_dir_name}/skill.md" not in file_names
-                    ):
+                    if f"{src_dir_name}/SKILL.md" not in file_names:
                         continue
 
                     candidate_name = _normalize_skill_name(src_dir_name)
@@ -840,10 +807,7 @@ class SkillManager:
                             archive_root_name
                         )
 
-                        if (
-                            f"{archive_root_name}/SKILL.md" not in file_names
-                            and f"{archive_root_name}/skill.md" not in file_names
-                        ):
+                        if f"{archive_root_name}/SKILL.md" not in file_names:
                             continue
 
                         if archive_root_name in {".", "..", ""} or not (

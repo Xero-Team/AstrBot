@@ -104,7 +104,7 @@ class BaseMessageComponent(BaseModel):
         return {"type": self.type.lower(), "data": data}
 
     async def to_dict(self) -> dict:
-        # 默认情况下，回退到旧的同步 toDict()
+        # Default async bridge for components that still implement only toDict().
         return self.toDict()
 
 
@@ -278,9 +278,9 @@ class Record(BaseMessageComponent):
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
 
-        return f"{callback_host}/api/file/{token}"
+        return f"{callback_host}/api/v1/files/tokens/{token}"
 
 
 class Video(BaseMessageComponent):
@@ -381,9 +381,9 @@ class Video(BaseMessageComponent):
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
 
-        return f"{callback_host}/api/file/{token}"
+        return f"{callback_host}/api/v1/files/tokens/{token}"
 
     async def to_dict(self):
         """需要和 toDict 区分开，toDict 是同步方法"""
@@ -393,7 +393,7 @@ class Video(BaseMessageComponent):
         elif callback_host := astrbot_config.get("callback_api_base"):
             callback_host = str(callback_host).removesuffix("/")
             token = await file_token_service.register_file(url_or_path)
-            payload_file = f"{callback_host}/api/file/{token}"
+            payload_file = f"{callback_host}/api/v1/files/tokens/{token}"
             logger.debug(f"Generated video file callback link: {payload_file}")
         else:
             payload_file = url_or_path
@@ -574,9 +574,9 @@ class Image(BaseMessageComponent):
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
 
-        return f"{callback_host}/api/file/{token}"
+        return f"{callback_host}/api/v1/files/tokens/{token}"
 
 
 class Reply(BaseMessageComponent):
@@ -595,11 +595,11 @@ class Reply(BaseMessageComponent):
     """被引用的消息解析后的纯文本消息字符串"""
 
     text: str | None = ""
-    """deprecated"""
+    """Historical plain-text mirror."""
     qq: int | None = 0
-    """deprecated"""
+    """Historical sender mirror."""
     seq: int | None = 0
-    """deprecated"""
+    """Historical sequence mirror."""
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
@@ -613,32 +613,18 @@ class Poke(BaseMessageComponent):
     type: ComponentType = ComponentType.Poke
     _type: str | int = "126"
     id: int | str | None = 0
-    qq: int | str | None = 0  # deprecated: legacy field, kept for compatibility
 
-    def __init__(self, poke_type: str | int | None = None, **_) -> None:
-        # Backward compatible with old signature: Poke(type="poke", ...)
-        legacy_type = _.pop("type", None)
-        if poke_type is None:
-            poke_type = legacy_type
+    def __init__(self, id: int | str | None = 0, poke_type: str | int | None = None, **_) -> None:
         if poke_type in (None, "", "poke", "Poke"):
             poke_type = "126"
-        super().__init__(_type=str(poke_type), **_)
-
-    def target_id(self) -> str | None:
-        """Return normalized target id, compatible with old `qq` field."""
-        for value in (self.id, self.qq):
-            if value is None:
-                continue
-            text = str(value).strip()
-            if text and text != "0":
-                return text
-        return None
+        super().__init__(id=id, _type=str(poke_type), **_)
 
     def toDict(self):
-        target_id = self.target_id()
         data = {"type": str(self._type or "126")}
-        if target_id:
-            data["id"] = target_id
+        if self.id is not None:
+            target_id = str(self.id).strip()
+            if target_id and target_id != "0":
+                data["id"] = target_id
         return {"type": "poke", "data": data}
 
 
@@ -810,10 +796,10 @@ class File(BaseMessageComponent):
 
     @file.setter
     def file(self, value: str) -> None:
-        """向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
+        """Set the file source from either a local path or an HTTP URL.
 
         Args:
-            value (str): 文件路径或URL
+            value: 文件路径或 URL。
 
         """
         if value.startswith("http://") or value.startswith("https://"):
@@ -888,9 +874,9 @@ class File(BaseMessageComponent):
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
 
-        return f"{callback_host}/api/file/{token}"
+        return f"{callback_host}/api/v1/files/tokens/{token}"
 
     async def to_dict(self):
         """需要和 toDict 区分开，toDict 是同步方法"""
@@ -900,7 +886,7 @@ class File(BaseMessageComponent):
         elif callback_host := astrbot_config.get("callback_api_base"):
             callback_host = str(callback_host).removesuffix("/")
             token = await file_token_service.register_file(url_or_path)
-            payload_file = f"{callback_host}/api/file/{token}"
+            payload_file = f"{callback_host}/api/v1/files/tokens/{token}"
             logger.debug(f"Generated file callback link: {payload_file}")
         else:
             payload_file = url_or_path

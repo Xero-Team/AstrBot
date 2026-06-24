@@ -4,7 +4,6 @@ import typing as T
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-from deprecated import deprecated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
@@ -23,7 +22,6 @@ from astrbot.core.db.po import (
     Preference,
     ProviderStat,
     SessionProjectRelation,
-    Stats,
     UmoAlias,
     WebChatThread,
 )
@@ -67,26 +65,6 @@ class BaseDatabase(abc.ABC):
             self.inited = True
         async with self.AsyncSessionLocal() as session:
             yield session
-
-    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
-    @abc.abstractmethod
-    def get_base_stats(self, offset_sec: int = 86400) -> Stats:
-        """获取基础统计数据"""
-        raise NotImplementedError
-
-    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
-    @abc.abstractmethod
-    def get_total_message_count(self) -> int:
-        """获取总消息数"""
-        raise NotImplementedError
-
-    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
-    @abc.abstractmethod
-    def get_grouped_base_stats(self, offset_sec: int = 86400) -> Stats:
-        """获取基础统计数据(合并)"""
-        raise NotImplementedError
-
-    # New methods in v4.0.0
 
     @abc.abstractmethod
     async def insert_platform_stats(

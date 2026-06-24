@@ -71,22 +71,6 @@ class _MCPServerRuntime:
     lifecycle_task: asyncio.Task[None]
 
 
-class _MCPClientDictView(Mapping[str, MCPClient]):
-    """Read-only view of MCP clients derived from runtime state."""
-
-    def __init__(self, runtime: dict[str, _MCPServerRuntime]) -> None:
-        self._runtime = runtime
-
-    def __getitem__(self, key: str) -> MCPClient:
-        return self._runtime[key].client
-
-    def __iter__(self):
-        return iter(self._runtime)
-
-    def __len__(self) -> int:
-        return len(self._runtime)
-
-
 def _resolve_timeout(
     timeout: float | int | str | None = None,
     *,
@@ -142,7 +126,7 @@ PY_TO_JSON_TYPE = {
     "tuple": "array",
     "set": "array",
 }
-# alias
+# Legacy alias.
 FuncTool = FunctionTool
 
 
@@ -292,7 +276,6 @@ class FunctionToolManager:
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP runtime metadata, keyed by server name. Updated atomically on MCP lifecycle changes."""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
-        self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
         self._timeout_mismatch_warned = False
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
@@ -313,24 +296,8 @@ class FunctionToolManager:
         )
 
     @property
-    def mcp_client_dict(self) -> Mapping[str, MCPClient]:
-        """Read-only compatibility view for external callers that still read mcp_client_dict.
-
-        Note: Mutating this mapping is unsupported and will raise TypeError.
-        """
-        return self._mcp_client_dict_view
-
-    @property
     def mcp_server_runtime_view(self) -> Mapping[str, _MCPServerRuntime]:
         """Read-only view of MCP runtime metadata for external callers."""
-        return self._mcp_server_runtime_view
-
-    @property
-    def mcp_server_runtime(self) -> Mapping[str, _MCPServerRuntime]:
-        """Backward-compatible read-only view (deprecated). Do not mutate.
-
-        Note: Mutations are not supported and will raise TypeError.
-        """
         return self._mcp_server_runtime_view
 
     def empty(self) -> bool:
@@ -358,7 +325,7 @@ class FunctionToolManager:
             handler=handler,
         )
 
-    def add_func(
+    def add_tool(
         self,
         name: str,
         func_args: list,
@@ -373,7 +340,7 @@ class FunctionToolManager:
         @param func_obj: 处理函数
         """
         # check if the tool has been added before
-        self.remove_func(name)
+        self.remove_tool(name)
 
         self.func_list.append(
             self.spec_to_func(
@@ -385,14 +352,14 @@ class FunctionToolManager:
         )
         logger.info(f"Added llm tool: {name}")
 
-    def remove_func(self, name: str) -> None:
+    def remove_tool(self, name: str) -> None:
         """删除一个函数调用工具。"""
         for i, f in enumerate(self.func_list):
             if f.name == name:
                 self.func_list.pop(i)
                 break
 
-    def get_func(self, name) -> FuncTool | None:
+    def get_tool(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
         # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
         for f in reversed(self.func_list):
@@ -929,7 +896,7 @@ class FunctionToolManager:
             )
             self._timeout_mismatch_warned = True
 
-    def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
+    def openai_schema(self, omit_empty_parameter_field=False) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
@@ -937,13 +904,13 @@ class FunctionToolManager:
             omit_empty_parameter_field=omit_empty_parameter_field,
         )
 
-    def get_func_desc_anthropic_style(self) -> list:
+    def anthropic_schema(self) -> list:
         """获得 Anthropic API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.anthropic_schema()
 
-    def get_func_desc_google_genai_style(self) -> dict:
+    def google_schema(self) -> dict:
         """获得 Google GenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
@@ -956,7 +923,7 @@ class FunctionToolManager:
             如果没找到，会返回 False
 
         """
-        func_tool = self.get_func(name)
+        func_tool = self.get_tool(name)
         if func_tool is not None:
             func_tool.active = False
 
@@ -980,7 +947,7 @@ class FunctionToolManager:
 
     # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
     def activate_llm_tool(self, name: str, star_map: dict) -> bool:
-        func_tool = self.get_func(name)
+        func_tool = self.get_tool(name)
         if func_tool is not None:
             if func_tool.handler_module_path in star_map:
                 if not star_map[func_tool.handler_module_path].activated:
@@ -1110,5 +1077,5 @@ class FunctionToolManager:
         return str(self.func_list)
 
 
-# alias
+# Legacy alias.
 FuncCall = FunctionToolManager

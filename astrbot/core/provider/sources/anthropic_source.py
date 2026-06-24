@@ -338,10 +338,6 @@ class ProviderAnthropic(Provider):
         if isinstance(tool_choice, dict):
             return tool_choice
 
-        if tool_choice == "required":
-            # 兼容 OpenAI 命名：required → any
-            return {"type": "any"}
-
         if tool_choice in ("auto", "any", "none"):
             return {"type": tool_choice}
 
@@ -362,7 +358,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
     ) -> LLMResponse:
         if tools:
-            if tool_list := tools.get_func_desc_anthropic_style():
+            if tool_list := tools.anthropic_schema():
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = self._normalize_tool_choice(
                     payloads.get("tool_choice", "auto")
@@ -453,7 +449,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
-            if tool_list := tools.get_func_desc_anthropic_style():
+            if tool_list := tools.anthropic_schema():
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = self._normalize_tool_choice(
                     payloads.get("tool_choice", "auto")

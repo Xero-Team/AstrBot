@@ -91,9 +91,29 @@ def new(name: str) -> None:
     with open(plug_path / "main.py", encoding="utf-8") as f:
         content = f.read()
 
-    new_content = content.replace(
-        '@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")',
-        f'@register("{name}", "{author}", "{desc}", "{version}")',
+    new_content = re.sub(
+        r"^\s*@register\(.*\)\s*$\n?",
+        "",
+        content,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    new_content = re.sub(
+        r"from astrbot\.api\.star import ([^\n]*?)\bregister\b,?\s*",
+        lambda match: (
+            "from astrbot.api.star import "
+            + ", ".join(
+                part.strip()
+                for part in match.group(1).split(",")
+                if part.strip() and part.strip() != "register"
+            )
+        ),
+        new_content,
+        count=1,
+    )
+    new_content = new_content.replace(
+        "from astrbot.api.star import \n",
+        "",
     )
 
     with open(plug_path / "main.py", "w", encoding="utf-8") as f:

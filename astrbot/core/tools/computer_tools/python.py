@@ -86,7 +86,7 @@ class PythonTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         code: str,
         silent: bool = False,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -95,14 +95,14 @@ class PythonTool(FunctionTool):
             context.context.event.unified_msg_origin,
         )
         effective_timeout = (
-            min(timeout, context.tool_call_timeout)
-            if timeout > 0
+            min(timeout_seconds, context.tool_call_timeout)
+            if timeout_seconds > 0
             else context.tool_call_timeout
         )
         try:
             result = await sb.python.exec(
                 code,
-                timeout=effective_timeout,
+                timeout_seconds=effective_timeout,
                 silent=silent,
             )
             return await handle_result(result, context.context.event)
@@ -126,14 +126,14 @@ class LocalPythonTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         code: str,
         silent: bool = False,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
         sb = get_local_booter()
         effective_timeout = (
-            min(timeout, context.tool_call_timeout)
-            if timeout > 0
+            min(timeout_seconds, context.tool_call_timeout)
+            if timeout_seconds > 0
             else context.tool_call_timeout
         )
         try:
@@ -143,7 +143,7 @@ class LocalPythonTool(FunctionTool):
             current_workspace_root.mkdir(parents=True, exist_ok=True)
             result = await sb.python.exec(
                 code,
-                timeout=effective_timeout,
+                timeout_seconds=effective_timeout,
                 silent=silent,
                 cwd=str(current_workspace_root),
             )

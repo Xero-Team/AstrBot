@@ -1,5 +1,5 @@
-import sys
 import typing as T
+from typing import override
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp
@@ -15,11 +15,6 @@ from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .dify_api_client import DifyAPIClient
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class DifyAgentRunner(BaseAgentRunner[TContext]):
@@ -191,7 +186,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     user=session_id,
                     conversation_id=conversation_id,
                     files=files_payload,
-                    timeout=self.timeout,
+                    timeout_seconds=self.timeout,
                 ):
                     logger.debug(f"dify resp chunk: {chunk}")
                     if chunk["event"] == "message" or chunk["event"] == "agent_message":
@@ -231,7 +226,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     },
                     user=session_id,
                     files=files_payload,
-                    timeout=self.timeout,
+                    timeout_seconds=self.timeout,
                 ):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:

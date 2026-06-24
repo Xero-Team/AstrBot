@@ -222,14 +222,14 @@ def builtin_tool(
 
 
 @overload
-def builtin_tool(
+def builtin_tool[TFunctionTool: type[FunctionTool]](
     tool_cls: TFunctionTool,
     *,
     config: dict[str, Any] | None = None,
 ) -> TFunctionTool: ...
 
 
-def builtin_tool(
+def builtin_tool[TFunctionTool: type[FunctionTool]](
     tool_cls: TFunctionTool | None = None,
     *,
     config: dict[str, Any] | None = None,

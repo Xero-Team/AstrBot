@@ -200,14 +200,14 @@ class WecomAIBotLongConnectionClient:
         self,
         req_id: str,
         payload: dict[str, Any],
-        timeout: float = 10.0,
+        timeout_seconds: float = 10.0,
     ) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
         waiter: asyncio.Future[dict[str, Any]] = loop.create_future()
         self._response_waiters[req_id] = waiter
         try:
             await self._send_json(payload)
-            return await asyncio.wait_for(waiter, timeout=timeout)
+            return await asyncio.wait_for(waiter, timeout=timeout_seconds)
         except TimeoutError:
             logger.warning(
                 "[WecomAI][LongConn] 等待命令响应超时: cmd=%s req_id=%s",

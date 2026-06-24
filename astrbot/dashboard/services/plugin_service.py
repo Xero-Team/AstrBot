@@ -7,7 +7,7 @@ import os
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -253,7 +253,7 @@ class PluginService:
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return token
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(logo_path, ttl_seconds=300)
             self._logo_cache[logo_path] = token
             return token
         except Exception as exc:
@@ -282,7 +282,7 @@ class PluginService:
         try:
             return datetime.fromtimestamp(
                 plugin_dir.stat().st_mtime,
-                timezone.utc,
+                UTC,
             ).isoformat()
         except OSError as exc:
             logger.warning(f"获取插件安装时间失败 {plugin.name}: {exc!s}")

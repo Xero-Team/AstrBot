@@ -27,7 +27,7 @@ import json
 import os
 import sys
 import uuid
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
 if sys.version_info >= (3, 14):
@@ -41,7 +41,7 @@ from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
-class ComponentType(str, Enum):
+class ComponentType(StrEnum):
     # Basic Segment Types
     Plain = "Plain"  # plain text message
     Image = "Image"  # image
@@ -614,7 +614,9 @@ class Poke(BaseMessageComponent):
     _type: str | int = "126"
     id: int | str | None = 0
 
-    def __init__(self, id: int | str | None = 0, poke_type: str | int | None = None, **_) -> None:
+    def __init__(
+        self, id: int | str | None = 0, poke_type: str | int | None = None, **_
+    ) -> None:
         if poke_type in (None, "", "poke", "Poke"):
             poke_type = "126"
         super().__init__(id=id, _type=str(poke_type), **_)

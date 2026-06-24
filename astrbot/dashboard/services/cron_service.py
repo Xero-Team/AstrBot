@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -30,7 +30,7 @@ class CronService:
             value = data.get(key)
             if isinstance(value, datetime):
                 if value.tzinfo is None:
-                    value = value.replace(tzinfo=timezone.utc)
+                    value = value.replace(tzinfo=UTC)
                 data[key] = value.isoformat()
 
         payload = data.get("payload") or {}

@@ -1,10 +1,9 @@
 import asyncio
 import os
 import re
-import sys
 import uuid
 from contextlib import suppress
-from typing import cast
+from typing import cast, override
 
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -35,11 +34,6 @@ from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver
 
 from .tg_event import TelegramPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 @register_platform_adapter("telegram", "telegram 适配器")

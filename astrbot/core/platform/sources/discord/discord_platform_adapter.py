@@ -1,7 +1,6 @@
 import asyncio
 import re
-import sys
-from typing import Any, cast
+from typing import Any, cast, override
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -27,11 +26,6 @@ from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 # 注册平台适配器
@@ -483,7 +477,7 @@ class DiscordPlatformAdapter(Platform):
                 # 設定 2.5 秒超時，避免卡死整個 event loop
                 await asyncio.wait_for(ctx.defer(), timeout=2.5)
                 followup_webhook = ctx.followup
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     f"[Discord] Defer command '{cmd_name}' timeout. Network might be too slow."
                 )

@@ -96,6 +96,7 @@ class AstrMessageEvent(abc.ABC):
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
+
     @property
     def unified_msg_origin(self) -> str:
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""

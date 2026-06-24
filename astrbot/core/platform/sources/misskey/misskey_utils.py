@@ -172,6 +172,7 @@ def resolve_message_visibility(
 
     return visibility, visible_user_ids
 
+
 def is_valid_user_session_id(session_id: str | Any) -> bool:
     """检查 session_id 是否是有效的聊天用户 session_id (仅限chat%前缀)"""
     if not isinstance(session_id, str) or "%" not in session_id:

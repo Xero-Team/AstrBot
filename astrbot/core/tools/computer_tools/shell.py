@@ -86,7 +86,7 @@ class ExecuteShellTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         command: str,
         background: bool = False,
-        timeout: int | None = 300,
+        timeout_seconds: int | None = 300,
         env: dict[str, Any] | None = None,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):
@@ -125,7 +125,7 @@ class ExecuteShellTool(FunctionTool):
                 cwd=cwd,
                 background=effective_background,
                 env=env,
-                timeout=timeout or 300,
+                timeout_seconds=timeout_seconds or 300,
             )
             if stdout_file:
                 result["stdout"] = (

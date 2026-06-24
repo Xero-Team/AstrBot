@@ -108,7 +108,7 @@ def _build_retrying(
     )
 
 
-async def retry_provider_request(
+async def retry_provider_request[T](
     provider_label: str,
     request_factory: Callable[[], Awaitable[T]],
     *,
@@ -129,7 +129,7 @@ async def retry_provider_request(
 
 
 @asynccontextmanager
-async def retry_provider_request_context(
+async def retry_provider_request_context[T](
     provider_label: str,
     context_manager_factory: Callable[[], AbstractAsyncContextManager[T]],
     *,

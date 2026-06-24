@@ -430,7 +430,9 @@ class ToolsService:
 
     async def _enable_added_server(self, name: str, server_config: dict) -> None:
         try:
-            await self.tool_mgr.enable_mcp_server(name, server_config, timeout=30)
+            await self.tool_mgr.enable_mcp_server(
+                name, server_config, timeout_seconds=30
+            )
         except TimeoutError as exc:
             rollback_ok = self.rollback_mcp_server(name)
             err_msg = f"Timed out while enabling MCP server {name}."
@@ -472,7 +474,7 @@ class ToolsService:
 
     async def _disable_server_before_enable(self, old_name: str) -> None:
         try:
-            await self.tool_mgr.disable_mcp_server(old_name, timeout=10)
+            await self.tool_mgr.disable_mcp_server(old_name, timeout_seconds=10)
         except TimeoutError as exc:
             raise ToolsServiceError(
                 f"Timed out while disabling MCP server {old_name} before enabling: {exc!s}"
@@ -485,7 +487,9 @@ class ToolsService:
 
     async def _enable_updated_server(self, name: str, server_config: dict) -> None:
         try:
-            await self.tool_mgr.enable_mcp_server(name, server_config, timeout=30)
+            await self.tool_mgr.enable_mcp_server(
+                name, server_config, timeout_seconds=30
+            )
         except TimeoutError as exc:
             raise ToolsServiceError(
                 f"Timed out while enabling MCP server {name}."
@@ -498,7 +502,7 @@ class ToolsService:
 
     async def _disable_server(self, name: str) -> None:
         try:
-            await self.tool_mgr.disable_mcp_server(name, timeout=10)
+            await self.tool_mgr.disable_mcp_server(name, timeout_seconds=10)
         except TimeoutError as exc:
             raise ToolsServiceError(
                 f"Timed out while disabling MCP server {name}."

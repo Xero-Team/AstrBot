@@ -90,7 +90,7 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 300,
+        timeout_seconds: int | None = 300,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -123,7 +123,7 @@ class LocalShellComponent(ShellComponent):
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
-                timeout=timeout or 300,
+                timeout=timeout_seconds or 300,
                 capture_output=True,
             )
             return {
@@ -141,7 +141,7 @@ class LocalPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
         silent: bool = False,
         cwd: str | None = None,
     ) -> dict[str, Any]:
@@ -150,7 +150,7 @@ class LocalPythonComponent(PythonComponent):
                 working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    timeout=timeout,
+                    timeout=timeout_seconds,
                     capture_output=True,
                     cwd=working_dir,
                 )

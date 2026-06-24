@@ -192,9 +192,11 @@ async def _exec_python3_or_error(
     code: str,
     *,
     operation: str,
-    timeout: int | None = 30,
+    timeout_seconds: int | None = 30,
 ) -> ProcessResult:
-    result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
+    result = await shell.exec(
+        f"python3 - <<'PY'\n{code}\nPY", timeout_seconds=timeout_seconds
+    )
     return _normalize_with_python3_requirement(result, operation)
 
 
@@ -300,7 +302,7 @@ class CuaShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout_seconds: int | None = 30,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -315,8 +317,8 @@ class CuaShellComponent(ShellComponent):
         kwargs: dict[str, Any] = {}
         if cwd is not None:
             kwargs["cwd"] = cwd
-        if timeout is not None:
-            kwargs["timeout"] = timeout
+        if timeout_seconds is not None:
+            kwargs["timeout"] = timeout_seconds
         if env:
             kwargs["env"] = env
         if background:
@@ -368,12 +370,14 @@ class CuaPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id
         if self._python_exec is not None:
-            result = await _maybe_await(self._python_exec(code, timeout=timeout))
+            result = await _maybe_await(
+                self._python_exec(code, timeout=timeout_seconds)
+            )
             proc = _normalize_process_result(result)
         else:
             shell = CuaShellComponent(self._sandbox, os_type=self._os_type)
@@ -381,7 +385,7 @@ class CuaPythonComponent(PythonComponent):
                 shell,
                 code,
                 operation="Python execution fallback",
-                timeout=timeout,
+                timeout_seconds=timeout_seconds,
             )
 
         output_text = "" if silent else proc.stdout

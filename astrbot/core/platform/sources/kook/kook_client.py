@@ -212,7 +212,7 @@ class KookClient:
                     logger.error(f"[KOOK] 原始响应内容: {msg}")
                     continue
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 超时检查，继续循环
                     continue
                 except websockets.exceptions.ConnectionClosed:

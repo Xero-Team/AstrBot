@@ -814,7 +814,7 @@ class ConfigDisplayService:
 
             logo_token = await file_token_service.register_file(
                 logo_file_path,
-                timeout=3600,
+                ttl_seconds=3600,
             )
             self._set_platform_logo_token(
                 platform_default_tmpl,

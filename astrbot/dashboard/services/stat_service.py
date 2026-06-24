@@ -6,7 +6,7 @@ import threading
 import time
 import traceback
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import cmp_to_key
 from pathlib import Path
 
@@ -133,7 +133,9 @@ class StatService:
             message_time_based_stats = []
             platform_stats = sorted(
                 stat,
-                key=lambda item: int(self._ensure_aware_utc(item.timestamp).timestamp()),
+                key=lambda item: int(
+                    self._ensure_aware_utc(item.timestamp).timestamp()
+                ),
             )
 
             idx = 0
@@ -142,7 +144,9 @@ class StatService:
                 while (
                     idx < len(platform_stats)
                     and int(
-                        self._ensure_aware_utc(platform_stats[idx].timestamp).timestamp()
+                        self._ensure_aware_utc(
+                            platform_stats[idx].timestamp
+                        ).timestamp()
                     )
                     < bucket_end
                 ):
@@ -216,15 +220,15 @@ class StatService:
     @staticmethod
     def _ensure_aware_utc(value: datetime) -> datetime:
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
     async def get_provider_token_stats(self, days: int) -> dict:
         try:
             if days not in (1, 3, 7):
                 days = 1
 
-            local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+            local_tz = datetime.now().astimezone().tzinfo or UTC
             now_local = datetime.now(local_tz)
             range_start_local = (now_local - timedelta(days=days)).replace(
                 minute=0, second=0, microsecond=0
@@ -233,7 +237,7 @@ class StatService:
                 hour=0, minute=0, second=0, microsecond=0
             )
             query_start_local = min(range_start_local, today_start_local)
-            query_start_utc = query_start_local.astimezone(timezone.utc)
+            query_start_utc = query_start_local.astimezone(UTC)
 
             async with self.db_helper.get_db() as session:
                 result = await session.execute(

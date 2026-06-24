@@ -1718,7 +1718,7 @@ class WeixinOCAdapter(Platform):
 
                     try:
                         await self._poll_qr_status(current_login)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.debug(
                             "weixin_oc(%s): qr status long-poll timeout",
                             self.meta().id,
@@ -1748,7 +1748,7 @@ class WeixinOCAdapter(Platform):
 
                 try:
                     await self._poll_inbound_updates()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.debug(
                         "weixin_oc(%s): inbound long-poll timeout",
                         self.meta().id,

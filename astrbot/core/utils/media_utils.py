@@ -16,7 +16,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeAlias
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
@@ -89,7 +88,7 @@ DEFAULT_MEDIA_SUFFIXES = {
 }
 
 
-MediaRefStr: TypeAlias = str
+type MediaRefStr = str
 """
 A media reference string accepted by MediaResolver: local path, file URI, HTTP(S),
 base64://, or data URI.

@@ -1,9 +1,8 @@
 import asyncio
 import os
-import sys
 import time
 from collections.abc import Callable, Coroutine
-from typing import Any, cast
+from typing import Any, cast, override
 
 from requests import Response
 from wechatpy import WeChatClient, create_reply, parse_message
@@ -30,11 +29,6 @@ from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class WeixinOfficialAccountServer:
@@ -377,7 +371,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     )  # wait for 180s
                 logger.debug(f"Got future result: {result}")
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.info(f"callback 处理消息超时: message_id={msg.id}")
                 return create_reply("处理消息超时，请稍后再试。", msg)
             except Exception as e:

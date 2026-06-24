@@ -1,5 +1,5 @@
 import json
-from enum import Enum, IntEnum
+from enum import IntEnum, StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -24,7 +24,7 @@ class KookApiPaths:
     DIRECT_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/create"
 
 
-class KookMentionTagName(str, Enum):
+class KookMentionTagName(StrEnum):
     """用来匹配 `(tagName)value(tagName)` 格式里的tagName , 例如: `(met)all(met)`
     定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown"""
 
@@ -45,7 +45,7 @@ class KookMessageType(IntEnum):
     SYSTEM = 255
 
 
-class KookModuleType(str, Enum):
+class KookModuleType(StrEnum):
     PLAIN_TEXT = "plain-text"
     KMARKDOWN = "kmarkdown"
     IMAGE = "image"
@@ -65,7 +65,7 @@ class KookModuleType(str, Enum):
     CARD = "card"
 
 
-class KookRoleExtraType(str, Enum):
+class KookRoleExtraType(StrEnum):
     """定义参见kook事件结构文档: https://developer.kookapp.cn/doc/event/event-introduction"""
 
     ADDED_ROLE = "added_role"
@@ -447,7 +447,7 @@ class KookMessageSignal(IntEnum):
     """server->client  resume ack"""
 
 
-class KookChannelType(str, Enum):
+class KookChannelType(StrEnum):
     GROUP = "GROUP"
     PERSON = "PERSON"
     BROADCAST = "BROADCAST"

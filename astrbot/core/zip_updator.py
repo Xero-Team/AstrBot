@@ -58,7 +58,7 @@ class RepoZipUpdator:
         self,
         url: str,
         path: str,
-        timeout: float = 1800.0,
+        timeout_seconds: float = 1800.0,
         progress_callback=None,
     ) -> None:
         target_path = Path(path)
@@ -72,7 +72,7 @@ class RepoZipUpdator:
                 await result
 
         try:
-            async with self._create_httpx_client(timeout=timeout) as client:
+            async with self._create_httpx_client(timeout=timeout_seconds) as client:
                 async with client.stream("GET", url) as response:
                     response.raise_for_status()
                     headers = getattr(response, "headers", {})

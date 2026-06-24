@@ -123,7 +123,7 @@ async def search_files_via_shell(
     glob: str | None = None,
     after_context: int | None = None,
     before_context: int | None = None,
-    timeout: int = 30,
+    timeout_seconds: int = 30,
 ) -> dict[str, Any]:
     command = build_search_command(
         pattern=pattern,
@@ -132,7 +132,7 @@ async def search_files_via_shell(
         after_context=after_context,
         before_context=before_context,
     )
-    result = await shell.exec(command, timeout=timeout)
+    result = await shell.exec(command, timeout_seconds=timeout_seconds)
     stdout = _truncate_long_lines(str(result.get("stdout", "") or ""))
     stderr = str(result.get("stderr", "") or "")
     exit_code = result.get("exit_code")

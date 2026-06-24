@@ -53,24 +53,24 @@ const {
 } = useFolderManager({
   operations: {
     loadFolderTree: async () => {
-      const response = await pluginExtensionApi.get('your-module/folder/tree');
+      const response = await httpClient.get('/api/v1/your-module/folder/tree');
       return response.data.data;
     },
     loadSubFolders: async (parentId) => {
-      const response = await pluginExtensionApi.get('your-module/folder/list', {
+      const response = await httpClient.get('/api/v1/your-module/folder/list', {
         params: { parent_id: parentId ?? '' }
       });
       return response.data.data;
     },
     createFolder: async (data) => {
-      const response = await pluginExtensionApi.post('your-module/folder/create', data);
+      const response = await httpClient.post('/api/v1/your-module/folder/create', data);
       return response.data.data.folder;
     },
     updateFolder: async (data) => {
-      await pluginExtensionApi.post('your-module/folder/update', data);
+      await httpClient.post('/api/v1/your-module/folder/update', data);
     },
     deleteFolder: async (folderId) => {
-      await pluginExtensionApi.post('your-module/folder/delete', { folder_id: folderId });
+      await httpClient.post('/api/v1/your-module/folder/delete', { folder_id: folderId });
     },
   },
   rootFolderName: '根目录',

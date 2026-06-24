@@ -12,7 +12,7 @@ import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from inspect import isawaitable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,14 +25,35 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
 )
-from astrbot.core.utils.io import ensure_dir
-from astrbot.core.utils.version_comparator import VersionComparator
+
+from ._importer_datetime import convert_datetime_fields
+from ._importer_files import (
+    backup_existing_directory,
+    extract_directory_files,
+    import_attachments,
+    import_directories,
+    list_directory_archive_files,
+    validate_path_within,
+)
+from ._importer_kb import clear_kb_data, import_kb_metadata_tables
+from ._importer_platform_stats import (
+    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
+    InvalidCountWarnLimiter,
+    merge_platform_stats_rows,
+    normalize_platform_stats_entry,
+    normalize_platform_stats_timestamp,
+)
+from ._importer_versioning import (
+    ManifestLoadError,
+    build_backup_summary,
+    check_version_compatibility,
+    get_major_version,
+    load_manifest,
+)
 
 # 从共享常量模块导入
 from .constants import (
-    KB_METADATA_MODELS,
     MAIN_DB_MODELS,
-    get_backup_directories,
 )
 
 if TYPE_CHECKING:
@@ -40,38 +61,11 @@ if TYPE_CHECKING:
 
 
 def _get_major_version(version_str: str) -> str:
-    """提取版本的主版本部分（前两位）
-
-    Args:
-        version_str: 版本字符串，如 "4.9.1", "4.10.0-beta"
-
-    Returns:
-        主版本字符串，如 "4.9", "4.10"
-    """
-    if not version_str:
-        return "0.0"
-    # 移除 v 前缀和预发布标签
-    version = version_str.lower().replace("v", "").split("-")[0].split("+")[0]
-    parts = [p for p in version.split(".") if p]  # 过滤空字符串
-    if len(parts) >= 2:
-        return f"{parts[0]}.{parts[1]}"
-    elif len(parts) == 1 and parts[0]:
-        return f"{parts[0]}.0"
-    return "0.0"
+    return get_major_version(version_str)
 
 
 def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
-    """Validate that target_path is within base_dir after resolving symlinks.
-
-    Prevents path traversal attacks (CWE-22) by ensuring the resolved
-    target path is relative to the resolved base directory.
-    """
-    try:
-        resolved = target_path.resolve(strict=False)
-        base_resolved = base_dir.resolve(strict=False)
-        return resolved.is_relative_to(base_resolved)
-    except (OSError, ValueError):
-        return False
+    return validate_path_within(target_path, base_dir)
 
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
@@ -83,62 +77,17 @@ PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (
 
 
 def _load_platform_stats_invalid_count_warn_limit() -> int:
-    raw_value = os.getenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV)
-    if raw_value is None:
-        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-
-    try:
-        value = int(raw_value)
-        if value < 0:
-            raise ValueError("negative")
-        return value
-    except (TypeError, ValueError):
-        logger.warning(
-            "Invalid env %s=%r, fallback to default %d",
-            PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
-            raw_value,
-            DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
-        )
-        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-
-
-PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = (
-    _load_platform_stats_invalid_count_warn_limit()
-)
+    return PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
 
 
 class _InvalidCountWarnLimiter:
     """Rate-limit warnings for invalid platform_stats count values."""
 
     def __init__(self, limit: int) -> None:
-        self.limit = limit
-        self._count = 0
-        self._suppression_logged = False
+        self._inner = InvalidCountWarnLimiter(limit)
 
     def warn_invalid_count(self, value: Any, key_for_log: tuple[Any, ...]) -> None:
-        if self.limit > 0:
-            if self._count < self.limit:
-                logger.warning(
-                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
-                    value,
-                    key_for_log,
-                )
-                self._count += 1
-                if self._count == self.limit and not self._suppression_logged:
-                    logger.warning(
-                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                        self.limit,
-                    )
-                    self._suppression_logged = True
-            return
-
-        if not self._suppression_logged:
-            # limit <= 0: emit only one suppression warning.
-            logger.warning(
-                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                self.limit,
-            )
-            self._suppression_logged = True
+        self._inner.warn_invalid_count(value, key_for_log)
 
 
 @dataclass
@@ -249,6 +198,130 @@ class AstrBotImporter:
         self.config_path = config_path
         self.kb_root_dir = kb_root_dir
 
+    async def _report_progress(
+        self,
+        progress_callback: Any | None,
+        stage: str,
+        current: int,
+        total: int,
+        message: str,
+    ) -> None:
+        if progress_callback:
+            await progress_callback(stage, current, total, message)
+
+    def _load_manifest_from_backup(
+        self,
+        zf: zipfile.ZipFile,
+        result: ImportResult,
+    ) -> dict[str, Any] | None:
+        try:
+            return load_manifest(zf)
+        except ManifestLoadError as exc:
+            result.add_error(str(exc))
+        return None
+
+    async def _import_main_database_stage(
+        self,
+        zf: zipfile.ZipFile,
+        mode: str,
+        result: ImportResult,
+    ) -> dict[str, list[dict]] | None:
+        try:
+            main_data = json.loads(zf.read("databases/main_db.json"))
+            if mode == "replace":
+                await self._clear_main_db()
+            imported = await self._import_main_database(main_data)
+            result.imported_tables.update(imported)
+            return main_data
+        except DatabaseClearError as e:
+            result.add_error(f"清空主数据库失败: {e}")
+        except Exception as e:
+            result.add_error(f"导入主数据库失败: {e}")
+        return None
+
+    async def _import_knowledge_bases_stage(
+        self,
+        zf: zipfile.ZipFile,
+        mode: str,
+        result: ImportResult,
+    ) -> None:
+        if not self.kb_manager or "databases/kb_metadata.json" not in zf.namelist():
+            return
+
+        try:
+            kb_meta_data = json.loads(zf.read("databases/kb_metadata.json"))
+            if mode == "replace":
+                await self._clear_kb_data()
+            await self._import_knowledge_bases(zf, kb_meta_data, result)
+        except Exception as e:
+            result.add_warning(f"导入知识库失败: {e}")
+
+    def _import_config_stage(self, zf: zipfile.ZipFile, result: ImportResult) -> None:
+        if "config/cmd_config.json" not in zf.namelist():
+            return
+
+        try:
+            config_content = zf.read("config/cmd_config.json")
+            if os.path.exists(self.config_path):
+                shutil.copy2(self.config_path, f"{self.config_path}.bak")
+            with open(self.config_path, "wb") as f:
+                f.write(config_content)
+            result.imported_files["config"] = 1
+        except Exception as e:
+            result.add_warning(f"导入配置文件失败: {e}")
+
+    async def _import_attachments_stage(
+        self,
+        zf: zipfile.ZipFile,
+        main_data: dict[str, list[dict]],
+        result: ImportResult,
+    ) -> None:
+        result.imported_files["attachments"] = await self._import_attachments(
+            zf, main_data.get("attachments", [])
+        )
+
+    async def _import_directories_stage(
+        self,
+        zf: zipfile.ZipFile,
+        manifest: dict[str, Any],
+        result: ImportResult,
+    ) -> None:
+        result.imported_directories = await self._import_directories(
+            zf, manifest, result
+        )
+
+    def _prepare_manifest_for_import(
+        self,
+        zf: zipfile.ZipFile,
+        result: ImportResult,
+    ) -> dict[str, Any] | None:
+        manifest = self._load_manifest_from_backup(zf, result)
+        if manifest is None:
+            return None
+
+        try:
+            self._validate_version(manifest)
+        except ValueError as exc:
+            result.add_error(str(exc))
+            return None
+
+        return manifest
+
+    async def _run_import_stage(
+        self,
+        progress_callback: Any | None,
+        stage: str,
+        start_message: str,
+        end_message: str,
+        action: Any,
+    ) -> Any:
+        await self._report_progress(progress_callback, stage, 0, 100, start_message)
+        stage_result = action()
+        if isawaitable(stage_result):
+            stage_result = await stage_result
+        await self._report_progress(progress_callback, stage, 100, 100, end_message)
+        return stage_result
+
     def pre_check(self, zip_path: str) -> ImportPreCheckResult:
         """预检查备份文件
 
@@ -270,39 +343,19 @@ class AstrBotImporter:
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
-                # 读取 manifest
                 try:
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data)
-                except KeyError:
-                    result.error = "备份文件缺少 manifest.json，不是有效的 AstrBot 备份"
-                    return result
-                except json.JSONDecodeError as e:
-                    result.error = f"manifest.json 格式错误: {e}"
+                    manifest = load_manifest(zf)
+                except ManifestLoadError as exc:
+                    result.error = str(exc)
                     return result
 
-                # 提取基本信息
                 result.backup_version = manifest.get("astrbot_version", "未知")
                 result.backup_time = manifest.get("exported_at", "未知")
                 result.valid = True
-
-                # 构建备份摘要
-                result.backup_summary = {
-                    "tables": list(manifest.get("tables", {}).keys()),
-                    "has_knowledge_bases": manifest.get("has_knowledge_bases", False),
-                    "has_config": manifest.get("has_config", False),
-                    "directories": manifest.get("directories", []),
-                }
-
-                # 检查版本兼容性
+                result.backup_summary = build_backup_summary(manifest)
                 version_check = self._check_version_compatibility(result.backup_version)
                 result.version_status = version_check["status"]
                 result.can_import = version_check["can_import"]
-
-                # 版本信息由前端根据 version_status 和 i18n 生成显示
-                # 不再将版本消息添加到 warnings 列表中，避免中文硬编码
-                # warnings 列表保留用于其他非版本相关的警告
-
                 return result
 
         except zipfile.BadZipFile:
@@ -322,44 +375,7 @@ class AstrBotImporter:
         Returns:
             dict: {status, can_import, message}
         """
-        if not backup_version:
-            return {
-                "status": "major_diff",
-                "can_import": False,
-                "message": "备份文件缺少版本信息",
-            }
-
-        # 提取主版本（前两位）进行比较
-        backup_major = _get_major_version(backup_version)
-        current_major = _get_major_version(VERSION)
-
-        # 比较主版本
-        if VersionComparator.compare_version(backup_major, current_major) != 0:
-            return {
-                "status": "major_diff",
-                "can_import": False,
-                "message": (
-                    f"主版本不兼容: 备份版本 {backup_version}, 当前版本 {VERSION}。"
-                    f"跨主版本导入可能导致数据损坏，请使用相同主版本的 AstrBot。"
-                ),
-            }
-
-        # 比较完整版本
-        version_cmp = VersionComparator.compare_version(backup_version, VERSION)
-        if version_cmp != 0:
-            return {
-                "status": "minor_diff",
-                "can_import": True,
-                "message": (
-                    f"小版本差异: 备份版本 {backup_version}, 当前版本 {VERSION}。"
-                ),
-            }
-
-        return {
-            "status": "match",
-            "can_import": True,
-            "message": "版本匹配",
-        }
+        return check_version_compatibility(backup_version, VERSION).to_dict()
 
     async def import_all(
         self,
@@ -387,116 +403,52 @@ class AstrBotImporter:
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
-                # 1. 读取并验证 manifest
-                if progress_callback:
-                    await progress_callback("validate", 0, 100, "正在验证备份文件...")
-
-                try:
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data)
-                except KeyError:
-                    result.add_error("备份文件缺少 manifest.json")
-                    return result
-                except json.JSONDecodeError as e:
-                    result.add_error(f"manifest.json 格式错误: {e}")
-                    return result
-
-                # 版本校验
-                try:
-                    self._validate_version(manifest)
-                except ValueError as e:
-                    result.add_error(str(e))
-                    return result
-
-                if progress_callback:
-                    await progress_callback("validate", 100, 100, "验证完成")
-
-                # 2. 导入主数据库
-                if progress_callback:
-                    await progress_callback("main_db", 0, 100, "正在导入主数据库...")
-
-                try:
-                    main_data_content = zf.read("databases/main_db.json")
-                    main_data = json.loads(main_data_content)
-
-                    if mode == "replace":
-                        await self._clear_main_db()
-
-                    imported = await self._import_main_database(main_data)
-                    result.imported_tables.update(imported)
-                except DatabaseClearError as e:
-                    result.add_error(f"清空主数据库失败: {e}")
-                    return result
-                except Exception as e:
-                    result.add_error(f"导入主数据库失败: {e}")
-                    return result
-
-                if progress_callback:
-                    await progress_callback("main_db", 100, 100, "主数据库导入完成")
-
-                # 3. 导入知识库
-                if self.kb_manager and "databases/kb_metadata.json" in zf.namelist():
-                    if progress_callback:
-                        await progress_callback("kb", 0, 100, "正在导入知识库...")
-
-                    try:
-                        kb_meta_content = zf.read("databases/kb_metadata.json")
-                        kb_meta_data = json.loads(kb_meta_content)
-
-                        if mode == "replace":
-                            await self._clear_kb_data()
-
-                        await self._import_knowledge_bases(zf, kb_meta_data, result)
-                    except Exception as e:
-                        result.add_warning(f"导入知识库失败: {e}")
-
-                    if progress_callback:
-                        await progress_callback("kb", 100, 100, "知识库导入完成")
-
-                # 4. 导入配置文件
-                if progress_callback:
-                    await progress_callback("config", 0, 100, "正在导入配置文件...")
-
-                if "config/cmd_config.json" in zf.namelist():
-                    try:
-                        config_content = zf.read("config/cmd_config.json")
-                        # 备份现有配置
-                        if os.path.exists(self.config_path):
-                            backup_path = f"{self.config_path}.bak"
-                            shutil.copy2(self.config_path, backup_path)
-
-                        with open(self.config_path, "wb") as f:
-                            f.write(config_content)
-                        result.imported_files["config"] = 1
-                    except Exception as e:
-                        result.add_warning(f"导入配置文件失败: {e}")
-
-                if progress_callback:
-                    await progress_callback("config", 100, 100, "配置文件导入完成")
-
-                # 5. 导入附件文件
-                if progress_callback:
-                    await progress_callback("attachments", 0, 100, "正在导入附件...")
-
-                attachment_count = await self._import_attachments(
-                    zf, main_data.get("attachments", [])
+                manifest = await self._run_import_stage(
+                    progress_callback,
+                    "validate",
+                    "正在验证备份文件...",
+                    "验证完成",
+                    lambda: self._prepare_manifest_for_import(zf, result),
                 )
-                result.imported_files["attachments"] = attachment_count
-
-                if progress_callback:
-                    await progress_callback("attachments", 100, 100, "附件导入完成")
-
-                # 6. 导入插件和其他目录
-                if progress_callback:
-                    await progress_callback(
-                        "directories", 0, 100, "正在导入插件和数据目录..."
-                    )
-
-                dir_stats = await self._import_directories(zf, manifest, result)
-                result.imported_directories = dir_stats
-
-                if progress_callback:
-                    await progress_callback("directories", 100, 100, "目录导入完成")
+                if manifest is None:
+                    return result
+                main_data = await self._run_import_stage(
+                    progress_callback,
+                    "main_db",
+                    "正在导入主数据库...",
+                    "主数据库导入完成",
+                    lambda: self._import_main_database_stage(zf, mode, result),
+                )
+                if main_data is None:
+                    return result
+                await self._run_import_stage(
+                    progress_callback,
+                    "kb",
+                    "正在导入知识库...",
+                    "知识库导入完成",
+                    lambda: self._import_knowledge_bases_stage(zf, mode, result),
+                )
+                await self._run_import_stage(
+                    progress_callback,
+                    "config",
+                    "正在导入配置文件...",
+                    "配置文件导入完成",
+                    lambda: self._import_config_stage(zf, result),
+                )
+                await self._run_import_stage(
+                    progress_callback,
+                    "attachments",
+                    "正在导入附件...",
+                    "附件导入完成",
+                    lambda: self._import_attachments_stage(zf, main_data, result),
+                )
+                await self._run_import_stage(
+                    progress_callback,
+                    "directories",
+                    "正在导入插件和数据目录...",
+                    "目录导入完成",
+                    lambda: self._import_directories_stage(zf, manifest, result),
+                )
 
             logger.info(f"备份导入完成: {result.to_dict()}")
             return result
@@ -543,30 +495,7 @@ class AstrBotImporter:
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
-        if not self.kb_manager:
-            return
-
-        # 清空知识库元数据表
-        async with self.kb_manager.kb_db.get_db() as session:
-            async with session.begin():
-                for table_name, model_class in KB_METADATA_MODELS.items():
-                    try:
-                        await session.execute(delete(model_class))
-                        logger.debug(f"已清空知识库表 {table_name}")
-                    except Exception as e:
-                        logger.warning(f"清空知识库表 {table_name} 失败: {e}")
-
-        # 删除知识库文件目录
-        for kb_id in list(self.kb_manager.kb_insts.keys()):
-            try:
-                kb_helper = self.kb_manager.kb_insts[kb_id]
-                await kb_helper.terminate()
-                if kb_helper.kb_dir.exists():
-                    shutil.rmtree(kb_helper.kb_dir)
-            except Exception as e:
-                logger.warning(f"清理知识库 {kb_id} 失败: {e}")
-
-        self.kb_manager.kb_insts.clear()
+        await clear_kb_data(self.kb_manager)
 
     async def _import_main_database(
         self, data: dict[str, list[dict]]
@@ -617,99 +546,22 @@ class AstrBotImporter:
     def _merge_platform_stats_rows(
         self, rows: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Merge duplicate platform_stats rows by normalized timestamp/platform key.
-
-        Note:
-        - Invalid/empty timestamps are kept as distinct rows to avoid accidental merging.
-        - Non-string platform_id/platform_type are kept as distinct rows.
-        - Invalid count warnings are rate-limited per function invocation.
-        """
-        merged: dict[tuple[str, str, str], dict[str, Any]] = {}
-        result: list[dict[str, Any]] = []
-        warn_limiter = _InvalidCountWarnLimiter(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT)
-
-        for row in rows:
-            normalized_row, normalized_timestamp, count = (
-                self._normalize_platform_stats_entry(row, warn_limiter)
-            )
-            platform_id = normalized_row.get("platform_id")
-            platform_type = normalized_row.get("platform_type")
-
-            if (
-                normalized_timestamp is None
-                or not isinstance(platform_id, str)
-                or not isinstance(platform_type, str)
-            ):
-                result.append(normalized_row)
-                continue
-
-            merge_key = (normalized_timestamp, platform_id, platform_type)
-            existing = merged.get(merge_key)
-            if existing is None:
-                merged[merge_key] = normalized_row
-                result.append(normalized_row)
-            else:
-                existing["count"] += count
-
-        return result
+        return merge_platform_stats_rows(rows)
 
     def _normalize_platform_stats_entry(
         self,
         row: dict[str, Any],
         warn_limiter: _InvalidCountWarnLimiter,
     ) -> tuple[dict[str, Any], str | None, int]:
-        normalized_row = dict(row)
-        raw_timestamp = normalized_row.get("timestamp")
-        normalized_timestamp = self._normalize_platform_stats_timestamp(raw_timestamp)
-
-        if normalized_timestamp is not None:
-            normalized_row["timestamp"] = normalized_timestamp
-        elif isinstance(raw_timestamp, str):
-            normalized_row["timestamp"] = raw_timestamp.strip()
-        elif raw_timestamp is None:
-            normalized_row["timestamp"] = ""
-        else:
-            normalized_row["timestamp"] = str(raw_timestamp)
-
-        raw_count = normalized_row.get("count", 0)
-        try:
-            count = int(raw_count)
-        except (TypeError, ValueError):
-            key_for_log = (
-                normalized_row.get("timestamp"),
-                repr(normalized_row.get("platform_id")),
-                repr(normalized_row.get("platform_type")),
-            )
-            warn_limiter.warn_invalid_count(raw_count, key_for_log)
-            count = 0
-
-        normalized_row["count"] = count
+        normalized_row, merge_key, count = normalize_platform_stats_entry(
+            row,
+            warn_limiter._inner,
+        )
+        normalized_timestamp = None if merge_key is None else merge_key[0]
         return normalized_row, normalized_timestamp, count
 
     def _normalize_platform_stats_timestamp(self, value: Any) -> str | None:
-        if isinstance(value, datetime):
-            dt = value
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            else:
-                dt = dt.astimezone(timezone.utc)
-            return dt.isoformat()
-        if isinstance(value, str):
-            timestamp = value.strip()
-            if not timestamp:
-                return None
-            if timestamp.endswith("Z"):
-                timestamp = f"{timestamp[:-1]}+00:00"
-            try:
-                dt = datetime.fromisoformat(timestamp)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                else:
-                    dt = dt.astimezone(timezone.utc)
-                return dt.isoformat()
-            except ValueError:
-                return None
-        return None
+        return normalize_platform_stats_timestamp(value)
 
     async def _import_knowledge_bases(
         self,
@@ -721,77 +573,96 @@ class AstrBotImporter:
         if not self.kb_manager:
             return
 
-        # 1. 导入知识库元数据
-        async with self.kb_manager.kb_db.get_db() as session:
-            async with session.begin():
-                for table_name, rows in kb_meta_data.items():
-                    model_class = KB_METADATA_MODELS.get(table_name)
-                    if not model_class:
-                        continue
+        await self._import_kb_metadata_tables(kb_meta_data, result)
 
-                    count = 0
-                    for row in rows:
-                        try:
-                            row = self._convert_datetime_fields(row, model_class)
-                            obj = model_class(**row)
-                            session.add(obj)
-                            count += 1
-                        except Exception as e:
-                            logger.warning(f"导入知识库记录到 {table_name} 失败: {e}")
-
-                    result.imported_tables[f"kb_{table_name}"] = count
-
-        # 2. 导入每个知识库的文档和文件
         for kb_data in kb_meta_data.get("knowledge_bases", []):
-            kb_id = kb_data.get("kb_id")
-            if not kb_id:
-                continue
+            await self._import_single_knowledge_base(zf, kb_data, result)
 
-            # 创建知识库目录
-            kb_dir = Path(self.kb_root_dir) / kb_id
-            kb_dir.mkdir(parents=True, exist_ok=True)
-
-            # 导入文档数据
-            doc_path = f"databases/kb_{kb_id}/documents.json"
-            if doc_path in zf.namelist():
-                try:
-                    doc_content = zf.read(doc_path)
-                    doc_data = json.loads(doc_content)
-
-                    # 导入到文档存储数据库
-                    await self._import_kb_documents(kb_id, doc_data)
-                except Exception as e:
-                    result.add_warning(f"导入知识库 {kb_id} 的文档失败: {e}")
-
-            # 导入 FAISS 索引
-            faiss_path = f"databases/kb_{kb_id}/index.faiss"
-            if faiss_path in zf.namelist():
-                try:
-                    target_path = kb_dir / "index.faiss"
-                    with zf.open(faiss_path) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
-                except Exception as e:
-                    result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
-
-            # 导入媒体文件
-            media_prefix = f"files/kb_media/{kb_id}/"
-            for name in zf.namelist():
-                if name.startswith(media_prefix):
-                    try:
-                        rel_path = name[len(media_prefix) :]
-                        target_path = kb_dir / rel_path
-                        # Validate path is within kb directory (CWE-22)
-                        if not _validate_path_within(target_path, kb_dir):
-                            logger.warning(f"媒体文件路径越界，已跳过: {target_path}")
-                            continue
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
-                    except Exception as e:
-                        result.add_warning(f"导入媒体文件 {name} 失败: {e}")
-
-        # 3. 重新加载知识库实例
         await self.kb_manager.load_kbs()
+
+    async def _import_kb_metadata_tables(
+        self,
+        kb_meta_data: dict[str, list[dict]],
+        result: ImportResult,
+    ) -> None:
+        await import_kb_metadata_tables(
+            self.kb_manager,
+            kb_meta_data,
+            result.imported_tables,
+            self._convert_datetime_fields,
+        )
+
+    async def _import_single_knowledge_base(
+        self,
+        zf: zipfile.ZipFile,
+        kb_data: dict[str, Any],
+        result: ImportResult,
+    ) -> None:
+        kb_id = kb_data.get("kb_id")
+        if not kb_id:
+            return
+
+        kb_dir = Path(self.kb_root_dir) / kb_id
+        kb_dir.mkdir(parents=True, exist_ok=True)
+
+        await self._import_single_kb_documents(zf, kb_id, result)
+        await self._import_single_kb_faiss_index(zf, kb_id, kb_dir, result)
+        await self._import_single_kb_media_files(zf, kb_id, kb_dir, result)
+
+    async def _import_single_kb_documents(
+        self,
+        zf: zipfile.ZipFile,
+        kb_id: str,
+        result: ImportResult,
+    ) -> None:
+        doc_path = f"databases/kb_{kb_id}/documents.json"
+        if doc_path not in zf.namelist():
+            return
+
+        try:
+            await self._import_kb_documents(kb_id, json.loads(zf.read(doc_path)))
+        except Exception as e:
+            result.add_warning(f"导入知识库 {kb_id} 的文档失败: {e}")
+
+    async def _import_single_kb_faiss_index(
+        self,
+        zf: zipfile.ZipFile,
+        kb_id: str,
+        kb_dir: Path,
+        result: ImportResult,
+    ) -> None:
+        faiss_path = f"databases/kb_{kb_id}/index.faiss"
+        if faiss_path not in zf.namelist():
+            return
+
+        try:
+            with zf.open(faiss_path) as src, open(kb_dir / "index.faiss", "wb") as dst:
+                dst.write(src.read())
+        except Exception as e:
+            result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
+
+    async def _import_single_kb_media_files(
+        self,
+        zf: zipfile.ZipFile,
+        kb_id: str,
+        kb_dir: Path,
+        result: ImportResult,
+    ) -> None:
+        media_prefix = f"files/kb_media/{kb_id}/"
+        for name in zf.namelist():
+            if not name.startswith(media_prefix):
+                continue
+            try:
+                rel_path = name[len(media_prefix) :]
+                target_path = kb_dir / rel_path
+                if not _validate_path_within(target_path, kb_dir):
+                    logger.warning("媒体文件路径越界，已跳过: %s", target_path)
+                    continue
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(name) as src, open(target_path, "wb") as dst:
+                    dst.write(src.read())
+            except Exception as exc:
+                result.add_warning(f"导入媒体文件 {name} 失败: {exc}")
 
     async def _import_kb_documents(self, kb_id: str, doc_data: dict) -> None:
         """导入知识库文档到向量数据库"""
@@ -824,41 +695,7 @@ class AstrBotImporter:
         attachments: list[dict],
     ) -> int:
         """导入附件文件"""
-        count = 0
-
-        attachments_dir = Path(self.config_path).parent / "attachments"
-        attachments_dir.mkdir(parents=True, exist_ok=True)
-
-        attachment_prefix = "files/attachments/"
-        for name in zf.namelist():
-            if name.startswith(attachment_prefix) and name != attachment_prefix:
-                try:
-                    # 从附件记录中找到原始路径
-                    attachment_id = os.path.splitext(os.path.basename(name))[0]
-                    original_path = None
-                    for att in attachments:
-                        if att.get("attachment_id") == attachment_id:
-                            original_path = att.get("path")
-                            break
-
-                    if original_path:
-                        target_path = Path(original_path)
-                    else:
-                        target_path = attachments_dir / os.path.basename(name)
-
-                    # Validate path is within attachments directory (CWE-22)
-                    if not _validate_path_within(target_path, attachments_dir):
-                        logger.warning(f"附件路径越界，已跳过: {target_path}")
-                        continue
-
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(name) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
-                    count += 1
-                except Exception as e:
-                    logger.warning(f"导入附件 {name} 失败: {e}")
-
-        return count
+        return import_attachments(zf, attachments, self.config_path)
 
     async def _import_directories(
         self,
@@ -876,104 +713,32 @@ class AstrBotImporter:
         Returns:
             dict: 每个目录导入的文件数量
         """
-        dir_stats: dict[str, int] = {}
+        return import_directories(zf, manifest, result.add_warning)
 
-        # 检查备份版本是否支持目录备份（需要版本 >= 1.1）
-        backup_version = manifest.get("version", "1.0")
-        if VersionComparator.compare_version(backup_version, "1.1") < 0:
-            logger.info("备份版本不支持目录备份，跳过目录导入")
-            return dir_stats
+    def _list_directory_archive_files(
+        self, zf: zipfile.ZipFile, archive_prefix: str
+    ) -> list[str]:
+        return list_directory_archive_files(zf, archive_prefix)
 
-        backed_up_dirs = manifest.get("directories", [])
-        backup_directories = get_backup_directories()
+    def _backup_existing_directory(self, target_dir: Path) -> None:
+        backup_existing_directory(target_dir)
 
-        for dir_name in backed_up_dirs:
-            if dir_name not in backup_directories:
-                result.add_warning(f"未知的目录类型: {dir_name}")
-                continue
-
-            target_dir = Path(backup_directories[dir_name])
-            archive_prefix = f"directories/{dir_name}/"
-
-            file_count = 0
-
-            try:
-                # 获取该目录下的所有文件
-                dir_files = [
-                    name
-                    for name in zf.namelist()
-                    if name.startswith(archive_prefix) and name != archive_prefix
-                ]
-
-                if not dir_files:
-                    continue
-
-                # 备份现有目录（如果存在）
-                if target_dir.exists():
-                    backup_path = Path(f"{target_dir}.bak")
-                    if backup_path.exists():
-                        shutil.rmtree(backup_path)
-                    shutil.move(str(target_dir), str(backup_path))
-                    logger.debug(f"已备份现有目录 {target_dir} 到 {backup_path}")
-
-                # 创建目标目录
-                target_dir.mkdir(parents=True, exist_ok=True)
-
-                # 解压文件
-                for name in dir_files:
-                    try:
-                        # 计算相对路径
-                        rel_path = name[len(archive_prefix) :]
-                        if not rel_path:  # 跳过目录条目
-                            continue
-
-                        target_path = target_dir / rel_path
-                        # Validate path is within target directory (CWE-22)
-                        if not _validate_path_within(target_path, target_dir):
-                            result.add_warning(f"文件路径越界，已跳过: {name}")
-                            continue
-
-                        if zf.getinfo(name).is_dir():
-                            ensure_dir(target_path)
-                            continue
-
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
-                        file_count += 1
-                    except Exception as e:
-                        result.add_warning(f"导入文件 {name} 失败: {e}")
-
-                dir_stats[dir_name] = file_count
-                logger.debug(f"导入目录 {dir_name}: {file_count} 个文件")
-
-            except Exception as e:
-                result.add_warning(f"导入目录 {dir_name} 失败: {e}")
-                dir_stats[dir_name] = 0
-
-        return dir_stats
+    def _extract_directory_files(
+        self,
+        zf: zipfile.ZipFile,
+        dir_files: list[str],
+        archive_prefix: str,
+        target_dir: Path,
+        result: ImportResult,
+    ) -> int:
+        return extract_directory_files(
+            zf,
+            dir_files,
+            archive_prefix,
+            target_dir,
+            result.add_warning,
+        )
 
     def _convert_datetime_fields(self, row: dict, model_class: type) -> dict:
         """转换 datetime 字符串字段为 datetime 对象"""
-        result = row.copy()
-
-        # 获取模型的 datetime 字段
-        from sqlalchemy import inspect as sa_inspect
-
-        try:
-            mapper = sa_inspect(model_class)
-            for column in mapper.columns:
-                if column.name in result and result[column.name] is not None:
-                    # 检查是否是 datetime 类型的列
-                    from sqlalchemy import DateTime
-
-                    if isinstance(column.type, DateTime):
-                        value = result[column.name]
-                        if isinstance(value, str):
-                            # 解析 ISO 格式的日期时间字符串
-                            result[column.name] = datetime.fromisoformat(value)
-        except Exception:
-            pass
-
-        return result
+        return convert_datetime_fields(row, model_class)

@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -65,6 +65,150 @@ class AstrBotExporter:
         self.config_path = config_path
         self._checksums: dict[str, str] = {}
 
+    async def _report_progress(
+        self,
+        progress_callback: Any | None,
+        stage: str,
+        current: int,
+        total: int,
+        message: str,
+    ) -> None:
+        if progress_callback:
+            await progress_callback(stage, current, total, message)
+
+    def _write_json_entry(
+        self,
+        zf: zipfile.ZipFile,
+        archive_path: str,
+        data: dict[str, Any] | dict[str, list[dict]],
+    ) -> None:
+        payload = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+        zf.writestr(archive_path, payload)
+        self._add_checksum(archive_path, payload)
+
+    async def _export_main_database_stage(
+        self,
+        zf: zipfile.ZipFile,
+        progress_callback: Any | None,
+    ) -> dict[str, list[dict]]:
+        await self._report_progress(
+            progress_callback, "main_db", 0, 100, "正在导出主数据库..."
+        )
+        main_data = await self._export_main_database()
+        self._write_json_entry(zf, "databases/main_db.json", main_data)
+        await self._report_progress(
+            progress_callback, "main_db", 100, 100, "主数据库导出完成"
+        )
+        return main_data
+
+    async def _export_kb_stage(
+        self,
+        zf: zipfile.ZipFile,
+        progress_callback: Any | None,
+    ) -> dict[str, Any]:
+        kb_meta_data: dict[str, Any] = {
+            "knowledge_bases": [],
+            "kb_documents": [],
+            "kb_media": [],
+        }
+        if not self.kb_manager:
+            return kb_meta_data
+
+        await self._report_progress(
+            progress_callback, "kb_metadata", 0, 100, "正在导出知识库元数据..."
+        )
+        kb_meta_data = await self._export_kb_metadata()
+        self._write_json_entry(zf, "databases/kb_metadata.json", kb_meta_data)
+        await self._report_progress(
+            progress_callback, "kb_metadata", 100, 100, "知识库元数据导出完成"
+        )
+
+        kb_insts = self.kb_manager.kb_insts
+        total_kbs = len(kb_insts)
+        for idx, (kb_id, kb_helper) in enumerate(kb_insts.items()):
+            await self._report_progress(
+                progress_callback,
+                "kb_documents",
+                idx,
+                total_kbs,
+                f"正在导出知识库 {kb_helper.kb.kb_name} 的文档数据...",
+            )
+            doc_data = await self._export_kb_documents(kb_helper)
+            self._write_json_entry(zf, f"databases/kb_{kb_id}/documents.json", doc_data)
+            await self._export_faiss_index(zf, kb_helper, kb_id)
+            await self._export_kb_media_files(zf, kb_helper, kb_id)
+
+        await self._report_progress(
+            progress_callback,
+            "kb_documents",
+            total_kbs,
+            total_kbs,
+            "知识库文档导出完成",
+        )
+        return kb_meta_data
+
+    async def _export_config_stage(
+        self,
+        zf: zipfile.ZipFile,
+        progress_callback: Any | None,
+    ) -> None:
+        await self._report_progress(
+            progress_callback, "config", 0, 100, "正在导出配置文件..."
+        )
+        if os.path.exists(self.config_path):
+            with open(self.config_path, encoding="utf-8") as f:
+                config_content = f.read()
+            zf.writestr("config/cmd_config.json", config_content)
+            self._add_checksum("config/cmd_config.json", config_content)
+        await self._report_progress(
+            progress_callback, "config", 100, 100, "配置文件导出完成"
+        )
+
+    async def _export_attachments_stage(
+        self,
+        zf: zipfile.ZipFile,
+        main_data: dict[str, list[dict]],
+        progress_callback: Any | None,
+    ) -> None:
+        await self._report_progress(
+            progress_callback, "attachments", 0, 100, "正在导出附件..."
+        )
+        await self._export_attachments(zf, main_data.get("attachments", []))
+        await self._report_progress(
+            progress_callback, "attachments", 100, 100, "附件导出完成"
+        )
+
+    async def _export_directories_stage(
+        self,
+        zf: zipfile.ZipFile,
+        progress_callback: Any | None,
+    ) -> dict[str, dict[str, int]]:
+        await self._report_progress(
+            progress_callback, "directories", 0, 100, "正在导出插件和数据目录..."
+        )
+        dir_stats = await self._export_directories(zf)
+        await self._report_progress(
+            progress_callback, "directories", 100, 100, "目录导出完成"
+        )
+        return dir_stats
+
+    async def _write_manifest_stage(
+        self,
+        zf: zipfile.ZipFile,
+        main_data: dict[str, list[dict]],
+        kb_meta_data: dict[str, Any],
+        dir_stats: dict[str, dict[str, int]],
+        progress_callback: Any | None,
+    ) -> None:
+        await self._report_progress(
+            progress_callback, "manifest", 0, 100, "正在生成清单..."
+        )
+        manifest = self._generate_manifest(main_data, kb_meta_data, dir_stats)
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        await self._report_progress(
+            progress_callback, "manifest", 100, 100, "清单生成完成"
+        )
+
     async def export_all(
         self,
         output_dir: str | None = None,
@@ -93,105 +237,20 @@ class AstrBotExporter:
 
         try:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                # 1. 导出主数据库
-                if progress_callback:
-                    await progress_callback("main_db", 0, 100, "正在导出主数据库...")
-                main_data = await self._export_main_database()
-                main_db_json = json.dumps(
-                    main_data, ensure_ascii=False, indent=2, default=str
+                main_data = await self._export_main_database_stage(
+                    zf, progress_callback
                 )
-                zf.writestr("databases/main_db.json", main_db_json)
-                self._add_checksum("databases/main_db.json", main_db_json)
-                if progress_callback:
-                    await progress_callback("main_db", 100, 100, "主数据库导出完成")
-
-                # 2. 导出知识库数据
-                kb_meta_data: dict[str, Any] = {
-                    "knowledge_bases": [],
-                    "kb_documents": [],
-                    "kb_media": [],
-                }
-                if self.kb_manager:
-                    if progress_callback:
-                        await progress_callback(
-                            "kb_metadata", 0, 100, "正在导出知识库元数据..."
-                        )
-                    kb_meta_data = await self._export_kb_metadata()
-                    kb_meta_json = json.dumps(
-                        kb_meta_data, ensure_ascii=False, indent=2, default=str
-                    )
-                    zf.writestr("databases/kb_metadata.json", kb_meta_json)
-                    self._add_checksum("databases/kb_metadata.json", kb_meta_json)
-                    if progress_callback:
-                        await progress_callback(
-                            "kb_metadata", 100, 100, "知识库元数据导出完成"
-                        )
-
-                    # 导出每个知识库的文档数据
-                    kb_insts = self.kb_manager.kb_insts
-                    total_kbs = len(kb_insts)
-                    for idx, (kb_id, kb_helper) in enumerate(kb_insts.items()):
-                        if progress_callback:
-                            await progress_callback(
-                                "kb_documents",
-                                idx,
-                                total_kbs,
-                                f"正在导出知识库 {kb_helper.kb.kb_name} 的文档数据...",
-                            )
-                        doc_data = await self._export_kb_documents(kb_helper)
-                        doc_json = json.dumps(
-                            doc_data, ensure_ascii=False, indent=2, default=str
-                        )
-                        doc_path = f"databases/kb_{kb_id}/documents.json"
-                        zf.writestr(doc_path, doc_json)
-                        self._add_checksum(doc_path, doc_json)
-
-                        # 导出 FAISS 索引文件
-                        await self._export_faiss_index(zf, kb_helper, kb_id)
-
-                        # 导出知识库多媒体文件
-                        await self._export_kb_media_files(zf, kb_helper, kb_id)
-
-                    if progress_callback:
-                        await progress_callback(
-                            "kb_documents", total_kbs, total_kbs, "知识库文档导出完成"
-                        )
-
-                # 3. 导出配置文件
-                if progress_callback:
-                    await progress_callback("config", 0, 100, "正在导出配置文件...")
-                if os.path.exists(self.config_path):
-                    with open(self.config_path, encoding="utf-8") as f:
-                        config_content = f.read()
-                    zf.writestr("config/cmd_config.json", config_content)
-                    self._add_checksum("config/cmd_config.json", config_content)
-                if progress_callback:
-                    await progress_callback("config", 100, 100, "配置文件导出完成")
-
-                # 4. 导出附件文件
-                if progress_callback:
-                    await progress_callback("attachments", 0, 100, "正在导出附件...")
-                await self._export_attachments(zf, main_data.get("attachments", []))
-                if progress_callback:
-                    await progress_callback("attachments", 100, 100, "附件导出完成")
-
-                # 5. 导出插件和其他目录
-                if progress_callback:
-                    await progress_callback(
-                        "directories", 0, 100, "正在导出插件和数据目录..."
-                    )
-                dir_stats = await self._export_directories(zf)
-                if progress_callback:
-                    await progress_callback("directories", 100, 100, "目录导出完成")
-
-                # 6. 生成 manifest
-                if progress_callback:
-                    await progress_callback("manifest", 0, 100, "正在生成清单...")
-                manifest = self._generate_manifest(main_data, kb_meta_data, dir_stats)
-                manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
-                zf.writestr("manifest.json", manifest_json)
-                if progress_callback:
-                    await progress_callback("manifest", 100, 100, "清单生成完成")
+                kb_meta_data = await self._export_kb_stage(zf, progress_callback)
+                await self._export_config_stage(zf, progress_callback)
+                await self._export_attachments_stage(zf, main_data, progress_callback)
+                dir_stats = await self._export_directories_stage(zf, progress_callback)
+                await self._write_manifest_stage(
+                    zf,
+                    main_data,
+                    kb_meta_data,
+                    dir_stats,
+                    progress_callback,
+                )
 
             logger.info(f"备份导出完成: {zip_path}")
             return zip_path
@@ -415,38 +474,14 @@ class AstrBotExporter:
         """生成备份清单"""
         if dir_stats is None:
             dir_stats = {}
-        # 收集知识库 ID
-        kb_document_tables = {}
-        if self.kb_manager:
-            for kb_id in self.kb_manager.kb_insts.keys():
-                kb_document_tables[kb_id] = "documents"
-
-        # 收集附件文件列表
-        attachment_files = []
-        for attachment in main_data.get("attachments", []):
-            attachment_id = attachment.get("attachment_id", "")
-            path = attachment.get("path", "")
-            if attachment_id and path:
-                ext = os.path.splitext(path)[1]
-                attachment_files.append(f"{attachment_id}{ext}")
-
-        # 收集知识库媒体文件
-        kb_media_files: dict[str, list[str]] = {}
-        if self.kb_manager:
-            for kb_id, kb_helper in self.kb_manager.kb_insts.items():
-                media_files: list[str] = []
-                media_dir = kb_helper.kb_medias_dir
-                if media_dir.exists():
-                    for root, _, files in os.walk(media_dir):
-                        for file in files:
-                            media_files.append(file)
-                if media_files:
-                    kb_media_files[kb_id] = media_files
+        kb_document_tables = self._collect_kb_document_tables()
+        attachment_files = self._collect_attachment_files(main_data)
+        kb_media_files = self._collect_kb_media_files()
 
         manifest = {
             "version": BACKUP_MANIFEST_VERSION,
             "astrbot_version": VERSION,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "origin": "exported",  # 标记备份来源：exported=本实例导出, uploaded=用户上传
             "schema_version": {
                 "main_db": "v4",
@@ -475,3 +510,32 @@ class AstrBotExporter:
         }
 
         return manifest
+
+    def _collect_kb_document_tables(self) -> dict[str, str]:
+        if not self.kb_manager:
+            return {}
+        return dict.fromkeys(self.kb_manager.kb_insts, "documents")
+
+    def _collect_attachment_files(self, main_data: dict[str, list[dict]]) -> list[str]:
+        attachment_files: list[str] = []
+        for attachment in main_data.get("attachments", []):
+            attachment_id = attachment.get("attachment_id", "")
+            path = attachment.get("path", "")
+            if attachment_id and path:
+                attachment_files.append(f"{attachment_id}{os.path.splitext(path)[1]}")
+        return attachment_files
+
+    def _collect_kb_media_files(self) -> dict[str, list[str]]:
+        if not self.kb_manager:
+            return {}
+
+        kb_media_files: dict[str, list[str]] = {}
+        for kb_id, kb_helper in self.kb_manager.kb_insts.items():
+            media_files: list[str] = []
+            media_dir = kb_helper.kb_medias_dir
+            if media_dir.exists():
+                for _, _, files in os.walk(media_dir):
+                    media_files.extend(files)
+            if media_files:
+                kb_media_files[kb_id] = media_files
+        return kb_media_files

@@ -14,9 +14,10 @@
                 <div class="folder-select-tree">
                     <v-list density="compact" nav class="tree-list">
                         <!-- 根目录选项 -->
-                        <v-list-item :active="selectedFolderId === null" @click="selectFolder(null)" rounded="lg"
-                            class="mb-1">
-                            <template v-slot:prepend>
+                        <v-list-item
+:active="selectedFolderId === null" rounded="lg" class="mb-1"
+                            @click="selectFolder(null)">
+                            <template #prepend>
                                 <v-icon>mdi-home</v-icon>
                             </template>
                             <v-list-item-title>{{ tm('folder.rootFolder') }}</v-list-item-title>
@@ -24,7 +25,8 @@
 
                         <!-- 文件夹树 -->
                         <template v-if="!treeLoading">
-                            <MoveTargetNode v-for="folder in availableFolders" :key="folder.folder_id" :folder="folder"
+                            <MoveTargetNode
+v-for="folder in availableFolders" :key="folder.folder_id" :folder="folder"
                                 :depth="0" :selected-folder-id="selectedFolderId" :disabled-folder-ids="disabledFolderIds"
                                 @select="selectFolder" />
                         </template>
@@ -41,7 +43,7 @@
                 <v-btn variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="submitMove" :loading="loading">
+                <v-btn color="primary" variant="flat" :loading="loading" @click="submitMove">
                     {{ tm('buttons.move') }}
                 </v-btn>
             </v-card-actions>
@@ -61,14 +63,12 @@ import type { FolderTreeNode } from '@/components/folder/types';
 interface PersonaItem {
     persona_id: string;
     folder_id?: string | null;
-    [key: string]: any;
 }
 
 interface FolderItem {
     folder_id: string;
     name: string;
     parent_id?: string | null;
-    [key: string]: any;
 }
 
 export default defineComponent({
@@ -124,14 +124,14 @@ export default defineComponent({
         disabledFolderIds(): string[] {
             if (this.itemType !== 'folder' || !this.item) return [];
             return collectFolderAndChildrenIds(
-                this.folderTree as FolderTreeNode[], 
+                this.folderTree, 
                 (this.item as FolderItem).folder_id
             );
         },
 
         // 过滤掉禁用的文件夹
         availableFolders(): FolderTreeNode[] {
-            return this.folderTree as FolderTreeNode[];
+            return this.folderTree;
         }
     },
     watch: {
@@ -148,6 +148,9 @@ export default defineComponent({
     },
     methods: {
         ...mapActions(usePersonaStore, ['movePersonaToFolder', 'moveFolderToFolder']),
+        getErrorMessage(error: unknown, fallback: string): string {
+            return error instanceof Error && error.message ? error.message : fallback;
+        },
 
         selectFolder(folderId: string | null) {
             // 检查是否禁用
@@ -177,8 +180,8 @@ export default defineComponent({
                 }
                 this.$emit('moved', this.tm('moveDialog.success'));
                 this.closeDialog();
-            } catch (error: any) {
-                this.$emit('error', error.message || this.tm('moveDialog.error'));
+            } catch (error) {
+                this.$emit('error', this.getErrorMessage(error, this.tm('moveDialog.error')));
             } finally {
                 this.loading = false;
             }

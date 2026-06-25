@@ -9,6 +9,10 @@ export function useCommandActions(
   toast: (message: string, color?: string) => void,
   fetchCommands: () => Promise<void>
 ) {
+  const getErrorMessage = (error: unknown, fallback: string) => (
+    error instanceof Error && error.message ? error.message : fallback
+  );
+
   // 重命名对话框状态
   const renameDialog = reactive<RenameDialogState>({
     show: false,
@@ -42,8 +46,8 @@ export function useCommandActions(
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+    } catch (err) {
+      toast(getErrorMessage(err, errorMessage), 'error');
     }
   };
 
@@ -76,8 +80,8 @@ export function useCommandActions(
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+    } catch (err) {
+      toast(getErrorMessage(err, errorMessage), 'error');
     } finally {
       renameDialog.loading = false;
     }
@@ -177,8 +181,8 @@ export function useCommandActions(
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+    } catch (err) {
+      toast(getErrorMessage(err, errorMessage), 'error');
     }
   };
 

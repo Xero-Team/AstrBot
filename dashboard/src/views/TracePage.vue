@@ -40,7 +40,7 @@ const updateTraceSettings = async () => {
 };
 
 onMounted(() => {
-  fetchTraceSettings();
+  void fetchTraceSettings();
 });
 </script>
 

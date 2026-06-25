@@ -31,7 +31,8 @@
             <v-card>
                 <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
                 <v-card-text>
-                    <v-text-field v-model="renameDialog.name" :label="tm('folder.form.name')"
+                    <v-text-field
+v-model="renameDialog.name" :label="tm('folder.form.name')"
                         :rules="[v => !!v || tm('folder.validation.nameRequired')]" variant="outlined"
                         density="comfortable" autofocus @keyup.enter="submitRename" />
                 </v-card-text>
@@ -40,8 +41,9 @@
                     <v-btn variant="text" @click="renameDialog.show = false">
                         {{ tm('buttons.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" variant="flat" @click="submitRename" :loading="renameDialog.loading"
-                        :disabled="!renameDialog.name">
+                    <v-btn
+color="primary" variant="flat" :loading="renameDialog.loading" :disabled="!renameDialog.name"
+                        @click="submitRename">
                         {{ tm('buttons.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -67,7 +69,7 @@
                     <v-btn variant="text" @click="deleteDialog.show = false">
                         {{ tm('buttons.cancel') }}
                     </v-btn>
-                    <v-btn color="error" variant="flat" @click="submitDelete" :loading="deleteDialog.loading">
+                    <v-btn color="error" variant="flat" :loading="deleteDialog.loading" @click="submitDelete">
                         {{ tm('buttons.delete') }}
                     </v-btn>
                 </v-card-actions>
@@ -83,25 +85,6 @@ import { usePersonaStore } from '@/stores/personaStore';
 import { mapState, mapActions } from 'pinia';
 import BaseFolderTree from '@/components/folder/BaseFolderTree.vue';
 import type { FolderTreeNode as FolderTreeNodeType } from '@/components/folder/types';
-
-interface ContextMenuState {
-    show: boolean;
-    target: [number, number] | null;
-    folder: FolderTreeNodeType | null;
-}
-
-interface RenameDialogState {
-    show: boolean;
-    folder: FolderTreeNodeType | null;
-    name: string;
-    loading: boolean;
-}
-
-interface DeleteDialogState {
-    show: boolean;
-    folder: FolderTreeNodeType | null;
-    loading: boolean;
-}
 
 export default defineComponent({
     name: 'FolderTree',
@@ -121,18 +104,18 @@ export default defineComponent({
                 show: false,
                 target: null,
                 folder: null
-            } as ContextMenuState,
+            },
             renameDialog: {
                 show: false,
-                folder: null,
+                folder: null as FolderTreeNodeType | null,
                 name: '',
                 loading: false
-            } as RenameDialogState,
+            },
             deleteDialog: {
                 show: false,
-                folder: null,
+                folder: null as FolderTreeNodeType | null,
                 loading: false
-            } as DeleteDialogState
+            }
         };
     },
     computed: {
@@ -140,14 +123,17 @@ export default defineComponent({
 
         filteredFolderTree(): FolderTreeNodeType[] {
             if (!this.searchQuery) {
-                return this.folderTree as FolderTreeNodeType[];
+                return this.folderTree;
             }
             const query = this.searchQuery.toLowerCase();
-            return this.filterTreeBySearch(this.folderTree as FolderTreeNodeType[], query);
+            return this.filterTreeBySearch(this.folderTree, query);
         }
     },
     methods: {
         ...mapActions(usePersonaStore, ['navigateToFolder', 'updateFolder', 'deleteFolder', 'toggleFolderExpansion', 'setFolderExpansion']),
+        getErrorMessage(error: unknown, fallback: string): string {
+            return error instanceof Error && error.message ? error.message : fallback;
+        },
         filterTreeBySearch(nodes: FolderTreeNodeType[], query: string): FolderTreeNodeType[] {
             return nodes.filter(node => {
                 const matches = node.name.toLowerCase().includes(query);
@@ -160,7 +146,7 @@ export default defineComponent({
         },
 
         handleFolderClick(folderId: string | null) {
-            this.navigateToFolder(folderId);
+            void this.navigateToFolder(folderId);
         },
 
         // rename event from BaseFolderTree
@@ -176,7 +162,7 @@ export default defineComponent({
             this.deleteDialog.show = true;
         },
 
-        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
+        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: unknown }) {
             if (data.item_type === 'persona') {
                 this.$emit('persona-dropped', {
                     persona_id: data.item_id,
@@ -196,8 +182,8 @@ export default defineComponent({
                 });
                 this.$emit('success', this.tm('folder.messages.renameSuccess'));
                 this.renameDialog.show = false;
-            } catch (error: any) {
-                this.$emit('error', error.message || this.tm('folder.messages.renameError'));
+            } catch (error) {
+                this.$emit('error', this.getErrorMessage(error, this.tm('folder.messages.renameError')));
             } finally {
                 this.renameDialog.loading = false;
             }
@@ -211,8 +197,8 @@ export default defineComponent({
                 await this.deleteFolder(this.deleteDialog.folder.folder_id);
                 this.$emit('success', this.tm('folder.messages.deleteSuccess'));
                 this.deleteDialog.show = false;
-            } catch (error: any) {
-                this.$emit('error', error.message || this.tm('folder.messages.deleteError'));
+            } catch (error) {
+                this.$emit('error', this.getErrorMessage(error, this.tm('folder.messages.deleteError')));
             } finally {
                 this.deleteDialog.loading = false;
             }

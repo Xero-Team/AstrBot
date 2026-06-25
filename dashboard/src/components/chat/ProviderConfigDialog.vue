@@ -28,7 +28,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 const dialog = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
+  set: (val) => { emit('update:modelValue', val); }
 })
 </script>
 

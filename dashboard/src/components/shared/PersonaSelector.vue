@@ -1,9 +1,8 @@
 <template>
   <BaseFolderItemSelector
     :model-value="modelValue"
-    @update:model-value="handleUpdate"
     :folder-tree="folderTree"
-    :items="currentPersonas as any"
+    :items="currentPersonas"
     :tree-loading="treeLoading"
     :items-loading="itemsLoading"
     :labels="labels"
@@ -12,6 +11,7 @@
     :default-item="defaultPersona"
     item-id-field="persona_id"
     item-name-field="persona_id"
+    @update:model-value="handleUpdate"
     item-description-field="system_prompt"
     :display-value-formatter="formatDisplayValue"
     @navigate="handleNavigate"
@@ -37,13 +37,14 @@ import PersonaForm from './PersonaForm.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import type { FolderTreeNode, SelectableItem } from '@/components/folder/types'
 
-interface Persona {
+interface PersonaApiRecord {
   persona_id: string
   system_prompt: string
   custom_error_message?: string | null
   folder_id?: string | null
-  [key: string]: any
 }
+
+type PersonaSelectableItem = SelectableItem & PersonaApiRecord
 
 const props = defineProps({
   modelValue: {
@@ -62,11 +63,11 @@ const { tm } = useModuleI18n('core.shared')
 
 // 状态
 const folderTree = ref<FolderTreeNode[]>([])
-const currentPersonas = ref<Persona[]>([])
+const currentPersonas = ref<PersonaSelectableItem[]>([])
 const treeLoading = ref(false)
 const itemsLoading = ref(false)
 const showPersonaDialog = ref(false)
-const editingPersona = ref<Persona | null>(null)
+const editingPersona = ref<PersonaSelectableItem | null>(null)
 const currentFolderId = ref<string | null>(null)
 
 // 默认人格
@@ -150,7 +151,13 @@ async function loadPersonasInFolder(folderId: string | null) {
   try {
     const response = await personaApi.list(folderId)
     if (response.data.status === 'ok') {
-      currentPersonas.value = response.data.data || []
+      const personas = Array.isArray(response.data.data) ? (response.data.data as PersonaApiRecord[]) : []
+      currentPersonas.value = personas.map((persona) => ({
+        ...persona,
+        id: persona.persona_id,
+        name: persona.persona_id,
+        description: persona.system_prompt,
+      }))
     }
   } catch (error) {
     console.error('加载人格列表失败:', error)
@@ -173,7 +180,7 @@ function openCreatePersona() {
 }
 
 // 打开编辑人格对话框
-function openEditPersona(persona: Persona) {
+function openEditPersona(persona: PersonaSelectableItem) {
   editingPersona.value = persona
   showPersonaDialog.value = true
 }
@@ -200,7 +207,7 @@ function handleError(error: string) {
 
 // 初始化加载文件夹树
 onMounted(() => {
-  loadFolderTree()
+  void loadFolderTree()
 })
 </script>
 

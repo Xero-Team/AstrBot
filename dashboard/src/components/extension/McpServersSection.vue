@@ -30,7 +30,7 @@
           <div class="mcp-server-tools text-caption text-medium-emphasis">
             <template v-if="server.tools && server.tools.length > 0">
               <v-dialog max-width="600px">
-                <template v-slot:activator="{ props: listToolsProps }">
+                <template #activator="{ props: listToolsProps }">
                   <button
                     v-bind="listToolsProps"
                     class="mcp-server-tools__button"
@@ -46,7 +46,7 @@
                     ({{ server.tools.length }})
                   </button>
                 </template>
-                <template v-slot:default="{ isActive }">
+                <template #default="{ isActive }">
                   <v-card style="padding: 16px;">
                     <v-card-title class="d-flex align-center">
                       <span>{{ tm('mcpServers.status.availableTools') }}</span>
@@ -170,21 +170,23 @@
         </v-card-title>
 
         <v-card-text class="py-4">
-          <v-form @submit.prevent="saveServer" ref="form">
-            <v-text-field v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined"
+          <v-form ref="form" @submit.prevent="saveServer">
+            <v-text-field
+v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined"
               :rules="[v => !!v || tm('dialogs.addServer.fields.nameRequired')]" required class="mb-3"></v-text-field>
 
             <div class="mb-2 d-flex align-center">
               <span class="text-subtitle-1">{{ tm('dialogs.addServer.fields.config') }}</span>
               <v-spacer></v-spacer>
-              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('stdio')" class="me-1">
+              <v-btn size="small" color="primary" variant="tonal" class="me-1" @click="setConfigTemplate('stdio')">
                 {{ tm('mcpServers.buttons.useTemplateStdio') }}
               </v-btn>
-              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('streamable_http')"
-                class="me-1">
+              <v-btn
+size="small" color="primary" variant="tonal" class="me-1"
+                @click="setConfigTemplate('streamable_http')">
                 {{ tm('mcpServers.buttons.useTemplateStreamableHttp') }}
               </v-btn>
-              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('sse')" class="me-1">
+              <v-btn size="small" color="primary" variant="tonal" class="me-1" @click="setConfigTemplate('sse')">
                 {{ tm('mcpServers.buttons.useTemplateSse') }}
               </v-btn>
             </div>
@@ -196,7 +198,8 @@
             </v-alert>
 
             <div class="monaco-container" style="margin-top: 16px;">
-              <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
+              <VueMonacoEditor
+v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
                 minimap: {
                   enabled: false
                 },
@@ -222,13 +225,13 @@
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeServerDialog" :disabled="loading">
+          <v-btn variant="text" :disabled="loading" @click="closeServerDialog">
             {{ tm('dialogs.addServer.buttons.cancel') }}
           </v-btn>
-          <v-btn variant="text" @click="testServerConnection" :disabled="loading">
+          <v-btn variant="text" :disabled="loading" @click="testServerConnection">
             {{ tm('dialogs.addServer.buttons.testConnection') }}
           </v-btn>
-          <v-btn color="primary" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
+          <v-btn color="primary" :loading="loading" :disabled="!isServerFormValid" @click="saveServer">
             {{ tm('dialogs.addServer.buttons.save') }}
           </v-btn>
         </v-card-actions>
@@ -243,7 +246,8 @@
         </v-card-title>
 
         <v-card-text class="py-4">
-          <v-select v-model="selectedMcpServerProvider" :items="mcpServerProviderList"
+          <v-select
+v-model="selectedMcpServerProvider" :items="mcpServerProviderList"
             label="选择平台" variant="outlined" required></v-select>
           <div v-if="selectedMcpServerProvider === 'modelscope'">
             <v-timeline align="start" side="end">
@@ -271,7 +275,8 @@
                   <p class="mt-2">
                     输入您的访问令牌以同步 MCP 服务器。
                   </p>
-                  <v-text-field v-model="mcpProviderToken" type="password" variant="outlined"
+                  <v-text-field
+v-model="mcpProviderToken" type="password" variant="outlined"
                     label="访问令牌" class="mt-2" hide-details/>
                 </div>
               </v-timeline-item>
@@ -281,10 +286,10 @@
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showSyncMcpServerDialog = false" :disabled="loading">
+          <v-btn variant="text" :disabled="loading" @click="showSyncMcpServerDialog = false">
             {{ tm('dialogs.addServer.buttons.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="syncMcpServers" :loading="loading" :disabled="loading">
+          <v-btn color="primary" :loading="loading" :disabled="loading" @click="syncMcpServers">
             {{ tm('dialogs.addServer.buttons.sync') }}
           </v-btn>
         </v-card-actions>
@@ -292,7 +297,7 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack" location="top">
+    <v-snackbar v-model="save_message_snack" :timeout="3000" elevation="24" :color="save_message_success" location="top">
       {{ save_message }}
     </v-snackbar>
   </div>
@@ -350,7 +355,7 @@ export default {
   },
   computed: {
     isServerFormValid() {
-      return !!this.currentServer.name && !this.jsonError;
+      return Boolean(this.currentServer.name) && !this.jsonError;
     },
     getServerConfigSummary() {
       return (server) => {

@@ -56,7 +56,7 @@
                 v-if="basicSourceConfig"
                 :iterable="basicSourceConfig"
                 :metadata="providerSourceSchema"
-                metadataKey="provider"
+                metadata-key="provider"
                 :is-editing="true"
               />
             </section>
@@ -70,7 +70,7 @@
               <AstrBotConfig
                 :iterable="advancedSourceConfig"
                 :metadata="providerSourceSchema"
-                metadataKey="provider"
+                metadata-key="provider"
                 :is-editing="true"
               />
             </section>
@@ -79,9 +79,9 @@
 
             <section class="provider-section provider-section--models">
               <ProviderModelsPanel
+                v-model:model-search="modelSearch"
                 :entries="filteredMergedModelEntries"
                 :available-count="availableModels.length"
-                v-model:model-search="modelSearch"
                 :loading-models="loadingModels"
                 :is-source-modified="isSourceModified"
                 :supports-image-input="supportsImageInput"
@@ -146,7 +146,7 @@
             v-if="providerEditData"
             :iterable="providerEditData"
             :metadata="providerModelConfigSchema"
-            metadataKey="provider"
+            metadata-key="provider"
             :is-editing="true"
           />
         </v-card-text>

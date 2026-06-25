@@ -6,7 +6,7 @@ import AuthStageAccount from './stages/AuthStageAccount.vue';
 import AuthStageTotp from './stages/AuthStageTotp.vue';
 import AuthStageRecovery from './stages/AuthStageRecovery.vue';
 
-const { tm: t } = useModuleI18n('features/auth');
+useModuleI18n('features/auth');
 const authStore = useAuthStore();
 
 const username = ref('');
@@ -47,13 +47,12 @@ async function submitAccountStage() {
   loading.value = true;
   apiError.value = '';
   try {
-    // @ts-ignore
     authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
     const res = await authStore.login(username.value, password.value);
     if (res === 'totp_required') {
       goToTotpStage();
     } else if (res === 'upgrade_recovery_required') {
-      return;
+      goToRecoveryStage();
     }
   } catch (err) {
     apiError.value = String(err || '') || 'Login failed';

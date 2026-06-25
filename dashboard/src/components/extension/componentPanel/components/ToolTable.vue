@@ -76,6 +76,7 @@ const getPermissionColor = (permission?: string): string => {
   switch (permission) {
     case 'admin':
       return 'error';
+    case undefined:
     default:
       return 'success';
   }
@@ -85,6 +86,7 @@ const getPermissionLabel = (permission?: string): string => {
   switch (permission) {
     case 'admin':
       return tmTool('functionTools.table.permissionAdmin');
+    case undefined:
     default:
       return tmTool('functionTools.table.permissionEveryone');
   }
@@ -170,7 +172,7 @@ const getPermissionLabel = (permission?: string): string => {
         </v-chip>
         <!-- Other tools: clickable dropdown -->
         <v-menu v-else location="bottom">
-          <template v-slot:activator="{ props: menuProps }">
+          <template #activator="{ props: menuProps }">
             <v-chip
               v-bind="menuProps"
               :color="getPermissionColor(item.permission)"
@@ -185,15 +187,15 @@ const getPermissionLabel = (permission?: string): string => {
           <v-list density="compact">
             <v-list-item
               :value="'member'"
-              @click="emit('update-permission', item, 'member')"
               :active="item.permission !== 'admin'"
+              @click="emit('update-permission', item, 'member')"
             >
               <v-list-item-title>{{ tmTool('functionTools.table.permissionEveryone') }}</v-list-item-title>
             </v-list-item>
             <v-list-item
               :value="'admin'"
-              @click="emit('update-permission', item, 'admin')"
               :active="item.permission === 'admin'"
+              @click="emit('update-permission', item, 'admin')"
             >
               <v-list-item-title>{{ tmTool('functionTools.table.permissionAdmin') }}</v-list-item-title>
             </v-list-item>

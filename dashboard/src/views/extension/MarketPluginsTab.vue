@@ -13,141 +13,29 @@ const props = defineProps({
 });
 
 const {
-  commonStore,
-  t,
   tm,
   router,
-  route,
-  getSelectedGitHubProxy,
-  conflictDialog,
-  checkAndPromptConflicts,
-  handleConflictConfirm,
-  fileInput,
   activeTab,
-  validTabs,
-  isValidTab,
-  getLocationHash,
-  extractTabFromHash,
-  syncTabFromHash,
-  extension_data,
-  getInitialShowReserved,
-  showReserved,
-  snack_message,
-  snack_show,
-  snack_success,
-  configDialog,
-  extension_config,
   pluginMarketData,
-  loadingDialog,
-  curr_namespace,
-  updatingAll,
-  readmeDialog,
-  forceUpdateDialog,
-  updateAllConfirmDialog,
-  changelogDialog,
-  getInitialListViewMode,
-  isListView,
-  pluginSearch,
   loading_,
   currentPage,
-  dangerConfirmDialog,
-  selectedDangerPlugin,
-  selectedMarketInstallPlugin,
-  installSupport,
-  versionSupportDialog,
-  showUninstallDialog,
-  uninstallTarget,
-  showSourceDialog,
-  showSourceManagerDialog,
-  sourceName,
-  sourceUrl,
   customSources,
   selectedSource,
-  showRemoveSourceDialog,
-  sourceToRemove,
-  editingSource,
-  originalSourceUrl,
-  extension_url,
-  dialog,
-  upload_file,
-  uploadTab,
   showPluginFullName,
   marketSearch,
-  debouncedMarketSearch,
   refreshingMarket,
   sortBy,
   sortOrder,
-  randomPluginNames,
   marketCategoryFilter,
   marketCategoryItems,
-  normalizeStr,
-  toPinyinText,
-  toInitials,
-  pluginHeaders,
-  filteredExtensions,
-  filteredPlugins,
-  filteredMarketPlugins,
-  sortedPlugins,
-  RANDOM_PLUGINS_COUNT,
   randomPlugins,
-  shufflePlugins,
   refreshRandomPlugins,
-  displayItemsPerPage,
   totalPages,
   paginatedPlugins,
-  updatableExtensions,
-  toggleShowReserved,
-  toast,
-  resetLoadingDialog,
-  onLoadingDialogResult,
-  failedPluginsDict,
-  getExtensions,
-  handleReloadAllFailed,
-  checkUpdate,
-  uninstallExtension,
-  handleUninstallConfirm,
-  updateExtension,
-  showUpdateAllConfirm,
-  confirmUpdateAll,
-  cancelUpdateAll,
-  confirmForceUpdate,
-  updateAllExtensions,
-  pluginOn,
-  pluginOff,
-  openExtensionConfig,
-  updateConfig,
-  showPluginInfo,
-  reloadPlugin,
-  viewReadme,
-  viewChangelog,
   openInstallDialog,
   handleInstallPlugin,
-  confirmDangerInstall,
-  cancelDangerInstall,
-  loadCustomSources,
-  saveCustomSources,
-  addCustomSource,
   openSourceManagerDialog,
-  selectPluginSource,
-  sourceSelectItems,
-  editCustomSource,
-  removeCustomSource,
-  confirmRemoveSource,
-  saveCustomSource,
-  trimExtensionName,
-  checkAlreadyInstalled,
-  showVersionSupportWarning,
-  continueInstallIgnoringVersionWarning,
-  cancelInstallOnVersionWarning,
-  newExtension,
-  normalizePlatformList,
-  getPlatformDisplayList,
-  resolveSelectedInstallPlugin,
-  selectedInstallPlugin,
-  checkInstallVersionSupport,
   refreshPluginMarket,
-  handleLocaleChange,
-  searchDebounceTimer,
 } = props.state;
 
 const currentSourceName = computed(() => {
@@ -192,9 +80,9 @@ const openMarketPluginDetail = (plugin) => {
           <h2 class="text-h2 mb-0">{{ tm("tabs.market") }}</h2>
 
           <v-tooltip location="top" :text="tm('market.sourceManagement')">
-            <template v-slot:activator="{ props }">
+            <template #activator="{ props: activatorProps }">
               <v-btn
-                v-bind="props"
+                v-bind="activatorProps"
                 variant="tonal"
                 rounded="md"
                 color="primary"
@@ -212,7 +100,6 @@ const openMarketPluginDetail = (plugin) => {
 
         <v-text-field
           :model-value="marketSearch"
-          @update:model-value="marketSearch = normalizeTextInput($event)"
           class="ml-auto"
           density="compact"
           :label="tm('search.marketPlaceholder')"
@@ -223,6 +110,7 @@ const openMarketPluginDetail = (plugin) => {
           hide-details
           single-line
           style="width: 340px; min-width: 220px; max-width: 340px"
+          @update:model-value="marketSearch = normalizeTextInput($event)"
         >
         </v-text-field>
       </div>
@@ -240,9 +128,9 @@ const openMarketPluginDetail = (plugin) => {
 
     <!-- FAB Button -->
     <v-tooltip :text="tm('market.installPlugin')" location="left">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props: tooltipProps }">
         <button
-          v-bind="props"
+          v-bind="tooltipProps"
           type="button"
           class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
           style="
@@ -279,9 +167,9 @@ const openMarketPluginDetail = (plugin) => {
           <v-btn
             icon
             variant="text"
-            @click="refreshPluginMarket"
             :loading="loading_ || refreshingMarket"
             :disabled="loading_ || refreshingMarket"
+            @click="refreshPluginMarket"
           >
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
@@ -334,7 +222,7 @@ const openMarketPluginDetail = (plugin) => {
         </v-col>
       </v-row>
 
-      <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
+      <div v-if="totalPages > 1" class="d-flex justify-center mt-4">
         <v-pagination
           v-model="currentPage"
           :length="totalPages"

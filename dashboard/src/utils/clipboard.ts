@@ -12,10 +12,13 @@ export async function copyToClipboard(
     trimmedLength: text?.trim().length ?? 0,
     isSecureContext: typeof window !== "undefined" ? window.isSecureContext : false,
     hasClipboardApi:
-      typeof navigator !== "undefined" && !!navigator.clipboard?.writeText,
+      typeof navigator !== "undefined" && Boolean(navigator.clipboard?.writeText),
     containerTag: container?.tagName ?? null,
     containerInBody:
-      typeof document !== "undefined" && !!container && document.body.contains(container),
+      typeof document !== "undefined" &&
+      container !== null &&
+      container !== undefined &&
+      document.body.contains(container),
   };
 
   if (!text) {
@@ -85,7 +88,7 @@ function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
     }
     if (selection) {
       selection.removeAllRanges();
-      selectedRanges.forEach((range) => selection.addRange(range));
+      selectedRanges.forEach((range) => { selection.addRange(range); });
     }
     activeElement?.focus?.();
   }

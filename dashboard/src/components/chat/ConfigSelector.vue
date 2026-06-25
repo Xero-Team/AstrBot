@@ -3,10 +3,10 @@
         <v-list-item
             class="styled-menu-item"
             rounded="md"
-            @click="openDialog"
             :disabled="loadingConfigs || saving"
+            @click="openDialog"
         >
-            <template v-slot:prepend>
+            <template #prepend>
                 <v-icon icon="mdi-cog-outline" size="small"></v-icon>
             </template>
             <v-list-item-title>
@@ -15,7 +15,7 @@
             <v-list-item-subtitle class="text-caption">
                 {{ selectedConfigLabel }}
             </v-list-item-subtitle>
-            <template v-slot:append>
+            <template #append>
                 <v-icon icon="mdi-chevron-right" size="small" class="text-medium-emphasis"></v-icon>
             </template>
         </v-list-item>
@@ -60,9 +60,9 @@
                     <v-btn variant="text" @click="closeDialog">取消</v-btn>
                     <v-btn
                         color="primary"
-                        @click="confirmSelection"
                         :disabled="!tempSelectedConfig"
                         :loading="saving"
+                        @click="confirmSelection"
                     >
                         应用
                     </v-btn>
@@ -88,9 +88,31 @@ interface ConfigInfo {
     name: string;
 }
 
+interface ConfigProfileInfo {
+    id?: string;
+    name?: string;
+}
+
 interface ConfigChangedPayload {
     configId: string;
     agentRunnerType: string;
+}
+
+interface DashboardConfigProfile {
+    provider_settings?: {
+        agent_runner_type?: string;
+    };
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    if (!error || typeof error !== 'object') {
+        return fallback;
+    }
+    const errorLike = error as {
+        message?: string;
+        response?: { data?: { message?: string } };
+    };
+    return errorLike.response?.data?.message || errorLike.message || fallback;
 }
 
 const props = withDefaults(defineProps<{
@@ -126,8 +148,6 @@ const normalizedSessionId = computed(() => {
     const id = props.sessionId?.trim();
     return id ? id : null;
 });
-
-const hasActiveSession = computed(() => !!normalizedSessionId.value);
 
 const messageType = computed(() => (props.isGroup ? 'GroupMessage' : 'FriendMessage'));
 
@@ -165,7 +185,8 @@ async function fetchConfigList() {
     loadingConfigs.value = true;
     try {
         const res = await configProfileApi.list();
-        configOptions.value = (res.data.data?.info_list || []).map((item: any) => ({
+        const infoList = Array.isArray(res.data.data?.info_list) ? (res.data.data.info_list as ConfigProfileInfo[]) : [];
+        configOptions.value = infoList.map((item) => ({
             id: String(item.id || ''),
             name: String(item.name || item.id || 'default')
         }));
@@ -183,7 +204,7 @@ async function fetchRoutingEntries() {
         const routing = res.data.data?.routing || {};
         routingEntries.value = Object.entries(routing).map(([pattern, confId]) => ({
             pattern,
-            confId: confId as string
+            confId
         }));
     } catch (error) {
         console.error('获取配置路由失败', error);
@@ -218,7 +239,8 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     }
     try {
         const res = await configProfileApi.get(confId);
-        const config = ((res.data.data as any).config || {}) as any;
+        const payload = res.data.data as { config?: DashboardConfigProfile } | undefined;
+        const config = payload?.config || {};
         const type = config?.provider_settings?.agent_runner_type || 'local';
         configCache.value[confId] = type;
         return type;
@@ -254,9 +276,8 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
         routingEntries.value = filtered;
         return true;
     } catch (error) {
-        const err = error as any;
-        console.error('更新配置文件失败', err);
-        toast.error(err?.response?.data?.message || '配置文件应用失败');
+        console.error('更新配置文件失败', error);
+        toast.error(getErrorMessage(error, '配置文件应用失败'));
         return false;
     } finally {
         saving.value = false;

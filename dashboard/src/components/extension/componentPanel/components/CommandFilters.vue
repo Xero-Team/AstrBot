@@ -62,45 +62,45 @@ const statusItems = [
     <v-col cols="12" sm="6" md="3">
       <v-select
         :model-value="pluginFilter"
-        @update:model-value="emit('update:pluginFilter', $event)"
         :items="pluginItems"
         :label="tm('filters.byPlugin')"
         density="compact"
         variant="outlined"
         hide-details
+        @update:model-value="emit('update:pluginFilter', $event)"
       />
     </v-col>
     <v-col cols="12" sm="6" md="2">
       <v-select
         :model-value="typeFilter"
-        @update:model-value="emit('update:typeFilter', $event)"
         :items="typeItems"
         :label="tm('filters.byType')"
         density="compact"
         variant="outlined"
         hide-details
+        @update:model-value="emit('update:typeFilter', $event)"
       />
     </v-col>
     <v-col cols="12" sm="6" md="2">
       <v-select
         :model-value="permissionFilter"
-        @update:model-value="emit('update:permissionFilter', $event)"
         :items="permissionItems"
         :label="tm('filters.byPermission')"
         density="compact"
         variant="outlined"
         hide-details
+        @update:model-value="emit('update:permissionFilter', $event)"
       />
     </v-col>
     <v-col cols="12" sm="6" md="2">
       <v-select
         :model-value="statusFilter"
-        @update:model-value="emit('update:statusFilter', $event)"
         :items="statusItems"
         :label="tm('filters.byStatus')"
         density="compact"
         variant="outlined"
         hide-details
+        @update:model-value="emit('update:statusFilter', $event)"
       />
     </v-col>
   </v-row>
@@ -110,7 +110,6 @@ const statusItems = [
     <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
       <v-text-field
         :model-value="searchQuery"
-        @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"
         density="compact"
         :label="tm('search.placeholder')"
         prepend-inner-icon="mdi-magnify"
@@ -119,6 +118,7 @@ const statusItems = [
         flat
         hide-details
         single-line
+        @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"
       />
     </div>
     <div class="d-flex align-center ga-4">
@@ -126,17 +126,17 @@ const statusItems = [
       <v-divider vertical class="mx-1" style="height: 20px;" />
       <v-checkbox
         :model-value="effectiveShowSystemPlugins"
-        @update:model-value="emit('update:showSystemPlugins', !!$event)"
         :label="tm('filters.showSystemPlugins')"
         density="compact"
         hide-details
         :disabled="hasSystemPluginConflict"
         class="system-plugin-checkbox"
+        @update:model-value="emit('update:showSystemPlugins', !!$event)"
       >
-        <template v-slot:label>
+        <template #label>
           <span class="text-body-2">{{ tm('filters.showSystemPlugins') }}</span>
           <v-tooltip v-if="hasSystemPluginConflict" location="top">
-            <template v-slot:activator="{ props: tooltipProps }">
+            <template #activator="{ props: tooltipProps }">
               <v-icon v-bind="tooltipProps" size="16" color="warning" class="ml-1">mdi-alert-circle</v-icon>
             </template>
             {{ tm('filters.systemPluginConflictHint') }}

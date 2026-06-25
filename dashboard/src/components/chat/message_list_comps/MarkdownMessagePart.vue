@@ -32,7 +32,7 @@ const refsByIndex = computed(() => {
   const refs =
     messageRefs && Array.isArray(messageRefs.used) ? messageRefs.used : [];
   return refs.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
-    if (item.index != null) {
+    if (item.index !== null && item.index !== undefined) {
       acc[String(item.index)] = item;
     }
     return acc;

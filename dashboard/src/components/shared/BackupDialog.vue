@@ -31,12 +31,12 @@
                             <h3 class="mb-4">{{ t('features.settings.backup.export.title') }}</h3>
                             <p class="mb-4 text-grey">{{ t('features.settings.backup.export.description') }}</p>
                             <v-alert type="info" variant="tonal" class="mb-4 text-left">
-                                <template v-slot:prepend>
+                                <template #prepend>
                                     <v-icon>mdi-information</v-icon>
                                 </template>
                                 {{ t('features.settings.backup.export.includes') }}
                             </v-alert>
-                            <v-btn color="primary" size="large" @click="startExport" :loading="exportStatus === 'processing'">
+                            <v-btn color="primary" size="large" :loading="exportStatus === 'processing'" @click="startExport">
                                 <v-icon class="mr-2">mdi-export</v-icon>
                                 {{ t('features.settings.backup.export.button') }}
                             </v-btn>
@@ -53,7 +53,7 @@
                             <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.export.completed') }}</h3>
                             <p class="mb-4">{{ exportResult?.filename }}</p>
-                            <v-btn color="primary" @click="downloadBackup(exportResult?.filename)" class="mr-2">
+                            <v-btn color="primary" class="mr-2" @click="downloadBackup(exportResult?.filename)">
                                 <v-icon class="mr-2">mdi-download</v-icon>
                                 {{ t('features.settings.backup.export.download') }}
                             </v-btn>
@@ -79,7 +79,7 @@
                         <!-- 步骤1: 选择文件 -->
                         <div v-if="importStatus === 'idle'" class="py-4">
                             <v-alert type="warning" variant="tonal" class="mb-4">
-                                <template v-slot:prepend>
+                                <template #prepend>
                                     <v-icon>mdi-alert</v-icon>
                                 </template>
                                 {{ t('features.settings.backup.import.warning') }}
@@ -98,9 +98,9 @@
                                 <v-btn
                                     color="primary"
                                     size="large"
-                                    @click="uploadAndCheck"
                                     :disabled="!importFile"
                                     :loading="importStatus === 'uploading'"
+                                    @click="uploadAndCheck"
                                 >
                                     <v-icon class="mr-2">mdi-upload</v-icon>
                                     {{ t('features.settings.backup.import.uploadAndCheck') }}
@@ -136,7 +136,7 @@
                                 variant="tonal"
                                 class="mb-4"
                             >
-                                <template v-slot:prepend>
+                                <template #prepend>
                                     <v-icon>{{ versionAlertIcon }}</v-icon>
                                 </template>
                                 <div class="confirm-message">
@@ -153,7 +153,7 @@
                             </v-alert>
 
                             <!-- 备份摘要 -->
-                            <v-card variant="outlined" class="mb-4" v-if="checkResult?.backup_summary">
+                            <v-card v-if="checkResult?.backup_summary" variant="outlined" class="mb-4">
                                 <v-card-title class="text-subtitle-1">
                                     <v-icon class="mr-2">mdi-package-variant</v-icon>
                                     {{ t('features.settings.backup.import.backupContents') }}
@@ -218,7 +218,7 @@
                             <v-alert type="info" variant="tonal" class="mb-4">
                                 {{ t('features.settings.backup.import.restartRequired') }}
                             </v-alert>
-                            <v-btn color="primary" @click="restartAstrBot" class="mr-2">
+                            <v-btn color="primary" class="mr-2" @click="restartAstrBot">
                                 <v-icon class="mr-2">mdi-restart</v-icon>
                                 {{ t('features.settings.backup.import.restartNow') }}
                             </v-btn>
@@ -255,7 +255,7 @@
                                 v-for="backup in backupList"
                                 :key="backup.filename"
                             >
-                                <template v-slot:prepend>
+                                <template #prepend>
                                     <v-icon :color="backup.type === 'uploaded' ? 'orange' : 'primary'">
                                         {{ backup.type === 'uploaded' ? 'mdi-upload' : 'mdi-zip-box' }}
                                     </v-icon>
@@ -272,7 +272,7 @@
                                     </v-chip>
                                 </v-list-item-subtitle>
 
-                                <template v-slot:append>
+                                <template #append>
                                     <v-btn
                                         icon="mdi-restore"
                                         variant="text"
@@ -312,7 +312,7 @@
 
             <v-card-actions class="px-6 py-4">
                 <v-spacer></v-spacer>
-                <v-btn color="grey" variant="text" @click="handleClose" :disabled="isProcessing">
+                <v-btn color="grey" variant="text" :disabled="isProcessing" @click="handleClose">
                     {{ t('core.common.close') }}
                 </v-btn>
             </v-card-actions>
@@ -337,7 +337,7 @@
                     autofocus
                     @keyup.enter="confirmRename"
                 >
-                    <template v-slot:append-inner>
+                    <template #append-inner>
                         <span class="text-grey">.zip</span>
                     </template>
                 </v-text-field>
@@ -353,9 +353,9 @@
                 <v-btn
                     color="primary"
                     variant="flat"
-                    @click="confirmRename"
                     :loading="renameLoading"
                     :disabled="!renameNewName || !!renameError"
+                    @click="confirmRename"
                 >
                     {{ t('core.common.confirm') }}
                 </v-btn>
@@ -459,16 +459,16 @@ const versionAlertMessage = computed(() => {
 // 监听对话框打开
 watch(isOpen, (newVal) => {
     if (newVal) {
-        loadBackupList()
+        void loadBackupList()
     } else {
-        resetAll()
+        void resetAll()
     }
 })
 
 // 监听标签页切换
 watch(activeTab, (newVal) => {
     if (newVal === 'list') {
-        loadBackupList()
+        void loadBackupList()
     }
 })
 
@@ -496,7 +496,7 @@ const startExport = async () => {
         const response = await backupApi.create()
         if (response.data.status === 'ok') {
             exportTaskId.value = response.data.data.task_id
-            pollExportProgress()
+            void pollExportProgress()
         } else {
             throw new Error(response.data.message)
         }
@@ -526,7 +526,7 @@ const pollExportProgress = async () => {
             } else if (data.status === 'completed') {
                 exportStatus.value = 'completed'
                 exportResult.value = data.result
-                loadBackupList()
+                void loadBackupList()
             } else if (data.status === 'failed') {
                 exportStatus.value = 'failed'
                 exportError.value = data.error || 'Export failed'
@@ -714,7 +714,7 @@ const confirmImport = async () => {
 
         if (response.data.status === 'ok') {
             importTaskId.value = response.data.data.task_id
-            pollImportProgress()
+            void pollImportProgress()
         } else {
             throw new Error(response.data.message)
         }
@@ -839,7 +839,7 @@ const deleteBackup = async (filename) => {
     try {
         const response = await backupApi.delete(filename)
         if (response.data.status === 'ok') {
-            loadBackupList()
+            void loadBackupList()
         } else {
             alert(response.data.message || 'Delete failed')
         }
@@ -898,7 +898,7 @@ const confirmRename = async () => {
 
         if (response.data.status === 'ok') {
             closeRenameDialog()
-            loadBackupList()
+            void loadBackupList()
         } else {
             renameError.value = response.data.message || t('features.settings.backup.list.renameFailed')
         }
@@ -915,7 +915,7 @@ const formatFileSize = (bytes) => {
     const k = 1024
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))  } ${  sizes[i]}`
 }
 
 // 格式化日期（从时间戳）

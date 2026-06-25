@@ -10,6 +10,17 @@ export function useToolActions(
   tools: Ref<ToolItem[]>,
   toast: (message: string, color?: string) => void
 ) {
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (!error || typeof error !== 'object') {
+      return fallback;
+    }
+    const errorLike = error as {
+      message?: string;
+      response?: { data?: { message?: string } };
+    };
+    return errorLike.response?.data?.message || errorLike.message || fallback;
+  };
+
   const toolSearch = ref('');
   const showBuiltinTools = ref(true);
 
@@ -66,14 +77,9 @@ export function useToolActions(
         tool.active = previous;
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (error: any) {
+    } catch (error) {
       tool.active = previous;
-      toast(
-        error?.response?.data?.message ||
-          error?.message ||
-          errorMessage,
-        'error'
-      );
+      toast(getErrorMessage(error, errorMessage), 'error');
     }
   };
 
@@ -100,13 +106,8 @@ export function useToolActions(
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (error: any) {
-      toast(
-        error?.response?.data?.message ||
-          error?.message ||
-          errorMessage,
-        'error'
-      );
+    } catch (error) {
+      toast(getErrorMessage(error, errorMessage), 'error');
     }
   };
 

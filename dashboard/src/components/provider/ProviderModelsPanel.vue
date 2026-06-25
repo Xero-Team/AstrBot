@@ -91,7 +91,7 @@
                     color="primary"
                     class="provider-model-row__switch"
                     :disabled="isProviderSaving(entry.provider.id)"
-                    @update:modelValue="emit('toggle-provider-enable', entry.provider, $event)"
+                    @update:model-value="emit('toggle-provider-enable', entry.provider, $event)"
                   ></v-switch>
 
                   <v-btn
@@ -264,7 +264,7 @@ const emit = defineEmits([
 
 const modelSearchProxy = computed({
   get: () => props.modelSearch,
-  set: (val) => emit('update:modelSearch', normalizeTextInput(val))
+  set: (val) => { emit('update:modelSearch', normalizeTextInput(val)); }
 })
 
 const configuredEntries = computed(() =>

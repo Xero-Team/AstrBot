@@ -30,7 +30,7 @@
  */
 
 // 类型导出
-export * from './types';
+export type * from './types';
 
 // Composable 导出
 export { useFolderManager, collectFolderAndChildrenIds } from './useFolderManager';

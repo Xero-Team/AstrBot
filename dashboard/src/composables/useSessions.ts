@@ -13,6 +13,14 @@ export interface Session {
     created_at: string;
 }
 
+function hasStatusCode(error: unknown, statusCode: number): boolean {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+    const response = (error as { response?: { status?: number } }).response;
+    return response?.status === statusCode;
+}
+
 export function useSessions(chatboxMode: boolean = false) {
     const router = useRouter();
     const sessions = ref<Session[]>([]);
@@ -39,9 +47,9 @@ export function useSessions(chatboxMode: boolean = false) {
 
 
     
-        } catch (err: any) {
-            if (err.response?.status === 401) {
-                router.push('/auth/login?redirect=/chatbox');
+        } catch (err) {
+            if (hasStatusCode(err, 401)) {
+                void router.push('/auth/login?redirect=/chatbox');
             }
             console.error(err);
         }
@@ -67,7 +75,7 @@ export function useSessions(chatboxMode: boolean = false) {
 
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';
-            router.push(`${basePath}/${sessionId}`);
+            void router.push(`${basePath}/${sessionId}`);
             
             await getSessions();
             
@@ -197,7 +205,7 @@ export function useSessions(chatboxMode: boolean = false) {
         selectedSessions.value = [];
         
         const basePath = chatboxMode ? '/chatbox' : '/chat';
-        router.push(basePath);
+        void router.push(basePath);
         
         if (closeMobileSidebar) {
             closeMobileSidebar();

@@ -54,7 +54,6 @@
                   <v-slider
                     v-if="pair.slider"
                     :model-value="Number(pair.value) || 0"
-                    @update:model-value="pair.value = $event"
                     :min="pair.slider.min"
                     :max="pair.slider.max"
                     :step="pair.slider.step"
@@ -62,6 +61,7 @@
                     density="compact"
                     hide-details
                     class="flex-grow-1"
+                    @update:model-value="pair.value = $event"
                   ></v-slider>
                   <v-text-field
                     v-model.number="pair.value"
@@ -87,8 +87,8 @@
                   variant="outlined"
                   hide-details="auto"
                   :placeholder="t('core.common.objectEditor.placeholders.jsonValue')"
-                  @blur="validateJSON(pair)"
                   :error-messages="pair.jsonError"
+                  @blur="validateJSON(pair)"
                 ></v-text-field>
               </v-col>
               <v-col cols="1" class="pl-2">
@@ -122,17 +122,16 @@
                 <v-text-field
                   v-if="template.type === 'string'"
                   :model-value="getTemplateValue(templateKey)"
-                  @update:model-value="updateTemplateValue(templateKey, $event)"
                   density="compact"
                   variant="outlined"
                   hide-details
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
+                  @update:model-value="updateTemplateValue(templateKey, $event)"
                 ></v-text-field>
                 <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
                   <v-slider
                     v-if="template.slider"
                     :model-value="Number(getTemplateValue(templateKey)) || 0"
-                    @update:model-value="updateTemplateValue(templateKey, $event)"
                     :min="template.slider.min"
                     :max="template.slider.max"
                     :step="template.slider.step"
@@ -140,25 +139,26 @@
                     density="compact"
                     hide-details
                     class="flex-grow-1"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
                   ></v-slider>
                   <v-text-field
                     :model-value="getTemplateValue(templateKey)"
-                    @update:model-value="updateTemplateValue(templateKey, $event)"
                     type="number"
                     density="compact"
                     variant="outlined"
                     hide-details
                     :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
                     :style="template.slider ? 'max-width: 120px;' : ''"
+                    @update:model-value="updateTemplateValue(templateKey, $event)"
                   ></v-text-field>
                 </div>
                 <v-switch
                   v-else-if="template.type === 'boolean' || template.type === 'bool'"
                   :model-value="getTemplateValue(templateKey)"
-                  @update:model-value="updateTemplateValue(templateKey, $event)"
                   density="compact"
                   hide-details
                   color="primary"
+                  @update:model-value="updateTemplateValue(templateKey, $event)"
                 ></v-switch>
               </v-col>
               <v-col cols="1" class="pl-2">
@@ -203,7 +203,7 @@
             hide-details
             style="max-width: 120px;"
           ></v-select>
-          <v-btn @click="addKeyValuePair" variant="tonal" color="primary">
+          <v-btn variant="tonal" color="primary" @click="addKeyValuePair">
             <v-icon>mdi-plus</v-icon>
             {{ t('core.common.add') }}
           </v-btn>
@@ -297,7 +297,7 @@ const nonTemplatePairs = computed(() => {
 })
 
 // 监听 modelValue 变化，主要用于初始化
-watch(() => props.modelValue, (newValue) => {
+watch(() => props.modelValue, (_newValue) => {
   // This watch is primarily for initialization or external changes
   // The dialog-based editing handles internal updates
 }, { immediate: true })
@@ -389,7 +389,7 @@ function validateJSON(pair) {
   try {
     JSON.parse(pair.value)
     pair.jsonError = ''
-  } catch (e) {
+  } catch (_error) {
     pair.jsonError = t('core.common.objectEditor.invalidJson')
   }
 }
@@ -432,9 +432,10 @@ function isTemplateKeyAdded(templateKey) {
 }
 
 function getTemplateValue(templateKey) {
-  const pair = localKeyValuePairs.value.find(pair => pair.key === templateKey)
-  if (pair) {
-    return pair.value
+  for (const item of localKeyValuePairs.value) {
+    if (item.key === templateKey) {
+      return item.value
+    }
   }
   const template = templateSchema.value[templateKey]
   return template?.default !== undefined ? template.default : getDefaultValueForType(template?.type || 'string')

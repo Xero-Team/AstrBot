@@ -8,19 +8,22 @@
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-          <v-btn size="large" :variant="isActive('knowledge-base') ? 'flat' : 'tonal'"
+          <v-btn
+size="large" :variant="isActive('knowledge-base') ? 'flat' : 'tonal'"
             :color="isActive('knowledge-base') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('knowledge-base')">
             <v-icon start>mdi-text-box-search</v-icon>
             {{ tm('page.navigation.knowledgeBase') }}
           </v-btn>
-          <v-btn size="large" :variant="isActive('long-term-memory') ? 'flat' : 'tonal'"
+          <v-btn
+size="large" :variant="isActive('long-term-memory') ? 'flat' : 'tonal'"
             :color="isActive('long-term-memory') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('long-term-memory')">
             <v-icon start>mdi-dots-hexagon</v-icon>
             {{ tm('page.navigation.longTermMemory') }}
           </v-btn>
-          <v-btn size="large" :variant="isActive('other') ? 'flat' : 'tonal'"
+          <v-btn
+size="large" :variant="isActive('other') ? 'flat' : 'tonal'"
             :color="isActive('other') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('other')">
             <v-icon start>mdi-tools</v-icon>
@@ -49,6 +52,12 @@ export default {
   data() {
     return {}
   },
+  mounted() {
+    // 如果在根路径 /alkaid，默认跳转到知识库页面
+    if (this.$route.path === '/alkaid') {
+      this.navigateTo('knowledge-base');
+    }
+  },
   methods: {
     navigateTo(tab) {
       try {
@@ -61,17 +70,11 @@ export default {
     },
     isActive(tab) {
       try {
-        return this.$route && this.$route.path.includes(`/alkaid/${tab}`);
+        return this.$route?.path.includes(`/alkaid/${tab}`);
       } catch (error) {
         console.warn('Route check error:', error);
         return false;
       }
-    }
-  },
-  mounted() {
-    // 如果在根路径 /alkaid，默认跳转到知识库页面
-    if (this.$route.path === '/alkaid') {
-      this.navigateTo('knowledge-base');
     }
   }
 }

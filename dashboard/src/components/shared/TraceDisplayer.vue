@@ -5,7 +5,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 
 <template>
   <div class="trace-wrapper">
-    <div class="trace-table" ref="scrollEl" :style="{ height: tableHeight }">
+    <div ref="scrollEl" class="trace-table" :style="{ height: tableHeight }">
       <div class="trace-row trace-header">
         <div class="trace-cell time">Time</div>
         <div class="trace-cell span">Event ID</div>
@@ -16,8 +16,9 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
         <div class="trace-cell outline">Outline</div>
         <div class="trace-cell fields"></div>
       </div>
-      <div class="trace-group" :class="{ highlight: highlightMap[event.span_id] }" v-for="event in events"
-        :key="event.span_id">
+      <div
+v-for="event in events" :key="event.span_id" class="trace-group"
+        :class="{ highlight: highlightMap[event.span_id] }">
         <div class="trace-row trace-event">
           <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
           <div class="trace-cell span" :title="event.span_id">
@@ -46,13 +47,13 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
             </v-btn>
           </div>
         </div>
-        <div class="trace-records" v-if="!event.collapsed">
-          <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key">
+        <div v-if="!event.collapsed" class="trace-records">
+          <div v-for="record in getVisibleRecords(event)" :key="record.key" class="trace-record">
             <div class="trace-record-time">{{ record.timeLabel }}</div>
             <div class="trace-record-action">{{ record.action }}</div>
             <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
           </div>
-          <div class="event-more" v-if="event.visibleCount < event.records.length">
+          <div v-if="event.visibleCount < event.records.length" class="event-more">
             <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
               Show more
             </v-btn>
@@ -150,7 +151,7 @@ export default {
       this.eventSource.onopen = () => {
         this.retryAttempts = 0;
         if (!this.lastEventId) {
-          this.fetchTraceHistory();
+          void this.fetchTraceHistory();
         }
       };
 
@@ -165,12 +166,12 @@ export default {
             return;
           }
           this.processNewTraces([payload]);
-        } catch (e) {
-          console.error('Failed to parse trace payload:', e);
+        } catch (_error) {
+          console.error('Failed to parse trace payload:', _error);
         }
       };
 
-      this.eventSource.onerror = (err) => {
+      this.eventSource.onerror = (_err) => {
         if (this.eventSource) {
           this.eventSource.close();
           this.eventSource = null;
@@ -328,7 +329,7 @@ export default {
           return `${text}`;
         }
         return text;
-      } catch (e) {
+      } catch (_error) {
         return String(fields);
       }
     }

@@ -7,7 +7,8 @@
 
             <v-card-text class="persona-form-content">
                 <!-- 创建位置提示 -->
-                <v-alert v-if="!editingPersona" type="info" variant="tonal" density="compact" class="mb-4"
+                <v-alert
+v-if="!editingPersona" type="info" variant="tonal" density="compact" class="mb-4"
                     icon="mdi-folder-outline">
                     {{ tm('form.createInFolder', { folder: folderDisplayName }) }}
                 </v-alert>
@@ -15,11 +16,13 @@
                 <v-form ref="personaForm" v-model="formValid">
                     <v-row class="persona-form-layout">
                         <v-col cols="12" md="6" class="persona-basic-col">
-                            <v-text-field v-model="personaForm.persona_id" :label="tm('form.personaId')"
+                            <v-text-field
+v-model="personaForm.persona_id" :label="tm('form.personaId')"
                                 :rules="personaIdRules" :disabled="editingPersona" variant="outlined"
                                 density="comfortable" class="mb-4" />
 
-                            <v-textarea v-model="personaForm.system_prompt" :label="tm('form.systemPrompt')"
+                            <v-textarea
+v-model="personaForm.system_prompt" :label="tm('form.systemPrompt')"
                                 :rules="systemPromptRules" variant="outlined" rows="16" class="mb-4" />
 
                             <v-textarea
@@ -41,7 +44,8 @@
                             <v-expansion-panel-title>
                                 <v-icon class="mr-2">mdi-tools</v-icon>
                                 {{ tm('form.tools') }}
-                                <v-chip v-if="Array.isArray(personaForm.tools) && personaForm.tools.length > 0"
+                                <v-chip
+v-if="Array.isArray(personaForm.tools) && personaForm.tools.length > 0"
                                     size="small" color="primary" variant="tonal" class="ml-2">
                                     {{ personaForm.tools.length }}
                                 </v-chip>
@@ -54,7 +58,7 @@
                                     </p>
                                 </div>
 
-                                <v-radio-group class="mt-2" v-model="toolSelectValue" hide-details="true">
+                                <v-radio-group v-model="toolSelectValue" class="mt-2" hide-details="true">
                                     <v-radio label="默认使用全部函数工具" value="0"></v-radio>
                                     <v-radio label="选择指定函数工具" value="1">
                                     </v-radio>
@@ -63,7 +67,8 @@
                                 <div v-if="toolSelectValue === '1'" class="mt-3 selected-config-area">
 
                                     <!-- 工具搜索 -->
-                                    <v-text-field v-model="toolSearch" :label="tm('form.searchTools')"
+                                    <v-text-field
+v-model="toolSearch" :label="tm('form.searchTools')"
                                         prepend-inner-icon="mdi-magnify" variant="outlined" density="compact"
                                         hide-details clearable class="mb-3" />
 
@@ -72,11 +77,12 @@
                                     <div v-if="mcpServers.length > 0" class="mb-4">
                                         <h4 class="text-subtitle-2 mb-2">{{ tm('form.mcpServersQuickSelect') }}</h4>
                                         <div class="d-flex flex-wrap ga-2">
-                                            <v-chip v-for="server in mcpServers" :key="server.name"
+                                            <v-chip
+v-for="server in mcpServers" :key="server.name"
                                                 :color="isServerSelected(server) ? 'primary' : 'default'"
                                                 :variant="isServerSelected(server) ? 'flat' : 'outlined'" size="small"
-                                                clickable @click="toggleMcpServer(server)"
-                                                :disabled="!server.tools || server.tools.length === 0">
+                                                clickable :disabled="!server.tools || server.tools.length === 0"
+                                                @click="toggleMcpServer(server)">
                                                 <v-icon start size="small">mdi-server</v-icon>
                                                 {{ server.name }}
                                                 <v-chip-text v-if="server.tools" class="ml-1">
@@ -89,12 +95,12 @@
                                     <!-- 工具选择列表 -->
                                     <div v-if="filteredTools.length > 0" class="tools-selection">
                                         <v-virtual-scroll :items="filteredTools" height="300" item-height="72">
-                                            <template v-slot:default="{ item }">
+                                            <template #default="{ item }">
                                                 <v-tooltip
                                                     :disabled="!isBuiltinTool(item)"
                                                     location="top"
                                                 >
-                                                    <template v-slot:activator="{ props: tooltipProps }">
+                                                    <template #activator="{ props: tooltipProps }">
                                                         <div v-bind="tooltipProps">
                                                             <v-list-item
                                                                 :key="item.name"
@@ -102,7 +108,7 @@
                                                                 :disabled="isBuiltinTool(item)"
                                                                 @click="toggleTool(item.name)"
                                                             >
-                                                                <template v-slot:prepend>
+                                                                <template #prepend>
                                                                     <v-checkbox-btn
                                                                         v-if="!isBuiltinTool(item)"
                                                                         :model-value="isToolSelected(item.name)"
@@ -117,11 +123,13 @@
                                                                 <v-list-item-title>
                                                                     {{ item.name }}
 
-                                                                    <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
+                                                                    <v-chip
+v-if="item.origin" size="x-small" color="info" class="mr-2"
                                                                         variant="tonal">
                                                                         {{ item.origin }}
                                                                     </v-chip>
-                                                                    <v-chip v-if="item.origin_name" size="x-small" color="info"
+                                                                    <v-chip
+v-if="item.origin_name" size="x-small" color="info"
                                                                         variant="outlined">
                                                                         {{ item.origin_name }}
                                                                     </v-chip>
@@ -140,7 +148,8 @@
                                         </v-virtual-scroll>
                                     </div>
 
-                                    <div v-else-if="!loadingTools && availableTools.length === 0"
+                                    <div
+v-else-if="!loadingTools && availableTools.length === 0"
                                         class="text-center pa-4">
                                         <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-tools</v-icon>
                                         <p class="text-body-2 text-medium-emphasis">{{ tm('form.noToolsAvailable')
@@ -148,7 +157,8 @@
                                         </p>
                                     </div>
 
-                                    <div v-else-if="!loadingTools && filteredTools.length === 0"
+                                    <div
+v-else-if="!loadingTools && filteredTools.length === 0"
                                         class="text-center pa-4">
                                         <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-magnify</v-icon>
                                         <p class="text-body-2 text-medium-emphasis">{{ tm('form.noToolsFound') }}
@@ -174,7 +184,8 @@
                                                 ({{ personaForm.tools.length }})
                                             </span>
                                         </h4>
-                                        <div v-if="Array.isArray(personaForm.tools) && personaForm.tools.length > 0"
+                                        <div
+v-if="Array.isArray(personaForm.tools) && personaForm.tools.length > 0"
                                             class="d-flex flex-wrap ga-1" style="max-height: 100px; overflow-y: auto;">
                                             <v-tooltip
                                                 v-for="toolName in personaForm.tools"
@@ -182,7 +193,7 @@
                                                 :disabled="!isBuiltinToolName(toolName)"
                                                 location="top"
                                             >
-                                                <template v-slot:activator="{ props: tooltipProps }">
+                                                <template #activator="{ props: tooltipProps }">
                                                     <v-chip
                                                         v-bind="tooltipProps"
                                                         size="small"
@@ -211,7 +222,8 @@
                             <v-expansion-panel-title>
                                 <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
                                 {{ tm('form.skills') }}
-                                <v-chip v-if="Array.isArray(personaForm.skills) && personaForm.skills.length > 0"
+                                <v-chip
+v-if="Array.isArray(personaForm.skills) && personaForm.skills.length > 0"
                                     size="small" color="primary" variant="tonal" class="ml-2">
                                     {{ personaForm.skills.length }}
                                 </v-chip>
@@ -224,23 +236,26 @@
                                     </p>
                                 </div>
 
-                                <v-radio-group class="mt-2" v-model="skillSelectValue" hide-details="true">
+                                <v-radio-group v-model="skillSelectValue" class="mt-2" hide-details="true">
                                     <v-radio :label="tm('form.skillsAllAvailable')" value="0"></v-radio>
                                     <v-radio :label="tm('form.skillsSelectSpecific')" value="1"></v-radio>
                                 </v-radio-group>
 
                                 <div v-if="skillSelectValue === '1'" class="mt-3 selected-config-area">
-                                    <v-text-field v-model="skillSearch" :label="tm('form.searchSkills')"
+                                    <v-text-field
+v-model="skillSearch" :label="tm('form.searchSkills')"
                                         prepend-inner-icon="mdi-magnify" variant="outlined" density="compact"
                                         hide-details clearable class="mb-3" />
 
                                     <div v-if="filteredSkills.length > 0" class="skills-selection">
                                         <v-virtual-scroll :items="filteredSkills" height="240" item-height="48">
-                                            <template v-slot:default="{ item }">
-                                                <v-list-item :key="item.name" density="comfortable"
+                                            <template #default="{ item }">
+                                                <v-list-item
+:key="item.name" density="comfortable"
                                                     @click="toggleSkill(item.name)">
-                                                    <template v-slot:prepend>
-                                                        <v-checkbox-btn :model-value="isSkillSelected(item.name)"
+                                                    <template #prepend>
+                                                        <v-checkbox-btn
+:model-value="isSkillSelected(item.name)"
                                                             @click.stop="toggleSkill(item.name)" />
                                                     </template>
                                                     <v-list-item-title>
@@ -254,15 +269,18 @@
                                         </v-virtual-scroll>
                                     </div>
 
-                                    <div v-else-if="!loadingSkills && availableSkills.length === 0"
+                                    <div
+v-else-if="!loadingSkills && availableSkills.length === 0"
                                         class="text-center pa-4">
-                                        <v-icon size="48" color="grey-lighten-2"
+                                        <v-icon
+size="48" color="grey-lighten-2"
                                             class="mb-2">mdi-lightning-bolt</v-icon>
                                         <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSkillsAvailable') }}
                                         </p>
                                     </div>
 
-                                    <div v-else-if="!loadingSkills && filteredSkills.length === 0"
+                                    <div
+v-else-if="!loadingSkills && filteredSkills.length === 0"
                                         class="text-center pa-4">
                                         <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-magnify</v-icon>
                                         <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSkillsFound') }}
@@ -285,9 +303,11 @@
                                                 ({{ personaForm.skills.length }})
                                             </span>
                                         </h4>
-                                        <div v-if="Array.isArray(personaForm.skills) && personaForm.skills.length > 0"
+                                        <div
+v-if="Array.isArray(personaForm.skills) && personaForm.skills.length > 0"
                                             class="d-flex flex-wrap ga-1" style="max-height: 100px; overflow-y: auto;">
-                                            <v-chip v-for="skillName in personaForm.skills" :key="skillName"
+                                            <v-chip
+v-for="skillName in personaForm.skills" :key="skillName"
                                                 size="small" color="primary" variant="tonal" closable
                                                 @click:close="removeSkill(skillName)">
                                                 {{ skillName }}
@@ -306,7 +326,8 @@
                             <v-expansion-panel-title>
                                 <v-icon class="mr-2">mdi-chat</v-icon>
                                 {{ tm('form.presetDialogs') }}
-                                <v-chip v-if="personaForm.begin_dialogs.length > 0" size="small" color="primary"
+                                <v-chip
+v-if="personaForm.begin_dialogs.length > 0" size="small" color="primary"
                                     variant="tonal" class="ml-2">
                                     {{ personaForm.begin_dialogs.length / 2 }}
                                 </v-chip>
@@ -320,18 +341,20 @@
                                 </div>
 
                                 <div v-for="(dialog, index) in personaForm.begin_dialogs" :key="index" class="mb-3">
-                                    <v-textarea v-model="personaForm.begin_dialogs[index]"
+                                    <v-textarea
+v-model="personaForm.begin_dialogs[index]"
                                         :label="index % 2 === 0 ? tm('form.userMessage') : tm('form.assistantMessage')"
                                         :rules="getDialogRules(index)" variant="outlined" rows="2"
                                         density="comfortable">
-                                        <template v-slot:append>
-                                            <v-btn icon="mdi-delete" variant="text" size="small" color="error"
+                                        <template #append>
+                                            <v-btn
+icon="mdi-delete" variant="text" size="small" color="error"
                                                 @click="removeDialog(index)" />
                                         </template>
                                     </v-textarea>
                                 </div>
 
-                                <v-btn variant="outlined" prepend-icon="mdi-plus" @click="addDialogPair" block>
+                                <v-btn variant="outlined" prepend-icon="mdi-plus" block @click="addDialogPair">
                                     {{ tm('buttons.addDialogPair') }}
                                 </v-btn>
                             </v-expansion-panel-text>
@@ -350,7 +373,7 @@
                 <v-btn color="grey" variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="savePersona" :loading="saving" :disabled="!formValid">
+                <v-btn color="primary" variant="flat" :loading="saving" :disabled="!formValid" @click="savePersona">
                     {{ tm('buttons.save') }}
                 </v-btn>
             </v-card-actions>
@@ -414,12 +437,12 @@ export default {
                 folder_id: null
             },
             personaIdRules: [
-                v => !!v || this.tm('validation.required'),
+                v => Boolean(v) || this.tm('validation.required'),
                 v => (v && v.length >= 1) || this.tm('validation.minLength', { min: 1 }),
                 v => this.editingPersona?.persona_id === v || !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
             ],
             systemPromptRules: [
-                v => !!v || this.tm('validation.required'),
+                v => Boolean(v) || this.tm('validation.required'),
                 v => (v && v.length >= 10) || this.tm('validation.minLength', { min: 10 })
             ],
             toolSearch: '',
@@ -444,8 +467,8 @@ export default {
             const search = this.toolSearch.toLowerCase();
             return this.availableTools.filter(tool =>
                 tool.name.toLowerCase().includes(search) ||
-                (tool.description && tool.description.toLowerCase().includes(search)) ||
-                (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search))
+                (tool.description?.toLowerCase().includes(search)) ||
+                (tool.mcp_server_name?.toLowerCase().includes(search))
             );
         },
         filteredSkills() {
@@ -455,7 +478,7 @@ export default {
             const search = this.skillSearch.toLowerCase();
             return this.availableSkills.filter(skill =>
                 skill.name.toLowerCase().includes(search) ||
-                (skill.description && skill.description.toLowerCase().includes(search))
+                (skill.description?.toLowerCase().includes(search))
             );
         },
         folderDisplayName() {
@@ -571,7 +594,7 @@ export default {
                 } else {
                     this.$emit('error', response.data.message || 'Failed to load MCP servers');
                 }
-            } catch (error) {
+            } catch (_error) {
                 this.$emit('error', error.response?.data?.message || 'Failed to load MCP servers');
                 this.mcpServers = [];
             }
@@ -586,7 +609,7 @@ export default {
                 } else {
                     this.$emit('error', response.data.message || 'Failed to load tools');
                 }
-            } catch (error) {
+            } catch (_error) {
                 this.$emit('error', error.response?.data?.message || 'Failed to load tools');
                 this.availableTools = [];
             } finally {
@@ -609,7 +632,7 @@ export default {
                 } else {
                     this.$emit('error', response.data.message || 'Failed to load skills');
                 }
-            } catch (error) {
+            } catch (_error) {
                 this.$emit('error', error.response?.data?.message || 'Failed to load skills');
                 this.availableSkills = [];
             } finally {
@@ -623,7 +646,7 @@ export default {
                 if (response.data.status === 'ok') {
                     this.existingPersonaIds = (response.data.data || []).map(p => p.persona_id);
                 }
-            } catch (error) {
+            } catch (_error) {
                 // 加载失败不影响表单使用，只是无法进行前端重名校验
                 this.existingPersonaIds = [];
             }
@@ -822,7 +845,7 @@ export default {
 
         truncateText(text, maxLength) {
             if (!text) return '';
-            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+            return text.length > maxLength ? `${text.substring(0, maxLength)  }...` : text;
         },
 
         isBuiltinTool(tool) {
@@ -836,7 +859,7 @@ export default {
         getDialogRules(index) {
             const dialogType = index % 2 === 0 ? this.tm('form.userMessage') : this.tm('form.assistantMessage');
             return [
-                v => !!v || this.tm('validation.dialogRequired', { type: dialogType }),
+                v => Boolean(v) || this.tm('validation.dialogRequired', { type: dialogType }),
                 v => (v && v.trim().length > 0) || this.tm('validation.dialogRequired', { type: dialogType })
             ];
         },

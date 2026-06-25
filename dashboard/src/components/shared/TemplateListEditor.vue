@@ -57,10 +57,10 @@
           </v-btn>
           <div class="d-flex flex-column">
             <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
-            <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
+            <v-list-item-subtitle v-if="templateDisplayText(entry)" class="property-hint entry-display-text">
               {{ templateDisplayText(entry) }}
             </v-list-item-subtitle>
-            <v-list-item-subtitle class="property-hint" v-if="templateHintText(entry)">
+            <v-list-item-subtitle v-if="templateHintText(entry)" class="property-hint">
               {{ templateHintText(entry) }}
             </v-list-item-subtitle>
           </div>
@@ -87,7 +87,7 @@
                   <v-list-item-title class="config-title">
                     {{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) || itemKey }}
                   </v-list-item-title>
-                  <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
+                  <v-list-item-subtitle v-if="itemMeta?.hint" class="config-hint">
                     {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
@@ -241,8 +241,8 @@ function templateItemText(templateKey, itemPath, attr, fallback) {
 function buildDefaults(itemsMeta = {}) {
   const result = {}
   for (const [k, meta] of Object.entries(itemsMeta)) {
-    if (!meta || !meta.type) continue
-    const fallback = Object.prototype.hasOwnProperty.call(meta, 'default')
+    if (!meta?.type) continue
+    const fallback = Object.hasOwn(meta, 'default')
       ? meta.default
       : defaultValueMap[meta.type]
 
@@ -258,19 +258,17 @@ function buildDefaults(itemsMeta = {}) {
 function applyDefaults(target, itemsMeta = {}) {
   let changed = false
   for (const [k, meta] of Object.entries(itemsMeta)) {
-    if (!meta || !meta.type) continue
-    const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default')
+    if (!meta?.type) continue
+    const hasDefault = Object.hasOwn(meta, 'default')
     const fallback = hasDefault ? meta.default : defaultValueMap[meta.type]
 
     if (meta.type === 'object') {
       if (!target[k] || typeof target[k] !== 'object') {
         target[k] = buildDefaults(meta.items || {})
         changed = true
-      } else {
-        if (applyDefaults(target[k], meta.items || {})) {
+      } else if (applyDefaults(target[k], meta.items || {})) {
           changed = true
         }
-      }
     } else if (!(k in target)) {
       target[k] = fallback
       changed = true
@@ -285,13 +283,13 @@ function ensureEntryDefaults() {
   let totalChanged = false
   const nextValue = props.modelValue.map((entry, idx) => {
     const template = getTemplate(entry)
-    if (!template || !template.items) return entry
+    if (!template?.items) return entry
     
     // 我们必须克隆以避免就地修改
     const newEntry = JSON.parse(JSON.stringify(entry))
     let entryChanged = applyDefaults(newEntry, template.items)
     
-    if (!Object.prototype.hasOwnProperty.call(newEntry, '__template_key')) {
+    if (!Object.hasOwn(newEntry, '__template_key')) {
       newEntry.__template_key = ''
       entryChanged = true
     }
@@ -313,7 +311,7 @@ function ensureEntryDefaults() {
 
 watch(
   () => props.modelValue,
-  () => ensureEntryDefaults(),
+  () => { ensureEntryDefaults(); },
   { immediate: true, deep: true }
 )
 
@@ -423,7 +421,7 @@ function shouldShowItem(itemMeta, entry) {
 
 function hasVisibleItemsAfter(entries, currentIndex, entry) {
   for (let i = currentIndex + 1; i < entries.length; i++) {
-    const [k, meta] = entries[i]
+    const [_k, meta] = entries[i]
     if (!meta?.invisible && shouldShowItem(meta, entry)) {
       return true
     }

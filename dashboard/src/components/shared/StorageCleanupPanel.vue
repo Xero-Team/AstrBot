@@ -163,7 +163,7 @@ const cleanupStorage = async (target) => {
 };
 
 onMounted(() => {
-    loadStorageStatus();
+    void loadStorageStatus();
 });
 </script>
 

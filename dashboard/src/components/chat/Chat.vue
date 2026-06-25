@@ -620,7 +620,7 @@ const activeReasoningTarget = ref<{
 } | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const threadSelection = reactive<{
   visible: boolean;
   left: number;
@@ -744,7 +744,7 @@ const selectedProject = computed(
     ) || null,
 );
 const chatInputReplyTarget = computed(() =>
-  replyTarget.value?.id == null
+  replyTarget.value?.id === null || replyTarget.value?.id === undefined
     ? null
     : {
         messageId: replyTarget.value.id,
@@ -820,7 +820,7 @@ function closeSecondaryPanels() {
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
-  selectedRefs.value = null;
+  selectedRefs.value = undefined;
 }
 
 function showChatWorkspace() {
@@ -1045,7 +1045,7 @@ async function sendCurrentMessage() {
 
 function buildOutgoingParts(text: string): MessagePart[] {
   const parts: MessagePart[] = [];
-  if (replyTarget.value?.id != null) {
+  if (replyTarget.value?.id !== null && replyTarget.value?.id !== undefined) {
     parts.push({
       type: "reply",
       message_id: replyTarget.value.id,
@@ -1105,7 +1105,7 @@ function scrollToMessage(messageId?: string | number) {
 function openMessageEdit(message: ChatRecord) {
   messageEditDraft.value = plainTextFromMessage(message);
   editingMessage.value = message;
-  nextTick(() => scrollToMessage(message.id));
+  void nextTick(() => { scrollToMessage(message.id); });
 }
 
 function cancelMessageEdit() {
@@ -1168,7 +1168,12 @@ async function handleRegenerateMessage(
 }
 
 function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
-  if (message.id == null || String(message.id).startsWith("local-")) return;
+  if (
+    message.id === null ||
+    message.id === undefined ||
+    String(message.id).startsWith("local-")
+  )
+    return;
   const container = event.currentTarget as HTMLElement | null;
   window.setTimeout(() => {
     const selection = window.getSelection();
@@ -1248,7 +1253,9 @@ function openRefsSidebar(refs: unknown) {
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === "object"
+      ? (refs as Record<string, unknown>)
+      : undefined;
   refsSidebarOpen.value = true;
 }
 
@@ -1259,7 +1266,7 @@ function openReasoningPanel(payload: {
   threadPanelOpen.value = false;
   activeThread.value = null;
   refsSidebarOpen.value = false;
-  selectedRefs.value = null;
+  selectedRefs.value = undefined;
   activeReasoningTarget.value = payload;
   reasoningPanelOpen.value = true;
 }
@@ -1338,7 +1345,7 @@ function handleMessagesScroll() {
 }
 
 function scrollToBottom() {
-  nextTick(() => {
+  void nextTick(() => {
     const container = messagesContainer.value;
     if (!container) return;
     container.scrollTop = container.scrollHeight;

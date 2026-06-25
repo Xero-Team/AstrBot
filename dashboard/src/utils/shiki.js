@@ -41,12 +41,12 @@ export async function ensureShikiLanguages() {
 
 export function renderShikiCode(highlighter, code, language, colorMode = "auto") {
   const normalizedLanguage = normalizeLanguage(language);
-  const options =
-    colorMode === "dark"
-      ? { lang: normalizedLanguage, theme: SHIKI_THEMES.dark }
-      : colorMode === "light"
-        ? { lang: normalizedLanguage, theme: SHIKI_THEMES.light }
-        : { lang: normalizedLanguage, themes: SHIKI_THEMES };
+  let options = { lang: normalizedLanguage, themes: SHIKI_THEMES };
+  if (colorMode === "dark") {
+    options = { lang: normalizedLanguage, theme: SHIKI_THEMES.dark };
+  } else if (colorMode === "light") {
+    options = { lang: normalizedLanguage, theme: SHIKI_THEMES.light };
+  }
 
   try {
     return highlighter.codeToHtml(code, options);
@@ -56,12 +56,12 @@ export function renderShikiCode(highlighter, code, language, colorMode = "auto")
       err,
     );
 
-    const fallbackOptions =
-      colorMode === "dark"
-        ? { lang: "text", theme: SHIKI_THEMES.dark }
-        : colorMode === "light"
-          ? { lang: "text", theme: SHIKI_THEMES.light }
-          : { lang: "text", themes: SHIKI_THEMES };
+    let fallbackOptions = { lang: "text", themes: SHIKI_THEMES };
+    if (colorMode === "dark") {
+      fallbackOptions = { lang: "text", theme: SHIKI_THEMES.dark };
+    } else if (colorMode === "light") {
+      fallbackOptions = { lang: "text", theme: SHIKI_THEMES.light };
+    }
 
     return highlighter.codeToHtml(code, fallbackOptions);
   }

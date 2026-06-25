@@ -48,7 +48,7 @@
                     class="mb-4"
                 />
 
-                <section id="system-config" class="settings-section" v-show="activeSettingsSection === 'general'">
+                <section v-show="activeSettingsSection === 'general'" id="system-config" class="settings-section">
                     <div class="settings-section__heading">
                         <div class="settings-section__title">{{ tm('sections.general.title') }}</div>
                     </div>
@@ -76,7 +76,7 @@
                     </div>
                 </section>
 
-                <section id="settings-appearance" class="settings-section" v-show="activeSettingsSection === 'appearance'">
+                <section v-show="activeSettingsSection === 'appearance'" id="settings-appearance" class="settings-section">
                     <div class="settings-section__heading">
                         <div class="settings-section__title">{{ tm('sections.appearance.title') }}</div>
                     </div>
@@ -142,7 +142,7 @@
                     </div>
                 </section>
 
-                <section id="settings-network" class="settings-section" v-show="activeSettingsSection === 'network'">
+                <section v-show="activeSettingsSection === 'network'" id="settings-network" class="settings-section">
                     <div class="settings-section__heading">
                         <div class="settings-section__title">{{ tm('sections.network.title') }}</div>
                     </div>
@@ -177,7 +177,7 @@
                     </div>
                 </section>
 
-                <section id="settings-security" class="settings-section" v-show="activeSettingsSection === 'security'">
+                <section v-show="activeSettingsSection === 'security'" id="settings-security" class="settings-section">
                     <div class="settings-section__heading">
                         <div class="settings-section__title">{{ tm('sections.security.title') }}</div>
                     </div>
@@ -200,7 +200,7 @@
                     </div>
                 </section>
 
-                <section id="settings-maintenance" class="settings-section" v-show="activeSettingsSection === 'maintenance'">
+                <section v-show="activeSettingsSection === 'maintenance'" id="settings-maintenance" class="settings-section">
                     <div class="settings-section__heading">
                         <div class="settings-section__title">{{ tm('sections.maintenance.title') }}</div>
                     </div>
@@ -235,7 +235,7 @@
                     </div>
                 </section>
 
-                <section id="settings-openapi" class="settings-section" v-show="activeSettingsSection === 'openapi'">
+                <section v-show="activeSettingsSection === 'openapi'" id="settings-openapi" class="settings-section">
                     <div class="settings-section__heading">
                         <div class="settings-section__title">{{ tm('sections.openapi.title') }}</div>
                     </div>

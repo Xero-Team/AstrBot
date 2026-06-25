@@ -2,39 +2,40 @@
   <div class="w-100">
     <!-- Special handling for specific metadata types -->
     <template v-if="itemMeta?._special === 'select_provider'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'" />
+      <ProviderSelector :model-value="modelValue" :provider-type="'chat_completion'" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider_stt'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'speech_to_text'" />
+      <ProviderSelector :model-value="modelValue" :provider-type="'speech_to_text'" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider_tts'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'text_to_speech'" />
+      <ProviderSelector :model-value="modelValue" :provider-type="'text_to_speech'" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_providers'">
       <ProviderSelector
         :model-value="modelValue"
-        @update:model-value="emitUpdate"
         :provider-type="'chat_completion'"
         :multiple="true"
+        @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
       <ProviderSelector
         :model-value="modelValue"
-        @update:model-value="emitUpdate"
         :provider-type="'agent_runner'"
         :provider-subtype="getSpecialSubtype(itemMeta?._special)"
+        @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'"
-        :button-text="t('core.shared.providerSelector.selectProviderPool')" />
+      <ProviderSelector
+:model-value="modelValue" :provider-type="'chat_completion'" :button-text="t('core.shared.providerSelector.selectProviderPool')"
+        @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
       <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'persona_pool'">
-      <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" :button-text="t('core.shared.personaSelector.selectPersonaPool')" />
+      <PersonaSelector :model-value="modelValue" :button-text="t('core.shared.personaSelector.selectPersonaPool')" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
@@ -56,20 +57,20 @@
       <div class="d-flex align-center gap-2">
         <v-text-field
           :model-value="modelValue"
-          @update:model-value="emitUpdate"
           density="compact"
           variant="outlined"
           class="config-field"
           type="number"
           hide-details
+          @update:model-value="emitUpdate"
         ></v-text-field>
         <v-btn
           color="primary"
           variant="tonal"
           size="small"
-          @click="$emit('get-embedding-dim')"
           :loading="loading"
           class="ml-2"
+          @click="$emit('get-embedding-dim')"
         >
           {{ t('core.common.autoDetect') }}
         </v-btn>
@@ -84,21 +85,20 @@
         v-for="(option, optionIndex) in itemMeta.options"
         :key="optionIndex"
         :model-value="modelValue"
-        @update:model-value="emitUpdate"
         :label="getLabel(itemMeta, optionIndex, option)"
         :value="option"
         class="config-checkbox"
         color="primary"
         density="compact"
         hide-details
+        @update:model-value="emitUpdate"
       ></v-checkbox>
     </div>
 
     <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
-      :model-value="modelValue"
-      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
       v-model:search="listSearchText"
+      :model-value="modelValue"
       :items="listSelectItems"
       item-title="title"
       item-value="value"
@@ -108,19 +108,20 @@
       class="config-field"
       hide-details
       chips
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
       multiple
     ></v-autocomplete>
 
     <v-select
       v-else-if="itemMeta?.options"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
       :items="getSelectItems(itemMeta)"
       :disabled="itemMeta?.readonly"
       density="compact"
       variant="outlined"
       class="config-field"
       hide-details
+      @update:model-value="emitUpdate"
     ></v-select>
 
     <div v-else-if="itemMeta?.editor_mode" class="editor-container">
@@ -132,9 +133,10 @@
         @update:value="emitUpdate"
       >
       </VueMonacoEditor>
-      <v-btn v-if="showFullscreenBtn" icon size="small" variant="text" color="primary" class="editor-fullscreen-btn"
-        @click="$emit('open-fullscreen')"
-        :title="t('core.common.editor.fullscreen')">
+      <v-btn
+v-if="showFullscreenBtn" icon size="small" variant="text" color="primary" class="editor-fullscreen-btn"
+        :title="t('core.common.editor.fullscreen')"
+        @click="$emit('open-fullscreen')">
         <v-icon>mdi-fullscreen</v-icon>
       </v-btn>
     </div>
@@ -142,11 +144,11 @@
     <v-text-field
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
       density="compact"
       variant="outlined"
       class="config-field"
       hide-details
+      @update:model-value="emitUpdate"
     ></v-text-field>
 
     <div
@@ -156,8 +158,6 @@
       <v-slider
         v-if="itemMeta?.slider"
         :model-value="toNumber(numericTemp ?? modelValue)"
-        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
-        @end="numericTemp = null"
         :min="itemMeta?.slider?.min ?? 0"
         :max="itemMeta?.slider?.max ?? 100"
         :step="itemMeta?.slider?.step ?? 1"
@@ -165,38 +165,40 @@
         density="compact"
         hide-details
         style="flex: 1"
+        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
+        @end="numericTemp = null"
       ></v-slider>
       <v-text-field
         :model-value="numericTemp ?? modelValue"
-        @update:model-value="val => (numericTemp = val)"
-        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
         density="compact"
         variant="outlined"
         class="config-field"
         type="number"
         hide-details
         style="flex: 1"
+        @update:model-value="val => (numericTemp = val)"
+        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
       ></v-text-field>
     </div>
 
     <v-textarea
       v-else-if="itemMeta?.type === 'text'"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
       variant="outlined"
       rows="3"
       class="config-field"
       hide-details
+      @update:model-value="emitUpdate"
     ></v-textarea>
 
     <v-switch
       v-else-if="itemMeta?.type === 'bool'"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
       color="primary"
       inset
       density="compact"
       hide-details
+      @update:model-value="emitUpdate"
     ></v-switch>
 
     <FileConfigItem
@@ -205,15 +207,15 @@
       :item-meta="itemMeta"
       :plugin-name="pluginName"
       :config-key="configKey"
-      @update:model-value="emitUpdate"
       class="config-field"
+      @update:model-value="emitUpdate"
     />
 
     <ListConfigItem
       v-else-if="itemMeta?.type === 'list'"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
       class="config-field"
+      @update:model-value="emitUpdate"
     />
 
     <ObjectEditor
@@ -223,18 +225,18 @@
       :plugin-name="pluginName"
       :plugin-i18n="pluginI18n"
       :config-key="configKey"
-      @update:model-value="emitUpdate"
       class="config-field"
+      @update:model-value="emitUpdate"
     />
 
     <v-text-field
       v-else
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
       density="compact"
       variant="outlined"
       class="config-field"
       hide-details
+      @update:model-value="emitUpdate"
     ></v-text-field>
   </div>
 </template>
@@ -348,7 +350,7 @@ function getSelectItems(itemMeta) {
   if (labels && itemMeta.options) {
     return itemMeta.options.map((value, index) => ({
       title: labels[index] || value,
-      value: value
+      value
     }))
   }
   return itemMeta.options || []

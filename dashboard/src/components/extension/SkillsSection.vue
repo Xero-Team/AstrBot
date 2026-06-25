@@ -939,7 +939,7 @@ export default {
       }
       runtime.value = payload.runtime || "local";
       const cache = payload.sandbox_cache || {};
-      sandboxCache.ready = !!cache.ready;
+      sandboxCache.ready = Boolean(cache.ready);
       sandboxCache.count = Number(cache.count || 0);
       sandboxCache.updated_at = cache.updated_at || null;
       return payload.skills || [];
@@ -1172,12 +1172,12 @@ export default {
       failureMessageDefault,
       onSuccess,
     ) => {
-      if (res && res.data && res.data.status === "ok") {
+      if (res?.data?.status === "ok") {
         showMessage(successMessage, "success");
         if (onSuccess) onSuccess();
       } else {
         const msg =
-          (res && res.data && res.data.message) || failureMessageDefault;
+          (res?.data?.message) || failureMessageDefault;
         showMessage(msg, "error");
       }
     };
@@ -1209,12 +1209,12 @@ export default {
         const failedCount = Array.isArray(payload.failed)
           ? payload.failed.length
           : 0;
-        const responseColor =
-          res?.data?.status === "error"
-            ? "error"
-            : failedCount > 0
-            ? "warning"
-            : "success";
+        let responseColor = "success";
+        if (res?.data?.status === "error") {
+          responseColor = "error";
+        } else if (failedCount > 0) {
+          responseColor = "warning";
+        }
         showMessage(
           res?.data?.message || tm("skills.uploadSuccess"),
           responseColor,
@@ -1399,7 +1399,13 @@ export default {
       editorDialog.skillName = skill.name;
       editorDialog.show = true;
       const entries = await loadSkillDir("");
-      const skillMd = entries.find((entry) => entry.path === "SKILL.md");
+      let skillMd = null;
+      for (const entry of entries) {
+        if (entry.path === "SKILL.md") {
+          skillMd = entry;
+          break;
+        }
+      }
       if (skillMd?.editable) {
         await loadSkillFile(skillMd.path);
       }
@@ -1559,7 +1565,7 @@ export default {
     const candidatePromoteLoadingKey = (candidateId, stage) =>
       `${candidateId}:${stage}`;
     const isCandidatePromoteLoading = (candidateId, stage) =>
-      !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
+      Boolean(candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)]);
     const isCandidatePromoting = (candidateId) =>
       isCandidatePromoteLoading(candidateId, "canary") ||
       isCandidatePromoteLoading(candidateId, "stable");

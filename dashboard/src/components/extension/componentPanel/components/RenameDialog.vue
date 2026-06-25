@@ -57,18 +57,18 @@ watch(showAliasEditor, (open) => {
 </script>
 
 <template>
-  <v-dialog :model-value="show" @update:model-value="emit('update:show', $event)" max-width="500">
+  <v-dialog :model-value="show" max-width="500" @update:model-value="emit('update:show', $event)">
     <v-card>
       <v-card-title class="text-h5">{{ tm('dialogs.rename.title') }}</v-card-title>
       <v-card-text>
         <v-text-field
           :model-value="newName"
-          @update:model-value="emit('update:newName', $event)"
           :label="tm('dialogs.rename.newName')"
           variant="outlined"
           density="compact"
           autofocus
           class="mb-2"
+          @update:model-value="emit('update:newName', $event)"
         />
 
         <v-card variant="outlined" class="mt-2" elevation="0">
@@ -89,11 +89,11 @@ watch(showAliasEditor, (open) => {
               <div v-for="(alias, index) in aliases" :key="index" class="d-flex align-center mb-2">
                 <v-text-field
                   :model-value="alias"
-                  @update:model-value="updateAlias(index, $event)"
                   variant="outlined"
                   density="compact"
                   hide-details
                   class="flex-grow-1 mr-2"
+                  @update:model-value="updateAlias(index, $event)"
                 />
                 <v-btn icon="mdi-delete" variant="text" color="error" density="compact" @click="removeAlias(index)" />
               </div>

@@ -16,7 +16,7 @@ function getFromLocalStorage(key: string, fallback: string): string {
       return fallback;
     }
     const value = localStorage.getItem(key);
-    return value == null ? fallback : value;
+    return value === null || value === undefined ? fallback : value;
   } catch {
     return fallback;
   }

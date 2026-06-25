@@ -49,7 +49,7 @@ export function useRecording() {
                 throw new Error('Audio recording is not supported in this browser');
             }
 
-            mediaRecorder.value?.stream.getTracks().forEach(track => track.stop());
+            mediaRecorder.value?.stream.getTracks().forEach(track => { track.stop(); });
             audioChunks.value = [];
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -95,7 +95,7 @@ export function useRecording() {
                 const mimeType = getRecordingMimeType();
                 const audioBlob = new Blob(audioChunks.value, { type: mimeType });
                 audioChunks.value = [];
-                recorder.stream.getTracks().forEach(track => track.stop());
+                recorder.stream.getTracks().forEach(track => { track.stop(); });
                 if (mediaRecorder.value === recorder) {
                     mediaRecorder.value = null;
                 }
@@ -114,21 +114,23 @@ export function useRecording() {
             };
 
             recorder.onerror = (event) => {
-                recorder.stream.getTracks().forEach(track => track.stop());
+                recorder.stream.getTracks().forEach(track => { track.stop(); });
                 if (mediaRecorder.value === recorder) {
                     mediaRecorder.value = null;
                 }
-                reject(event);
+                reject(event instanceof ErrorEvent
+                    ? new Error(event.message || 'MediaRecorder error')
+                    : new Error('MediaRecorder error'));
             };
 
             try {
                 recorder.stop();
             } catch (error) {
-                recorder.stream.getTracks().forEach(track => track.stop());
+                recorder.stream.getTracks().forEach(track => { track.stop(); });
                 if (mediaRecorder.value === recorder) {
                     mediaRecorder.value = null;
                 }
-                reject(error);
+                reject(error instanceof Error ? error : new Error(String(error)));
             }
         });
     }

@@ -40,27 +40,27 @@
           <v-text-field 
             v-model="newItem" 
             :label="t('core.common.list.addItemPlaceholder')" 
-            @keyup.enter="addItem" 
             clearable 
-            hide-details
-            variant="outlined" 
+            hide-details 
+            variant="outlined"
             density="compact" 
-            :placeholder="t('core.common.list.inputPlaceholder')"
-            class="flex-grow-1">
+            :placeholder="t('core.common.list.inputPlaceholder')" 
+            class="flex-grow-1"
+            @keyup.enter="addItem">
           </v-text-field>
           <v-btn
-            @click="addItem"
             variant="tonal"
             color="primary"
             size="small"
-            :disabled="!newItem.trim()">
+            :disabled="!newItem.trim()"
+            @click="addItem">
             {{ t('core.common.list.addButton') }}
           </v-btn>
           <v-btn 
-            @click="showBatchImport = true" 
             variant="tonal" 
-            color="primary"
-            size="small">
+            color="primary" 
+            size="small"
+            @click="showBatchImport = true">
             <v-icon size="small">mdi-import</v-icon>
             {{ t('core.common.list.batchImport') }}
           </v-btn>
@@ -84,29 +84,29 @@
               hide-details 
               variant="outlined" 
               density="compact"
-              @keyup.enter="saveEdit" 
+              autofocus 
+              @keyup.enter="saveEdit"
               @keyup.esc="cancelEdit"
               @click.stop
-              autofocus
             ></v-text-field>
             
-            <template v-slot:append>
+            <template #append>
               <div class="d-flex">
                 <v-btn 
                   v-if="editIndex === index"
-                  @click.stop="saveEdit" 
                   variant="plain" 
                   color="success" 
                   icon 
-                  size="small">
+                  size="small" 
+                  @click.stop="saveEdit">
                   <v-icon>mdi-check</v-icon>
                 </v-btn>
                 <v-btn 
-                  @click.stop="editIndex === index ? cancelEdit() : removeItem(index)" 
                   variant="plain" 
-                  :color="editIndex === index ? 'error' : 'default'"
-                  icon 
-                  size="small">
+                  :color="editIndex === index ? 'error' : 'default'" 
+                  icon
+                  size="small" 
+                  @click.stop="editIndex === index ? cancelEdit() : removeItem(index)">
                   <v-icon>mdi-close</v-icon>
                 </v-btn>
               </div>
@@ -247,7 +247,7 @@ watch(() => props.modelValue, (newValue) => {
     const filtered = newValue.filter(item => typeof item === 'string' ? item.trim() !== '' : true)
     if (filtered.length !== newValue.length) {
       // 使用 nextTick 确保父组件已准备好接收更新
-      nextTick(() => {
+      void nextTick(() => {
         emit('update:modelValue', filtered)
       })
     }

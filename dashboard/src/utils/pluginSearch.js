@@ -53,7 +53,7 @@ export const buildSearchQuery = (raw) => {
 };
 
 export const matchesText = (value, query) => {
-  if (value == null || !query?.norm) return false;
+  if (value === null || value === undefined || !query?.norm) return false;
   const text = String(value);
 
   const normalizedValue = getNormalizedText(text);

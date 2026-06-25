@@ -6,12 +6,14 @@
                 {{ labels.title }}
             </v-card-title>
             <v-card-text>
-                <v-form ref="form" v-model="formValid" @submit.prevent="submitForm" :disabled="loading">
-                    <v-text-field v-model="formData.name" :label="mergedLabels.nameLabel"
-                        :rules="[(v: any) => !!v || mergedLabels.nameRequired]" variant="outlined"
+                <v-form ref="form" v-model="formValid" :disabled="loading" @submit.prevent="submitForm">
+                    <v-text-field
+v-model="formData.name" :label="mergedLabels.nameLabel"
+                        :rules="[(v: string | null | undefined) => !!v || mergedLabels.nameRequired]" variant="outlined"
                         density="comfortable" autofocus class="mb-3" />
 
-                    <v-textarea v-model="formData.description" :label="labels.descriptionLabel" variant="outlined"
+                    <v-textarea
+v-model="formData.description" :label="labels.descriptionLabel" variant="outlined"
                         rows="3" density="comfortable" hide-details />
                 </v-form>
             </v-card-text>
@@ -20,7 +22,7 @@
                 <v-btn variant="text" @click="closeDialog">
                     {{ labels.cancelButton }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="submitForm" :loading="loading" :disabled="!formValid">
+                <v-btn color="primary" variant="flat" :loading="loading" :disabled="!formValid" @click="submitForm">
                     {{ labels.createButton }}
                 </v-btn>
             </v-card-actions>
@@ -31,6 +33,10 @@
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue';
 import type { CreateFolderData } from './types';
+
+interface FormController {
+    resetValidation: () => void;
+}
 
 interface DefaultLabels {
     title: string;
@@ -104,7 +110,7 @@ export default defineComponent({
                 description: ''
             };
             if (this.$refs.form) {
-                (this.$refs.form as any).resetValidation();
+                (this.$refs.form as FormController).resetValidation();
             }
         },
 

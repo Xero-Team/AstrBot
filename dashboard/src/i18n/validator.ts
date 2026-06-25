@@ -5,6 +5,8 @@
 
 import type { ValidationResult, ValidationError, UsageReport, TranslationStats } from './types';
 
+type LocaleTree = Record<string, unknown>;
+
 export class I18nValidator {
   private baseLocale: string = 'zh-CN';
   private supportedLocales: string[] = ['zh-CN', 'en-US'];
@@ -12,7 +14,7 @@ export class I18nValidator {
   /**
    * 验证翻译完整性
    */
-  validateCompleteness(localeData: Record<string, any>): ValidationResult {
+  validateCompleteness(localeData: Record<string, LocaleTree>): ValidationResult {
     const errors: ValidationError[] = [];
     const missingKeys: string[] = [];
     const extraKeys: string[] = [];
@@ -88,7 +90,7 @@ export class I18nValidator {
   /**
    * 验证翻译值的有效性
    */
-  validateValues(localeData: Record<string, any>): ValidationError[] {
+  validateValues(localeData: Record<string, LocaleTree>): ValidationError[] {
     const errors: ValidationError[] = [];
 
     for (const [locale, data] of Object.entries(localeData)) {
@@ -102,7 +104,7 @@ export class I18nValidator {
    * 递归验证嵌套值
    */
   private validateNestedValues(
-    obj: any, 
+    obj: LocaleTree,
     locale: string, 
     parentKey: string, 
     errors: ValidationError[]
@@ -111,7 +113,7 @@ export class I18nValidator {
       const fullKey = parentKey ? `${parentKey}.${key}` : key;
 
       if (typeof value === 'object' && value !== null) {
-        this.validateNestedValues(value, locale, fullKey, errors);
+        this.validateNestedValues(value as LocaleTree, locale, fullKey, errors);
       } else if (typeof value === 'string') {
         // 检查空值
         if (!value.trim()) {
@@ -165,7 +167,7 @@ export class I18nValidator {
   /**
    * 生成翻译统计信息
    */
-  generateStats(localeData: Record<string, any>): TranslationStats {
+  generateStats(localeData: Record<string, LocaleTree>): TranslationStats {
     const stats: TranslationStats = {
       modules: {},
       locales: {},
@@ -205,13 +207,18 @@ export class I18nValidator {
   /**
    * 分析模块统计
    */
-  private analyzeModules(data: any, locale: string, modules: TranslationStats['modules']): void {
+  private analyzeModules(
+    data: LocaleTree,
+    locale: string,
+    modules: TranslationStats['modules'],
+  ): void {
     for (const [moduleName, moduleData] of Object.entries(data)) {
       if (typeof moduleData === 'object' && moduleData !== null) {
         const moduleKey = `${locale}.${moduleName}`;
-        const keys = this.getAllKeys(moduleData);
+        const nestedModuleData = moduleData as LocaleTree;
+        const keys = this.getAllKeys(nestedModuleData);
         const translatedKeys = keys.filter(key => {
-          const value = this.getValueByKey(moduleData, key);
+          const value = this.getValueByKey(nestedModuleData, key);
           return typeof value === 'string' && value.trim() !== '';
         });
 
@@ -232,14 +239,14 @@ export class I18nValidator {
   /**
    * 获取对象的所有键路径
    */
-  private getAllKeys(obj: any, prefix: string = ''): string[] {
+  private getAllKeys(obj: LocaleTree, prefix: string = ''): string[] {
     const keys: string[] = [];
 
     for (const [key, value] of Object.entries(obj)) {
       const fullKey = prefix ? `${prefix}.${key}` : key;
 
       if (typeof value === 'object' && value !== null) {
-        keys.push(...this.getAllKeys(value, fullKey));
+        keys.push(...this.getAllKeys(value as LocaleTree, fullKey));
       } else {
         keys.push(fullKey);
       }
@@ -251,16 +258,19 @@ export class I18nValidator {
   /**
    * 根据键路径获取值
    */
-  private getValueByKey(obj: any, keyPath: string): any {
-    return keyPath.split('.').reduce((current, key) => {
-      return current && current[key];
+  private getValueByKey(obj: LocaleTree, keyPath: string): unknown {
+    return keyPath.split('.').reduce<unknown>((current, key) => {
+      if (!current || typeof current !== 'object') {
+        return undefined;
+      }
+      return (current as LocaleTree)[key];
     }, obj);
   }
 
   /**
    * 检查插值一致性
    */
-  validateInterpolation(localeData: Record<string, any>): ValidationError[] {
+  validateInterpolation(localeData: Record<string, LocaleTree>): ValidationError[] {
     const errors: ValidationError[] = [];
     const baseData = localeData[this.baseLocale];
     
@@ -302,7 +312,7 @@ export class I18nValidator {
   /**
    * 验证键命名规范
    */
-  validateKeyNaming(localeData: Record<string, any>): ValidationError[] {
+  validateKeyNaming(localeData: Record<string, LocaleTree>): ValidationError[] {
     const errors: ValidationError[] = [];
     const keyNamingPattern = /^[a-z][a-zA-Z0-9]*$/;
 
@@ -317,7 +327,7 @@ export class I18nValidator {
    * 递归验证键命名
    */
   private validateKeyNamingRecursive(
-    obj: any,
+    obj: LocaleTree,
     locale: string,
     parentKey: string,
     pattern: RegExp,
@@ -336,7 +346,7 @@ export class I18nValidator {
       }
 
       if (typeof obj[key] === 'object' && obj[key] !== null) {
-        this.validateKeyNamingRecursive(obj[key], locale, fullKey, pattern, errors);
+        this.validateKeyNamingRecursive(obj[key] as LocaleTree, locale, fullKey, pattern, errors);
       }
     }
   }
@@ -409,7 +419,7 @@ export class I18nValidator {
   /**
    * 生成验证报告
    */
-  generateReport(localeData: Record<string, any>, usedKeys: string[] = []): {
+  generateReport(localeData: Record<string, LocaleTree>, usedKeys: string[] = []): {
     completeness: ValidationResult;
     values: ValidationError[];
     interpolation: ValidationError[];

@@ -1,9 +1,10 @@
 {
   "extends": "@vue/tsconfig/tsconfig.json",
-  "include": ["vite.config.*"],
+  "include": ["vite.config.*", "scripts/**/*.mjs"],
   "compilerOptions": {
     "composite": true,
     "allowJs": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vite-config.tsbuildinfo",
     "types": ["node"]
   }
 }

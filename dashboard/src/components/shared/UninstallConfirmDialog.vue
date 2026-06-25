@@ -26,10 +26,10 @@
           hide-details
           class="mb-2"
         >
-          <template v-slot:append>
+          <template #append>
             <v-tooltip location="top">
-              <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="grey">mdi-information-outline</v-icon>
+              <template #activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" size="small" color="grey">mdi-information-outline</v-icon>
               </template>
               <span>{{ tm('dialogs.uninstall.configHint') }}</span>
             </v-tooltip>
@@ -42,10 +42,10 @@
           color="error"
           hide-details
         >
-          <template v-slot:append>
+          <template #append>
             <v-tooltip location="top">
-              <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="grey">mdi-information-outline</v-icon>
+              <template #activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" size="small" color="grey">mdi-information-outline</v-icon>
               </template>
               <span>{{ tm('dialogs.uninstall.dataHint') }}</span>
             </v-tooltip>
@@ -59,7 +59,7 @@
           density="compact"
           class="mt-4"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-alert</v-icon>
           </template>
           {{ t('messages.validation.operation_cannot_be_undone') }}

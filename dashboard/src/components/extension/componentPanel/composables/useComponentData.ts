@@ -6,6 +6,10 @@ import { commandApi, toolApi } from '@/api/v1';
 import type { CommandItem, CommandSummary, SnackbarState, ToolItem } from '../types';
 
 export function useComponentData() {
+  const getErrorMessage = (error: unknown, fallback: string) => (
+    error instanceof Error && error.message ? error.message : fallback
+  );
+
   const loading = ref(false);
   const commands = ref<CommandItem[]>([]);
   const tools = ref<ToolItem[]>([]);
@@ -45,8 +49,8 @@ export function useComponentData() {
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+    } catch (err) {
+      toast(getErrorMessage(err, errorMessage), 'error');
     } finally {
       loading.value = false;
     }
@@ -61,8 +65,8 @@ export function useComponentData() {
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
-    } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+    } catch (err) {
+      toast(getErrorMessage(err, errorMessage), 'error');
     } finally {
       toolsLoading.value = false;
     }

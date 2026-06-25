@@ -19,25 +19,16 @@ const pageState = useExtensionPage();
 const { pluginName, pluginDesc } = usePluginI18n();
 
 const {
-  commonStore,
   t,
   tm,
   router,
   route,
-  getSelectedGitHubProxy,
   conflictDialog,
-  checkAndPromptConflicts,
   handleConflictConfirm,
   fileInput,
   activeTab,
-  validTabs,
-  isValidTab,
-  getLocationHash,
   extractTabFromHash,
-  syncTabFromHash,
   extension_data,
-  getInitialShowReserved,
-  showReserved,
   snack_message,
   snack_show,
   snack_success,
@@ -46,24 +37,17 @@ const {
   pluginMarketData,
   loadingDialog,
   curr_namespace,
-  updatingAll,
   readmeDialog,
   forceUpdateDialog,
   updateConfirmDialog,
   updateAllConfirmDialog,
   changelogDialog,
-  getInitialListViewMode,
-  isListView,
-  pluginSearch,
   loading_,
-  currentPage,
   dangerConfirmDialog,
-  selectedDangerPlugin,
   selectedMarketInstallPlugin,
   installSupport,
   versionSupportDialog,
   showUninstallDialog,
-  uninstallTarget,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
@@ -73,84 +57,34 @@ const {
   showRemoveSourceDialog,
   sourceToRemove,
   editingSource,
-  originalSourceUrl,
   extension_url,
   dialog,
   upload_file,
   uploadTab,
-  showPluginFullName,
-  marketSearch,
-  debouncedMarketSearch,
-  refreshingMarket,
-  sortBy,
-  sortOrder,
-  randomPluginNames,
-  normalizeStr,
-  toPinyinText,
-  toInitials,
-  pluginHeaders,
-  filteredExtensions,
-  filteredPlugins,
-  filteredMarketPlugins,
-  sortedPlugins,
-  RANDOM_PLUGINS_COUNT,
-  randomPlugins,
-  shufflePlugins,
-  refreshRandomPlugins,
-  displayItemsPerPage,
-  totalPages,
-  paginatedPlugins,
   updatableExtensions,
-  toggleShowReserved,
-  toast,
   resetLoadingDialog,
-  onLoadingDialogResult,
-  failedPluginsDict,
-  getExtensions,
-  handleReloadAllFailed,
-  checkUpdate,
-  uninstallExtension,
   handleUninstallConfirm,
-  updateExtension,
   closeUpdateConfirmDialog,
   confirmUpdatePlugin,
-  showUpdateAllConfirm,
   confirmUpdateAll,
   cancelUpdateAll,
   confirmForceUpdate,
-  updateAllExtensions,
-  pluginOn,
-  pluginOff,
-  openExtensionConfig,
   updateConfig,
-  showPluginInfo,
-  reloadPlugin,
-  viewReadme,
-  viewChangelog,
-  openInstallDialog,
   closeInstallDialog,
-  handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
-  loadCustomSources,
-  saveCustomSources,
   addCustomSource,
-  openSourceManagerDialog,
   selectPluginSource,
   sourceSelectItems,
   editCustomSource,
   removeCustomSource,
   confirmRemoveSource,
   saveCustomSource,
-  trimExtensionName,
-  checkAlreadyInstalled,
-  showVersionSupportWarning,
   continueInstallIgnoringVersionWarning,
   cancelInstallOnVersionWarning,
   newExtension,
   normalizePlatformList,
   getPlatformDisplayList,
-  resolveSelectedInstallPlugin,
   selectedInstallPlugin,
   selectedInstallDownloadUrl,
   selectedInstallSourceUrl,
@@ -160,10 +94,6 @@ const {
   selectedUpdateDownloadUrl,
   selectedUpdateSourceUrl,
   updateUsesGithubSource,
-  checkInstallVersionSupport,
-  refreshPluginMarket,
-  handleLocaleChange,
-  searchDebounceTimer,
 } = pageState;
 
 const selectedPluginId = computed(() => {
@@ -178,7 +108,12 @@ const selectedDetailTab = computed(
 const selectedInstalledPlugin = computed(() => {
   if (!selectedPluginId.value) return null;
   const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-  return data.find((plugin) => plugin.name === selectedPluginId.value) || null;
+  for (const plugin of data) {
+    if (plugin.name === selectedPluginId.value) {
+      return plugin;
+    }
+  }
+  return null;
 });
 
 const selectedMarketPlugin = computed(() => {
@@ -187,11 +122,19 @@ const selectedMarketPlugin = computed(() => {
     : [];
   const installedPlugin = selectedInstalledPlugin.value;
   const repo = installedPlugin?.repo?.toLowerCase();
-  return (
-    market.find((item) => item.name === selectedPluginId.value) ||
-    market.find((item) => repo && item.repo?.toLowerCase() === repo) ||
-    null
-  );
+  for (const item of market) {
+    if (item.name === selectedPluginId.value) {
+      return item;
+    }
+  }
+  if (repo) {
+    for (const item of market) {
+      if (item.repo?.toLowerCase() === repo) {
+        return item;
+      }
+    }
+  }
+  return null;
 });
 
 const selectedDetailPlugin = computed(() => {
@@ -417,9 +360,9 @@ const updateDialogPluginLogo = computed(() => {
             v-if="extension_config.metadata"
             :metadata="extension_config.metadata"
             :iterable="extension_config.config"
-            :metadataKey="curr_namespace"
-            :pluginName="curr_namespace"
-            :pluginI18n="extension_config.i18n"
+            :metadata-key="curr_namespace"
+            :plugin-name="curr_namespace"
+            :plugin-i18n="extension_config.i18n"
           />
           <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
         </div>
@@ -468,7 +411,7 @@ const updateDialogPluginLogo = computed(() => {
         <div style="margin-top: 32px">
           <h3>{{ tm("dialogs.loading.logs") }}</h3>
           <ConsoleDisplayer
-            historyNum="10"
+            history-num="10"
             style="height: 200px; margin-top: 16px; margin-bottom: 24px"
           >
           </ConsoleDisplayer>
@@ -490,10 +433,10 @@ const updateDialogPluginLogo = computed(() => {
   </v-dialog>
 
   <v-snackbar
+    v-model="snack_show"
     :timeout="2000"
     elevation="24"
     :color="snack_success"
-    v-model="snack_show"
     location="bottom center"
   >
     {{ snack_message }}
@@ -771,8 +714,8 @@ const updateDialogPluginLogo = computed(() => {
                   color="primary"
                   size="large"
                   prepend-icon="mdi-upload"
-                  @click="$refs.fileInput.click()"
                   elevation="2"
+                  @click="$refs.fileInput.click()"
                 >
                   {{ tm("buttons.selectFile") }}
                 </v-btn>
@@ -789,7 +732,7 @@ const updateDialogPluginLogo = computed(() => {
                     @click:close="upload_file = null"
                   >
                     {{ upload_file.name }}
-                    <template v-slot:append>
+                    <template #append>
                       <span class="text-caption ml-2"
                         >({{ (upload_file.size / 1024).toFixed(1) }}KB)</span
                       >
@@ -916,15 +859,15 @@ const updateDialogPluginLogo = computed(() => {
       <v-card-text>
         <v-select
           :model-value="selectedSource || '__default__'"
-          @update:model-value="
-            selectPluginSource($event === '__default__' ? null : $event)
-          "
           :items="sourceSelectItems"
           :label="tm('market.currentSource')"
           variant="outlined"
           prepend-inner-icon="mdi-source-branch"
           hide-details
           class="mb-4"
+          @update:model-value="
+            selectPluginSource($event === '__default__' ? null : $event)
+          "
         ></v-select>
 
         <div class="d-flex align-center justify-space-between mb-2">
@@ -947,7 +890,7 @@ const updateDialogPluginLogo = computed(() => {
             :active="selectedSource === null"
             @click="selectPluginSource(null)"
           >
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon
                 icon="mdi-shield-check"
                 size="small"
@@ -967,7 +910,7 @@ const updateDialogPluginLogo = computed(() => {
             :active="selectedSource === source.url"
             @click="selectPluginSource(source.url)"
           >
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon
                 icon="mdi-link-variant"
                 size="small"
@@ -978,7 +921,7 @@ const updateDialogPluginLogo = computed(() => {
             <v-list-item-subtitle class="text-caption">{{
               source.url
             }}</v-list-item-subtitle>
-            <template v-slot:append>
+            <template #append>
               <v-btn
                 icon="mdi-pencil-outline"
                 size="small"

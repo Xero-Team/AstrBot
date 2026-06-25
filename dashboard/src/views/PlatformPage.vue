@@ -10,8 +10,9 @@
             {{ tm('subtitle') }}
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="updatingMode = false; showAddPlatformDialog = true"
-          rounded="xl" size="x-large">
+        <v-btn
+color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
+          size="x-large" @click="updatingMode = false; showAddPlatformDialog = true">
           {{ tm('addAdapter') }}
         </v-btn>
       </v-row>
@@ -26,13 +27,14 @@
 
         <v-row v-else>
           <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card :item="platform" title-field="id" enabled-field="enable"
+            <item-card
+:item="platform" title-field="id" enabled-field="enable"
               variant="outlined"
               :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
               @delete="deletePlatform" @edit="editPlatform">
               <template #item-details="{ item }">
                 <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
-                <div class="platform-status-row mb-2" v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)">
+                <div v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)" class="platform-status-row mb-2">
                   <!-- 状态 chip - 只在非 running 状态时显示 -->
                   <v-chip
                     v-if="getPlatformStat(item.id)?.status !== 'running'"
@@ -59,8 +61,8 @@
                   </v-chip>
                 </div>
                 <div
-                  class="platform-qr-chip"
                   v-if="hasQrPayload(item.id)"
+                  class="platform-qr-chip"
                 >
                   <v-chip
                     size="small"
@@ -105,7 +107,7 @@
 
 
         <v-expand-transition>
-          <v-card-text class="pa-0" v-if="showConsole">
+          <v-card-text v-if="showConsole" class="pa-0">
             <ConsoleDisplayer style="background-color: #1e1e1e; height: 300px; border-radius: 0"></ConsoleDisplayer>
           </v-card-text>
         </v-expand-transition>
@@ -113,7 +115,8 @@
     </v-container>
 
     <!-- 添加平台适配器对话框 -->
-    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata" :config_data="config_data" ref="addPlatformDialog"
+    <AddNewPlatform
+ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata" :config-data="config_data"
       :updating-mode="updatingMode" :updating-platform-config="updatingPlatformConfig" @update="getConfig"
       @show-toast="showToast" @refresh-config="getConfig"/>
 
@@ -133,7 +136,7 @@
             hide-details
             class="webhook-url-field"
           >
-            <template v-slot:append-inner>
+            <template #append-inner>
               <v-btn
                 icon
                 size="small"
@@ -185,7 +188,7 @@
           <v-icon class="me-2" color="error">mdi-alert-circle</v-icon>
           {{ tm('errorDialog.title') }}
         </v-card-title>
-        <v-card-text class="px-4 pb-4" v-if="currentErrorPlatform">
+        <v-card-text v-if="currentErrorPlatform" class="px-4 pb-4">
           <div class="mb-3">
             <strong>{{ tm('errorDialog.platformId') }}:</strong> {{ currentErrorPlatform.id }}
           </div>
@@ -220,7 +223,8 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
+    <v-snackbar
+v-model="save_message_snack" :timeout="3000" elevation="24" :color="save_message_success"
       location="top">
       {{ save_message }}
     </v-snackbar>
@@ -229,8 +233,6 @@
 
 <script>
 import { botApi, fileApi, systemConfigApi } from '@/api/v1';
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
@@ -247,8 +249,6 @@ import { copyToClipboard } from '@/utils/clipboard';
 export default {
   name: 'PlatformPage',
   components: {
-    AstrBotConfig,
-    WaitingForRestart,
     ConsoleDisplayer,
     ItemCard,
     AddNewPlatform,
@@ -295,6 +295,21 @@ export default {
       currentQrPlatformId: "",
 
       store: useCommonStore()
+    }
+  },
+  computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
+      };
+    },
+    currentWebhookUrl() {
+      return this.getWebhookUrl(this.currentWebhookUuid);
     }
   },
 
@@ -347,8 +362,8 @@ export default {
     // 从工具函数导入
     getPlatformIcon(platform_id) {
       // 首先检查是否有来自插件的 logo_token
-      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
-      if (template && template.logo_token) {
+      const template = this.metadata.platform_group?.metadata.platform?.config_template?.[platform_id];
+      if (template?.logo_token) {
           // 通过文件服务访问插件提供的 logo
         return fileApi.tokenUrl(template.logo_token);
       }
@@ -482,7 +497,7 @@ export default {
 
         // 1) 先按模板顺序写入，保证字段相对顺序与 template 一致
         for (const [key, refValue] of Object.entries(referenceObj)) {
-          const hasSourceKey = Object.prototype.hasOwnProperty.call(sourceObj, key);
+          const hasSourceKey = Object.hasOwn(sourceObj, key);
           const sourceValue = sourceObj[key];
 
           if (refValue && typeof refValue === 'object' && !Array.isArray(refValue)) {
@@ -512,7 +527,7 @@ export default {
 
         // 2) 再补充 source 中模板没有的额外字段，保持旧配置兼容性
         for (const [key, value] of Object.entries(sourceObj)) {
-          if (Object.prototype.hasOwnProperty.call(referenceObj, key)) {
+          if (Object.hasOwn(referenceObj, key)) {
             continue;
           }
           if (Array.isArray(value)) {
@@ -613,21 +628,6 @@ export default {
       } else {
         this.showError(this.tm('webhookCopyFailed'));
       }
-    }
-  },
-  computed: {
-    // 安全访问翻译的计算属性
-    messages() {
-      return {
-        updateSuccess: this.tm('messages.updateSuccess'),
-        addSuccess: this.tm('messages.addSuccess'),
-        deleteSuccess: this.tm('messages.deleteSuccess'),
-        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('messages.deleteConfirm')
-      };
-    },
-    currentWebhookUrl() {
-      return this.getWebhookUrl(this.currentWebhookUuid);
     }
   }
 }

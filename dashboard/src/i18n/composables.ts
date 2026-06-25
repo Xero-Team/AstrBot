@@ -2,9 +2,11 @@ import { ref, computed } from 'vue';
 import { translations as staticTranslations } from './translations';
 import type { Locale } from './types';
 
+type TranslationTree = Record<string, unknown>;
+
 // 全局状态
 const currentLocale = ref<Locale>('zh-CN');
-const translations = ref<Record<string, any>>({});
+const translations = ref<TranslationTree>({});
 
 /**
  * 初始化i18n系统
@@ -49,12 +51,12 @@ export function useI18n() {
   // 翻译函数
   const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.');
-    let value: any = translations.value;
+    let value: unknown = translations.value;
 
     // 遍历键路径
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {
-        value = value[k];
+        value = (value as TranslationTree)[k];
       } else {
         console.warn(`Translation key not found: ${key}`);
         // 返回带括号的键名，便于在开发时识别缺失的翻译
@@ -130,15 +132,15 @@ export function useModuleI18n(moduleName: string) {
   };
 
   // 获取原始翻译值（可能是字符串、数组或对象）
-  const getRaw = (key: string): any => {
+  const getRaw = (key: string): unknown => {
     const normalizedModuleName = moduleName.replace(/\//g, '.');
     const fullKey = `${normalizedModuleName}.${key}`;
     const keys = fullKey.split('.');
-    let value: any = translations.value;
+    let value: unknown = translations.value;
 
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {
-        value = value[k];
+        value = (value as TranslationTree)[k];
       } else {
         return null;
       }
@@ -184,18 +186,21 @@ export function useLanguageSwitcher() {
  * @param modulePath 模块路径，如 'features.config-metadata'
  * @param allLocaleData 所有语言的翻译数据，如 { "zh-CN": {...}, "en-US": {...} }
  */
-export function mergeDynamicTranslations(modulePath: string, allLocaleData: Record<string, any>) {
+export function mergeDynamicTranslations(
+  modulePath: string,
+  allLocaleData: Record<string, TranslationTree>,
+) {
   const locale = currentLocale.value;
   const localeData = allLocaleData[locale];
   if (!localeData || typeof localeData !== 'object') return;
 
   const pathParts = modulePath.split('.');
-  let target: any = translations.value;
+  let target: TranslationTree = translations.value;
   for (const part of pathParts) {
     if (!(part in target) || typeof target[part] !== 'object') {
       target[part] = {};
     }
-    target = target[part];
+    target = target[part] as TranslationTree;
   }
 
   deepMerge(target, localeData);
@@ -204,13 +209,13 @@ export function mergeDynamicTranslations(modulePath: string, allLocaleData: Reco
   translations.value = { ...translations.value };
 }
 
-function deepMerge(target: Record<string, any>, source: Record<string, any>) {
+function deepMerge(target: TranslationTree, source: TranslationTree) {
   for (const key of Object.keys(source)) {
     if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
       if (!(key in target) || typeof target[key] !== 'object') {
         target[key] = {};
       }
-      deepMerge(target[key], source[key]);
+      deepMerge(target[key] as TranslationTree, source[key] as TranslationTree);
     } else {
       target[key] = source[key];
     }

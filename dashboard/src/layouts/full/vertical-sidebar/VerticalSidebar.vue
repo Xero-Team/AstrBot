@@ -3,7 +3,7 @@ import { ref, shallowRef, computed, onMounted, onUnmounted, watch, defineAsyncCo
 import { useTheme } from 'vuetify';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
-import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
+import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 
@@ -220,7 +220,7 @@ function moveAt(clientX, clientY) {
   const newLeft = clamp(clientX - offsetX, 0, window.innerWidth - dm.offsetWidth);
   const newTop = clamp(clientY - offsetY, 0, window.innerHeight - dm.offsetHeight);
   // Sync dragged position to reactive variable
-  dragPos.value = { left: newLeft + 'px', top: newTop + 'px' };
+  dragPos.value = { left: `${newLeft  }px`, top: `${newTop  }px` };
 }
 
 function endDrag() {
@@ -273,7 +273,7 @@ async function fetchStarCount() {
   try {
     const response = await fetch('https://cloud.astrbot.app/api/v1/github/repo-info');
     const data = await response.json();
-    if (data.data && data.data.stargazers_count) {
+    if (data.data?.stargazers_count) {
       starCount.value = data.data.stargazers_count;
       console.debug('Fetched star count:', starCount.value);
     }
@@ -282,7 +282,7 @@ async function fetchStarCount() {
   }
 }
 
-fetchStarCount();
+void fetchStarCount();
 
 // 打开更新日志对话框
 function openChangelogDialog() {
@@ -293,8 +293,8 @@ function openChangelogDialog() {
 
 <template>
   <v-navigation-drawer
-    left
     v-model="customizer.Sidebar_drawer"
+    left
     elevation="0"
     rail-width="80"
     app
@@ -303,28 +303,32 @@ function openChangelogDialog() {
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
-      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
+      <v-list v-model:opened="openedItems" :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]" :open-strategy="'multiple'">
         <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
           <NavItem :item="item" class="leftPadding" />
         </template>
       </v-list>
-      <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
+      <div v-if="!customizer.mini_sidebar" class="sidebar-footer">
         <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
           {{ t('core.navigation.settings') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
+        <v-btn
+class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
           @click="openChangelogDialog">
           {{ t('core.navigation.changelog') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
+        <v-btn
+class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
           @click="toggleIframe">
           {{ t('core.navigation.documentation') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
+        <v-btn
+class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
           @click="openFaqLink">
           {{ t('core.navigation.faq') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
+        <v-btn
+class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
           @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
           {{ t('core.navigation.github') }}
            <v-chip
@@ -341,8 +345,8 @@ function openChangelogDialog() {
     <div 
       v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
-      @mousedown="startSidebarResize"
       :class="{ 'resizing': isResizing }"
+      @mousedown="startSidebarResize"
     >
     </div>
   </v-navigation-drawer>
@@ -361,17 +365,17 @@ function openChangelogDialog() {
       <div style="display: flex; gap: 8px;">
         <v-btn
           icon
+          :style="{ borderRadius: '8px', border: frameBorder }"
           @click.stop="openIframeLink('https://docs.astrbot.app')"
           @mousedown.stop
-          :style="{ borderRadius: '8px', border: frameBorder }"
         >
           <v-icon icon="mdi-open-in-new" />
         </v-btn>
         <v-btn
           icon
+          :style="{ borderRadius: '8px', border: frameBorder }"
           @click.stop="toggleIframe"
           @mousedown.stop
-          :style="{ borderRadius: '8px', border: frameBorder }"
         >
           <v-icon icon="mdi-close" />
         </v-btn>

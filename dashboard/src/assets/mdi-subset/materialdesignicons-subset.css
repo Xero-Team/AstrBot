@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 271 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -38,10 +38,6 @@
 
 .mdi-account-heart::before {
   content: "\F0899";
-}
-
-.mdi-account-voice::before {
-  content: "\F05CB";
 }
 
 .mdi-alert::before {

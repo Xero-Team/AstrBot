@@ -90,7 +90,7 @@
                     v-if="basicSourceConfig"
                     :iterable="basicSourceConfig"
                     :metadata="providerSourceSchema"
-                    metadataKey="provider"
+                    metadata-key="provider"
                     :is-editing="true"
                   />
                 </section>
@@ -104,7 +104,7 @@
                   <AstrBotConfig
                     :iterable="advancedSourceConfig"
                     :metadata="providerSourceSchema"
-                    metadataKey="provider"
+                    metadata-key="provider"
                     :is-editing="true"
                   />
                 </section>
@@ -113,9 +113,9 @@
 
                 <section class="provider-section provider-section--models">
                   <ProviderModelsPanel
+                    v-model:model-search="modelSearch"
                     :entries="filteredMergedModelEntries"
                     :available-count="availableModels.length"
-                    v-model:model-search="modelSearch"
                     :loading-models="loadingModels"
                     :is-source-modified="isSourceModified"
                     :supports-image-input="supportsImageInput"
@@ -167,8 +167,8 @@
               >
                 <template #item-details="{ item }">
                   <v-tooltip v-if="getProviderStatus(item.id)" location="top" max-width="300">
-                    <template #activator="{ props }">
-                      <v-chip v-bind="props" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
+                    <template #activator="{ props: activatorProps }">
+                      <v-chip v-bind="activatorProps" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
                         <v-icon start size="small">
                           {{
                             getProviderStatus(item.id).status === 'available'
@@ -251,7 +251,7 @@
           <AstrBotConfig
             :iterable="newSelectedProviderConfig"
             :metadata="configSchema"
-            metadataKey="provider"
+            metadata-key="provider"
             :is-editing="updatingMode"
           />
         </v-card-text>
@@ -277,7 +277,7 @@
             v-if="providerEditData"
             :iterable="providerEditData"
             :metadata="providerModelConfigSchema"
-            metadataKey="provider"
+            metadata-key="provider"
             :is-editing="true"
           />
         </v-card-text>
@@ -523,7 +523,7 @@ function configExistingProvider(provider) {
         if (!Array.isArray(reference[key])) {
           mergeConfigWithOrder(
             target[key],
-            source && source[key] ? source[key] : {},
+            source?.[key] ? source[key] : {},
             reference[key]
           )
         }
@@ -625,7 +625,7 @@ function isProviderTesting(providerId) {
 }
 
 function getProviderStatus(providerId) {
-  return providerStatuses.value.find(s => s.id === providerId)
+  providerStatuses.value.find(s => s.id === providerId);
 }
 
 async function testSingleProvider(provider) {
@@ -658,7 +658,7 @@ async function testSingleProvider(provider) {
 
     const startTime = performance.now()
     const res = await providerApi.test(provider.id)
-    if (!res.data || res.data.status !== 'ok') {
+    if (res.data?.status !== 'ok') {
       throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
     }
 
@@ -672,7 +672,9 @@ async function testSingleProvider(provider) {
       providerStatuses.value.splice(index, 1, result)
     }
 
-    const isAvailable = result.status === 'available' && result.error == null
+    const isAvailable =
+      result.status === 'available' &&
+      (result.error === null || result.error === undefined)
     if (!isAvailable) {
       throw new Error(result.error || tm('models.testError'))
     }
@@ -723,7 +725,7 @@ function getStatusText(status) {
 }
 
 function goToConfigPage() {
-  router.push('/config')
+  void router.push('/config')
   showAgentRunnerDialog.value = false
 }
 </script>

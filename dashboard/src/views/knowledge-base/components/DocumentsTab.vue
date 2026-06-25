@@ -5,7 +5,8 @@
       <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
         {{ t('documents.upload') }}
       </v-btn>
-      <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
+      <v-text-field
+v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
         density="compact" hide-details clearable style="max-width: 300px" />
     </div>
 
@@ -27,7 +28,8 @@
                     ({{ item.uploadProgress.current }} / {{ item.uploadProgress.total }})
                   </span>
                 </div>
-                <v-progress-linear :model-value="getUploadPercentage(item)" color="primary" height="4" rounded
+                <v-progress-linear
+:model-value="getUploadPercentage(item)" color="primary" height="4" rounded
                   striped />
               </div>
             </div>
@@ -78,14 +80,16 @@
             <!-- 文件上传 -->
             <v-window-item value="file">
               <!-- 文件选择 -->
-              <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
+              <div
+class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
                 @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
                 <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
                 <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
+                <input
+ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
 
@@ -95,7 +99,8 @@
                   <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
                 </div>
                 <div class="files-list">
-                  <div v-for="(file, index) in selectedFiles" :key="index"
+                  <div
+v-for="(file, index) in selectedFiles" :key="index"
                     class="file-item pa-3 mb-2 rounded bg-surface-variant">
                     <div class="d-flex align-center justify-space-between">
                       <div class="d-flex align-center gap-2">
@@ -128,7 +133,8 @@
                 </v-alert>
               </div>
 
-              <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable :disabled="tavilyConfigStatus === 'not_configured'"
+              <v-text-field
+v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable :disabled="tavilyConfigStatus === 'not_configured'"
                 autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
             </v-window-item>
           </v-window>
@@ -143,7 +149,8 @@
                 <v-switch v-model="uploadSettings.enable_cleaning" :label="t('upload.enableCleaning')" color="primary" />
               </v-col>
               <v-col cols="12" sm="8">
-                <v-select v-model="uploadSettings.cleaning_provider_id" :items="llmProviders" item-title="id"
+                <v-select
+v-model="uploadSettings.cleaning_provider_id" :items="llmProviders" item-title="id"
                   item-value="id" :label="t('upload.cleaningProvider')" :hint="t('upload.cleaningProviderHint')"
                   persistent-hint variant="outlined" density="compact" :disabled="!uploadSettings.enable_cleaning" />
               </v-col>
@@ -157,12 +164,14 @@
             </div>
             <v-row>
               <v-col cols="12" sm="6">
-                <v-text-field v-model.number="uploadSettings.chunk_size" :label="t('upload.chunkSize')"
+                <v-text-field
+v-model.number="uploadSettings.chunk_size" :label="t('upload.chunkSize')"
                   :hint="t('upload.chunkSizeHint')" persistent-hint type="number" variant="outlined" density="compact"
                   :placeholder="props.kb?.chunk_size?.toString() || '512'" />
               </v-col>
               <v-col cols="12" sm="6">
-                <v-text-field v-model.number="uploadSettings.chunk_overlap" :label="t('upload.chunkOverlap')"
+                <v-text-field
+v-model.number="uploadSettings.chunk_overlap" :label="t('upload.chunkOverlap')"
                   :hint="t('upload.chunkOverlapHint')" persistent-hint type="number" variant="outlined"
                   density="compact" :placeholder="props.kb?.chunk_overlap?.toString() || '50'" />
               </v-col>
@@ -173,15 +182,18 @@
             <h3 class="text-h6 mb-4">{{ t('upload.batchSettings') }}</h3>
             <v-row>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量"
+                <v-text-field
+v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量"
                   persistent-hint type="number" variant="outlined" density="compact" />
               </v-col>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
+                <v-text-field
+v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
                   hint="并发任务数量限制" persistent-hint type="number" variant="outlined" density="compact" />
               </v-col>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.max_retries" :label="t('upload.maxRetries')"
+                <v-text-field
+v-model.number="uploadSettings.max_retries" :label="t('upload.maxRetries')"
                   hint="失败时的最大重试次数" persistent-hint type="number" variant="outlined" density="compact" />
               </v-col>
             </v-row>
@@ -193,11 +205,12 @@
 
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
+          <v-btn variant="text" :disabled="uploading" @click="closeUploadDialog">
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="startUpload" :loading="uploading"
-            :disabled="isUploadDisabled">
+          <v-btn
+color="primary" variant="elevated" :loading="uploading" :disabled="isUploadDisabled"
+            @click="startUpload">
             {{ t('upload.submit') }}
           </v-btn>
         </v-card-actions>
@@ -217,7 +230,7 @@
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
-          <v-btn color="error" variant="elevated" @click="deleteDocument" :loading="deleting">
+          <v-btn color="error" variant="elevated" :loading="deleting" @click="deleteDocument">
             删除
           </v-btn>
         </v-card-actions>
@@ -244,9 +257,108 @@ import { useModuleI18n } from '@/i18n/composables'
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 const router = useRouter()
 
+interface KnowledgeBaseConfig {
+  chunk_size?: number | null
+  chunk_overlap?: number | null
+  [key: string]: unknown
+}
+
+interface UploadProgressState {
+  stage: string
+  current: number
+  total: number
+}
+
+interface DocumentItem {
+  doc_id: string
+  doc_name: string
+  file_type: string
+  file_size: number
+  chunk_count: number
+  created_at: string
+  uploading?: boolean
+  taskId?: string
+  uploadProgress?: UploadProgressState
+}
+
+interface LlmProviderItem {
+  id: string
+  [key: string]: unknown
+}
+
+interface UploadSettingsState {
+  chunk_size: number | null
+  chunk_overlap: number | null
+  batch_size: number
+  tasks_limit: number
+  max_retries: number
+  enable_cleaning: boolean
+  cleaning_provider_id: string | null
+}
+
+interface UrlUploadPayload {
+  kb_id: string
+  url: string
+  batch_size: number
+  tasks_limit: number
+  max_retries: number
+  chunk_size?: number
+  chunk_overlap?: number
+  enable_cleaning?: true
+  cleaning_provider_id?: string
+  [key: string]: unknown
+}
+
+interface DocumentsPayload {
+  items?: DocumentItem[]
+}
+
+interface UploadTaskPayload {
+  task_id?: string
+  file_count?: number
+  url?: string
+}
+
+interface KnowledgeTaskProgressPayload {
+  file_index?: number
+  stage?: string
+  current?: number
+  total?: number
+}
+
+interface KnowledgeTaskResultPayload {
+  success_count?: number
+  failed_count?: number
+}
+
+interface KnowledgeTaskPayload {
+  status?: string
+  progress?: KnowledgeTaskProgressPayload
+  result?: KnowledgeTaskResultPayload
+  error?: string
+}
+
+interface ProviderSettings {
+  websearch_tavily_key?: string[]
+  [key: string]: unknown
+}
+
+interface DashboardConfig {
+  provider_settings?: ProviderSettings
+  [key: string]: unknown
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+  const errorLike = error as { response?: { data?: { message?: string } } }
+  return errorLike.response?.data?.message || fallback
+}
+
 const props = defineProps<{
   kbId: string
-  kb: any
+  kb: KnowledgeBaseConfig
 }>()
 
 const emit = defineEmits(['refresh'])
@@ -255,18 +367,17 @@ const emit = defineEmits(['refresh'])
 const loading = ref(false)
 const uploading = ref(false)
 const deleting = ref(false)
-const documents = ref<any[]>([])
+const documents = ref<DocumentItem[]>([])
 const searchQuery = ref('')
 const showUploadDialog = ref(false)
 const showDeleteDialog = ref(false)
 const selectedFiles = ref<File[]>([])
-const deleteTarget = ref<any>(null)
+const deleteTarget = ref<DocumentItem | null>(null)
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploadMode = ref('file') // 'file' or 'url'
 const uploadUrl = ref('')
-const llmProviders = ref<any[]>([])
-const uploadingTasks = ref<Map<string, any>>(new Map())
+const llmProviders = ref<LlmProviderItem[]>([])
 const progressPollingInterval = ref<number | null>(null)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
@@ -284,7 +395,7 @@ const showSnackbar = (text: string, color: string = 'success') => {
 }
 
 // 上传设置
-const uploadSettings = ref({
+const uploadSettings = ref<UploadSettingsState>({
   chunk_size: null as number | null,
   chunk_overlap: null as number | null,
   batch_size: 32,
@@ -342,7 +453,8 @@ const loadDocuments = async () => {
   try {
     const response = await knowledgeApi.documents(props.kbId)
     if (response.data.status === 'ok') {
-      documents.value = response.data.data.items || []
+      const payload = response.data.data as DocumentsPayload | undefined
+      documents.value = payload?.items || []
     }
   } catch (error) {
     console.error('Failed to load documents:', error)
@@ -426,13 +538,13 @@ const uploadFiles = async () => {
     const response = await knowledgeApi.uploadDocument(props.kbId, formData)
 
     if (response.data.status === 'ok') {
-      const result = response.data.data
-      const taskId = result.task_id
+      const result = response.data.data as UploadTaskPayload | undefined
+      const taskId = result?.task_id || ''
 
-      showSnackbar(`正在后台上传 ${result.file_count} 个文件...`, 'info')
+      showSnackbar(`正在后台上传 ${result?.file_count || 0} 个文件...`, 'info')
 
       // 为每个文件添加占位条目到文档列表
-      const uploadingDocs = selectedFiles.value.map((file, index) => ({
+      const uploadingDocs: DocumentItem[] = selectedFiles.value.map((file, index) => ({
         doc_id: `uploading_${taskId}_${index}`,
         doc_name: file.name,
         file_type: file.name.split('.').pop() || '',
@@ -440,7 +552,7 @@ const uploadFiles = async () => {
         chunk_count: 0,
         created_at: new Date().toISOString(),
         uploading: true,
-        taskId: taskId,
+        taskId,
         uploadProgress: {
           stage: 'waiting',
           current: 0,
@@ -479,10 +591,10 @@ const uploadFromUrl = async () => {
   uploading.value = true
 
   try {
-    const payload: any = {
-      kb_id: props.kbId,
-      url: uploadUrl.value,
-      batch_size: uploadSettings.value.batch_size,
+      const payload: UrlUploadPayload = {
+        kb_id: props.kbId,
+        url: uploadUrl.value,
+        batch_size: uploadSettings.value.batch_size,
       tasks_limit: uploadSettings.value.tasks_limit,
       max_retries: uploadSettings.value.max_retries
     }
@@ -503,21 +615,21 @@ const uploadFromUrl = async () => {
     const response = await knowledgeApi.importDocumentFromUrl(props.kbId, payload)
 
     if (response.data.status === 'ok') {
-      const result = response.data.data
-      const taskId = result.task_id
+      const result = response.data.data as UploadTaskPayload | undefined
+      const taskId = result?.task_id || ''
 
       showSnackbar(`正在从 URL 后台提取内容...`, 'info')
 
       // 添加占位条目
-      const uploadingDoc = {
+      const uploadingDoc: DocumentItem = {
         doc_id: `uploading_${taskId}_0`,
-        doc_name: result.url,
+        doc_name: result?.url || uploadUrl.value,
         file_type: 'url',
         file_size: 0, // URL has no size
         chunk_count: 0,
         created_at: new Date().toISOString(),
         uploading: true,
-        taskId: taskId,
+        taskId,
         uploadProgress: {
           stage: 'waiting',
           current: 0,
@@ -534,9 +646,9 @@ const uploadFromUrl = async () => {
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to upload from URL:', error)
-    const message = error.response?.data?.message || t('documents.uploadFailed')
+    const message = getErrorMessage(error, t('documents.uploadFailed'))
     showSnackbar(message, 'error')
   } finally {
     uploading.value = false
@@ -555,10 +667,10 @@ const startProgressPolling = (taskId: string) => {
       const response = await knowledgeApi.task(taskId)
 
       if (response.data.status === 'ok') {
-        const data = response.data.data
-        const status = data.status
+        const data = response.data.data as KnowledgeTaskPayload | undefined
+        const status = data?.status
 
-        if (status === 'processing' && data.progress) {
+        if (status === 'processing' && data?.progress) {
           // 更新进度
           const progress = data.progress
           const fileIndex = progress.file_index || 0
@@ -566,7 +678,7 @@ const startProgressPolling = (taskId: string) => {
           // 更新对应文件的进度
           documents.value = documents.value.map(doc => {
             if (doc.taskId === taskId) {
-              const docIndex = parseInt(doc.doc_id.split('_').pop() || '0')
+              const docIndex = parseInt(doc.doc_id.split('_').pop() || '0', 10)
               if (docIndex === fileIndex) {
                 return {
                   ...doc,
@@ -584,7 +696,7 @@ const startProgressPolling = (taskId: string) => {
           // 任务完成
           stopProgressPolling()
 
-          const result = data.result
+          const result = data?.result
           const successCount = result?.success_count || 0
           const failedCount = result?.failed_count || 0
 
@@ -607,7 +719,7 @@ const startProgressPolling = (taskId: string) => {
           // 移除上传中的占位文档
           documents.value = documents.value.filter(doc => doc.taskId !== taskId)
 
-          showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
+          showSnackbar(`上传失败: ${data?.error || '未知错误'}`, 'error')
         }
       } else {
         // 任务不存在，停止轮询
@@ -630,7 +742,7 @@ const stopProgressPolling = () => {
 }
 
 // 获取上传百分比
-const getUploadPercentage = (item: any) => {
+const getUploadPercentage = (item: DocumentItem) => {
   if (!item.uploadProgress) return 0
   const { current, total } = item.uploadProgress
   if (!total || total === 0) return 0
@@ -660,15 +772,15 @@ const closeUploadDialog = () => {
 }
 
 // 查看文档
-const viewDocument = (doc: any) => {
-  router.push({
+const viewDocument = (doc: DocumentItem) => {
+  void router.push({
     name: 'NativeDocumentDetail',
     params: { kbId: props.kbId, docId: doc.doc_id }
   })
 }
 
 // 确认删除
-const confirmDelete = (doc: any) => {
+const confirmDelete = (doc: DocumentItem) => {
   deleteTarget.value = doc
   showDeleteDialog.value = true
 }
@@ -748,7 +860,9 @@ const loadLlmProviders = async () => {
   try {
     const response = await providerApi.listByProviderType('chat_completion')
     if (response.data.status === 'ok') {
-      llmProviders.value = response.data.data
+      llmProviders.value = Array.isArray(response.data.data)
+        ? (response.data.data as LlmProviderItem[])
+        : []
     }
   } catch (error) {
     console.error('Failed to load LLM providers:', error)
@@ -761,8 +875,9 @@ const checkTavilyConfig = async () => {
   try {
     const response = await configProfileApi.get('default')
     if (response.data.status === 'ok') {
-      const config = ((response.data.data as any).config || {}) as any
-      const tavilyKeys = config?.provider_settings?.websearch_tavily_key
+      const payload = response.data.data as { config?: DashboardConfig } | undefined
+      const config = payload?.config || {}
+      const tavilyKeys = config.provider_settings?.websearch_tavily_key
       if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some(key => key.trim() !== '')) {
         tavilyConfigStatus.value = 'configured'
       } else {
@@ -779,13 +894,13 @@ const checkTavilyConfig = async () => {
 
 const onTavilyKeySet = () => {
   showSnackbar('Tavily API Key 配置成功', 'success')
-  checkTavilyConfig()
+  void checkTavilyConfig()
 }
 
 onMounted(() => {
-  loadDocuments()
-  loadLlmProviders()
-  checkTavilyConfig()
+  void loadDocuments()
+  void loadLlmProviders()
+  void checkTavilyConfig()
 })
 
 onUnmounted(() => {

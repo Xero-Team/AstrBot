@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, useSlots } from "vue";
+import { computed, inject, useSlots, type VNode } from "vue";
 import type { ChatThread } from "@/composables/useMessages";
 
 const props = defineProps<{
@@ -15,8 +15,14 @@ const props = defineProps<{
 }>();
 
 const slots = useSlots();
-const threadMap = inject("chatThreadMap", () => ({} as Record<string, ChatThread>));
-const openThread = inject("openChatThread", (_thread: ChatThread) => {});
+const threadMap = inject<() => Record<string, ChatThread>>(
+  "chatThreadMap",
+  () => ({}),
+);
+const openThread = inject<(thread: ChatThread) => void>(
+  "openChatThread",
+  (_thread) => undefined,
+);
 
 const threadId = computed(() => {
   const nodeContent = props.node?.content?.trim();
@@ -35,11 +41,11 @@ function open() {
   }
 }
 
-function slotText(nodes: unknown[] = []): string {
+function slotText(nodes: VNode[] = []): string {
   return nodes
-    .map((node: any) => {
+    .map((node) => {
       if (typeof node.children === "string") return node.children;
-      if (Array.isArray(node.children)) return slotText(node.children);
+      if (Array.isArray(node.children)) return slotText(node.children as VNode[]);
       return "";
     })
     .join("");

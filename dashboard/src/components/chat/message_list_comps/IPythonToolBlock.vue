@@ -3,9 +3,11 @@
         <div v-if="displayExpanded" class="py-3 animate-fade-in">
             <!-- Code Section -->
             <div class="code-section">
-                <div v-if="shikiReady && code" class="code-highlighted"
+                <div
+v-if="shikiReady && code" class="code-highlighted"
                     v-html="highlightedCode"></div>
-                <pre v-else class="code-fallback"
+                <pre
+v-else class="code-fallback"
                     :class="{ 'dark-theme': isDark }">{{ code || 'No code available' }}</pre>
             </div>
 
@@ -14,7 +16,8 @@
                 <div class="result-label">
                     {{ tm('ipython.output') }}:
                 </div>
-                <pre class="result-content"
+                <pre
+class="result-content"
                     :class="{ 'dark-theme': isDark }">{{ formattedResult }}</pre>
             </div>
         </div>
@@ -56,7 +59,7 @@ const shikiReady = ref(false);
 
 const code = computed(() => {
     try {
-        if (props.toolCall.args && props.toolCall.args.code) {
+        if (props.toolCall.args?.code) {
             return props.toolCall.args.code;
         }
     } catch (err) {

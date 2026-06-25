@@ -27,7 +27,7 @@ const { tm } = useModuleI18n('features/console');
           style="margin-right: 16px;"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
-          <template v-slot:activator="{ props }">
+          <template #activator="{ props }">
             <v-btn variant="plain" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
           </template>
           <v-card>
@@ -41,7 +41,7 @@ const { tm } = useModuleI18n('features/console');
             </v-card-text>
             <v-card-actions>
               <v-spacer></v-spacer>
-              <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
+              <v-btn color="blue-darken-1" variant="text" :loading="loading" @click="pipInstall">
                 {{ tm('pipInstall.installButton') }}
               </v-btn>
             </v-card-actions>
@@ -69,17 +69,17 @@ export default {
       loading: false
     }
   },
-  mounted() {
-    if (this.$refs.consoleDisplayer) {
-      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
-    }
-  },
   watch: {
     autoScrollEnabled(val) {
       localStorage.setItem('console_auto_scroll', val);
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }
+    }
+  },
+  mounted() {
+    if (this.$refs.consoleDisplayer) {
+      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
     }
   },
   methods: {

@@ -110,13 +110,13 @@ const formatDuration = (seconds) => {
   if (!Number.isFinite(seconds) || seconds < 0) return "";
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
-  } else if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  } else {
-    const minutes = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return `${minutes}m ${secs}s`;
   }
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${minutes}m ${secs}s`;
 };
 
 const toggleExpanded = () => {

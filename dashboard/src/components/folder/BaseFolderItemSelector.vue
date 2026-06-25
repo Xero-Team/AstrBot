@@ -39,9 +39,10 @@
                             </div>
                             <v-list density="compact" nav class="tree-list pa-2" bg-color="transparent">
                                 <!-- 根目录 -->
-                                <v-list-item :active="currentFolderId === null" @click="navigateToFolder(null)"
-                                    rounded="lg" class="mb-1 root-item">
-                                    <template v-slot:prepend>
+                                <v-list-item
+:active="currentFolderId === null" rounded="lg"
+                                    class="mb-1 root-item" @click="navigateToFolder(null)">
+                                    <template #prepend>
                                         <v-icon size="20" :color="currentFolderId === null ? 'primary' : ''">mdi-home</v-icon>
                                     </template>
                                     <v-list-item-title class="text-body-2">{{ labels.rootFolder || '根目录' }}</v-list-item-title>
@@ -49,7 +50,8 @@
 
                                 <!-- 文件夹树 -->
                                 <template v-if="!treeLoading">
-                                    <BaseMoveTargetNode v-for="folder in folderTree" :key="folder.folder_id"
+                                    <BaseMoveTargetNode
+v-for="folder in folderTree" :key="folder.folder_id"
                                         :folder="folder" :depth="0" :selected-folder-id="currentFolderId"
                                         :disabled-folder-ids="[]" @select="navigateToFolder" />
                                 </template>
@@ -63,9 +65,11 @@
                         <!-- 右侧项目列表 -->
                         <div class="items-panel">
                             <div v-if="isCompactLayout" class="mobile-folder-bar px-4 py-2">
-                                <v-btn icon="mdi-arrow-left" size="small" variant="text"
+                                <v-btn
+icon="mdi-arrow-left" size="small" variant="text"
                                     :disabled="currentFolderId === null" @click="navigateToParentFolder" />
-                                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-home"
+                                <v-btn
+size="small" variant="tonal" color="primary" prepend-icon="mdi-home"
                                     @click="navigateToFolder(null)">
                                     {{ labels.rootFolder || '根目录' }}
                                 </v-btn>
@@ -79,16 +83,18 @@
                             <!-- 面包屑导航 -->
                             <div class="breadcrumb-bar px-4 py-3">
                                 <v-breadcrumbs :items="breadcrumbItems" density="compact" class="pa-0">
-                                    <template v-slot:item="{ item }">
-                                        <v-breadcrumbs-item :disabled="(item as any).disabled"
-                                            @click="!(item as any).disabled && navigateToFolder((item as any).folderId)"
-                                            :class="{ 'breadcrumb-link': !(item as any).disabled }">
-                                            <v-icon v-if="(item as any).isRoot" size="small"
+                                    <template #item="{ item }">
+                                        <v-breadcrumbs-item
+                                            :disabled="toBreadcrumbItem(item).disabled"
+                                            :class="{ 'breadcrumb-link': !toBreadcrumbItem(item).disabled }"
+                                            @click="!toBreadcrumbItem(item).disabled && navigateToFolder(toBreadcrumbItem(item).folderId)">
+                                            <v-icon
+v-if="toBreadcrumbItem(item).isRoot" size="small"
                                                 class="mr-1">mdi-home</v-icon>
-                                            {{ item.title }}
+                                            {{ toBreadcrumbItem(item).title }}
                                         </v-breadcrumbs-item>
                                     </template>
-                                    <template v-slot:divider>
+                                    <template #divider>
                                         <v-icon size="small" color="grey">mdi-chevron-right</v-icon>
                                     </template>
                                 </v-breadcrumbs>
@@ -98,22 +104,24 @@
 
                             <!-- 项目列表 -->
                             <div class="items-list">
-                                <v-progress-linear v-if="itemsLoading" indeterminate
+                                <v-progress-linear
+v-if="itemsLoading" indeterminate
                                     color="primary" height="2"></v-progress-linear>
 
                                 <!-- 子文件夹 -->
                                 <v-list v-if="!itemsLoading" lines="two" class="pa-3 items-content">
                                     <template v-if="currentSubFolders.length > 0">
                                         <div class="section-label text-caption text-medium-emphasis mb-2 px-2">子文件夹</div>
-                                        <v-list-item v-for="folder in currentSubFolders" :key="'folder-' + folder.folder_id"
-                                            @click="navigateToFolder(folder.folder_id)" rounded="lg" class="mb-1 folder-item">
-                                            <template v-slot:prepend>
+                                        <v-list-item
+v-for="folder in currentSubFolders" :key="'folder-' + folder.folder_id"
+                                            rounded="lg" class="mb-1 folder-item" @click="navigateToFolder(folder.folder_id)">
+                                            <template #prepend>
                                                 <v-avatar size="36" color="amber-lighten-4" class="mr-3">
                                                     <v-icon color="amber-darken-2" size="20">mdi-folder</v-icon>
                                                 </v-avatar>
                                             </template>
                                             <v-list-item-title class="font-weight-medium">{{ folder.name }}</v-list-item-title>
-                                            <template v-slot:append>
+                                            <template #append>
                                                 <v-icon size="20" color="grey">mdi-chevron-right</v-icon>
                                             </template>
                                         </v-list-item>
@@ -122,11 +130,12 @@
                                     <!-- 项目列表 -->
                                     <template v-if="currentItems.length > 0">
                                         <div class="section-label text-caption text-medium-emphasis mb-2 px-2" :class="{ 'mt-4': currentSubFolders.length > 0 }">可选项目</div>
-                                        <v-list-item v-for="item in currentItems" :key="'item-' + getItemId(item)"
-                                            :value="getItemId(item)" @click="selectItem(item)"
-                                            :active="selectedItemId === getItemId(item)" rounded="lg" class="mb-1 persona-item"
-                                            :class="{ 'selected-item': selectedItemId === getItemId(item) }">
-                                            <template v-slot:prepend>
+                                        <v-list-item
+v-for="item in currentItems" :key="'item-' + getItemId(item)"
+                                            :value="getItemId(item)" :active="selectedItemId === getItemId(item)"
+                                            rounded="lg" class="mb-1 persona-item" :class="{ 'selected-item': selectedItemId === getItemId(item) }"
+                                            @click="selectItem(item)">
+                                            <template #prepend>
                                                 <v-avatar size="36" :color="selectedItemId === getItemId(item) ? 'primary-lighten-4' : 'grey-lighten-3'" class="mr-3">
                                                     <v-icon :color="selectedItemId === getItemId(item) ? 'primary' : 'grey-darken-1'" size="20">mdi-account</v-icon>
                                                 </v-avatar>
@@ -136,16 +145,18 @@
                                                 {{ truncateText(getItemDescription(item), 80) }}
                                             </v-list-item-subtitle>
 
-                                            <template v-slot:append>
+                                            <template #append>
                                                 <div class="d-flex align-center ga-1">
-                                                    <v-btn v-if="showEditButton && !isDefaultItem(item)"
+                                                    <v-btn
+v-if="showEditButton && !isDefaultItem(item)"
                                                         icon="mdi-pencil"
                                                         size="small"
                                                         variant="text"
-                                                        @click.stop="handleEditItem(item)"
                                                         :title="labels.editButton || 'Edit'"
+                                                        @click.stop="handleEditItem(item)"
                                                     />
-                                                    <v-icon v-if="selectedItemId === getItemId(item)"
+                                                    <v-icon
+v-if="selectedItemId === getItemId(item)"
                                                         color="primary" size="22">mdi-check-circle</v-icon>
                                                 </div>
                                             </template>
@@ -153,7 +164,8 @@
                                     </template>
 
                                     <!-- 空状态 -->
-                                    <div v-if="currentSubFolders.length === 0 && currentItems.length === 0"
+                                    <div
+v-if="currentSubFolders.length === 0 && currentItems.length === 0"
                                         class="empty-state text-center py-12">
                                         <v-icon size="64" color="grey-lighten-2">mdi-folder-open-outline</v-icon>
                                         <p class="text-grey mt-4 text-body-2">{{ labels.emptyFolder || labels.noItems || '此文件夹为空' }}</p>
@@ -165,13 +177,14 @@
                 </v-card-text>
 
                 <v-card-actions class="pa-4">
-                    <v-btn v-if="showCreateButton" variant="text" color="primary" prepend-icon="mdi-plus"
+                    <v-btn
+v-if="showCreateButton" variant="text" color="primary" prepend-icon="mdi-plus"
                         @click="$emit('create')">
                         {{ labels.createButton || '新建' }}
                     </v-btn>
                     <v-spacer></v-spacer>
                     <v-btn variant="text" @click="cancelSelection">{{ labels.cancelButton || '取消' }}</v-btn>
-                    <v-btn color="primary" @click="confirmSelection" :disabled="!selectedItemId">
+                    <v-btn color="primary" :disabled="!selectedItemId" @click="confirmSelection">
                         {{ labels.confirmButton || '确认' }}
                     </v-btn>
                 </v-card-actions>
@@ -183,7 +196,7 @@
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue';
 import BaseMoveTargetNode from './BaseMoveTargetNode.vue';
-import type { FolderTreeNode, FolderItemSelectorLabels, SelectableItem } from './types';
+import type { BreadcrumbItem, FolderTreeNode, FolderItemSelectorLabels, SelectableItem } from './types';
 
 export default defineComponent({
     name: 'BaseFolderItemSelector',
@@ -257,7 +270,7 @@ export default defineComponent({
     data() {
         return {
             dialog: false,
-            selectedItemId: '' as string,
+            selectedItemId: '',
             currentFolderId: null as string | null,
             breadcrumbPath: [] as FolderTreeNode[]
         };
@@ -308,8 +321,8 @@ export default defineComponent({
             return folder?.children || [];
         },
 
-        breadcrumbItems(): any[] {
-            const items: any[] = [
+        breadcrumbItems(): BreadcrumbItem[] {
+            const items: BreadcrumbItem[] = [
                 {
                     title: this.labels.rootFolder || '根目录',
                     folderId: null,
@@ -331,6 +344,9 @@ export default defineComponent({
         }
     },
     methods: {
+        toBreadcrumbItem(item: unknown): BreadcrumbItem {
+            return item as BreadcrumbItem;
+        },
         getItemId(item: SelectableItem): string {
             return String(item[this.itemIdField] || item.id || '');
         },
@@ -345,7 +361,7 @@ export default defineComponent({
 
         truncateText(text: string, maxLength: number): string {
             if (!text) return '';
-            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+            return text.length > maxLength ? `${text.substring(0, maxLength)  }...` : text;
         },
 
         openDialog() {

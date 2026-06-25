@@ -10,10 +10,12 @@
             <div class="sidebar d-none d-md-block">
                 <div class="sidebar-header d-flex justify-space-between align-center mb-3">
                     <h3 class="text-h6">{{ tm('folder.sidebarTitle') }}</h3>
-                    <v-btn icon="mdi-folder-plus" variant="text" size="small" @click="showCreateFolderDialog = true"
-                        :title="tm('folder.createButton')" />
+                    <v-btn
+icon="mdi-folder-plus" variant="text" size="small" :title="tm('folder.createButton')"
+                        @click="showCreateFolderDialog = true" />
                 </div>
-                <FolderTree @move-folder="openMoveFolderDialog" @success="showSuccess" @error="showError"
+                <FolderTree
+@move-folder="openMoveFolderDialog" @success="showSuccess" @error="showError"
                     @persona-dropped="handlePersonaDropped" />
             </div>
 
@@ -28,12 +30,14 @@
 
                     <!-- 操作按钮组 -->
                     <div class="d-flex ga-2">
-                        <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreatePersonaDialog"
-                            rounded="lg">
+                        <v-btn
+color="primary" variant="tonal" prepend-icon="mdi-plus" rounded="lg"
+                            @click="openCreatePersonaDialog">
                             {{ tm('buttons.create') }}
                         </v-btn>
-                        <v-btn variant="outlined" prepend-icon="mdi-folder-plus" @click="showCreateFolderDialog = true"
-                            rounded="lg">
+                        <v-btn
+variant="outlined" prepend-icon="mdi-folder-plus" rounded="lg"
+                            @click="showCreateFolderDialog = true">
                             {{ tm('folder.createButton') }}
                         </v-btn>
                     </div>
@@ -59,9 +63,11 @@
                             {{ tm('folder.foldersTitle') }} ({{ currentFolders.length }})
                         </h3>
                         <v-row>
-                            <v-col v-for="folder in currentFolders" :key="folder.folder_id" cols="12" sm="6" lg="6"
+                            <v-col
+v-for="folder in currentFolders" :key="folder.folder_id" cols="12" sm="6" lg="6"
                                 xl="4">
-                                <FolderCard :folder="folder" @click="navigateToFolder(folder.folder_id)"
+                                <FolderCard
+:folder="folder" @click="navigateToFolder(folder.folder_id)"
                                     @open="navigateToFolder(folder.folder_id)" @rename="openRenameFolderDialog(folder)"
                                     @move="openMoveFolderDialog(folder)" @delete="confirmDeleteFolder(folder)"
                                     @persona-dropped="handlePersonaDropped" />
@@ -76,9 +82,11 @@
                             {{ tm('persona.personasTitle') }} ({{ currentPersonas.length }})
                         </h3>
                         <v-row>
-                            <v-col v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="6"
+                            <v-col
+v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="6"
                                 xl="4">
-                                <PersonaCard :persona="persona" @view="viewPersona(persona)"
+                                <PersonaCard
+:persona="persona" @view="viewPersona(persona)"
                                     @edit="editPersona(persona)" @move="openMovePersonaDialog(persona)"
                                     @delete="confirmDeletePersona(persona)" />
                             </v-col>
@@ -92,11 +100,13 @@
                             <h3 class="text-h5 mb-2">{{ tm('empty.folderEmpty') }}</h3>
                             <p class="text-body-1 text-medium-emphasis mb-4">{{ tm('empty.folderEmptyDescription') }}</p>
                             <div class="d-flex justify-center ga-2">
-                                <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus"
+                                <v-btn
+color="primary" variant="tonal" prepend-icon="mdi-plus"
                                     @click="openCreatePersonaDialog">
                                     {{ tm('buttons.create') }}
                                 </v-btn>
-                                <v-btn variant="outlined" prepend-icon="mdi-folder-plus"
+                                <v-btn
+variant="outlined" prepend-icon="mdi-folder-plus"
                                     @click="showCreateFolderDialog = true">
                                     {{ tm('folder.createButton') }}
                                 </v-btn>
@@ -108,7 +118,8 @@
         </div>
 
         <!-- 创建/编辑 Persona 对话框 -->
-        <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
+        <PersonaForm
+v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
             :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
             @saved="handlePersonaSaved" @deleted="handlePersonaDeleted" @error="showError" />
 
@@ -145,7 +156,8 @@
                     <div v-if="viewingPersona.begin_dialogs && viewingPersona.begin_dialogs.length > 0" class="mb-4">
                         <h4 class="text-h6 mb-2">{{ tm('form.presetDialogs') }}</h4>
                         <div v-for="(dialog, index) in viewingPersona.begin_dialogs" :key="index" class="mb-2">
-                            <v-chip :color="index % 2 === 0 ? 'primary' : 'secondary'" variant="tonal" size="small"
+                            <v-chip
+:color="index % 2 === 0 ? 'primary' : 'secondary'" variant="tonal" size="small"
                                 class="mb-1">
                                 {{ index % 2 === 0 ? tm('form.userMessage') : tm('form.assistantMessage') }}
                             </v-chip>
@@ -160,9 +172,11 @@
                                 {{ tm('form.allToolsAvailable') }}
                             </v-chip>
                         </div>
-                        <div v-else-if="viewingPersona.tools && viewingPersona.tools.length > 0"
+                        <div
+v-else-if="viewingPersona.tools && viewingPersona.tools.length > 0"
                             class="d-flex flex-wrap ga-1">
-                            <v-chip v-for="toolName in viewingPersona.tools" :key="toolName" size="small"
+                            <v-chip
+v-for="toolName in viewingPersona.tools" :key="toolName" size="small"
                                 color="primary" variant="tonal">
                                 {{ toolName }}
                             </v-chip>
@@ -179,9 +193,11 @@
                                 {{ tm('form.allSkillsAvailable') }}
                             </v-chip>
                         </div>
-                        <div v-else-if="viewingPersona.skills && viewingPersona.skills.length > 0"
+                        <div
+v-else-if="viewingPersona.skills && viewingPersona.skills.length > 0"
                             class="d-flex flex-wrap ga-1">
-                            <v-chip v-for="skillName in viewingPersona.skills" :key="skillName" size="small"
+                            <v-chip
+v-for="skillName in viewingPersona.skills" :key="skillName" size="small"
                                 color="primary" variant="tonal">
                                 {{ skillName }}
                             </v-chip>
@@ -201,7 +217,8 @@
         </v-dialog>
 
         <!-- 创建文件夹对话框 -->
-        <CreateFolderDialog v-model="showCreateFolderDialog" :parent-folder-id="currentFolderId"
+        <CreateFolderDialog
+v-model="showCreateFolderDialog" :parent-folder-id="currentFolderId"
             @created="showSuccess" @error="showError" />
 
         <!-- 重命名文件夹对话框 -->
@@ -209,7 +226,8 @@
             <v-card>
                 <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
                 <v-card-text>
-                    <v-text-field v-model="renameFolderData.name" :label="tm('folder.form.name')"
+                    <v-text-field
+v-model="renameFolderData.name" :label="tm('folder.form.name')"
                         :rules="[v => !!v || tm('folder.validation.nameRequired')]" variant="outlined"
                         density="comfortable" autofocus @keyup.enter="submitRenameFolder" />
                 </v-card-text>
@@ -218,8 +236,9 @@
                     <v-btn variant="text" @click="showRenameFolderDialog = false">
                         {{ tm('buttons.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" variant="flat" @click="submitRenameFolder" :loading="renameLoading"
-                        :disabled="!renameFolderData.name">
+                    <v-btn
+color="primary" variant="flat" :loading="renameLoading" :disabled="!renameFolderData.name"
+                        @click="submitRenameFolder">
                         {{ tm('buttons.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -227,7 +246,8 @@
         </v-dialog>
 
         <!-- 移动对话框 -->
-        <MoveToFolderDialog v-model="showMoveDialog" :item-type="moveDialogType" :item="moveDialogItem"
+        <MoveToFolderDialog
+v-model="showMoveDialog" :item-type="moveDialogType" :item="moveDialogItem"
             @moved="showSuccess" @error="showError" />
 
         <!-- 删除文件夹确认对话框 -->
@@ -249,7 +269,7 @@
                     <v-btn variant="text" @click="showDeleteFolderDialog = false">
                         {{ tm('buttons.cancel') }}
                     </v-btn>
-                    <v-btn color="error" variant="flat" @click="submitDeleteFolder" :loading="deleteLoading">
+                    <v-btn color="error" variant="flat" :loading="deleteLoading" @click="submitDeleteFolder">
                         {{ tm('buttons.delete') }}
                     </v-btn>
                 </v-card-actions>
@@ -257,7 +277,7 @@
         </v-dialog>
 
         <!-- 消息提示 -->
-        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+        <v-snackbar v-model="showMessage" :timeout="3000" elevation="24" :color="messageType" location="top">
             {{ message }}
         </v-snackbar>
     </div>
@@ -293,12 +313,35 @@ interface Persona {
     created_at?: string;
     updated_at?: string;
     folder_id?: string | null;
-    [key: string]: any;
 }
+
+type MoveDialogType = 'persona' | 'folder';
 
 interface RenameFolderData {
     folder: Folder | null;
     name: string;
+}
+
+interface PersonaManagerData {
+    showPersonaDialog: boolean;
+    showViewDialog: boolean;
+    editingPersona: Persona | null;
+    viewingPersona: Persona | null;
+    showCreateFolderDialog: boolean;
+    showRenameFolderDialog: boolean;
+    showDeleteFolderDialog: boolean;
+    renameFolderData: RenameFolderData;
+    deleteFolderData: Folder | null;
+    renameLoading: boolean;
+    deleteLoading: boolean;
+    showMoveDialog: boolean;
+    moveDialogType: MoveDialogType;
+    moveDialogItem: Persona | Folder | null;
+    showMessage: boolean;
+    message: string;
+    messageType: string;
+    showSkeleton: boolean;
+    skeletonTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export default defineComponent({
@@ -318,7 +361,7 @@ export default defineComponent({
         const confirmDialog = useConfirmDialog();
         return { t, tm, confirmDialog };
     },
-    data() {
+    data(): PersonaManagerData {
         return {
             // Persona 相关
             showPersonaDialog: false,
@@ -330,20 +373,20 @@ export default defineComponent({
             showCreateFolderDialog: false,
             showRenameFolderDialog: false,
             showDeleteFolderDialog: false,
-            renameFolderData: { folder: null, name: '' } as RenameFolderData,
+            renameFolderData: { folder: null as Folder | null, name: '' },
             deleteFolderData: null as Folder | null,
             renameLoading: false,
             deleteLoading: false,
 
             // 移动对话框
             showMoveDialog: false,
-            moveDialogType: 'persona' as 'persona' | 'folder',
+            moveDialogType: 'persona',
             moveDialogItem: null as Persona | Folder | null,
 
             // 消息提示
             showMessage: false,
             message: '',
-            messageType: 'success' as 'success' | 'error',
+            messageType: 'success',
 
             // 骨架屏延迟显示控制
             showSkeleton: false,
@@ -407,6 +450,9 @@ export default defineComponent({
     },
     methods: {
         ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder']),
+        getErrorMessage(error: unknown, fallback: string): string {
+            return error instanceof Error && error.message ? error.message : fallback;
+        },
 
         async initialize() {
             await Promise.all([
@@ -440,12 +486,12 @@ export default defineComponent({
 
         handlePersonaSaved(message: string) {
             this.showSuccess(message);
-            this.refreshCurrentFolder();
+            void this.refreshCurrentFolder();
         },
 
         handlePersonaDeleted(message: string) {
             this.showSuccess(message);
-            this.refreshCurrentFolder();
+            void this.refreshCurrentFolder();
         },
 
         async confirmDeletePersona(persona: Persona) {
@@ -461,8 +507,8 @@ export default defineComponent({
             try {
                 await this.deletePersona(persona.persona_id);
                 this.showSuccess(this.tm('messages.deleteSuccess'));
-            } catch (error: any) {
-                this.showError(error.message || this.tm('messages.deleteError'));
+            } catch (error) {
+                this.showError(this.getErrorMessage(error, this.tm('messages.deleteError')));
             }
         },
 
@@ -478,8 +524,8 @@ export default defineComponent({
                 this.showSuccess(this.tm('persona.messages.moveSuccess'));
                 // Navigate to the target folder
                 await this.navigateToFolder(target_folder_id);
-            } catch (error: any) {
-                this.showError(error.message || this.tm('persona.messages.moveError'));
+            } catch (error) {
+                this.showError(this.getErrorMessage(error, this.tm('persona.messages.moveError')));
             }
         },
 
@@ -500,8 +546,8 @@ export default defineComponent({
                 });
                 this.showSuccess(this.tm('folder.messages.renameSuccess'));
                 this.showRenameFolderDialog = false;
-            } catch (error: any) {
-                this.showError(error.message || this.tm('folder.messages.renameError'));
+            } catch (error) {
+                this.showError(this.getErrorMessage(error, this.tm('folder.messages.renameError')));
             } finally {
                 this.renameLoading = false;
             }
@@ -526,8 +572,8 @@ export default defineComponent({
                 await this.deleteFolder(this.deleteFolderData.folder_id);
                 this.showSuccess(this.tm('folder.messages.deleteSuccess'));
                 this.showDeleteFolderDialog = false;
-            } catch (error: any) {
-                this.showError(error.message || this.tm('folder.messages.deleteError'));
+            } catch (error) {
+                this.showError(this.getErrorMessage(error, this.tm('folder.messages.deleteError')));
             } finally {
                 this.deleteLoading = false;
             }

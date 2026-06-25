@@ -39,7 +39,7 @@ export default defineComponent({
         return { tm };
     },
     methods: {
-        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
+        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: unknown }) {
             if (data.item_type === 'persona') {
                 this.$emit('persona-dropped', {
                     persona_id: data.item_id,

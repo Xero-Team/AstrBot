@@ -89,7 +89,6 @@ const REGISTRATION_ACTIONS = {
 export default {
   name: 'PlatformRegistrationAction',
   components: { QrCodeViewer },
-  emits: ['success', 'error', 'created'],
   props: {
     platformConfig: {
       type: Object,
@@ -100,6 +99,7 @@ export default {
       default: true,
     },
   },
+  emits: ['success', 'error', 'created'],
   setup() {
     const { tm } = useModuleI18n('features/platform');
     return { tm };
@@ -155,7 +155,7 @@ export default {
       if (!this.active || !this.action || this.flow.status !== 'idle') {
         return;
       }
-      this.startAction();
+      void this.startAction();
     },
     buildPayload(action, extra = {}) {
       return {
@@ -203,7 +203,7 @@ export default {
       this.stopPolling();
       const seconds = Math.max(Number(intervalSeconds || 3), 1);
       this.pollTimer = setTimeout(() => {
-        this.pollAction();
+        void this.pollAction();
       }, seconds * 1000);
     },
     stopPolling() {

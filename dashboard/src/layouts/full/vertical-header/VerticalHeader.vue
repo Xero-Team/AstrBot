@@ -8,7 +8,6 @@ import {
   defineAsyncComponent,
 } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
-import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useCommonStore } from "@/stores/common";
@@ -46,14 +45,18 @@ let password = ref("");
 let newPassword = ref("");
 let confirmPassword = ref("");
 let newUsername = ref("");
-let status = ref("");
 let updateStatus = ref("");
 let releaseMessage = ref("");
 let hasNewVersion = ref(false);
 let botCurrVersion = ref("");
 let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref("");
-let releases = ref<any[]>([]);
+type ReleaseItem = {
+  tag_name: string;
+  published_at: string;
+  body: string;
+};
+let releases = ref<ReleaseItem[]>([]);
 let releasesLoading = ref(false);
 const showPreReleases = ref(
   typeof window === "undefined"
@@ -112,7 +115,7 @@ const createEmptyUpdateProgress = (): UpdateProgress => ({
 let updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
 let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
 const isDesktopReleaseMode = ref(
-  typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
+  typeof window !== "undefined" && Boolean(window.astrbotDesktop?.isDesktop),
 );
 const desktopUpdateDialog = ref(false);
 const desktopUpdateChecking = ref(false);
@@ -163,11 +166,11 @@ const releasesHeader = computed(() => [
 const visibleReleases = computed(() =>
   showPreReleases.value
     ? releases.value
-    : releases.value.filter((item: any) => !isPreRelease(item.tag_name)),
+    : releases.value.filter((item) => !isPreRelease(item.tag_name)),
 );
 const firstReleasePageItems = computed(() => visibleReleases.value.slice(0, 6));
 const firstReleasePageHasPreRelease = computed(() =>
-  firstReleasePageItems.value.some((item: any) => isPreRelease(item.tag_name)),
+  firstReleasePageItems.value.some((item) => isPreRelease(item.tag_name)),
 );
 const updateStageItems = computed(() => [
   {
@@ -210,7 +213,7 @@ const updateProgressMessage = computed(() => {
 const formValid = ref(true);
 const passwordRules = computed(() => [
   (v: string) =>
-    !!v || t("core.header.accountDialog.validation.passwordRequired"),
+    Boolean(v) || t("core.header.accountDialog.validation.passwordRequired"),
   (v: string) =>
     v.length >= 8 ||
     t("core.header.accountDialog.validation.passwordMinLength"),
@@ -226,7 +229,7 @@ const passwordRules = computed(() => [
 const confirmPasswordRules = computed(() => [
   (v: string) =>
     !newPassword.value ||
-    !!v ||
+    Boolean(v) ||
     t("core.header.accountDialog.validation.passwordRequired"),
   (v: string) =>
     !newPassword.value ||
@@ -292,7 +295,7 @@ async function openDesktopUpdateDialog() {
     desktopUpdateCurrentVersion.value = result.currentVersion || "-";
     desktopUpdateLatestVersion.value =
       result.latestVersion || result.currentVersion || "-";
-    desktopUpdateHasNewVersion.value = !!result.hasUpdate;
+    desktopUpdateHasNewVersion.value = Boolean(result.hasUpdate);
     desktopUpdateStatus.value = result.hasUpdate
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
@@ -348,7 +351,7 @@ function handleUpdateClick() {
     return;
   }
   checkUpdate();
-  getReleases();
+  void getReleases();
   updateStatusDialog.value = true;
 }
 
@@ -379,7 +382,7 @@ function accountEdit() {
       new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
-      if (res.data.status == "error") {
+      if (res.data.status === "error") {
         accountEditStatus.value.error = true;
         accountEditStatus.value.message = res.data.message || "";
         password.value = "";
@@ -415,7 +418,7 @@ function getVersion() {
   statsApi
     .version()
     .then((res) => {
-      botCurrVersion.value = "v" + (res.data.data.version || "");
+      botCurrVersion.value = `v${  res.data.data.version || ""}`;
       dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
       commonStore.setAstrBotVersion(
         res.data.data.version || "",
@@ -428,9 +431,9 @@ function getVersion() {
       if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
-        accountWarningUpgrade.value = !!password_upgrade_required;
+        accountWarningUpgrade.value = Boolean(password_upgrade_required);
         accountWarningMd5.value =
-          !!md5_pwd_hint && !password_upgrade_required;
+          Boolean(md5_pwd_hint) && !password_upgrade_required;
         if (
           change_pwd_hint ||
           (md5_pwd_hint && !password_upgrade_required)
@@ -495,7 +498,7 @@ function checkUpdate() {
         : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
-      if (err.response && err.response.status == 401) {
+      if (err.response?.status === 401) {
         console.log("401");
         const authStore = useAuthStore();
         authStore.logout();
@@ -511,9 +514,16 @@ function getReleases() {
   return updatesApi
     .releases()
     .then((res) => {
-      releases.value = res.data.data.map((item: any) => {
-        item.published_at = new Date(item.published_at).toLocaleString();
-        return item;
+      const releaseItems = Array.isArray(res.data.data) ? res.data.data : [];
+      releases.value = releaseItems.map((item) => {
+        const release = item as Partial<ReleaseItem>;
+        return {
+          tag_name: release.tag_name || "",
+          published_at: new Date(
+            typeof release.published_at === "string" ? release.published_at : "",
+          ).toLocaleString(),
+          body: release.body || "",
+        };
       });
     })
     .catch((err) => {
@@ -756,7 +766,7 @@ async function switchVersion(targetVersion: string) {
     status: "running",
     version: targetVersion,
     message: t("core.header.updateDialog.progress.preparing"),
-  } as UpdateProgress;
+  };
   resetRestartFeedbackState();
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
@@ -823,7 +833,7 @@ function updateDashboard() {
     .dashboard()
     .then((res) => {
       updateStatus.value = res.data.message || "";
-      if (res.data.status == "ok") {
+      if (res.data.status === "ok") {
         setTimeout(() => {
           reloadWithCacheBuster();
         }, 1000);
@@ -860,7 +870,7 @@ function handleLogoClick() {
   if (isChatPath.value) {
     aboutDialog.value = true;
   } else {
-    router.push("/about");
+    void router.push("/about");
   }
 }
 
@@ -868,7 +878,7 @@ getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
 
-commonStore.createEventSource(); // log
+void commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 onUnmounted(() => {
@@ -954,13 +964,13 @@ const currentMode = computed({
 
       if (val === "chat") {
         const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
-        router.push(lastSessionId ? `/chat/${lastSessionId}` : "/chat");
+        void router.push(lastSessionId ? `/chat/${lastSessionId}` : "/chat");
       } else {
         let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || "/";
         if (lastBotRoute.startsWith("/chat")) {
           lastBotRoute = "/";
         }
-        router.push(lastBotRoute);
+        void router.push(lastBotRoute);
       }
     } catch (e) {
       // 在受限隱私模式等環境中，sessionStorage 操作可能會拋出 SecurityError
@@ -1060,9 +1070,9 @@ onMounted(async () => {
           /> </span
       ></span>
       <span
+        v-if="isChatPath"
         class="logo-text logo-text-light Outfit"
         style="color: grey"
-        v-if="isChatPath"
         >ChatUI</span
       >
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
@@ -1101,7 +1111,7 @@ onMounted(async () => {
 
     <!-- 功能菜单 -->
     <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
-      <template v-slot:activator="{ props: activatorProps }">
+      <template #activator="{ props: activatorProps }">
         <v-btn
           v-bind="activatorProps"
           size="small"
@@ -1148,20 +1158,20 @@ onMounted(async () => {
         :location="$vuetify.display.xs ? 'bottom' : 'start center'"
         offset="8"
       >
-        <template v-slot:activator="{ props: languageMenuProps }">
+        <template #activator="{ props: languageMenuProps }">
           <v-list-item
             v-bind="languageMenuProps"
-            @click.stop
             class="styled-menu-item language-group-trigger"
             rounded="md"
+            @click.stop
           >
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon>mdi-translate</v-icon>
             </template>
             <v-list-item-title>{{
               t("core.common.language")
             }}</v-list-item-title>
-            <template v-slot:append>
+            <template #append>
               <span class="language-group-current">{{
                 currentLanguage?.flag
               }}</span>
@@ -1183,14 +1193,14 @@ onMounted(async () => {
               v-for="lang in languages"
               :key="lang.code"
               :value="lang.code"
-              @click="changeLanguage(lang.code)"
               :class="{
                 'styled-menu-item-active': currentLocale === lang.code,
               }"
               class="styled-menu-item"
               rounded="md"
+              @click="changeLanguage(lang.code)"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <span class="language-flag">{{ lang.flag }}</span>
               </template>
               <v-list-item-title>{{ lang.name }}</v-list-item-title>
@@ -1208,20 +1218,20 @@ onMounted(async () => {
         :location="$vuetify.display.xs ? 'bottom' : 'start center'"
         offset="8"
       >
-        <template v-slot:activator="{ props: themeMenuProps }">
+        <template #activator="{ props: themeMenuProps }">
           <v-list-item
             v-bind="themeMenuProps"
-            @click.stop
             class="styled-menu-item theme-group-trigger"
             rounded="md"
+            @click.stop
           >
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon>mdi-brightness-6</v-icon>
             </template>
             <v-list-item-title>{{
               t("core.header.buttons.theme.title")
             }}</v-list-item-title>
-            <template v-slot:append>
+            <template #append>
               <span class="theme-group-current">
                 <v-icon size="16">{{
                   customizer.themeMode === 'dark'
@@ -1246,14 +1256,14 @@ onMounted(async () => {
             <v-list-item
               v-for="option in themeOptions"
               :key="option.mode"
-              @click="setThemeMode(option.mode)"
               :class="{
                 'styled-menu-item-active': customizer.themeMode === option.mode,
               }"
               class="styled-menu-item"
               rounded="md"
+              @click="setThemeMode(option.mode)"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
               </template>
               <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
@@ -1264,21 +1274,21 @@ onMounted(async () => {
 
       <!-- 更新按钮 -->
       <v-list-item
-        @click="handleUpdateClick"
         class="styled-menu-item"
         rounded="md"
+        @click="handleUpdateClick"
       >
-        <template v-slot:prepend>
+        <template #prepend>
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
         <v-list-item-title>{{
           t("core.header.updateDialog.title")
         }}</v-list-item-title>
         <template
-          v-slot:append
           v-if="
             hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
           "
+          #append
         >
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
             >!</v-chip
@@ -1287,8 +1297,8 @@ onMounted(async () => {
       </v-list-item>
 
       <!-- 账户按钮 -->
-      <v-list-item @click="dialog = true" class="styled-menu-item" rounded="md">
-        <template v-slot:prepend>
+      <v-list-item class="styled-menu-item" rounded="md" @click="dialog = true">
+        <template #prepend>
           <v-icon>mdi-account</v-icon>
         </template>
         <v-list-item-title>{{
@@ -1501,7 +1511,7 @@ onMounted(async () => {
                 density="compact"
                 class="mb-4"
               >
-                <template v-slot:prepend>
+                <template #prepend>
                   <v-icon>mdi-alert-circle-outline</v-icon>
                 </template>
                 <div class="text-body-2">
@@ -1532,7 +1542,7 @@ onMounted(async () => {
                 density="comfortable"
                 :loading="releasesLoading"
               >
-                <template v-slot:item.tag_name="{ item }: { item: any }">
+                <template #item.tag_name="{ item }: { item: ReleaseItem }">
                   <div class="d-flex align-center">
                     <span>{{ item.tag_name }}</span>
                     <v-chip
@@ -1547,30 +1557,30 @@ onMounted(async () => {
                   </div>
                 </template>
                 <template
-                  v-slot:item.body="{
+                  #item.body="{
                     item,
                   }: {
                     item: { body: string; tag_name: string };
                   }"
                 >
                   <v-btn
-                    @click="openReleaseNotesDialog(item.body, item.tag_name)"
                     rounded="xl"
                     variant="tonal"
                     color="primary"
                     size="x-small"
+                    @click="openReleaseNotesDialog(item.body, item.tag_name)"
                     >{{ t("core.header.updateDialog.table.view") }}</v-btn
                   >
                 </template>
                 <template
-                  v-slot:item.switch="{ item }: { item: { tag_name: string } }"
+                  #item.switch="{ item }: { item: { tag_name: string } }"
                 >
                   <v-btn
-                    @click="switchVersion(item.tag_name)"
                     variant="tonal"
                     color="primary"
                     size="small"
                     :disabled="installLoading"
+                    @click="switchVersion(item.tag_name)"
                   >
                     {{ t("core.header.updateDialog.table.switch") }}
                   </v-btn>
@@ -1628,8 +1638,8 @@ onMounted(async () => {
                 <v-btn
                   color="primary"
                   variant="tonal"
-                  @click="updateDashboard()"
                   :loading="updatingDashboardLoading"
+                  @click="updateDashboard()"
                 >
                   {{
                     t(
@@ -1720,21 +1730,21 @@ onMounted(async () => {
           <v-btn
             color="grey"
             variant="text"
-            @click="cancelDesktopUpdate"
             :disabled="desktopUpdateInstalling"
+            @click="cancelDesktopUpdate"
           >
             {{ t("core.common.dialog.cancelButton") }}
           </v-btn>
           <v-btn
             color="primary"
             variant="flat"
-            @click="confirmDesktopUpdate"
             :loading="desktopUpdateInstalling"
             :disabled="
               desktopUpdateChecking ||
               desktopUpdateInstalling ||
               !desktopUpdateHasNewVersion
             "
+            @click="confirmDesktopUpdate"
           >
             {{ t("core.common.dialog.confirmButton") }}
           </v-btn>
@@ -1803,10 +1813,10 @@ onMounted(async () => {
               variant="outlined"
               required
               clearable
-              @click:append-inner="showPassword = !showPassword"
               prepend-inner-icon="mdi-lock-outline"
               hide-details="auto"
               class="mb-4"
+              @click:append-inner="showPassword = !showPassword"
             ></v-text-field>
 
             <v-text-field
@@ -1817,11 +1827,11 @@ onMounted(async () => {
               :label="t('core.header.accountDialog.form.newPassword')"
               variant="outlined"
               clearable
-              @click:append-inner="showNewPassword = !showNewPassword"
               prepend-inner-icon="mdi-lock-plus-outline"
               :hint="t('core.header.accountDialog.form.passwordHint')"
               persistent-hint
               class="mb-4"
+              @click:append-inner="showNewPassword = !showNewPassword"
             ></v-text-field>
 
             <v-text-field
@@ -1834,11 +1844,11 @@ onMounted(async () => {
               :label="t('core.header.accountDialog.form.confirmPassword')"
               variant="outlined"
               clearable
-              @click:append-inner="showConfirmPassword = !showConfirmPassword"
               prepend-inner-icon="mdi-lock-check-outline"
               :hint="t('core.header.accountDialog.form.confirmPasswordHint')"
               persistent-hint
               class="mb-4"
+              @click:append-inner="showConfirmPassword = !showConfirmPassword"
             ></v-text-field>
 
             <v-text-field
@@ -1865,17 +1875,17 @@ onMounted(async () => {
             v-if="!accountWarning"
             variant="tonal"
             color="secondary"
-            @click="dialog = false"
             :disabled="accountEditStatus.loading"
+            @click="dialog = false"
           >
             {{ t("core.header.accountDialog.actions.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
-            @click="accountEdit"
             :loading="accountEditStatus.loading"
             :disabled="!formValid"
             prepend-icon="mdi-content-save"
+            @click="accountEdit"
           >
             {{ t("core.header.accountDialog.actions.save") }}
           </v-btn>
@@ -2022,7 +2032,7 @@ onMounted(async () => {
   margin-right: 8px;
 }
 
-.language-group-trigger :deep(.v-list-item__append) {
+.language-group-trigger .v-list-item__append {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2041,7 +2051,7 @@ onMounted(async () => {
   min-width: 180px;
 }
 
-.theme-group-trigger :deep(.v-list-item__append) {
+.theme-group-trigger .v-list-item__append {
   display: flex;
   align-items: center;
   gap: 6px;

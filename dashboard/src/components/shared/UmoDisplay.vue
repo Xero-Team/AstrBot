@@ -24,7 +24,7 @@
         </v-tooltip>
       </v-btn>
       <v-tooltip v-if="showInfo" location="top">
-        <template v-slot:activator="{ props }">
+        <template #activator="{ props }">
           <v-icon v-bind="props" size="small" class="umo-display__info"> mdi-information-outline </v-icon>
         </template>
         <div>

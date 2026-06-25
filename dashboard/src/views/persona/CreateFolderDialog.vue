@@ -1,6 +1,7 @@
 <template>
-    <BaseCreateFolderDialog v-model="showDialog" :parent-folder-id="parentFolderId" :labels="labels"
-        @create="handleCreate" ref="baseDialog" />
+    <BaseCreateFolderDialog
+ref="baseDialog" v-model="showDialog" :parent-folder-id="parentFolderId"
+        :labels="labels" @create="handleCreate" />
 </template>
 
 <script lang="ts">
@@ -54,6 +55,10 @@ export default defineComponent({
     methods: {
         ...mapActions(usePersonaStore, ['createFolder']),
 
+        getErrorMessage(error: unknown, fallback: string): string {
+            return error instanceof Error && error.message ? error.message : fallback;
+        },
+
         async handleCreate(data: CreateFolderData) {
             const baseDialog = this.$refs.baseDialog as InstanceType<typeof BaseCreateFolderDialog>;
             baseDialog.setLoading(true);
@@ -66,8 +71,8 @@ export default defineComponent({
                 });
                 this.$emit('created', this.tm('folder.messages.createSuccess'));
                 this.showDialog = false;
-            } catch (error: any) {
-                this.$emit('error', error.message || this.tm('folder.messages.createError'));
+            } catch (error) {
+                this.$emit('error', this.getErrorMessage(error, this.tm('folder.messages.createError')));
             } finally {
                 baseDialog.setLoading(false);
             }

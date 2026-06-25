@@ -86,7 +86,7 @@ function normalizeAxiosError(error: AxiosError) {
         'change_pwd_hint',
         'md5_pwd_hint',
         'password_upgrade_required',
-      ].forEach((key) => localStorage.removeItem(key));
+      ].forEach((key) => { localStorage.removeItem(key); });
 
       if (!window.location.hash.startsWith('#/auth/login')) {
         window.location.hash = '/auth/login';
@@ -97,10 +97,10 @@ function normalizeAxiosError(error: AxiosError) {
   if (error.response?.status === 429) {
     const data = error.response.data as { message?: string } | undefined;
     if (data?.message) {
-      return Promise.reject(data.message);
+      throw new Error(data.message);
     }
   }
-  return Promise.reject(error);
+  throw error;
 }
 
 function installAxiosInterceptors(instance: AxiosInstance) {
@@ -119,7 +119,7 @@ export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
 
   const requestHeaders =
     typeof input !== 'string' && 'headers' in input
-      ? (input as Request).headers
+      ? (input).headers
       : undefined;
   const headers = new Headers(init?.headers || requestHeaders);
 

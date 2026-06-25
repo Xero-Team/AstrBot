@@ -24,7 +24,7 @@ const buildFailedPluginItems = (raw) => {
       display_name: detail.display_name || detail.name || dirName,
       error: detail.error || "",
       traceback: detail.traceback || "",
-      reserved: !!detail.reserved,
+      reserved: Boolean(detail.reserved),
     };
   });
 };
@@ -298,7 +298,7 @@ export const useExtensionPage = () => {
 
   const compareInstalledFallback = (left, right) => {
     const reservedDiff =
-      Number(!!left.plugin?.reserved) - Number(!!right.plugin?.reserved);
+      Number(Boolean(left.plugin?.reserved)) - Number(Boolean(right.plugin?.reserved));
     if (reservedDiff !== 0) {
       return reservedDiff;
     }
@@ -515,7 +515,7 @@ export const useExtensionPage = () => {
 
       // 刷新列表
       await getExtensions();
-    } catch (e) {
+    } catch (_error) {
       console.error("重载失败:", e);
       toast("批量重载过程中出现错误", "error");
     } finally {
@@ -584,12 +584,12 @@ export const useExtensionPage = () => {
 
   const requestUninstallPlugin = (name) => {
     if (!name) return;
-    uninstall({ kind: "normal", id: name }, { skipConfirm: false });
+    void uninstall({ kind: "normal", id: name }, { skipConfirm: false });
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
     if (!dirName) return;
-    uninstall({ kind: "failed", id: dirName }, { skipConfirm: false });
+    void uninstall({ kind: "failed", id: dirName }, { skipConfirm: false });
   };
 
   const normalizeInstallUrl = (value) =>
@@ -612,17 +612,20 @@ export const useExtensionPage = () => {
     const repo = normalizeInstallUrl(extension.repo).toLowerCase();
 
     if (repo) {
-      return (
-        pluginMarketData.value.find(
-          (plugin) => normalizeInstallUrl(plugin?.repo).toLowerCase() === repo,
-        ) || null
-      );
+      for (const plugin of pluginMarketData.value) {
+        if (normalizeInstallUrl(plugin?.repo).toLowerCase() === repo) {
+          return plugin;
+        }
+      }
+      return null;
     }
 
-    return (
-      pluginMarketData.value.find((plugin) => plugin.name === extension.name) ||
-      null
-    );
+    for (const plugin of pluginMarketData.value) {
+      if (plugin.name === extension.name) {
+        return plugin;
+      }
+    }
+    return null;
   };
 
   const getUpdateDownloadUrl = (extension) =>
@@ -783,7 +786,7 @@ export const useExtensionPage = () => {
   // 确认更新全部插件
   const confirmUpdateAll = () => {
     updateAllConfirmDialog.show = false;
-    updateAllExtensions();
+    void updateAllExtensions();
   };
 
   // 取消更新全部插件
@@ -891,7 +894,7 @@ export const useExtensionPage = () => {
         return;
       }
       toast(res.data.message, "success");
-      getExtensions();
+      void getExtensions();
     } catch (err) {
       toast(err, "error");
     }
@@ -927,7 +930,7 @@ export const useExtensionPage = () => {
       extension_config.metadata = {};
       extension_config.config = {};
       extension_config.i18n = {};
-      getExtensions();
+      void getExtensions();
     } catch (err) {
       toast(err, "error");
     }
@@ -935,7 +938,7 @@ export const useExtensionPage = () => {
 
   const showPluginInfo = (plugin) => {
     if (!plugin?.name) return;
-    router.push({
+    void router.push({
       name: "ExtensionDetails",
       params: { pluginId: plugin.name },
       hash: "#plugin-components",
@@ -1015,7 +1018,7 @@ export const useExtensionPage = () => {
 
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
-    if (plugin.tags && plugin.tags.includes("danger")) {
+    if (plugin.tags?.includes("danger")) {
       selectedDangerPlugin.value = plugin;
       dangerConfirmDialog.value = true;
     } else {
@@ -1055,7 +1058,7 @@ export const useExtensionPage = () => {
       } else {
         toast(res.data.message, "error");
       }
-    } catch (e) {
+    } catch (_error) {
       console.warn("Failed to load custom sources:", e);
       customSources.value = [];
     }
@@ -1073,7 +1076,7 @@ export const useExtensionPage = () => {
       if (res.data.status !== "ok") {
         toast(res.data.message, "error");
       }
-    } catch (e) {
+    } catch (_error) {
       toast(e, "error");
     }
   };
@@ -1100,7 +1103,7 @@ export const useExtensionPage = () => {
       localStorage.removeItem("selectedPluginSource");
     }
     // 重新加载插件市场数据
-    refreshPluginMarket();
+    void refreshPluginMarket();
   };
 
   const sourceSelectItems = computed(() => [
@@ -1133,14 +1136,14 @@ export const useExtensionPage = () => {
       customSources.value = customSources.value.filter(
         (s) => s.url !== sourceToRemove.value.url,
       );
-      saveCustomSources();
+      void saveCustomSources();
 
       // 如果删除的是当前选中的源，切换到默认源
       if (selectedSource.value === sourceToRemove.value.url) {
         selectedSource.value = null;
         localStorage.removeItem("selectedPluginSource");
         // 重新加载插件市场数据
-        refreshPluginMarket();
+        void refreshPluginMarket();
       }
 
       toast(tm("market.sourceRemoved"), "success");
@@ -1160,7 +1163,7 @@ export const useExtensionPage = () => {
     // 检查URL格式
     try {
       new URL(normalizedUrl);
-    } catch (e) {
+    } catch (_error) {
       toast(tm("messages.invalidUrl"), "error");
       return;
     }
@@ -1181,7 +1184,7 @@ export const useExtensionPage = () => {
           selectedSource.value = normalizedUrl;
           localStorage.setItem("selectedPluginSource", selectedSource.value);
           // 重新加载插件市场数据
-          refreshPluginMarket();
+          void refreshPluginMarket();
         }
       }
     } else {
@@ -1197,7 +1200,7 @@ export const useExtensionPage = () => {
       });
     }
 
-    saveCustomSources();
+    void saveCustomSources();
     toast(
       editingSource.value
         ? tm("market.sourceUpdated")
@@ -1263,7 +1266,7 @@ export const useExtensionPage = () => {
         }
       }
 
-      plugin.installed = !!matchedInstalled;
+      plugin.installed = Boolean(matchedInstalled);
     }
 
     let installed = [];
@@ -1531,16 +1534,16 @@ export const useExtensionPage = () => {
 
   const resolveSelectedInstallPlugin = () => {
     if (
-      selectedMarketInstallPlugin.value &&
-      selectedMarketInstallPlugin.value.repo === extension_url.value
+      selectedMarketInstallPlugin.value?.repo === extension_url.value
     ) {
       return selectedMarketInstallPlugin.value;
     }
-    return (
-      pluginMarketData.value.find(
-        (plugin) => plugin.repo === extension_url.value,
-      ) || null
-    );
+    for (const plugin of pluginMarketData.value) {
+      if (plugin.repo === extension_url.value) {
+        return plugin;
+      }
+    }
+    return null;
   };
 
   const selectedInstallPlugin = computed(() => resolveSelectedInstallPlugin());
@@ -1611,7 +1614,7 @@ export const useExtensionPage = () => {
 
       toast(tm("messages.refreshSuccess"), "success");
     } catch (err) {
-      toast(tm("messages.refreshFailed") + " " + err, "error");
+      toast(`${tm("messages.refreshFailed")  } ${  err}`, "error");
     } finally {
       refreshingMarket.value = false;
       loading_.value = false;
@@ -1628,7 +1631,7 @@ export const useExtensionPage = () => {
       await getExtensions({ withLoading: false });
 
       // 加载自定义插件源
-      loadCustomSources();
+      void loadCustomSources();
 
       // 检查是否有 open_config 参数
       const plugin_name = Array.isArray(route.query.open_config)
@@ -1636,7 +1639,7 @@ export const useExtensionPage = () => {
         : route.query.open_config;
       if (plugin_name) {
         console.log(`Opening config for plugin: ${plugin_name}`);
-        openExtensionConfig(plugin_name);
+        void openExtensionConfig(plugin_name);
       }
 
       const data = await commonStore.getPluginCollections(
@@ -1650,7 +1653,7 @@ export const useExtensionPage = () => {
       checkUpdate();
       refreshRandomPlugins();
     } catch (err) {
-      toast(tm("messages.getMarketDataFailed") + " " + err, "error");
+      toast(`${tm("messages.getMarketDataFailed")  } ${  err}`, "error");
     } finally {
       loading_.value = false;
     }
@@ -1660,7 +1663,7 @@ export const useExtensionPage = () => {
   const handleLocaleChange = () => {
     // 如果配置对话框是打开的，重新加载当前插件的配置
     if (configDialog.value && currentConfigPlugin.value) {
-      openExtensionConfig(currentConfigPlugin.value);
+      void openExtensionConfig(currentConfigPlugin.value);
     }
   };
 

@@ -57,7 +57,7 @@
                 :key="plugin.name"
                 rounded="md"
                 class="ma-1">
-                <template v-slot:prepend>
+                <template #prepend>
                   <v-checkbox
                     v-model="selectedPlugins"
                     :value="plugin.name"
@@ -137,16 +137,8 @@ const pluginDescription = (plugin) => pluginDesc(plugin)
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
-  return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === '*'
+  return props.modelValue?.length === 1 && props.modelValue[0] === '*'
 })
-
-// 移除插件
-function removePlugin(pluginName) {
-  if (props.modelValue && props.modelValue.length > 0) {
-    const newValue = props.modelValue.filter(name => name !== pluginName)
-    emit('update:modelValue', newValue)
-  }
-}
 
 // 监听 modelValue 变化，同步内部状态
 watch(() => props.modelValue, (newValue) => {

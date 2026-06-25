@@ -5,7 +5,7 @@
         <span class="project-header-emoji">{{ project?.emoji || "📁" }}</span>
         <h2 class="project-header-title">{{ project?.title }}</h2>
       </div>
-      <p class="project-header-description" v-if="project?.description">
+      <p v-if="project?.description" class="project-header-description">
         {{ project.description }}
       </p>
     </div>
@@ -19,9 +19,9 @@
         <v-list-item
           v-for="session in sessions"
           :key="session.session_id"
-          @click="$emit('selectSession', session.session_id)"
           class="project-session-item"
           rounded="lg"
+          @click="$emit('selectSession', session.session_id)"
         >
           <v-list-item-title>
             {{ session.display_name || tm("conversation.newConversation") }}
@@ -29,7 +29,7 @@
           <v-list-item-subtitle>
             {{ formatDate(session.updated_at) }}
           </v-list-item-subtitle>
-          <template v-slot:append>
+          <template #append>
             <div class="session-actions">
               <v-btn
                 icon="mdi-pencil"

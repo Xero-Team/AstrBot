@@ -117,10 +117,10 @@ async function getEmbeddingDimensions(providerConfig) {
     }
     const response = await providerApi.embeddingDimension(providerId, providerConfig)
     
-    if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
+    if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
       console.log(response.data.data.embedding_dimensions)
       providerConfig.embedding_dimensions = response.data.data.embedding_dimensions
-      useToast().success("获取成功: " + response.data.data.embedding_dimensions)
+      useToast().success(`获取成功: ${  response.data.data.embedding_dimensions}`)
     } else {
       useToast().error(response.data.message)
     }
@@ -144,7 +144,7 @@ function getValueBySelector(obj, selector) {
   return current
 }
 
-function shouldShowItem(itemMeta, itemKey) {
+function shouldShowItem(itemMeta, _itemKey) {
   if (!itemMeta?.condition) {
     return true
   }
@@ -166,7 +166,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
   // 检查当前索引之后是否还有可见的配置项
   for (let i = currentIndex + 1; i < itemEntries.length; i++) {
-    const [itemKey, itemValue] = itemEntries[i]
+    const [itemKey, _itemValue] = itemEntries[i]
     const itemMeta = props.metadata[props.metadataKey].items[itemKey]
     if (!itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)) {
       return true
@@ -178,7 +178,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
 </script>
 
 <template>
-  <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
+  <div v-if="iterable && metadata[metadataKey]?.type === 'object'" class="config-section">
     <v-list-item-title class="config-title">
       {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }} <span class="metadata-key">({{ metadataKey }})</span>
     </v-list-item-title>
@@ -211,10 +211,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <AstrBotConfig
                 :metadata="metadata[metadataKey].items"
                 :iterable="iterable[key]"
-                :metadataKey="key"
-                :pluginName="pluginName"
-                :pluginI18n="pluginI18n"
-                :pathPrefix="getItemPath(key)"
+                :metadata-key="key"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :path-prefix="getItemPath(key)"
               >
               </AstrBotConfig>
             </v-expand-transition>
@@ -262,7 +262,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
+                  <span
+v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
                         class="important-hint">‼️</span>
                   {{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}
                 </v-list-item-subtitle>
@@ -349,10 +350,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
       </v-toolbar>
       <v-card-text class="pa-0">
         <VueMonacoEditor
+          v-model:value="currentEditingKeyIterable[currentEditingKey]"
           :theme="currentEditingTheme"
           :language="currentEditingLanguage"
           style="height: calc(100vh - 64px);"
-          v-model:value="currentEditingKeyIterable[currentEditingKey]"
         >
         </VueMonacoEditor>
       </v-card-text>

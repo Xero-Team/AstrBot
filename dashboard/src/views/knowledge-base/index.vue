@@ -49,7 +49,7 @@ const isDetailRoute = computed(() => route.name === 'NativeKBDetail')
 const displayDetailTitle = computed(() => detailTitle.value || String(route.params.kbId || ''))
 
 const goToList = () => {
-  router.push({ name: 'NativeKBList' })
+  void router.push({ name: 'NativeKBList' })
 }
 </script>
 

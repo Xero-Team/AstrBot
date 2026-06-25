@@ -8,6 +8,20 @@ export interface Conversation {
     updated_at: number;
 }
 
+interface SessionRecord {
+    session_id: string;
+    display_name: string | null;
+    updated_at: string;
+}
+
+function hasStatusCode(error: unknown, statusCode: number): boolean {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+    const response = (error as { response?: { status?: number } }).response;
+    return response?.status === statusCode;
+}
+
 export function useConversations(chatboxMode: boolean = false) {
     const router = useRouter();
     const conversations = ref<Conversation[]>([]);
@@ -28,7 +42,8 @@ export function useConversations(chatboxMode: boolean = false) {
     async function getConversations() {
         try {
             const response = await chatApi.listSessions();
-            conversations.value = (response.data.data || []).map((session: any) => ({
+            const data = Array.isArray(response.data.data) ? (response.data.data as SessionRecord[]) : [];
+            conversations.value = data.map((session) => ({
                 cid: session.session_id,
                 title: session.display_name || session.session_id,
                 updated_at: Date.parse(session.updated_at || '') || 0,
@@ -46,9 +61,9 @@ export function useConversations(chatboxMode: boolean = false) {
                 const firstConversation = conversations.value[0];
                 selectedConversations.value = [firstConversation.cid];
             }
-        } catch (err: any) {
-            if (err.response?.status === 401) {
-                router.push('/auth/login?redirect=/chatbox');
+        } catch (err) {
+            if (hasStatusCode(err, 401)) {
+                void router.push('/auth/login?redirect=/chatbox');
             }
             console.error(err);
         }
@@ -62,7 +77,7 @@ export function useConversations(chatboxMode: boolean = false) {
 
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';
-            router.push(`${basePath}/${cid}`);
+            void router.push(`${basePath}/${cid}`);
             
             await getConversations();
             return cid;
@@ -121,7 +136,7 @@ export function useConversations(chatboxMode: boolean = false) {
         selectedConversations.value = [];
         
         const basePath = chatboxMode ? '/chatbox' : '/chat';
-        router.push(basePath);
+        void router.push(basePath);
         
         if (closeMobileSidebar) {
             closeMobileSidebar();

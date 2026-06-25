@@ -1,5 +1,6 @@
 <template>
-    <BaseMoveTargetNode :folder="folder" :depth="depth" :selected-folder-id="selectedFolderId"
+    <BaseMoveTargetNode
+:folder="folder" :depth="depth" :selected-folder-id="selectedFolderId"
         :disabled-folder-ids="disabledFolderIds" @select="$emit('select', $event)" />
 </template>
 

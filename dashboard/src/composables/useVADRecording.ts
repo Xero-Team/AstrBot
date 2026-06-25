@@ -1,5 +1,4 @@
 import { ref, onBeforeUnmount } from 'vue';
-import axios from 'axios';
 
 interface VADOptions {
     onSpeechStart?: () => void;
@@ -29,7 +28,7 @@ declare global {
     interface Window {
         vad: {
             MicVAD: {
-                new(options: VADOptions): Promise<VADInstance>;
+                new: (options: VADOptions) => Promise<VADInstance>;
             };
         };
     }
@@ -58,7 +57,7 @@ export function useVADRecording() {
         }
 
         try {
-            vadInstance.value = await (window.vad.MicVAD as any).new({
+            vadInstance.value = await window.vad.MicVAD.new({
                 onSpeechStart: () => {
                     console.log('[VAD] Speech started');
                     isSpeaking.value = true;

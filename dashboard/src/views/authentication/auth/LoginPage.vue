@@ -127,9 +127,9 @@ onMounted(async () => {
   if (authStore.has_token()) {
     const onboardingCompleted = await authStore.checkOnboardingCompleted();
     if (onboardingCompleted) {
-      router.push('/dashboard/default');
+      void router.push('/dashboard/default');
     } else {
-      router.push('/welcome');
+      void router.push('/welcome');
     }
     return;
   }
@@ -140,7 +140,7 @@ onMounted(async () => {
       setupStatus.data?.data?.setup_required &&
       setupStatus.data?.data?.skip_default_password_auth
     ) {
-      router.push('/auth/setup');
+      void router.push('/auth/setup');
       return;
     }
   } catch {
@@ -162,7 +162,8 @@ onMounted(async () => {
           <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
-            <v-divider vertical class="mx-1"
+            <v-divider
+vertical class="mx-1"
               style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
 
             <!-- 主题切换下拉菜单 -->
@@ -171,7 +172,7 @@ onMounted(async () => {
               location="bottom center"
               offset="6"
             >
-              <template v-slot:activator="{ props: themeMenuProps }">
+              <template #activator="{ props: themeMenuProps }">
                 <v-btn
                   v-bind="themeMenuProps"
                   class="theme-toggle-btn"
@@ -198,14 +199,14 @@ onMounted(async () => {
                   <v-list-item
                     v-for="option in themeOptions"
                     :key="option.mode"
-                    @click="setThemeMode(option.mode)"
                     :class="{
                       'styled-menu-item-active': customizer.themeMode === option.mode,
                     }"
                     class="styled-menu-item"
                     rounded="md"
+                    @click="setThemeMode(option.mode)"
                   >
-                    <template v-slot:prepend>
+                    <template #prepend>
                       <v-icon size="16" style="margin-right: 8px; opacity: 0.85;">{{ option.icon }}</v-icon>
                     </template>
                     <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>

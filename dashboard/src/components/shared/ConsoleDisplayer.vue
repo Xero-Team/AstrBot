@@ -5,10 +5,11 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 </script>
 
 <template>
-  <div class="console-displayer-wrapper" id="console-wrapper">
-    <div class="filter-controls mb-2" v-if="showLevelBtns">
+  <div id="console-wrapper" class="console-displayer-wrapper">
+    <div v-if="showLevelBtns" class="filter-controls mb-2">
       <v-chip-group v-model="selectedLevels" column multiple>
-        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
+        <v-chip
+v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
           :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
           {{ level }}
         </v-chip>
@@ -31,6 +32,16 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 <script>
 export default {
   name: 'ConsoleDisplayer',
+  props: {
+    historyNum: {
+      type: String,
+      default: "-1"
+    },
+    showLevelBtns: {
+      type: Boolean,
+      default: true
+    }
+  },
   data() {
     return {
       autoScroll: true,
@@ -67,16 +78,6 @@ export default {
     commonStore() {
       return useCommonStore();
     },
-  },
-  props: {
-    historyNum: {
-      type: String,
-      default: "-1"
-    },
-    showLevelBtns: {
-      type: Boolean,
-      default: true
-    }
   },
   watch: {
     selectedLevels: {
@@ -127,7 +128,7 @@ export default {
         this.retryAttempts = 0;
 
         if (!this.lastEventId) {
-            this.fetchLogHistory();
+            void this.fetchLogHistory();
         }
       };
 
@@ -271,12 +272,12 @@ export default {
           console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
       } else {
-        document.exitFullscreen();
+        void document.exitFullscreen();
       }
     },
 
     handleFullscreenChange() {
-      this.isFullscreen = !!document.fullscreenElement;
+      this.isFullscreen = Boolean(document.fullscreenElement);
     },
 
     appendLogContent(element, log) {
@@ -316,7 +317,7 @@ export default {
       }
       
       let span = document.createElement('pre')
-      let style = this.logColorAnsiMap['default']
+      let style = this.logColorAnsiMap.default
       for (let key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
           style = this.logColorAnsiMap[key]

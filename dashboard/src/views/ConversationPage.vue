@@ -8,10 +8,11 @@
                     <v-chip size="small" class="ml-2">{{ pagination.total || 0 }}</v-chip>
                     <v-row class="me-4 ms-4" dense>
                         <v-col cols="12" sm="6" md="4">
-                            <v-combobox v-model="platformFilter" :label="tm('filters.platform')"
+                            <v-combobox
+v-model="platformFilter" :label="tm('filters.platform')"
                                 :items="availablePlatforms" chips multiple clearable variant="solo-filled" flat
                                 density="compact" hide-details>
-                                <template v-slot:selection="{ item }">
+                                <template #selection="{ item }">
                                     <v-chip size="small" label>
                                         {{ item.title }}
                                     </v-chip>
@@ -20,9 +21,10 @@
                         </v-col>
 
                         <v-col cols="12" sm="6" md="4">
-                            <v-select v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems"
+                            <v-select
+v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems"
                                 chips multiple clearable variant="solo-filled" density="compact" hide-details flat>
-                                <template v-slot:selection="{ item }">
+                                <template #selection="{ item }">
                                     <v-chip size="small" variant="solo-filled" label>
                                         {{ item.title }}
                                     </v-chip>
@@ -31,13 +33,15 @@
                         </v-col>
 
                         <v-col cols="12" sm="12" md="4">
-                            <v-text-field v-model="search" prepend-inner-icon="mdi-magnify"
+                            <v-text-field
+v-model="search" prepend-inner-icon="mdi-magnify"
                                 :label="tm('filters.search')" hide-details density="compact" variant="solo-filled" flat
                                 clearable></v-text-field>
                         </v-col>
                     </v-row>
-                    <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
-                        :loading="loading" size="small" class="mr-2">
+                    <v-btn
+color="primary" prepend-icon="mdi-refresh" variant="tonal" :loading="loading"
+                        size="small" class="mr-2" @click="fetchConversations">
                         {{ tm('history.refresh') }}
                     </v-btn>
                     <v-btn 
@@ -45,10 +49,10 @@
                         color="success" 
                         prepend-icon="mdi-download"
                         variant="tonal" 
-                        @click="exportConversations" 
-                        :disabled="loading"
+                        :disabled="loading" 
                         size="small"
-                        class="mr-2">
+                        class="mr-2"
+                        @click="exportConversations">
                         {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
                     </v-btn>
                     <v-btn 
@@ -56,9 +60,9 @@
                         color="error" 
                         prepend-icon="mdi-delete"
                         variant="tonal" 
-                        @click="confirmBatchDelete" 
-                        :disabled="loading"
-                        size="small">
+                        :disabled="loading" 
+                        size="small"
+                        @click="confirmBatchDelete">
                         {{ tm('batch.deleteSelected', { count: selectedItems.length }) }}
                     </v-btn>
                 </v-card-title>
@@ -66,12 +70,13 @@
                 <v-divider></v-divider>
 
                 <v-card-text class="pa-0">
-                    <v-data-table v-model="selectedItems" :headers="tableHeaders" :items="conversations"
+                    <v-data-table
+v-model="selectedItems" :headers="tableHeaders" :items="conversations"
                         :loading="loading" style="font-size: 12px;" density="comfortable" hide-default-footer
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
                         :disabled="loading" @update:options="handleTableOptions">
-                        <template v-slot:header.umo_source>
+                        <template #header.umo_source>
                             <div class="umo-header-cell">
                                 <span>{{ tm('table.headers.umo') }}</span>
                                 <v-btn-toggle
@@ -92,7 +97,7 @@
                             </div>
                         </template>
 
-                        <template v-slot:item.title="{ item }">
+                        <template #item.title="{ item }">
                             <div class="conversation-title-cell">
                                 <div class="conversation-title-row">
                                     <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
@@ -103,8 +108,8 @@
                                         density="compact"
                                         :ripple="false"
                                         class="conversation-inline-edit"
-                                        @click.stop="editConversation(item)"
                                         :disabled="loading"
+                                        @click.stop="editConversation(item)"
                                     >
                                         <v-icon size="14">mdi-pencil</v-icon>
                                     </v-btn>
@@ -113,12 +118,13 @@
                             </div>
                         </template>
 
-                        <template v-slot:item.umo_source="{ item }">
+                        <template #item.umo_source="{ item }">
                             <div class="umo-source-cell">
                                 <div class="umo-source-content">
                                     <template v-if="umoDisplayMode === 'parsed'">
                                         <div class="conversation-umo-stack">
-                                            <UmoDisplay v-if="hasConversationUmoReadableName(item)"
+                                            <UmoDisplay
+v-if="hasConversationUmoReadableName(item)"
                                                 v-bind="getConversationUmoDisplayProps(item)" compact
                                                 :show-info="false" :show-platform="false" :show-meta="false"
                                                 class="conversation-umo-display" />
@@ -149,28 +155,30 @@
                             </div>
                         </template>
 
-                        <template v-slot:item.created_at="{ item }">
+                        <template #item.created_at="{ item }">
                             {{ formatTimestamp(item.created_at) }}
                         </template>
 
-                        <template v-slot:item.updated_at="{ item }">
+                        <template #item.updated_at="{ item }">
                             {{ formatTimestamp(item.updated_at) }}
                         </template>
 
-                        <template v-slot:item.actions="{ item }">
+                        <template #item.actions="{ item }">
                             <div class="actions-wrapper">
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="viewConversation(item)" :disabled="loading">
+                                <v-btn
+icon variant="plain" size="x-small" class="action-button"
+                                    :disabled="loading" @click="viewConversation(item)">
                                     <v-icon>mdi-eye</v-icon>
                                 </v-btn>
-                                <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
-                                    @click="confirmDeleteConversation(item)" :disabled="loading">
+                                <v-btn
+icon color="error" variant="plain" size="x-small" class="action-button"
+                                    :disabled="loading" @click="confirmDeleteConversation(item)">
                                     <v-icon>mdi-delete</v-icon>
                                 </v-btn>
                             </div>
                         </template>
 
-                        <template v-slot:no-data>
+                        <template #no-data>
                             <div class="d-flex flex-column align-center py-6">
                                 <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
                                 <span class="text-subtitle-1 text-disabled mt-3">{{ tm('status.noData') }}</span>
@@ -184,7 +192,8 @@
                         <div class="d-flex justify-between align-center px-4 py-2 bg-grey-lighten-5">
                             <div class="d-flex align-center">
                                 <span class="text-caption mr-2">{{ tm('pagination.itemsPerPage') }}:</span>
-                                <v-select v-model="pagination.page_size" :items="pageSizeOptions" variant="outlined"
+                                <v-select
+v-model="pagination.page_size" :items="pageSizeOptions" variant="outlined"
                                     density="compact" hide-details style="max-width: 100px;"
                                     :disabled="loading" @update:model-value="onPageSizeChange"></v-select>
                             </div>
@@ -196,8 +205,9 @@
                                 }) }}
                             </div>
                         </div>
-                        <v-pagination v-model="pagination.page" :length="pagination.total_pages" :disabled="loading"
-                            @update:model-value="fetchConversations" rounded="circle" :total-visible="7"></v-pagination>
+                        <v-pagination
+v-model="pagination.page" :length="pagination.total_pages" :disabled="loading"
+                            rounded="circle" :total-visible="7" @update:model-value="fetchConversations"></v-pagination>
                     </div>
                 </v-card-text>
             </v-card>
@@ -209,10 +219,12 @@
                 <v-card-title class="ml-2 mt-2 conversation-detail-title">
                     <div class="conversation-detail-heading">
                         <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
-                        <UmoDisplay v-if="selectedConversation?.user_id && hasConversationUmoReadableName(selectedConversation)"
+                        <UmoDisplay
+v-if="selectedConversation?.user_id && hasConversationUmoReadableName(selectedConversation)"
                             v-bind="getConversationUmoDisplayProps(selectedConversation)" compact :show-info="false"
                             :show-platform="false" :show-meta="false" class="conversation-umo-display" />
-                        <div v-if="selectedConversation?.user_id"
+                        <div
+v-if="selectedConversation?.user_id"
                             class="conversation-umo-parsed conversation-detail-umo-parsed">
                             <v-chip size="x-small" label>
                                 {{ getConversationUmoInfo(selectedConversation).platform || tm('status.unknown') }}
@@ -229,12 +241,14 @@
 
                 <v-card-text>
                     <div class="mb-4 d-flex align-center">
-                        <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
+                        <v-btn
+color="secondary" variant="tonal" size="small" class="mr-2"
                             @click="isEditingHistory = !isEditingHistory">
                             <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
                             {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
                         </v-btn>
-                        <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
+                        <v-btn
+v-if="isEditingHistory" color="success" variant="tonal" size="small"
                             :loading="savingHistory" @click="saveHistoryChanges">
                             <v-icon class="mr-1">mdi-content-save</v-icon>
                             {{ tm('dialogs.view.saveChanges') }}
@@ -243,19 +257,21 @@
 
                     <!-- 编辑模式 - Monaco编辑器 -->
                     <div v-if="isEditingHistory" class="monaco-editor-container">
-                        <VueMonacoEditor v-model:value="editedHistory" theme="vs-dark" language="json" :options="{
+                        <VueMonacoEditor
+v-model:value="editedHistory" theme="vs-dark" language="json" :options="{
                             automaticLayout: true,
                             fontSize: 13,
                             tabSize: 2,
                             minimap: { enabled: false },
                             scrollBeyondLastLine: false,
                             wordWrap: 'on'
-                        }" @editorDidMount="onMonacoMounted" />
+                        }" @editor-did-mount="onMonacoMounted" />
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);"
-                        ref="messagesContainer"
+                    <div
+v-else ref="messagesContainer" class="conversation-messages-container"
+                        style="background-color: var(--v-theme-surface);"
                         @wheel.prevent="onContainerWheel">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
@@ -264,7 +280,7 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList v-else :messages="formattedMessages" :isDark="isDark" />
+                        <MessageList v-else :messages="formattedMessages" :is-dark="isDark" />
                     </div>
                 </v-card-text>
 
@@ -287,7 +303,8 @@
 
                 <v-card-text class="py-4">
                     <v-form ref="form" v-model="valid">
-                        <v-text-field v-model="editedItem.title" :label="tm('dialogs.edit.titleLabel')"
+                        <v-text-field
+v-model="editedItem.title" :label="tm('dialogs.edit.titleLabel')"
                             :placeholder="tm('dialogs.edit.titlePlaceholder')" variant="outlined" density="comfortable"
                             class="mb-3"></v-text-field>
                     </v-form>
@@ -297,10 +314,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
+                    <v-btn variant="text" :disabled="loading" @click="dialogEdit = false">
                         {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" @click="saveConversation" :loading="loading">
+                    <v-btn color="primary" :loading="loading" @click="saveConversation">
                         {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -324,10 +341,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
+                    <v-btn variant="text" :disabled="loading" @click="dialogDelete = false">
                         {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="deleteConversation" :loading="loading">
+                    <v-btn color="error" :loading="loading" @click="deleteConversation">
                         {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -347,9 +364,10 @@
 
                     <!-- 显示前几个要删除的对话 -->
                     <div v-if="selectedItems.length > 0" class="mb-3">
-                        <v-chip v-for="(item, index) in selectedItems.slice(0, 5)" :key="`${item.user_id}-${item.cid}`"
-                            size="small" class="mr-1 mb-1" closable @click:close="removeFromSelection(item)"
-                            :disabled="loading">
+                        <v-chip
+v-for="item in selectedItems.slice(0, 5)" :key="`${item.user_id}-${item.cid}`"
+                            size="small" class="mr-1 mb-1" closable :disabled="loading"
+                            @click:close="removeFromSelection(item)">
                             {{ item.title || tm('status.noTitle') }}
                         </v-chip>
                         <v-chip v-if="selectedItems.length > 5" size="small" class="mr-1 mb-1">
@@ -366,10 +384,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
+                    <v-btn variant="text" :disabled="loading" @click="dialogBatchDelete = false">
                         {{ tm('dialogs.batchDelete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="batchDeleteConversations" :loading="loading">
+                    <v-btn color="error" :loading="loading" @click="batchDeleteConversations">
                         {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -377,7 +395,7 @@
         </v-dialog>
 
         <!-- 消息提示 -->
-        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+        <v-snackbar v-model="showMessage" :timeout="3000" elevation="24" :color="messageType" location="top">
             {{ message }}
         </v-snackbar>
     </div>
@@ -482,27 +500,6 @@ export default {
         }
     },
 
-    watch: {
-        // 监听筛选条件变化，使用防抖处理
-        platformFilter() {
-            this.debouncedApplyFilters();
-        },
-        messageTypeFilter() {
-            this.debouncedApplyFilters();
-        },
-        search() {
-            this.debouncedApplyFilters();
-        }
-    },
-
-    created() {
-        this.debouncedApplyFilters = debounce(() => {
-            // 重置到第一页
-            this.pagination.page = 1;
-            this.fetchConversations();
-        }, 300);
-    },
-
     computed: {
         // 动态表头
         tableHeaders() {
@@ -545,7 +542,7 @@ export default {
                 typeof item === 'object' ? item.value : item
             );
             return {
-                platforms: platforms,
+                platforms,
                 messageTypes: this.messageTypeFilter,
                 search: this.search
             };
@@ -575,7 +572,7 @@ export default {
 
                     const messageParts = this.convertContentToMessageParts(msg.content)
                         // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
-                        .filter(part => part.type !== 'plain' || (part.text && part.text.trim()));
+                        .filter(part => part.type !== 'plain' || (part.text?.trim()));
 
                     // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
                     if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
@@ -610,6 +607,27 @@ export default {
         }
     },
 
+    watch: {
+        // 监听筛选条件变化，使用防抖处理
+        platformFilter() {
+            this.debouncedApplyFilters();
+        },
+        messageTypeFilter() {
+            this.debouncedApplyFilters();
+        },
+        search() {
+            this.debouncedApplyFilters();
+        }
+    },
+
+    created() {
+        this.debouncedApplyFilters = debounce(() => {
+            // 重置到第一页
+            this.pagination.page = 1;
+            this.fetchConversations();
+        }, 300);
+    },
+
     mounted() {
         this.fetchConversations();
     },
@@ -624,7 +642,7 @@ export default {
                     JSON.parse(this.editedHistory);
                     // 有效的JSON格式
                     editor.getAction('editor.action.formatDocument').run();
-                } catch (e) {
+                } catch (_error) {
                     // 无效的JSON格式，不做处理，Monaco编辑器会自动提示
                 }
             });
@@ -636,7 +654,7 @@ export default {
             if (options.itemsPerPage !== this.pagination.page_size) {
                 this.pagination.page_size = options.itemsPerPage;
                 this.pagination.page = 1; // 重置到第一页
-                this.fetchConversations();
+                void this.fetchConversations();
             }
         },
 
@@ -771,7 +789,7 @@ export default {
                     if (response.data.status === "ok") {
                         const data = response.data.data;
 
-                        if (!data || !data.conversations) {
+                        if (!data?.conversations) {
                             console.error('API 返回数据格式不符合预期:', data);
                             this.showErrorMessage(this.tm('messages.fetchError'));
                             return;
@@ -871,7 +889,7 @@ export default {
                 let historyJson;
                 try {
                     historyJson = JSON.parse(this.editedHistory);
-                } catch (e) {
+                } catch (_error) {
                     this.showErrorMessage(this.tm('messages.invalidJson'));
                     return;
                 }
@@ -944,7 +962,7 @@ export default {
                     this.showSuccessMessage(this.tm('messages.saveSuccess'));
 
                     // 刷新数据
-                    this.fetchConversations();
+                    void this.fetchConversations();
                 } else {
                     this.showErrorMessage(response.data.message || this.tm('messages.saveError'));
                 }
@@ -997,7 +1015,7 @@ export default {
         // 处理页面大小变更
         onPageSizeChange() {
             this.pagination.page = 1; // 重置到第一页
-            this.fetchConversations();
+            void this.fetchConversations();
         },
 
         // 确认批量删除
@@ -1035,7 +1053,7 @@ export default {
                 }));
 
                 const response = await conversationApi.batchDelete({
-                    conversations: conversations
+                    conversations
                 });
 
                 if (response.data.status === "ok") {
@@ -1060,7 +1078,7 @@ export default {
                     }
 
                     // 刷新列表
-                    this.fetchConversations();
+                    void this.fetchConversations();
                 } else {
                     this.showErrorMessage(response.data.message || this.tm('messages.batchDeleteError'));
                 }
@@ -1088,7 +1106,7 @@ export default {
                 }));
 
                 const response = await conversationApi.export({
-                    conversations: conversations
+                    conversations
                 });
 
                 // 创建一个下载链接
@@ -1178,7 +1196,7 @@ export default {
             } else if (typeof content === 'object' && content !== null) {
                 // 对象格式，尝试提取文本和图片
                 const textParts = [];
-                for (const [key, value] of Object.entries(content)) {
+                for (const [_key, value] of Object.entries(content)) {
                     if (typeof value === 'string' && value.trim()) {
                         textParts.push(value);
                     }

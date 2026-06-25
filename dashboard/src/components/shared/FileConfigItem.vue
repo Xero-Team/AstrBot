@@ -32,13 +32,16 @@
               </v-list-item-title>
               <template #append>
                 <div class="d-flex align-center gap-1">
-                  <v-chip v-if="item.status !== 'ok'" size="x-small" :color="getStatusColor(item.status)"
+                  <v-chip
+v-if="item.status !== 'ok'" size="x-small" :color="getStatusColor(item.status)"
                     variant="tonal">
                     {{ getStatusText(item.status) }}
                   </v-chip>
-                  <v-btn v-if="item.status === 'unconfigured'" icon="mdi-plus" size="x-small" variant="text"
+                  <v-btn
+v-if="item.status === 'unconfigured'" icon="mdi-plus" size="x-small" variant="text"
                     @click="addToConfig(item.path)" />
-                  <v-btn icon="mdi-delete" size="x-small" variant="text"
+                  <v-btn
+icon="mdi-delete" size="x-small" variant="text"
                     @click="item.status === 'unconfigured' ? deletePhysicalFile(item.path) : deleteFile(item.path)" />
                 </div>
               </template>
@@ -46,7 +49,8 @@
 
             <v-divider v-if="mergedFileItems.length > 0" class="my-2" />
 
-            <v-list-item class="upload-item" :class="{ dragover: isDragging }" @drop.prevent="handleDrop"
+            <v-list-item
+class="upload-item" :class="{ dragover: isDragging }" @drop.prevent="handleDrop"
               @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="openFilePicker">
               <template #prepend>
                 <v-icon size="18" color="primary">mdi-plus</v-icon>
@@ -112,7 +116,7 @@ const directoryFiles = ref([])
 
 const fileList = computed({
   get: () => (Array.isArray(props.modelValue) ? props.modelValue : []),
-  set: (val) => emit('update:modelValue', val)
+  set: (val) => { emit('update:modelValue', val); }
 })
 
 const mergedFileItems = computed(() => {
@@ -213,7 +217,7 @@ const loadDirectoryFiles = async () => {
 const handleFileSelect = (event) => {
   const target = event.target
   if (target?.files && target.files.length > 0) {
-    uploadFiles(Array.from(target.files))
+    void uploadFiles(Array.from(target.files))
   }
   if (target) {
     target.value = ''
@@ -223,7 +227,7 @@ const handleFileSelect = (event) => {
 const handleDrop = (event) => {
   isDragging.value = false
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-    uploadFiles(Array.from(event.dataTransfer.files))
+    void uploadFiles(Array.from(event.dataTransfer.files))
   }
 }
 
@@ -342,7 +346,7 @@ watch(
   () => dialog.value,
   (value) => {
     if (value) {
-      loadDirectoryFiles()
+      void loadDirectoryFiles()
     }
   }
 )

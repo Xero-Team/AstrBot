@@ -22,7 +22,7 @@ const emit = defineEmits(['update:modelValue']);
 
 const dialog = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
+  set: (value) => { emit('update:modelValue', value); }
 });
 
 const changelogContent = ref('');
@@ -99,7 +99,7 @@ async function loadAvailableVersions() {
 // 版本选择变化时加载对应的更新日志
 function onVersionChange() {
   if (selectedVersion.value) {
-    loadChangelog(selectedVersion.value);
+    void loadChangelog(selectedVersion.value);
   }
 }
 
@@ -149,21 +149,21 @@ watch(dialog, async (newValue) => {
 });
 
 // 初始化时获取版本号
-getCurrentVersion();
+void getCurrentVersion();
 </script>
 
 <template>
   <v-dialog 
     :model-value="dialog" 
-    @update:model-value="dialog = $event"
     :width="$vuetify.display.smAndDown ? '100%' : '800'"
-    :fullscreen="$vuetify.display.xs" 
-    max-width="1000"
+    :fullscreen="$vuetify.display.xs"
+    max-width="1000" 
+    @update:model-value="dialog = $event"
   >
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h3">{{ t('core.navigation.changelogDialog.title') }}</span>
-        <v-btn icon @click="dialog = false" flat>
+        <v-btn icon flat @click="dialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -179,16 +179,16 @@ getCurrentVersion();
             density="compact"
             @update:model-value="onVersionChange"
           >
-            <template v-slot:item="{ item, props }">
-              <v-list-item v-bind="props" :title="`v${item.value}`">
-                <template v-slot:append v-if="item.value === changelogVersion">
+            <template #item="{ item, props: itemProps }">
+              <v-list-item v-bind="itemProps" :title="`v${item.value}`">
+                <template v-if="item.value === changelogVersion" #append>
                   <v-chip size="x-small" color="primary" variant="tonal">
                     {{ t('core.navigation.changelogDialog.current') }}
                   </v-chip>
                 </template>
               </v-list-item>
             </template>
-            <template v-slot:selection="{ item }">
+            <template #selection="{ item }">
               <span>v{{ item.value }}</span>
             </template>
           </v-select>

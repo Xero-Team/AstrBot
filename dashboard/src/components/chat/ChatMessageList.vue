@@ -479,9 +479,32 @@ const customMarkdownTags = ["ref"];
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const listRoot = ref<HTMLElement | null>(null);
 const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
+
+interface MessageRefItem {
+  index?: unknown;
+  title: string;
+  url?: string;
+  snippet?: unknown;
+  favicon?: unknown;
+}
+
+interface AgentStatsLike {
+  token_usage?: {
+    input_other?: unknown;
+    output?: unknown;
+    input_cached?: unknown;
+  };
+  duration?: unknown;
+  total_duration?: unknown;
+  start_time?: unknown;
+  end_time?: unknown;
+  time_to_first_token?: unknown;
+  ttft?: unknown;
+  first_token_latency?: unknown;
+}
 
 function isUserMessage(message: ChatRecord) {
   return messageContent(message).type === "user";
@@ -539,8 +562,10 @@ function isMessageStreaming(message: ChatRecord, messageIndex: number) {
 
 function isEditingMessage(message: ChatRecord) {
   return (
-    props.editingMessageId != null &&
-    message.id != null &&
+    props.editingMessageId !== null &&
+    props.editingMessageId !== undefined &&
+    message.id !== null &&
+    message.id !== undefined &&
     String(props.editingMessageId) === String(message.id)
   );
 }
@@ -548,10 +573,11 @@ function isEditingMessage(message: ChatRecord) {
 function canEditMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableEdit &&
-    isUserMessage(message) &&
-    messageIndex === latestEditableUserIndex() &&
-    message.id != null &&
-    !String(message.id).startsWith("local-")
+      isUserMessage(message) &&
+      messageIndex === latestEditableUserIndex() &&
+      message.id !== null &&
+      message.id !== undefined &&
+      !String(message.id).startsWith("local-")
   );
 }
 
@@ -560,7 +586,8 @@ function latestEditableUserIndex() {
     const message = props.messages[index];
     if (
       isUserMessage(message) &&
-      message.id != null &&
+      message.id !== null &&
+      message.id !== undefined &&
       !String(message.id).startsWith("local-")
     ) {
       return index;
@@ -584,10 +611,6 @@ function showMessageMeta(message: ChatRecord, messageIndex: number) {
     !messageContent(message).isLoading &&
     !isMessageStreaming(message, messageIndex)
   );
-}
-
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === "content");
 }
 
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
@@ -728,7 +751,7 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  nextTick(() => {
+  void nextTick(() => {
     listRoot.value
       ?.querySelectorAll(".message-row")
       [index]?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -767,23 +790,28 @@ function resolvedMessageRefs(message: ChatRecord) {
 
 function normalizeRefs(refs: unknown) {
   if (!refs) return { used: [] as Array<Record<string, unknown>> };
-  const used = Array.isArray((refs as any)?.used)
-    ? (refs as any).used
-    : Array.isArray(refs)
-      ? refs
-      : [];
+  const refsValue = refs as { used?: unknown };
+  let used: unknown[] = [];
+  if (Array.isArray(refsValue.used)) {
+    used = refsValue.used;
+  } else if (Array.isArray(refs)) {
+    used = refs;
+  }
   return { used: normalizeRefItems(used) };
 }
 
 function normalizeRefItems(items: unknown[]) {
   return items
-    .map((item: any) => ({
-      index: item?.index,
-      title: item?.title || item?.url || tm("refs.title"),
-      url: item?.url,
-      snippet: item?.snippet,
-      favicon: item?.favicon,
-    }))
+    .map((item) => {
+      const refItem = item as Partial<MessageRefItem>;
+      return {
+        index: refItem.index,
+        title: refItem.title || refItem.url || tm("refs.title"),
+        url: refItem.url,
+        snippet: refItem.snippet,
+        favicon: refItem.favicon,
+      };
+    })
     .filter((item) => item.url);
 }
 
@@ -793,7 +821,9 @@ function handleOpenRefs(refs: unknown) {
     return;
   }
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === "object"
+      ? (refs as Record<string, unknown>)
+      : undefined;
   refsSidebarOpen.value = true;
 }
 
@@ -858,20 +888,22 @@ function formatTime(value: string) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function inputTokens(stats: any) {
-  const usage = stats?.token_usage || {};
-  return usage.input_other || 0;
+function inputTokens(stats: AgentStatsLike | unknown) {
+  const usage = (stats as AgentStatsLike | undefined)?.token_usage || {};
+  return Number(usage.input_other) || 0;
 }
 
-function outputTokens(stats: any) {
-  return stats?.token_usage?.output || 0;
+function outputTokens(stats: AgentStatsLike | unknown) {
+  return Number((stats as AgentStatsLike | undefined)?.token_usage?.output) || 0;
 }
 
-function cachedInputTokens(stats: any) {
-  return stats?.token_usage?.input_cached || 0;
+function cachedInputTokens(stats: AgentStatsLike | unknown) {
+  return (
+    Number((stats as AgentStatsLike | undefined)?.token_usage?.input_cached) || 0
+  );
 }
 
-function agentDuration(stats: any) {
+function agentDuration(stats: AgentStatsLike | unknown) {
   const directDuration = readPositiveNumber(stats, [
     "duration",
     "total_duration",
@@ -884,7 +916,7 @@ function agentDuration(stats: any) {
   return formatDuration(endTime - startTime);
 }
 
-function agentTtft(stats: any) {
+function agentTtft(stats: AgentStatsLike | unknown) {
   const ttft = readPositiveNumber(stats, [
     "time_to_first_token",
     "ttft",
@@ -894,9 +926,9 @@ function agentTtft(stats: any) {
   return formatDuration(ttft);
 }
 
-function readPositiveNumber(source: any, keys: string[]) {
+function readPositiveNumber(source: AgentStatsLike | unknown, keys: string[]) {
   for (const key of keys) {
-    const value = Number(source?.[key]);
+    const value = Number((source as Record<string, unknown> | undefined)?.[key]);
     if (Number.isFinite(value) && value > 0) return value;
   }
   return null;

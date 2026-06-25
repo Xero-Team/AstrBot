@@ -4,8 +4,8 @@
       color="primary" 
       variant="tonal"
       size="small"
-      @click="openDialog"
       style="margin-bottom: 8px;"
+      @click="openDialog"
     >
       {{ t('features.settings.sidebar.customize.title') }}
     </v-btn>
@@ -42,11 +42,11 @@
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'main', index)"
                 >
-                  <template v-slot:prepend>
+                  <template #prepend>
                     <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
-                  <template v-slot:append>
+                  <template #append>
                     <v-btn
                       icon="mdi-arrow-right"
                       variant="text"
@@ -75,11 +75,11 @@
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'more', index)"
                 >
-                  <template v-slot:prepend>
+                  <template #prepend>
                     <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
-                  <template v-slot:append>
+                  <template #append>
                     <v-btn
                       icon="mdi-arrow-left"
                       variant="text"
@@ -151,7 +151,7 @@ function openDialog() {
 function handleDragStart(event, listType, index) {
   draggedItem.value = {
     type: listType,
-    index: index,
+    index,
     item: listType === 'main' ? mainItems.value[index] : moreItems.value[index]
   };
   event.dataTransfer.effectAllowed = 'move';

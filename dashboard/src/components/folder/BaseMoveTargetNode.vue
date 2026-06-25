@@ -1,11 +1,13 @@
 <template>
     <div class="base-move-target-node">
-        <v-list-item :active="selectedFolderId === folder.folder_id" :disabled="isDisabled"
-            @click.stop="!isDisabled && $emit('select', folder.folder_id)" rounded="lg"
-            :style="{ paddingLeft: `${(depth + 1) * 16}px` }" class="folder-item">
-            <template v-slot:prepend>
-                <v-btn v-if="hasChildren" icon variant="text" size="x-small" @click.stop="toggleExpand"
-                    class="expand-btn" :disabled="isDisabled">
+        <v-list-item
+:active="selectedFolderId === folder.folder_id" :disabled="isDisabled"
+            rounded="lg" :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
+            class="folder-item" @click.stop="!isDisabled && $emit('select', folder.folder_id)">
+            <template #prepend>
+                <v-btn
+v-if="hasChildren" icon variant="text" size="x-small" class="expand-btn"
+                    :disabled="isDisabled" @click.stop="toggleExpand">
                     <v-icon size="16">{{ isExpanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
                 </v-btn>
                 <div v-else class="expand-placeholder"></div>
@@ -19,7 +21,8 @@
         <!-- 子文件夹 -->
         <v-expand-transition>
             <div v-show="isExpanded && hasChildren">
-                <BaseMoveTargetNode v-for="child in folder.children" :key="child.folder_id" :folder="child" :depth="depth + 1"
+                <BaseMoveTargetNode
+v-for="child in folder.children" :key="child.folder_id" :folder="child" :depth="depth + 1"
                     :selected-folder-id="selectedFolderId" :disabled-folder-ids="disabledFolderIds"
                     @select="$emit('select', $event)" />
             </div>

@@ -122,10 +122,6 @@ const viewReadme = () => {
   emit("view-readme", props.extension);
 };
 
-const viewChangelog = () => {
-  emit("view-changelog", props.extension);
-};
-
 const togglePin = () => {
   emit("toggle-pin", props.extension);
 };
@@ -181,7 +177,7 @@ const togglePin = () => {
                     : extension.name
                 "
               >
-                <template v-slot:activator="{ props: titleTooltipProps }">
+                <template #activator="{ props: titleTooltipProps }">
                   <span v-bind="titleTooltipProps" class="extension-title__text">{{
                     localizedName
                   }}</span>
@@ -199,10 +195,10 @@ const togglePin = () => {
                 {{ tm("status.system") }}
               </v-chip>
               <v-tooltip
-                location="top"
                 v-if="extension?.has_update && !marketMode"
+                location="top"
               >
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <v-icon
                     v-bind="tooltipProps"
                     color="warning"
@@ -222,7 +218,7 @@ const togglePin = () => {
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <div class="extension-switch-wrap" @click.stop>
                     <div
                       v-bind="tooltipProps"
@@ -293,7 +289,7 @@ const togglePin = () => {
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
         <v-tooltip location="top">
-          <template v-slot:activator="{ props: pinTooltipProps }">
+          <template #activator="{ props: pinTooltipProps }">
             <v-btn
               v-bind="pinTooltipProps"
               :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
@@ -309,7 +305,7 @@ const togglePin = () => {
         </v-tooltip>
 
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
-          <template v-slot:activator="{ props: actionProps }">
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-book-open-page-variant"
@@ -322,7 +318,7 @@ const togglePin = () => {
         </v-tooltip>
 
         <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
-          <template v-slot:activator="{ props: actionProps }">
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-cog"
@@ -335,7 +331,7 @@ const togglePin = () => {
         </v-tooltip>
 
         <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
-          <template v-slot:activator="{ props: actionProps }">
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-refresh"

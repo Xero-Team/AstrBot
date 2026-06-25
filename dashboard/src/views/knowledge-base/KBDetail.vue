@@ -138,7 +138,7 @@
 
         <!-- 知识库检索 -->
         <v-window-item value="retrieval">
-          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name"/>
+          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name || ''"/>
         </v-window-item>
 
         <!-- 设置 -->
@@ -164,6 +164,19 @@ import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
 import SettingsTab from './components/SettingsTab.vue'
 
+interface KnowledgeBaseDetail {
+  kb_id?: string
+  kb_name?: string
+  description?: string | null
+  emoji?: string | null
+  created_at?: string
+  updated_at?: string
+  doc_count?: number
+  chunk_count?: number
+  embedding_provider_id?: string | null
+  rerank_provider_id?: string | null
+}
+
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 const route = useRoute()
 
@@ -174,7 +187,7 @@ const emit = defineEmits<{
 const kbId = ref(route.params.kbId as string)
 const loading = ref(true)
 const activeTab = ref('overview')
-const kb = ref<any>({})
+const kb = ref<KnowledgeBaseDetail>({})
 
 const snackbar = ref({
   show: false,
@@ -208,7 +221,7 @@ const loadKB = async () => {
 }
 
 // 格式化日期
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {
@@ -221,7 +234,7 @@ const formatDate = (dateStr: string) => {
 }
 
 onMounted(() => {
-  loadKB()
+  void loadKB()
 })
 
 watch(

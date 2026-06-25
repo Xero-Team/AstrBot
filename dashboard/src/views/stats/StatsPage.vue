@@ -414,11 +414,11 @@ async function refreshStats(): Promise<void> {
   }
 }
 
-const rangeOptions = computed(() => [
-  { labelKey: 'ranges.oneDay', value: 1 as TokenRange },
-  { labelKey: 'ranges.threeDays', value: 3 as TokenRange },
-  { labelKey: 'ranges.oneWeek', value: 7 as TokenRange }
-])
+const rangeOptions: ReadonlyArray<{ labelKey: string; value: TokenRange }> = [
+  { labelKey: 'ranges.oneDay', value: 1 },
+  { labelKey: 'ranges.threeDays', value: 3 },
+  { labelKey: 'ranges.oneWeek', value: 7 }
+]
 
 const lastUpdatedLabel = computed(() => {
   if (!lastUpdatedAt.value) return t('header.notUpdated')

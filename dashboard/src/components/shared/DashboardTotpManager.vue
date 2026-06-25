@@ -2,11 +2,11 @@
   <div class="totp-manager">
     <v-switch
       :model-value="modelValue"
-      @update:model-value="onTotpToggle"
       color="primary"
       inset
       density="compact"
       hide-details
+      @update:model-value="onTotpToggle"
     ></v-switch>
     <div v-if="modelValue" class="totp-manager-actions">
       <v-chip

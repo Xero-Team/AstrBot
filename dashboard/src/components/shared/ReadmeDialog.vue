@@ -339,13 +339,13 @@ watch(
   ([show, name]) => {
     if (!show) return;
     if (requiresPluginName.value && !name) return;
-    fetchContent();
+    void fetchContent();
   },
   { immediate: true },
 );
 
 watch([content, locale, isDark], () => {
-  updateRenderedHtml();
+  void updateRenderedHtml();
 }, { immediate: true });
 
 async function handleContainerClick(event) {
@@ -393,7 +393,7 @@ function showCopyFeedback(btn, success) {
 
 const _show = computed({
   get: () => props.show,
-  set: (val) => emit("update:show", val),
+  set: (val) => { emit("update:show", val); },
 });
 
 // 安全打开外部链接
@@ -403,7 +403,7 @@ function openExternalLink(url) {
 }
 
 const showActionArea = computed(() => {
-  const hasGithub = modeConfig.value.showGithubButton && !!props.repoUrl;
+  const hasGithub = modeConfig.value.showGithubButton && Boolean(props.repoUrl);
   return hasGithub || modeConfig.value.showRefreshButton;
 });
 </script>
@@ -413,7 +413,7 @@ const showActionArea = computed(() => {
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
-        <v-btn icon @click="_show = false" variant="text">
+        <v-btn icon variant="text" @click="_show = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -454,8 +454,8 @@ const showActionArea = computed(() => {
         <div
           v-else-if="renderedHtml"
           class="markdown-body"
-          v-html="renderedHtml"
           @click="handleContainerClick"
+          v-html="renderedHtml"
         ></div>
 
         <div

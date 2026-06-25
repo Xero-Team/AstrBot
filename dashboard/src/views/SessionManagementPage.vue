@@ -19,13 +19,13 @@
               density="compact"
             ></v-text-field>
           </v-row>
-          <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal" @click="confirmBatchDelete" class="mr-2" size="small">
+          <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal" class="mr-2" size="small" @click="confirmBatchDelete">
             {{ tm('buttons.batchDelete') }} ({{ selectedItems.length }})
           </v-btn>
-          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="openAddRuleDialog" class="mr-2" size="small">
+          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" class="mr-2" size="small" @click="openAddRuleDialog">
             {{ tm('buttons.addRule') }}
           </v-btn>
-          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshData" :loading="loading" size="small">
+          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" :loading="loading" size="small" @click="refreshData">
             {{ tm('buttons.refresh') }}
           </v-btn>
         </v-card-title>
@@ -34,22 +34,22 @@
 
         <v-card-text class="pa-0">
           <v-data-table-server
+            v-model:items-per-page="itemsPerPage"
+            v-model:page="currentPage"
+            v-model="selectedItems"
             :headers="headers"
             :items="filteredRulesList"
             :loading="loading"
             :items-length="totalItems"
-            v-model:items-per-page="itemsPerPage"
-            v-model:page="currentPage"
-            @update:options="onTableOptionsUpdate"
             class="elevation-0"
             style="font-size: 12px"
-            v-model="selectedItems"
             show-select
             item-value="umo"
             return-object
+            @update:options="onTableOptionsUpdate"
           >
             <!-- UMO 信息 -->
-            <template v-slot:item.umo_info="{ item }">
+            <template #item.umo_info="{ item }">
               <UmoDisplay
                 :umo="item.umo"
                 :platform="item.platform"
@@ -65,7 +65,7 @@
             </template>
 
             <!-- 规则概览 -->
-            <template v-slot:item.rules_overview="{ item }">
+            <template #item.rules_overview="{ item }">
               <div class="d-flex flex-wrap ga-1">
                 <v-chip v-if="item.rules.session_service_config" size="x-small" color="primary" variant="outlined">
                   {{ tm('customRules.serviceConfig') }}
@@ -83,8 +83,8 @@
             </template>
 
             <!-- 操作按钮 -->
-            <template v-slot:item.actions="{ item }">
-              <v-btn size="small" variant="tonal" color="primary" @click="openRuleEditor(item)" class="mr-1">
+            <template #item.actions="{ item }">
+              <v-btn size="small" variant="tonal" color="primary" class="mr-1" @click="openRuleEditor(item)">
                 <v-icon>mdi-pencil</v-icon>
                 <v-tooltip activator="parent" location="top">{{ tm('buttons.editRule') }}</v-tooltip>
               </v-btn>
@@ -95,7 +95,7 @@
             </template>
 
             <!-- 空状态 -->
-            <template v-slot:no-data>
+            <template #no-data>
               <div class="text-center py-8">
                 <v-icon size="64" color="grey-400">mdi-file-document-edit-outline</v-icon>
                 <div class="text-h6 mt-4 text-grey-600">
@@ -185,7 +185,7 @@
           </v-row>
           <v-row dense class="mt-3">
             <v-col cols="12" class="d-flex justify-end">
-              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges" :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
+              <v-btn color="primary" variant="tonal" size="large" :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all" @click="applyBatchChanges">
                 {{ tm('batchOperations.apply') }}
               </v-btn>
             </v-col>
@@ -217,7 +217,7 @@
               </v-list>
             </v-menu>
           </v-btn>
-          <v-btn color="success" variant="tonal" size="small" @click="openCreateGroupDialog" prepend-icon="mdi-folder-plus">
+          <v-btn color="success" variant="tonal" size="small" prepend-icon="mdi-folder-plus" @click="openCreateGroupDialog">
             {{ tm('groups.create') }}
           </v-btn>
         </v-card-title>
@@ -279,14 +279,14 @@
                   prepend-inner-icon="mdi-magnify"
                 ></v-text-field>
                 <v-list density="compact" class="transfer-list">
-                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
-                    <template v-slot:prepend>
+                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" class="transfer-item" @click="addToGroup(umo)">
+                    <template #prepend>
                       <v-icon size="small" color="grey">mdi-plus</v-icon>
                     </template>
                     <v-list-item-title>
                       <UmoDisplay v-bind="getAvailableUmoDisplayProps(umo)" compact :show-info="false" :show-platform="false" />
                     </v-list-item-title>
-                    <template v-slot:append>
+                    <template #append>
                       <v-chip v-if="getAvailableUmoInfo(umo).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(umo).platform)" class="umo-list-platform">
                         {{ getAvailableUmoInfo(umo).platform }}
                       </v-chip>
@@ -302,10 +302,10 @@
               </v-col>
               <!-- 中间：操作按钮 -->
               <v-col cols="2" class="d-flex flex-column align-center justify-center">
-                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" @click="addAllToGroup" :disabled="unselectedUmos.length === 0">
+                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" :disabled="unselectedUmos.length === 0" @click="addAllToGroup">
                   <v-icon>mdi-chevron-double-right</v-icon>
                 </v-btn>
-                <v-btn icon size="small" variant="tonal" color="error" @click="removeAllFromGroup" :disabled="editingGroup.umos.length === 0">
+                <v-btn icon size="small" variant="tonal" color="error" :disabled="editingGroup.umos.length === 0" @click="removeAllFromGroup">
                   <v-icon>mdi-chevron-double-left</v-icon>
                 </v-btn>
               </v-col>
@@ -329,14 +329,14 @@
                   prepend-inner-icon="mdi-magnify"
                 ></v-text-field>
                 <v-list density="compact" class="transfer-list">
-                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
-                    <template v-slot:prepend>
+                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" class="transfer-item" @click="removeFromGroup(umo)">
+                    <template #prepend>
                       <v-icon size="small" color="error">mdi-minus</v-icon>
                     </template>
                     <v-list-item-title>
                       <UmoDisplay v-bind="getAvailableUmoDisplayProps(umo)" compact :show-info="false" :show-platform="false" />
                     </v-list-item-title>
-                    <template v-slot:append>
+                    <template #append>
                       <v-chip v-if="getAvailableUmoInfo(umo).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(umo).platform)" class="umo-list-platform">
                         {{ getAvailableUmoInfo(umo).platform }}
                       </v-chip>
@@ -374,19 +374,19 @@
             </v-alert>
 
             <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos" :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')">
-              <template v-slot:item="{ props, item }">
+              <template #item="{ props, item }">
                 <v-list-item v-bind="props">
-                  <template v-slot:title>
+                  <template #title>
                     <UmoDisplay v-bind="getAvailableUmoDisplayProps(item.raw)" compact :show-info="false" :show-platform="false" />
                   </template>
-                  <template v-slot:append>
+                  <template #append>
                     <v-chip v-if="getAvailableUmoInfo(item.raw).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(item.raw).platform)" class="umo-list-platform">
                       {{ getAvailableUmoInfo(item.raw).platform }}
                     </v-chip>
                   </template>
                 </v-list-item>
               </template>
-              <template v-slot:selection="{ item }">
+              <template #selection="{ item }">
                 <v-chip v-if="item && getUmoSelectionText(item.raw)" size="small" variant="tonal" color="primary" class="umo-selection-chip">
                   {{ getUmoSelectionText(item.raw) }}
                 </v-chip>
@@ -397,7 +397,7 @@
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="addRuleDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="primary" variant="tonal" @click="createNewRule" :disabled="!selectedNewUmo">
+            <v-btn color="primary" variant="tonal" :disabled="!selectedNewUmo" @click="createNewRule">
               {{ tm('buttons.next') }}
             </v-btn>
           </v-card-actions>
@@ -441,7 +441,7 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving" prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" :loading="saving" prepend-icon="mdi-content-save" @click="saveServiceConfig">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -494,7 +494,7 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving" prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" :loading="saving" prepend-icon="mdi-content-save" @click="saveProviderConfig">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -527,7 +527,7 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving" prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" :loading="saving" prepend-icon="mdi-content-save" @click="saveServiceConfig">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -563,7 +563,7 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving" prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" :loading="saving" prepend-icon="mdi-content-save" @click="savePluginConfig">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -601,7 +601,7 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving" prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" :loading="saving" prepend-icon="mdi-content-save" @click="saveKbConfig">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -622,7 +622,7 @@
           <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="deleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="error" variant="tonal" @click="deleteAllRules" :loading="deleting">{{ tm('buttons.delete') }}</v-btn>
+            <v-btn color="error" variant="tonal" :loading="deleting" @click="deleteAllRules">{{ tm('buttons.delete') }}</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -642,7 +642,7 @@
           <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="batchDeleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="error" variant="tonal" @click="batchDeleteRules" :loading="deleting">
+            <v-btn color="error" variant="tonal" :loading="deleting" @click="batchDeleteRules">
               {{ tm('buttons.delete') }}
             </v-btn>
           </v-card-actions>
@@ -664,7 +664,7 @@
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="quickEditNameDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="primary" variant="tonal" @click="saveQuickEditName" :loading="saving">
+            <v-btn color="primary" variant="tonal" :loading="saving" @click="saveQuickEditName">
               {{ tm('buttons.save') }}
             </v-btn>
           </v-card-actions>
@@ -1037,13 +1037,13 @@ export default {
       // 当分页参数变化时重新加载数据
       this.currentPage = options.page
       this.itemsPerPage = options.itemsPerPage
-      this.loadData()
+      void this.loadData()
     },
 
     onSearchChange() {
       // 搜索时重置到第一页
       this.currentPage = 1
-      this.loadData()
+      void this.loadData()
     },
 
     async loadUmos() {
@@ -1068,7 +1068,7 @@ export default {
     },
 
     hasProviderConfig(rules) {
-      return rules && (rules['provider_perf_chat_completion'] || rules['provider_perf_speech_to_text'] || rules['provider_perf_text_to_speech'])
+      return rules && (rules.provider_perf_chat_completion || rules.provider_perf_speech_to_text || rules.provider_perf_text_to_speech)
     },
 
     parseUmoInfo(umo) {
@@ -1191,9 +1191,9 @@ export default {
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: this.editingRules['provider_perf_chat_completion'] || FOLLOW_CONFIG_VALUE,
-        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || FOLLOW_CONFIG_VALUE,
-        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || FOLLOW_CONFIG_VALUE,
+        chat_completion: this.editingRules.provider_perf_chat_completion || FOLLOW_CONFIG_VALUE,
+        speech_to_text: this.editingRules.provider_perf_speech_to_text || FOLLOW_CONFIG_VALUE,
+        text_to_speech: this.editingRules.provider_perf_text_to_speech || FOLLOW_CONFIG_VALUE,
       }
 
       // 初始化插件配置
@@ -1476,7 +1476,7 @@ export default {
       try {
         const umos = this.selectedItems.map((item) => item.umo)
         const response = await sessionApi.deleteRules({
-          umos: umos,
+          umos,
         })
 
         if (response.data.status === 'ok') {

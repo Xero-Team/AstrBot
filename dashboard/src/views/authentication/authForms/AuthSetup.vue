@@ -14,23 +14,26 @@ const showConfirmPassword = ref(false);
 const loading = ref(false);
 
 const usernameRules = [
-  (value: string) => !!value || t('setup.validation.usernameRequired'),
+  (value: string) => Boolean(value) || t('setup.validation.usernameRequired'),
   (value: string) => (value && value.length >= 3) || t('setup.validation.usernameMinLength'),
 ];
 const passwordRules = [
-  (value: string) => !!value || t('setup.validation.passwordRequired'),
+  (value: string) => Boolean(value) || t('setup.validation.passwordRequired'),
   (value: string) => (value && value.length >= 8) || t('setup.validation.passwordMinLength'),
   (value: string) => /[A-Z]/.test(value) || t('setup.validation.passwordUppercase'),
   (value: string) => /[a-z]/.test(value) || t('setup.validation.passwordLowercase'),
   (value: string) => /\d/.test(value) || t('setup.validation.passwordDigit'),
 ];
 const confirmPasswordRules = [
-  (value: string) => !!value || t('setup.validation.confirmPasswordRequired'),
+  (value: string) => Boolean(value) || t('setup.validation.confirmPasswordRequired'),
   (value: string) => value === password.value || t('setup.validation.passwordMatch'),
 ];
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-async function validate(values: any, { setErrors }: any) {
+interface SetupFormContext {
+  setErrors: (errors: Record<string, string>) => void;
+}
+
+async function validate(_values: Record<string, unknown>, { setErrors }: SetupFormContext) {
   loading.value = true;
   const authStore = useAuthStore();
   return authStore.setup(username.value, password.value, confirmPassword.value).catch((err) => {
@@ -42,23 +45,27 @@ async function validate(values: any, { setErrors }: any) {
 </script>
 
 <template>
-  <Form @submit="validate" class="mt-4 setup-form" v-slot="{ errors, isSubmitting }">
-    <v-text-field v-model="username" :label="t('setup.username')" class="mb-5 input-field" required hide-details="auto"
+  <Form v-slot="{ errors, isSubmitting }" class="mt-4 setup-form" @submit="validate">
+    <v-text-field
+v-model="username" :label="t('setup.username')" class="mb-5 input-field" required hide-details="auto"
       variant="outlined" prepend-inner-icon="mdi-account-edit" :disabled="loading" :rules="usernameRules"></v-text-field>
 
-    <v-text-field v-model="password" :label="t('setup.password')" required variant="outlined" hide-details="auto"
+    <v-text-field
+v-model="password" :label="t('setup.password')" required variant="outlined" hide-details="auto"
       :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'" :type="showPassword ? 'text' : 'password'"
-      @click:append-inner="showPassword = !showPassword" class="pwd-input mb-5" prepend-inner-icon="mdi-lock-plus"
-      :disabled="loading" :rules="passwordRules"></v-text-field>
+      class="pwd-input mb-5" prepend-inner-icon="mdi-lock-plus" :disabled="loading"
+      :rules="passwordRules" @click:append-inner="showPassword = !showPassword"></v-text-field>
 
-    <v-text-field v-model="confirmPassword" :label="t('setup.confirmPassword')" required variant="outlined"
+    <v-text-field
+v-model="confirmPassword" :label="t('setup.confirmPassword')" required variant="outlined"
       hide-details="auto" :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
-      :type="showConfirmPassword ? 'text' : 'password'" @click:append-inner="showConfirmPassword = !showConfirmPassword"
-      class="pwd-input" prepend-inner-icon="mdi-lock-check" :disabled="loading" :rules="confirmPasswordRules"></v-text-field>
+      :type="showConfirmPassword ? 'text' : 'password'" class="pwd-input"
+      prepend-inner-icon="mdi-lock-check" :disabled="loading" :rules="confirmPasswordRules" @click:append-inner="showConfirmPassword = !showConfirmPassword"></v-text-field>
 
     <small class="setup-hint">{{ t('setup.passwordHint') }}</small>
 
-    <v-btn color="secondary" :loading="isSubmitting || loading" block class="setup-btn mt-8" variant="flat" size="large"
+    <v-btn
+color="secondary" :loading="isSubmitting || loading" block class="setup-btn mt-8" variant="flat" size="large"
       type="submit">
       <span class="setup-btn-text">{{ t('setup.submit') }}</span>
     </v-btn>

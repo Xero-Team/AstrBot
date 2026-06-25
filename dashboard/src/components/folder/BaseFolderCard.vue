@@ -1,6 +1,7 @@
 <template>
-    <v-card class="base-folder-card" :class="{ 'drag-over': isDragOver }" rounded="lg" @click="$emit('click')" @contextmenu.prevent="$emit('contextmenu', $event)"
-        elevation="0" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave" @drop.prevent="handleDrop">
+    <v-card
+class="base-folder-card" :class="{ 'drag-over': isDragOver }" rounded="lg" elevation="0" @click="$emit('click')"
+        @contextmenu.prevent="$emit('contextmenu', $event)" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave" @drop.prevent="handleDrop">
         <v-card-text class="d-flex align-center pa-3">
             <v-icon size="40" color="amber-darken-2" class="mr-3">mdi-folder</v-icon>
             <div class="folder-info flex-grow-1 overflow-hidden">
@@ -10,31 +11,31 @@
                 </div>
             </div>
             <v-menu offset-y>
-                <template v-slot:activator="{ props }">
+                <template #activator="{ props }">
                     <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" @click.stop />
                 </template>
                 <v-list density="compact">
                     <v-list-item @click.stop="$emit('open')">
-                        <template v-slot:prepend>
+                        <template #prepend>
                             <v-icon size="small">mdi-folder-open</v-icon>
                         </template>
                         <v-list-item-title>{{ mergedLabels.open }}</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click.stop="$emit('rename')">
-                        <template v-slot:prepend>
+                        <template #prepend>
                             <v-icon size="small">mdi-pencil</v-icon>
                         </template>
                         <v-list-item-title>{{ mergedLabels.rename }}</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click.stop="$emit('move')">
-                        <template v-slot:prepend>
+                        <template #prepend>
                             <v-icon size="small">mdi-folder-move</v-icon>
                         </template>
                         <v-list-item-title>{{ mergedLabels.moveTo }}</v-list-item-title>
                     </v-list-item>
                     <v-divider class="my-1" />
-                    <v-list-item @click.stop="$emit('delete')" class="text-error">
-                        <template v-slot:prepend>
+                    <v-list-item class="text-error" @click.stop="$emit('delete')">
+                        <template #prepend>
                             <v-icon size="small" color="error">mdi-delete</v-icon>
                         </template>
                         <v-list-item-title>{{ mergedLabels.delete }}</v-list-item-title>

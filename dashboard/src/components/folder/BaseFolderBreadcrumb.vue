@@ -1,16 +1,17 @@
 <template>
     <v-breadcrumbs :items="computedItems" class="base-folder-breadcrumb pa-0">
-        <template v-slot:prepend>
+        <template #prepend>
             <v-icon size="small" class="mr-1">mdi-folder-outline</v-icon>
         </template>
-        <template v-slot:item="{ item }">
-            <v-breadcrumbs-item :disabled="(item as any).disabled" @click="!(item as any).disabled && handleClick((item as any).folderId)"
-                :class="{ 'breadcrumb-link': !(item as any).disabled }">
-                <v-icon v-if="(item as any).isRoot" size="small" class="mr-1">mdi-home</v-icon>
-                {{ (item as any).title }}
+        <template #item="{ item }">
+            <v-breadcrumbs-item
+:disabled="toBreadcrumbItem(item).disabled" :class="{ 'breadcrumb-link': !toBreadcrumbItem(item).disabled }"
+                @click="!toBreadcrumbItem(item).disabled && handleClick(toBreadcrumbItem(item).folderId)">
+                <v-icon v-if="toBreadcrumbItem(item).isRoot" size="small" class="mr-1">mdi-home</v-icon>
+                {{ toBreadcrumbItem(item).title }}
             </v-breadcrumbs-item>
         </template>
-        <template v-slot:divider>
+        <template #divider>
             <v-icon size="small">mdi-chevron-right</v-icon>
         </template>
     </v-breadcrumbs>
@@ -61,6 +62,9 @@ export default defineComponent({
         }
     },
     methods: {
+        toBreadcrumbItem(item: unknown): BreadcrumbItem {
+            return item as BreadcrumbItem;
+        },
         handleClick(folderId: string | null) {
             this.$emit('navigate', folderId);
         }

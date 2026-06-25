@@ -12,14 +12,15 @@
         <!-- 查询输入区域 -->
         <v-row class="mb-4">
           <v-col cols="12" md="8">
-            <v-textarea v-model="query" :label="t('retrieval.query')" :placeholder="t('retrieval.queryPlaceholder')"
+            <v-textarea
+v-model="query" :label="t('retrieval.query')" :placeholder="t('retrieval.queryPlaceholder')"
               variant="outlined" rows="3" auto-grow clearable />
 
             <!-- debug -->
             <div v-if="debugVisualize" class="mt-2">
               <v-card variant="outlined">
                 <v-img :src="`data:image/png;base64,${debugVisualize}`" :alt="t('retrieval.tsneVisualization')" cover>
-                  <template v-slot:placeholder>
+                  <template #placeholder>
                     <div class="d-flex align-center justify-center fill-height">
                       <v-progress-circular indeterminate color="primary" />
                     </div>
@@ -32,12 +33,14 @@
             <v-card variant="outlined" class="pa-4">
               <h4 class="text-subtitle-2 mb-3">{{ t('retrieval.settings') }}</h4>
 
-              <v-text-field v-model.number="topK" :label="t('retrieval.topK')" :hint="t('retrieval.topKHint')"
+              <v-text-field
+v-model.number="topK" :label="t('retrieval.topK')" :hint="t('retrieval.topKHint')"
                 type="number" variant="outlined" density="compact" persistent-hint class="mb-3" />
 
-              <v-switch v-model="debugMode" :label="t('retrieval.debugMode')" color="primary" density="compact"
+              <v-switch
+v-model="debugMode" :label="t('retrieval.debugMode')" color="primary" density="compact"
                 hide-details>
-                <template v-slot:label>
+                <template #label>
                   <span class="text-caption">
                     <v-icon size="small" class="mr-1">mdi-bug</v-icon>
                     Debug (t-SNE)
@@ -49,8 +52,9 @@
         </v-row>
 
         <div class="d-flex justify-end mb-4">
-          <v-btn prepend-icon="mdi-magnify" color="primary" variant="elevated" @click="performRetrieval"
-            :loading="loading" :disabled="!query || query.trim() === ''">
+          <v-btn
+prepend-icon="mdi-magnify" color="primary" variant="elevated" :loading="loading"
+            :disabled="!query || query.trim() === ''" @click="performRetrieval">
             {{ loading ? t('retrieval.searching') : t('retrieval.search') }}
           </v-btn>
         </div>
@@ -120,6 +124,15 @@ import { ref } from 'vue'
 import { knowledgeApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
+interface RetrievalResult {
+  chunk_id: string
+  chunk_index: number
+  doc_name: string
+  char_count: number
+  score: number
+  content: string
+}
+
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 
 const props = defineProps<{
@@ -132,7 +145,7 @@ const loading = ref(false)
 const query = ref('')
 const topK = ref(5)
 const debugMode = ref(false)
-const results = ref<any[]>([])
+const results = ref<RetrievalResult[]>([])
 const hasSearched = ref(false)
 const debugVisualize = ref<string | null>(null)
 

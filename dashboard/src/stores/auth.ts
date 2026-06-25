@@ -7,24 +7,64 @@ import {
   systemConfigApi,
   UPGRADE_RECOVERY_EVENT,
   UPGRADE_RECOVERY_TOKEN_KEY,
-  type VersionData,
 } from '@/api/v1';
+
+interface AuthSessionData {
+  username: string;
+  token: string;
+  password_upgrade_required?: boolean;
+  md5_pwd_hint?: boolean;
+  change_pwd_hint?: boolean;
+}
+
+interface SystemConfigPayload {
+  config?: {
+    platform?: unknown[];
+  };
+}
+
+interface ProviderSourceRecord {
+  id: string;
+  provider_type?: string;
+}
+
+interface ProviderRecord {
+  provider_type?: string;
+  provider_source_id?: string;
+  type?: string;
+}
+
+function getErrorMessage(error: unknown, fallback?: unknown): string {
+  if (fallback instanceof Error) {
+    fallback = fallback.message;
+  } else {
+    fallback = String(fallback ?? '');
+  }
+
+  if (!error || typeof error !== 'object') {
+    return String(error ?? fallback);
+  }
+  const errorLike = error as {
+    message?: string;
+    response?: { status?: number; data?: { message?: string; data?: { totp_required?: boolean } } };
+  };
+  return errorLike.response?.data?.message || errorLike.message || String(fallback);
+}
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    // @ts-ignore
     username: '',
-    returnUrl: null,
+    returnUrl: null as string | null,
   }),
   actions: {
-    async finishAuthenticatedSession(data: any): Promise<void> {
+    async finishAuthenticatedSession(data: AuthSessionData): Promise<void> {
       this.username = data.username;
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
-      const passwordUpgradeRequired = !!data?.password_upgrade_required;
-      const md5PwdHint = !!data?.md5_pwd_hint;
+      const passwordUpgradeRequired = Boolean(data?.password_upgrade_required);
+      const md5PwdHint = Boolean(data?.md5_pwd_hint);
       const passwordWarning =
-        !!data?.change_pwd_hint ||
+        Boolean(data?.change_pwd_hint) ||
         (md5PwdHint && !passwordUpgradeRequired);
       if (passwordWarning) {
         localStorage.setItem('change_pwd_hint', 'true');
@@ -46,13 +86,13 @@ export const useAuthStore = defineStore("auth", {
       const onboardingCompleted = await this.checkOnboardingCompleted();
       this.returnUrl = null;
       if (passwordWarning) {
-        router.push('/auth/setup');
+        void router.push('/auth/setup');
         return;
       }
       if (onboardingCompleted) {
-        router.push('/dashboard/default');
+        void router.push('/dashboard/default');
       } else {
-        router.push('/welcome');
+        void router.push('/welcome');
       }
     },
     async login(
@@ -70,7 +110,7 @@ export const useAuthStore = defineStore("auth", {
         });
 
         if (res.data.status === 'error') {
-          return Promise.reject(res.data.message);
+          throw new Error(String(res.data.message || ''));
         }
 
         const sessionToken = String(res.data.data?.token || '');
@@ -108,12 +148,13 @@ export const useAuthStore = defineStore("auth", {
           }
         }
 
-        await this.finishAuthenticatedSession(res.data.data);
-      } catch (error: any) {
-        if (error?.response?.status === 401 && error.response?.data?.data?.totp_required) {
+        await this.finishAuthenticatedSession(res.data.data as unknown as AuthSessionData);
+      } catch (error) {
+        const typedError = error as { response?: { status?: number; data?: { data?: { totp_required?: boolean } } } };
+        if (typedError.response?.status === 401 && typedError.response?.data?.data?.totp_required) {
           return 'totp_required';
         }
-        return Promise.reject(error?.response?.data?.message || error);
+        throw new Error(getErrorMessage(error, error));
       }
     },
     async setup(
@@ -129,30 +170,34 @@ export const useAuthStore = defineStore("auth", {
         });
 
         if (res.data.status === 'error') {
-          return Promise.reject(res.data.message);
+          throw new Error(String(res.data.message || ''));
         }
 
-        await this.finishAuthenticatedSession(res.data.data);
+        await this.finishAuthenticatedSession(res.data.data as unknown as AuthSessionData);
       } catch (error) {
-        return Promise.reject(error);
+        throw (error instanceof Error ? error : new Error(String(error)));
       }
     },
     async checkOnboardingCompleted(): Promise<boolean> {
       try {
         // 1. 检查平台配置
         const platformRes = await systemConfigApi.get();
-        const systemConfig = (platformRes.data.data as any).config || {};
+        const systemConfig = ((platformRes.data.data as SystemConfigPayload | undefined)?.config) || {};
         const hasPlatform = (systemConfig.platform || []).length > 0;
         if (!hasPlatform) return false;
 
         // 2. 检查提供者配置
         const providerRes = await providerApi.schema();
-        const providers = providerRes.data.data?.providers || [];
-        const sources = providerRes.data.data?.provider_sources || [];
-        const sourceMap = new Map();
-        sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
+        const providers = Array.isArray(providerRes.data.data?.providers)
+          ? (providerRes.data.data.providers as ProviderRecord[])
+          : [];
+        const sources = Array.isArray(providerRes.data.data?.provider_sources)
+          ? (providerRes.data.data.provider_sources as unknown as ProviderSourceRecord[])
+          : [];
+        const sourceMap = new Map<string, string | undefined>();
+        sources.forEach((s) => sourceMap.set(s.id, s.provider_type));
         
-        const hasProvider = providers.some((provider: any) => {
+        const hasProvider = providers.some((provider) => {
           if (provider.provider_type) return provider.provider_type === 'chat_completion';
           if (provider.provider_source_id) {
             const type = sourceMap.get(provider.provider_source_id);
@@ -175,10 +220,10 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem('md5_pwd_hint');
       localStorage.removeItem('password_upgrade_required');
       void authApi.logout().catch(() => undefined);
-      router.push('/auth/login');
+      void router.push('/auth/login');
     },
     has_token(): boolean {
-      return !!localStorage.getItem('token');
+      return Boolean(localStorage.getItem('token'));
     }
   }
 });

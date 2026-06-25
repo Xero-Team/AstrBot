@@ -3,7 +3,7 @@
  * 
  * 提供文件夹管理的核心逻辑，可以被不同的业务模块复用
  */
-import { ref, computed, reactive, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import type {
   Folder,
   FolderTreeNode,
@@ -250,8 +250,8 @@ export function useFolderManager(options: UseFolderManagerOptions): UseFolderMan
   
   // 自动加载
   if (autoLoad) {
-    loadFolderTree();
-    navigateToFolder(null);
+    void loadFolderTree();
+    void navigateToFolder(null);
   }
   
   return {

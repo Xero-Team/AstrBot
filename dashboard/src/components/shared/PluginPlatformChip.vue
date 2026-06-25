@@ -27,8 +27,8 @@ const platformDetails = computed(() => {
   return props.platforms
     .filter((item) => typeof item === "string")
     .map((platformId) => ({
-      name: getPlatformDisplayName(platformId as string),
-      icon: getPlatformIcon(platformId as string),
+      name: getPlatformDisplayName(platformId),
+      icon: getPlatformIcon(platformId),
     }));
 });
 </script>
@@ -47,7 +47,7 @@ const platformDetails = computed(() => {
     >
       <div class="d-flex align-center" style="gap: 2px">
         <!-- 显示图标，最多 5 个 -->
-        <div class="d-flex align-center mr-1" v-if="platformDetails.some(p => p.icon)">
+        <div v-if="platformDetails.some(p => p.icon)" class="d-flex align-center mr-1">
           <v-avatar
             v-for="(platform, index) in platformDetails.slice(0, 5)"
             :key="index"
@@ -90,8 +90,8 @@ const platformDetails = computed(() => {
             min-height="24"
             class="px-2"
           >
-            <template v-slot:prepend>
-              <v-avatar size="14" class="mr-2" v-if="platform.icon">
+            <template #prepend>
+              <v-avatar v-if="platform.icon" size="14" class="mr-2">
                 <v-img :src="platform.icon"></v-img>
               </v-avatar>
               <v-icon v-else icon="mdi-apps" size="12" class="mr-2"></v-icon>

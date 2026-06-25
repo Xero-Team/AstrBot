@@ -47,10 +47,10 @@ function onSubmit() {
     hide-details="auto"
     :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
     :type="showPassword ? 'text' : 'password'"
-    @click:append-inner="showPassword = !showPassword"
     class="pwd-input"
     prepend-inner-icon="mdi-lock"
     :disabled="props.loading"
+    @click:append-inner="showPassword = !showPassword"
     @update:model-value="(value: string) => emit('update:password', value)"
     @keyup.enter="onSubmit"
   ></v-text-field>

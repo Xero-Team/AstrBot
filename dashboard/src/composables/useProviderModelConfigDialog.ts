@@ -1,10 +1,40 @@
 import { computed, ref, type Ref } from 'vue'
 import { providerApi } from '@/api/v1'
 
+interface ProviderSourceRef {
+  id?: string
+  type?: string
+}
+
+interface ProviderConfigSchema {
+  provider?: {
+    items?: Record<string, { invisible?: boolean } & Record<string, unknown>>
+  }
+  [key: string]: unknown
+}
+
+interface ProviderEditData {
+  id: string
+  model?: string
+  provider_source_id?: string
+  [key: string]: unknown
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+  const errorLike = error as {
+    message?: string
+    response?: { data?: { message?: string } }
+  }
+  return errorLike.response?.data?.message || errorLike.message || fallback
+}
+
 interface UseProviderModelConfigDialogOptions {
-  selectedProviderSource: Ref<any | null>
-  configSchema: Ref<Record<string, any>>
-  buildModelProviderConfig: (modelId: string) => any
+  selectedProviderSource: Ref<ProviderSourceRef | null>
+  configSchema: Ref<ProviderConfigSchema>
+  buildModelProviderConfig: (modelId: string) => ProviderEditData | null | undefined
   modelAlreadyConfigured: (modelId: string) => boolean
   loadConfig: () => Promise<void> | void
   tm: (key: string, params?: Record<string, unknown>) => string
@@ -23,7 +53,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
   } = options
 
   const showProviderEditDialog = ref(false)
-  const providerEditData = ref<any | null>(null)
+  const providerEditData = ref<ProviderEditData | null>(null)
   const providerEditOriginalId = ref('')
   const providerEditMode = ref<'add' | 'edit'>('edit')
   const savingProviders = ref<string[]>([])
@@ -57,7 +87,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     return providerId ? `${actionTitle} ${providerId}` : actionTitle
   })
 
-  function openProviderEdit(provider: any) {
+  function openProviderEdit(provider: ProviderEditData) {
     providerEditData.value = JSON.parse(JSON.stringify(provider))
     providerEditOriginalId.value = provider.id
     providerEditMode.value = 'edit'
@@ -95,7 +125,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
         throw new Error(tm('providerSources.selectHint'))
       }
       const res = isAdding
-        ? await providerApi.createInSource(sourceId, providerEditData.value)
+        ? await providerApi.createInSource(sourceId as string, providerEditData.value)
         : await providerApi.update(
           providerEditOriginalId.value || providerEditData.value.id,
           providerEditData.value
@@ -114,8 +144,8 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
       )
       showProviderEditDialog.value = false
       await loadConfig()
-    } catch (err: any) {
-      showMessage(err.response?.data?.message || err.message || tm('providerSources.saveError'), 'error')
+    } catch (err) {
+      showMessage(getErrorMessage(err, tm('providerSources.saveError')), 'error')
     } finally {
       savingProviders.value = savingProviders.value.filter(id => id !== providerEditData.value?.id)
     }

@@ -102,7 +102,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       :row-props="getRowProps"
       :loading="props.loading"
     >
-      <template v-slot:item.effective_command="{ item }">
+      <template #item.effective_command="{ item }">
         <div class="d-flex align-center py-2">
           <!-- 展开/折叠按钮（针对指令组） -->
           <v-btn
@@ -125,7 +125,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
         </div>
       </template>
 
-      <template v-slot:item.type="{ item }">
+      <template #item.type="{ item }">
         <v-chip
           :color="getTypeInfo(item.type).color"
           size="small"
@@ -136,21 +136,21 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
         </v-chip>
       </template>
 
-      <template v-slot:item.plugin="{ item }">
+      <template #item.plugin="{ item }">
         <div class="text-body-2">{{ item.plugin_display_name || item.plugin }}</div>
       </template>
 
-      <template v-slot:item.description="{ item }">
+      <template #item.description="{ item }">
         <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.description">
           {{ item.description || '-' }}
         </div>
       </template>
 
-      <template v-slot:item.permission="{ item }">
+      <template #item.permission="{ item }">
         <v-menu location="bottom">
-          <template v-slot:activator="{ props }">
+          <template #activator="{ props: activatorProps }">
             <v-chip
-              v-bind="props"
+              v-bind="activatorProps"
               :color="getPermissionColor(item.permission)"
               size="small"
               class="font-weight-medium cursor-pointer"
@@ -163,15 +163,15 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
           <v-list density="compact">
             <v-list-item
               :value="'member'"
-              @click="$emit('update-permission', item, 'member')"
               :active="item.permission !== 'admin'"
+              @click="$emit('update-permission', item, 'member')"
             >
               <v-list-item-title>{{ tm('permission.everyone') }}</v-list-item-title>
             </v-list-item>
             <v-list-item
               :value="'admin'"
-              @click="$emit('update-permission', item, 'admin')"
               :active="item.permission === 'admin'"
+              @click="$emit('update-permission', item, 'admin')"
             >
               <v-list-item-title>{{ tm('permission.admin') }}</v-list-item-title>
             </v-list-item>
@@ -179,7 +179,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
         </v-menu>
       </template>
 
-      <template v-slot:item.enabled="{ item }">
+      <template #item.enabled="{ item }">
         <v-chip
           :color="getStatusInfo(item).color"
           size="small"
@@ -190,7 +190,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
         </v-chip>
       </template>
 
-      <template v-slot:item.actions="{ item }">
+      <template #item.actions="{ item }">
         <div class="d-flex align-center">
           <v-btn-group density="default" variant="text" color="primary">
             <v-btn
@@ -227,7 +227,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
         </div>
       </template>
 
-      <template v-slot:no-data>
+      <template #no-data>
         <div class="text-center pa-8">
           <v-icon size="64" color="info" class="mb-4">mdi-console-line</v-icon>
           <div class="text-h5 mb-2">{{ tm('empty.noCommands') }}</div>

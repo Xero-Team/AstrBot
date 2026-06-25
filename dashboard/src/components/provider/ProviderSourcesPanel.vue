@@ -68,9 +68,9 @@
         ></v-btn>
 
         <StyledMenu>
-          <template #activator="{ props }">
+          <template #activator="{ props: activatorProps }">
             <v-btn
-              v-bind="props"
+              v-bind="activatorProps"
               prepend-icon="mdi-plus"
               color="primary"
               variant="text"
@@ -224,9 +224,9 @@ const selectedSourceValue = computed(() => {
   return sourceValue(props.selectedProviderSource)
 })
 
-const emitAddSource = (type) => emit('add-provider-source', type)
-const emitSelectSource = (source) => emit('select-provider-source', source)
-const emitDeleteSource = (source) => emit('delete-provider-source', source)
+const emitAddSource = (type) => { emit('add-provider-source', type); }
+const emitSelectSource = (source) => { emit('select-provider-source', source); }
+const emitDeleteSource = (source) => { emit('delete-provider-source', source); }
 
 const deleteSelectedSource = () => {
   if (canDeleteSelectedSource.value) {

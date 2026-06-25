@@ -74,11 +74,12 @@ export default {
     },
 
     normalizedRefs() {
-      const used = Array.isArray(this.refs?.used)
-        ? this.refs.used
-        : Array.isArray(this.refs)
-        ? this.refs
-        : [];
+      let used = [];
+      if (Array.isArray(this.refs?.used)) {
+        used = this.refs.used;
+      } else if (Array.isArray(this.refs)) {
+        used = this.refs;
+      }
 
       return used
         .map((ref) => ({

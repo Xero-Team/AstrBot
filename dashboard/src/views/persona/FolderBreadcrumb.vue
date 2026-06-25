@@ -3,9 +3,9 @@
         :breadcrumb-path="breadcrumbPath"
         :current-folder-id="currentFolderId"
         :root-folder-name="rootName"
-        @navigate="handleClick"
         :labels="{ rootFolder: tm('folder.rootFolder') }"
         class="folder-breadcrumb pa-0"
+        @navigate="handleClick"
     />
 </template>
 
@@ -15,15 +15,6 @@ import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
 import { mapState, mapActions } from 'pinia';
 import BaseFolderBreadcrumb from '@/components/folder/BaseFolderBreadcrumb.vue';
-import type { FolderTreeNode } from '@/components/folder/types';
-
-interface BreadcrumbItem {
-    title: string;
-    folderId: string | null;
-    disabled: boolean;
-    isRoot: boolean;
-}
-
 export default defineComponent({
     name: 'FolderBreadcrumb',
     components: { BaseFolderBreadcrumb },
@@ -41,7 +32,7 @@ export default defineComponent({
         ...mapActions(usePersonaStore, ['navigateToFolder']),
 
         handleClick(folderId: string | null) {
-            this.navigateToFolder(folderId);
+            void this.navigateToFolder(folderId);
         }
     }
 });

@@ -3,14 +3,16 @@ export { I18nValidator } from '../validator';
 export { I18nLoader } from '../loader';
 export type * from '../types';
 
+type TranslationTree = Record<string, unknown>;
+
 // 实用工具函数
 export function generateMissingKeys(
-  sourceTranslations: Record<string, any>,
-  targetTranslations: Record<string, any>
+  sourceTranslations: TranslationTree,
+  targetTranslations: TranslationTree
 ): string[] {
   const missing: string[] = [];
   
-  function traverse(source: any, target: any, path: string = '') {
+  function traverse(source: TranslationTree, target: TranslationTree, path: string = '') {
     for (const key in source) {
       const currentPath = path ? `${path}.${key}` : key;
       
@@ -18,13 +20,11 @@ export function generateMissingKeys(
         if (!target[key]) {
           missing.push(currentPath);
         } else {
-          traverse(source[key], target[key], currentPath);
+          traverse(source[key] as TranslationTree, target[key] as TranslationTree, currentPath);
         }
-      } else {
-        if (!(key in target)) {
+      } else if (!(key in target)) {
           missing.push(currentPath);
         }
-      }
     }
   }
   

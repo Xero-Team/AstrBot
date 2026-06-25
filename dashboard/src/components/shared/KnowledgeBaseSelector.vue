@@ -1,7 +1,8 @@
 <template>
   <div class="d-flex align-center justify-space-between" style="gap: 8px;">
     <div style="flex: 1; min-width: 0; overflow: hidden;">
-      <span v-if="!modelValue || (Array.isArray(modelValue) && modelValue.length === 0)" 
+      <span
+v-if="!modelValue || (Array.isArray(modelValue) && modelValue.length === 0)" 
             style="color: rgb(var(--v-theme-primaryText));">
         {{ tm('knowledgeBaseSelector.notSelected') }}
       </span>
@@ -13,13 +14,13 @@
           color="primary" 
           variant="tonal"
           closable
-          @click:close="removeKnowledgeBase(name)"
-          style="max-width: 100%;">
+          style="max-width: 100%;"
+          @click:close="removeKnowledgeBase(name)">
           <span class="text-truncate" style="max-width: 200px;">{{ name }}</span>
         </v-chip>
       </div>
     </div>
-    <v-btn size="small" color="primary" variant="tonal" @click="openDialog" style="flex-shrink: 0;">
+    <v-btn size="small" color="primary" variant="tonal" style="flex-shrink: 0;" @click="openDialog">
       {{ buttonText || tm('knowledgeBaseSelector.buttonText') }}
     </v-btn>
   </div>
@@ -41,11 +42,11 @@
             v-for="kb in knowledgeBaseList"
             :key="kb.kb_id"
             :value="kb.kb_name"
-            @click="selectKnowledgeBase(kb.kb_name)"
             :active="isSelected(kb.kb_name)"
             rounded="md"
-            class="ma-1">
-            <template v-slot:prepend>
+            class="ma-1"
+            @click="selectKnowledgeBase(kb.kb_name)">
+            <template #prepend>
               <span class="emoji-icon">{{ kb.emoji || '📚' }}</span>
             </template>
             <v-list-item-title>{{ kb.kb_name }}</v-list-item-title>
@@ -55,7 +56,7 @@
               <span v-if="kb.chunk_count !== undefined"> - {{ tm('knowledgeBaseSelector.chunkCount', { count: kb.chunk_count }) }}</span>
             </v-list-item-subtitle>
             
-            <template v-slot:append>
+            <template #append>
               <v-icon v-if="isSelected(kb.kb_name)" color="primary">
                 mdi-checkbox-marked
               </v-icon>
@@ -194,7 +195,7 @@ function cancelSelection() {
 
 function goToKnowledgeBasePage() {
   dialog.value = false
-  router.push('/knowledge-base')
+  void router.push('/knowledge-base')
 }
 </script>
 

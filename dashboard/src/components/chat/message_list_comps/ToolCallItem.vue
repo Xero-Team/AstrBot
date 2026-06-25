@@ -1,6 +1,7 @@
 <template>
     <div class="tool-call-item">
-        <div class="tool-call-line" role="button" tabindex="0"
+        <div
+class="tool-call-line" role="button" tabindex="0"
             @click="toggleExpanded"
             @keydown.enter="toggleExpanded"
             @keydown.space.prevent="toggleExpanded">
@@ -17,7 +18,7 @@
 <script setup>
 import { ref } from 'vue';
 
-const props = defineProps({
+defineProps({
     isDark: {
         type: Boolean,
         default: false

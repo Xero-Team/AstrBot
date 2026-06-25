@@ -1,5 +1,5 @@
 <template>
-    <div class="live-orb-container" ref="containerRef" :class="{ 'dark': isDark }" :style="styleVars">
+    <div ref="containerRef" class="live-orb-container" :class="{ 'dark': isDark }" :style="styleVars">
         <div class="live-orb">
         </div>
         <div class="eyes-container">
@@ -42,7 +42,8 @@
         <!-- Hair Accessory Star -->
         <div class="accessory-star">
             <svg viewBox="0 0 24 24" width="100%" height="100%">
-                <path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"
+                <path
+d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"
                     fill="rgba(125, 128, 228, 0.4)" stroke="rgba(180, 182, 255, 0.6)" stroke-width="3"
                     stroke-linejoin="round" />
             </svg>
@@ -51,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, type CSSProperties } from 'vue';
 
 const props = defineProps<{
     energy: number; // 0.0 - 1.0
@@ -72,7 +73,7 @@ const eyeOffset = ref({ x: 0, y: 0 });
 const targetEyeOffset = { x: 0, y: 0 };
 
 let animationFrameId: number;
-let blinkTimeoutId: any;
+let blinkTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 // 颜色配置
 const colorConfigs = {
@@ -164,7 +165,7 @@ const handleMouseMove = (e: MouseEvent) => {
 };
 
 // Code Mode Helpers
-const codeColumns = ref<Array<{ content: string, style: any }>>([]);
+const codeColumns = ref<Array<{ content: string; style: CSSProperties }>>([]);
 
 onMounted(() => {
     animationFrameId = requestAnimationFrame(animate);
@@ -181,7 +182,7 @@ onMounted(() => {
             if (Math.random() > 0.7) {
                 content += '\n';
             } else {
-                content += chars[Math.floor(Math.random() * chars.length)] + '\n';
+                content += `${chars[Math.floor(Math.random() * chars.length)]  }\n`;
             }
         }
         // Repeat once to make it seamless
@@ -207,7 +208,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     cancelAnimationFrame(animationFrameId);
-    clearTimeout(blinkTimeoutId);
+    if (blinkTimeoutId !== null) {
+        clearTimeout(blinkTimeoutId);
+    }
     window.removeEventListener('mousemove', handleMouseMove);
 });
 
@@ -245,7 +248,7 @@ const styleVars = computed(() => {
         '--contrast-amount': contrastAmount,
         '--eye-x': `${eyeOffset.value.x}px`,
         '--eye-y': `${eyeOffset.value.y}px`,
-    } as Record<string, string | number>;
+    };
 });
 
 </script>

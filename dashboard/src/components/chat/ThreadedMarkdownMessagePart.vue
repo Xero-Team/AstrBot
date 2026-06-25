@@ -34,7 +34,7 @@ const isDarkRef = computed(() => props.isDark);
 const refsByIndex = computed(() => {
   const refs = props.refs && Array.isArray(props.refs.used) ? props.refs.used : [];
   return refs.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
-    if (item.index != null) {
+    if (item.index !== null && item.index !== undefined) {
       acc[String(item.index)] = item;
     }
     return acc;
@@ -82,7 +82,7 @@ const threadedContent = computed(() => {
 provide("isDark", isDarkRef);
 provide("webSearchResults", () => refsByIndex.value);
 provide("chatThreadMap", () => threadMap.value);
-provide("openChatThread", (thread: ChatThread) => emit("openThread", thread));
+provide("openChatThread", (thread: ChatThread) => { emit("openThread", thread); });
 
 function escapeHtml(value: string) {
   return value

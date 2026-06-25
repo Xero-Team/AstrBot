@@ -4,7 +4,6 @@ import { fetchWithAuth } from "@/api/http";
 
 export const useCommonStore = defineStore("common", {
   state: () => ({
-    // @ts-ignore
     eventSource: null,
     log_cache: [],
     sse_connected: false,
@@ -28,7 +27,7 @@ export const useCommonStore = defineStore("common", {
       // 如果是用 fetch 的话，这里是支持 Authorization Header 的
       const headers = {
         "Content-Type": "multipart/form-data",
-        Authorization: "Bearer " + localStorage.getItem("token"),
+        Authorization: `Bearer ${  localStorage.getItem("token")}`,
       };
 
       fetchWithAuth(logApi.liveUrl(), {
@@ -53,7 +52,7 @@ export const useCommonStore = defineStore("common", {
               console.log("SSE stream closed");
               setTimeout(() => {
                 this.eventSource = null;
-                this.createEventSource();
+                void this.createEventSource();
               }, 2000);
               return;
             }
@@ -92,9 +91,9 @@ export const useCommonStore = defineStore("common", {
                     logObject.uuid =
                       "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
                         /[xy]/g,
-                        function (c) {
+                        (c) => {
                           var r = (Math.random() * 16) | 0,
-                            v = c == "x" ? r : (r & 0x3) | 0x8;
+                            v = c === "x" ? r : (r & 0x3) | 0x8;
                           return v.toString(16);
                         },
                       );
@@ -121,7 +120,7 @@ export const useCommonStore = defineStore("common", {
             return reader.read().then(processStream);
           };
 
-          reader.read().then(processStream);
+          void reader.read().then(processStream);
         })
         .catch((error) => {
           console.error("SSE error:", error);
@@ -131,11 +130,11 @@ export const useCommonStore = defineStore("common", {
             level: "ERROR",
             time: Date.now() / 1000,
             data: "SSE Connection failed, retrying in 5 seconds...",
-            uuid: "error-" + Date.now(),
+            uuid: `error-${  Date.now()}`,
           });
           setTimeout(() => {
             this.eventSource = null;
-            this.createEventSource();
+            void this.createEventSource();
           }, 1000);
         });
 
@@ -173,7 +172,7 @@ export const useCommonStore = defineStore("common", {
       if (this.startTime !== -1) {
         return this.startTime;
       }
-      this.fetchStartTime().catch(() => {});
+      this.fetchStartTime().catch(() => undefined);
       return this.startTime;
     },
     async getPluginCollections(force = false, customSource = null) {
@@ -192,6 +191,14 @@ export const useCommonStore = defineStore("common", {
           if (res.data.data && typeof res.data.data === "object") {
             for (let key in res.data.data) {
               const pluginData = res.data.data[key];
+              let supportPlatforms = [];
+              if (Array.isArray(pluginData?.support_platforms)) {
+                supportPlatforms = pluginData.support_platforms;
+              } else if (Array.isArray(pluginData?.support_platform)) {
+                supportPlatforms = pluginData.support_platform;
+              } else if (Array.isArray(pluginData?.platform)) {
+                supportPlatforms = pluginData.platform;
+              }
 
               data.push({
                 ...pluginData,
@@ -222,13 +229,7 @@ export const useCommonStore = defineStore("common", {
                   ? pluginData.astrbot_version
                   : "",
                 category: pluginData?.category ? pluginData.category : "",
-                support_platforms: Array.isArray(pluginData?.support_platforms)
-                  ? pluginData.support_platforms
-                  : Array.isArray(pluginData?.support_platform)
-                  ? pluginData.support_platform
-                  : Array.isArray(pluginData?.platform)
-                  ? pluginData.platform
-                  : [],
+                support_platforms: supportPlatforms,
               });
             }
           }
@@ -237,7 +238,7 @@ export const useCommonStore = defineStore("common", {
           return data;
         })
         .catch((err) => {
-          return Promise.reject(err);
+          throw err;
         });
     },
   },

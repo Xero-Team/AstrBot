@@ -1,6 +1,6 @@
 <template>
   <StyledMenu offset="12" location="bottom center">
-    <template v-slot:activator="{ props: activatorProps }">
+    <template #activator="{ props: activatorProps }">
       <v-btn
         v-bind="activatorProps"
         :variant="(props.variant === 'header' || props.variant === 'chatbox') ? 'flat' : 'text'"
@@ -26,12 +26,12 @@
       v-for="lang in languages"
       :key="lang.code"
       :value="lang.code"
-      @click="changeLanguage(lang.code)"
       :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
       class="styled-menu-item"
       rounded="md"
+      @click="changeLanguage(lang.code)"
     >
-      <template v-slot:prepend>
+      <template #prepend>
         <span class="language-flag">{{ lang.flag }}</span>
       </template>
       <v-list-item-title>{{ lang.name }}</v-list-item-title>
@@ -54,7 +54,7 @@ const props = withDefaults(defineProps<{
 
 // 使用新的i18n系统
 const { t } = useI18n()
-const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher()
+const { languageOptions, switchLanguage, locale } = useLanguageSwitcher()
 
 const languages = computed(() => 
   languageOptions.value.map(lang => ({

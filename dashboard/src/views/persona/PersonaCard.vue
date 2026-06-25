@@ -1,28 +1,29 @@
 <template>
-    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" variant="outlined" @click="$emit('view')"
-        elevation="0" draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
+    <v-card
+class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" variant="outlined" elevation="0"
+        draggable="true" @click="$emit('view')" @dragstart="handleDragStart" @dragend="handleDragEnd">
         <v-card-title class="d-flex justify-space-between align-center">
             <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
             <v-menu offset-y>
-                <template v-slot:activator="{ props }">
+                <template #activator="{ props }">
                     <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" @click.stop />
                 </template>
                 <v-list density="compact">
                     <v-list-item @click.stop="$emit('edit')">
-                        <template v-slot:prepend>
+                        <template #prepend>
                             <v-icon size="small">mdi-pencil</v-icon>
                         </template>
                         <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click.stop="$emit('move')">
-                        <template v-slot:prepend>
+                        <template #prepend>
                             <v-icon size="small">mdi-folder-move</v-icon>
                         </template>
                         <v-list-item-title>{{ tm('persona.contextMenu.moveTo') }}</v-list-item-title>
                     </v-list-item>
                     <v-divider class="my-1" />
-                    <v-list-item @click.stop="$emit('delete')" class="text-error">
-                        <template v-slot:prepend>
+                    <v-list-item class="text-error" @click.stop="$emit('delete')">
+                        <template #prepend>
                             <v-icon size="small" color="error">mdi-delete</v-icon>
                         </template>
                         <v-list-item-title>{{ tm('buttons.delete') }}</v-list-item-title>
@@ -37,23 +38,28 @@
             </div>
 
             <div class="mt-3 d-flex flex-wrap ga-1">
-                <v-chip v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0" size="small" color="secondary"
+                <v-chip
+v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0" size="small" color="secondary"
                     variant="tonal" prepend-icon="mdi-chat">
                     {{ tm('labels.presetDialogs', { count: persona.begin_dialogs.length / 2 }) }}
                 </v-chip>
-                <v-chip v-if="persona.tools === null" size="small" color="success" variant="tonal"
+                <v-chip
+v-if="persona.tools === null" size="small" color="success" variant="tonal"
                     prepend-icon="mdi-tools">
                     {{ tm('form.allToolsAvailable') }}
                 </v-chip>
-                <v-chip v-else-if="persona.tools && persona.tools.length > 0" size="small" color="primary" variant="tonal"
+                <v-chip
+v-else-if="persona.tools && persona.tools.length > 0" size="small" color="primary" variant="tonal"
                     prepend-icon="mdi-tools">
                     {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
                 </v-chip>
-                <v-chip v-if="persona.skills === null" size="small" color="success" variant="tonal"
+                <v-chip
+v-if="persona.skills === null" size="small" color="success" variant="tonal"
                     prepend-icon="mdi-lightning-bolt">
                     {{ tm('form.allSkillsAvailable') }}
                 </v-chip>
-                <v-chip v-else-if="persona.skills && persona.skills.length > 0" size="small" color="primary"
+                <v-chip
+v-else-if="persona.skills && persona.skills.length > 0" size="small" color="primary"
                     variant="tonal" prepend-icon="mdi-lightning-bolt">
                     {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
                 </v-chip>
@@ -86,7 +92,6 @@ interface Persona {
     created_at?: string;
     updated_at?: string;
     folder_id?: string | null;
-    [key: string]: any;
 }
 
 export default defineComponent({
@@ -130,7 +135,7 @@ export default defineComponent({
         },
         truncateText(text: string | undefined | null, maxLength: number): string {
             if (!text) return '';
-            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+            return text.length > maxLength ? `${text.substring(0, maxLength)  }...` : text;
         },
         formatDate(dateString: string | undefined | null): string {
             if (!dateString) return '';

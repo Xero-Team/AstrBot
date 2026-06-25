@@ -14,9 +14,10 @@
                 <div class="folder-select-tree">
                     <v-list density="compact" nav class="tree-list">
                         <!-- 根目录选项 -->
-                        <v-list-item :active="selectedFolderId === null" @click="selectFolder(null)" rounded="lg"
-                            class="mb-1">
-                            <template v-slot:prepend>
+                        <v-list-item
+:active="selectedFolderId === null" rounded="lg" class="mb-1"
+                            @click="selectFolder(null)">
+                            <template #prepend>
                                 <v-icon>mdi-home</v-icon>
                             </template>
                             <v-list-item-title>{{ labels.rootFolder }}</v-list-item-title>
@@ -24,7 +25,8 @@
 
                         <!-- 文件夹树 -->
                         <template v-if="!treeLoading">
-                            <BaseMoveTargetNode v-for="folder in folderTree" :key="folder.folder_id" :folder="folder"
+                            <BaseMoveTargetNode
+v-for="folder in folderTree" :key="folder.folder_id" :folder="folder"
                                 :depth="0" :selected-folder-id="selectedFolderId" :disabled-folder-ids="disabledFolderIds"
                                 @select="selectFolder" />
                         </template>
@@ -41,7 +43,7 @@
                 <v-btn variant="text" @click="closeDialog">
                     {{ labels.cancelButton }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="submitMove" :loading="loading">
+                <v-btn color="primary" variant="flat" :loading="loading" @click="submitMove">
                     {{ labels.moveButton }}
                 </v-btn>
             </v-card-actions>

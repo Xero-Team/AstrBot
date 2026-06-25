@@ -167,7 +167,9 @@ function wrapLimitedHighlighter(highlighter) {
     loadLanguage() {
       return Promise.resolve();
     },
-    loadLanguageSync() {},
+    loadLanguageSync() {
+      return undefined;
+    },
     async loadTheme(...themes) {
       const resolved = uniqueThemes(themes.flat());
       if (resolved.length && loadTheme) await loadTheme(...resolved);

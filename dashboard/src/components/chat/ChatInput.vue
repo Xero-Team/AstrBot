@@ -31,25 +31,25 @@
       </transition>
       <!-- 引用预览区 -->
       <transition name="slideReply" @after-leave="handleReplyAfterLeave">
-        <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
+        <div v-if="props.replyTo && !isReplyClosing" class="reply-preview">
           <div class="reply-content">
             <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
             "<span class="reply-text">{{ props.replyTo.selectedText }}</span
             >"
           </div>
           <v-btn
-            @click="handleClearReply"
             class="remove-reply-btn"
             icon="mdi-close"
             size="x-small"
             color="grey"
             variant="text"
+            @click="handleClearReply"
           />
         </div>
       </transition>
 
       <transition name="attachments">
-        <div class="attachments-preview" v-if="hasStagedAttachments">
+        <div v-if="hasStagedAttachments" class="attachments-preview">
           <div
             v-for="(img, index) in stagedImagesUrl"
             :key="'img-' + index"
@@ -57,12 +57,12 @@
           >
             <img :src="img" class="preview-image" alt="attachment preview" />
             <v-btn
-              @click="$emit('removeImage', index)"
               class="remove-attachment-btn"
               icon="mdi-close"
               size="x-small"
               color="error"
               variant="tonal"
+              @click="$emit('removeImage', index)"
             />
           </div>
 
@@ -72,12 +72,12 @@
             </div>
             <span class="attachment-name">{{ tm("voice.recording") }}</span>
             <v-btn
-              @click="$emit('removeAudio')"
               class="remove-attachment-btn"
               icon="mdi-close"
               size="x-small"
               color="error"
               variant="tonal"
+              @click="$emit('removeAudio')"
             />
           </div>
 
@@ -97,12 +97,12 @@
             </div>
             <span class="attachment-name">{{ file.original_name }}</span>
             <v-btn
-              @click="$emit('removeFile', index)"
               class="remove-attachment-btn"
               icon="mdi-close"
               size="x-small"
               color="error"
               variant="tonal"
+              @click="$emit('removeFile', index)"
             />
           </div>
         </div>
@@ -119,19 +119,16 @@
       <textarea
         ref="inputField"
         v-model="localPrompt"
-        @keydown="handleKeyDown"
-        @input="handleInput"
-        @compositionstart="handleCompositionStart"
-        @compositionend="handleCompositionEnd"
-        @compositioncancel="handleCompositionEnd"
-        @blur="handleBlur"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
         autocomplete="off"
         autocorrect="off"
+        @keydown="handleKeyDown"
         autocapitalize="sentences"
+        @input="handleInput"
         spellcheck="false"
+        @compositionstart="handleCompositionStart"
         style="
           width: 100%;
           resize: none;
@@ -147,6 +144,9 @@
           background-color: var(--v-theme-surface);
           transition: height 0.16s ease;
         "
+        @compositionend="handleCompositionEnd"
+        @compositioncancel="handleCompositionEnd"
+        @blur="handleBlur"
       ></textarea>
       <div
         style="
@@ -174,7 +174,7 @@
             location="top start"
             :close-on-content-click="false"
           >
-            <template v-slot:activator="{ props: activatorProps }">
+            <template #activator="{ props: activatorProps }">
               <v-btn
                 v-bind="activatorProps"
                 icon="mdi-plus"
@@ -189,7 +189,7 @@
               rounded="md"
               @click="triggerImageInput"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon icon="mdi-file-upload" size="small"></v-icon>
               </template>
               <v-list-item-title>
@@ -212,7 +212,7 @@
               rounded="md"
               @click="$emit('toggleStreaming')"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon icon="mdi-lightning-bolt" size="small"></v-icon>
               </template>
               <v-list-item-title>
@@ -241,11 +241,11 @@
           "
         >
           <input
-            type="file"
             ref="imageInputRef"
-            @change="handleFileSelect"
+            type="file"
             style="display: none"
             multiple
+            @change="handleFileSelect"
           />
           <v-progress-circular
             v-if="disabled && !mobile"
@@ -266,10 +266,10 @@
                         </v-tooltip>
                     </v-btn> -->
           <v-btn
-            @click="handleRecordClick"
             icon
             variant="text"
             class="record-btn input-icon-btn"
+            @click="handleRecordClick"
           >
             <v-icon
               :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
@@ -283,11 +283,11 @@
             </v-tooltip>
           </v-btn>
           <v-btn
-            icon
             v-if="isRunning && !canSend"
-            @click="$emit('stop')"
+            icon
             variant="tonal"
             class="send-btn input-action-btn"
+            @click="$emit('stop')"
           >
             <v-icon icon="mdi-stop" variant="text" plain></v-icon>
             <v-tooltip activator="parent" location="top">
@@ -296,11 +296,11 @@
           </v-btn>
           <v-btn
             v-else
-            @click="$emit('send')"
             icon="mdi-arrow-up"
             variant="tonal"
             :disabled="!canSend"
             class="send-btn input-action-btn"
+            @click="$emit('send')"
           />
         </div>
       </div>
@@ -540,10 +540,10 @@ const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
   return (
-    (props.prompt && props.prompt.trim()) ||
+    props.prompt.trim() ||
     props.stagedImagesUrl.length > 0 ||
     props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
+    props.stagedFiles?.length > 0
   );
 });
 
@@ -551,7 +551,7 @@ const hasStagedAttachments = computed(() => {
   return (
     props.stagedImagesUrl.length > 0 ||
     props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
+    props.stagedFiles?.length > 0
   );
 });
 
@@ -636,11 +636,11 @@ function autoResize() {
   const el = inputField.value;
   if (!el) return;
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  el.style.height = `${Math.min(el.scrollHeight, 200)  }px`;
 }
 
 watch(localPrompt, () => {
-  nextTick(autoResize);
+  void nextTick(autoResize);
 });
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -710,7 +710,7 @@ function handleKeyDown(e: KeyboardEvent) {
     if (canSend.value) {
       emit("send");
     }
-    return;
+    
   }
 }
 
@@ -736,9 +736,9 @@ function handleBlur() {
 
 /** 选择命令，填入输入框 */
 function handleCommandSelect(cmd: SuggestionCommand) {
-  localPrompt.value = cmd.effective_command + " ";
+  localPrompt.value = `${cmd.effective_command  } `;
   showCommandSuggestion.value = false;
-  nextTick(() => {
+  void nextTick(() => {
     inputField.value?.focus();
     autoResize();
   });
@@ -785,7 +785,7 @@ function handleCompositionEnd(e: CompositionEvent) {
   // where props.prompt is externally updated between now and nextTick.
   const endValue = inputField.value?.value;
 
-  nextTick(() => {
+  void nextTick(() => {
     const el = inputField.value;
     // Only sync if the DOM hasn't been changed externally in the meantime.
     if (el && el.value === endValue && el.value !== props.prompt) {
@@ -794,7 +794,7 @@ function handleCompositionEnd(e: CompositionEvent) {
       // composition (handleInput checks isComposing). Only needed when
       // the value actually changed. Runs in a nested nextTick so
       // props.prompt reflects the emit above.
-      nextTick(() => {
+      void nextTick(() => {
         handleInput();
       });
     }
@@ -840,7 +840,7 @@ function handleDragOver(e: DragEvent) {
   }
 }
 
-function handleDragLeave(e: DragEvent) {
+function handleDragLeave(_e: DragEvent) {
   // 使用 timeout 避免在子元素间移动时闪烁
   dragLeaveTimeout = window.setTimeout(() => {
     isDragging.value = false;
@@ -887,7 +887,7 @@ function handleConfigChange(payload: {
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
     currentConfigId.value = payload.configId;
-    fetchCommands();
+    void fetchCommands();
   }
 }
 
@@ -909,7 +909,7 @@ onMounted(() => {
   }
   document.addEventListener("keyup", handleKeyUp);
   // 预加载指令列表
-  fetchCommands();
+  void fetchCommands();
 });
 
 onBeforeUnmount(() => {

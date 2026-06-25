@@ -21,7 +21,7 @@ setupHttpClient();
  *       避免与此处产生竞态。
  */
 function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
-  import('./stores/customizer').then(({ useCustomizerStore }) => {
+  void import('./stores/customizer').then(({ useCustomizerStore }) => {
     const customizer = useCustomizerStore(pinia);
 
     // 1. 若当前是 system 模式，重新用 matchMedia 计算，防止 SSR / 构建时偏差
@@ -63,7 +63,7 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
 }
 
 // 初始化新的i18n系统，等待完成后再挂载应用
-setupI18n().then(async () => {
+void setupI18n().then(async () => {
   console.log('🌍 新i18n系统初始化完成');
 
   const app = createApp(App);

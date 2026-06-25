@@ -21,10 +21,10 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="closeDialog" :disabled="saving">
+        <v-btn variant="text" :disabled="saving" @click="closeDialog">
           取消
         </v-btn>
-        <v-btn color="primary" variant="elevated" @click="saveKey" :loading="saving">
+        <v-btn color="primary" variant="elevated" :loading="saving" @click="saveKey">
           保存
         </v-btn>
       </v-card-actions>
@@ -35,6 +35,25 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { configProfileApi } from '@/api/v1'
+
+interface ProviderSettings {
+  websearch_tavily_key?: string[]
+  websearch_provider?: string
+  [key: string]: unknown
+}
+
+interface DashboardConfig {
+  provider_settings?: ProviderSettings
+  [key: string]: unknown
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+  const errorLike = error as { response?: { data?: { message?: string } } }
+  return errorLike.response?.data?.message || fallback
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -76,7 +95,8 @@ const saveKey = async () => {
       throw new Error('获取当前配置失败')
     }
 
-    const currentConfig = ((configResponse.data.data as any).config || {}) as any
+    const payload = configResponse.data.data as { config?: DashboardConfig } | undefined
+    const currentConfig: DashboardConfig = payload?.config || {}
 
     // 2. 更新配置
     if (!currentConfig.provider_settings) {
@@ -95,8 +115,8 @@ const saveKey = async () => {
     } else {
       errorMessage.value = saveResponse.data.message || '保存失败，请检查 Key 是否正确'
     }
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.message || '保存失败，发生未知错误'
+  } catch (error) {
+    errorMessage.value = getErrorMessage(error, '保存失败，发生未知错误')
   } finally {
     saving.value = false
   }

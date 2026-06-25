@@ -16,7 +16,7 @@
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="gray" @click="handleCancel">{{ t('core.common.dialog.cancelButton') }}</v-btn>
-        <v-btn color="red" @click="handleConfirm" class="confirm-button">{{ t('core.common.dialog.confirmButton') }}</v-btn>
+        <v-btn color="red" class="confirm-button" @click="handleConfirm">{{ t('core.common.dialog.confirmButton') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

@@ -6,14 +6,15 @@
             </v-card-title>
             <v-card-text>
                 <v-text-field v-model="form.emoji" :label="tm('project.emoji')" flat variant="solo-filled" hide-details class="mb-3" />
-                <v-text-field v-model="form.title" :label="tm('project.name')" flat variant="solo-filled" hide-details class="mb-3" autofocus
+                <v-text-field
+v-model="form.title" :label="tm('project.name')" flat variant="solo-filled" hide-details class="mb-3" autofocus
                     @keyup.enter="handleSave" />
                 <v-textarea v-model="form.description" :label="tm('project.description')" flat variant="solo-filled" hide-details rows="3" rounded="lg" />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn variant="text" @click="handleCancel" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn variant="text" @click="handleSave" color="primary" :disabled="!form.title.trim()">{{ t('core.common.save') }}</v-btn>
+                <v-btn variant="text" color="grey-darken-1" @click="handleCancel">{{ t('core.common.cancel') }}</v-btn>
+                <v-btn variant="text" color="primary" :disabled="!form.title.trim()" @click="handleSave">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>

@@ -61,10 +61,6 @@ import {
 } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
 
-type StartTimeData = {
-  start_time?: number | string | null;
-};
-
 type RecoveryEventDetail = VersionData & {
   blocking?: boolean;
 };
@@ -212,7 +208,7 @@ async function showRecoveryDialog(versionData: VersionData, blocking = false) {
 
 function handleRecoveryEvent(event: Event) {
   const versionData = (event as CustomEvent<RecoveryEventDetail>).detail || {};
-  void showRecoveryDialog(versionData, !!versionData.blocking);
+  void showRecoveryDialog(versionData, Boolean(versionData.blocking));
 }
 
 async function detectUpgradeMismatch() {

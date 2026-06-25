@@ -235,6 +235,14 @@ type SubAgentConfig = {
   agents: SubAgentItem[]
 }
 
+type RawSubAgentItem = Partial<Omit<SubAgentItem, '__key'>> & Record<string, unknown>
+
+type RawSubAgentConfig = {
+  main_enable?: unknown
+  remove_main_duplicate_tools?: unknown
+  agents?: unknown
+}
+
 const { tm } = useModuleI18n('features/subagent')
 const theme = useTheme()
 const confirmDialog = useConfirmDialog()
@@ -268,18 +276,29 @@ const mainStateDescription = computed(() =>
 
 const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value)
 
-function normalizeConfig(raw: any): SubAgentConfig {
-  const main_enable = !!raw?.main_enable
-  const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
-  const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+  const errorLike = error as {
+    message?: string
+    response?: { data?: { message?: string } }
+  }
+  return errorLike.response?.data?.message || errorLike.message || fallback
+}
 
-  const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => ({
+function normalizeConfig(raw: RawSubAgentConfig): SubAgentConfig {
+  const main_enable = Boolean(raw?.main_enable)
+  const remove_main_duplicate_tools = Boolean(raw?.remove_main_duplicate_tools)
+  const agentsRaw = Array.isArray(raw?.agents) ? (raw.agents as RawSubAgentItem[]) : []
+
+  const agents: SubAgentItem[] = agentsRaw.map((a, i) => ({
     __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
     name: (a?.name ?? '').toString(),
     persona_id: (a?.persona_id ?? '').toString(),
     public_description: (a?.public_description ?? '').toString(),
     enabled: a?.enabled !== false,
-    provider_id: (a?.provider_id ?? undefined) as string | undefined
+    provider_id: (a?.provider_id ?? undefined)
   }))
 
   return { main_enable, remove_main_duplicate_tools, agents }
@@ -311,8 +330,8 @@ async function loadConfig() {
     } else {
       toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadConfigFailed'), 'error')
+  } catch (e) {
+    toast(getErrorMessage(e, tm('messages.loadConfigFailed')), 'error')
   } finally {
     loading.value = false
   }
@@ -398,8 +417,8 @@ async function save() {
     } else {
       toast(res.data.message || tm('messages.saveFailed'), 'error')
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.saveFailed'), 'error')
+  } catch (e) {
+    toast(getErrorMessage(e, tm('messages.saveFailed')), 'error')
   } finally {
     saving.value = false
   }
@@ -440,7 +459,7 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
 
 onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
-  reload()
+  void reload()
 })
 
 onBeforeUnmount(() => {
@@ -448,7 +467,7 @@ onBeforeUnmount(() => {
 })
 
 onBeforeRouteLeave(async () => {
-  return await confirmLeaveIfNeeded()
+  return confirmLeaveIfNeeded()
 })
 </script>
 

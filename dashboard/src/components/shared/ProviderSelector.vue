@@ -99,14 +99,14 @@
             v-if="!multiple"
             key="none"
             value=""
-            @click="selectProvider({ id: '' })"
             :active="selectedProvider === ''"
             rounded="md"
-            class="ma-1">
+            class="ma-1"
+            @click="selectProvider({ id: '' })">
             <v-list-item-title>{{ tm('providerSelector.clearSelection') }}</v-list-item-title>
             <v-list-item-subtitle>{{ tm('providerSelector.clearSelectionSubtitle') }}</v-list-item-subtitle>
             
-            <template v-slot:append>
+            <template #append>
               <v-icon v-if="selectedProvider === ''" color="primary">mdi-check-circle</v-icon>
             </template>
           </v-list-item>
@@ -117,17 +117,17 @@
             v-for="provider in providerList"
             :key="provider.id"
             :value="provider.id"
-            @click="selectProvider(provider)"
             :active="isProviderSelected(provider.id)"
             rounded="md"
-            class="ma-1">
+            class="ma-1"
+            @click="selectProvider(provider)">
             <v-list-item-title>{{ provider.id }}</v-list-item-title>
             <v-list-item-subtitle>
               {{ provider.type || provider.provider_type || tm('providerSelector.unknownType') }}
               <span v-if="provider.model">- {{ provider.model }}</span>
             </v-list-item-subtitle>
             
-            <template v-slot:append>
+            <template #append>
               <v-icon v-if="isProviderSelected(provider.id)" color="primary">mdi-check-circle</v-icon>
             </template>
           </v-list-item>
@@ -244,7 +244,7 @@ watch(() => props.modelValue, (newValue) => {
 
 watch(providerDrawer, (isOpen, wasOpen) => {
   if (!isOpen && wasOpen) {
-    loadProviders()
+    void loadProviders()
   }
 })
 

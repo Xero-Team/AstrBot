@@ -1,62 +1,81 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import * as openApiV1 from './generated/openapi-v1';
-import {
-  type BackupChunkUploadRequest,
-  client as openApiV1Client,
-  type BackupExportRequest,
-  type BackupRenameRequest,
-  type BackupUploadInitRequest,
-  type BackupUploadRequest,
-  type BackupUploadSessionRequest,
-  type BotConfigRequest,
-  type BotRegistrationRequest,
-  type ChatMessagePatchRequest,
-  type ChatMessageRegenerateRequest,
-  type ChatProjectRequest,
-  type ChatRequest,
-  type ChatSessionBatchDeleteRequest,
-  type ChatSessionPatchRequest,
-  type ChatThreadCreateRequest,
-  type ChatThreadMessageRequest,
-  type CommandPatchRequest,
-  type ConfigRouteUpsertRequest,
-  type ConfigRoutesReplaceRequest,
-  type ConversationBatchDeleteRequest,
-  type ConversationExportRequest,
-  type ConversationMessagesReplaceRequest,
-  type ConversationPatchRequest,
-  type CreateApiKeyRequest,
-  type CronJobPatchRequest,
-  type CronJobRequest,
-  type DynamicConfig,
-  type EnabledPatch,
-  type GhproxyTestRequest,
-  type LoginRequest,
-  type ListConversationsData,
-  type McpServerConfig,
-  type ModelScopeSyncRequest,
-  type PipInstallRequest,
-  type PluginVersionSupportRequest,
-  type PluginConfigFileDeleteRequest,
-  type ProviderConfigRequest,
-  type BatchSessionProviderRequest,
-  type BatchSessionServiceRequest,
-  type SetupAuthRequest,
-  type SessionGroupRequest,
-  type SessionRuleRequest,
-  type UmoListRequest,
-  type SuccessEnvelope,
-  type T2iTemplateRequest,
-  type TotpSetupRequest,
-  type TraceSettingsRequest,
-  type UpdateAccountRequest,
-  type UpdateRequest,
+import type {
+  BackupChunkUploadRequest,
+  BackupExportRequest,
+  BackupImportRequest,
+  BackupRenameRequest,
+  BackupUploadInitRequest,
+  BackupUploadRequest,
+  BackupUploadSessionRequest,
+  BotConfigRequest,
+  BotRegistrationRequest,
+  ChatMessagePatchRequest,
+  ChatMessageRegenerateRequest,
+  ChatProjectRequest,
+  ChatRequest,
+  ChatSessionBatchDeleteRequest,
+  ChatSessionPatchRequest,
+  ChatThreadCreateRequest,
+  ChatThreadMessageRequest,
+  CommandPatchRequest,
+  ConfigRouteUpsertRequest,
+  ConfigRoutesReplaceRequest,
+  ConversationBatchDeleteRequest,
+  ConversationExportRequest,
+  ConversationMessagesReplaceRequest,
+  ConversationPatchRequest,
+  CreateApiKeyRequest,
+  CronJobPatchRequest,
+  CronJobRequest,
+  DynamicConfig,
+  EnabledPatch,
+  GhproxyTestRequest,
+  KnowledgeDocumentUrlImportRequest,
+  LoginRequest,
+  ListConversationsData,
+  McpServerConfig,
+  ModelScopeSyncRequest,
+  NeoCandidateActionRequest,
+  NeoReleaseActionRequest,
+  PersonaFolderRequest,
+  PersonaMoveRequest,
+  PersonaRequest,
+  PipInstallRequest,
+  PluginVersionSupportRequest,
+  PluginConfigFileDeleteRequest,
+  PluginGithubInstallRequest,
+  PluginSourceRequest,
+  PluginUrlInstallRequest,
+  ProviderConfigRequest,
+  BatchSessionProviderRequest,
+  BatchSessionServiceRequest,
+  FileUploadRequest,
+  ReorderRequest,
+  SetupAuthRequest,
+  SessionGroupRequest,
+  SessionRuleRequest,
+  UmoListRequest,
+  T2iTemplateRequest,
+  TotpSetupRequest,
+  TraceSettingsRequest,
+  UpdateAccountRequest,
+  UpdateRequest,
+  PluginUploadInstallRequest,
+  KnowledgeDocumentUploadRequest,
 } from './generated/openapi-v1';
+import { client as openApiV1Client } from './generated/openapi-v1/client.gen';
 import { httpClient } from './http';
+import type {
+  CommandItem,
+  ToolItem,
+} from '../components/extension/componentPanel/types';
+import type { ChatContent } from '../composables/useMessages';
 
 openApiV1Client.setConfig({
   axios: httpClient,
+  baseURL: '',
   throwOnError: true,
 });
 
@@ -116,8 +135,66 @@ type StartTimeData = {
   start_time?: number | string | null;
 };
 
+export interface AuthLoginData {
+  username?: string;
+  token?: string;
+  password_upgrade_required?: boolean;
+  md5_pwd_hint?: boolean;
+  change_pwd_hint?: boolean;
+  [key: string]: unknown;
+}
+
+export interface AuthSetupStatusData {
+  setup_required?: boolean;
+  skip_default_password_auth?: boolean;
+  totp_required?: boolean;
+  [key: string]: unknown;
+}
+
+export interface TotpSetupData {
+  secret?: string | null;
+  recovery_code?: string | null;
+  recovery_code_hash?: string | null;
+  [key: string]: unknown;
+}
+
+export interface UpdateCheckData {
+  has_new_version: boolean;
+  dashboard_has_new_version: boolean;
+  [key: string]: unknown;
+}
+
+export interface UploadedFileData {
+  attachment_id: string;
+  filename: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface BotRegistrationData {
+  status?: string;
+  registration_code?: string;
+  interval?: number;
+  verification_uri_complete?: string;
+  qrcode_img_content?: string;
+  qrcode?: string;
+  task_id?: string;
+  bind_key?: string;
+  app_id?: string;
+  app_secret?: string;
+  appid?: string;
+  secret?: string;
+  domain?: string;
+  weixin_oc_token?: string;
+  weixin_oc_account_id?: string;
+  weixin_oc_base_url?: string;
+  client_id?: string;
+  client_secret?: string;
+  [key: string]: unknown;
+}
+
 export interface CommandListData {
-  items?: any[];
+  items?: CommandItem[];
   wake_prefix?: string[];
   summary?: {
     disabled?: number;
@@ -125,6 +202,371 @@ export interface CommandListData {
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+export interface PagedItemsData<T> {
+  items?: T[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  [key: string]: unknown;
+}
+
+export interface ChatSessionSummary {
+  session_id: string;
+  display_name: string | null;
+  updated_at: string;
+  platform_id: string;
+  creator: string;
+  is_group: number;
+  created_at: string;
+  [key: string]: unknown;
+}
+
+export interface ChatThreadData {
+  thread_id: string;
+  parent_session_id: string;
+  parent_message_id: number;
+  base_checkpoint_id: string;
+  selected_text: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface ChatSessionProjectData {
+  project_id: string;
+  title: string;
+  emoji?: string;
+  [key: string]: unknown;
+}
+
+export interface ChatSessionDetailData {
+  session_id?: string;
+  display_name?: string | null;
+  platform_id?: string;
+  history?: HistoryRecordData[];
+  threads?: ChatThreadData[];
+  project?: ProjectData | null;
+  [key: string]: unknown;
+}
+
+export interface ChatMessageMutationData {
+  message?: OpenConfig;
+  truncated_after_message?: boolean;
+  needs_regenerate?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ChatBatchDeleteData {
+  deleted_count?: number;
+  failed_count?: number;
+  failed_items?: OpenConfig[];
+  [key: string]: unknown;
+}
+
+export interface SessionRuleListData {
+  rules?: OpenConfig[];
+  total?: number;
+  available_personas?: OpenConfig[];
+  available_chat_providers?: OpenConfig[];
+  available_stt_providers?: OpenConfig[];
+  available_tts_providers?: OpenConfig[];
+  available_plugins?: OpenConfig[];
+  available_kbs?: OpenConfig[];
+  [key: string]: unknown;
+}
+
+export interface UmoInfoData {
+  umo: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
+  [key: string]: unknown;
+}
+
+export interface ActiveUmosData {
+  umos?: string[];
+  umo_infos?: UmoInfoData[];
+  [key: string]: unknown;
+}
+
+export interface SkillItemData {
+  name?: string;
+  description?: string;
+  path?: string;
+  active?: boolean;
+  source_type?: string;
+  [key: string]: unknown;
+}
+
+export type SkillListData =
+  | SkillItemData[]
+  | {
+      skills?: SkillItemData[];
+      runtime?: string;
+      sandbox_cache?: OpenConfig;
+      [key: string]: unknown;
+    };
+
+export interface PersonaFolderData {
+  folder_id: string;
+  name: string;
+  parent_id: string | null;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  children: PersonaFolderData[];
+  [key: string]: unknown;
+}
+
+export interface PersonaData {
+  persona_id: string;
+  system_prompt: string;
+  custom_error_message: string | null;
+  begin_dialogs: string[];
+  tools: string[] | null;
+  skills: string[] | null;
+  folder_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+export interface PersonaFolderMutationData {
+  folder?: PersonaFolderData;
+  [key: string]: unknown;
+}
+
+export interface PersonaFolderInput {
+  name?: string;
+  parent_id?: string | null;
+  description?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PersonaInput {
+  persona_id: string;
+  system_prompt: string;
+  begin_dialogs?: string[];
+  tools?: string[] | null;
+  skills?: string[] | null;
+  folder_id?: string | null;
+  custom_error_message?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ConversationPaginationData {
+  page?: number;
+  page_size?: number;
+  total?: number;
+  total_pages?: number;
+  [key: string]: unknown;
+}
+
+export interface ConversationRecordData {
+  cid?: string;
+  user_id?: string;
+  title?: string;
+  history?: string;
+  [key: string]: unknown;
+}
+
+export interface ConversationListResponseData {
+  conversations?: ConversationRecordData[];
+  pagination?: ConversationPaginationData;
+  [key: string]: unknown;
+}
+
+export interface ConversationBatchDeleteData {
+  deleted_count?: number;
+  failed_count?: number;
+  [key: string]: unknown;
+}
+
+export interface KnowledgeBaseData {
+  kb_id: string;
+  kb_name: string;
+  description?: string | null;
+  emoji?: string | null;
+  init_error?: string | null;
+  doc_count?: number;
+  chunk_count?: number;
+  embedding_provider_id?: string | null;
+  rerank_provider_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface KnowledgeDocumentData {
+  document_id?: string;
+  doc_id?: string;
+  doc_name: string;
+  file_type?: string;
+  file_size?: number;
+  chunk_count?: number;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+export interface KnowledgeChunkData {
+  chunk_id: string;
+  chunk_index: number;
+  content: string;
+  char_count: number;
+  [key: string]: unknown;
+}
+
+export interface KnowledgeRetrieveResultData {
+  chunk_id: string;
+  chunk_index: number;
+  doc_name: string;
+  char_count: number;
+  score: number;
+  content: string;
+  [key: string]: unknown;
+}
+
+export interface KnowledgeRetrieveData {
+  results?: KnowledgeRetrieveResultData[];
+  visualization?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PluginData {
+  name?: string;
+  activated?: boolean;
+  reserved?: boolean;
+  origin?: string;
+  origin_name?: string;
+  readme?: string;
+  readme_content?: string;
+  content?: string;
+  [key: string]: unknown;
+}
+
+export interface ProjectData {
+  project_id: string;
+  title: string;
+  emoji?: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+export interface DownloadStageData {
+  status: 'pending' | 'running' | 'done' | 'error';
+  downloaded: number;
+  total: number;
+  percent: number;
+  speed: number;
+  [key: string]: unknown;
+}
+
+export interface UpdateProgressData {
+  id: string;
+  status: 'idle' | 'running' | 'success' | 'error';
+  stage: string;
+  version: string;
+  message: string;
+  overall_percent: number;
+  stages: Record<string, DownloadStageData>;
+  [key: string]: unknown;
+}
+
+export interface PluginConfigFilesData {
+  files?: string[];
+  [key: string]: unknown;
+}
+
+export interface PluginConfigUploadData {
+  uploaded?: string[];
+  errors?: OpenConfig[];
+  [key: string]: unknown;
+}
+
+export interface ReleaseItemData {
+  tag_name: string;
+  published_at: string;
+  body: string;
+  [key: string]: unknown;
+}
+
+export interface HistoryRecordData {
+  content?: ChatContent & {
+    agent_stats?: unknown;
+  };
+  sender_id?: string;
+  [key: string]: unknown;
+}
+
+export interface ChatThreadDetailData extends ChatThreadData {
+  history?: HistoryRecordData[];
+}
+
+export interface BaseStatsData {
+  message_count: number;
+  platform_count: number;
+  platform: Array<{
+    name: string;
+    count: number;
+    timestamp: number;
+  }>;
+  message_time_series: Array<[number, number]>;
+  memory: {
+    process: number;
+    system: number;
+  };
+  cpu_percent: number;
+  running: {
+    hours: number;
+    minutes: number;
+    seconds: number;
+  };
+  thread_count: number;
+  start_time: number;
+}
+
+export interface ProviderTrendItemData {
+  name: string;
+  data: Array<[number, number]>;
+  total_tokens: number;
+}
+
+export interface ProviderRankingItemData {
+  provider_id: string;
+  tokens: number;
+}
+
+export interface UmoRankingItemData {
+  umo: string;
+  tokens: number;
+}
+
+export interface ProviderTokenStatsData {
+  days: 1 | 3 | 7;
+  trend: {
+    series: ProviderTrendItemData[];
+    total_series: Array<[number, number]>;
+  };
+  range_total_tokens: number;
+  range_total_calls: number;
+  range_avg_ttft_ms: number;
+  range_avg_duration_ms: number;
+  range_avg_tpm: number;
+  range_success_rate: number;
+  range_by_provider: ProviderRankingItemData[];
+  range_by_umo: UmoRankingItemData[];
+  today_total_tokens: number;
+  today_total_calls: number;
+  today_by_provider: ProviderRankingItemData[];
 }
 
 export interface BotListParams {
@@ -190,11 +632,11 @@ function typed<T>(response: Promise<unknown>): V1Response<T> {
   return response as unknown as V1Response<T>;
 }
 
-function generatedOptions(
-  options: Record<string, unknown>,
+function generatedOptions<T extends Record<string, unknown>>(
+  options: T,
   requestConfig?: AxiosRequestConfig,
-) {
-  return { ...options, ...(requestConfig || {}) } as any;
+): T {
+  return { ...options, ...(requestConfig || {}) } as T;
 }
 
 function generatedQuery<T extends object>(
@@ -203,7 +645,9 @@ function generatedQuery<T extends object>(
   return params as (T & Record<string, unknown>) | undefined;
 }
 
-function generatedFormData(formData: FormData | Record<string, unknown>) {
+function generatedFormData(
+  formData: FormData | Record<string, unknown>,
+): FormData | Record<string, unknown> {
   if (typeof FormData !== 'undefined' && formData instanceof FormData) {
     const body: Record<string, unknown> = {};
     formData.forEach((value, key) => {
@@ -216,27 +660,29 @@ function generatedFormData(formData: FormData | Record<string, unknown>) {
         body[key] = [existing, value];
       }
     });
-    return body as any;
+    return body;
   }
-  return formData as any;
+  return formData;
 }
 
 function botConfig(config: OpenConfig): BotConfigRequest {
+  let enabled: boolean | undefined;
+  if (typeof config.enable === 'boolean') {
+    enabled = config.enable;
+  } else if (typeof config.enabled === 'boolean') {
+    enabled = config.enabled;
+  }
+
   return {
     id: typeof config.id === 'string' ? config.id : undefined,
     type: typeof config.type === 'string' ? config.type : '',
-    enabled:
-      typeof config.enable === 'boolean'
-        ? config.enable
-        : typeof config.enabled === 'boolean'
-          ? config.enabled
-          : undefined,
+    enabled,
     config,
   };
 }
 
 function providerConfig(config: OpenConfig): ProviderConfigRequest {
-  return { config } as ProviderConfigRequest;
+  return { config };
 }
 
 function providerTypeToCapabilities(providerType: string): ProviderCapability[] {
@@ -352,7 +798,7 @@ export const botApi = {
     return typed<{ platforms: OpenConfig[] }>(openApiV1.listBotStats());
   },
   registration(botType: string, payload: BotRegistrationRequest) {
-    return typed<any>(
+    return typed<BotRegistrationData>(
       openApiV1.registerBotType({
         path: { bot_type: botType },
         body: payload,
@@ -510,13 +956,13 @@ export const providerApi = {
 
 export const authApi = {
   login(payload: LoginRequest) {
-    return typed<any>(openApiV1.login({ body: payload }));
+    return typed<AuthLoginData>(openApiV1.login({ body: payload }));
   },
   logout() {
     return typed<OpenConfig>(openApiV1.logout());
   },
   setupStatus(requestConfig?: AxiosRequestConfig) {
-    return typed<any>(
+    return typed<AuthSetupStatusData>(
       openApiV1.getAuthSetupStatus(generatedOptions({}, requestConfig)),
     );
   },
@@ -524,10 +970,10 @@ export const authApi = {
     return typed<OpenConfig>(openApiV1.setupAuth({ body: payload }));
   },
   setupTotp(payload?: TotpSetupRequest) {
-    return typed<any>(openApiV1.setupTotp({ body: payload }));
+    return typed<TotpSetupData>(openApiV1.setupTotp({ body: payload }));
   },
   recoverTotp() {
-    return typed<any>(openApiV1.recoverTotp());
+    return typed<TotpSetupData>(openApiV1.recoverTotp());
   },
   updateAccount(payload: UpdateAccountRequest) {
     return typed<OpenConfig>(
@@ -568,10 +1014,10 @@ export const traceApi = {
 
 export const updatesApi = {
   check() {
-    return typed<any>(openApiV1.checkUpdate());
+    return typed<UpdateCheckData>(openApiV1.checkUpdate());
   },
   releases(type?: 'core' | 'dashboard') {
-    return typed<any[]>(
+    return typed<ReleaseItemData[]>(
       openApiV1.listReleases({
         query: type ? { type } : undefined,
       }),
@@ -584,7 +1030,7 @@ export const updatesApi = {
     return typed<OpenConfig>(openApiV1.updateDashboard({ body: payload }));
   },
   progress(taskId: string) {
-    return typed<any>(
+    return typed<UpdateProgressData>(
       openApiV1.getUpdateProgress({ path: { task_id: taskId } }),
     );
   },
@@ -597,45 +1043,50 @@ export const updatesApi = {
 
 export const backupApi = {
   list(params?: BackupListParams) {
-    return typed<any>(openApiV1.listBackups({ query: generatedQuery(params) }));
+    return typed<OpenConfig>(openApiV1.listBackups({ query: generatedQuery(params) }));
   },
   create(payload?: BackupExportRequest) {
-    return typed<any>(openApiV1.createBackup({ body: payload }));
+    return typed<OpenConfig>(openApiV1.createBackup({ body: payload }));
   },
   progress(taskId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.getBackupProgress({ path: { task_id: taskId } }),
     );
   },
   upload(formData: FormData | BackupUploadRequest) {
-    return typed<any>(
-      openApiV1.uploadBackup({ body: generatedFormData(formData) }),
+    return typed<OpenConfig>(
+      openApiV1.uploadBackup({
+        body: generatedFormData(formData) as unknown as BackupUploadRequest,
+      }),
     );
   },
   initUpload(payload: BackupUploadInitRequest) {
-    return typed<any>(openApiV1.initBackupUpload({ body: payload }));
+    return typed<OpenConfig>(openApiV1.initBackupUpload({ body: payload }));
   },
   uploadChunk(formData: FormData | BackupChunkUploadRequest) {
-    return typed<any>(
-      openApiV1.uploadBackupChunk({ body: generatedFormData(formData) }),
+    return typed<OpenConfig>(
+      openApiV1.uploadBackupChunk({
+        body: generatedFormData(formData) as unknown as BackupChunkUploadRequest,
+      }),
     );
   },
   completeUpload(payload: BackupUploadSessionRequest) {
-    return typed<any>(openApiV1.completeBackupUpload({ body: payload }));
+    return typed<OpenConfig>(openApiV1.completeBackupUpload({ body: payload }));
   },
   abortUpload(payload: BackupUploadSessionRequest) {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
   check(filename: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.checkBackup({ path: { filename } }),
     );
   },
   import(filename: string, confirmed = true) {
-    return typed<any>(
+    const payload: BackupImportRequest = { confirmed };
+    return typed<OpenConfig>(
       openApiV1.importBackup({
         path: { filename },
-        body: { confirmed } as any,
+        body: payload,
       }),
     );
   },
@@ -645,7 +1096,7 @@ export const backupApi = {
     );
   },
   rename(filename: string, payload: BackupRenameRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.renameBackup({ path: { filename }, body: payload }),
     );
   },
@@ -656,7 +1107,7 @@ export const backupApi = {
 
 export const chatApi = {
   send(payload: ChatRequest) {
-    return typed<any>(openApiV1.sendChatMessage({ body: payload }));
+    return typed<OpenConfig>(openApiV1.sendChatMessage({ body: payload }));
   },
   sendStreamUrl() {
     return '/api/v1/chat';
@@ -670,24 +1121,24 @@ export const chatApi = {
     return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
   },
   listSessions(params?: ChatSessionListParams) {
-    return typed<any>(
+    return typed<ChatSessionSummary[]>(
       openApiV1.listChatSessions({ query: generatedQuery(params) }),
     );
   },
   createSession(platformId?: string) {
-    return typed<any>(
+    return typed<ChatSessionSummary>(
       openApiV1.createChatSession({
         query: platformId ? { platform_id: platformId } : undefined,
       }),
     );
   },
   getSession(sessionId: string) {
-    return typed<any>(
+    return typed<ChatSessionDetailData>(
       openApiV1.getChatSession({ path: { session_id: sessionId } }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.updateChatSession({
         path: { session_id: sessionId },
         body: payload,
@@ -695,15 +1146,15 @@ export const chatApi = {
     );
   },
   deleteSession(sessionId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.deleteChatSession({ path: { session_id: sessionId } }),
     );
   },
   batchDeleteSessions(payload: ChatSessionBatchDeleteRequest) {
-    return typed<any>(openApiV1.batchDeleteChatSessions({ body: payload }));
+    return typed<ChatBatchDeleteData>(openApiV1.batchDeleteChatSessions({ body: payload }));
   },
   stopSession(sessionId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.stopChatSession({ path: { session_id: sessionId } }),
     );
   },
@@ -712,7 +1163,7 @@ export const chatApi = {
     messageId: string | number,
     payload: ChatMessagePatchRequest,
   ) {
-    return typed<any>(
+    return typed<ChatMessageMutationData>(
       openApiV1.updateChatMessage({
         path: { session_id: sessionId, message_id: String(messageId) },
         body: payload,
@@ -724,53 +1175,53 @@ export const chatApi = {
     messageId: string | number,
     payload?: ChatMessageRegenerateRequest,
   ) {
-    return typed<any>(
+    return typed<ChatMessageMutationData>(
       openApiV1.regenerateChatMessage({
         path: { session_id: sessionId, message_id: String(messageId) },
         body: payload,
-      }) as any,
+      }),
     );
   },
   regenerateMessageUrl(sessionId: string, messageId: string | number) {
     return `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(String(messageId))}/regenerate`;
   },
   createThread(payload: ChatThreadCreateRequest) {
-    return typed<any>(openApiV1.createChatThread({ body: payload }));
+    return typed<ChatThreadData>(openApiV1.createChatThread({ body: payload }));
   },
   getThread(threadId: string) {
-    return typed<any>(
+    return typed<ChatThreadDetailData>(
       openApiV1.getChatThread({ path: { thread_id: threadId } }),
     );
   },
   deleteThread(threadId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.deleteChatThread({ path: { thread_id: threadId } }),
     );
   },
   sendThreadMessage(threadId: string, payload: ChatThreadMessageRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.sendChatThreadMessage({
         path: { thread_id: threadId },
         body: payload,
-      }) as any,
+      }),
     );
   },
   sendThreadMessageUrl(threadId: string) {
     return `/api/v1/chat/threads/${encodeURIComponent(threadId)}/messages`;
   },
   listProjects() {
-    return typed<any>(openApiV1.listChatProjects());
+    return typed<ProjectData[]>(openApiV1.listChatProjects());
   },
   createProject(payload: ChatProjectRequest) {
-    return typed<any>(openApiV1.createChatProject({ body: payload }));
+    return typed<ProjectData>(openApiV1.createChatProject({ body: payload }));
   },
   getProject(projectId: string) {
-    return typed<any>(
+    return typed<ProjectData>(
       openApiV1.getChatProject({ path: { project_id: projectId } }),
     );
   },
   updateProject(projectId: string, payload: ChatProjectRequest) {
-    return typed<any>(
+    return typed<ProjectData>(
       openApiV1.updateChatProject({
         path: { project_id: projectId },
         body: payload,
@@ -778,24 +1229,24 @@ export const chatApi = {
     );
   },
   deleteProject(projectId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.deleteChatProject({ path: { project_id: projectId } }),
     );
   },
   listProjectSessions(projectId: string) {
-    return typed<any>(
+    return typed<ChatSessionSummary[]>(
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
   addProjectSession(projectId: string, sessionId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.addChatProjectSession({
         path: { project_id: projectId, session_id: sessionId },
       }),
     );
   },
   removeProjectSession(sessionId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.removeChatProjectSession({ path: { session_id: sessionId } }),
     );
   },
@@ -803,8 +1254,10 @@ export const chatApi = {
 
 export const fileApi = {
   upload(formData: FormData) {
-    return typed<any>(
-      openApiV1.uploadFile({ body: generatedFormData(formData) }),
+    return typed<UploadedFileData>(
+      openApiV1.uploadFile({
+        body: generatedFormData(formData) as unknown as FileUploadRequest,
+      }),
     );
   },
   getByName(filename: string) {
@@ -826,40 +1279,40 @@ export const fileApi = {
 
 export const sessionApi = {
   list(params?: SessionListParams) {
-    return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
+    return typed<OpenConfig>(openApiV1.listSessions({ query: generatedQuery(params) }));
   },
   activeUmos() {
-    return typed<any>(openApiV1.listActiveUmos());
+    return typed<ActiveUmosData>(openApiV1.listActiveUmos());
   },
   listRules(params?: SessionRuleListParams) {
-    return typed<any>(
+    return typed<SessionRuleListData>(
       openApiV1.listSessionRules({ query: generatedQuery(params) }),
     );
   },
   upsertRule(payload: SessionRuleRequest) {
-    return typed<any>(openApiV1.upsertSessionRule({ body: payload }));
+    return typed<OpenConfig>(openApiV1.upsertSessionRule({ body: payload }));
   },
   deleteRules(payload: UmoListRequest) {
-    return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
+    return typed<OpenConfig>(openApiV1.deleteSessionRules({ body: payload }));
   },
   batchUpdateProvider(payload: BatchSessionProviderRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.batchUpdateSessionProvider({ body: payload }),
     );
   },
   batchUpdateService(payload: BatchSessionServiceRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.batchUpdateSessionService({ body: payload }),
     );
   },
   listGroups() {
-    return typed<any>(openApiV1.listSessionGroups());
+    return typed<OpenConfig[]>(openApiV1.listSessionGroups());
   },
   createGroup(payload: SessionGroupRequest) {
-    return typed<any>(openApiV1.createSessionGroup({ body: payload }));
+    return typed<OpenConfig>(openApiV1.createSessionGroup({ body: payload }));
   },
   updateGroup(groupId: string, payload: SessionGroupRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.updateSessionGroup({
         path: { group_id: groupId },
         body: payload,
@@ -867,7 +1320,7 @@ export const sessionApi = {
     );
   },
   deleteGroup(groupId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.deleteSessionGroup({ path: { group_id: groupId } }),
     );
   },
@@ -875,21 +1328,21 @@ export const sessionApi = {
 
 export const cronApi = {
   list(params?: CronJobListParams) {
-    return typed<any>(openApiV1.listCronJobs({ query: generatedQuery(params) }));
+    return typed<OpenConfig[]>(openApiV1.listCronJobs({ query: generatedQuery(params) }));
   },
   create(payload: CronJobRequest) {
-    return typed<any>(openApiV1.createCronJob({ body: payload }));
+    return typed<OpenConfig>(openApiV1.createCronJob({ body: payload }));
   },
   update(jobId: string, payload: CronJobPatchRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.updateCronJob({ path: { job_id: jobId }, body: payload }),
     );
   },
   delete(jobId: string) {
-    return typed<any>(openApiV1.deleteCronJob({ path: { job_id: jobId } }));
+    return typed<OpenConfig>(openApiV1.deleteCronJob({ path: { job_id: jobId } }));
   },
   run(jobId: string) {
-    return typed<any>(openApiV1.runCronJob({ path: { job_id: jobId } }));
+    return typed<OpenConfig>(openApiV1.runCronJob({ path: { job_id: jobId } }));
   },
 };
 
@@ -903,7 +1356,7 @@ export const subagentApi = {
     );
   },
   availableTools() {
-    return typed<any>(openApiV1.listSubagentAvailableTools());
+    return typed<OpenConfig>(openApiV1.listSubagentAvailableTools());
   },
 };
 
@@ -930,7 +1383,7 @@ export const commandApi = {
 
 export const toolApi = {
   list(params?: ToolListParams) {
-    return typed<any[]>(openApiV1.listTools({ query: generatedQuery(params) }));
+    return typed<ToolItem[]>(openApiV1.listTools({ query: generatedQuery(params) }));
   },
   setEnabled(toolId: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1044,7 +1497,7 @@ export const logApi = {
 
 export const pluginApi = {
   list(params?: { include_reserved?: boolean; enabled?: boolean }) {
-    return typed<any[]>(openApiV1.listPlugins({ query: params }));
+    return typed<PluginData[]>(openApiV1.listPlugins({ query: params }));
   },
   get(pluginId: string) {
     return typed<OpenConfig>(
@@ -1096,17 +1549,17 @@ export const pluginApi = {
   update(pluginId: string, body?: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.updatePlugins({
-        body: { plugin_id: pluginId, ...(body || {}) } as any,
+        body: { plugin_id: pluginId, ...(body || {}) },
       }),
     );
   },
   updateMany(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.updatePlugins({ body: body as any }),
+      openApiV1.updatePlugins({ body }),
     );
   },
   checkVersionSupport(payload: PluginVersionSupportRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.checkPluginVersionSupport({ body: payload }),
     );
   },
@@ -1123,17 +1576,17 @@ export const pluginApi = {
     );
   },
   listConfigFiles(pluginId: string, configKey: string) {
-    return typed<any>(
+    return typed<PluginConfigFilesData>(
       openApiV1.listPluginConfigFilesById({
         query: { plugin_id: pluginId, config_key: configKey },
       }),
     );
   },
   uploadConfigFiles(pluginId: string, configKey: string, formData: FormData) {
-    return typed<any>(
+    return typed<PluginConfigUploadData>(
       openApiV1.uploadPluginConfigFilesById({
         query: { plugin_id: pluginId, config_key: configKey },
-        body: generatedFormData(formData),
+        body: generatedFormData(formData) as Record<string, unknown>,
       }),
     );
   },
@@ -1164,54 +1617,54 @@ export const pluginApi = {
     force_refresh?: boolean;
     custom_registry?: string;
   }) {
-    return typed<any>(openApiV1.listPluginMarket({ query: params }));
+    return typed<OpenConfig>(openApiV1.listPluginMarket({ query: params }));
   },
   sources() {
-    return typed<any>(openApiV1.listPluginSources());
+    return typed<PluginSourceRequest[]>(openApiV1.listPluginSources());
   },
-  replaceSources(sources: OpenConfig[]) {
+  replaceSources(sources: PluginSourceRequest[]) {
     return typed<OpenConfig>(
-      openApiV1.replacePluginSources({ body: { sources: sources as any } }),
+      openApiV1.replacePluginSources({ body: { sources } }),
     );
   },
   installUpload(formData: FormData) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromUpload({
-        body: generatedFormData(formData),
+        body: generatedFormData(formData) as unknown as PluginUploadInstallRequest,
       }),
     );
   },
-  installGithub(body: OpenConfig) {
+  installGithub(body: PluginGithubInstallRequest) {
     return typed<OpenConfig>(
-      openApiV1.installPluginFromGithub({ body: body as any }),
+      openApiV1.installPluginFromGithub({ body }),
     );
   },
-  installUrl(body: OpenConfig) {
+  installUrl(body: PluginUrlInstallRequest) {
     return typed<OpenConfig>(
-      openApiV1.installPluginFromUrl({ body: body as any }),
+      openApiV1.installPluginFromUrl({ body }),
     );
   },
 };
 
 export const knowledgeApi = {
   list(params?: { page?: number; page_size?: number; refresh_stats?: boolean }) {
-    return typed<any>(openApiV1.listKnowledgeBases({ query: params }));
+    return typed<PagedItemsData<KnowledgeBaseData>>(openApiV1.listKnowledgeBases({ query: params }));
   },
   get(kbId: string) {
-    return typed<OpenConfig>(
+    return typed<KnowledgeBaseData>(
       openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
   create(config: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config as any }),
+      openApiV1.createKnowledgeBase({ body: config as never }),
     );
   },
   update(kbId: string, config: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.updateKnowledgeBase({
         path: { kb_id: kbId },
-        body: config as any,
+        body: config as never,
       }),
     );
   },
@@ -1221,7 +1674,7 @@ export const knowledgeApi = {
     );
   },
   documents(kbId: string, params?: { page?: number; page_size?: number }) {
-    return typed<any>(
+    return typed<PagedItemsData<KnowledgeDocumentData>>(
       openApiV1.listKnowledgeDocuments({
         path: { kb_id: kbId },
         query: params,
@@ -1229,28 +1682,28 @@ export const knowledgeApi = {
     );
   },
   uploadDocument(kbId: string, formData: FormData) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.uploadKnowledgeDocument({
         path: { kb_id: kbId },
-        body: generatedFormData(formData),
+        body: generatedFormData(formData) as unknown as KnowledgeDocumentUploadRequest,
       }),
     );
   },
-  importDocumentFromUrl(kbId: string, payload: OpenConfig) {
-    return typed<any>(
+  importDocumentFromUrl(kbId: string, payload: KnowledgeDocumentUrlImportRequest) {
+    return typed<OpenConfig>(
       openApiV1.importKnowledgeDocumentFromUrl({
         path: { kb_id: kbId },
-        body: payload as any,
+        body: payload,
       }),
     );
   },
   task(taskId: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.getKnowledgeTask({ path: { task_id: taskId } }),
     );
   },
   document(kbId: string, documentId: string) {
-    return typed<OpenConfig>(
+    return typed<KnowledgeDocumentData>(
       openApiV1.getKnowledgeDocument({
         path: { kb_id: kbId, document_id: documentId },
       }),
@@ -1267,7 +1720,7 @@ export const knowledgeApi = {
     kbId: string,
     params?: { document_id?: string; page?: number; page_size?: number },
   ) {
-    return typed<any>(
+    return typed<PagedItemsData<KnowledgeChunkData>>(
       openApiV1.listKnowledgeChunks({
         path: { kb_id: kbId },
         query: params,
@@ -1283,10 +1736,10 @@ export const knowledgeApi = {
     );
   },
   retrieve(kbId: string, payload: OpenConfig) {
-    return typed<any>(
+    return typed<KnowledgeRetrieveData>(
       openApiV1.retrieveKnowledgeBase({
         path: { kb_id: kbId },
-        body: payload as any,
+        body: payload as never,
       }),
     );
   },
@@ -1294,10 +1747,10 @@ export const knowledgeApi = {
 
 export const skillApi = {
   list(params?: { enabled?: boolean; source?: string }) {
-    return typed<any>(openApiV1.listSkills({ query: params }));
+    return typed<SkillListData>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.uploadSkillsBatch({ body: { files } }),
     );
   },
@@ -1320,14 +1773,14 @@ export const skillApi = {
     });
   },
   listFiles(skillName: string, path = '') {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.listSkillFilesByName({
         query: { skill_name: skillName, ...(path ? { path } : {}) },
       }),
     );
   },
   getFile(skillName: string, path: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.getSkillFileByName({
         query: { skill_name: skillName, path },
       }),
@@ -1341,70 +1794,70 @@ export const skillApi = {
     );
   },
   neoCandidates(params?: { skill_key?: string; status?: string }) {
-    return typed<any>(openApiV1.listNeoSkillCandidates({ query: params }));
+    return typed<OpenConfig>(openApiV1.listNeoSkillCandidates({ query: params }));
   },
   neoReleases(params?: { skill_key?: string; stage?: string }) {
-    return typed<any>(openApiV1.listNeoSkillReleases({ query: params }));
+    return typed<OpenConfig>(openApiV1.listNeoSkillReleases({ query: params }));
   },
   neoPayload(payloadRef: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.getNeoSkillPayload({ query: { payload_ref: payloadRef } }),
     );
   },
-  evaluateNeoCandidate(body: OpenConfig) {
+  evaluateNeoCandidate(body: NeoCandidateActionRequest) {
     return typed<OpenConfig>(
-      openApiV1.evaluateNeoSkillCandidate({ body: body as any }),
+      openApiV1.evaluateNeoSkillCandidate({ body }),
     );
   },
-  promoteNeoCandidate(body: OpenConfig) {
+  promoteNeoCandidate(body: NeoCandidateActionRequest) {
     return typed<OpenConfig>(
-      openApiV1.promoteNeoSkillCandidate({ body: body as any }),
+      openApiV1.promoteNeoSkillCandidate({ body }),
     );
   },
-  rollbackNeoRelease(body: OpenConfig) {
+  rollbackNeoRelease(body: NeoReleaseActionRequest) {
     return typed<OpenConfig>(
-      openApiV1.rollbackNeoSkillRelease({ body: body as any }),
+      openApiV1.rollbackNeoSkillRelease({ body }),
     );
   },
-  syncNeoRelease(body: OpenConfig) {
+  syncNeoRelease(body: NeoReleaseActionRequest) {
     return typed<OpenConfig>(
-      openApiV1.syncNeoSkillRelease({ body: body as any }),
+      openApiV1.syncNeoSkillRelease({ body }),
     );
   },
-  deleteNeoCandidate(body: OpenConfig) {
+  deleteNeoCandidate(body: NeoCandidateActionRequest) {
     return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillCandidate({ body: body as any }),
+      openApiV1.deleteNeoSkillCandidate({ body }),
     );
   },
-  deleteNeoRelease(body: OpenConfig) {
+  deleteNeoRelease(body: NeoReleaseActionRequest) {
     return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillRelease({ body: body as any }),
+      openApiV1.deleteNeoSkillRelease({ body }),
     );
   },
 };
 
 export const personaApi = {
   tree() {
-    return typed<any>(openApiV1.getPersonaTree());
+    return typed<PersonaFolderData[]>(openApiV1.getPersonaTree());
   },
   folders(parentId?: string | null) {
-    return typed<any[]>(
+    return typed<PersonaFolderData[]>(
       openApiV1.listPersonaFolders({
         query:
           parentId === undefined ? undefined : { parent_id: parentId ?? '' },
       }),
     );
   },
-  createFolder(folder: OpenConfig) {
+  createFolder(folder: PersonaFolderInput) {
     return typed<OpenConfig>(
-      openApiV1.createPersonaFolder({ body: folder as any }),
+      openApiV1.createPersonaFolder({ body: folder as unknown as PersonaFolderRequest }),
     );
   },
-  updateFolder(folderId: string, folder: OpenConfig) {
+  updateFolder(folderId: string, folder: PersonaFolderInput) {
     return typed<OpenConfig>(
       openApiV1.updatePersonaFolder({
         path: { folder_id: folderId },
-        body: folder as any,
+        body: folder as unknown as PersonaFolderRequest,
       }),
     );
   },
@@ -1414,7 +1867,7 @@ export const personaApi = {
     );
   },
   list(folderId?: string | null) {
-    return typed<any[]>(
+    return typed<PersonaData[]>(
       openApiV1.listPersonas({
         query:
           folderId === undefined ? undefined : { folder_id: folderId ?? '' },
@@ -1422,19 +1875,19 @@ export const personaApi = {
     );
   },
   get(personaId: string) {
-    return typed<OpenConfig>(
+    return typed<PersonaData>(
       openApiV1.getPersonaById({ query: { persona_id: personaId } }),
     );
   },
-  create(persona: OpenConfig) {
+  create(persona: PersonaInput) {
     return typed<OpenConfig>(
-      openApiV1.createPersona({ body: persona as any }),
+      openApiV1.createPersona({ body: persona as unknown as PersonaRequest }),
     );
   },
-  update(personaId: string, persona: OpenConfig) {
+  update(personaId: string, persona: Omit<PersonaInput, 'persona_id'>) {
     return typed<OpenConfig>(
       openApiV1.updatePersonaById({
-        body: { persona_id: personaId, ...persona } as any,
+        body: { persona_id: personaId, ...persona },
       }),
     );
   },
@@ -1444,22 +1897,24 @@ export const personaApi = {
     );
   },
   move(personaId: string, folderId: string | null) {
+    const payload: PersonaMoveRequest = {
+      persona_id: personaId,
+      folder_id: folderId ?? undefined,
+    };
     return typed<OpenConfig>(
-      openApiV1.movePersonaItem({
-        body: { persona_id: personaId, folder_id: folderId } as any,
-      }),
+      openApiV1.movePersonaItem({ body: payload }),
     );
   },
-  reorder(items: any[]) {
+  reorder(items: ReorderRequest['items']) {
     return typed<OpenConfig>(
-      openApiV1.reorderPersonaItems({ body: { items } as any }),
+      openApiV1.reorderPersonaItems({ body: { items } }),
     );
   },
 };
 
 export const conversationApi = {
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
-    return typed<any>(
+    return typed<ConversationListResponseData>(
       openApiV1.listConversations(
         generatedOptions(
           { query: generatedQuery(params) },
@@ -1469,7 +1924,7 @@ export const conversationApi = {
     );
   },
   get(userId: string, cid: string) {
-    return typed<any>(
+    return typed<ConversationRecordData>(
       openApiV1.getConversation({
         path: { conversation_id: cid },
         query: { user_id: userId },
@@ -1477,7 +1932,7 @@ export const conversationApi = {
     );
   },
   update(userId: string, cid: string, payload: ConversationPatchRequest) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.updateConversation({
         path: { conversation_id: cid },
         query: { user_id: userId },
@@ -1490,7 +1945,7 @@ export const conversationApi = {
     cid: string,
     payload: ConversationMessagesReplaceRequest,
   ) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.replaceConversationMessages({
         path: { conversation_id: cid },
         query: { user_id: userId },
@@ -1499,7 +1954,7 @@ export const conversationApi = {
     );
   },
   delete(userId: string, cid: string) {
-    return typed<any>(
+    return typed<OpenConfig>(
       openApiV1.deleteConversation({
         path: { conversation_id: cid },
         query: { user_id: userId },
@@ -1507,7 +1962,7 @@ export const conversationApi = {
     );
   },
   batchDelete(payload: ConversationBatchDeleteRequest) {
-    return typed<any>(openApiV1.batchDeleteConversations({ body: payload }));
+    return typed<ConversationBatchDeleteData>(openApiV1.batchDeleteConversations({ body: payload }));
   },
   export(payload: ConversationExportRequest) {
     return openApiV1.exportConversations({
@@ -1519,14 +1974,14 @@ export const conversationApi = {
 
 export const statsApi = {
   get(offsetSec?: number) {
-    return typed<any>(
+    return typed<BaseStatsData>(
       openApiV1.getStats({
         query: offsetSec === undefined ? undefined : { offset_sec: offsetSec },
       }),
     );
   },
   providerTokens(days?: number) {
-    return typed<any>(
+    return typed<ProviderTokenStatsData>(
       openApiV1.getProviderTokenStats({
         query: days === undefined ? undefined : { days },
       }),

@@ -1,11 +1,13 @@
 <template>
     <div class="live-mode-container">
         <div class="header-controls">
-            <v-btn icon="mdi-close" @click="handleClose" flat variant="text" />
-            <v-btn :icon="isCodeMode ? 'mdi-code-tags-check' : 'mdi-code-tags'" @click="toggleCodeMode" flat
-                variant="text" :color="isCodeMode ? 'primary' : ''" />
-            <v-btn :icon="isNervousMode ? 'mdi-emoticon-confused' : 'mdi-emoticon-confused-outline'"
-                @click="toggleNervousMode" flat variant="text" :color="isNervousMode ? 'primary' : ''" />
+            <v-btn icon="mdi-close" flat variant="text" @click="handleClose" />
+            <v-btn
+:icon="isCodeMode ? 'mdi-code-tags-check' : 'mdi-code-tags'" flat variant="text"
+                :color="isCodeMode ? 'primary' : ''" @click="toggleCodeMode" />
+            <v-btn
+:icon="isNervousMode ? 'mdi-emoticon-confused' : 'mdi-emoticon-confused-outline'"
+                flat variant="text" :color="isNervousMode ? 'primary' : ''" @click="toggleNervousMode" />
         </div>
 
         <span style="color: gray; padding-left: 16px;">We're developing Astr Live Mode on ChatUI & Desktop right now. Stay tuned!</span>
@@ -15,13 +17,14 @@
                 <!-- 爆炸效果层 -->
                 <div v-if="isExploding" class="explosion-wave"></div>
 
-                <SiriOrb :energy="orbEnergy" :mode="isActive ? orbMode : 'idle'" :is-dark="isDark"
+                <SiriOrb
+:energy="orbEnergy" :mode="isActive ? orbMode : 'idle'" :is-dark="isDark"
                     :code-mode="isCodeMode" :nervous-mode="isNervousMode" class="siri-orb" />
             </div>
             <div class="status-text">
                 {{ statusText }}
             </div>
-            <div class="messages-container" v-if="messages.length > 0">
+            <div v-if="messages.length > 0" class="messages-container">
                 <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.type">
                     <div class="message-content">
                         {{ msg.text }}
@@ -29,7 +32,7 @@
                 </div>
             </div>
 
-            <div class="metrics-container" v-if="Object.keys(metrics).length > 0">
+            <div v-if="Object.keys(metrics).length > 0" class="metrics-container">
                 <span v-if="metrics.wav_assemble_time">WAV Assemble: {{ (metrics.wav_assemble_time * 1000).toFixed(0)
                     }}ms</span>
                 <span v-if="metrics.llm_ttft">LLM First Token Latency: {{ (metrics.llm_ttft * 1000).toFixed(0)
@@ -125,20 +128,6 @@ const statusText = computed(() => {
     return '准备就绪';
 });
 
-const getIcon = computed(() => {
-    if (!isActive.value) return 'mdi-microphone';
-    if (isSpeaking.value) return 'mdi-account-voice';
-    if (isProcessing.value) return 'mdi-loading';
-    return 'mdi-check';
-});
-
-const getIconColor = computed(() => {
-    if (!isActive.value) return isDark.value ? 'white' : 'black';
-    if (isSpeaking.value) return 'success';
-    if (isProcessing.value) return 'warning';
-    return 'primary';
-});
-
 const orbEnergy = computed(() => {
     if (isPlaying.value) return botEnergy.value;
     if (isSpeaking.value || isListening.value) return vadRecording.audioEnergy.value;
@@ -189,7 +178,7 @@ async function startLiveMode() {
                 currentStamp = generateStamp();
 
                 // 发送开始说话消息
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws?.readyState === WebSocket.OPEN) {
                     metrics.value = {}; // Reset metrics
                     ws.send(JSON.stringify({
                         t: 'start_speaking',
@@ -202,7 +191,7 @@ async function startLiveMode() {
                 console.log('[Live Mode] VAD 检测到语音结束，音频长度:', audio.length);
 
                 // 将完整音频转换为 PCM16 并发送
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws?.readyState === WebSocket.OPEN) {
                     const pcm16 = new Int16Array(audio.length);
                     for (let i = 0; i < audio.length; i++) {
                         const s = Math.max(-1, Math.min(1, audio[i]));
@@ -292,7 +281,7 @@ function connectWebSocket(): Promise<void> {
 
         ws.onerror = (error) => {
             console.error('[Live Mode] WebSocket 错误:', error);
-            reject(error);
+            reject(error instanceof Error ? error : new Error('WebSocket 连接失败'));
         };
 
         ws.onmessage = handleWebSocketMessage;
@@ -359,7 +348,7 @@ function handleWebSocketMessage(event: MessageEvent) {
 
             case 'error':
                 console.error('[Live Mode] 错误:', message.data);
-                alert('处理出错: ' + message.data);
+                alert(`处理出错: ${  message.data}`);
                 isProcessing.value = false;
                 isListening.value = true;
                 break;
@@ -388,7 +377,7 @@ function playAudioChunk(base64Data: string) {
         rawAudioQueue.push(bytes);
 
         // 触发解码处理
-        processRawAudioQueue();
+        void processRawAudioQueue();
 
     } catch (error) {
         console.error('[Live Mode] 接收音频数据失败:', error);
@@ -422,7 +411,7 @@ async function processRawAudioQueue() {
         isDecoding = false;
         // 如果在解码过程中又有新数据进来，继续处理
         if (rawAudioQueue.length > 0) {
-            processRawAudioQueue();
+            void processRawAudioQueue();
         }
     }
 }
@@ -476,7 +465,7 @@ function stopAudioPlayback() {
         try {
             currentSource.stop();
             currentSource.disconnect();
-        } catch (e) {
+        } catch (_error) {
             // ignore
         }
         currentSource = null;
@@ -520,7 +509,7 @@ function updateBotEnergy() {
 }
 
 function handleClose() {
-    stopLiveMode();
+    void stopLiveMode();
     emit('close');
 }
 
@@ -536,7 +525,7 @@ function toggleNervousMode() {
 watch(isSpeaking, (newVal) => {
     if (newVal && isPlaying.value) {
         // 用户在播放时开始说话，发送打断信号
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ t: 'interrupt' }));
         }
         // 本地立即停止播放
@@ -545,7 +534,7 @@ watch(isSpeaking, (newVal) => {
 });
 
 onBeforeUnmount(() => {
-    stopLiveMode();
+    void stopLiveMode();
 });
 </script>
 

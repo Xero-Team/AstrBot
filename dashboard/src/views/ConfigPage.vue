@@ -1,20 +1,22 @@
 <template>
 
   <div style="display: flex; flex-direction: column; align-items: center;">
-    <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
+    <div
+v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
       style="display: flex; flex-direction: column; align-items: start;">
 
-      <div class="config-toolbar d-flex flex-row pr-4"
+      <div
+class="config-toolbar d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
         <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
-          <v-select class="config-select" style="min-width: 130px;" :model-value="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
-            v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
+          <v-select
+v-if="!isSystemConfig" class="config-select" style="min-width: 130px;" :model-value="selectedConfigID" :items="configSelectItems" item-title="name"
+            :disabled="initialConfigId !== null" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
           <v-text-field
             class="config-search-input"
             :model-value="configSearchKeyword"
-            @update:model-value="onConfigSearchInput"
             prepend-inner-icon="mdi-magnify"
             :label="tm('search.placeholder')"
             clearable
@@ -23,6 +25,7 @@
             rounded="md"
             variant="outlined"
             style="min-width: 280px;"
+            @update:model-value="onConfigSearchInput"
           />
           <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
 
@@ -46,7 +49,7 @@
           <!-- 可视化编辑 -->
           <AstrBotCoreConfigWrapper
             :metadata="metadata"
-            :config_data="config_data"
+            :config-data="config_data"
             :search-keyword="configSearchKeyword"
           />
         </div>
@@ -55,24 +58,27 @@
       <!-- 浮动按钮放在 transition 外部 -->
       <template v-if="(selectedConfigID || isSystemConfig) && fetched">
         <v-tooltip :text="tm('actions.save')" location="left">
-          <template v-slot:activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+          <template #activator="{ props }">
+            <v-btn
+v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
               color="darkprimary" @click="updateConfig">
             </v-btn>
           </template>
         </v-tooltip>
 
         <v-tooltip :text="tm('codeEditor.title')" location="left">
-          <template v-slot:activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+          <template #activator="{ props }">
+            <v-btn
+v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
               @click="configToString(); codeEditorDialog = true">
             </v-btn>
           </template>
         </v-tooltip>
 
-        <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
-          <template v-slot:activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
+        <v-tooltip v-if="!isSystemConfig" text="测试当前配置" location="left">
+          <template #activator="{ props }">
+            <v-btn
+v-bind="props" icon="mdi-chat-processing" size="x-large"
               style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
               @click="openTestChat">
             </v-btn>
@@ -102,8 +108,9 @@
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor language="json" theme="vs-dark" style="height: calc(100vh - 64px);"
-          v-model:value="config_data_str">
+        <VueMonacoEditor
+v-model:value="config_data_str" language="json" theme="vs-dark"
+          style="height: calc(100vh - 64px);">
         </VueMonacoEditor>
       </v-card-text>
     </v-card>
@@ -120,7 +127,7 @@
       <v-card-text>
         <small>{{ tm('configManagement.description') }}</small>
         <div class="mt-6 mb-4">
-          <v-btn prepend-icon="mdi-plus" @click="startCreateConfig" variant="tonal" color="primary">
+          <v-btn prepend-icon="mdi-plus" variant="tonal" color="primary" @click="startCreateConfig">
             {{ tm('configManagement.newConfig') }}
           </v-btn>
         </div>
@@ -128,15 +135,18 @@
         <!-- Config List -->
         <v-list lines="two">
           <v-list-item v-for="config in configInfoList" :key="config.id" :title="config.name">
-            <template v-slot:append>
+            <template #append>
               <div class="d-flex align-center" style="gap: 8px;">
-                <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
+                <v-btn
+icon="mdi-content-copy" size="small" variant="text" color="primary"
                   @click="startCopyConfig(config)"></v-btn>
-                <v-btn icon="mdi-pencil" size="small" variant="text" color="warning"
-                  v-if="config.id !== 'default'"
+                <v-btn
+v-if="config.id !== 'default'" icon="mdi-pencil" size="small" variant="text"
+                  color="warning"
                   @click="startEditConfig(config)"></v-btn>
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error"
-                  v-if="config.id !== 'default'"
+                <v-btn
+v-if="config.id !== 'default'" icon="mdi-delete" size="small" variant="text"
+                  color="error"
                   @click="confirmDeleteConfig(config)"></v-btn>
               </div>
             </template>
@@ -151,13 +161,15 @@
 
           <h4>{{ tm('configManagement.configName') }}</h4>
 
-          <v-text-field v-model="configFormData.name" :label="tm('configManagement.fillConfigName')" variant="outlined" class="mt-4 mb-4"
+          <v-text-field
+v-model="configFormData.name" :label="tm('configManagement.fillConfigName')" variant="outlined" class="mt-4 mb-4"
             hide-details></v-text-field>
 
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="primary" @click="saveConfigForm"
-              :disabled="isConfigFormSaveDisabled">
+            <v-btn
+color="primary" :disabled="isConfigFormSaveDisabled"
+              @click="saveConfigForm">
               {{ isEditingConfig ? tm('buttons.update') : tm('buttons.create') }}
             </v-btn>
           </div>
@@ -166,7 +178,7 @@
     </v-card>
   </v-dialog>
 
-  <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack">
+  <v-snackbar v-model="save_message_snack" :timeout="3000" elevation="24" :color="save_message_success">
     {{ save_message }}
   </v-snackbar>
 
@@ -202,7 +214,7 @@
       </div>
       <v-divider></v-divider>
       <div class="test-chat-content">
-        <StandaloneChat v-if="testChatDrawer" :configId="testConfigId" />
+        <StandaloneChat v-if="testChatDrawer" :config-id="testConfigId" />
       </div>
     </v-card>
   </v-overlay>
@@ -237,6 +249,38 @@ export default {
     UnsavedChangesConfirmDialog,
     DashboardTwoFactorDialog
   },
+
+// 检查未保存的更改
+  async beforeRouteLeave(to, from, next) {
+    if (this.hasUnsavedChanges) {
+      const confirmed = await this.$refs.unsavedChangesDialog?.open({
+        title: this.tm('unsavedChangesWarning.dialogTitle'),
+        message: this.tm('unsavedChangesWarning.leavePage'),
+        confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+        cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+        closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
+      });
+      // 关闭弹窗不跳转
+      if (confirmed === 'close') {
+        next(false);
+      } else if (confirmed) {
+        const result = await this.updateConfig();
+        if (this.isSystemConfig) {
+          next(false);
+        } else if (result?.success) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            next();
+          } else {
+            next(false);
+          }
+      } else {
+        this.hasUnsavedChanges = false;
+        next();
+      }
+    } else {
+      next();
+    }
+  },
   props: {
     initialConfigId: {
       type: String,
@@ -256,38 +300,56 @@ export default {
       confirmDialog
     };
   },
+  data() {
+    return {
+      codeEditorDialog: false,
+      configManageDialog: false,
+      showConfigForm: false,
+      isEditingConfig: false,
+      isCopyingConfig: false,
+      config_data_has_changed: false,
+      config_data_str: "",
+      config_data: {
+        config: {}
+      },
+      fetched: false,
+      metadata: {},
+      save_message_snack: false,
+      save_message: "",
+      save_message_success: "",
+      configContentKey: 0,
+      lastSavedConfigSnapshot: '',
+      configSave2faDialogVisible: false,
+      configSave2faError: '',
+      configSave2faSaving: false,
+      configSave2faRotationHint: '',
+      configSavePendingPostData: null,
 
-// 检查未保存的更改
-  async beforeRouteLeave(to, from, next) {
-    if (this.hasUnsavedChanges) {
-      const confirmed = await this.$refs.unsavedChangesDialog?.open({
-        title: this.tm('unsavedChangesWarning.dialogTitle'),
-        message: this.tm('unsavedChangesWarning.leavePage'),
-        confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
-        cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
-        closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
-      });
-      // 关闭弹窗不跳转
-      if (confirmed === 'close') {
-        next(false);
-      } else if (confirmed) {
-        const result = await this.updateConfig();
-        if (this.isSystemConfig) {
-          next(false);
-        } else {
-          if (result?.success) {
-            await new Promise(resolve => setTimeout(resolve, 800));
-            next();
-          } else {
-            next(false);
-          }
-        }
-      } else {
-        this.hasUnsavedChanges = false;
-        next();
-      }
-    } else {
-      next();
+      // 配置类型切换
+      configType: 'normal', // 'normal' 或 'system'
+      configSearchKeyword: '',
+
+      // 系统配置开关
+      isSystemConfig: false,
+
+      // 多配置文件管理
+      selectedConfigID: null, // 用于存储当前选中的配置项信息
+      currentConfigId: null, // 跟踪当前正在编辑的配置id
+      configInfoList: [],
+      configFormData: {
+        name: '',
+      },
+      editingConfigId: null,
+      copySourceConfigId: '',
+
+      // 测试聊天
+      testChatDrawer: false,
+      testConfigId: null,
+
+      // 未保存的更改状态
+      hasUnsavedChanges: false,
+      // 存储原始配置
+      originalConfigData: null,
     }
   },
 
@@ -342,7 +404,7 @@ export default {
     }
   },
   watch: {
-    config_data_str(val) {
+    config_data_str(_val) {
       this.config_data_has_changed = true;
     },
     config_data: {
@@ -367,58 +429,6 @@ export default {
       if (this.selectedConfigID !== newVal) {
         this.getConfigInfoList(newVal);
       }
-    }
-  },
-  data() {
-    return {
-      codeEditorDialog: false,
-      configManageDialog: false,
-      showConfigForm: false,
-      isEditingConfig: false,
-      isCopyingConfig: false,
-      config_data_has_changed: false,
-      config_data_str: "",
-      config_data: {
-        config: {}
-      },
-      fetched: false,
-      metadata: {},
-      save_message_snack: false,
-      save_message: "",
-      save_message_success: "",
-      configContentKey: 0,
-      lastSavedConfigSnapshot: '',
-      configSave2faDialogVisible: false,
-      configSave2faError: '',
-      configSave2faSaving: false,
-      configSave2faRotationHint: '',
-      configSavePendingPostData: null,
-
-      // 配置类型切换
-      configType: 'normal', // 'normal' 或 'system'
-      configSearchKeyword: '',
-
-      // 系统配置开关
-      isSystemConfig: false,
-
-      // 多配置文件管理
-      selectedConfigID: null, // 用于存储当前选中的配置项信息
-      currentConfigId: null, // 跟踪当前正在编辑的配置id
-      configInfoList: [],
-      configFormData: {
-        name: '',
-      },
-      editingConfigId: null,
-      copySourceConfigId: '',
-
-      // 测试聊天
-      testChatDrawer: false,
-      testConfigId: null,
-
-      // 未保存的更改状态
-      hasUnsavedChanges: false,
-      // 存储原始配置
-      originalConfigData: null,
     }
   },
   mounted() {
@@ -508,7 +518,7 @@ export default {
             this.getConfig(this.selectedConfigID);
           }
         }
-      }).catch((err) => {
+      }).catch((_err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
         this.save_message_success = "error";
@@ -534,7 +544,7 @@ export default {
               this.currentConfigId = abconf_id || this.selectedConfigID;
             }
           });
-      }).catch((err) => {
+      }).catch((_err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
         this.save_message_success = "error";
@@ -596,7 +606,7 @@ export default {
         this.save_message_snack = true;
         this.save_message_success = "error";
         return { success: false };
-      } catch (err) {
+      } catch (_err) {
         this.save_message = this.messages.saveError;
         this.save_message_snack = true;
         this.save_message_success = "error";
@@ -664,7 +674,7 @@ export default {
         this.save_message_success = "success";
         this.save_message = this.messages.configApplied;
         this.save_message_snack = true;
-      } catch (e) {
+      } catch (_error) {
         this.save_message_success = "error";
         this.save_message = this.messages.configApplyError;
         this.save_message_snack = true;
@@ -701,7 +711,7 @@ export default {
         return false;
       }
       return this.configInfoList.some((config) => {
-        if (!config || !config.name) {
+        if (!config?.name) {
           return false;
         }
         if (excludeId && config.id === excludeId) {
@@ -718,15 +728,14 @@ export default {
           this.selectedConfigID = this.selectedConfigInfo.id || 'default';
           this.getConfig(this.selectedConfigID);
         });
-      } else {
+      } else if (this.hasUnsavedChanges) {
         // 检查是否有未保存的更改
-        if (this.hasUnsavedChanges) {
           // 获取之前正在编辑的配置id
           const prevConfigId = this.isSystemConfig ? 'default' : (this.currentConfigId || this.selectedConfigID || 'default');
           const message = this.tm('unsavedChangesWarning.switchConfig');
           const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
             title: this.tm('unsavedChangesWarning.dialogTitle'),
-            message: message,
+            message,
             confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
             cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
             closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
@@ -746,17 +755,16 @@ export default {
               this.selectedConfigID = value;
               this.getConfig(value);
             }
-            return;
+
           } else {
             // 取消保存并切换配置
             this.selectedConfigID = value;
             this.getConfig(value);
           }
-        } else {
-          // 无未保存更改直接切换
-          this.selectedConfigID = value;
-          this.getConfig(value);
-        }
+      } else {
+        // 无未保存更改直接切换
+        this.selectedConfigID = value;
+        this.getConfig(value);
       }
     },
     setConfigFormState({ mode = 'create', config = null, visible = true } = {}) {
@@ -896,7 +904,7 @@ export default {
         const message = this.tm('unsavedChangesWarning.leavePage');
         const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
           title: this.tm('unsavedChangesWarning.dialogTitle'),
-          message: message,
+          message,
           confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
           cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
           closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
@@ -905,7 +913,7 @@ export default {
         if (saveAndSwitch === 'close') {
           // 恢复路由
           const originalHash = this.isSystemConfig ? '#system' : '#normal';
-          this.$router.replace('/config' + originalHash);
+          this.$router.replace(`/config${  originalHash}`);
           this.configType = this.isSystemConfig ? 'system' : 'normal';
           return;
         }
@@ -924,20 +932,18 @@ export default {
       if (this.isSystemConfig) {
         // 切换到系统配置
         this.getConfig();
-      } else {
+      } else if (this.selectedConfigID) {
         // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
-        if (this.selectedConfigID) {
-          this.getConfig(this.selectedConfigID);
-        } else {
-          this.getConfigInfoList("default");
-        }
+        this.getConfig(this.selectedConfigID);
+      } else {
+        this.getConfigInfoList("default");
       }
     },
     onSystemConfigToggle() {
       // 保持向后兼容性，更新 configType
       this.configType = this.isSystemConfig ? 'system' : 'normal';
 
-      this.onConfigTypeToggle();
+      void this.onConfigTypeToggle();
     },
     openTestChat() {
       if (!this.selectedConfigID) {

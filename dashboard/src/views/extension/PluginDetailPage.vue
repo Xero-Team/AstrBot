@@ -468,9 +468,15 @@ const buildCommandComponentRows = (commandComponents) => {
         )
       : [];
 
+    let kind = "handler";
+    if (children.length > 0) {
+      kind = "group";
+    } else if (depth > 0) {
+      kind = "subCommand";
+    }
+
     rows.push({
-      kind:
-        children.length > 0 ? "group" : depth > 0 ? "subCommand" : "handler",
+      kind,
       key,
       component,
       displayCommand: name,
@@ -479,10 +485,10 @@ const buildCommandComponentRows = (commandComponents) => {
     });
 
     if (!children.length || !isCommandGroupExpanded(key)) return;
-    children.forEach((child) => appendRows(child, nextPath, depth + 1));
+    children.forEach((child) => { appendRows(child, nextPath, depth + 1); });
   };
 
-  commandComponents.forEach((component) => appendRows(component));
+  commandComponents.forEach((component) => { appendRows(component); });
   return rows;
 };
 
@@ -688,11 +694,11 @@ const fetchChangelog = async () => {
 };
 
 const showDocsSection = computed(
-  () => !isMarketDetail.value || !!getDocumentUrl("readme_url"),
+  () => !isMarketDetail.value || Boolean(getDocumentUrl("readme_url")),
 );
 
 const showChangelogSection = computed(
-  () => !isMarketDetail.value || !!getDocumentUrl("changelog_url"),
+  () => !isMarketDetail.value || Boolean(getDocumentUrl("changelog_url")),
 );
 
 watch(
@@ -705,16 +711,16 @@ watch(
   async () => {
     logoLoadFailed.value = false;
     await fetchPluginDetail();
-    fetchReadme();
-    fetchChangelog();
-    scrollToHashTarget();
+    void fetchReadme();
+    void fetchChangelog();
+    void scrollToHashTarget();
   },
   { immediate: true },
 );
 
 onMounted(() => {
   updateHeaderStuckState();
-  scrollToHashTarget();
+  void scrollToHashTarget();
   window.addEventListener("scroll", updateHeaderStuckState, { passive: true });
   document.addEventListener("scroll", updateHeaderStuckState, {
     capture: true,

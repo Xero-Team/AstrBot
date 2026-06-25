@@ -61,7 +61,7 @@
 import { ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
 
-const props = defineProps({
+defineProps({
   modelValue: {
     type: Boolean,
     default: false

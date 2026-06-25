@@ -93,11 +93,37 @@ const draft = ref("");
 const sending = ref(false);
 const messagesEl = ref<HTMLElement | null>(null);
 
+type ThreadRecordInput = {
+  sender_id?: string;
+  content?: {
+    type?: string;
+    message?: unknown[];
+    reasoning?: string;
+    agentStats?: unknown;
+    agent_stats?: unknown;
+    refs?: unknown;
+  };
+  [key: string]: unknown;
+};
+
+interface StreamPayload {
+  type?: string;
+  t?: string;
+  ct?: string;
+  chain_type?: string;
+  streaming?: boolean;
+  data?: unknown;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
 watch(
   () => props.thread?.thread_id,
   (threadId) => {
     if (threadId) {
-      loadThread(threadId);
+      void loadThread(threadId);
     } else {
       messages.value = [];
     }
@@ -181,8 +207,8 @@ async function send() {
   }
 }
 
-function normalizeRecord(record: any): ChatRecord {
-  const content = record.content || {};
+function normalizeRecord(record: ThreadRecordInput): ChatRecord {
+  const content = (record.content || {});
   const normalizedMessage = normalizeMessageParts(
     content.message || [],
     content.reasoning || "",
@@ -201,7 +227,7 @@ function normalizeRecord(record: any): ChatRecord {
 
 async function readSseStream(
   stream: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
+  onPayload: (payload: StreamPayload) => void,
 ) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -228,7 +254,7 @@ async function readSseStream(
   }
 }
 
-function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
+function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: StreamPayload) {
   const normalized =
     payload?.ct === "chat"
       ? { ...payload, type: payload.type || payload.t }
@@ -236,25 +262,26 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   const type = normalized?.type || normalized?.t;
   const chainType = normalized?.chain_type;
   const data = normalized?.data ?? "";
+  const dataRecord = asRecord(data);
 
   if (type === "session_id" || type === "session_bound") return;
 
   if (type === "user_message_saved") {
-    userRecord.id = data?.id || userRecord.id;
-    userRecord.created_at = data?.created_at || userRecord.created_at;
+    userRecord.id = String(dataRecord.id || userRecord.id);
+    userRecord.created_at = String(dataRecord.created_at || userRecord.created_at);
     userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+      String(dataRecord.llm_checkpoint_id || userRecord.llm_checkpoint_id || "");
     return;
   }
 
   if (type === "message_saved") {
     markMessageStarted(botRecord);
-    botRecord.id = data?.id || botRecord.id;
-    botRecord.created_at = data?.created_at || botRecord.created_at;
+    botRecord.id = String(dataRecord.id || botRecord.id);
+    botRecord.created_at = String(dataRecord.created_at || botRecord.created_at);
     botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
-    if (data?.refs) {
-      botRecord.content.refs = data.refs;
+      String(dataRecord.llm_checkpoint_id || botRecord.llm_checkpoint_id || "");
+    if (dataRecord.refs) {
+      botRecord.content.refs = dataRecord.refs;
     }
     return;
   }
@@ -303,7 +330,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
     return;
   }
 
-  if (["image", "record", "file", "video"].includes(type)) {
+  if (typeof type === "string" && ["image", "record", "file", "video"].includes(type)) {
     markMessageStarted(botRecord);
     const filename = String(data)
       .replace("[IMAGE]", "")
@@ -316,7 +343,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
 }
 
 function scrollToBottom() {
-  nextTick(() => {
+  void nextTick(() => {
     if (messagesEl.value) {
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
     }

@@ -11,7 +11,7 @@ export const useCustomizerStore = defineStore('customizer', {
     mini_sidebar: config.mini_sidebar,
     fontTheme: 'Noto Sans SC',
     uiTheme: config.uiTheme,
-    themeMode: config.themeMode as ThemeMode,
+    themeMode: config.themeMode,
     inputBg: config.inputBg,
     chatSidebarOpen: false, // chat mode mobile sidebar state
   }),

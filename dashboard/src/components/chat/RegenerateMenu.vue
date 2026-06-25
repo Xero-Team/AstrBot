@@ -155,13 +155,13 @@ async function loadProviderConfigs(force = false) {
 
 function handleMenuToggle(isOpen: boolean) {
   if (isOpen) {
-    loadProviderConfigs();
+    void loadProviderConfigs();
   }
 }
 
 function handleModelMenuToggle(isOpen: boolean) {
   if (isOpen) {
-    loadProviderConfigs();
+    void loadProviderConfigs();
   }
 }
 

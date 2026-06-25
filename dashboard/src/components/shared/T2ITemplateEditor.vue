@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
-    <template v-slot:activator="{ props }">
+    <template #activator="{ props }">
       <div class="t2i-template-editor-trigger">
         <v-btn
           v-bind="props"
@@ -45,9 +45,9 @@
             class="flex-grow-1"
             :loading="loading"
           >
-            <template v-slot:item="{ props, item }">
+            <template #item="{ props, item }">
               <v-list-item v-bind="props" :title="item.raw.name">
-                <template v-slot:append>
+                <template #append>
                   <v-chip
                     v-if="item.raw.name === activeTemplate"
                     color="success"
@@ -63,8 +63,8 @@
                     color="primary"
                     size="small"
                     class="ml-2"
-                    @click.stop="setActiveTemplate(item.raw.name)"
                     :loading="applyLoading"
+                    @click.stop="setActiveTemplate(item.raw.name)"
                   >
                     {{ tm('t2iTemplateEditor.apply') }}
                   </v-btn>
@@ -93,8 +93,8 @@
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="newTemplate"
                   color="success"
+                  @click="newTemplate"
                 >
                   <v-icon left>mdi-plus</v-icon>
                   {{ tm('t2iTemplateEditor.new') }}
@@ -103,18 +103,18 @@
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="resetToDefault"
                   :loading="resetLoading"
                   color="warning"
+                  @click="resetToDefault"
                 >
                   {{ tm('t2iTemplateEditor.resetBase') }}
                 </v-btn>
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="promptDelete"
                   color="error"
                   :disabled="isCreatingNew || selectedTemplate === 'base' || !selectedTemplate"
+                  @click="promptDelete"
                 >
                   {{ tm('t2iTemplateEditor.delete') }}
                 </v-btn>
@@ -122,10 +122,10 @@
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="saveTemplate"
                   :loading="saveLoading"
                   color="primary"
                   :disabled="(isCreatingNew && !editingName) || (!isCreatingNew && !selectedTemplate)"
+                  @click="saveTemplate"
                 >
                   {{ tm('t2iTemplateEditor.save') }}
                 </v-btn>
@@ -150,8 +150,8 @@
               <v-btn
                 variant="text"
                 size="small"
-                @click="refreshPreview"
                 :loading="previewLoading"
+                @click="refreshPreview"
               >
                 {{ tm('t2iTemplateEditor.refreshPreview') }}
               </v-btn>
@@ -185,9 +185,9 @@
             <v-btn
               color="primary"
               variant="tonal"
-              @click="promptApplyAndClose"
               :loading="saveLoading"
               :disabled="isCreatingNew || !selectedTemplate"
+              @click="promptApplyAndClose"
             >
               {{ tm('t2iTemplateEditor.saveAndApply') }}
             </v-btn>
@@ -206,7 +206,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="warning" variant="tonal" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
+          <v-btn color="warning" variant="tonal" :loading="resetLoading" @click="confirmReset">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -221,7 +221,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="error" variant="tonal" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
+          <v-btn color="error" variant="tonal" :loading="saveLoading" @click="confirmDelete">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -236,7 +236,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" variant="tonal" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
+          <v-btn color="primary" variant="tonal" :loading="saveLoading" @click="confirmApplyAndClose">{{ t('core.common.confirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -323,7 +323,8 @@ const injectShikiRuntime = (content) => {
   return `${runtimeScript}\n${content}`
 }
 
-const getShikiRuntimeScript = () => '<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr' + 'ipt>'
+const getShikiRuntimeScript = () =>
+  `<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr${"ipt>"}`
 
 const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
 
@@ -566,8 +567,8 @@ const confirmApplyAndClose = async () => {
 
 const refreshPreview = () => {
   previewLoading.value = true
-  syncPreviewVersion()
-  nextTick(() => {
+  void syncPreviewVersion()
+  void nextTick(() => {
     if (previewFrame.value) {
       previewFrame.value.contentWindow.location.reload()
     }
@@ -583,8 +584,8 @@ const closeDialog = () => {
 
 watch(dialog, (newVal) => {
   if (newVal) {
-    syncPreviewVersion()
-    loadInitialData()
+    void syncPreviewVersion()
+    void loadInitialData()
   } else {
     // 关闭时重置状态
     selectedTemplate.value = null
@@ -596,7 +597,7 @@ watch(dialog, (newVal) => {
 watch(selectedTemplate, (newName) => {
   if (newName) {
     isCreatingNew.value = false
-    loadTemplateContent(newName)
+    void loadTemplateContent(newName)
   }
 })
 

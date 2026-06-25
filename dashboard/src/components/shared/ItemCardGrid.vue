@@ -14,7 +14,7 @@
           <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
             <span class="text-h2 text-truncate" :title="getItemTitle(item)">{{ getItemTitle(item) }}</span>
             <v-tooltip location="top">
-              <template v-slot:activator="{ props }">
+              <template #activator="{ props }">
                 <v-switch 
                   color="primary" 
                   hide-details 
@@ -52,7 +52,7 @@
             <v-spacer></v-spacer>
           </v-card-actions>
 
-          <div class="d-flex justify-end align-center" style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;" v-if="bglogo">
+          <div v-if="bglogo" class="d-flex justify-end align-center" style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;">
             <v-img
               :src="bglogo"
               contain
@@ -73,10 +73,6 @@ import { useI18n } from '@/i18n/composables';
 
 export default {
   name: 'ItemCardGrid',
-  setup() {
-    const { t } = useI18n();
-    return { t };
-  },
   props: {
     items: {
       type: Array,
@@ -104,6 +100,10 @@ export default {
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   computed: {
     displayEmptyText() {
       return this.emptyText || this.t('core.common.itemCard.noData');

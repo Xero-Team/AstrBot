@@ -46,7 +46,7 @@ const getPermissionLabel = (permission: string): string => {
 </script>
 
 <template>
-  <v-dialog :model-value="show" @update:model-value="emit('update:show', $event)" max-width="500">
+  <v-dialog :model-value="show" max-width="500" @update:model-value="emit('update:show', $event)">
     <v-card v-if="command">
       <v-card-title class="text-h5">{{ tm('dialogs.details.title') }}</v-card-title>
       <v-card-text>

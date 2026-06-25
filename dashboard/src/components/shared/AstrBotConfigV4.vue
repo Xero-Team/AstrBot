@@ -42,7 +42,6 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
-const { getRaw } = useModuleI18n('features/config-metadata')
 const { tm: tmConfig } = useModuleI18n('features/config')
 const { translateIfKey, resolveConfigText } = useConfigTextResolver(props)
 
@@ -55,27 +54,6 @@ const renderHint = (value) => {
   const text = translateIfKey(value)
   if (!text) return ''
   return hintMarkdown.renderInline(text)
-}
-
-// 处理labels翻译 - labels可以是数组或国际化键
-const getTranslatedLabels = (itemMeta) => {
-  if (!itemMeta?.labels) return null
-  
-  // 如果labels是字符串（国际化键）
-  if (typeof itemMeta.labels === 'string') {
-    const translatedLabels = getRaw(itemMeta.labels)
-    // 如果翻译成功且是数组，返回翻译结果
-    if (Array.isArray(translatedLabels)) {
-      return translatedLabels
-    }
-  }
-  
-  // 如果labels是数组，直接返回
-  if (Array.isArray(itemMeta.labels)) {
-    return itemMeta.labels
-  }
-  
-  return null
 }
 
 const dialog = ref(false)
@@ -223,47 +201,15 @@ function shouldShowSection() {
   return hasVisibleItems
 }
 
-function hasVisibleItemsAfter(items, currentIndex) {
-  const itemEntries = Object.entries(items)
-
-  // 检查当前索引之后是否还有可见的配置项
-  for (let i = currentIndex + 1; i < itemEntries.length; i++) {
-    const [itemKey, itemMeta] = itemEntries[i]
-    if (shouldShowItem(itemMeta, itemKey)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function parseSpecialValue(value) {
-  if (!value || typeof value !== 'string') {
-    return { name: '', subtype: '' }
-  }
-  const [name, ...rest] = value.split(':')
-  return {
-    name,
-    subtype: rest.join(':') || ''
-  }
-}
-
-function getSpecialName(value) {
-  return parseSpecialValue(value).name
-}
-
-function getSpecialSubtype(value) {
-  return parseSpecialValue(value).subtype
-}
-
 </script>
 
 <template>
 
 
-  <v-card v-if="shouldShowSection()" style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));"
+  <v-card
+v-if="shouldShowSection()" style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));"
     rounded="md" variant="outlined">
-    <v-card-text class="config-section" v-if="metadata[metadataKey]?.type === 'object'" style="padding-bottom: 8px;">
+    <v-card-text v-if="metadata[metadataKey]?.type === 'object'" class="config-section" style="padding-bottom: 8px;">
       <v-list-item-title class="config-title">
         {{ translateIfKey(metadata[metadataKey]?.description) }}
       </v-list-item-title>
@@ -318,16 +264,19 @@ function getSpecialSubtype(value) {
           </v-col>
         </v-row>
 
-        <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+        <v-row
+v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
           class="plugin-set-display-row">
           <v-col cols="12" class="plugin-set-display">
-            <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+            <div
+v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
               class="selected-plugins-full-width">
               <div class="plugins-header">
                 <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
               </div>
               <div class="d-flex flex-wrap ga-2 mt-2">
-                <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                <v-chip
+v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
                   color="primary" variant="outlined">
                   {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
                 </v-chip>
@@ -345,8 +294,9 @@ function getSpecialSubtype(value) {
           </v-col>
         </v-row>
 
-        <v-divider class="config-divider"
-          v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"></v-divider>
+        <v-divider
+v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"
+          class="config-divider"></v-divider>
       </div>
 
       <div v-if="hasCollapsedItems()" class="collapsed-config-section">
@@ -405,16 +355,19 @@ function getSpecialSubtype(value) {
                 </v-col>
               </v-row>
 
-              <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+              <v-row
+v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
                 class="plugin-set-display-row">
                 <v-col cols="12" class="plugin-set-display">
-                  <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                  <div
+v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
                     class="selected-plugins-full-width">
                     <div class="plugins-header">
                       <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
                     </div>
                     <div class="d-flex flex-wrap ga-2 mt-2">
-                      <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                      <v-chip
+v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
                         color="primary" variant="outlined">
                         {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
                       </v-chip>
@@ -432,8 +385,9 @@ function getSpecialSubtype(value) {
                 </v-col>
               </v-row>
 
-              <v-divider class="config-divider"
-                v-if="hasVisibleEntriesAfter(getVisibleItemEntries(true), index)"></v-divider>
+              <v-divider
+v-if="hasVisibleEntriesAfter(getVisibleItemEntries(true), index)"
+                class="config-divider"></v-divider>
             </div>
         </div>
       </div>
@@ -455,8 +409,9 @@ function getSpecialSubtype(value) {
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor :theme="currentEditingTheme" :language="currentEditingLanguage"
-          style="height: calc(100vh - 64px);" v-model:value="currentEditingKeyIterable[currentEditingKey]">
+        <VueMonacoEditor
+v-model:value="currentEditingKeyIterable[currentEditingKey]" :theme="currentEditingTheme"
+          :language="currentEditingLanguage" style="height: calc(100vh - 64px);">
         </VueMonacoEditor>
       </v-card-text>
     </v-card>

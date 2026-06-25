@@ -75,8 +75,8 @@
                 :label="t('settings.embeddingProvider')"
                 variant="outlined"
                 density="comfortable"
-                @update:model-value="handleEmbeddingProviderChange"
                 :disabled="true"
+                @update:model-value="handleEmbeddingProviderChange"
               />
             </v-col>
             <v-col cols="12" md="6">
@@ -97,7 +97,7 @@
             {{ t('settings.tips') }}
           </v-alert>
 
-          <v-alert type="warning" variant="tonal" class="mt-4" v-if="showEmbeddingWarning">
+          <v-alert v-if="showEmbeddingWarning" type="warning" variant="tonal" class="mt-4">
             <strong>注意:</strong> 修改嵌入模型会导致现有的向量数据失效,建议重新上传文档。不同的嵌入模型生成的向量不兼容,可能导致检索结果不准确。
           </v-alert>
         </v-form>
@@ -109,8 +109,8 @@
           color="primary"
           variant="elevated"
           prepend-icon="mdi-content-save"
-          @click="saveSettings"
           :loading="saving"
+          @click="saveSettings"
         >
           {{ t('settings.save') }}
         </v-btn>
@@ -162,10 +162,31 @@ import { ref, watch, onMounted } from 'vue'
 import { knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
+interface KnowledgeBaseSettings {
+  kb_id?: string
+  chunk_size?: number
+  chunk_overlap?: number
+  top_k_dense?: number
+  top_k_sparse?: number
+  embedding_provider_id?: string | null
+  rerank_provider_id?: string | null
+}
+
+interface ProviderItem {
+  id: string
+  provider_type: 'embedding' | 'rerank' | string
+  embedding_model?: string | null
+  rerank_model?: string | null
+}
+
+function asProviderItems(data: unknown): ProviderItem[] {
+  return Array.isArray(data) ? (data) : []
+}
+
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 
 const props = defineProps<{
-  kb: any
+  kb: KnowledgeBaseSettings
 }>()
 
 const emit = defineEmits(['updated'])
@@ -173,8 +194,8 @@ const emit = defineEmits(['updated'])
 // 状态
 const saving = ref(false)
 const formRef = ref()
-const embeddingProviders = ref<any[]>([])
-const rerankProviders = ref<any[]>([])
+const embeddingProviders = ref<ProviderItem[]>([])
+const rerankProviders = ref<ProviderItem[]>([])
 const originalEmbeddingProvider = ref('')
 const showEmbeddingWarning = ref(false)
 const embeddingChangeDialog = ref(false)
@@ -224,11 +245,12 @@ const loadProviders = async () => {
   try {
     const response = await providerApi.listByProviderType('embedding,rerank')
     if (response.data.status === 'ok') {
-      embeddingProviders.value = response.data.data.filter(
-        (p: any) => p.provider_type === 'embedding'
+      const providers = asProviderItems(response.data.data)
+      embeddingProviders.value = providers.filter(
+        (p) => p.provider_type === 'embedding'
       )
-      rerankProviders.value = response.data.data.filter(
-        (p: any) => p.provider_type === 'rerank'
+      rerankProviders.value = providers.filter(
+        (p) => p.provider_type === 'rerank'
       )
     }
   } catch (error) {
@@ -265,6 +287,7 @@ const cancelEmbeddingChange = () => {
 
 // 保存设置
 const saveSettings = async () => {
+  if (!props.kb.kb_id) return
   const { valid } = await formRef.value.validate()
   if (!valid) return
 
@@ -294,7 +317,7 @@ const saveSettings = async () => {
 }
 
 onMounted(() => {
-  loadProviders()
+  void loadProviders()
 })
 </script>
 

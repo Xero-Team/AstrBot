@@ -172,20 +172,20 @@ watch(viewMode, async (mode) => {
           <div v-if="viewMode === 'commands'">
             <CommandFilters
               :plugin-filter="pluginFilter"
-              @update:plugin-filter="pluginFilter = $event"
               :type-filter="typeFilter"
-              @update:type-filter="typeFilter = $event"
               :permission-filter="permissionFilter"
-              @update:permission-filter="permissionFilter = $event"
               :status-filter="statusFilter"
-              @update:status-filter="statusFilter = $event"
               :show-system-plugins="showSystemPlugins"
-              @update:show-system-plugins="showSystemPlugins = $event"
               :search-query="searchQuery"
-              @update:search-query="searchQuery = $event"
               :available-plugins="availablePlugins"
               :has-system-plugin-conflict="hasSystemPluginConflict"
               :effective-show-system-plugins="effectiveShowSystemPlugins"
+              @update:plugin-filter="pluginFilter = $event"
+              @update:type-filter="typeFilter = $event"
+              @update:permission-filter="permissionFilter = $event"
+              @update:status-filter="statusFilter = $event"
+              @update:show-system-plugins="showSystemPlugins = $event"
+              @update:search-query="searchQuery = $event"
             >
               <template #stats>
                 <div class="d-flex align-center">
@@ -210,7 +210,7 @@ watch(viewMode, async (mode) => {
               prominent
               border="start"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon size="28">mdi-alert-circle</v-icon>
               </template>
               <v-alert-title class="text-subtitle-1 font-weight-bold">
@@ -296,25 +296,25 @@ watch(viewMode, async (mode) => {
   <!-- 重命名对话框 -->
   <RenameDialog
     :show="renameDialog.show"
-    @update:show="renameDialog.show = $event"
     :new-name="renameDialog.newName"
-    @update:new-name="renameDialog.newName = $event"
     :aliases="renameDialog.aliases"
-    @update:aliases="renameDialog.aliases = $event"
     :command="renameDialog.command"
     :loading="renameDialog.loading"
+    @update:show="renameDialog.show = $event"
+    @update:new-name="renameDialog.newName = $event"
+    @update:aliases="renameDialog.aliases = $event"
     @confirm="handleConfirmRename"
   />
 
   <!-- 详情对话框 -->
   <DetailsDialog
     :show="detailsDialog.show"
-    @update:show="detailsDialog.show = $event"
     :command="detailsDialog.command"
+    @update:show="detailsDialog.show = $event"
   />
 
   <!-- Snackbar -->
-  <v-snackbar :timeout="2000" elevation="24" :color="snackbar.color" v-model="snackbar.show">
+  <v-snackbar v-model="snackbar.show" :timeout="2000" elevation="24" :color="snackbar.color">
     {{ snackbar.message }}
   </v-snackbar>
 </template>

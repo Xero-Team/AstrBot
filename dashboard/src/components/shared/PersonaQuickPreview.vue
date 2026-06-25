@@ -42,7 +42,7 @@
             {{ tool.name }}
           </v-chip>
           <v-tooltip v-if="tool.active === false" location="top">
-            <template v-slot:activator="{ props: tooltipProps }">
+            <template #activator="{ props: tooltipProps }">
               <small class="text-warning tool-inactive" v-bind="tooltipProps">
                 {{ tm('personaQuickPreview.toolInactive') }}
               </small>
@@ -207,20 +207,20 @@ async function loadPersonaPreview(personaId) {
 
 function handlePersonaSaved() {
   if (props.modelValue) {
-    loadPersonaPreview(props.modelValue)
+    void loadPersonaPreview(props.modelValue)
   }
 }
 
 watch(
   () => props.modelValue,
   (newValue) => {
-    loadPersonaPreview(newValue)
+    void loadPersonaPreview(newValue)
   },
   { immediate: true }
 )
 
-loadToolsMeta()
-loadSkillsMeta()
+void loadToolsMeta()
+void loadSkillsMeta()
 
 onMounted(() => {
   window.addEventListener('astrbot:persona-saved', handlePersonaSaved)

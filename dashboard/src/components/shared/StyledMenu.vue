@@ -1,6 +1,6 @@
 <template>
   <v-menu v-bind="$attrs" :close-on-content-click="closeOnContentClick">
-    <template v-slot:activator="{ props: activatorProps }">
+    <template #activator="{ props: activatorProps }">
       <slot name="activator" :props="activatorProps"></slot>
     </template>
     

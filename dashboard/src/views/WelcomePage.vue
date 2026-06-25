@@ -20,7 +20,8 @@
             </div>
 
             <v-timeline align="start" side="end" density="compact" class="welcome-timeline" truncate-line="both">
-              <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
+              <v-timeline-item
+:dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
                 icon="mdi-numeric-1" fill-dot size="small">
                 <div class="pl-2">
                   <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step1Title') }}</div>
@@ -29,7 +30,8 @@
                     <v-btn color="primary" variant="flat" rounded="pill" class="px-6" @click="openProviderDialog">
                       {{ tm('onboard.configure') }}
                     </v-btn>
-                    <div v-if="providerStepState === 'completed'"
+                    <div
+v-if="providerStepState === 'completed'"
                       class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
                       {{ tm('onboard.completed') }}
                     </div>
@@ -37,17 +39,20 @@
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item :dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
+              <v-timeline-item
+:dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
                 icon="mdi-numeric-2" fill-dot size="small">
                 <div class="pl-2">
                   <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step2Title') }}</div>
                   <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step2Desc') }}</p>
                   <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" :loading="loadingPlatformDialog"
+                    <v-btn
+color="primary" variant="flat" rounded="pill" class="px-6" :loading="loadingPlatformDialog"
                       @click="openPlatformDialog">
                       {{ tm('onboard.configure') }}
                     </v-btn>
-                    <div v-if="platformStepState === 'completed'"
+                    <div
+v-if="platformStepState === 'completed'"
                       class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
                       {{ tm('onboard.completed') }}
                     </div>
@@ -55,7 +60,8 @@
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item :dot-color="computerAccessStepState === 'completed' ? 'success' : 'primary'"
+              <v-timeline-item
+:dot-color="computerAccessStepState === 'completed' ? 'success' : 'primary'"
                 icon="mdi-numeric-3" fill-dot size="small">
                 <div class="pl-2">
                   <div class="d-flex align-center mb-1">
@@ -104,7 +110,8 @@
             <v-row>
               <v-col cols="12" sm="4">
                 <!-- GitHub Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
+                <v-card
+variant="outlined" class="h-100 pa-4 d-flex flex-column"
                   href="https://github.com/AstrBotDevs/AstrBot/" target="_blank">
                   <div class="d-flex align-center mb-3">
                     <v-icon size="32" class="mr-3">mdi-github</v-icon>
@@ -118,7 +125,8 @@
 
               <v-col cols="12" sm="4">
                 <!-- Docs Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column" href="https://docs.astrbot.app"
+                <v-card
+variant="outlined" class="h-100 pa-4 d-flex flex-column" href="https://docs.astrbot.app"
                   target="_blank">
                   <div class="d-flex align-center mb-3">
                     <v-icon size="32" class="mr-3">mdi-book-open-variant</v-icon>
@@ -132,7 +140,8 @@
 
               <v-col cols="12" sm="4">
                 <!-- Afdian Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
+                <v-card
+variant="outlined" class="h-100 pa-4 d-flex flex-column"
                   href="https://afdian.com/a/astrbot_team" target="_blank">
                   <div class="d-flex align-center mb-3">
                     <v-icon size="32" class="mr-3">mdi-hand-heart</v-icon>
@@ -165,7 +174,8 @@
       </v-row>
     </v-container>
 
-    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="platformMetadata" :config_data="platformConfigData"
+    <AddNewPlatform
+v-model:show="showAddPlatformDialog" :metadata="platformMetadata" :config-data="platformConfigData"
       @refresh-config="loadPlatformConfigBase" />
     <ProviderConfigDialog v-model="showProviderDialog" />
     <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
@@ -205,6 +215,55 @@ import 'markstream-vue/index.css';
 type StepState = 'pending' | 'completed' | 'skipped';
 type ComputerAccessRuntime = 'local' | 'none';
 
+interface ProviderSettings {
+  default_provider_id?: string;
+  computer_use_runtime?: unknown;
+  [key: string]: unknown;
+}
+
+interface DefaultConfigPayload {
+  provider_settings?: ProviderSettings;
+  [key: string]: unknown;
+}
+
+interface PlatformConfigPayload {
+  platform?: unknown[];
+  [key: string]: unknown;
+}
+
+interface RuntimeConfigPayload {
+  metadata?: Record<string, unknown>;
+  config?: PlatformConfigPayload;
+}
+
+interface ProviderSourceEntry {
+  id?: string;
+  provider_type?: string;
+  [key: string]: unknown;
+}
+
+interface ProviderEntry {
+  id?: string;
+  enable?: boolean;
+  provider_type?: string;
+  provider_source_id?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+interface ProviderTemplatePayload {
+  providers?: ProviderEntry[];
+  provider_sources?: ProviderSourceEntry[];
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback;
+  }
+  const errorLike = error as { response?: { data?: { message?: string } }; message?: string };
+  return errorLike.response?.data?.message || errorLike.message || fallback;
+}
+
 const { tm } = useModuleI18n('features/welcome');
 const { locale } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
@@ -214,8 +273,8 @@ const showProviderDialog = ref(false);
 const showComputerAccessHelpDialog = ref(false);
 const loadingPlatformDialog = ref(false);
 
-const platformMetadata = ref<Record<string, any>>({});
-const platformConfigData = ref<Record<string, any>>({});
+const platformMetadata = ref<Record<string, unknown>>({});
+const platformConfigData = ref<PlatformConfigPayload>({});
 const platformCountBeforeOpen = ref(0);
 const providerCountBeforeOpen = ref(0);
 
@@ -330,23 +389,28 @@ const greetingText = computed(() => {
 
 async function loadPlatformConfigBase() {
   const res = await systemConfigApi.runtime();
-  const payload = (res.data.data || {}) as any;
+  const payload = (res.data.data || {}) as RuntimeConfigPayload;
   platformMetadata.value = payload.metadata || {};
   platformConfigData.value = payload.config || {};
 }
 
-async function fetchDefaultConfig() {
+async function fetchDefaultConfig(): Promise<DefaultConfigPayload> {
   const res = await configProfileApi.get('default');
-  return (res.data?.data as any)?.config || {};
+  const payload = res.data?.data as { config?: DefaultConfigPayload } | undefined;
+  return payload?.config || {};
 }
 
-function getChatProvidersFromTemplatePayload(payload: any) {
+function getChatProvidersFromTemplatePayload(payload: ProviderTemplatePayload) {
   const providers = payload?.providers || [];
   const sources = payload?.provider_sources || [];
-  const sourceMap = new Map();
-  sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
+  const sourceMap = new Map<string, string>();
+  sources.forEach((source) => {
+    if (typeof source.id === 'string' && typeof source.provider_type === 'string') {
+      sourceMap.set(source.id, source.provider_type);
+    }
+  });
 
-  return providers.filter((provider: any) => {
+  return providers.filter((provider) => {
     if (provider.provider_type) {
       return provider.provider_type === 'chat_completion';
     }
@@ -366,7 +430,7 @@ async function fetchChatProviders() {
   return getChatProvidersFromTemplatePayload(response.data.data);
 }
 
-function pickDefaultProviderId(providers: any[]) {
+function pickDefaultProviderId(providers: ProviderEntry[]) {
   if (!providers.length) return '';
   const enabledProvider = providers.find((provider) => provider.enable !== false);
   return (enabledProvider || providers[0]).id || '';
@@ -400,7 +464,7 @@ function normalizeComputerAccessRuntime(runtime: unknown): ComputerAccessRuntime
   return runtime === 'local' || runtime === 'sandbox' ? 'local' : 'none';
 }
 
-function syncComputerAccessRuntime(configData: any) {
+function syncComputerAccessRuntime(configData: DefaultConfigPayload) {
   const providerSettings = configData?.provider_settings || {};
   const currentRuntime = providerSettings?.computer_use_runtime;
   const normalizedRuntime = normalizeComputerAccessRuntime(currentRuntime);
@@ -442,8 +506,8 @@ async function saveComputerAccessRuntime() {
           : 'onboard.computerAccessDenied'
       )
     );
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.computerAccessUpdateFailed'));
+  } catch (err: unknown) {
+    showError(getErrorMessage(err, tm('onboard.computerAccessUpdateFailed')));
   } finally {
     savingComputerAccess.value = false;
   }
@@ -494,8 +558,8 @@ async function openPlatformDialog() {
     await loadPlatformConfigBase();
     platformCountBeforeOpen.value = (platformConfigData.value.platform || []).length;
     showAddPlatformDialog.value = true;
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.platformLoadFailed'));
+  } catch (err: unknown) {
+    showError(getErrorMessage(err, tm('onboard.platformLoadFailed')));
   } finally {
     loadingPlatformDialog.value = false;
   }
@@ -506,8 +570,8 @@ async function openProviderDialog() {
     const providers = await fetchChatProviders();
     providerCountBeforeOpen.value = providers.length;
     showProviderDialog.value = true;
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.providerLoadFailed'));
+  } catch (err: unknown) {
+    showError(getErrorMessage(err, tm('onboard.providerLoadFailed')));
   }
 }
 
@@ -519,8 +583,8 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
     if (newCount > platformCountBeforeOpen.value) {
       platformStepState.value = 'completed';
     }
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.platformLoadFailed'));
+  } catch (err: unknown) {
+    showError(getErrorMessage(err, tm('onboard.platformLoadFailed')));
   }
 });
 
@@ -532,8 +596,8 @@ watch(showProviderDialog, async (visible, wasVisible) => {
       providerStepState.value = 'completed';
       await syncDefaultConfigProviderIfNeeded();
     }
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.providerUpdateFailed'));
+  } catch (err: unknown) {
+    showError(getErrorMessage(err, tm('onboard.providerUpdateFailed')));
   }
 });
 

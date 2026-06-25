@@ -1,15 +1,17 @@
 <template>
     <div class="base-folder-tree">
         <!-- 搜索框 -->
-        <v-text-field v-model="searchQuery" :placeholder="labels.searchPlaceholder" prepend-inner-icon="mdi-magnify"
+        <v-text-field
+v-model="searchQuery" :placeholder="labels.searchPlaceholder" prepend-inner-icon="mdi-magnify"
             variant="outlined" density="compact" hide-details clearable class="mb-3" />
 
         <!-- 根目录节点 -->
         <v-list density="compact" nav class="tree-list" bg-color="transparent">
-            <v-list-item :active="currentFolderId === null" @click="handleFolderClick(null)" rounded="lg"
-                :class="['root-item', { 'drag-over': isRootDragOver }]"
+            <v-list-item
+:active="currentFolderId === null" rounded="lg" :class="['root-item', { 'drag-over': isRootDragOver }]"
+                @click="handleFolderClick(null)"
                 @dragover.prevent="handleRootDragOver" @dragleave="handleRootDragLeave" @drop.prevent="handleRootDrop">
-                <template v-slot:prepend>
+                <template #prepend>
                     <v-icon>mdi-home</v-icon>
                 </template>
                 <v-list-item-title>{{ labels.rootFolder }}</v-list-item-title>
@@ -17,7 +19,8 @@
 
             <!-- 文件夹树 -->
             <template v-if="!treeLoading">
-                <BaseFolderTreeNode v-for="folder in filteredFolderTree" :key="folder.folder_id" :folder="folder"
+                <BaseFolderTreeNode
+v-for="folder in filteredFolderTree" :key="folder.folder_id" :folder="folder"
                     :depth="0" :current-folder-id="currentFolderId" :search-query="searchQuery"
                     :expanded-folder-ids="expandedFolderIds" :accept-drop-types="acceptDropTypes"
                     @folder-click="handleFolderClick" @folder-context-menu="handleContextMenu"
@@ -39,29 +42,29 @@
         </v-list>
 
         <!-- 右键菜单 -->
-        <v-menu v-model="contextMenu.show" :target="contextMenu.target as any" location="end" :close-on-content-click="true">
+        <v-menu v-model="contextMenu.show" :target="contextMenuTarget" location="end" :close-on-content-click="true">
             <v-list density="compact">
                 <v-list-item @click="openFolder">
-                    <template v-slot:prepend>
+                    <template #prepend>
                         <v-icon size="small">mdi-folder-open</v-icon>
                     </template>
                     <v-list-item-title>{{ mergedLabels.contextMenu.open }}</v-list-item-title>
                 </v-list-item>
                 <v-list-item @click="$emit('rename-folder', contextMenu.folder)">
-                    <template v-slot:prepend>
+                    <template #prepend>
                         <v-icon size="small">mdi-pencil</v-icon>
                     </template>
                     <v-list-item-title>{{ mergedLabels.contextMenu.rename }}</v-list-item-title>
                 </v-list-item>
                 <v-list-item @click="$emit('move-folder', contextMenu.folder)">
-                    <template v-slot:prepend>
+                    <template #prepend>
                         <v-icon size="small">mdi-folder-move</v-icon>
                     </template>
                     <v-list-item-title>{{ mergedLabels.contextMenu.moveTo }}</v-list-item-title>
                 </v-list-item>
                 <v-divider class="my-1" />
-                <v-list-item @click="$emit('delete-folder', contextMenu.folder)" class="text-error">
-                    <template v-slot:prepend>
+                <v-list-item class="text-error" @click="$emit('delete-folder', contextMenu.folder)">
+                    <template #prepend>
                         <v-icon size="small" color="error">mdi-delete</v-icon>
                     </template>
                     <v-list-item-title>{{ mergedLabels.contextMenu.delete }}</v-list-item-title>
@@ -73,24 +76,8 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue';
-import type { FolderTreeNode, ContextMenuEvent } from './types';
+import type { Folder, FolderTreeNode, ContextMenuEvent } from './types';
 import BaseFolderTreeNode from './BaseFolderTreeNode.vue';
-
-interface ContextMenuState {
-    show: boolean;
-    target: [number, number] | null;
-    folder: FolderTreeNode | null;
-}
-
-interface Folder {
-    folder_id: string;
-    name: string;
-    parent_id: string | null;
-    description?: string | null;
-    sort_order?: number;
-    created_at?: string;
-    updated_at?: string;
-}
 
 interface DefaultLabels {
     searchPlaceholder: string;
@@ -162,9 +149,9 @@ export default defineComponent({
             isRootDragOver: false,
             contextMenu: {
                 show: false,
-                target: null,
-                folder: null
-            } as ContextMenuState
+                target: null as [number, number] | null,
+                folder: null as Folder | null
+            }
         };
     },
     computed: {
@@ -177,6 +164,9 @@ export default defineComponent({
                     ...(this.labels?.contextMenu || {})
                 }
             };
+        },
+        contextMenuTarget(): [number, number] | undefined {
+            return this.contextMenu.target ?? undefined;
         },
         filteredFolderTree(): FolderTreeNode[] {
             if (!this.searchQuery) {
@@ -234,7 +224,7 @@ export default defineComponent({
         handleContextMenu(eventData: ContextMenuEvent) {
             const { event, folder } = eventData;
             this.contextMenu.target = [event.clientX, event.clientY];
-            this.contextMenu.folder = folder as FolderTreeNode;
+            this.contextMenu.folder = folder;
             this.contextMenu.show = true;
         },
 

@@ -30,9 +30,11 @@
                         v-for="tabType in ['chat_completion', 'agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank']"
                         :key="tabType" :value="tabType">
                         <v-row class="mt-1">
-                            <v-col v-for="(template, name) in getTemplatesByType(tabType)" :key="name" cols="12" sm="6"
+                            <v-col
+v-for="(template, name) in getTemplatesByType(tabType)" :key="name" cols="12" sm="6"
                                 md="4">
-                                <v-card variant="outlined" hover class="provider-card"
+                                <v-card
+variant="outlined" hover class="provider-card"
                                     @click="selectProviderTemplate(name)">
                                     <div class="provider-card-content">
                                         <div class="provider-card-text">
@@ -43,8 +45,9 @@
                                             </v-card-text>
                                         </div>
                                         <div class="provider-card-logo">
-                                            <img :src="getProviderIcon(template.provider)"
-                                                v-if="getProviderIcon(template.provider)" class="provider-logo-img">
+                                            <img
+v-if="getProviderIcon(template.provider)"
+                                                :src="getProviderIcon(template.provider)" class="provider-logo-img">
                                             <div v-else class="provider-logo-fallback">
                                                 {{ name[0].toUpperCase() }}
                                             </div>

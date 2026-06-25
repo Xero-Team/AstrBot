@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthSetup from '../authForms/AuthSetup.vue';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
@@ -37,16 +37,16 @@ onMounted(async () => {
 
   try {
     const setupStatus = await authApi.setupStatus();
-    const setupRequired = !!setupStatus.data?.data?.setup_required;
-    const canSkipDefaultPassword = !!setupStatus.data?.data?.skip_default_password_auth;
+    const setupRequired = Boolean(setupStatus.data?.data?.setup_required);
+    const canSkipDefaultPassword = Boolean(setupStatus.data?.data?.skip_default_password_auth);
     if (
       !setupRequired ||
       (!hasToken && !canSkipDefaultPassword)
     ) {
-      router.push('/auth/login');
+      void router.push('/auth/login');
     }
   } catch {
-    router.push('/auth/login');
+    void router.push('/auth/login');
   }
 });
 </script>
@@ -61,7 +61,8 @@ onMounted(async () => {
           </div>
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
-            <v-divider vertical class="mx-1"
+            <v-divider
+vertical class="mx-1"
               style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
 
             <!-- 主题切换下拉菜单 -->
@@ -70,7 +71,7 @@ onMounted(async () => {
               location="bottom center"
               offset="6"
             >
-              <template v-slot:activator="{ props: themeMenuProps }">
+              <template #activator="{ props: themeMenuProps }">
                 <v-btn
                   v-bind="themeMenuProps"
                   class="theme-toggle-btn"
@@ -97,14 +98,14 @@ onMounted(async () => {
                   <v-list-item
                     v-for="option in themeOptions"
                     :key="option.mode"
-                    @click="setThemeMode(option.mode)"
                     :class="{
                       'styled-menu-item-active': customizer.themeMode === option.mode,
                     }"
                     class="styled-menu-item"
                     rounded="md"
+                    @click="setThemeMode(option.mode)"
                   >
-                    <template v-slot:prepend>
+                    <template #prepend>
                       <v-icon size="16" style="margin-right: 8px; opacity: 0.85;">{{ option.icon }}</v-icon>
                     </template>
                     <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>

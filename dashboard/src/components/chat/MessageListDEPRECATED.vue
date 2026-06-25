@@ -1,33 +1,37 @@
 <template>
-    <div class="messages-container" ref="messageContainer" :class="{ 'is-dark': isDark }">
+    <div ref="messageContainer" class="messages-container" :class="{ 'is-dark': isDark }">
         <!-- 加载指示器 -->
         <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
             <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
         </div>
         <!-- 聊天消息列表 -->
         <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }" @mouseup="handleTextSelection">
-            <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
+            <div v-for="(msg, index) in messages" :key="index" class="message-item fade-in">
                 <!-- 用户消息 -->
                 <div v-if="msg.content.type == 'user'" class="user-message">
-                    <div class="message-bubble user-bubble" :class="{ 'has-audio': hasAudio(msg.content.message) }"
+                    <div
+class="message-bubble user-bubble" :class="{ 'has-audio': hasAudio(msg.content.message) }"
                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
                         <!-- 遍历 message parts -->
                         <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
                             <!-- 引用消息 -->
-                            <div v-if="part.type === 'reply'" class="reply-quote"
+                            <div
+v-if="part.type === 'reply'" class="reply-quote"
                                 @click="scrollToMessage(part.message_id)">
                                 <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
                                 <span class="reply-quote-text">{{ getReplyContent(part.message_id) }}</span>
                             </div>
 
                             <!-- 纯文本 -->
-                            <pre v-else-if="part.type === 'plain' && part.text"
+                            <pre
+v-else-if="part.type === 'plain' && part.text"
                                 style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ part.text }}</pre>
 
                             <!-- 图片附件 -->
                             <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
                                 <div class="image-attachment">
-                                    <img :src="part.embedded_url" class="attached-image"
+                                    <img
+:src="part.embedded_url" class="attached-image"
                                         @click="openImagePreview(part.embedded_url)" />
                                 </div>
                             </div>
@@ -43,27 +47,32 @@
                             <!-- 文件附件 -->
                             <div v-else-if="part.type === 'file' && part.embedded_file" class="file-attachments">
                                 <div class="file-attachment">
-                                    <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
+                                    <a
+v-if="part.embedded_file.url" :href="part.embedded_file.url"
                                         :download="part.embedded_file.filename" class="file-link"
                                         :class="{ 'is-dark': isDark }" :style="isDark ? {
                                             backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                             borderColor: 'rgba(255, 255, 255, 0.1)',
                                             color: 'var(--v-theme-secondary)'
                                         } : {}">
-                                        <v-icon size="small" class="file-icon"
+                                        <v-icon
+size="small" class="file-icon"
                                             :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
                                         <span class="file-name">{{ part.embedded_file.filename }}</span>
                                     </a>
-                                    <a v-else @click="downloadFile(part.embedded_file)"
-                                        class="file-link file-link-download" :class="{ 'is-dark': isDark }" :style="isDark ? {
+                                    <a
+v-else class="file-link file-link-download"
+                                        :class="{ 'is-dark': isDark }" :style="isDark ? {
                                             backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                             borderColor: 'rgba(255, 255, 255, 0.1)',
                                             color: 'var(--v-theme-secondary)'
-                                        } : {}">
-                                        <v-icon size="small" class="file-icon"
+                                        } : {}" @click="downloadFile(part.embedded_file)">
+                                        <v-icon
+size="small" class="file-icon"
                                             :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
                                         <span class="file-name">{{ part.embedded_file.filename }}</span>
-                                        <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
+                                        <v-icon
+v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
                                             size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
                                         <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
                                     </a>
@@ -76,9 +85,11 @@
                 <!-- Bot Messages -->
                 <div v-else class="bot-message">
                     <v-avatar class="bot-avatar" size="36">
-                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1"
+                        <v-progress-circular
+v-if="isStreaming && index === messages.length - 1" :index="index"
                             indeterminate size="28" width="2"></v-progress-circular>
-                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64"
+                        <v-icon
+v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64"
                             color="#8fb6d2">mdi-star-four-points-small</v-icon>
                     </v-avatar>
                     <div class="bot-message-content">
@@ -90,24 +101,28 @@
 
                             <template v-else>
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
-                                <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
+                                <ReasoningBlock
+v-if="msg.content.reasoning && msg.content.reasoning.trim()"
                                     :reasoning="msg.content.reasoning" :is-dark="isDark"
                                     class="mt-2"
                                     :initial-expanded="isReasoningExpanded(index)" />
 
-                                <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark"
+                                <MessagePartsRenderer
+:parts="msg.content.message" :is-dark="isDark"
                                     :current-time="currentTime" :downloading-files="downloadingFiles"
                                     @open-image-preview="openImagePreview" @download-file="downloadFile" />
                             </template>
                         </div>
-                        <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
-                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
+                        <div v-if="!msg.content.isLoading || index === messages.length - 1" class="message-actions">
+                            <span v-if="msg.created_at" class="message-time">{{ formatMessageTime(msg.created_at)
                                 }}</span>
                             <!-- Agent Stats Menu -->
-                            <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover
+                            <v-menu
+v-if="msg.content.agentStats" location="bottom" open-on-hover
                                 :close-on-content-click="false">
-                                <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" size="x-small"
+                                <template #activator="{ props }">
+                                    <v-icon
+v-bind="props" size="x-small"
                                         class="stats-info-icon">mdi-information-outline</v-icon>
                                 </template>
                                 <v-card class="stats-menu-card" variant="elevated" elevation="3">
@@ -122,14 +137,16 @@
                                             <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output
                                                 || 0 }}</span>
                                         </div>
-                                        <div class="stats-menu-row"
-                                            v-if="msg.content.agentStats.token_usage.input_cached > 0">
+                                        <div
+v-if="msg.content.agentStats.token_usage.input_cached > 0"
+                                            class="stats-menu-row">
                                             <span class="stats-menu-label">{{ tm('stats.cachedTokens') }}</span>
                                             <span class="stats-menu-value">{{
                                                 msg.content.agentStats.token_usage.input_cached }}</span>
                                         </div>
-                                        <div class="stats-menu-row"
-                                            v-if="msg.content.agentStats.time_to_first_token > 0">
+                                        <div
+v-if="msg.content.agentStats.time_to_first_token > 0"
+                                            class="stats-menu-row">
                                             <span class="stats-menu-label">{{ tm('stats.ttft') }}</span>
                                             <span class="stats-menu-value">{{
                                                 formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
@@ -142,11 +159,13 @@
                                     </v-card-text>
                                 </v-card>
                             </v-menu>
-                            <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
+                            <v-btn
+:icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index), 'copy-failed': isCopyFailure(index) }"
-                                @click="copyBotMessage(msg.content.message, index)" :title="getCopyTitle(index)" />
-                            <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
-                                @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
+                                :title="getCopyTitle(index)" @click="copyBotMessage(msg.content.message, index)" />
+                            <v-btn
+icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
+                                :title="tm('actions.reply')" @click="$emit('replyMessage', msg, index)" />
                             
                             <!-- Refs Visualization -->
                             <ActionRef :refs="msg.content.refs" @open-refs="openRefsSidebar" />
@@ -157,13 +176,15 @@
         </div>
 
         <!-- 浮动引用按钮 -->
-        <div v-if="selectedText.content && selectedText.messageIndex !== null" class="selection-quote-button" :style="{
+        <div
+v-if="selectedText.content && selectedText.messageIndex !== null" class="selection-quote-button" :style="{
             top: selectedText.position.top + 'px',
             left: selectedText.position.left + 'px',
             position: 'fixed'
         }">
-            <v-btn size="large" rounded="xl" @click="handleQuoteSelected" class="quote-btn"
-                :class="{ 'dark-mode': isDark }">
+            <v-btn
+size="large" rounded="xl" class="quote-btn" :class="{ 'dark-mode': isDark }"
+                @click="handleQuoteSelected">
                 <v-icon left small>mdi-reply</v-icon>
                 引用
             </v-btn>
@@ -205,8 +226,13 @@ export default {
     components: {
         ReasoningBlock,
         MessagePartsRenderer,
-        RefNode,
         ActionRef
+    },
+    provide() {
+        return {
+            isDark: this.isDark,
+            webSearchResults: () => this.webSearchResults
+        };
     },
     props: {
         messages: {
@@ -236,12 +262,6 @@ export default {
             t,
             tm,
             toast
-        };
-    },
-    provide() {
-        return {
-            isDark: this.isDark,
-            webSearchResults: () => this.webSearchResults
         };
     },
     data() {
@@ -402,7 +422,7 @@ export default {
             if (this.selectedText.messageIndex === null) return;
 
             const msg = this.messages[this.selectedText.messageIndex];
-            if (!msg || !msg.id) return;
+            if (!msg?.id) return;
 
             // 触发replyWithText事件，传递选中的文本内容
             this.$emit('replyWithText', {
@@ -438,7 +458,7 @@ export default {
             }
             // 截断过长内容
             if (content.length > 50) {
-                content = content.substring(0, 50) + '...';
+                content = `${content.substring(0, 50)  }...`;
             }
             return content || '[媒体内容]';
         },
@@ -450,7 +470,7 @@ export default {
 
             const container = this.$refs.messageContainer;
             const messageItems = container?.querySelectorAll('.message-item');
-            if (messageItems && messageItems[msgIndex]) {
+            if (messageItems?.[msgIndex]) {
                 messageItems[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
                 // 高亮一下
                 messageItems[msgIndex].classList.add('highlight-message');
@@ -496,7 +516,7 @@ export default {
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(url), 100);
+                setTimeout(() => { URL.revokeObjectURL(url); }, 100);
             } catch (err) {
                 console.error('Download file failed:', err);
             } finally {
@@ -548,7 +568,7 @@ export default {
 
         async copyWithFeedback(text, messageIndex = null) {
             const result = await this.copyTextToClipboard(text);
-            const ok = !!result?.ok;
+            const ok = Boolean(result?.ok);
 
             if (messageIndex !== null && messageIndex !== undefined) {
                 if (ok) this.showCopySuccess(messageIndex);
@@ -596,7 +616,7 @@ export default {
         async copyCodeToClipboard(code) {
             const text = String(code ?? '');
             if (!text) return { ok: false, method: 'empty' };
-            return await this.copyWithFeedback(text, null);
+            return this.copyWithFeedback(text, null);
         },
 
         // 复制bot消息到剪贴板
@@ -680,26 +700,28 @@ export default {
         initCodeCopyButtons() {
             this.$nextTick(() => {
                 const codeBlocks = this.$refs.messageContainer?.querySelectorAll('pre code') || [];
-                codeBlocks.forEach((codeBlock, index) => {
+                codeBlocks.forEach((codeBlock, _index) => {
                     const pre = codeBlock.parentElement;
                     if (pre && !pre.querySelector('.copy-code-btn')) {
                         const button = document.createElement('button');
                         button.className = 'copy-code-btn';
                         button.innerHTML = this.getCopyIconSvg();
                         button.title = this.t('core.common.copy');
-                        button.addEventListener('click', async () => {
-                            const res = await this.copyCodeToClipboard(codeBlock.textContent || '');
-                            const ok = !!res?.ok;
-                            button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
-                            button.style.color = ok
-                                ? 'rgb(var(--v-theme-success))'
-                                : 'rgb(var(--v-theme-error))';
-                            button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
-                            setTimeout(() => {
-                                button.innerHTML = this.getCopyIconSvg();
-                                button.style.color = '';
-                                button.setAttribute("title", this.t('core.common.copy'));
-                            }, 2000);
+                        button.addEventListener('click', () => {
+                            void (async () => {
+                                const res = await this.copyCodeToClipboard(codeBlock.textContent || '');
+                                const ok = Boolean(res?.ok);
+                                button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
+                                button.style.color = ok
+                                    ? 'rgb(var(--v-theme-success))'
+                                    : 'rgb(var(--v-theme-error))';
+                                button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
+                                setTimeout(() => {
+                                    button.innerHTML = this.getCopyIconSvg();
+                                    button.style.color = '';
+                                    button.setAttribute("title", this.t('core.common.copy'));
+                                }, 2000);
+                            })();
                         });
                         pre.style.position = 'relative';
                         pre.appendChild(button);
@@ -716,7 +738,7 @@ export default {
                     if (!img.hasAttribute('data-click-enabled')) {
                         img.style.cursor = 'pointer';
                         img.setAttribute('data-click-enabled', 'true');
-                        img.onclick = () => this.openImagePreview(img.src);
+                        img.onclick = () => { this.openImagePreview(img.src); };
                     }
                 });
             });
@@ -803,18 +825,17 @@ export default {
                 return `${this.tm('time.today')} ${timeStr}`;
             } else if (dateDay.getTime() === yesterdayDay.getTime()) {
                 return `${this.tm('time.yesterday')} ${timeStr}`;
-            } else {
+            } 
                 // 更早的日期显示完整格式
                 const month = (date.getMonth() + 1).toString().padStart(2, '0');
                 const day = date.getDate().toString().padStart(2, '0');
                 return `${month}-${day} ${timeStr}`;
-            }
+            
         },
 
         // Start timer for updating elapsed time
         startElapsedTimeTimer() {
             // Update every 12ms for sub-second precision, then every second after 1s
-            let fastUpdateCount = 0;
             const fastUpdateInterval = 12;
             const slowUpdateInterval = 1000;
 
@@ -839,7 +860,6 @@ export default {
                     );
 
                     if (hasSubSecondToolCall) {
-                        fastUpdateCount++;
                         this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
                     } else {
                         this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
@@ -865,11 +885,11 @@ export default {
                 return `${Math.round(seconds * 1000)}ms`;
             } else if (seconds < 60) {
                 return `${seconds.toFixed(1)}s`;
-            } else {
+            } 
                 const minutes = Math.floor(seconds / 60);
                 const secs = Math.round(seconds % 60);
                 return `${minutes}m ${secs}s`;
-            }
+            
         },
 
         // Get input tokens (input_other + input_cached)

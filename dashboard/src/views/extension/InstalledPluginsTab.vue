@@ -15,132 +15,26 @@ const props = defineProps({
 });
 
 const {
-  commonStore,
-  t,
   tm,
   router,
-  route,
-  getSelectedGitHubProxy,
-  conflictDialog,
-  checkAndPromptConflicts,
-  handleConflictConfirm,
-  fileInput,
   activeTab,
-  validTabs,
-  isValidTab,
-  getLocationHash,
-  extractTabFromHash,
-  syncTabFromHash,
-  snack_message,
-  snack_show,
-  snack_success,
-  configDialog,
-  extension_config,
-  pluginMarketData,
-  loadingDialog,
-  curr_namespace,
   updatingAll,
-  readmeDialog,
-  forceUpdateDialog,
-  updateAllConfirmDialog,
-  changelogDialog,
   pluginSearch,
-  currentPage,
-  dangerConfirmDialog,
-  selectedDangerPlugin,
-  selectedMarketInstallPlugin,
-  installSupport,
-  versionSupportDialog,
-  showUninstallDialog,
-  uninstallTarget,
-  showSourceDialog,
-  showSourceManagerDialog,
-  sourceName,
-  sourceUrl,
-  customSources,
-  selectedSource,
-  showRemoveSourceDialog,
-  sourceToRemove,
-  editingSource,
-  originalSourceUrl,
-  extension_url,
-  dialog,
-  upload_file,
-  uploadTab,
-  showPluginFullName,
-  marketSearch,
-  debouncedMarketSearch,
-  refreshingMarket,
-  sortBy,
-  sortOrder,
-  randomPluginNames,
-  normalizeStr,
-  toPinyinText,
-  toInitials,
-  filteredExtensions,
   filteredPlugins,
-  filteredMarketPlugins,
-  sortedPlugins,
-  RANDOM_PLUGINS_COUNT,
-  randomPlugins,
-  shufflePlugins,
-  refreshRandomPlugins,
-  displayItemsPerPage,
-  totalPages,
-  paginatedPlugins,
-  updatableExtensions,
-  toast,
-  resetLoadingDialog,
-  onLoadingDialogResult,
   failedPluginItems,
-  getExtensions,
   reloadFailedPlugin,
-  checkUpdate,
   uninstallExtension,
   requestUninstallFailedPlugin,
-  handleUninstallConfirm,
   updateExtension,
   showUpdateAllConfirm,
-  confirmUpdateAll,
-  cancelUpdateAll,
-  confirmForceUpdate,
-  updateAllExtensions,
   pluginOn,
   pluginOff,
   openExtensionConfig,
-  updateConfig,
   showPluginInfo,
   reloadPlugin,
   viewReadme,
   viewChangelog,
   openInstallDialog,
-  handleInstallPlugin,
-  confirmDangerInstall,
-  cancelDangerInstall,
-  loadCustomSources,
-  saveCustomSources,
-  addCustomSource,
-  openSourceManagerDialog,
-  selectPluginSource,
-  sourceSelectItems,
-  editCustomSource,
-  removeCustomSource,
-  confirmRemoveSource,
-  saveCustomSource,
-  trimExtensionName,
-  checkAlreadyInstalled,
-  showVersionSupportWarning,
-  continueInstallIgnoringVersionWarning,
-  cancelInstallOnVersionWarning,
-  newExtension,
-  normalizePlatformList,
-  getPlatformDisplayList,
-  resolveSelectedInstallPlugin,
-  selectedInstallPlugin,
-  checkInstallVersionSupport,
-  refreshPluginMarket,
-  handleLocaleChange,
-  searchDebounceTimer,
 } = props.state;
 
 const openPluginDetail = (extension) => {
@@ -189,7 +83,7 @@ watch(
 
 const isPinnedExtension = (extension) => {
   const name = extension?.name;
-  return !!name && pinnedExtensionOrder.value.has(name);
+  return Boolean(name) && pinnedExtensionOrder.value.has(name);
 };
 
 const togglePinnedExtension = (extension) => {
@@ -213,7 +107,6 @@ const togglePinnedExtension = (extension) => {
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
           <v-text-field
             :model-value="pluginSearch"
-            @update:model-value="pluginSearch = normalizeTextInput($event)"
             density="compact"
             :label="tm('search.placeholder')"
             prepend-inner-icon="mdi-magnify"
@@ -223,6 +116,7 @@ const togglePinnedExtension = (extension) => {
             hide-details
             single-line
             style="min-width: 220px; max-width: 340px"
+            @update:model-value="pluginSearch = normalizeTextInput($event)"
           >
           </v-text-field>
         </div>
@@ -319,10 +213,10 @@ const togglePinnedExtension = (extension) => {
 
         <v-row>
           <v-col
-            cols="12"
-            md="6"
             v-for="extension in sortedInstalledPlugins"
             :key="extension.name"
+            cols="12"
+            md="6"
             class="pb-2"
           >
             <ExtensionCard
@@ -352,9 +246,9 @@ const togglePinnedExtension = (extension) => {
     </v-fade-transition>
 
     <v-tooltip :text="tm('market.installPlugin')" location="left">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props: tooltipProps }">
         <button
-          v-bind="props"
+          v-bind="tooltipProps"
           type="button"
           class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
           style="
@@ -380,9 +274,9 @@ const togglePinnedExtension = (extension) => {
     </v-tooltip>
 
     <v-tooltip :text="tm('buttons.updateAll')" location="left">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props: tooltipProps }">
         <v-btn
-          v-bind="props"
+          v-bind="tooltipProps"
           color="darkprimary"
           icon="mdi-update"
           size="x-large"

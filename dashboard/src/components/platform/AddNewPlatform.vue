@@ -45,9 +45,9 @@
                   class="mt-6"
                   style="max-width: 30%; min-width: 300px"
                 >
-                  <template v-slot:item="{ props: itemProps, item }">
+                  <template #item="{ props: itemProps, item }">
                     <v-list-item v-bind="itemProps">
-                      <template v-slot:prepend>
+                      <template #prepend>
                         <img
                           :src="
                             getPlatformIcon(platformTemplates[item.raw].type)
@@ -63,7 +63,7 @@
                     </v-list-item>
                   </template>
                 </v-select>
-                <div class="mt-3" v-if="selectedPlatformConfig">
+                <div v-if="selectedPlatformConfig" class="mt-3">
                   <div v-if="isLarkPlatform">
                     <div class="creation-mode-title mt-4 mb-1">
                       {{ tm("registrationAction.mode.title") }}
@@ -101,8 +101,8 @@
                         <v-btn
                           color="info"
                           variant="tonal"
-                          @click="openTutorial"
                           class="mt-2"
+                          @click="openTutorial"
                         >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
@@ -111,7 +111,7 @@
                       <AstrBotConfig
                         :iterable="selectedPlatformConfig"
                         :metadata="metadata['platform_group']?.metadata"
-                        metadataKey="platform"
+                        metadata-key="platform"
                       />
                     </div>
                   </div>
@@ -156,8 +156,8 @@
                         <v-btn
                           color="info"
                           variant="tonal"
-                          @click="openTutorial"
                           class="mt-2"
+                          @click="openTutorial"
                         >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
@@ -166,7 +166,7 @@
                       <AstrBotConfig
                         :iterable="selectedPlatformConfig"
                         :metadata="metadata['platform_group']?.metadata"
-                        metadataKey="platform"
+                        metadata-key="platform"
                       />
                     </div>
                   </div>
@@ -211,8 +211,8 @@
                         <v-btn
                           color="info"
                           variant="tonal"
-                          @click="openTutorial"
                           class="mt-2"
+                          @click="openTutorial"
                         >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
@@ -221,7 +221,7 @@
                       <AstrBotConfig
                         :iterable="selectedPlatformConfig"
                         :metadata="metadata['platform_group']?.metadata"
-                        metadataKey="platform"
+                        metadata-key="platform"
                       />
                     </div>
                   </div>
@@ -244,8 +244,8 @@
                       <v-btn
                         color="info"
                         variant="tonal"
-                        @click="openTutorial"
                         class="mt-2"
+                        @click="openTutorial"
                       >
                         <v-icon start>mdi-book-open-variant</v-icon>
                         {{ tm("dialog.viewTutorial") }}
@@ -254,13 +254,14 @@
                     <AstrBotConfig
                       :iterable="selectedPlatformConfig"
                       :metadata="metadata['platform_group']?.metadata"
-                      metadataKey="platform"
+                      metadata-key="platform"
                     />
                   </div>
                 </div>
               </div>
               <div v-else>
                 <v-text-field
+                  v-model="updatingPlatformConfig.type"
                   :label="tm('createDialog.platformTypeLabel')"
                   variant="outlined"
                   rounded="md"
@@ -268,7 +269,6 @@
                   hide-details
                   class="mt-6"
                   style="max-width: 30%; min-width: 300px"
-                  v-model="updatingPlatformConfig.type"
                   disabled
                 ></v-text-field>
                 <div class="mt-3">
@@ -276,7 +276,7 @@
                     <AstrBotConfig
                       :iterable="updatingPlatformConfig"
                       :metadata="metadata['platform_group']?.metadata"
-                      metadataKey="platform"
+                      metadata-key="platform"
                     />
                   </div>
                 </div>
@@ -297,19 +297,19 @@
                     {{ tm("createDialog.configFileTitle") }}
                   </h3>
                   <v-chip
+                    v-if="!updatingMode"
                     size="x-small"
                     color="primary"
                     variant="tonal"
                     rounded="sm"
                     class="ml-2"
-                    v-if="!updatingMode"
                     >{{ tm("createDialog.optional") }}</v-chip
                   >
                 </div>
                 <small style="color: grey">{{
                   tm("createDialog.configHint")
                 }}</small>
-                <small style="color: grey" v-if="!updatingMode">{{
+                <small v-if="!updatingMode" style="color: grey">{{
                   tm("createDialog.configDefaultHint")
                 }}</small>
               </div>
@@ -317,8 +317,8 @@
                 <v-btn
                   variant="plain"
                   icon
-                  @click="toggleConfigSection"
                   class="mt-2"
+                  @click="toggleConfigSection"
                 >
                   <v-icon>{{
                     showConfigSection ? "mdi-chevron-up" : "mdi-chevron-down"
@@ -330,18 +330,18 @@
             <div v-if="showConfigSection">
               <div v-if="!updatingMode">
                 <v-radio-group
-                  class="mt-2"
                   v-model="aBConfigRadioVal"
+                  class="mt-2"
                   hide-details="true"
                 >
                   <v-radio value="0">
-                    <template v-slot:label>
+                    <template #label>
                       <span>{{ tm("createDialog.useExistingConfig") }}</span>
                     </template>
                   </v-radio>
                   <div
-                    class="d-flex align-center ml-10 my-2"
                     v-if="aBConfigRadioVal === '0'"
+                    class="d-flex align-center ml-10 my-2"
                   >
                     <v-select
                       v-model="selectedAbConfId"
@@ -373,8 +373,8 @@
                   >
                   </v-radio>
                   <div
-                    class="d-flex align-center"
                     v-if="aBConfigRadioVal === '1'"
+                    class="d-flex align-center"
                   >
                     <v-text-field
                       v-model="selectedAbConfId"
@@ -426,7 +426,7 @@
                     </h4>
                     <AstrBotCoreConfigWrapper
                       :metadata="newConfigMetadata"
-                      :config_data="newConfigData"
+                      :config-data="newConfigData"
                     />
                   </div>
                   <div v-else class="text-center py-4 text-grey">
@@ -445,8 +445,8 @@
                       v-if="isEditingRoutes"
                       color="primary"
                       variant="tonal"
-                      @click="addNewRoute"
                       size="small"
+                      @click="addNewRoute"
                     >
                       <v-icon start>mdi-plus</v-icon>
                       {{ tm("createDialog.addRouteRule") }}
@@ -479,7 +479,7 @@
                   class="mt-2"
                   variant="outlined"
                 >
-                  <template v-slot:item.source="{ item }">
+                  <template #item.source="{ item }">
                     <div class="route-source-cell">
                       <div
                         class="d-flex align-center route-source-input-row"
@@ -511,9 +511,9 @@
                           "
                           @focus="loadKnownRouteUmos"
                         >
-                          <template v-slot:item="{ props, item: sourceItem }">
+                          <template #item="{ props, item: sourceItem }">
                             <v-list-item v-bind="props">
-                              <template v-slot:title>
+                              <template #title>
                                 <UmoDisplay
                                   v-bind="
                                     getKnownRouteUmoDisplayProps(sourceItem.raw)
@@ -524,7 +524,7 @@
                               </template>
                             </v-list-item>
                           </template>
-                          <template v-slot:selection="{ item: sourceItem }">
+                          <template #selection="{ item: sourceItem }">
                             <v-chip
                               v-if="
                                 sourceItem &&
@@ -586,7 +586,7 @@
                     </div>
                   </template>
 
-                  <template v-slot:item.configId="{ item }">
+                  <template #item.configId="{ item }">
                     <div class="d-flex align-center">
                       <v-select
                         v-if="isEditingRoutes"
@@ -626,14 +626,14 @@
                     >
                   </template>
 
-                  <template v-slot:item.actions="{ item, index }">
+                  <template #item.actions>
                     <div v-if="isEditingRoutes" class="d-flex align-center">
                       <v-btn
                         icon
                         size="x-small"
                         variant="text"
-                        @click="moveRouteUp(index)"
                         :disabled="index === 0"
+                        @click="moveRouteUp(index)"
                       >
                         <v-icon>mdi-arrow-up</v-icon>
                       </v-btn>
@@ -641,8 +641,8 @@
                         icon
                         size="x-small"
                         variant="text"
-                        @click="moveRouteDown(index)"
                         :disabled="index === platformRoutes.length - 1"
+                        @click="moveRouteDown(index)"
                       >
                         <v-icon>mdi-arrow-down</v-icon>
                       </v-btn>
@@ -672,19 +672,19 @@
         <v-spacer></v-spacer>
         <v-btn text @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
         <v-btn
+          v-if="!updatingMode"
           :disabled="!canSave"
           color="primary"
-          v-if="!updatingMode"
-          @click="newPlatform"
           :loading="loading"
+          @click="newPlatform"
           >{{ tm("dialog.save") }}</v-btn
         >
         <v-btn
+          v-else
           :disabled="!selectedAbConfId"
           color="primary"
-          v-else
-          @click="newPlatform"
           :loading="loading"
+          @click="newPlatform"
           >{{ tm("dialog.save") }}</v-btn
         >
       </v-card-actions>
@@ -804,7 +804,6 @@ export default {
     PlatformRegistrationAction,
     UmoDisplay,
   },
-  emits: ["update:show", "show-toast", "refresh-config"],
   props: {
     show: {
       type: Boolean,
@@ -814,7 +813,7 @@ export default {
       type: Object,
       default: () => ({}),
     },
-    config_data: {
+    configData: {
       type: Object,
       default: () => ({}),
     },
@@ -826,6 +825,11 @@ export default {
       type: Object,
       default: null,
     },
+  },
+  emits: ["update:show", "show-toast", "refresh-config"],
+  setup() {
+    const { tm } = useModuleI18n("features/platform");
+    return { tm };
   },
   data() {
     return {
@@ -880,10 +884,6 @@ export default {
       originalUpdatingPlatformId: null,
     };
   },
-  setup() {
-    const { tm } = useModuleI18n("features/platform");
-    return { tm };
-  },
   computed: {
     showDialog: {
       get() {
@@ -895,7 +895,7 @@ export default {
     },
     platformTemplates() {
       return (
-        this.metadata["platform_group"]?.metadata?.platform?.config_template ||
+        this.metadata.platform_group?.metadata.platform?.config_template ||
         {}
       );
     },
@@ -957,13 +957,13 @@ export default {
 
       // 如果是使用现有配置文件模式
       if (this.aBConfigRadioVal === "0") {
-        return !!this.selectedAbConfId;
+        return Boolean(this.selectedAbConfId);
       }
 
       // 如果是创建新配置文件模式
       if (this.aBConfigRadioVal === "1") {
         // 需要配置文件名称，且新配置数据已加载
-        return !!(this.selectedAbConfId && this.newConfigData);
+        return Boolean(this.selectedAbConfId && this.newConfigData);
       }
 
       return false;
@@ -1032,7 +1032,7 @@ export default {
       const platformId = this.routePlatformId;
       return this.knownRouteUmos.filter((umo) => {
         const parsed = this.parseUmop(umo);
-        return parsed && parsed.platform === platformId;
+        return parsed?.platform === platformId;
       });
     },
     isLarkPlatform() {
@@ -1106,7 +1106,7 @@ export default {
     // 监听更新模式变化，获取相关配置文件
     updatingPlatformConfig: {
       handler(newConfig) {
-        if (this.updatingMode && newConfig && newConfig.id) {
+        if (this.updatingMode && newConfig?.id) {
           this.originalUpdatingPlatformId = newConfig.id;
           this.getPlatformConfigs(newConfig.id);
         }
@@ -1139,7 +1139,7 @@ export default {
     getPlatformIcon(platformType) {
       // Check for plugin-provided logo_token first
       const template = this.platformTemplates?.[platformType];
-      if (template && template.logo_token) {
+      if (template?.logo_token) {
         return fileApi.tokenUrl(template.logo_token);
       }
       return getPlatformIcon(platformType);
@@ -1251,9 +1251,9 @@ export default {
         if (this.updatingPlatformConfig.type === "aiocqhttp") {
           const token = this.updatingPlatformConfig.ws_reverse_token;
           if (!token || token.trim() === "") {
-            this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
+            void this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
               if (continueWithWarning) {
-                this.updatePlatform();
+                void this.updatePlatform();
               } else {
                 this.loading = false;
               }
@@ -1261,9 +1261,9 @@ export default {
             return;
           }
         }
-        this.updatePlatform();
+        void this.updatePlatform();
       } else {
-        this.savePlatform();
+        void this.savePlatform();
       }
     },
     async updatePlatform() {
@@ -1312,7 +1312,7 @@ export default {
       }
 
       // 检查 ID 是否已存在
-      const existingPlatform = this.config_data.platform?.find(
+      const existingPlatform = this.configData.platform?.find(
         (p) => p.id === this.selectedPlatformConfig.id,
       );
       if (existingPlatform || this.selectedPlatformConfig.id === "webchat") {
@@ -1460,11 +1460,11 @@ export default {
     },
 
     showSuccess(message) {
-      this.$emit("show-toast", { message: message, type: "success" });
+      this.$emit("show-toast", { message, type: "success" });
     },
 
     showError(message) {
-      this.$emit("show-toast", { message: message, type: "error" });
+      this.$emit("show-toast", { message, type: "error" });
     },
 
     buildRandomPlatformIdSuffix() {
@@ -1550,7 +1550,7 @@ export default {
           const parsedUmop = this.parseUmop(umop);
           if (this.isParsedUmopMatchPlatform(parsedUmop, platformId)) {
             routes.push({
-              umop: umop,
+              umop,
               originalUmop: umop, // 保存原始 UMOP 用于更新时查找
               sourceMode: "manual",
               sourceUmo: parsedUmop.sessionId === "*" ? "" : umop,
@@ -1678,7 +1678,7 @@ export default {
         this.getRouteSourceMode(route) === "known" ? "manual" : "known";
       route.sourceMode = nextMode;
       if (nextMode === "known") {
-        this.loadKnownRouteUmos();
+        void this.loadKnownRouteUmos();
       }
     },
 
@@ -1851,14 +1851,13 @@ export default {
     },
 
     prepareData() {
-      this.getConfigInfoList();
-      this.getConfigForPreview(this.selectedAbConfId);
+      void this.getConfigInfoList();
+      void this.getConfigForPreview(this.selectedAbConfId);
       if (
         this.updatingMode &&
-        this.updatingPlatformConfig &&
-        this.updatingPlatformConfig.id
+        this.updatingPlatformConfig?.id
       ) {
-        this.getPlatformConfigs(this.updatingPlatformConfig.id);
+        void this.getPlatformConfigs(this.updatingPlatformConfig.id);
       }
     },
     scrollDialogToBottom() {

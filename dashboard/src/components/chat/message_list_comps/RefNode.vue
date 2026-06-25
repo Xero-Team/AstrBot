@@ -51,7 +51,7 @@ const domain = computed(() => {
   try {
     const urlObj = new URL(url.value);
     return urlObj.hostname.replace(/^www\./, "");
-  } catch (e) {
+  } catch (_error) {
     return "";
   }
 });

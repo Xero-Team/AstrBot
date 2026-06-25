@@ -108,7 +108,6 @@ const handleOpen = () => {
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
-            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -117,6 +116,7 @@ const handleOpen = () => {
               overflow: hidden;
               text-overflow: ellipsis;
             "
+            @click.stop
           >
             {{ plugin.author }}
           </a>
@@ -186,10 +186,10 @@ const handleOpen = () => {
         v-if="!plugin?.installed"
         color="primary"
         size="small"
-        @click="handleInstall(plugin)"
         variant="flat"
         class="market-action-btn"
         style="height: 32px"
+        @click="handleInstall(plugin)"
       >
         {{ tm("buttons.install") }}
       </v-btn>

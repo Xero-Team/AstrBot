@@ -239,6 +239,21 @@ import { knowledgeApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 
+interface KnowledgeDocument {
+  doc_name?: string
+  file_type?: string
+  file_size?: number
+  chunk_count?: number
+  created_at?: string
+}
+
+interface KnowledgeChunk {
+  chunk_id: string
+  chunk_index: number
+  content: string
+  char_count: number
+}
+
 const { tm: t } = useModuleI18n('features/knowledge-base/document')
 const route = useRoute()
 
@@ -250,11 +265,11 @@ const docId = ref(route.params.docId as string)
 // 状态
 const loading = ref(true)
 const loadingChunks = ref(false)
-const document = ref<any>({})
-const chunks = ref<any[]>([])
+const document = ref<KnowledgeDocument>({})
+const chunks = ref<KnowledgeChunk[]>([])
 const searchQuery = ref('')
 const showViewDialog = ref(false)
-const selectedChunk = ref<any>(null)
+const selectedChunk = ref<KnowledgeChunk | null>(null)
 
 // 分页状态
 const page = ref(1)
@@ -330,29 +345,29 @@ const loadChunks = async () => {
 // 处理分页变化
 const handlePageChange = (newPage: number) => {
   page.value = newPage
-  loadChunks()
+  void loadChunks()
 }
 
 const handlePageSizeChange = (newPageSize: number) => {
   pageSize.value = newPageSize
   page.value = 1
-  loadChunks()
+  void loadChunks()
 }
 
 // 查看分块
-const viewChunk = (chunk: any) => {
+const viewChunk = (chunk: KnowledgeChunk) => {
   selectedChunk.value = chunk
   showViewDialog.value = true
 }
 
 // 删除分块
-const deleteChunk = async (chunk: any) => {
+const deleteChunk = async (chunk: KnowledgeChunk) => {
   if (!(await askForConfirmation(t('chunks.deleteConfirm'), confirmDialog))) return
   try {
     const response = await knowledgeApi.deleteChunk(kbId.value, chunk.chunk_id, docId.value)
     if (response.data.status === 'ok') {
       showSnackbar(t('chunks.deleteSuccess'))
-      loadChunks()
+      void loadChunks()
     } else {
       showSnackbar(t('chunks.deleteFailed'), 'error')
     }
@@ -363,7 +378,7 @@ const deleteChunk = async (chunk: any) => {
 }
 
 // 工具函数
-const getFileIcon = (fileType: string) => {
+const getFileIcon = (fileType?: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
   if (type.includes('epub')) return 'mdi-book-open-page-variant'
@@ -372,7 +387,7 @@ const getFileIcon = (fileType: string) => {
   return 'mdi-file'
 }
 
-const getFileColor = (fileType: string) => {
+const getFileColor = (fileType?: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'error'
   if (type.includes('epub')) return 'warning'
@@ -381,7 +396,7 @@ const getFileColor = (fileType: string) => {
   return 'grey'
 }
 
-const formatFileSize = (bytes: number) => {
+const formatFileSize = (bytes?: number) => {
   if (!bytes) return '-'
   const units = ['B', 'KB', 'MB', 'GB']
   let size = bytes
@@ -393,7 +408,7 @@ const formatFileSize = (bytes: number) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -405,8 +420,8 @@ const formatDate = (dateStr: string) => {
 }
 
 onMounted(() => {
-  loadDocument()
-  loadChunks()
+  void loadDocument()
+  void loadChunks()
 })
 </script>
 

@@ -1,5 +1,6 @@
 <template>
-    <BaseFolderTreeNode :folder="folder" :depth="depth" :current-folder-id="currentFolderId"
+    <BaseFolderTreeNode
+:folder="folder" :depth="depth" :current-folder-id="currentFolderId"
         :search-query="searchQuery" :expanded-folder-ids="expandedFolderIds" :accept-drop-types="['persona']"
         @folder-click="$emit('folder-click', $event)"
         @folder-context-menu="handleContextMenu"
@@ -49,7 +50,7 @@ export default defineComponent({
             this.$emit('folder-context-menu', event);
         },
 
-        handleItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data: any }) {
+        handleItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data: unknown }) {
             if (data.item_type === 'persona') {
                 this.$emit('persona-dropped', {
                     persona_id: data.item_id,

@@ -941,9 +941,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
-    async def step_until_done(
-        self, max_step: int
-    ) -> T.AsyncGenerator[AgentResponse]:
+    async def step_until_done(self, max_step: int) -> T.AsyncGenerator[AgentResponse]:
         """Process steps until the agent is done."""
         step_count = 0
         while not self.done() and step_count < max_step:

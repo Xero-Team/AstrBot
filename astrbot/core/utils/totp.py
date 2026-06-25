@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import base64
 import datetime
@@ -262,7 +260,7 @@ def verify_recovery_code(config, code: str) -> bool:
         iterations = int(parts[1])
         salt = parts[2]
         expected_digest = parts[3]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return False
 
     candidate = hashlib.pbkdf2_hmac(

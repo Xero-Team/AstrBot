@@ -57,7 +57,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
                 dimensions = int(self.provider_config["embedding_dimensions"])
                 if dimensions > 0:
                     payload["dimensions"] = dimensions
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
         return payload
 
@@ -107,7 +107,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         if "embedding_dimensions" in self.provider_config:
             try:
                 return int(self.provider_config["embedding_dimensions"])
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: "
                     f"'{self.provider_config['embedding_dimensions']}', ignored."

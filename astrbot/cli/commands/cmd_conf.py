@@ -236,5 +236,5 @@ def get_config(key: str | None = None) -> None:
                     else _get_nested_item(config, key)
                 )
                 click.echo(f"  {key}: {value}")
-            except (KeyError, TypeError):
+            except KeyError, TypeError:
                 pass

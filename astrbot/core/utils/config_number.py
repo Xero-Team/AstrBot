@@ -39,7 +39,7 @@ def coerce_int_config(
     else:
         try:
             parsed = int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             if warn:
                 logger.warning(
                     "%s %s has unsupported type %s. Fallback to %s.",

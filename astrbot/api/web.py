@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextvars
 from collections.abc import Callable, KeysView
 from contextlib import contextmanager
@@ -55,7 +53,7 @@ class PluginMultiDict[ValueT]:
                 return item_value
             try:
                 return type(item_value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return default
         return default
 
@@ -106,7 +104,7 @@ class PluginUploadFile:
         try:
             raw = self.headers.get("content-length")
             return int(raw) if raw else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
     async def save(self, destination: str | Path) -> None:

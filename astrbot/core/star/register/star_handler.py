@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any

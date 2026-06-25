@@ -107,7 +107,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         if data_b64:
             try:
                 return base64.b64decode(data_b64)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 logging.exception("Failed to decode base64 audio data.")
                 return None
 

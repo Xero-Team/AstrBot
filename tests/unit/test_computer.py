@@ -151,7 +151,7 @@ class TestLocalShellComponent:
         """Test command with timeout."""
         shell = LocalShellComponent()
         # Sleep command should complete within timeout
-        result = await shell.exec("echo test", timeout=5)
+        result = await shell.exec("echo test", timeout_seconds=5)
         assert result["exit_code"] == 0
 
     @pytest.mark.asyncio
@@ -215,7 +215,7 @@ class TestLocalPythonComponent:
         """Test Python execution with timeout."""
         python = LocalPythonComponent()
         # This should timeout
-        result = await python.exec("import time; time.sleep(10)", timeout=1)
+        result = await python.exec("import time; time.sleep(10)", timeout_seconds=1)
         assert "timed out" in result["data"]["error"].lower()
 
     @pytest.mark.asyncio
@@ -609,15 +609,9 @@ class TestSyncSkillsToSandbox:
         mock_booter.shell.exec = AsyncMock()
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/nonexistent/path",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=False,
-            ),
+        with patch(
+            "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+            return_value="/nonexistent/path",
         ):
             await computer_client._sync_skills_to_sandbox(mock_booter)
             mock_booter.upload_file.assert_not_called()

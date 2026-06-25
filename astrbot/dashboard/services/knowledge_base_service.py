@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import traceback
 import uuid
@@ -863,7 +861,7 @@ class KnowledgeBaseService:
     def _to_int(value, default: int) -> int:
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
 

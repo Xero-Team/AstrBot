@@ -1,7 +1,5 @@
 """Cross-platform startup smoke check for AstrBot."""
 
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess
@@ -33,7 +31,7 @@ def _is_ready() -> bool:
             timeout=REQUEST_TIMEOUT_SECONDS,
         ) as response:
             return response.status < 400
-    except (OSError, urllib.error.URLError):
+    except OSError, urllib.error.URLError:
         return False
 
 

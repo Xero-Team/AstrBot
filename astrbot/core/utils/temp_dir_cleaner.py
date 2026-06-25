@@ -14,7 +14,7 @@ def parse_size_to_bytes(value: str | int | float | None) -> int:
 
     try:
         size_mb = float(str(value).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
     if size_mb <= 0:

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from astrbot.core import file_token_service
 
 

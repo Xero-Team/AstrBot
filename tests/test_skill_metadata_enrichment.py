@@ -1,6 +1,5 @@
 """Tests for skill metadata: frontmatter parsing, prompt generation, absolute paths."""
 
-from __future__ import annotations
 
 from pathlib import Path
 

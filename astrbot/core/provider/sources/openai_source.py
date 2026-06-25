@@ -745,7 +745,7 @@ class ProviderOpenAIOfficial(Provider):
                         import ast
 
                         parsed = ast.literal_eval(check_content)
-                    except (ValueError, SyntaxError):
+                    except ValueError, SyntaxError:
                         parsed = None
 
                 if isinstance(parsed, list):
@@ -992,7 +992,7 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(content, str):
                     try:
                         json.loads(content)
-                    except (json.JSONDecodeError, ValueError):
+                    except json.JSONDecodeError, ValueError:
                         message["content"] = json.dumps(
                             {"result": content}, ensure_ascii=False
                         )

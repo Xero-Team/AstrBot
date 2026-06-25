@@ -646,7 +646,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
-        except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
+        except botpy.errors.ServerError, botpy.errors.SequenceNumberError:
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")

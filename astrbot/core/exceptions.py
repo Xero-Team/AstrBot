@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-
 class AstrBotError(Exception):
     """Base exception for all AstrBot errors."""
 

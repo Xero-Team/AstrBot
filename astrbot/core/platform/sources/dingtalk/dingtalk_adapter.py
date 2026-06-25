@@ -807,7 +807,7 @@ class DingtalkPlatformAdapter(Platform):
                     if task.done():
                         try:
                             exc = task.exception()
-                        except (asyncio.CancelledError, FutureCancelledError):
+                        except asyncio.CancelledError, FutureCancelledError:
                             logger.info("钉钉适配器 task 已取消")
                             return
                         if exc:

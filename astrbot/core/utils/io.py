@@ -140,7 +140,7 @@ async def download_image_by_url(
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return path
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+    except aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError:
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
@@ -272,7 +272,7 @@ async def download_file(
                         "speed": 0,
                     },
                 )
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+    except aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError:
         if not allow_insecure_ssl_fallback:
             raise
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
@@ -431,7 +431,7 @@ def is_dashboard_version_compatible(
             )
             == 0
         )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
 
 
@@ -479,7 +479,7 @@ def should_use_bundled_dashboard_dist(
         return True
     try:
         return not is_dashboard_version_compatible(user_version, current_version)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
 
 

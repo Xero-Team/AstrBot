@@ -350,7 +350,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     def _fingerprint_message(self, message: dict[str, T.Any]) -> str:
         try:
             raw = json.dumps(message, sort_keys=True, ensure_ascii=False, default=str)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raw = repr(message)
         return hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()
 

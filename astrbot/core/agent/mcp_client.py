@@ -97,7 +97,7 @@ try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
-except (ModuleNotFoundError, ImportError):
+except ModuleNotFoundError, ImportError:
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
@@ -109,12 +109,12 @@ try:
     from mcp.client.streamable_http import (
         streamablehttp_client as streamable_http_client_legacy,
     )
-except (ModuleNotFoundError, ImportError):
+except ModuleNotFoundError, ImportError:
     try:
         from mcp.client.streamable_http import (
             streamable_http_client as streamable_http_client,
         )
-    except (ModuleNotFoundError, ImportError):
+    except ModuleNotFoundError, ImportError:
         logger.warning(
             "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
         )

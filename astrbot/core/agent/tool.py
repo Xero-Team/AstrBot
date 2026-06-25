@@ -41,8 +41,7 @@ class FunctionTool[TContext](ToolSchema):
     """A callable tool, for function calling."""
 
     handler: (
-        Callable[..., Awaitable[str | None] | AsyncGenerator[MessageEventResult]]
-        | None
+        Callable[..., Awaitable[str | None] | AsyncGenerator[MessageEventResult]] | None
     ) = None
     """a callable that implements the tool's functionality. It should be an async function."""
 

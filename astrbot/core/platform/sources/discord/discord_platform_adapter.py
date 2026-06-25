@@ -72,7 +72,7 @@ class DiscordPlatformAdapter(Platform):
         try:
             channel_id = int(channel_id_str)
             channel = self.client.get_channel(channel_id)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             logger.warning(f"[Discord] Invalid channel ID format: {channel_id_str}")
 
         if channel:

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 from astrbot.core.skills._skill_inventory import (
@@ -114,7 +112,7 @@ class SkillManagerDiscoveryMixin:
             with skill_md.open(encoding="utf-8") as file:
                 content = file.read(WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS)
             return _parse_frontmatter_description(content)
-        except (OSError, UnicodeError):
+        except OSError, UnicodeError:
             return ""
 
     @staticmethod

@@ -288,7 +288,9 @@ class KookPlatformAdapter(Platform):
             elif mention_target:
                 components.append(
                     At(
-                        qq=mention_target,
+                        qq=int(mention_target)
+                        if mention_target.isdigit()
+                        else mention_target,
                         name=mention_name_map.get(mention_target, ""),
                     )
                 )

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
@@ -45,7 +43,7 @@ async def _run_file(operation, *, error_message: str = "File access error"):
         return result
     except ChatServiceError as exc:
         return error(str(exc))
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return error(error_message)
 
 

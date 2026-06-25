@@ -92,7 +92,7 @@ class TelegramPlatformAdapter(Platform):
         raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
         try:
             delay = float(raw_delay)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             logger.warning(
                 "Invalid 'telegram_polling_restart_delay' value %r in config, "
                 "falling back to default 5.0s",

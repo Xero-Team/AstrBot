@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import base64
 import hashlib
 import io
@@ -362,7 +360,7 @@ def _is_docx_bytes(file_bytes: bytes) -> bool:
     try:
         with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
             names = set(archive.namelist())
-    except (OSError, zipfile.BadZipFile):
+    except OSError, zipfile.BadZipFile:
         return False
 
     if "[Content_Types].xml" not in names:
@@ -377,7 +375,7 @@ def _is_epub_bytes(file_bytes: bytes) -> bool:
             names = set(archive.namelist())
             with archive.open("mimetype") as mimetype_file:
                 mimetype = mimetype_file.read(64).decode("utf-8").strip()
-    except (KeyError, OSError, UnicodeDecodeError, zipfile.BadZipFile):
+    except KeyError, OSError, UnicodeDecodeError, zipfile.BadZipFile:
         return False
 
     return mimetype == "application/epub+zip" and "META-INF/container.xml" in names

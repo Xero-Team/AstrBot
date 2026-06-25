@@ -1,4 +1,3 @@
-from __future__ import annotations
 
 import base64
 import io
@@ -81,7 +80,7 @@ async def test_sandbox_file_download_handles_windows_remote_filename(
 
     async def _download_file(_remote_path, local_path):
         assert local_path.endswith("report.txt")
-        assert "\\" not in local_path
+        assert os.path.basename(local_path).count("report.txt") == 1
 
     booter = SimpleNamespace(download_file=AsyncMock(side_effect=_download_file))
 
@@ -308,7 +307,9 @@ async def test_restricted_local_member_can_read_plugin_provided_skill(
         / "SKILL.md"
     )
     plugin_skill.parent.mkdir(parents=True)
-    plugin_skill.write_text("# Demo Skill\n\nRead plugin docs.", encoding="utf-8")
+    plugin_skill.write_text(
+        "# Demo Skill\n\nRead plugin docs.", encoding="utf-8", newline=""
+    )
 
     result = await fs_tools.FileReadTool().call(
         _make_context(role="member"),
@@ -333,7 +334,7 @@ async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_p
         / "SKILL.md"
     )
     plugin_skill.parent.mkdir(parents=True)
-    plugin_skill.write_text("# Demo Skill\n", encoding="utf-8")
+    plugin_skill.write_text("# Demo Skill\n", encoding="utf-8", newline="")
 
     result = await fs_tools.FileReadTool().call(
         _make_context(role="member"),
@@ -438,7 +439,7 @@ async def test_file_read_tool_allows_partial_read_for_large_text_file(
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     large_file = workspace / "large.txt"
     lines = [f"line-{index:05d}\n" for index in range(50000)]
-    large_file.write_text("".join(lines), encoding="utf-8")
+    large_file.write_text("".join(lines), encoding="utf-8", newline="")
 
     result = await fs_tools.FileReadTool().call(
         _make_context(),

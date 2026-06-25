@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.dashboard.async_utils import run_maybe_async

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 

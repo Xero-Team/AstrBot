@@ -282,7 +282,7 @@ def _truncate_reply_text(text: str) -> str:
 def _positive_int(value, fallback: int) -> int:
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return fallback
     return parsed if parsed > 0 else fallback
 

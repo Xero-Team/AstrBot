@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.dashboard.responses import ApiError, ok

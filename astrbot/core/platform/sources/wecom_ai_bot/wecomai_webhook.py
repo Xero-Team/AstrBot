@@ -1,7 +1,5 @@
 """企业微信智能机器人 webhook 推送客户端。"""
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import mimetypes

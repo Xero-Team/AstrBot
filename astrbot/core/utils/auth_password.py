@@ -103,7 +103,7 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
             iterations = int(iterations_s)
             stored_key = bytes.fromhex(digest)
             salt_bytes = bytes.fromhex(salt)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return False
         candidate_key = hashlib.pbkdf2_hmac(
             "sha256",

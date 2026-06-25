@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Prepare an AstrBot release branch and release metadata."""
 
-from __future__ import annotations
-
 import argparse
 import re
 import subprocess

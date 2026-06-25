@@ -711,7 +711,7 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
 
         try:
             num_results = int(kwargs.get("num_results", 10))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             num_results = 10
         if num_results < 1:
             num_results = 1
@@ -909,7 +909,7 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
 
         try:
             max_characters = int(kwargs.get("max_characters", 3000))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             max_characters = 3000
 
         results = await _exa_get_contents(

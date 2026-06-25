@@ -338,7 +338,7 @@ class WecomAIBotMessageParser:
         """
         try:
             return data.get("text", {}).get("content")
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             logger.warning("文本消息解析失败")
             return None
 
@@ -355,7 +355,7 @@ class WecomAIBotMessageParser:
         """
         try:
             return data.get("image", {}).get("url")
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             logger.warning("图片消息解析失败")
             return None
 
@@ -378,7 +378,7 @@ class WecomAIBotMessageParser:
                 "content": stream_data.get("content"),
                 "msg_item": stream_data.get("msg_item", []),
             }
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             logger.warning("流消息解析失败")
             return None
 
@@ -395,7 +395,7 @@ class WecomAIBotMessageParser:
         """
         try:
             return data.get("mixed", {}).get("msg_item", [])
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             logger.warning("混合消息解析失败")
             return None
 
@@ -412,6 +412,6 @@ class WecomAIBotMessageParser:
         """
         try:
             return data.get("event", {})
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             logger.warning("事件消息解析失败")
             return None

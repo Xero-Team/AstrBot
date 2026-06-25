@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import copy
 import json
@@ -86,7 +84,7 @@ def _resolve_timeout(
 
     try:
         timeout_value = float(timeout)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.warning(
             f"超时配置（{source}）={timeout!r} 无效，使用默认值 {default:g} 秒。"
         )

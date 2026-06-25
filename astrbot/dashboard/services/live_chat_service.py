@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import base64
 import json
@@ -245,7 +243,7 @@ class LiveChatService:
                                 "title": item.get("title"),
                                 "snippet": item.get("snippet"),
                             }
-                except (json.JSONDecodeError, KeyError):
+                except json.JSONDecodeError, KeyError:
                     pass
 
         if not web_search_results:

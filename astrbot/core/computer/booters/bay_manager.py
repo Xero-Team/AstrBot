@@ -5,8 +5,6 @@ container using the Docker socket (like BoxliteBooter does for Ship
 containers).
 """
 
-from __future__ import annotations
-
 import asyncio
 import io
 import json

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import time
@@ -40,9 +38,7 @@ class LogService:
         except Exception as exc:
             logger.error(f"Log SSE 补发历史错误: {exc}")
 
-    async def stream_log_events(
-        self, last_event_id: str | None
-    ) -> AsyncGenerator[str]:
+    async def stream_log_events(self, last_event_id: str | None) -> AsyncGenerator[str]:
         queue = None
         try:
             if last_event_id:

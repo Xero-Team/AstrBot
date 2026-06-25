@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -19,7 +17,7 @@ def load_platform_stats_invalid_count_warn_limit() -> int:
 
     try:
         value = int(raw_value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         value = -1
 
     if value < 0:
@@ -186,7 +184,7 @@ def _normalize_platform_stats_count(
     raw_count = normalized_row.get("count", 0)
     try:
         count = int(raw_count)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         warn_limiter.warn_invalid_count(
             raw_count,
             (

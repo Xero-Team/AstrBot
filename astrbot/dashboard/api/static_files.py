@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 

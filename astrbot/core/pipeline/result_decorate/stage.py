@@ -52,7 +52,7 @@ class ResultDecorateStage(Stage):
                 0.0,
                 min(float(trigger_probability), 1.0),
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             self.tts_trigger_probability = 1.0
 
         # 分段回复

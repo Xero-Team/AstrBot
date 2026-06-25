@@ -32,7 +32,7 @@ def _string_field(data: dict[str, Any], key: str) -> str:
 def _int_config(value: Any, default: int, minimum: int) -> int:
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         parsed = default
     return max(parsed, minimum)
 

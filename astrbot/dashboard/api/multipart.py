@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -20,7 +18,7 @@ class UploadFileAdapter:
         try:
             raw = self.headers.get("content-length")
             return int(raw) if raw else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
     async def save(self, destination: str | Path) -> None:
@@ -49,7 +47,7 @@ class MultiDict:
                 return item_value
             try:
                 return type(item_value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return default
         return default
 

@@ -1,6 +1,5 @@
 """Tests for ShipyardNeoBooter — readiness gate, shutdown cleanup, and rebuild recovery."""
 
-from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace

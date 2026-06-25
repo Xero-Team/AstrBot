@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.command_management import (

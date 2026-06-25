@@ -20,6 +20,33 @@ from ..context import PipelineContext
 from ..stage import Stage, register_stage
 
 
+def _split_path_mapping(mapping: str) -> tuple[str, str] | None:
+    """Split a ``from:to`` path-mapping entry into its two paths.
+
+    Naive ``str.split(":")`` breaks on Windows drive letters (e.g.
+    ``C:\\src:C:\\dst`` yields four parts). This finds the separator colon
+    while ignoring colons that belong to a ``X:`` drive prefix.
+
+    Args:
+        mapping: A ``from:to`` mapping string.
+
+    Returns:
+        The ``(from, to)`` pair, or None when the entry is malformed.
+    """
+
+    def _is_drive_colon(text: str, index: int) -> bool:
+        # A drive-letter colon sits at position 1 and is preceded by a letter,
+        # either at the very start or right after a path separator.
+        return (index == 1 or (index >= 2 and text[index - 2] in "/\\")) and text[
+            index - 1
+        ].isalpha()
+
+    for i, char in enumerate(mapping):
+        if char == ":" and not _is_drive_colon(mapping, i):
+            return mapping[:i], mapping[i + 1 :]
+    return None
+
+
 @register_stage
 class PreProcessStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -43,7 +70,7 @@ class PreProcessStage(Stage):
             path = Path(media_path).resolve()
             temp_dir = Path(get_astrbot_temp_path()).resolve()
             path.relative_to(temp_dir)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return
         event.track_temporary_local_file(str(path))
 
@@ -80,7 +107,11 @@ class PreProcessStage(Stage):
             for idx, component in enumerate(message_chain):
                 if isinstance(component, Record | Image) and component.url:
                     for mapping in mappings:
-                        from_, to_ = mapping.split(":")
+                        split_result = _split_path_mapping(mapping)
+                        if split_result is None:
+                            logger.warning(f"无效的路径映射配置，已跳过: {mapping}")
+                            continue
+                        from_, to_ = split_result
                         from_ = from_.removesuffix("/")
                         to_ = to_.removesuffix("/")
 

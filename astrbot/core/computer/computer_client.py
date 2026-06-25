@@ -37,7 +37,7 @@ def _get_cua_idle_timeout(config: dict) -> float:
     value = sandbox_cfg.get("cua_idle_timeout", 0)
     try:
         timeout = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0.0
     return max(timeout, 0.0)
 

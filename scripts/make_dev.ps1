@@ -130,6 +130,39 @@ function Test-Url {
     }
 }
 
+function Show-DashboardCredentials {
+    param(
+        [string]$LogPath,
+        [int]$TimeoutSeconds = 30
+    )
+
+    # The backend runs hidden with stdout redirected to the log, so the
+    # initial username/password printed at startup never reaches this console.
+    # Poll the log until the credentials banner shows up, then surface it.
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $pattern = "Initial username:|Initial password:|Change it after logging in|Username:"
+
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path $LogPath) {
+            $lines = Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue |
+                Select-String -Pattern $pattern
+            if ($lines) {
+                Write-Host ""
+                Write-Host "Dashboard credentials (from $(Split-Path -Leaf $LogPath)):"
+                foreach ($line in $lines) {
+                    Write-Host "  $($line.Line.Trim())"
+                }
+                Write-Host ""
+                return
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    Write-Host "Dashboard credentials not found in $(Split-Path -Leaf $LogPath) yet."
+    Write-Host "Check the log directly: $LogPath"
+}
+
 switch ($Action) {
     "run-backend" {
         Start-ManagedProcess `
@@ -139,6 +172,7 @@ switch ($Action) {
             -StdoutPath $backendLog `
             -StderrPath $backendErrLog `
             -WarmupSeconds 6
+        Show-DashboardCredentials -LogPath $backendLog
     }
     "run-dashboard" {
         Start-ManagedProcess `

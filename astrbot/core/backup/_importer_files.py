@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import shutil
 import zipfile
 from pathlib import Path
@@ -27,7 +25,7 @@ def validate_path_within(target_path: Path, base_dir: Path) -> bool:
         resolved = target_path.resolve(strict=False)
         base_resolved = base_dir.resolve(strict=False)
         return resolved.is_relative_to(base_resolved)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
 
 

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import base64
 import inspect
@@ -793,7 +791,7 @@ class CuaBooter(ComputerBooter):
     def _build_ephemeral_kwargs(self, ephemeral: Any) -> dict[str, Any]:
         try:
             parameters = inspect.signature(ephemeral).parameters
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return {}
         kwargs: dict[str, Any] = {}
         if "ttl" in parameters:
@@ -900,7 +898,7 @@ class CuaBooter(ComputerBooter):
             return False
         try:
             result = await self._runtime.shell.exec(
-                f"echo {_CUA_SANDBOX_HEALTH_PROBE}", timeout=10
+                f"echo {_CUA_SANDBOX_HEALTH_PROBE}", timeout_seconds=10
             )
         except asyncio.CancelledError:
             raise

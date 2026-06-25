@@ -1,6 +1,5 @@
 """Tests for profile-aware sandbox selection and conditional tool registration."""
 
-from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import patch

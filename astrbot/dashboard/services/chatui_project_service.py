@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 

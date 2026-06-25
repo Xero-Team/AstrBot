@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
@@ -273,7 +271,7 @@ async def get_open_api_file(
         return FileResponse(file_path, media_type=mimetype)
     except ChatServiceError as exc:
         return _open_api_error(str(exc))
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return _open_api_error("File access error")
 
 

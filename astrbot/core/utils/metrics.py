@@ -32,7 +32,7 @@ class Metric:
             from astrbot.core import astrbot_config
 
             return astrbot_config.get("disable_metrics", False)
-        except (ImportError, AttributeError, KeyError):
+        except ImportError, AttributeError, KeyError:
             return False
 
     @staticmethod
@@ -96,7 +96,7 @@ class Metric:
     def _coerce_counter(value: Any) -> int:
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0
 
     @staticmethod

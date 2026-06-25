@@ -125,7 +125,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             return self.client.get_channel(
                 channel_id,
             ) or await self.client.fetch_channel(channel_id)
-        except (ValueError, discord.errors.NotFound, discord.errors.Forbidden):
+        except ValueError, discord.errors.NotFound, discord.errors.Forbidden:
             logger.error(f"[Discord] 无法获取频道 {self.session_id}")
             return None
 

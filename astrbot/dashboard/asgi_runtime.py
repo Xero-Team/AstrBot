@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextvars
 import inspect
 import re
@@ -39,7 +37,7 @@ class RequestArgs:
             return value
         try:
             return type(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
 
@@ -55,7 +53,7 @@ class RequestMultiDict:
                 return item_value
             try:
                 return type(item_value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return default
         return default
 
@@ -96,7 +94,7 @@ class RequestUploadFile:
         try:
             raw = self.headers.get("content-length")
             return int(raw) if raw else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
     async def save(self, destination: str | Path) -> None:

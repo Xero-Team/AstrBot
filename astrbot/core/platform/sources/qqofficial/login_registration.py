@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import base64
 import secrets
 from dataclasses import dataclass
@@ -37,7 +35,7 @@ def _string_field(data: dict[str, Any], key: str) -> str:
 def _int_config(value: Any, default: int, minimum: int) -> int:
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         parsed = default
     return max(parsed, minimum)
 
@@ -77,7 +75,7 @@ async def _post_json(
     if retcode is not None:
         try:
             retcode_ok = int(retcode) == 0
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             retcode_ok = False
         if retcode_ok:
             return data
@@ -150,7 +148,7 @@ def qqofficial_login_result(data: dict[str, Any], *, bind_key: str) -> dict[str,
 
     try:
         raw_status = int(payload.get("status", QQOFFICIAL_BIND_STATUS_NONE))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raw_status = QQOFFICIAL_BIND_STATUS_NONE
 
     if raw_status == QQOFFICIAL_BIND_STATUS_COMPLETED:

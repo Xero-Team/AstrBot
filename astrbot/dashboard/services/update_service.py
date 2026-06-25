@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import inspect
 import traceback
@@ -453,7 +451,7 @@ class UpdateService:
     def _normalize_percent(value) -> int:
         try:
             percent = float(value or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0
         if percent <= 1:
             percent *= 100

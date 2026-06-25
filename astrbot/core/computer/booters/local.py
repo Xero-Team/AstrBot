@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import locale
 import os
@@ -62,7 +60,7 @@ def _decode_bytes_with_fallback(
         attempted_encodings.append(normalized)
         try:
             return output.decode(encoding)
-        except (LookupError, UnicodeDecodeError):
+        except LookupError, UnicodeDecodeError:
             return None
 
     for encoding in filter(None, [preferred_encoding, "utf-8", "utf-8-sig"]):

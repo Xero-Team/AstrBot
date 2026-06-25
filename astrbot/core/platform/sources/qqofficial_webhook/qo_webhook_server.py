@@ -51,7 +51,7 @@ def _verify_qq_webhook_signature(
 
     try:
         signature_buffer = bytes.fromhex(signature)
-    except (BinasciiError, ValueError):
+    except BinasciiError, ValueError:
         return False
 
     if (
@@ -65,7 +65,7 @@ def _verify_qq_webhook_signature(
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
         public_key = private_key.public_key()
         public_key.verify(signature_buffer, timestamp.encode("utf-8") + body)
-    except (InvalidSignature, ValueError):
+    except InvalidSignature, ValueError:
         return False
     return True
 

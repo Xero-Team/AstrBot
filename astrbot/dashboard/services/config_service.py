@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import copy
 import inspect
@@ -46,7 +44,7 @@ def try_cast(value: Any, type_: str):
     if type_ == "int":
         try:
             return int(value)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
     elif (
         type_ == "float"
@@ -57,7 +55,7 @@ def try_cast(value: Any, type_: str):
     elif type_ == "float":
         try:
             return float(value)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
 

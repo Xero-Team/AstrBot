@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import os
 import shlex
@@ -557,7 +555,7 @@ class ShipyardNeoBooter(ComputerBooter):
         try:
             profile_list = await client.list_profiles()
             profiles = profile_list.items
-        except (UnauthorizedError, ForbiddenError):
+        except UnauthorizedError, ForbiddenError:
             raise  # auth errors must not be silenced
         except Exception as exc:
             logger.warning(

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, WebSocket
 
 from astrbot.dashboard.services.live_chat_service import LiveChatService

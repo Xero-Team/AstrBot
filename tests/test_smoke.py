@@ -1,6 +1,5 @@
 """Smoke tests for critical startup and import paths."""
 
-from __future__ import annotations
 
 import subprocess
 import sys

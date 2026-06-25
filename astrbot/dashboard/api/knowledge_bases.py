@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 
@@ -44,7 +42,7 @@ async def _json_or_empty(request: Request) -> dict[str, Any]:
 def _to_int(value: Any, default: int) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 

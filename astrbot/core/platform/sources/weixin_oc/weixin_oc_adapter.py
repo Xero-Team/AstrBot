@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import base64
 import hashlib
@@ -213,7 +211,7 @@ class WeixinOCAdapter(Platform):
     ) -> int:
         try:
             value = int(self.config.get(key, default))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             value = default
         return max(minimum, value)
 
@@ -1349,7 +1347,7 @@ class WeixinOCAdapter(Platform):
                 if quoted_item_type_raw not in (None, "")
                 else None
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             quoted_item_type = None
         metadata.quoted_item_type = quoted_item_type
         metadata.reply_kind = self._item_type_to_kind(quoted_item_type)
@@ -1361,7 +1359,7 @@ class WeixinOCAdapter(Platform):
                 if ref_create_time_ms_raw not in (None, "")
                 else None
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             ref_create_time_ms = None
 
         quoted_components: list[Any] = []

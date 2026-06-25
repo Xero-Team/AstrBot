@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import os
@@ -261,7 +259,7 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
                             "title": item.get("title"),
                             "snippet": item.get("snippet"),
                         }
-            except (json.JSONDecodeError, KeyError):
+            except json.JSONDecodeError, KeyError:
                 pass
 
     if not web_search_results:

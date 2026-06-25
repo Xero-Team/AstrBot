@@ -138,9 +138,9 @@ def new(name: str) -> None:
     click.echo(f"Plugin {name} created successfully")
 
 
-@plug.command()
+@plug.command(name="list")
 @click.option("--all", "show_all", "-a", is_flag=True, help="List uninstalled plugins")
-def list(show_all: bool) -> None:
+def list_plugins(show_all: bool) -> None:
     """List plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")

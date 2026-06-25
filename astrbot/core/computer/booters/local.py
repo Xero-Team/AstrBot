@@ -1,13 +1,14 @@
 import asyncio
+import fnmatch
 import locale
 import os
+import re
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
-
-from python_ripgrep import search
 
 from astrbot.api import logger
 from astrbot.core.computer.file_read_utils import (
@@ -225,15 +226,99 @@ class LocalFileSystemComponent(FileSystemComponent):
         before_context: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            results = search(
-                patterns=[pattern],
-                paths=[path] if path else None,
-                globs=[glob] if glob else None,
-                after_context=after_context,
-                before_context=before_context,
-                line_number=True,
+            search_path = Path(path or get_astrbot_root()).resolve(strict=False)
+            rg_path = shutil.which("rg")
+            if rg_path:
+                command = [
+                    rg_path,
+                    "--color=never",
+                    "-n",
+                    "--max-columns",
+                    "1000",
+                    "-e",
+                    pattern,
+                ]
+                if glob:
+                    command.extend(["-g", glob])
+                if after_context is not None:
+                    command.extend(["-A", str(after_context)])
+                if before_context is not None:
+                    command.extend(["-B", str(before_context)])
+                command.extend(["--", str(search_path)])
+
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    cwd=get_astrbot_root(),
+                )
+                if result.returncode in (0, 1):
+                    return {
+                        "success": True,
+                        "content": _truncate_long_lines(
+                            _decode_shell_output(result.stdout)
+                        ),
+                    }
+                return {
+                    "success": False,
+                    "content": "",
+                    "error": _decode_shell_output(result.stderr)
+                    or f"command exited with code {result.returncode}",
+                    "exit_code": result.returncode,
+                }
+
+            matcher = re.compile(pattern)
+            output_lines: list[str] = []
+            paths = (
+                [search_path]
+                if search_path.is_file()
+                else sorted(
+                    path_ for path_ in search_path.rglob("*") if path_.is_file()
+                )
             )
-            return {"success": True, "content": _truncate_long_lines("".join(results))}
+            for file_path in paths:
+                if glob and not fnmatch.fnmatch(file_path.name, glob):
+                    continue
+                try:
+                    text = file_path.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    continue
+
+                lines = text.splitlines()
+                matching_indexes = [
+                    index
+                    for index, line in enumerate(lines)
+                    if matcher.search(line) is not None
+                ]
+                if not matching_indexes:
+                    continue
+
+                if after_context is None and before_context is None:
+                    for index in matching_indexes:
+                        output_lines.append(
+                            f"{file_path}:{index + 1}:{lines[index][:1000]}\n"
+                        )
+                    continue
+
+                trailing = after_context or 0
+                leading = before_context or 0
+                ranges: list[tuple[int, int]] = []
+                for index in matching_indexes:
+                    start = max(0, index - leading)
+                    end = min(len(lines) - 1, index + trailing)
+                    if ranges and start <= ranges[-1][1] + 1:
+                        ranges[-1] = (ranges[-1][0], max(ranges[-1][1], end))
+                    else:
+                        ranges.append((start, end))
+
+                for range_index, (start, end) in enumerate(ranges):
+                    for line_index in range(start, end + 1):
+                        output_lines.append(
+                            f"{file_path}:{line_index + 1}:{lines[line_index][:1000]}\n"
+                        )
+                    if range_index != len(ranges) - 1:
+                        output_lines.append("--\n")
+
+            return {"success": True, "content": "".join(output_lines)}
 
         return await asyncio.to_thread(_run)
 

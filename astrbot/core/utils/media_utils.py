@@ -221,12 +221,14 @@ def file_uri_to_path(file_uri: MediaRefStr) -> str:
             return str(Path(url2pathname(f"//{netloc}{path}")))
         return str(Path(f"//{netloc}{path}"))
 
+    if os.name != "nt" and path.startswith("//"):
+        # Older AstrBot builds generated file:////path for POSIX absolute paths.
+        # Collapse the legacy prefix before url2pathname, which in Python 3.14
+        # treats a leading // as a non-local authority and raises URLError.
+        path = "/" + path.lstrip("/")
     path = url2pathname(path)
     if len(path) >= 4 and path[0] == "/" and path[2] == ":" and path[1].isalpha():
         path = path[1:]
-    elif os.name != "nt" and path.startswith("//"):
-        # Older AstrBot builds generated file:////path for POSIX absolute paths.
-        path = "/" + path.lstrip("/")
     return str(Path(path))
 
 

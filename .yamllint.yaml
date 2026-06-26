@@ -1,0 +1,31 @@
+---
+# yamllint configuration — strict baseline with prose-hostile rules relaxed.
+extends: default
+
+yaml-files:
+  - "*.yaml"
+  - "*.yml"
+
+rules:
+  # Prettier owns line wrapping; do not double-enforce length.
+  line-length: disable
+  # Many config files (k8s, compose) legitimately omit the leading `---`.
+  document-start: disable
+  # GitHub Actions and similar use `on:` which yamllint flags as truthy.
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+
+ignore: |
+  .venv*/
+  node_modules/
+  dashboard/node_modules/
+  dashboard/pnpm-lock.yaml
+  dashboard/dist/
+  data/

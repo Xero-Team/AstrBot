@@ -1,0 +1,43 @@
+# Dependency lockfiles and vendored content
+**/node_modules/
+.venv*/
+uv.lock
+dashboard/pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Build output
+dashboard/dist/
+astrbot/dashboard/dist/
+
+# Generated code (do not reformat)
+dashboard/src/api/generated/
+dashboard/src/assets/mdi-subset/
+
+# Historical changelogs (excluded from reformatting)
+changelogs/
+
+# Jinja / runtime HTML templates (Prettier would break templating syntax)
+astrbot/core/utils/t2i/template/
+
+# Minified assets
+*.min.js
+*.min.css
+
+# Binary / non-text assets
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.svg
+*.woff
+*.woff2
+*.wav
+*.ico
+
+# Test data fixtures with intentionally non-standard formatting
+tests/test_kook/data/
+
+# Python (handled by ruff, not prettier)
+*.py
+*.pyi

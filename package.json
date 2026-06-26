@@ -1,0 +1,19 @@
+{
+  "name": "astrbot-repo-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev-only toolchain for repo-wide formatting and linting (see `make check` / `make format`). Not published.",
+  "scripts": {
+    "format:data": "prettier --write \"**/*.{json,jsonc,css,scss,html,yml,yaml}\"",
+    "check:data": "prettier --check \"**/*.{json,jsonc,css,scss,html,yml,yaml}\"",
+    "format:md": "prettier --write \"**/*.md\"",
+    "check:md": "prettier --check \"**/*.md\" && markdownlint-cli2 \"**/*.md\"",
+    "format:toml": "taplo fmt",
+    "check:toml": "taplo fmt --check && taplo lint"
+  },
+  "devDependencies": {
+    "@taplo/cli": "0.7.0",
+    "markdownlint-cli2": "0.18.1",
+    "prettier": "3.8.4"
+  }
+}

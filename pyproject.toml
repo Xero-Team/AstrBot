@@ -80,6 +80,7 @@ dev = [
   "pytest-cov>=6.2.1",
   "radon>=6.0.1",
   "ruff>=0.15.0",
+  "yamllint>=1.37.1",
 ]
 
 [project.scripts]

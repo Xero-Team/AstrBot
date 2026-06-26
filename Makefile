@@ -1,6 +1,9 @@
 .PHONY: worktree worktree-add worktree-rm pr-test-neo pr-test-full pr-test-full-fast \
 	build build-backend build-dashboard run run-backend run-dashboard \
-	stop stop-backend stop-dashboard clean status quality quality-report
+	stop stop-backend stop-dashboard clean status quality quality-report \
+	check format \
+	check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker \
+	format-py format-web format-data format-md format-toml format-shell format-ps
 
 WORKTREE_DIR ?= ../astrbot_worktree
 BRANCH ?= $(word 2,$(MAKECMDGOALS))
@@ -11,6 +14,7 @@ RUN_DIR ?= .make
 DASHBOARD_DIR ?= dashboard
 PS := powershell -NoProfile -ExecutionPolicy Bypass -File
 PNPM := npm exec --yes pnpm@10 --
+NPX := npm exec --yes --
 QUALITY_TYPE_TARGETS := astrbot/api astrbot/cli astrbot/core/backup astrbot/core/config astrbot/core/knowledge_base astrbot/core/skills astrbot/utils
 QUALITY_SECURITY_TARGETS := astrbot/api astrbot/cli astrbot/core/backup astrbot/core/knowledge_base astrbot/core/skills astrbot/utils
 
@@ -95,3 +99,112 @@ quality-report:
 # Swallow extra args (branch/base) so make doesn't treat them as targets
 %:
 	@true
+
+# ---------------------------------------------------------------------------
+# Repo-wide formatting & linting
+#
+#   make check    verify every file type (CI-equivalent, no writes)
+#   make format   auto-fix every file type
+#
+# Node tools (prettier, markdownlint-cli2, taplo) come from the root
+# package.json; install once with `npm install`. yamllint comes from the uv
+# dev group (`uv sync --group dev`). Shell/Dockerfile linters are native
+# binaries: run if present, skipped with a notice otherwise (CI installs them).
+# ---------------------------------------------------------------------------
+
+check: check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker
+	@echo "==> all checks passed"
+
+format: format-py format-toml format-data format-md format-web format-shell format-ps
+	@echo "==> formatting complete; run 'make check' to verify"
+
+check-py:
+	@echo "==> [py] ruff format --check + ruff check"
+	uv run ruff format --check .
+	uv run ruff check .
+
+format-py:
+	@echo "==> [py] ruff format + ruff check --fix"
+	uv run ruff format .
+	uv run ruff check --fix .
+
+check-web:
+	@echo "==> [web] typecheck + eslint + prettier"
+	cd $(DASHBOARD_DIR) && $(PNPM) run typecheck
+	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --max-warnings=0
+	$(NPX) prettier --check "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
+
+format-web:
+	@echo "==> [web] prettier + eslint --fix"
+	$(NPX) prettier --write "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
+	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --fix
+
+check-data:
+	@echo "==> [data] prettier --check json/css/scss/html"
+	$(NPX) prettier --check "**/*.{json,jsonc,css,scss,html}"
+
+format-data:
+	@echo "==> [data] prettier --write json/css/scss/html"
+	$(NPX) prettier --write "**/*.{json,jsonc,css,scss,html}"
+
+check-md:
+	@echo "==> [md] prettier --check + markdownlint-cli2"
+	$(NPX) prettier --check "**/*.md"
+	$(NPX) markdownlint-cli2 "**/*.md"
+
+format-md:
+	@echo "==> [md] prettier --write + markdownlint-cli2 --fix"
+	$(NPX) prettier --write "**/*.md"
+	$(NPX) markdownlint-cli2 --fix "**/*.md"
+
+check-toml:
+	@echo "==> [toml] taplo fmt --check + lint"
+	$(NPX) @taplo/cli fmt --check
+	$(NPX) @taplo/cli lint
+
+format-toml:
+	@echo "==> [toml] taplo fmt"
+	$(NPX) @taplo/cli fmt
+
+check-yaml:
+	@echo "==> [yaml] prettier --check + yamllint"
+	$(NPX) prettier --check "**/*.{yml,yaml}"
+	uv run yamllint .
+
+format-yaml:
+	@echo "==> [yaml] prettier --write"
+	$(NPX) prettier --write "**/*.{yml,yaml}"
+
+check-shell:
+	@if command -v shfmt >/dev/null 2>&1; then \
+		echo "==> [shell] shfmt -d"; \
+		shfmt -d -i 2 -ci $$(git ls-files '*.sh'); \
+	else echo "==> [shell] shfmt not found, skipping (CI enforces)"; fi
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		echo "==> [shell] shellcheck"; \
+		shellcheck -S style $$(git ls-files '*.sh'); \
+	else echo "==> [shell] shellcheck not found, skipping (CI enforces)"; fi
+
+format-shell:
+	@if command -v shfmt >/dev/null 2>&1; then \
+		echo "==> [shell] shfmt -w"; \
+		shfmt -w -i 2 -ci $$(git ls-files '*.sh'); \
+	else echo "==> [shell] shfmt not found, skipping"; fi
+
+check-ps:
+	@echo "==> [ps] PSScriptAnalyzer"
+	@pwsh -NoProfile -Command "if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Write-Host '==> [ps] PSScriptAnalyzer not installed, skipping'; exit 0 }; \
+		$$f = git ls-files '*.ps1'; \
+		$$r = $$f | ForEach-Object { Invoke-ScriptAnalyzer -Path $$_ -Severity Warning,Error }; \
+		if ($$r) { $$r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 } else { Write-Host 'ok' }"
+
+format-ps:
+	@echo "==> [ps] Invoke-Formatter"
+	@pwsh -NoProfile -Command "if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Write-Host '==> [ps] PSScriptAnalyzer not installed, skipping'; exit 0 }; \
+		git ls-files '*.ps1' | ForEach-Object { $$p = $$_; $$c = Get-Content -Raw $$p; Set-Content -Path $$p -Value (Invoke-Formatter -ScriptDefinition $$c) -NoNewline }"
+
+check-docker:
+	@if command -v hadolint >/dev/null 2>&1; then \
+		echo "==> [docker] hadolint"; \
+		hadolint Dockerfile; \
+	else echo "==> [docker] hadolint not found, skipping (CI enforces)"; fi

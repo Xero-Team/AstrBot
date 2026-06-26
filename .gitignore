@@ -33,6 +33,9 @@ tests/astrbot_plugin_openai
 dashboard/node_modules/
 dashboard/dist/
 .pnpm-store/
+
+# Root dev toolchain (npm) — see package.json / `make check`
+/node_modules/
 package-lock.json
 yarn.lock
 
@@ -66,3 +69,5 @@ GenieData/
 dashboard/bun.lock
 
 *.log
+napcat/
+ntqq/

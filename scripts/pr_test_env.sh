@@ -150,9 +150,9 @@ if [[ "$PROFILE" == "neo" ]]; then
     "tests/test_skill_manager_sandbox_cache.py"
     "tests/test_dashboard.py::test_neo_skills_routes"
   )
-  uv run pytest -q "${NEO_TESTS[@]}" ${PYTEST_ARGS:-}
+  uv run pytest -q "${NEO_TESTS[@]}" "${PYTEST_ARGS:-}"
 else
-  uv run pytest --cov=. -v -o log_cli=true -o log_level=DEBUG ${PYTEST_ARGS:-}
+  uv run pytest --cov=. -v -o log_cli=true -o log_level=DEBUG "${PYTEST_ARGS:-}"
 fi
 
 run_smoke_test() {

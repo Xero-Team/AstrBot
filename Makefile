@@ -200,7 +200,7 @@ check-ps:
 	@echo "==> [ps] PSScriptAnalyzer"
 	@pwsh -NoProfile -Command "if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Write-Host '==> [ps] PSScriptAnalyzer not installed, skipping'; exit 0 }; \
 		$$f = git ls-files '*.ps1'; \
-		$$r = $$f | ForEach-Object { Invoke-ScriptAnalyzer -Path $$_ -Severity Warning,Error }; \
+		$$r = $$f | ForEach-Object { Invoke-ScriptAnalyzer -Path $$_ -Settings PSScriptAnalyzerSettings.psd1 }; \
 		if ($$r) { $$r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 } else { Write-Host 'ok' }"
 
 format-ps:

@@ -15,7 +15,8 @@ function Write-Status {
 
     if ($UseColor) {
         Write-Host "$Prefix    $Message" -ForegroundColor $Color
-    } else {
+    }
+    else {
         Write-Host "$Prefix    $Message"
     }
 }
@@ -59,11 +60,13 @@ function Install-Uv {
         Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -OutFile $tempScript -UseBasicParsing
         & $tempScript
         Update-UvPath
-    } catch {
+    }
+    catch {
         Err "Failed to install uv."
         Err "Please install uv manually: https://docs.astral.sh/uv/getting-started/installation/"
         exit 1
-    } finally {
+    }
+    finally {
         Remove-Item $tempScript -ErrorAction SilentlyContinue
     }
 }

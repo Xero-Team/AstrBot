@@ -1,0 +1,27 @@
+# Normalize line endings. Text files are stored as LF in the repository;
+# Git converts to the platform's native ending on checkout where applicable.
+* text=auto
+
+# Files that MUST stay LF even on Windows checkout (executed on Linux/CI or
+# byte-sensitive). Without this, core.autocrlf=true rewrites them to CRLF,
+# which breaks shell shebangs/heredocs and shellcheck.
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.service   text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# PowerShell is Windows-native; keep CRLF.
+*.ps1       text eol=crlf
+
+# Binary assets — never normalize.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.wav   binary
+*.svg   binary

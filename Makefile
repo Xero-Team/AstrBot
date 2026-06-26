@@ -161,7 +161,7 @@ check-toml:
 	@echo "==> [toml] taplo fmt --check + lint"
 	@for f in $$(git ls-files '*.toml'); do \
 		$(NPX) @taplo/cli fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
-		$(NPX) @taplo/cli lint --stdin-filepath "$$f" - < "$$f" || exit 1; \
+		$(NPX) @taplo/cli lint - < "$$f" || exit 1; \
 	done
 
 format-toml:
@@ -198,15 +198,11 @@ format-shell:
 
 check-ps:
 	@echo "==> [ps] PSScriptAnalyzer"
-	@pwsh -NoProfile -Command "if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Write-Host '==> [ps] PSScriptAnalyzer not installed, skipping'; exit 0 }; \
-		$$f = git ls-files '*.ps1'; \
-		$$r = $$f | ForEach-Object { Invoke-ScriptAnalyzer -Path $$_ -Settings PSScriptAnalyzerSettings.psd1 }; \
-		if ($$r) { $$r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 } else { Write-Host 'ok' }"
+	@$(PS) scripts/lint_powershell.ps1
 
 format-ps:
 	@echo "==> [ps] Invoke-Formatter"
-	@pwsh -NoProfile -Command "if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Write-Host '==> [ps] PSScriptAnalyzer not installed, skipping'; exit 0 }; \
-		git ls-files '*.ps1' | ForEach-Object { $$p = $$_; $$c = Get-Content -Raw $$p; Set-Content -Path $$p -Value (Invoke-Formatter -ScriptDefinition $$c) -NoNewline }"
+	@$(PS) scripts/lint_powershell.ps1 -Fix
 
 check-docker:
 	@if command -v hadolint >/dev/null 2>&1; then \

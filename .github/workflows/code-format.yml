@@ -100,12 +100,4 @@ jobs:
         run: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
       - name: Invoke-ScriptAnalyzer
         shell: pwsh
-        run: |
-          $r = git ls-files '*.ps1' | ForEach-Object {
-            Invoke-ScriptAnalyzer -Path $_ -Settings PSScriptAnalyzerSettings.psd1
-          }
-          if ($r) {
-            $r | Format-Table -AutoSize | Out-String | Write-Host
-            exit 1
-          }
-          Write-Host 'ok'
+        run: ./scripts/lint_powershell.ps1

@@ -2,13 +2,18 @@
   <v-dialog
     :model-value="modelValue"
     max-width="520"
-    @update:model-value="val => emit('update:modelValue', val)"
+    @update:model-value="(val) => emit('update:modelValue', val)"
   >
     <v-card>
       <v-card-title class="d-flex align-center pa-4">
         {{ tm('system_group.system.dashboard.totp.configuration') }}
         <v-spacer></v-spacer>
-        <v-btn icon variant="text" size="small" @click="emit('update:modelValue', false)">
+        <v-btn
+          icon
+          variant="text"
+          size="small"
+          @click="emit('update:modelValue', false)"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -29,11 +34,7 @@
           </div>
         </div>
         <div class="d-flex justify-center ga-3 mt-4">
-          <v-btn
-            color="primary"
-            variant="tonal"
-            @click="emit('rotate')"
-          >
+          <v-btn color="primary" variant="tonal" @click="emit('rotate')">
             <v-icon class="mr-1" size="16">mdi-shield-key</v-icon>
             {{ tm('system_group.system.dashboard.totp.rotate') }}
           </v-btn>
@@ -52,32 +53,36 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import QrCodeViewer from './QrCodeViewer.vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed } from 'vue';
+import QrCodeViewer from './QrCodeViewer.vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   configRoot: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits(['update:modelValue', 'rotate', 'rotate-recovery'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(['update:modelValue', 'rotate', 'rotate-recovery']);
+const { tm } = useModuleI18n('features/config-metadata');
 
-const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || '')
+const totpSecret = computed(
+  () => props.configRoot?.dashboard?.totp?.secret || '',
+);
 
 const totpProvisioningUri = computed(() => {
-  if (!totpSecret.value) return ''
-  const label = encodeURIComponent(props.configRoot?.dashboard?.username || 'AstrBot')
-  const issuer = encodeURIComponent('AstrBot')
-  return `otpauth://totp/${label}?secret=${encodeURIComponent(totpSecret.value)}&issuer=${issuer}`
-})
+  if (!totpSecret.value) return '';
+  const label = encodeURIComponent(
+    props.configRoot?.dashboard?.username || 'AstrBot',
+  );
+  const issuer = encodeURIComponent('AstrBot');
+  return `otpauth://totp/${label}?secret=${encodeURIComponent(totpSecret.value)}&issuer=${issuer}`;
+});
 </script>
 
 <style scoped>

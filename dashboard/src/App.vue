@@ -5,9 +5,14 @@
 
   <!-- 全局唯一 snackbar -->
   <v-snackbar
-v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.color"
-    :timeout="toastStore.current.timeout" :multi-line="toastStore.current.multiLine"
-    :location="toastStore.current.location" close-on-back>
+    v-if="toastStore.current"
+    v-model="snackbarShow"
+    :color="toastStore.current.color"
+    :timeout="toastStore.current.timeout"
+    :multi-line="toastStore.current.multiLine"
+    :location="toastStore.current.location"
+    close-on-back
+  >
     {{ toastStore.current.message }}
     <template v-if="toastStore.current.closable" #actions>
       <v-btn variant="text" @click="snackbarShow = false">关闭</v-btn>
@@ -17,43 +22,43 @@ v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.colo
 
 <script setup>
 import { RouterView } from 'vue-router';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useToastStore } from '@/stores/toast'
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue'
-import UpgradeRecoveryDialog from '@/components/shared/UpgradeRecoveryDialog.vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useToastStore } from '@/stores/toast';
+import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import UpgradeRecoveryDialog from '@/components/shared/UpgradeRecoveryDialog.vue';
 
-const toastStore = useToastStore()
-const globalWaitingRef = ref(null)
-let disposeTrayRestartListener = null
+const toastStore = useToastStore();
+const globalWaitingRef = ref(null);
+let disposeTrayRestartListener = null;
 
 const snackbarShow = computed({
   get: () => Boolean(toastStore.current),
   set: (val) => {
-    if (!val) toastStore.shift()
-  }
-})
+    if (!val) toastStore.shift();
+  },
+});
 
 onMounted(() => {
-  const desktopBridge = window.astrbotDesktop
+  const desktopBridge = window.astrbotDesktop;
   if (!desktopBridge?.onTrayRestartBackend) {
-    return
+    return;
   }
   disposeTrayRestartListener = desktopBridge.onTrayRestartBackend(() => {
     void (async () => {
       try {
-        await globalWaitingRef.value?.check?.()
+        await globalWaitingRef.value?.check?.();
       } catch (error) {
-        globalWaitingRef.value?.stop?.()
-        console.error('Tray restart backend failed:', error)
+        globalWaitingRef.value?.stop?.();
+        console.error('Tray restart backend failed:', error);
       }
-    })()
-  })
-})
+    })();
+  });
+});
 
 onBeforeUnmount(() => {
   if (disposeTrayRestartListener) {
-    disposeTrayRestartListener()
-    disposeTrayRestartListener = null
+    disposeTrayRestartListener();
+    disposeTrayRestartListener = null;
   }
-})
+});
 </script>

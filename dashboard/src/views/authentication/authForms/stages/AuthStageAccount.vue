@@ -56,7 +56,7 @@ function onSubmit() {
   ></v-text-field>
 
   <div class="mt-2">
-    <small style="color: grey;">{{ t('defaultHint') }}</small>
+    <small style="color: grey">{{ t('defaultHint') }}</small>
   </div>
 
   <v-btn

@@ -1,10 +1,10 @@
 <template>
-  <div style="margin-top: 16px;">
-    <v-btn 
-      color="primary" 
+  <div style="margin-top: 16px">
+    <v-btn
+      color="primary"
       variant="tonal"
       size="small"
-      style="margin-bottom: 8px;"
+      style="margin-bottom: 8px"
       @click="openDialog"
     >
       {{ t('features.settings.sidebar.customize.title') }}
@@ -20,14 +20,18 @@
             @click="dialog = false"
           ></v-btn>
         </v-card-title>
-        
+
         <v-card-text>
-          <p class="text-body-2 mb-4">{{ t('features.settings.sidebar.customize.subtitle') }}</p>
-          
+          <p class="text-body-2 mb-4">
+            {{ t('features.settings.sidebar.customize.subtitle') }}
+          </p>
+
           <v-row>
             <v-col cols="12" md="6">
-              <div class="mb-2 font-weight-medium">{{ t('features.settings.sidebar.customize.mainItems') }}</div>
-              <v-list 
+              <div class="mb-2 font-weight-medium">
+                {{ t('features.settings.sidebar.customize.mainItems') }}
+              </div>
+              <v-list
                 density="compact"
                 class="custom-list"
                 @dragover.prevent
@@ -43,7 +47,11 @@
                   @drop.stop="handleDrop($event, 'main', index)"
                 >
                   <template #prepend>
-                    <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
+                    <v-icon
+                      :icon="item.icon"
+                      size="small"
+                      class="mr-2"
+                    ></v-icon>
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template #append>
@@ -57,10 +65,12 @@
                 </v-list-item>
               </v-list>
             </v-col>
-            
+
             <v-col cols="12" md="6">
-              <div class="mb-2 font-weight-medium">{{ t('features.settings.sidebar.customize.moreItems') }}</div>
-              <v-list 
+              <div class="mb-2 font-weight-medium">
+                {{ t('features.settings.sidebar.customize.moreItems') }}
+              </div>
+              <v-list
                 density="compact"
                 class="custom-list"
                 @dragover.prevent
@@ -76,7 +86,11 @@
                   @drop.stop="handleDrop($event, 'more', index)"
                 >
                   <template #prepend>
-                    <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
+                    <v-icon
+                      :icon="item.icon"
+                      size="small"
+                      class="mr-2"
+                    ></v-icon>
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template #append>
@@ -92,21 +106,13 @@
             </v-col>
           </v-row>
         </v-card-text>
-        
+
         <v-card-actions>
-          <v-btn
-            color="error"
-            variant="text"
-            @click="resetToDefault"
-          >
+          <v-btn color="error" variant="text" @click="resetToDefault">
             {{ t('features.settings.sidebar.customize.reset') }}
           </v-btn>
           <v-spacer></v-spacer>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            @click="saveCustomization"
-          >
+          <v-btn color="primary" variant="tonal" @click="saveCustomization">
             {{ t('core.actions.save') }}
           </v-btn>
         </v-card-actions>
@@ -119,11 +125,11 @@
 import { ref, onMounted } from 'vue';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from '@/layouts/full/vertical-sidebar/sidebarItem';
-import { 
-  getSidebarCustomization, 
-  setSidebarCustomization, 
+import {
+  getSidebarCustomization,
+  setSidebarCustomization,
   clearSidebarCustomization,
-  resolveSidebarItems
+  resolveSidebarItems,
 } from '@/utils/sidebarCustomization';
 
 const { t } = useI18n();
@@ -135,10 +141,8 @@ const draggedItem = ref(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(
-    sidebarItems,
-    customization
-  );
+  const { mainItems: resolvedMain, moreItems: resolvedMore } =
+    resolveSidebarItems(sidebarItems, customization);
   mainItems.value = resolvedMain;
   moreItems.value = resolvedMore;
 }
@@ -152,60 +156,60 @@ function handleDragStart(event, listType, index) {
   draggedItem.value = {
     type: listType,
     index,
-    item: listType === 'main' ? mainItems.value[index] : moreItems.value[index]
+    item: listType === 'main' ? mainItems.value[index] : moreItems.value[index],
   };
   event.dataTransfer.effectAllowed = 'move';
 }
 
 function handleDrop(event, targetListType, targetIndex) {
   event.preventDefault();
-  
+
   if (!draggedItem.value) return;
-  
+
   const sourceListType = draggedItem.value.type;
   const sourceIndex = draggedItem.value.index;
   const item = draggedItem.value.item;
-  
+
   // Remove from source
   if (sourceListType === 'main') {
     mainItems.value.splice(sourceIndex, 1);
   } else {
     moreItems.value.splice(sourceIndex, 1);
   }
-  
+
   // Add to target
   if (targetListType === 'main') {
     mainItems.value.splice(targetIndex, 0, item);
   } else {
     moreItems.value.splice(targetIndex, 0, item);
   }
-  
+
   draggedItem.value = null;
 }
 
 function handleDropToList(event, targetListType) {
   event.preventDefault();
-  
+
   if (!draggedItem.value) return;
-  
+
   const sourceListType = draggedItem.value.type;
   const sourceIndex = draggedItem.value.index;
   const item = draggedItem.value.item;
-  
+
   // Remove from source
   if (sourceListType === 'main') {
     mainItems.value.splice(sourceIndex, 1);
   } else {
     moreItems.value.splice(sourceIndex, 1);
   }
-  
+
   // Add to target list at the end
   if (targetListType === 'main') {
     mainItems.value.push(item);
   } else {
     moreItems.value.push(item);
   }
-  
+
   draggedItem.value = null;
 }
 
@@ -221,22 +225,22 @@ function moveToMain(index) {
 
 function saveCustomization() {
   const config = {
-    mainItems: mainItems.value.map(item => item.title),
-    moreItems: moreItems.value.map(item => item.title)
+    mainItems: mainItems.value.map((item) => item.title),
+    moreItems: moreItems.value.map((item) => item.title),
   };
-  
+
   setSidebarCustomization(config);
-  
+
   // Notify the sidebar to reload
   window.dispatchEvent(new CustomEvent('sidebar-customization-changed'));
-  
+
   dialog.value = false;
 }
 
 function resetToDefault() {
   clearSidebarCustomization();
   initializeItems();
-  
+
   // Notify the sidebar to reload
   window.dispatchEvent(new CustomEvent('sidebar-customization-changed'));
 }

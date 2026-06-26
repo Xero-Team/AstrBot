@@ -14,15 +14,15 @@ const props = defineProps({
   },
   order: {
     type: String,
-    default: "desc",
+    default: 'desc',
   },
   ascendingLabel: {
     type: String,
-    default: "Ascending",
+    default: 'Ascending',
   },
   descendingLabel: {
     type: String,
-    default: "Descending",
+    default: 'Descending',
   },
   showOrder: {
     type: Boolean,
@@ -30,14 +30,14 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue", "update:order"]);
+const emit = defineEmits(['update:modelValue', 'update:order']);
 
 const updateSortBy = (value) => {
-  emit("update:modelValue", value);
+  emit('update:modelValue', value);
 };
 
 const toggleOrder = () => {
-  emit("update:order", props.order === "desc" ? "asc" : "desc");
+  emit('update:order', props.order === 'desc' ? 'asc' : 'desc');
 };
 </script>
 
@@ -66,10 +66,10 @@ const toggleOrder = () => {
       @click="toggleOrder"
     >
       <v-icon>{{
-        order === "desc" ? "mdi-arrow-down-thin" : "mdi-arrow-up-thin"
+        order === 'desc' ? 'mdi-arrow-down-thin' : 'mdi-arrow-up-thin'
       }}</v-icon>
       <v-tooltip activator="parent" location="top">
-        {{ order === "desc" ? descendingLabel : ascendingLabel }}
+        {{ order === 'desc' ? descendingLabel : ascendingLabel }}
       </v-tooltip>
     </v-btn>
   </div>

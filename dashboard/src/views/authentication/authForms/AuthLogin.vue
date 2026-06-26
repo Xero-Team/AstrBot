@@ -47,7 +47,9 @@ async function submitAccountStage() {
   loading.value = true;
   apiError.value = '';
   try {
-    authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
+    authStore.returnUrl = new URLSearchParams(window.location.search).get(
+      'redirect',
+    );
     const res = await authStore.login(username.value, password.value);
     if (res === 'totp_required') {
       goToTotpStage();
@@ -134,7 +136,12 @@ async function submitRecoveryStage() {
     />
 
     <div v-if="apiError" class="mt-4 error-container">
-      <v-alert color="error" variant="tonal" icon="mdi-alert-circle" border="start">
+      <v-alert
+        color="error"
+        variant="tonal"
+        icon="mdi-alert-circle"
+        border="start"
+      >
         {{ apiError }}
       </v-alert>
     </div>
@@ -224,6 +231,5 @@ async function submitRecoveryStage() {
     font-weight: 600;
     color: rgba(var(--v-theme-on-surface), 0.85);
   }
-
 }
 </style>

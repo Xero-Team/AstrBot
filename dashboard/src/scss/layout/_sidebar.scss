@@ -31,24 +31,24 @@
     .v-list-item {
       &:hover {
         color: rgb(var(--v-theme-primary)) !important;
-        
+
         .v-list-item-title {
           color: rgb(var(--v-theme-primary)) !important;
         }
-        
+
         .v-icon {
           color: rgb(var(--v-theme-primary)) !important;
         }
       }
-      
+
       // 选中状态的样式
       &.v-list-item--active {
         color: rgb(var(--v-theme-primary)) !important;
-        
+
         .v-list-item-title {
           color: rgb(var(--v-theme-primary)) !important;
         }
-        
+
         .v-icon {
           color: rgb(var(--v-theme-primary)) !important;
         }
@@ -95,12 +95,12 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    
+
     .flex-grow-1 {
       flex: 1 1 auto;
       overflow-y: auto;
     }
-    
+
     .sidebar-footer {
       padding: 16px;
       background: inherit;
@@ -110,7 +110,7 @@
       font-size: 13px;
       text-align: center;
       flex-shrink: 0;
-      
+
       .v-btn {
         width: 100%;
         max-width: 180px;

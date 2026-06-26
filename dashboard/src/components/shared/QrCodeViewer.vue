@@ -1,11 +1,6 @@
 <template>
   <div class="qr-code-viewer">
-    <img
-      v-if="imageSrc"
-      :src="imageSrc"
-      :alt="alt"
-      class="qr-code-image"
-    />
+    <img v-if="imageSrc" :src="imageSrc" :alt="alt" class="qr-code-image" />
     <div v-else class="qr-code-empty">
       {{ emptyHint }}
     </div>
@@ -16,15 +11,15 @@
 import QRCode from 'qrcode';
 
 export default {
-  name: "QrCodeViewer",
+  name: 'QrCodeViewer',
   props: {
     value: {
       type: String,
-      default: "",
+      default: '',
     },
     alt: {
       type: String,
-      default: "QR Code",
+      default: 'QR Code',
     },
     size: {
       type: Number,
@@ -36,25 +31,25 @@ export default {
     },
     emptyHint: {
       type: String,
-      default: "暂无可用二维码",
+      default: '暂无可用二维码',
     },
   },
   data() {
     return {
-      imageSrc: "",
+      imageSrc: '',
     };
   },
   watch: {
     value: {
       immediate: true,
-      handler: "renderQRCode",
+      handler: 'renderQRCode',
     },
   },
   methods: {
     async renderQRCode(rawValue) {
-      const value = String(rawValue || "").trim();
+      const value = String(rawValue || '').trim();
       if (!value) {
-        this.imageSrc = "";
+        this.imageSrc = '';
         return;
       }
 
@@ -62,10 +57,10 @@ export default {
         this.imageSrc = await QRCode.toDataURL(value, {
           margin: this.margin,
           width: this.size,
-          errorCorrectionLevel: "M",
+          errorCorrectionLevel: 'M',
         });
       } catch {
-        this.imageSrc = "";
+        this.imageSrc = '';
       }
     },
   },

@@ -7,7 +7,10 @@ import webfontDl from 'vite-plugin-webfont-dl';
 import { runMdiSubset } from './scripts/subset-mdi-font.mjs';
 
 const t2iShikiRuntimePath = fileURLToPath(
-  new URL('../astrbot/core/utils/t2i/template/shiki_runtime.iife.js', import.meta.url)
+  new URL(
+    '../astrbot/core/utils/t2i/template/shiki_runtime.iife.js',
+    import.meta.url,
+  ),
 );
 
 // Vite plugin: run MDI icon font subsetting (build only)
@@ -32,7 +35,9 @@ function t2iShikiRuntimeAsset(): Plugin {
           res.end(readFileSync(t2iShikiRuntimePath));
         } catch (error) {
           res.statusCode = 404;
-          res.end(`T2I Shiki runtime not found: ${error instanceof Error ? error.message : String(error)}`);
+          res.end(
+            `T2I Shiki runtime not found: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       });
     },
@@ -41,16 +46,16 @@ function t2iShikiRuntimeAsset(): Plugin {
         this.emitFile({
           type: 'asset',
           fileName: 't2i/shiki_runtime.iife.js',
-          source: readFileSync(t2iShikiRuntimePath)
+          source: readFileSync(t2iShikiRuntimePath),
         });
       } catch (error) {
         this.warn(
           `Skipping T2I Shiki runtime asset because it could not be read: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
-    }
+    },
   };
 }
 
@@ -87,39 +92,43 @@ export default defineConfig(({ command }) => ({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => ['v-list-recognize-title'].includes(tag)
-        }
-      }
+          isCustomElement: (tag) => ['v-list-recognize-title'].includes(tag),
+        },
+      },
     }),
     vuetify({
-      autoImport: true
+      autoImport: true,
     }),
-    webfontDl()
+    webfontDl(),
   ],
   resolve: {
     alias: [
       {
         find: /^shiki$/,
-        replacement: fileURLToPath(new URL('./src/utils/shikiLimitedBundle.js', import.meta.url))
+        replacement: fileURLToPath(
+          new URL('./src/utils/shikiLimitedBundle.js', import.meta.url),
+        ),
       },
       {
         find: /^stream-monaco$/,
-        replacement: fileURLToPath(new URL('./src/utils/streamMonacoDisabled.js', import.meta.url))
+        replacement: fileURLToPath(
+          new URL('./src/utils/streamMonacoDisabled.js', import.meta.url),
+        ),
       },
       {
         find: 'mermaid',
-        replacement: 'mermaid/dist/mermaid.js'
+        replacement: 'mermaid/dist/mermaid.js',
       },
       {
         find: '@',
-        replacement: fileURLToPath(new URL('./src', import.meta.url))
-      }
-    ]
+        replacement: fileURLToPath(new URL('./src', import.meta.url)),
+      },
+    ],
   },
   css: {
     preprocessorOptions: {
-      scss: {}
-    }
+      scss: {},
+    },
   },
   build: {
     sourcemap: false,
@@ -128,13 +137,13 @@ export default defineConfig(({ command }) => ({
       output: {
         manualChunks(id) {
           return resolveVendorChunk(id);
-        }
-      }
-    }
+        },
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['vuetify'],
-    entries: ['./src/**/*.vue']
+    entries: ['./src/**/*.vue'],
   },
   server: {
     host: '0.0.0.0',
@@ -143,8 +152,8 @@ export default defineConfig(({ command }) => ({
       '/api': {
         target: 'http://127.0.0.1:6185/',
         changeOrigin: true,
-        ws: true
-      }
-    }
-  }
+        ws: true,
+      },
+    },
+  },
 }));

@@ -3,7 +3,9 @@
     <div class="provider-models-toolbar">
       <div class="provider-models-title-wrap">
         <h3 class="provider-models-title">{{ tm('models.title') }}</h3>
-        <small class="provider-models-subtitle">{{ tm('models.available') }} {{ availableCount }}</small>
+        <small class="provider-models-subtitle"
+          >{{ tm('models.available') }} {{ availableCount }}</small
+        >
       </div>
 
       <div class="provider-models-toolbar__actions">
@@ -27,7 +29,11 @@
           rounded="xl"
           @click="emit('fetch-models')"
         >
-          {{ isSourceModified ? tm('providerSources.saveAndFetchModels') : tm('providerSources.fetchModels') }}
+          {{
+            isSourceModified
+              ? tm('providerSources.saveAndFetchModels')
+              : tm('providerSources.fetchModels')
+          }}
         </v-btn>
 
         <v-btn
@@ -45,8 +51,12 @@
     <div class="provider-models-sections">
       <section class="provider-models-section">
         <div class="provider-models-section__head">
-          <div class="provider-models-section__title">{{ tm('models.configured') }}</div>
-          <v-chip size="x-small" variant="tonal" label>{{ configuredEntries.length }}</v-chip>
+          <div class="provider-models-section__title">
+            {{ tm('models.configured') }}
+          </div>
+          <v-chip size="x-small" variant="tonal" label>{{
+            configuredEntries.length
+          }}</v-chip>
         </div>
 
         <div v-if="configuredEntries.length" class="provider-models-list">
@@ -63,8 +73,12 @@
                   class="provider-model-row__main"
                   @click="emit('open-provider-edit', entry.provider)"
                 >
-                  <div class="provider-model-row__title">{{ entry.provider.id }}</div>
-                  <div class="provider-model-row__subtitle">{{ entry.provider.model }}</div>
+                  <div class="provider-model-row__title">
+                    {{ entry.provider.id }}
+                  </div>
+                  <div class="provider-model-row__subtitle">
+                    {{ entry.provider.model }}
+                  </div>
                   <div class="provider-model-row__meta">
                     <span
                       v-for="item in capabilityIcons(entry.metadata)"
@@ -91,14 +105,19 @@
                     color="primary"
                     class="provider-model-row__switch"
                     :disabled="isProviderSaving(entry.provider.id)"
-                    @update:model-value="emit('toggle-provider-enable', entry.provider, $event)"
+                    @update:model-value="
+                      emit('toggle-provider-enable', entry.provider, $event)
+                    "
                   ></v-switch>
 
                   <v-btn
                     icon="mdi-connection"
                     size="small"
                     variant="text"
-                    :disabled="!entry.provider.enable || isProviderSaving(entry.provider.id)"
+                    :disabled="
+                      !entry.provider.enable ||
+                      isProviderSaving(entry.provider.id)
+                    "
                     :loading="isProviderTesting(entry.provider.id)"
                     @click.stop="emit('test-provider', entry.provider)"
                   ></v-btn>
@@ -117,26 +136,43 @@
                 </div>
               </div>
             </template>
-            <div><strong>{{ tm('models.tooltips.providerId') }}:</strong> {{ entry.provider.id }}</div>
-            <div><strong>{{ tm('models.tooltips.modelId') }}:</strong> {{ entry.provider.model }}</div>
+            <div>
+              <strong>{{ tm('models.tooltips.providerId') }}:</strong>
+              {{ entry.provider.id }}
+            </div>
+            <div>
+              <strong>{{ tm('models.tooltips.modelId') }}:</strong>
+              {{ entry.provider.model }}
+            </div>
           </v-tooltip>
         </div>
 
         <div v-else class="provider-models-empty">
-          <v-icon size="36" color="grey-lighten-1">mdi-package-variant-closed</v-icon>
+          <v-icon size="36" color="grey-lighten-1"
+            >mdi-package-variant-closed</v-icon
+          >
           <p>{{ tm('models.empty') }}</p>
         </div>
       </section>
 
       <v-divider></v-divider>
 
-      <section class="provider-models-section provider-models-section--available">
+      <section
+        class="provider-models-section provider-models-section--available"
+      >
         <div class="provider-models-section__head">
-          <div class="provider-models-section__title">{{ tm('models.available') }}</div>
-          <v-chip size="x-small" variant="tonal" label>{{ availableEntries.length }}</v-chip>
+          <div class="provider-models-section__title">
+            {{ tm('models.available') }}
+          </div>
+          <v-chip size="x-small" variant="tonal" label>{{
+            availableEntries.length
+          }}</v-chip>
         </div>
 
-        <div v-if="availableEntries.length" class="provider-models-list provider-models-list--available">
+        <div
+          v-if="availableEntries.length"
+          class="provider-models-list provider-models-list--available"
+        >
           <v-tooltip
             v-for="entry in availableEntries"
             :key="entry.model"
@@ -150,7 +186,11 @@
                   class="provider-model-row__main"
                   @click="emit('add-model-provider', entry.model)"
                 >
-                  <div class="provider-model-row__title provider-model-row__title--mono">{{ entry.model }}</div>
+                  <div
+                    class="provider-model-row__title provider-model-row__title--mono"
+                  >
+                    {{ entry.model }}
+                  </div>
                   <div class="provider-model-row__meta">
                     <span
                       v-for="item in capabilityIcons(entry.metadata)"
@@ -179,12 +219,17 @@
                 </div>
               </div>
             </template>
-            <div><strong>{{ tm('models.tooltips.modelId') }}:</strong> {{ entry.model }}</div>
+            <div>
+              <strong>{{ tm('models.tooltips.modelId') }}:</strong>
+              {{ entry.model }}
+            </div>
           </v-tooltip>
         </div>
 
         <div v-else class="provider-models-empty provider-models-empty--small">
-          <v-icon size="36" color="grey-lighten-1">mdi-database-search-outline</v-icon>
+          <v-icon size="36" color="grey-lighten-1"
+            >mdi-database-search-outline</v-icon
+          >
           <p>{{ tm('models.noModelsFound') }}</p>
         </div>
       </section>
@@ -193,63 +238,63 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { normalizeTextInput } from '@/utils/inputValue'
+import { computed } from 'vue';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 const props = defineProps({
   entries: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   availableCount: {
     type: Number,
-    default: 0
+    default: 0,
   },
   modelSearch: {
     type: String,
-    default: ''
+    default: '',
   },
   loadingModels: {
     type: Boolean,
-    default: false
+    default: false,
   },
   isSourceModified: {
     type: Boolean,
-    default: false
+    default: false,
   },
   supportsImageInput: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsAudioInput: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsToolCall: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsReasoning: {
     type: Function,
-    required: true
+    required: true,
   },
   formatContextLimit: {
     type: Function,
-    required: true
+    required: true,
   },
   testingProviders: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   savingProviders: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   tm: {
     type: Function,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
 const emit = defineEmits([
   'update:modelSearch',
@@ -259,41 +304,45 @@ const emit = defineEmits([
   'toggle-provider-enable',
   'test-provider',
   'delete-provider',
-  'add-model-provider'
-])
+  'add-model-provider',
+]);
 
 const modelSearchProxy = computed({
   get: () => props.modelSearch,
-  set: (val) => { emit('update:modelSearch', normalizeTextInput(val)); }
-})
+  set: (val) => {
+    emit('update:modelSearch', normalizeTextInput(val));
+  },
+});
 
 const configuredEntries = computed(() =>
-  (props.entries || []).filter((entry) => entry.type === 'configured')
-)
+  (props.entries || []).filter((entry) => entry.type === 'configured'),
+);
 
 const availableEntries = computed(() =>
-  (props.entries || []).filter((entry) => entry.type === 'available')
-)
+  (props.entries || []).filter((entry) => entry.type === 'available'),
+);
 
 const capabilityIcons = (metadata) => {
-  const icons = []
+  const icons = [];
   if (props.supportsImageInput(metadata)) {
-    icons.push({ icon: 'mdi-image-outline' })
+    icons.push({ icon: 'mdi-image-outline' });
   }
   if (props.supportsAudioInput(metadata)) {
-    icons.push({ icon: 'mdi-music-note-outline' })
+    icons.push({ icon: 'mdi-music-note-outline' });
   }
   if (props.supportsToolCall(metadata)) {
-    icons.push({ icon: 'mdi-wrench-outline' })
+    icons.push({ icon: 'mdi-wrench-outline' });
   }
   if (props.supportsReasoning(metadata)) {
-    icons.push({ icon: 'mdi-brain' })
+    icons.push({ icon: 'mdi-brain' });
   }
-  return icons
-}
+  return icons;
+};
 
-const isProviderTesting = (providerId) => props.testingProviders.includes(providerId)
-const isProviderSaving = (providerId) => props.savingProviders.includes(providerId)
+const isProviderTesting = (providerId) =>
+  props.testingProviders.includes(providerId);
+const isProviderSaving = (providerId) =>
+  props.savingProviders.includes(providerId);
 </script>
 
 <style scoped>
@@ -415,14 +464,8 @@ const isProviderSaving = (providerId) => props.savingProviders.includes(provider
 
 .provider-model-row__title--mono {
   font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace;
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
 }
 
 .provider-model-row__subtitle {

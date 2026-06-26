@@ -2,7 +2,7 @@
   <transition name="slide-left">
     <div v-if="isOpen" class="refs-sidebar">
       <div class="sidebar-header">
-        <h3 class="sidebar-title">{{ tm("refs.title") }}</h3>
+        <h3 class="sidebar-title">{{ tm('refs.title') }}</h3>
         <v-btn
           icon="mdi-close"
           size="small"
@@ -44,10 +44,10 @@
 </template>
 
 <script>
-import { useModuleI18n } from "@/i18n/composables";
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
-  name: "RefsSidebar",
+  name: 'RefsSidebar',
   props: {
     modelValue: {
       type: Boolean,
@@ -58,9 +58,9 @@ export default {
       default: null,
     },
   },
-  emits: ["update:modelValue"],
+  emits: ['update:modelValue'],
   setup() {
-    const { tm } = useModuleI18n("features/chat");
+    const { tm } = useModuleI18n('features/chat');
     return { tm };
   },
   computed: {
@@ -69,7 +69,7 @@ export default {
         return this.modelValue;
       },
       set(value) {
-        this.$emit("update:modelValue", value);
+        this.$emit('update:modelValue', value);
       },
     },
 
@@ -84,7 +84,7 @@ export default {
       return used
         .map((ref) => ({
           index: ref?.index,
-          title: ref?.title || ref?.url || "Reference",
+          title: ref?.title || ref?.url || 'Reference',
           url: ref?.url,
           snippet: ref?.snippet,
           favicon: ref?.favicon,
@@ -98,12 +98,12 @@ export default {
     },
 
     getRefInitial(title) {
-      if (!title) return "?";
+      if (!title) return '?';
       return title.charAt(0).toUpperCase();
     },
 
     formatUrl(url) {
-      if (!url) return "";
+      if (!url) return '';
       try {
         const urlObj = new URL(url);
         return urlObj.hostname;
@@ -114,7 +114,7 @@ export default {
 
     openLink(url) {
       if (url) {
-        window.open(url, "_blank");
+        window.open(url, '_blank');
       }
     },
   },

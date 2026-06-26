@@ -25,7 +25,7 @@
         <div v-if="isDragging" class="drop-overlay">
           <div class="drop-overlay-content">
             <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-            <span class="drop-text">{{ tm("input.dropToUpload") }}</span>
+            <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
           </div>
         </div>
       </transition>
@@ -70,7 +70,7 @@
             <div class="attachment-icon attachment-icon--audio">
               <v-icon icon="mdi-microphone" size="24"></v-icon>
             </div>
-            <span class="attachment-name">{{ tm("voice.recording") }}</span>
+            <span class="attachment-name">{{ tm('voice.recording') }}</span>
             <v-btn
               class="remove-attachment-btn"
               icon="mdi-close"
@@ -193,7 +193,7 @@
                 <v-icon icon="mdi-file-upload" size="small"></v-icon>
               </template>
               <v-list-item-title>
-                {{ tm("input.upload") }}
+                {{ tm('input.upload') }}
               </v-list-item-title>
             </v-list-item>
 
@@ -218,8 +218,8 @@
               <v-list-item-title>
                 {{
                   enableStreaming
-                    ? tm("streaming.enabled")
-                    : tm("streaming.disabled")
+                    ? tm('streaming.enabled')
+                    : tm('streaming.disabled')
                 }}
               </v-list-item-title>
             </v-list-item>
@@ -278,7 +278,7 @@
             ></v-icon>
             <v-tooltip activator="parent" location="top">
               {{
-                isRecording ? tm("voice.speaking") : tm("voice.startRecording")
+                isRecording ? tm('voice.speaking') : tm('voice.startRecording')
               }}
             </v-tooltip>
           </v-btn>
@@ -291,7 +291,7 @@
           >
             <v-icon icon="mdi-stop" variant="text" plain></v-icon>
             <v-tooltip activator="parent" location="top">
-              {{ tm("input.stopGenerating") }}
+              {{ tm('input.stopGenerating') }}
             </v-tooltip>
           </v-btn>
           <v-btn
@@ -316,19 +316,19 @@ import {
   nextTick,
   onMounted,
   onBeforeUnmount,
-} from "vue";
-import { useDisplay } from "vuetify";
-import { useModuleI18n } from "@/i18n/composables";
-import { useCustomizerStore } from "@/stores/customizer";
-import { isComposingEnter } from "@/utils/imeInput.mjs";
-import { commandApi } from "@/api/v1";
-import type { CommandItem } from "@/components/extension/componentPanel/types";
-import ConfigSelector from "./ConfigSelector.vue";
-import ProviderModelMenu from "./ProviderModelMenu.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import CommandSuggestion from "./CommandSuggestion.vue";
-import type { Session } from "@/composables/useSessions";
-import type { SuggestionCommand } from "./CommandSuggestion.vue";
+} from 'vue';
+import { useDisplay } from 'vuetify';
+import { useModuleI18n } from '@/i18n/composables';
+import { useCustomizerStore } from '@/stores/customizer';
+import { isComposingEnter } from '@/utils/imeInput.mjs';
+import { commandApi } from '@/api/v1';
+import type { CommandItem } from '@/components/extension/componentPanel/types';
+import ConfigSelector from './ConfigSelector.vue';
+import ProviderModelMenu from './ProviderModelMenu.vue';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
+import CommandSuggestion from './CommandSuggestion.vue';
+import type { Session } from '@/composables/useSessions';
+import type { SuggestionCommand } from './CommandSuggestion.vue';
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -356,7 +356,7 @@ interface Props {
   currentSession?: Session | null;
   configId?: string | null;
   replyTo?: ReplyInfo | null;
-  sendShortcut?: "enter" | "shift_enter";
+  sendShortcut?: 'enter' | 'shift_enter';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -365,11 +365,11 @@ const props = withDefaults(defineProps<Props>(), {
   configId: null,
   stagedFiles: () => [],
   replyTo: null,
-  sendShortcut: "shift_enter",
+  sendShortcut: 'shift_enter',
 });
 
 const emit = defineEmits<{
-  "update:prompt": [value: string];
+  'update:prompt': [value: string];
   send: [];
   stop: [];
   toggleStreaming: [];
@@ -384,9 +384,9 @@ const emit = defineEmits<{
   openLiveMode: [];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
+  () => useCustomizerStore().uiTheme === 'PurpleThemeDark',
 );
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
@@ -406,8 +406,8 @@ const allCommands = ref<CommandItem[]>([]);
 const showCommandSuggestion = ref(false);
 const selectedCommandIndex = ref(0);
 const commandSuggestionLoading = ref(false);
-const wakePrefixes = ref<string[]>(["/"]);
-const currentConfigId = ref((props.configId as string) || "default");
+const wakePrefixes = ref<string[]>(['/']);
+const currentConfigId = ref((props.configId as string) || 'default');
 
 /** 检查文本是否以任意一个唤醒词前缀开头 */
 function hasWakePrefix(text: string): boolean {
@@ -435,11 +435,11 @@ const enabledCommands = computed(() => {
   const result: SuggestionCommand[] = [];
   const seen = new Set<string>();
   // 使用第一个唤醒词前缀作为指令的展示前缀
-  const displayPrefix = wakePrefixes.value[0] || "/";
+  const displayPrefix = wakePrefixes.value[0] || '/';
 
   function addCommand(cmd: CommandItem) {
     if (!cmd.enabled) return;
-    if (cmd.type === "group") {
+    if (cmd.type === 'group') {
       // 指令组本身不加入，但其子指令加入
       cmd.sub_commands?.forEach(addCommand);
       return;
@@ -502,8 +502,10 @@ const filteredCommands = computed(() => {
 
   for (const cmd of enabledCommands.value) {
     const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
-    const descriptionText = normalizeCommandSearchText(cmd.description || "");
+    const pluginText = normalizeCommandSearchText(
+      cmd.plugin_display_name || '',
+    );
+    const descriptionText = normalizeCommandSearchText(cmd.description || '');
     const matchesCommand = commandText.includes(query);
     const matchesMetadata =
       pluginText.includes(query) || descriptionText.includes(query);
@@ -529,12 +531,12 @@ const localPrompt = computed({
     // DOM state mid-composition, which interferes with IME insertion at
     // non-terminal cursor positions (alternating character loss).
     // The final value is synced manually in handleCompositionEnd.
-    if (!isComposing.value) emit("update:prompt", value);
+    if (!isComposing.value) emit('update:prompt', value);
   },
 });
 
 const sessionPlatformId = computed(
-  () => props.currentSession?.platform_id || "webchat",
+  () => props.currentSession?.platform_id || 'webchat',
 );
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
@@ -559,56 +561,56 @@ const fileTypeStyles: Record<
   string,
   { color: string; icon: string; label: string }
 > = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
+  pdf: { color: '#d32f2f', icon: 'mdi-file-pdf-box', label: 'PDF' },
+  txt: { color: '#1976d2', icon: 'mdi-file-document-outline', label: 'TXT' },
+  md: { color: '#1976d2', icon: 'mdi-language-markdown-outline', label: 'MD' },
   markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
+    color: '#1976d2',
+    icon: 'mdi-language-markdown-outline',
+    label: 'MD',
   },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
+  doc: { color: '#2b579a', icon: 'mdi-file-word-box', label: 'DOC' },
+  docx: { color: '#2b579a', icon: 'mdi-file-word-box', label: 'DOCX' },
+  xls: { color: '#217346', icon: 'mdi-file-excel-box', label: 'XLS' },
+  xlsx: { color: '#217346', icon: 'mdi-file-excel-box', label: 'XLSX' },
+  csv: { color: '#217346', icon: 'mdi-file-delimited-outline', label: 'CSV' },
+  ppt: { color: '#d24726', icon: 'mdi-file-powerpoint-box', label: 'PPT' },
+  pptx: { color: '#d24726', icon: 'mdi-file-powerpoint-box', label: 'PPTX' },
+  zip: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'ZIP' },
+  rar: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'RAR' },
+  '7z': { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: '7Z' },
+  tar: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'TAR' },
+  gz: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'GZ' },
+  json: { color: '#6a1b9a', icon: 'mdi-code-json', label: 'JSON' },
+  yaml: { color: '#6a1b9a', icon: 'mdi-code-braces', label: 'YAML' },
+  yml: { color: '#6a1b9a', icon: 'mdi-code-braces', label: 'YML' },
+  js: { color: '#b8860b', icon: 'mdi-language-javascript', label: 'JS' },
+  ts: { color: '#3178c6', icon: 'mdi-language-typescript', label: 'TS' },
+  html: { color: '#e34c26', icon: 'mdi-language-html5', label: 'HTML' },
+  css: { color: '#264de4', icon: 'mdi-language-css3', label: 'CSS' },
+  py: { color: '#3776ab', icon: 'mdi-language-python', label: 'PY' },
+  java: { color: '#b07219', icon: 'mdi-language-java', label: 'JAVA' },
+  mp3: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'MP3' },
+  wav: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'WAV' },
+  flac: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'FLAC' },
+  mp4: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'MP4' },
+  mov: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'MOV' },
+  webm: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'WEBM' },
 };
 
 function fileExtension(file: StagedFileInfo) {
-  const name = file.original_name || file.filename || "";
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
+  const name = file.original_name || file.filename || '';
+  const extension = name.split('.').pop()?.toLowerCase() || '';
+  return extension === name.toLowerCase() ? '' : extension;
 }
 
 function filePresentation(file: StagedFileInfo) {
   const extension = fileExtension(file);
   return (
     fileTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
+      color: '#607d8b',
+      icon: 'mdi-file-document-outline',
+      label: extension ? extension.slice(0, 4).toUpperCase() : 'FILE',
     }
   );
 }
@@ -625,7 +627,7 @@ function handleClearReply() {
 
 // 动画完成后发送clearReply事件
 function handleReplyAfterLeave() {
-  emit("clearReply");
+  emit('clearReply');
   isReplyClosing.value = false;
 }
 
@@ -635,8 +637,8 @@ const { mobile } = useDisplay();
 function autoResize() {
   const el = inputField.value;
   if (!el) return;
-  el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, 200)  }px`;
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
 }
 
 watch(localPrompt, () => {
@@ -646,20 +648,20 @@ watch(localPrompt, () => {
 function handleKeyDown(e: KeyboardEvent) {
   // 命令提示激活时，拦截方向键和 Enter/Esc
   if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
-    if (e.key === "ArrowDown") {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
       selectedCommandIndex.value =
         (selectedCommandIndex.value + 1) % filteredCommands.value.length;
       return;
     }
-    if (e.key === "ArrowUp") {
+    if (e.key === 'ArrowUp') {
       e.preventDefault();
       selectedCommandIndex.value =
         (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
         filteredCommands.value.length;
       return;
     }
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       const cmd = filteredCommands.value[selectedCommandIndex.value];
       if (cmd) {
@@ -667,14 +669,14 @@ function handleKeyDown(e: KeyboardEvent) {
       }
       return;
     }
-    if (e.key === "Escape") {
+    if (e.key === 'Escape') {
       e.preventDefault();
       showCommandSuggestion.value = false;
       return;
     }
   }
 
-  const isEnter = e.key === "Enter";
+  const isEnter = e.key === 'Enter';
   if (!isEnter) {
     // Ctrl+B 录音
     if (e.ctrlKey && e.keyCode === 66) {
@@ -684,7 +686,7 @@ function handleKeyDown(e: KeyboardEvent) {
       ctrlKeyDown.value = true;
       ctrlKeyTimer.value = window.setTimeout(() => {
         if (ctrlKeyDown.value && !props.isRecording) {
-          emit("startRecording");
+          emit('startRecording');
         }
       }, ctrlKeyLongPressThreshold);
     }
@@ -698,19 +700,18 @@ function handleKeyDown(e: KeyboardEvent) {
   const isSendHotkey =
     e.ctrlKey ||
     e.metaKey ||
-    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
+    (props.sendShortcut === 'enter' ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
-    if (localPrompt.value.trim() === "/astr_live_dev") {
-      emit("openLiveMode");
-      localPrompt.value = "";
+    if (localPrompt.value.trim() === '/astr_live_dev') {
+      emit('openLiveMode');
+      localPrompt.value = '';
       return;
     }
     if (canSend.value) {
-      emit("send");
+      emit('send');
     }
-    
   }
 }
 
@@ -736,7 +737,7 @@ function handleBlur() {
 
 /** 选择命令，填入输入框 */
 function handleCommandSelect(cmd: SuggestionCommand) {
-  localPrompt.value = `${cmd.effective_command  } `;
+  localPrompt.value = `${cmd.effective_command} `;
   showCommandSuggestion.value = false;
   void nextTick(() => {
     inputField.value?.focus();
@@ -750,8 +751,10 @@ async function fetchCommands() {
   commandSuggestionLoading.value = true;
   try {
     const cid = currentConfigId.value;
-    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
-    if (res.data.status === "ok") {
+    const res = await commandApi.list(
+      cid && cid !== 'default' ? cid : undefined,
+    );
+    if (res.data.status === 'ok') {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
       const prefixes: string[] = res.data.data.wake_prefix || [];
@@ -761,7 +764,7 @@ async function fetchCommands() {
     }
   } catch (err) {
     // 静默失败，不影响聊天功能
-    console.warn("Failed to fetch commands for suggestion:", err);
+    console.warn('Failed to fetch commands for suggestion:', err);
   } finally {
     commandSuggestionLoading.value = false;
   }
@@ -789,7 +792,7 @@ function handleCompositionEnd(e: CompositionEvent) {
     const el = inputField.value;
     // Only sync if the DOM hasn't been changed externally in the meantime.
     if (el && el.value === endValue && el.value !== props.prompt) {
-      emit("update:prompt", el.value);
+      emit('update:prompt', el.value);
       // Re-evaluate command suggestions that were suppressed during IME
       // composition (handleInput checks isComposing). Only needed when
       // the value actually changed. Runs in a nested nextTick so
@@ -818,13 +821,13 @@ function handleKeyUp(e: KeyboardEvent) {
     }
 
     if (props.isRecording) {
-      emit("stopRecording");
+      emit('stopRecording');
     }
   }
 }
 
 function handlePaste(e: ClipboardEvent) {
-  emit("pasteImage", e);
+  emit('pasteImage', e);
 }
 
 function handleDragOver(e: DragEvent) {
@@ -835,7 +838,7 @@ function handleDragOver(e: DragEvent) {
   }
 
   // 检查是否有文件
-  if (e.dataTransfer?.types.includes("Files")) {
+  if (e.dataTransfer?.types.includes('Files')) {
     isDragging.value = true;
   }
 }
@@ -852,7 +855,7 @@ function handleDrop(e: DragEvent) {
 
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
-    emit("fileSelect", files);
+    emit('fileSelect', files);
   }
 }
 
@@ -864,16 +867,16 @@ function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement;
   const files = target.files;
   if (files) {
-    emit("fileSelect", files);
+    emit('fileSelect', files);
   }
-  target.value = "";
+  target.value = '';
 }
 
 function handleRecordClick() {
   if (props.isRecording) {
-    emit("stopRecording");
+    emit('stopRecording');
   } else {
-    emit("startRecording");
+    emit('startRecording');
   }
 }
 
@@ -881,8 +884,8 @@ function handleConfigChange(payload: {
   configId: string;
   agentRunnerType: string;
 }) {
-  const runnerType = (payload.agentRunnerType || "").toLowerCase();
-  const isInternal = runnerType === "internal" || runnerType === "local";
+  const runnerType = (payload.agentRunnerType || '').toLowerCase();
+  const isInternal = runnerType === 'internal' || runnerType === 'local';
   showProviderSelector.value = isInternal;
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
@@ -905,19 +908,19 @@ function focusInput() {
 
 onMounted(() => {
   if (inputField.value) {
-    inputField.value.addEventListener("paste", handlePaste);
+    inputField.value.addEventListener('paste', handlePaste);
   }
-  document.addEventListener("keyup", handleKeyUp);
+  document.addEventListener('keyup', handleKeyUp);
   // 预加载指令列表
   void fetchCommands();
 });
 
 onBeforeUnmount(() => {
   if (inputField.value) {
-    inputField.value.removeEventListener("paste", handlePaste);
+    inputField.value.removeEventListener('paste', handlePaste);
   }
   clearCompositionState();
-  document.removeEventListener("keyup", handleKeyUp);
+  document.removeEventListener('keyup', handleKeyUp);
 });
 
 defineExpose({

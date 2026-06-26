@@ -15,7 +15,7 @@
 </template>
 
 <script setup>
-import { computed, inject, unref, useSlots } from "vue";
+import { computed, inject, unref, useSlots } from 'vue';
 
 const props = defineProps({
   node: {
@@ -25,8 +25,8 @@ const props = defineProps({
 });
 
 const slots = useSlots();
-const injectedIsDark = inject("isDark", false);
-const webSearchResults = inject("webSearchResults", () => ({}));
+const injectedIsDark = inject('isDark', false);
+const webSearchResults = inject('webSearchResults', () => ({}));
 
 const isDark = computed(() => Boolean(unref(injectedIsDark)));
 const refIndex = computed(() => {
@@ -38,41 +38,41 @@ const refIndex = computed(() => {
 const resultData = computed(() => {
   if (!refIndex.value) return null;
   const results =
-    typeof webSearchResults === "function"
+    typeof webSearchResults === 'function'
       ? webSearchResults()
       : webSearchResults;
   return results?.[refIndex.value] || null;
 });
 
-const url = computed(() => resultData.value?.url || "");
+const url = computed(() => resultData.value?.url || '');
 
 const domain = computed(() => {
-  if (!url.value) return "";
+  if (!url.value) return '';
   try {
     const urlObj = new URL(url.value);
-    return urlObj.hostname.replace(/^www\./, "");
+    return urlObj.hostname.replace(/^www\./, '');
   } catch (_error) {
-    return "";
+    return '';
   }
 });
 
 const chipStyle = computed(() => ({
   backgroundColor: isDark.value
-    ? "rgba(var(--v-theme-on-surface), 0.08)"
-    : "rgba(var(--v-theme-on-surface), 0.04)",
+    ? 'rgba(var(--v-theme-on-surface), 0.08)'
+    : 'rgba(var(--v-theme-on-surface), 0.04)',
   color: isDark.value
-    ? "rgba(var(--v-theme-on-surface), 0.62)"
-    : "rgba(var(--v-theme-on-surface), 0.72)",
+    ? 'rgba(var(--v-theme-on-surface), 0.62)'
+    : 'rgba(var(--v-theme-on-surface), 0.72)',
 }));
 
 function slotText(nodes = []) {
   return nodes
     .map((node) => {
-      if (typeof node.children === "string") return node.children;
+      if (typeof node.children === 'string') return node.children;
       if (Array.isArray(node.children)) return slotText(node.children);
-      return "";
+      return '';
     })
-    .join("");
+    .join('');
 }
 </script>
 

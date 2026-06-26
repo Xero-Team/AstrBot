@@ -3,12 +3,16 @@
  */
 import { ref, reactive } from 'vue';
 import { commandApi, toolApi } from '@/api/v1';
-import type { CommandItem, CommandSummary, SnackbarState, ToolItem } from '../types';
+import type {
+  CommandItem,
+  CommandSummary,
+  SnackbarState,
+  ToolItem,
+} from '../types';
 
 export function useComponentData() {
-  const getErrorMessage = (error: unknown, fallback: string) => (
-    error instanceof Error && error.message ? error.message : fallback
-  );
+  const getErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error && error.message ? error.message : fallback;
 
   const loading = ref(false);
   const commands = ref<CommandItem[]>([]);
@@ -16,13 +20,13 @@ export function useComponentData() {
   const toolsLoading = ref(false);
   const summary = reactive<CommandSummary>({
     disabled: 0,
-    conflicts: 0
+    conflicts: 0,
   });
 
   const snackbar = reactive<SnackbarState>({
     show: false,
     message: '',
-    color: 'success'
+    color: 'success',
   });
 
   /**
@@ -81,6 +85,6 @@ export function useComponentData() {
     snackbar,
     toast,
     fetchCommands,
-    fetchTools
+    fetchTools,
   };
 }

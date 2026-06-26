@@ -3,9 +3,14 @@
     <v-container fluid class="dashboard-shell pa-4 pa-md-6">
       <div class="dashboard-header">
         <div class="dashboard-header-main">
-          <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+          <div class="d-flex align-center flex-wrap" style="gap: 8px">
             <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
-            <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>
+            <v-chip
+              size="x-small"
+              color="orange-darken-2"
+              variant="tonal"
+              label
+            >
               {{ tm('page.beta') }}
             </v-chip>
           </div>
@@ -13,10 +18,22 @@
         </div>
 
         <div class="dashboard-header-actions">
-          <v-btn variant="text" color="primary" prepend-icon="mdi-refresh" :loading="loading" @click="reload">
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-refresh"
+            :loading="loading"
+            @click="reload"
+          >
             {{ tm('actions.refresh') }}
           </v-btn>
-          <v-btn variant="tonal" color="primary" prepend-icon="mdi-content-save" :loading="saving" @click="save">
+          <v-btn
+            variant="tonal"
+            color="primary"
+            prepend-icon="mdi-content-save"
+            :loading="saving"
+            @click="save"
+          >
             {{ tm('actions.save') }}
           </v-btn>
         </div>
@@ -29,8 +46,12 @@
 
       <div class="dashboard-section-head">
         <div>
-          <div class="dashboard-section-title">{{ tm('section.globalSettings') }}</div>
-          <div class="dashboard-section-subtitle">{{ mainStateDescription }}</div>
+          <div class="dashboard-section-title">
+            {{ tm('section.globalSettings') }}
+          </div>
+          <div class="dashboard-section-subtitle">
+            {{ mainStateDescription }}
+          </div>
         </div>
       </div>
 
@@ -39,7 +60,9 @@
           <div class="setting-card-head">
             <div>
               <div class="setting-title">{{ tm('switches.enable') }}</div>
-              <div class="setting-subtitle">{{ tm('switches.enableHint') }}</div>
+              <div class="setting-subtitle">
+                {{ tm('switches.enableHint') }}
+              </div>
             </div>
             <v-switch
               v-model="cfg.main_enable"
@@ -55,7 +78,9 @@
           <div class="setting-card-head">
             <div>
               <div class="setting-title">{{ tm('switches.dedupe') }}</div>
-              <div class="setting-subtitle">{{ tm('switches.dedupeHint') }}</div>
+              <div class="setting-subtitle">
+                {{ tm('switches.dedupeHint') }}
+              </div>
             </div>
             <v-switch
               v-model="cfg.remove_main_duplicate_tools"
@@ -72,20 +97,30 @@
       <div class="dashboard-section-head">
         <div>
           <div class="dashboard-section-title">{{ tm('section.title') }}</div>
-          <div class="dashboard-section-subtitle">{{ tm('section.subtitle') }}</div>
+          <div class="dashboard-section-subtitle">
+            {{ tm('section.subtitle') }}
+          </div>
         </div>
         <div class="dashboard-section-actions">
           <div class="dashboard-pill">
             <v-icon size="16">mdi-robot-outline</v-icon>
             <span>{{ cfg.agents.length }}</span>
           </div>
-          <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="addAgent">
+          <v-btn
+            color="primary"
+            variant="tonal"
+            prepend-icon="mdi-plus"
+            @click="addAgent"
+          >
             {{ tm('actions.add') }}
           </v-btn>
         </div>
       </div>
 
-      <div v-if="cfg.agents.length === 0" class="dashboard-card dashboard-card--padded empty-card">
+      <div
+        v-if="cfg.agents.length === 0"
+        class="dashboard-card dashboard-card--padded empty-card"
+      >
         <div class="empty-wrap">
           <v-icon icon="mdi-robot-off" size="60" class="mb-4" />
           <div class="empty-title">{{ tm('empty.title') }}</div>
@@ -105,10 +140,24 @@
           <div class="agent-summary">
             <div class="agent-summary-main">
               <div class="agent-summary-top">
-                <v-badge dot :color="agent.enabled ? 'success' : 'grey'" inline />
-                <span class="agent-name">{{ agent.name || tm('cards.unnamed') }}</span>
-                <v-chip size="x-small" variant="tonal" :color="agent.enabled ? 'success' : 'default'">
-                  {{ agent.enabled ? tm('cards.statusEnabled') : tm('cards.statusDisabled') }}
+                <v-badge
+                  dot
+                  :color="agent.enabled ? 'success' : 'grey'"
+                  inline
+                />
+                <span class="agent-name">{{
+                  agent.name || tm('cards.unnamed')
+                }}</span>
+                <v-chip
+                  size="x-small"
+                  variant="tonal"
+                  :color="agent.enabled ? 'success' : 'default'"
+                >
+                  {{
+                    agent.enabled
+                      ? tm('cards.statusEnabled')
+                      : tm('cards.statusDisabled')
+                  }}
                 </v-chip>
               </div>
               <div class="agent-summary-desc">
@@ -117,13 +166,21 @@
             </div>
             <div class="agent-summary-actions">
               <v-btn
-                :append-icon="isAgentExpanded(agent.__key) ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                :append-icon="
+                  isAgentExpanded(agent.__key)
+                    ? 'mdi-chevron-up'
+                    : 'mdi-chevron-down'
+                "
                 variant="text"
                 color="default"
                 density="comfortable"
                 @click="toggleAgentExpanded(agent.__key)"
               >
-                {{ isAgentExpanded(agent.__key) ? tm('actions.collapse') : tm('actions.expand') }}
+                {{
+                  isAgentExpanded(agent.__key)
+                    ? tm('actions.collapse')
+                    : tm('actions.expand')
+                }}
               </v-btn>
               <v-switch
                 v-model="agent.enabled"
@@ -145,19 +202,28 @@
           <v-expand-transition>
             <div v-show="isAgentExpanded(agent.__key)" class="agent-edit-grid">
               <section class="dashboard-card dashboard-card--padded inner-card">
-                <div class="dashboard-section-title section-mini-title">{{ tm('section.agentSetup') }}</div>
+                <div class="dashboard-section-title section-mini-title">
+                  {{ tm('section.agentSetup') }}
+                </div>
                 <div class="dashboard-form-grid dashboard-form-grid--single">
                   <v-text-field
                     v-model="agent.name"
                     :label="tm('form.nameLabel')"
-                    :rules="[v => !!v || tm('messages.nameRequired'), v => /^[a-z][a-z0-9_]*$/.test(v) || tm('messages.namePattern')]"
+                    :rules="[
+                      (v) => !!v || tm('messages.nameRequired'),
+                      (v) =>
+                        /^[a-z][a-z0-9_]*$/.test(v) ||
+                        tm('messages.namePattern'),
+                    ]"
                     variant="outlined"
                     density="comfortable"
                     hide-details="auto"
                   />
 
                   <div class="selector-wrap">
-                    <div class="selector-label">{{ tm('form.providerLabel') }}</div>
+                    <div class="selector-label">
+                      {{ tm('form.providerLabel') }}
+                    </div>
                     <div class="selector-card">
                       <ProviderSelector
                         v-model="agent.provider_id"
@@ -170,7 +236,9 @@
                   </div>
 
                   <div class="selector-wrap">
-                    <div class="selector-label">{{ tm('form.personaLabel') }}</div>
+                    <div class="selector-label">
+                      {{ tm('form.personaLabel') }}
+                    </div>
                     <div class="selector-card">
                       <PersonaSelector v-model="agent.persona_id" />
                     </div>
@@ -188,10 +256,17 @@
               </section>
 
               <section class="dashboard-card dashboard-card--padded inner-card">
-                <div class="dashboard-section-title section-mini-title">{{ tm('cards.personaPreview') }}</div>
-                <div class="dashboard-section-subtitle">{{ tm('cards.previewHint') }}</div>
+                <div class="dashboard-section-title section-mini-title">
+                  {{ tm('cards.personaPreview') }}
+                </div>
+                <div class="dashboard-section-subtitle">
+                  {{ tm('cards.previewHint') }}
+                </div>
                 <div class="persona-preview-wrap">
-                  <PersonaQuickPreview :model-value="agent.persona_id" class="h-100" />
+                  <PersonaQuickPreview
+                    :model-value="agent.persona_id"
+                    class="h-100"
+                  />
                 </div>
               </section>
             </div>
@@ -199,10 +274,17 @@
         </section>
       </div>
 
-      <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
+      <v-snackbar
+        v-model="snackbar.show"
+        :color="snackbar.color"
+        timeout="3000"
+        location="top"
+      >
         {{ snackbar.message }}
         <template #actions>
-          <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
+          <v-btn variant="text" @click="snackbar.show = false">{{
+            tm('actions.close')
+          }}</v-btn>
         </template>
       </v-snackbar>
     </v-container>
@@ -210,87 +292,97 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
-import { useTheme } from 'vuetify'
-import { subagentApi } from '@/api/v1'
-import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
-import PersonaSelector from '@/components/shared/PersonaSelector.vue'
-import ProviderSelector from '@/components/shared/ProviderSelector.vue'
-import { useModuleI18n } from '@/i18n/composables'
-import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
+import { useTheme } from 'vuetify';
+import { subagentApi } from '@/api/v1';
+import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue';
+import PersonaSelector from '@/components/shared/PersonaSelector.vue';
+import ProviderSelector from '@/components/shared/ProviderSelector.vue';
+import { useModuleI18n } from '@/i18n/composables';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 type SubAgentItem = {
-  __key: string
-  name: string
-  persona_id: string
-  public_description: string
-  enabled: boolean
-  provider_id?: string
-}
+  __key: string;
+  name: string;
+  persona_id: string;
+  public_description: string;
+  enabled: boolean;
+  provider_id?: string;
+};
 
 type SubAgentConfig = {
-  main_enable: boolean
-  remove_main_duplicate_tools: boolean
-  agents: SubAgentItem[]
-}
+  main_enable: boolean;
+  remove_main_duplicate_tools: boolean;
+  agents: SubAgentItem[];
+};
 
-type RawSubAgentItem = Partial<Omit<SubAgentItem, '__key'>> & Record<string, unknown>
+type RawSubAgentItem = Partial<Omit<SubAgentItem, '__key'>> &
+  Record<string, unknown>;
 
 type RawSubAgentConfig = {
-  main_enable?: unknown
-  remove_main_duplicate_tools?: unknown
-  agents?: unknown
-}
+  main_enable?: unknown;
+  remove_main_duplicate_tools?: unknown;
+  agents?: unknown;
+};
 
-const { tm } = useModuleI18n('features/subagent')
-const theme = useTheme()
-const confirmDialog = useConfirmDialog()
+const { tm } = useModuleI18n('features/subagent');
+const theme = useTheme();
+const confirmDialog = useConfirmDialog();
 
-const loading = ref(false)
-const saving = ref(false)
-const isDark = computed(() => theme.global.current.value.dark)
+const loading = ref(false);
+const saving = ref(false);
+const isDark = computed(() => theme.global.current.value.dark);
 
 const snackbar = ref({
   show: false,
   message: '',
-  color: 'success'
-})
-const expandedAgents = ref<Record<string, boolean>>({})
-const initialSnapshot = ref('')
-const hasLoaded = ref(false)
+  color: 'success',
+});
+const expandedAgents = ref<Record<string, boolean>>({});
+const initialSnapshot = ref('');
+const hasLoaded = ref(false);
 
-function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
-  snackbar.value = { show: true, message, color }
+function toast(
+  message: string,
+  color: 'success' | 'error' | 'warning' = 'success',
+) {
+  snackbar.value = { show: true, message, color };
 }
 
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
-  agents: []
-})
+  agents: [],
+});
 
 const mainStateDescription = computed(() =>
-  cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
-)
+  cfg.value.main_enable
+    ? tm('description.enabled')
+    : tm('description.disabled'),
+);
 
-const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value)
+const hasUnsavedChanges = computed(
+  () => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value,
+);
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (!error || typeof error !== 'object') {
-    return fallback
+    return fallback;
   }
   const errorLike = error as {
-    message?: string
-    response?: { data?: { message?: string } }
-  }
-  return errorLike.response?.data?.message || errorLike.message || fallback
+    message?: string;
+    response?: { data?: { message?: string } };
+  };
+  return errorLike.response?.data?.message || errorLike.message || fallback;
 }
 
 function normalizeConfig(raw: RawSubAgentConfig): SubAgentConfig {
-  const main_enable = Boolean(raw?.main_enable)
-  const remove_main_duplicate_tools = Boolean(raw?.remove_main_duplicate_tools)
-  const agentsRaw = Array.isArray(raw?.agents) ? (raw.agents as RawSubAgentItem[]) : []
+  const main_enable = Boolean(raw?.main_enable);
+  const remove_main_duplicate_tools = Boolean(raw?.remove_main_duplicate_tools);
+  const agentsRaw = Array.isArray(raw?.agents)
+    ? (raw.agents as RawSubAgentItem[])
+    : [];
 
   const agents: SubAgentItem[] = agentsRaw.map((a, i) => ({
     __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
@@ -298,10 +390,10 @@ function normalizeConfig(raw: RawSubAgentConfig): SubAgentConfig {
     persona_id: (a?.persona_id ?? '').toString(),
     public_description: (a?.public_description ?? '').toString(),
     enabled: a?.enabled !== false,
-    provider_id: (a?.provider_id ?? undefined)
-  }))
+    provider_id: a?.provider_id ?? undefined,
+  }));
 
-  return { main_enable, remove_main_duplicate_tools, agents }
+  return { main_enable, remove_main_duplicate_tools, agents };
 }
 
 function serializeConfig(config: SubAgentConfig): string {
@@ -313,89 +405,91 @@ function serializeConfig(config: SubAgentConfig): string {
       persona_id: agent.persona_id,
       public_description: agent.public_description,
       enabled: agent.enabled,
-      provider_id: agent.provider_id ?? null
-    }))
-  })
+      provider_id: agent.provider_id ?? null,
+    })),
+  });
 }
 
 async function loadConfig() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await subagentApi.getConfig()
+    const res = await subagentApi.getConfig();
     if (res.data.status === 'ok') {
-      cfg.value = normalizeConfig(res.data.data)
-      expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
-      initialSnapshot.value = serializeConfig(cfg.value)
-      hasLoaded.value = true
+      cfg.value = normalizeConfig(res.data.data);
+      expandedAgents.value = Object.fromEntries(
+        cfg.value.agents.map((agent) => [agent.__key, false]),
+      );
+      initialSnapshot.value = serializeConfig(cfg.value);
+      hasLoaded.value = true;
     } else {
-      toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
+      toast(res.data.message || tm('messages.loadConfigFailed'), 'error');
     }
   } catch (e) {
-    toast(getErrorMessage(e, tm('messages.loadConfigFailed')), 'error')
+    toast(getErrorMessage(e, tm('messages.loadConfigFailed')), 'error');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function addAgent() {
-  const key = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const key = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   cfg.value.agents.push({
     __key: key,
     name: '',
     persona_id: '',
     public_description: '',
     enabled: true,
-    provider_id: undefined
-  })
-  expandedAgents.value[key] = false
+    provider_id: undefined,
+  });
+  expandedAgents.value[key] = false;
 }
 
 function removeAgent(idx: number) {
-  const [removed] = cfg.value.agents.splice(idx, 1)
+  const [removed] = cfg.value.agents.splice(idx, 1);
   if (removed) {
-    delete expandedAgents.value[removed.__key]
+    delete expandedAgents.value[removed.__key];
   }
 }
 
 function isAgentExpanded(key: string): boolean {
-  return expandedAgents.value[key] !== false
+  return expandedAgents.value[key] !== false;
 }
 
 function toggleAgentExpanded(key: string) {
-  expandedAgents.value[key] = !isAgentExpanded(key)
+  expandedAgents.value[key] = !isAgentExpanded(key);
 }
 
 function validateBeforeSave(): boolean {
-  const nameRe = /^[a-z][a-z0-9_]{0,63}$/
-  const seen = new Set<string>()
+  const nameRe = /^[a-z][a-z0-9_]{0,63}$/;
+  const seen = new Set<string>();
 
   for (const agent of cfg.value.agents) {
-    const name = (agent.name || '').trim()
+    const name = (agent.name || '').trim();
     if (!name) {
-      toast(tm('messages.nameMissing'), 'warning')
-      return false
+      toast(tm('messages.nameMissing'), 'warning');
+      return false;
     }
     if (!nameRe.test(name)) {
-      toast(tm('messages.nameInvalid'), 'warning')
-      return false
+      toast(tm('messages.nameInvalid'), 'warning');
+      return false;
     }
     if (seen.has(name)) {
-      toast(tm('messages.nameDuplicate', { name }), 'warning')
-      return false
+      toast(tm('messages.nameDuplicate', { name }), 'warning');
+      return false;
     }
-    seen.add(name)
+    seen.add(name);
     if (!agent.persona_id) {
-      toast(tm('messages.personaMissing', { name }), 'warning')
-      return false
+      toast(tm('messages.personaMissing', { name }), 'warning');
+      return false;
     }
   }
 
-  return true
+  return true;
 }
 
 async function save() {
-  if (!validateBeforeSave()) return
-  saving.value = true
+  if (!validateBeforeSave()) return;
+  saving.value = true;
   try {
     const payload = {
       main_enable: cfg.value.main_enable,
@@ -405,22 +499,22 @@ async function save() {
         persona_id: agent.persona_id,
         public_description: agent.public_description,
         enabled: agent.enabled,
-        provider_id: agent.provider_id
-      }))
-    }
+        provider_id: agent.provider_id,
+      })),
+    };
 
-    const res = await subagentApi.updateConfig(payload)
+    const res = await subagentApi.updateConfig(payload);
     if (res.data.status === 'ok') {
-      initialSnapshot.value = serializeConfig(cfg.value)
-      hasLoaded.value = true
-      toast(res.data.message || tm('messages.saveSuccess'), 'success')
+      initialSnapshot.value = serializeConfig(cfg.value);
+      hasLoaded.value = true;
+      toast(res.data.message || tm('messages.saveSuccess'), 'success');
     } else {
-      toast(res.data.message || tm('messages.saveFailed'), 'error')
+      toast(res.data.message || tm('messages.saveFailed'), 'error');
     }
   } catch (e) {
-    toast(getErrorMessage(e, tm('messages.saveFailed')), 'error')
+    toast(getErrorMessage(e, tm('messages.saveFailed')), 'error');
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
@@ -428,47 +522,47 @@ async function reload() {
   if (hasUnsavedChanges.value) {
     const confirmed = await askForConfirmation(
       tm('messages.unsavedChangesReloadConfirm'),
-      confirmDialog
-    )
+      confirmDialog,
+    );
     if (!confirmed) {
-      return
+      return;
     }
   }
-  await loadConfig()
+  await loadConfig();
 }
 
 async function confirmLeaveIfNeeded(): Promise<boolean> {
   if (!hasUnsavedChanges.value) {
-    return true
+    return true;
   }
 
   return askForConfirmation(
     tm('messages.unsavedChangesLeaveConfirm'),
-    confirmDialog
-  )
+    confirmDialog,
+  );
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
   if (!hasUnsavedChanges.value) {
-    return
+    return;
   }
 
-  event.preventDefault()
-  event.returnValue = ''
+  event.preventDefault();
+  event.returnValue = '';
 }
 
 onMounted(() => {
-  window.addEventListener('beforeunload', handleBeforeUnload)
-  void reload()
-})
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  void reload();
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-})
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+});
 
 onBeforeRouteLeave(async () => {
-  return confirmLeaveIfNeeded()
-})
+  return confirmLeaveIfNeeded();
+});
 </script>
 
 <style scoped>

@@ -43,7 +43,7 @@ export interface ReorderItem {
   sort_order: number;
 }
 
-export const usePersonaStore = defineStore("persona", {
+export const usePersonaStore = defineStore('persona', {
   state: () => ({
     folderTree: [] as FolderTreeNode[],
     currentFolderId: null as string | null,
@@ -61,7 +61,9 @@ export const usePersonaStore = defineStore("persona", {
       if (this.breadcrumbPath.length === 0) {
         return '根目录';
       }
-      return this.breadcrumbPath[this.breadcrumbPath.length - 1]?.name || '根目录';
+      return (
+        this.breadcrumbPath[this.breadcrumbPath.length - 1]?.name || '根目录'
+      );
     },
   },
 
@@ -175,7 +177,10 @@ export const usePersonaStore = defineStore("persona", {
     /**
      * 移动 Persona 到文件夹
      */
-    async movePersonaToFolder(personaId: string, targetFolderId: string | null): Promise<void> {
+    async movePersonaToFolder(
+      personaId: string,
+      targetFolderId: string | null,
+    ): Promise<void> {
       const response = await personaApi.move(personaId, targetFolderId);
 
       if (response.data.status !== 'ok') {
@@ -183,16 +188,16 @@ export const usePersonaStore = defineStore("persona", {
       }
 
       // 刷新当前文件夹内容和文件夹树
-      await Promise.all([
-        this.refreshCurrentFolder(),
-        this.loadFolderTree(),
-      ]);
+      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
     },
 
     /**
      * 移动文件夹到另一个文件夹
      */
-    async moveFolderToFolder(folderId: string, targetParentId: string | null): Promise<void> {
+    async moveFolderToFolder(
+      folderId: string,
+      targetParentId: string | null,
+    ): Promise<void> {
       const response = await personaApi.updateFolder(folderId, {
         parent_id: targetParentId,
       });
@@ -202,10 +207,7 @@ export const usePersonaStore = defineStore("persona", {
       }
 
       // 刷新当前文件夹内容和文件夹树
-      await Promise.all([
-        this.refreshCurrentFolder(),
-        this.loadFolderTree(),
-      ]);
+      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
     },
 
     /**
@@ -226,10 +228,7 @@ export const usePersonaStore = defineStore("persona", {
       }
 
       // 刷新当前文件夹内容和文件夹树
-      await Promise.all([
-        this.refreshCurrentFolder(),
-        this.loadFolderTree(),
-      ]);
+      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
 
       return response.data.data.folder as PersonaFolder;
     },
@@ -249,10 +248,7 @@ export const usePersonaStore = defineStore("persona", {
       }
 
       // 刷新当前文件夹内容和文件夹树
-      await Promise.all([
-        this.refreshCurrentFolder(),
-        this.loadFolderTree(),
-      ]);
+      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
     },
 
     /**
@@ -266,10 +262,7 @@ export const usePersonaStore = defineStore("persona", {
       }
 
       // 刷新当前文件夹内容和文件夹树
-      await Promise.all([
-        this.refreshCurrentFolder(),
-        this.loadFolderTree(),
-      ]);
+      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
     },
 
     /**
@@ -318,5 +311,5 @@ export const usePersonaStore = defineStore("persona", {
       };
       return findNode(this.folderTree);
     },
-  }
+  },
 });

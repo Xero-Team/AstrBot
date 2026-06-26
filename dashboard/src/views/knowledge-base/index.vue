@@ -36,21 +36,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useModuleI18n } from '@/i18n/composables';
 
-const { tm: t } = useModuleI18n('features/knowledge-base/index')
-const route = useRoute()
-const router = useRouter()
-const detailTitle = ref('')
+const { tm: t } = useModuleI18n('features/knowledge-base/index');
+const route = useRoute();
+const router = useRouter();
+const detailTitle = ref('');
 
-const isDetailRoute = computed(() => route.name === 'NativeKBDetail')
-const displayDetailTitle = computed(() => detailTitle.value || String(route.params.kbId || ''))
+const isDetailRoute = computed(() => route.name === 'NativeKBDetail');
+const displayDetailTitle = computed(
+  () => detailTitle.value || String(route.params.kbId || ''),
+);
 
 const goToList = () => {
-  void router.push({ name: 'NativeKBList' })
-}
+  void router.push({ name: 'NativeKBList' });
+};
 </script>
 
 <style scoped>

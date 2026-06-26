@@ -75,9 +75,12 @@ export function useI18n() {
 
     // 处理参数插值
     if (params) {
-      result = result.replace(/\{(\w+)\}/g, (match: string, paramKey: string) => {
-        return params[paramKey]?.toString() || match;
-      });
+      result = result.replace(
+        /\{(\w+)\}/g,
+        (match: string, paramKey: string) => {
+          return params[paramKey]?.toString() || match;
+        },
+      );
     }
 
     return result;
@@ -95,9 +98,11 @@ export function useI18n() {
       // 触发自定义事件，通知相关页面重新加载配置数据
       // 这是因为插件适配器的 i18n 数据是通过后端 API 注入的，
       // 需要根据 Accept-Language 头重新获取
-      window.dispatchEvent(new CustomEvent('astrbot-locale-changed', {
-        detail: { locale: newLocale }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('astrbot-locale-changed', {
+          detail: { locale: newLocale },
+        }),
+      );
     }
   };
 
@@ -115,7 +120,7 @@ export function useI18n() {
     locale,
     setLocale,
     availableLocales,
-    isLoaded
+    isLoaded,
   };
 }
 
@@ -125,7 +130,10 @@ export function useI18n() {
 export function useModuleI18n(moduleName: string) {
   const { t } = useI18n();
 
-  const tm = (key: string, params?: Record<string, string | number>): string => {
+  const tm = (
+    key: string,
+    params?: Record<string, string | number>,
+  ): string => {
     // 将斜杠转换为点号以匹配嵌套对象结构
     const normalizedModuleName = moduleName.replace(/\//g, '.');
     return t(`${normalizedModuleName}.${key}`, params);
@@ -161,11 +169,11 @@ export function useLanguageSwitcher() {
   const languageOptions = computed(() => [
     { value: 'zh-CN', label: '简体中文', flag: '🇨🇳' },
     { value: 'en-US', label: 'English', flag: '🇺🇸' },
-    { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' }
+    { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' },
   ]);
 
   const currentLanguage = computed(() => {
-    return languageOptions.value.find(lang => lang.value === locale.value);
+    return languageOptions.value.find((lang) => lang.value === locale.value);
   });
 
   const switchLanguage = async (newLocale: Locale) => {
@@ -177,7 +185,7 @@ export function useLanguageSwitcher() {
     languageOptions,
     currentLanguage,
     switchLanguage,
-    availableLocales
+    availableLocales,
   };
 }
 
@@ -211,7 +219,11 @@ export function mergeDynamicTranslations(
 
 function deepMerge(target: TranslationTree, source: TranslationTree) {
   for (const key of Object.keys(source)) {
-    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+    if (
+      source[key] &&
+      typeof source[key] === 'object' &&
+      !Array.isArray(source[key])
+    ) {
       if (!(key in target) || typeof target[key] !== 'object') {
         target[key] = {};
       }
@@ -226,9 +238,10 @@ function deepMerge(target: TranslationTree, source: TranslationTree) {
 export async function setupI18n() {
   // 从localStorage获取保存的语言设置
   const savedLocale = localStorage.getItem('astrbot-locale') as Locale;
-  const initialLocale = savedLocale && ['zh-CN', 'en-US', 'ru-RU'].includes(savedLocale)
-    ? savedLocale
-    : 'zh-CN';
+  const initialLocale =
+    savedLocale && ['zh-CN', 'en-US', 'ru-RU'].includes(savedLocale)
+      ? savedLocale
+      : 'zh-CN';
 
   await initI18n(initialLocale);
-} 
+}

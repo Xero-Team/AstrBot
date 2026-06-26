@@ -1,11 +1,11 @@
 <script setup>
-import ExtensionCard from "@/components/shared/ExtensionCard.vue";
-import { normalizeTextInput } from "@/utils/inputValue";
+import ExtensionCard from '@/components/shared/ExtensionCard.vue';
+import { normalizeTextInput } from '@/utils/inputValue';
 import {
   readPinnedExtensions,
   writePinnedExtensions,
-} from "./extensionPreferenceStorage.mjs";
-import { computed, ref, watch } from "vue";
+} from './extensionPreferenceStorage.mjs';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
   state: {
@@ -40,9 +40,9 @@ const {
 const openPluginDetail = (extension) => {
   if (!extension?.name) return;
   router.push({
-    name: "ExtensionDetails",
+    name: 'ExtensionDetails',
     params: { pluginId: extension.name },
-    hash: "#installed",
+    hash: '#installed',
   });
 };
 
@@ -102,7 +102,7 @@ const togglePinnedExtension = (extension) => {
   <v-tab-item v-show="activeTab === 'installed'">
     <div class="mb-4 pt-4 pb-4">
       <div class="d-flex align-center flex-wrap" style="gap: 12px">
-        <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
+        <h2 class="text-h2 mb-0">{{ tm('titles.installedAstrBotPlugins') }}</h2>
 
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
           <v-text-field
@@ -131,18 +131,18 @@ const togglePinnedExtension = (extension) => {
     >
       <v-card-title class="d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
-        {{ tm("failedPlugins.title", { count: failedPluginItems.length }) }}
+        {{ tm('failedPlugins.title', { count: failedPluginItems.length }) }}
       </v-card-title>
       <v-card-text class="pt-0">
         <div class="text-body-2 mb-3">
-          {{ tm("failedPlugins.hint") }}
+          {{ tm('failedPlugins.hint') }}
         </div>
         <v-table density="compact">
           <thead>
             <tr>
-              <th>{{ tm("failedPlugins.columns.plugin") }}</th>
-              <th>{{ tm("failedPlugins.columns.error") }}</th>
-              <th class="text-right">{{ tm("buttons.actions") }}</th>
+              <th>{{ tm('failedPlugins.columns.plugin') }}</th>
+              <th>{{ tm('failedPlugins.columns.error') }}</th>
+              <th class="text-right">{{ tm('buttons.actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -166,7 +166,7 @@ const togglePinnedExtension = (extension) => {
                     overflow: hidden;
                   "
                 >
-                  {{ plugin.error || tm("status.unknown") }}
+                  {{ plugin.error || tm('status.unknown') }}
                 </div>
               </td>
               <td class="text-right">
@@ -178,7 +178,7 @@ const togglePinnedExtension = (extension) => {
                   prepend-icon="mdi-refresh"
                   @click="reloadFailedPlugin(plugin.dir_name)"
                 >
-                  {{ tm("buttons.reload") }}
+                  {{ tm('buttons.reload') }}
                 </v-btn>
                 <v-btn
                   size="small"
@@ -188,7 +188,7 @@ const togglePinnedExtension = (extension) => {
                   :disabled="plugin.reserved"
                   @click="requestUninstallFailedPlugin(plugin.dir_name)"
                 >
-                  {{ tm("buttons.uninstall") }}
+                  {{ tm('buttons.uninstall') }}
                 </v-btn>
               </td>
             </tr>
@@ -204,9 +204,9 @@ const togglePinnedExtension = (extension) => {
             <v-icon size="64" color="info" class="mb-4"
               >mdi-puzzle-outline</v-icon
             >
-            <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
+            <div class="text-h5 mb-2">{{ tm('empty.noPlugins') }}</div>
             <div class="text-body-1 mb-4">
-              {{ tm("empty.noPluginsDesc") }}
+              {{ tm('empty.noPluginsDesc') }}
             </div>
           </v-col>
         </v-row>

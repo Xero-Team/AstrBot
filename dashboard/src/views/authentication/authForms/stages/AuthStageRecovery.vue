@@ -15,7 +15,10 @@ const emit = defineEmits<{
 }>();
 
 function normalizeRecoveryCode(code: string): string {
-  return code.toUpperCase().replace(/[^A-Z2-7]/g, '').slice(0, 32);
+  return code
+    .toUpperCase()
+    .replace(/[^A-Z2-7]/g, '')
+    .slice(0, 32);
 }
 
 function formatRecoveryCode(code: string): string {
@@ -40,13 +43,25 @@ function onSubmit() {
 <template>
   <div class="account-stage-header">
     <div class="account-stage-user">{{ t('recovery.title') }}</div>
-    <v-btn variant="text" size="small" color="primary" :disabled="props.loading" @click="emit('back')">
+    <v-btn
+      variant="text"
+      size="small"
+      color="primary"
+      :disabled="props.loading"
+      @click="emit('back')"
+    >
       {{ t('setup.totp.back') }}
     </v-btn>
   </div>
 
   <div class="recovery-code-section mt-2">
-    <v-alert color="warning" variant="tonal" icon="mdi-alert" class="mb-4" density="compact">
+    <v-alert
+      color="warning"
+      variant="tonal"
+      icon="mdi-alert"
+      class="mb-4"
+      density="compact"
+    >
       {{ t('recovery.totpDisableWarning') }}
     </v-alert>
 

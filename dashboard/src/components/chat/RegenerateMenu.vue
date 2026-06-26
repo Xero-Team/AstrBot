@@ -16,15 +16,11 @@
       />
     </template>
 
-    <v-list-item
-      class="styled-menu-item"
-      rounded="md"
-      @click="emit('retry')"
-    >
+    <v-list-item class="styled-menu-item" rounded="md" @click="emit('retry')">
       <template #prepend>
         <v-icon size="18">mdi-refresh</v-icon>
       </template>
-      <v-list-item-title>{{ tm("actions.retry") }}</v-list-item-title>
+      <v-list-item-title>{{ tm('actions.retry') }}</v-list-item-title>
     </v-list-item>
 
     <v-menu
@@ -44,7 +40,9 @@
           <template #prepend>
             <v-icon size="18">mdi-creation</v-icon>
           </template>
-          <v-list-item-title>{{ tm("actions.retryWithModel") }}</v-list-item-title>
+          <v-list-item-title>{{
+            tm('actions.retryWithModel')
+          }}</v-list-item-title>
           <template #append>
             <v-progress-circular
               v-if="loadingProviders"
@@ -92,8 +90,11 @@
             </v-list-item-subtitle>
           </v-list-item>
 
-          <div v-if="!loadingProviders && !providerConfigs.length" class="regenerate-empty">
-            {{ tm("actions.noAvailableModels") }}
+          <div
+            v-if="!loadingProviders && !providerConfigs.length"
+            class="regenerate-empty"
+          >
+            {{ tm('actions.noAvailableModels') }}
           </div>
         </v-list>
       </v-card>
@@ -102,10 +103,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { providerApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { ref } from 'vue';
+import { providerApi } from '@/api/v1';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 interface ModelMetadata {
   modalities?: { input?: string[] };
@@ -130,7 +131,7 @@ const emit = defineEmits<{
   retryWithModel: [selection: RegenerateModelSelection];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const providerConfigs = ref<ProviderConfig[]>([]);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
@@ -139,15 +140,15 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
-        (provider: ProviderConfig) => provider.enable !== false,
-      );
+    const response = await providerApi.listByProviderType('chat_completion');
+    if (response.data.status === 'ok') {
+      providerConfigs.value = (
+        (response.data.data || []) as unknown as ProviderConfig[]
+      ).filter((provider: ProviderConfig) => provider.enable !== false);
       providersLoaded.value = true;
     }
   } catch (error) {
-    console.error("Failed to load provider list:", error);
+    console.error('Failed to load provider list:', error);
   } finally {
     loadingProviders.value = false;
   }
@@ -166,18 +167,18 @@ function handleModelMenuToggle(isOpen: boolean) {
 }
 
 function retryWithModel(provider: ProviderConfig) {
-  emit("retryWithModel", {
+  emit('retryWithModel', {
     providerId: provider.id,
     modelName: provider.model,
   });
 }
 
 function supportsImageInput(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.modalities?.input?.includes("image"));
+  return Boolean(provider.model_metadata?.modalities?.input?.includes('image'));
 }
 
 function supportsAudioInput(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.modalities?.input?.includes("audio"));
+  return Boolean(provider.model_metadata?.modalities?.input?.includes('audio'));
 }
 
 function supportsToolCall(provider: ProviderConfig): boolean {

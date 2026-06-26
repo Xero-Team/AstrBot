@@ -31,7 +31,11 @@
     </div>
 
     <transition :name="previewTransitionName" mode="out-in">
-      <div v-if="showStreamingPreview" :key="previewKey" class="reasoning-preview">
+      <div
+        v-if="showStreamingPreview"
+        :key="previewKey"
+        class="reasoning-preview"
+      >
         {{ previewText }}
       </div>
     </transition>
@@ -39,14 +43,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
   type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+} from '@/composables/useMessages';
+import { useModuleI18n } from '@/i18n/composables';
+import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 
 const props = defineProps<{
   parts?: MessagePart[];
@@ -62,9 +66,9 @@ const emit = defineEmits<{
   open: [];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const isExpanded = ref(Boolean(props.initialExpanded));
-const previewText = ref("");
+const previewText = ref('');
 const previewKey = ref(0);
 let previewTimer: ReturnType<typeof setInterval> | null = null;
 let previewStartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -72,7 +76,7 @@ let previewStartTimer: ReturnType<typeof setTimeout> | null = null;
 const renderParts = computed<MessagePart[]>(() => {
   if (props.parts?.length) return props.parts;
   if (props.reasoning) {
-    return [{ type: "think", think: props.reasoning }];
+    return [{ type: 'think', think: props.reasoning }];
   }
   return [];
 });
@@ -80,7 +84,7 @@ const renderParts = computed<MessagePart[]>(() => {
 const openInSidebar = computed(() => Boolean(props.openInSidebar));
 
 const activityCounts = computed(() =>
-  reasoningActivityCounts(renderParts.value, props.reasoning || ""),
+  reasoningActivityCounts(renderParts.value, props.reasoning || ''),
 );
 
 const reasoningTitle = computed(() =>
@@ -89,9 +93,9 @@ const reasoningTitle = computed(() =>
 
 const thinkingText = computed(() =>
   renderParts.value
-    .filter((part) => part.type === "think")
-    .map((part) => String(part.think || ""))
-    .join(""),
+    .filter((part) => part.type === 'think')
+    .map((part) => String(part.think || ''))
+    .join(''),
 );
 
 const showStreamingPreview = computed(
@@ -104,13 +108,13 @@ const showStreamingPreview = computed(
 
 const previewTransitionName = computed(() =>
   props.hasNonReasoningContent
-    ? "reasoning-preview-collapse"
-    : "reasoning-preview-fade",
+    ? 'reasoning-preview-collapse'
+    : 'reasoning-preview-fade',
 );
 
 function handlePrimaryAction() {
   if (openInSidebar.value) {
-    emit("open");
+    emit('open');
     return;
   }
   isExpanded.value = !isExpanded.value;
@@ -121,7 +125,7 @@ function latestReasoningPreview() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  return lines.slice(-3).join("\n");
+  return lines.slice(-3).join('\n');
 }
 
 function updatePreviewLine() {
@@ -174,7 +178,7 @@ function syncPreviewTimer() {
   stopPreviewStartTimer();
   stopPreviewTimer();
   if (!props.isStreaming) {
-    previewText.value = "";
+    previewText.value = '';
   }
 }
 

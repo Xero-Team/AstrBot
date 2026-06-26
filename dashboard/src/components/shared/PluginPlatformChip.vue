@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
-import { useModuleI18n } from "@/i18n/composables";
+import { ref, computed } from 'vue';
+import { getPlatformDisplayName, getPlatformIcon } from '@/utils/platformUtils';
+import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps({
   platforms: {
@@ -10,7 +10,7 @@ const props = defineProps({
   },
   size: {
     type: String,
-    default: "small",
+    default: 'small',
   },
   chipStyle: {
     type: Object,
@@ -18,14 +18,14 @@ const props = defineProps({
   },
 });
 
-const { tm } = useModuleI18n("features/extension");
+const { tm } = useModuleI18n('features/extension');
 
 const showMenu = ref(false);
 
 const platformDetails = computed(() => {
   if (!Array.isArray(props.platforms)) return [];
   return props.platforms
-    .filter((item) => typeof item === "string")
+    .filter((item) => typeof item === 'string')
     .map((platformId) => ({
       name: getPlatformDisplayName(platformId),
       icon: getPlatformIcon(platformId),
@@ -47,22 +47,32 @@ const platformDetails = computed(() => {
     >
       <div class="d-flex align-center" style="gap: 2px">
         <!-- 显示图标，最多 5 个 -->
-        <div v-if="platformDetails.some(p => p.icon)" class="d-flex align-center mr-1">
+        <div
+          v-if="platformDetails.some((p) => p.icon)"
+          class="d-flex align-center mr-1"
+        >
           <v-avatar
             v-for="(platform, index) in platformDetails.slice(0, 5)"
             :key="index"
             :size="size === 'x-small' ? 12 : 14"
             class="platform-mini-icon"
-            :style="{ marginLeft: index > 0 ? '-4px' : '0', zIndex: 10 - index }"
+            :style="{
+              marginLeft: index > 0 ? '-4px' : '0',
+              zIndex: 10 - index,
+            }"
           >
             <v-img v-if="platform.icon" :src="platform.icon"></v-img>
-            <v-icon v-else icon="mdi-circle-small" :size="size === 'x-small' ? 8 : 10"></v-icon>
+            <v-icon
+              v-else
+              icon="mdi-circle-small"
+              :size="size === 'x-small' ? 8 : 10"
+            ></v-icon>
           </v-avatar>
         </div>
 
         <span class="text-caption font-weight-bold">
           {{
-            tm("card.status.supportPlatformsCount", {
+            tm('card.status.supportPlatformsCount', {
               count: platformDetails.length,
             })
           }}
@@ -96,7 +106,10 @@ const platformDetails = computed(() => {
               </v-avatar>
               <v-icon v-else icon="mdi-apps" size="12" class="mr-2"></v-icon>
             </template>
-            <v-list-item-title class="text-caption font-weight-bold" style="font-size: 0.75rem !important">
+            <v-list-item-title
+              class="text-caption font-weight-bold"
+              style="font-size: 0.75rem !important"
+            >
               {{ platform.name }}
             </v-list-item-title>
           </v-list-item>

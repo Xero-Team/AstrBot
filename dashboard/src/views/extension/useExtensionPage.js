@@ -1,29 +1,29 @@
-import { commandApi, pluginApi } from "@/api/v1";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useCommonStore } from "@/stores/common";
-import { resolveErrorMessage } from "@/utils/errorUtils";
-import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
-import { getPlatformDisplayName } from "@/utils/platformUtils";
+import { commandApi, pluginApi } from '@/api/v1';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useCommonStore } from '@/stores/common';
+import { resolveErrorMessage } from '@/utils/errorUtils';
+import { getValidHashTab, replaceTabRoute } from '@/utils/hashRouteTabs.mjs';
+import { getPlatformDisplayName } from '@/utils/platformUtils';
 import {
-    buildSearchQuery,
-    matchesPluginSearch,
-    normalizeStr,
-    toInitials,
-    toPinyinText,
-} from "@/utils/pluginSearch";
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
+} from '@/utils/pluginSearch';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
-    const detail = info && typeof info === "object" ? info : {};
+    const detail = info && typeof info === 'object' ? info : {};
     return {
       ...detail,
       dir_name: dirName,
       name: detail.name || dirName,
       display_name: detail.display_name || detail.name || dirName,
-      error: detail.error || "",
-      traceback: detail.traceback || "",
+      error: detail.error || '',
+      traceback: detail.traceback || '',
       reserved: Boolean(detail.reserved),
     };
   });
@@ -32,15 +32,15 @@ const buildFailedPluginItems = (raw) => {
 export const useExtensionPage = () => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
-  const { tm } = useModuleI18n("features/extension");
+  const { tm } = useModuleI18n('features/extension');
   const router = useRouter();
   const route = useRoute();
 
   const getSelectedGitHubProxy = () => {
-    if (typeof window === "undefined" || !window.localStorage) return "";
-    return localStorage.getItem("githubProxyRadioValue") === "1"
-      ? localStorage.getItem("selectedGitHubProxy") || ""
-      : "";
+    if (typeof window === 'undefined' || !window.localStorage) return '';
+    return localStorage.getItem('githubProxyRadioValue') === '1'
+      ? localStorage.getItem('selectedGitHubProxy') || ''
+      : '';
   };
 
   // 检查指令冲突并提示
@@ -51,7 +51,7 @@ export const useExtensionPage = () => {
   const checkAndPromptConflicts = async () => {
     try {
       const res = await commandApi.list();
-      if (res.data.status === "ok") {
+      if (res.data.status === 'ok') {
         const conflicts = res.data.data.summary?.conflicts || 0;
         if (conflicts > 0) {
           conflictDialog.count = conflicts;
@@ -59,18 +59,18 @@ export const useExtensionPage = () => {
         }
       }
     } catch (err) {
-      console.debug("Failed to check command conflicts:", err);
+      console.debug('Failed to check command conflicts:', err);
     }
   };
   const handleConflictConfirm = () => {
-    activeTab.value = "commands";
+    activeTab.value = 'commands';
   };
 
   const fileInput = ref(null);
-  const activeTab = ref("installed");
-  const validTabs = ["installed", "market", "mcp", "skills", "components"];
+  const activeTab = ref('installed');
+  const validTabs = ['installed', 'market', 'mcp', 'skills', 'components'];
   const isValidTab = (tab) => validTabs.includes(tab);
-  const getLocationHash = () => route.hash || "";
+  const getLocationHash = () => route.hash || '';
   const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
   const syncTabFromHash = (hash) => {
     const tab = extractTabFromHash(hash);
@@ -82,12 +82,12 @@ export const useExtensionPage = () => {
   };
   const extension_data = reactive({
     data: [],
-    message: "",
+    message: '',
   });
 
-  const snack_message = ref("");
+  const snack_message = ref('');
   const snack_show = ref(false);
-  const snack_success = ref("success");
+  const snack_success = ref('success');
   const configDialog = ref(false);
   const extension_config = reactive({
     metadata: {},
@@ -97,29 +97,29 @@ export const useExtensionPage = () => {
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
     show: false,
-    title: "",
+    title: '',
     statusCode: 0, // 0: loading, 1: success, 2: error,
-    result: "",
+    result: '',
   });
-  const curr_namespace = ref("");
-  const currentConfigPlugin = ref("");
+  const curr_namespace = ref('');
+  const currentConfigPlugin = ref('');
   const updatingAll = ref(false);
 
   const readmeDialog = reactive({
     show: false,
-    pluginName: "",
+    pluginName: '',
     repoUrl: null,
   });
 
   // 强制更新确认对话框
   const forceUpdateDialog = reactive({
     show: false,
-    extensionName: "",
+    extensionName: '',
   });
 
   const updateConfirmDialog = reactive({
     show: false,
-    extensionName: "",
+    extensionName: '',
     forceUpdate: false,
   });
 
@@ -131,11 +131,11 @@ export const useExtensionPage = () => {
   // 插件更新日志对话框（复用 ReadmeDialog）
   const changelogDialog = reactive({
     show: false,
-    pluginName: "",
+    pluginName: '',
     repoUrl: null,
   });
 
-  const pluginSearch = ref("");
+  const pluginSearch = ref('');
   const loading_ = ref(false);
 
   // 分页相关
@@ -148,13 +148,13 @@ export const useExtensionPage = () => {
   const installSupport = reactive({
     checked: false,
     supported: true,
-    message: "",
+    message: '',
   });
 
   // AstrBot 版本范围不兼容警告对话框
   const versionSupportDialog = reactive({
     show: false,
-    message: "",
+    message: '',
   });
 
   // 卸载插件确认对话框（列表模式用）
@@ -164,60 +164,60 @@ export const useExtensionPage = () => {
   // 自定义插件源相关
   const showSourceDialog = ref(false);
   const showSourceManagerDialog = ref(false);
-  const sourceName = ref("");
-  const sourceUrl = ref("");
+  const sourceName = ref('');
+  const sourceUrl = ref('');
   const customSources = ref([]);
   const selectedSource = ref(null);
   const showRemoveSourceDialog = ref(false);
   const sourceToRemove = ref(null);
   const editingSource = ref(false);
-  const originalSourceUrl = ref("");
+  const originalSourceUrl = ref('');
 
   // 插件市场相关
-  const extension_url = ref("");
+  const extension_url = ref('');
   const dialog = ref(false);
   const upload_file = ref(null);
-  const uploadTab = ref("file");
+  const uploadTab = ref('file');
   const showPluginFullName = ref(false);
-  const marketSearch = ref("");
-  const debouncedMarketSearch = ref("");
+  const marketSearch = ref('');
+  const debouncedMarketSearch = ref('');
   const refreshingMarket = ref(false);
-  const sortBy = ref("default"); // default, stars, author, updated
-  const sortOrder = ref("desc"); // desc (降序) or asc (升序)
+  const sortBy = ref('default'); // default, stars, author, updated
+  const sortOrder = ref('desc'); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
-  const marketCategoryFilter = ref("all");
+  const marketCategoryFilter = ref('all');
 
   // 插件市场拼音搜索
 
   const normalizeMarketCategory = (rawCategory) => {
-    const normalized = String(rawCategory || "")
+    const normalized = String(rawCategory || '')
       .trim()
       .toLowerCase();
     if (!normalized) {
-      return "other";
+      return 'other';
     }
-    return normalized.replace(/[\s-]+/g, "_");
+    return normalized.replace(/[\s-]+/g, '_');
   };
 
-  const getMarketCategoryLabel = (key, rawCategory = "") => {
+  const getMarketCategoryLabel = (key, rawCategory = '') => {
     const fallbackMap = {
-      all: "All",
-      ai_tools: "AI Tools",
-      entertainment: "Entertainment",
-      productivity: "Productivity",
-      integrations: "Integrations",
-      utilities: "Utilities",
-      other: "Other",
+      all: 'All',
+      ai_tools: 'AI Tools',
+      entertainment: 'Entertainment',
+      productivity: 'Productivity',
+      integrations: 'Integrations',
+      utilities: 'Utilities',
+      other: 'Other',
     };
     const i18nKey = `market.categories.${key}`;
     const translated = tm(i18nKey);
-    if (translated && !translated.includes("[MISSING:")) {
+    if (translated && !translated.includes('[MISSING:')) {
       return translated;
     }
     if (fallbackMap[key]) {
       return fallbackMap[key];
     }
-    const normalizedRaw = String(rawCategory || "").trim();
+    const normalizedRaw = String(rawCategory || '').trim();
     if (normalizedRaw) {
       return normalizedRaw;
     }
@@ -225,7 +225,7 @@ export const useExtensionPage = () => {
       .split(/[_-]+/)
       .filter(Boolean)
       .map((part) => part[0].toUpperCase() + part.slice(1))
-      .join(" ");
+      .join(' ');
   };
 
   const marketCategoryMeta = computed(() => {
@@ -240,7 +240,7 @@ export const useExtensionPage = () => {
       }
       categories.set(categoryKey, {
         count: 1,
-        rawLabel: String(plugin?.category || "").trim(),
+        rawLabel: String(plugin?.category || '').trim(),
       });
     }
 
@@ -261,8 +261,8 @@ export const useExtensionPage = () => {
   const marketCategoryItems = computed(() => {
     const items = [
       {
-        value: "all",
-        label: getMarketCategoryLabel("all"),
+        value: 'all',
+        label: getMarketCategoryLabel('all'),
         count: marketCategoryCounts.value.all || 0,
       },
     ];
@@ -288,17 +288,18 @@ export const useExtensionPage = () => {
   });
 
   const compareInstalledPluginNames = (left, right) =>
-    normalizeStr(left?.name ?? "").localeCompare(
-      normalizeStr(right?.name ?? ""),
+    normalizeStr(left?.name ?? '').localeCompare(
+      normalizeStr(right?.name ?? ''),
       undefined,
       {
-        sensitivity: "base",
+        sensitivity: 'base',
       },
     );
 
   const compareInstalledFallback = (left, right) => {
     const reservedDiff =
-      Number(Boolean(left.plugin?.reserved)) - Number(Boolean(right.plugin?.reserved));
+      Number(Boolean(left.plugin?.reserved)) -
+      Number(Boolean(right.plugin?.reserved));
     if (reservedDiff !== 0) {
       return reservedDiff;
     }
@@ -333,7 +334,7 @@ export const useExtensionPage = () => {
   const filteredMarketPlugins = computed(() => {
     const query = buildSearchQuery(debouncedMarketSearch.value);
     const targetCategory = normalizeMarketCategory(marketCategoryFilter.value);
-    const shouldFilterByCategory = marketCategoryFilter.value !== "all";
+    const shouldFilterByCategory = marketCategoryFilter.value !== 'all';
     if (!query) {
       if (!shouldFilterByCategory) {
         return pluginMarketData.value;
@@ -358,27 +359,27 @@ export const useExtensionPage = () => {
     let plugins = [...filteredMarketPlugins.value];
 
     // 根据排序选项排序
-    if (sortBy.value === "stars") {
+    if (sortBy.value === 'stars') {
       // 按 star 数排序
       plugins.sort((a, b) => {
         const starsA = a.stars ?? 0;
         const starsB = b.stars ?? 0;
-        return sortOrder.value === "desc" ? starsB - starsA : starsA - starsB;
+        return sortOrder.value === 'desc' ? starsB - starsA : starsA - starsB;
       });
-    } else if (sortBy.value === "author") {
+    } else if (sortBy.value === 'author') {
       // 按作者名字典序排序
       plugins.sort((a, b) => {
-        const authorA = (a.author ?? "").toLowerCase();
-        const authorB = (b.author ?? "").toLowerCase();
+        const authorA = (a.author ?? '').toLowerCase();
+        const authorB = (b.author ?? '').toLowerCase();
         const result = authorA.localeCompare(authorB);
-        return sortOrder.value === "desc" ? -result : result;
+        return sortOrder.value === 'desc' ? -result : result;
       });
-    } else if (sortBy.value === "updated") {
+    } else if (sortBy.value === 'updated') {
       // 按更新时间排序
       plugins.sort((a, b) => {
         const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
         const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-        return sortOrder.value === "desc" ? dateB - dateA : dateA - dateB;
+        return sortOrder.value === 'desc' ? dateB - dateA : dateA - dateB;
       });
     } else {
       // default: 推荐插件排在前面
@@ -456,9 +457,9 @@ export const useExtensionPage = () => {
 
   const resetLoadingDialog = () => {
     loadingDialog.show = false;
-    loadingDialog.title = tm("dialogs.loading.title");
+    loadingDialog.title = tm('dialogs.loading.title');
     loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
+    loadingDialog.result = '';
   };
 
   const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
@@ -486,7 +487,7 @@ export const useExtensionPage = () => {
 
       // checkUpdate() is called after pluginMarketData is loaded in onMounted
     } catch (err) {
-      toast(err, "error");
+      toast(err, 'error');
     } finally {
       if (withLoading) {
         loading_.value = false;
@@ -497,27 +498,25 @@ export const useExtensionPage = () => {
   const handleReloadAllFailed = async () => {
     const dirNames = Object.keys(failedPluginsDict.value);
     if (dirNames.length === 0) {
-      toast("没有需要重载的失败插件", "info");
+      toast('没有需要重载的失败插件', 'info');
       return;
     }
 
     loading_.value = true;
     try {
-      const promises = dirNames.map((dir) =>
-        pluginApi.reloadFailed(dir),
-      );
+      const promises = dirNames.map((dir) => pluginApi.reloadFailed(dir));
       await Promise.all(promises);
 
-      toast("已尝试重载所有失败插件", "success");
+      toast('已尝试重载所有失败插件', 'success');
 
       // 清空 message 关闭对话框
-      extension_data.message = "";
+      extension_data.message = '';
 
       // 刷新列表
       await getExtensions();
     } catch (_error) {
-      console.error("重载失败:", e);
-      toast("批量重载过程中出现错误", "error");
+      console.error('重载失败:', e);
+      toast('批量重载过程中出现错误', 'error');
     } finally {
       loading_.value = false;
     }
@@ -528,14 +527,14 @@ export const useExtensionPage = () => {
 
     try {
       const res = await pluginApi.reloadFailed(dirName);
-      if (res.data.status === "error") {
-        toast(res.data.message || tm("messages.reloadFailed"), "error");
+      if (res.data.status === 'error') {
+        toast(res.data.message || tm('messages.reloadFailed'), 'error');
         return;
       }
-      toast(res.data.message || tm("messages.reloadSuccess"), "success");
+      toast(res.data.message || tm('messages.reloadSuccess'), 'success');
       await getExtensions();
     } catch (err) {
-      toast(resolveErrorMessage(err, tm("messages.reloadFailed")), "error");
+      toast(resolveErrorMessage(err, tm('messages.reloadFailed')), 'error');
     }
   };
 
@@ -556,46 +555,46 @@ export const useExtensionPage = () => {
       return;
     }
 
-    const isFailed = target.kind === "failed";
+    const isFailed = target.kind === 'failed';
     const options = {
       delete_config: deleteConfig,
       delete_data: deleteData,
     };
 
-    toast(`${tm("messages.uninstalling")} ${target.id}`, "primary");
+    toast(`${tm('messages.uninstalling')} ${target.id}`, 'primary');
 
     try {
       const res = isFailed
         ? await pluginApi.uninstallFailed(target.id, options)
         : await pluginApi.uninstall(target.id, options);
-      if (res.data.status === "error") {
-        toast(res.data.message, "error");
+      if (res.data.status === 'error') {
+        toast(res.data.message, 'error');
         return;
       }
       if (!isFailed) {
         Object.assign(extension_data, res.data);
       }
-      toast(res.data.message, "success");
+      toast(res.data.message, 'success');
       await getExtensions();
     } catch (err) {
-      toast(resolveErrorMessage(err, tm("messages.operationFailed")), "error");
+      toast(resolveErrorMessage(err, tm('messages.operationFailed')), 'error');
     }
   };
 
   const requestUninstallPlugin = (name) => {
     if (!name) return;
-    void uninstall({ kind: "normal", id: name }, { skipConfirm: false });
+    void uninstall({ kind: 'normal', id: name }, { skipConfirm: false });
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
     if (!dirName) return;
-    void uninstall({ kind: "failed", id: dirName }, { skipConfirm: false });
+    void uninstall({ kind: 'failed', id: dirName }, { skipConfirm: false });
   };
 
   const normalizeInstallUrl = (value) =>
-    String(value || "")
+    String(value || '')
       .trim()
-      .replace(/\/+$/, "");
+      .replace(/\/+$/, '');
 
   const isGithubRepoUrl = (value) =>
     /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?(?:\/tree\/[^/\s]+)?$/i.test(
@@ -629,7 +628,7 @@ export const useExtensionPage = () => {
   };
 
   const getUpdateDownloadUrl = (extension) =>
-    String(findMarketPluginForExtension(extension)?.download_url || "").trim();
+    String(findMarketPluginForExtension(extension)?.download_url || '').trim();
 
   const checkUpdate = () => {
     const onlinePluginsMap = new Map();
@@ -637,21 +636,28 @@ export const useExtensionPage = () => {
 
     pluginMarketData.value.forEach((plugin) => {
       if (plugin.repo) {
-        onlinePluginsMap.set(normalizeInstallUrl(plugin.repo).toLowerCase(), plugin);
+        onlinePluginsMap.set(
+          normalizeInstallUrl(plugin.repo).toLowerCase(),
+          plugin,
+        );
       }
       const normalizedName = normalizeStr(plugin.name);
       onlinePluginsNameMap.set(normalizedName, plugin);
     });
 
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    
+
     data.forEach((extension) => {
-      const repoKey = extension.repo ? normalizeInstallUrl(extension.repo).toLowerCase() : undefined;
+      const repoKey = extension.repo
+        ? normalizeInstallUrl(extension.repo).toLowerCase()
+        : undefined;
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
 
       // 使用 marketplace_name 进行市场匹配（后端已统一为减号格式）
       const normalizedExtensionName = normalizeStr(extension.marketplace_name);
-      const onlinePluginByName = onlinePluginsNameMap.get(normalizedExtensionName);
+      const onlinePluginByName = onlinePluginsNameMap.get(
+        normalizedExtensionName,
+      );
 
       const matchedPlugin = repoKey ? onlinePlugin : onlinePluginByName;
 
@@ -659,9 +665,9 @@ export const useExtensionPage = () => {
         extension.online_version = matchedPlugin.version;
         extension.has_update =
           extension.version !== matchedPlugin.version &&
-          matchedPlugin.version !== tm("status.unknown");
+          matchedPlugin.version !== tm('status.unknown');
       } else {
-        extension.online_version = "";
+        extension.online_version = '';
         extension.has_update = false;
       }
     });
@@ -673,15 +679,15 @@ export const useExtensionPage = () => {
   ) => {
     if (!extensionName) return;
 
-    if (typeof optionsOrSkipConfirm === "boolean") {
+    if (typeof optionsOrSkipConfirm === 'boolean') {
       return uninstall(
-        { kind: "normal", id: extensionName },
+        { kind: 'normal', id: extensionName },
         { skipConfirm: optionsOrSkipConfirm },
       );
     }
 
     return uninstall(
-      { kind: "normal", id: extensionName },
+      { kind: 'normal', id: extensionName },
       { ...(optionsOrSkipConfirm || {}), skipConfirm: true },
     );
   };
@@ -707,7 +713,7 @@ export const useExtensionPage = () => {
 
   const closeUpdateConfirmDialog = () => {
     updateConfirmDialog.show = false;
-    updateConfirmDialog.extensionName = "";
+    updateConfirmDialog.extensionName = '';
     updateConfirmDialog.forceUpdate = false;
   };
 
@@ -734,17 +740,17 @@ export const useExtensionPage = () => {
 
     const downloadUrl = getUpdateDownloadUrl(ext);
     closeUpdateConfirmDialog();
-    loadingDialog.title = tm("status.loading");
+    loadingDialog.title = tm('status.loading');
     loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
+    loadingDialog.result = '';
     loadingDialog.show = true;
     try {
       const res = await pluginApi.update(extensionName, {
         download_url: downloadUrl,
-        proxy: downloadUrl ? "" : getSelectedGitHubProxy(),
+        proxy: downloadUrl ? '' : getSelectedGitHubProxy(),
       });
 
-      if (res.data.status === "error") {
+      if (res.data.status === 'error') {
         onLoadingDialogResult(2, res.data.message, -1);
         return;
       }
@@ -752,10 +758,10 @@ export const useExtensionPage = () => {
       Object.assign(extension_data, res.data);
       onLoadingDialogResult(1, res.data.message);
       setTimeout(async () => {
-        toast(tm("messages.refreshing"), "info", 2000);
+        toast(tm('messages.refreshing'), 'info', 2000);
         try {
           await getExtensions();
-          toast(tm("messages.refreshSuccess"), "success");
+          toast(tm('messages.refreshSuccess'), 'success');
 
           // 更新完成后弹出更新日志
           viewChangelog({
@@ -765,11 +771,11 @@ export const useExtensionPage = () => {
         } catch (error) {
           const errorMsg =
             error.response?.data?.message || error.message || String(error);
-          toast(`${tm("messages.refreshFailed")}: ${errorMsg}`, "error");
+          toast(`${tm('messages.refreshFailed')}: ${errorMsg}`, 'error');
         }
       }, 1000);
     } catch (err) {
-      toast(err, "error");
+      toast(err, 'error');
     }
   };
 
@@ -777,7 +783,7 @@ export const useExtensionPage = () => {
   // 显示更新全部插件确认对话框
   const showUpdateAllConfirm = () => {
     if (updatableExtensions.value.length === 0) {
-      toast(tm("messages.noUpdatesAvailable"), "info");
+      toast(tm('messages.noUpdatesAvailable'), 'info');
       return;
     }
     updateAllConfirmDialog.show = true;
@@ -797,20 +803,20 @@ export const useExtensionPage = () => {
   const confirmForceUpdate = () => {
     const name = forceUpdateDialog.extensionName;
     forceUpdateDialog.show = false;
-    forceUpdateDialog.extensionName = "";
+    forceUpdateDialog.extensionName = '';
     openUpdateConfirmDialog(name, true);
   };
 
   const updateAllExtensions = async () => {
     if (updatingAll.value) return;
     if (updatableExtensions.value.length === 0) {
-      toast(tm("messages.noUpdatesAvailable"), "info");
+      toast(tm('messages.noUpdatesAvailable'), 'info');
       return;
     }
     updatingAll.value = true;
-    loadingDialog.title = tm("status.loading");
+    loadingDialog.title = tm('status.loading');
     loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
+    loadingDialog.result = '';
     loadingDialog.show = true;
 
     const targets = updatableExtensions.value.map((ext) => ext.name);
@@ -826,11 +832,11 @@ export const useExtensionPage = () => {
         proxy: getSelectedGitHubProxy(),
       });
 
-      if (res.data.status === "error") {
+      if (res.data.status === 'error') {
         onLoadingDialogResult(
           2,
           res.data.message ||
-            tm("messages.updateAllFailed", {
+            tm('messages.updateAllFailed', {
               failed: targets.length,
               total: targets.length,
             }),
@@ -840,25 +846,25 @@ export const useExtensionPage = () => {
       }
 
       const results = res.data.data?.results || [];
-      const failures = results.filter((r) => r.status !== "ok");
+      const failures = results.filter((r) => r.status !== 'ok');
       try {
         await getExtensions();
       } catch (err) {
         const errorMsg =
           err.response?.data?.message || err.message || String(err);
-        failures.push({ name: "refresh", status: "error", message: errorMsg });
+        failures.push({ name: 'refresh', status: 'error', message: errorMsg });
       }
 
       if (failures.length === 0) {
-        onLoadingDialogResult(1, tm("messages.updateAllSuccess"));
+        onLoadingDialogResult(1, tm('messages.updateAllSuccess'));
       } else {
-        const failureText = tm("messages.updateAllFailed", {
+        const failureText = tm('messages.updateAllFailed', {
           failed: failures.length,
           total: targets.length,
         });
         const detail = failures
           .map((f) => `${f.name}: ${f.message}`)
-          .join("\n");
+          .join('\n');
         onLoadingDialogResult(2, `${failureText}\n${detail}`, -1);
       }
     } catch (err) {
@@ -873,30 +879,30 @@ export const useExtensionPage = () => {
   const pluginOn = async (extension) => {
     try {
       const res = await pluginApi.setEnabled(extension.name, true);
-      if (res.data.status === "error") {
-        toast(res.data.message, "error");
+      if (res.data.status === 'error') {
+        toast(res.data.message, 'error');
         return;
       }
-      toast(res.data.message, "success");
+      toast(res.data.message, 'success');
       await getExtensions();
 
       await checkAndPromptConflicts();
     } catch (err) {
-      toast(err, "error");
+      toast(err, 'error');
     }
   };
 
   const pluginOff = async (extension) => {
     try {
       const res = await pluginApi.setEnabled(extension.name, false);
-      if (res.data.status === "error") {
-        toast(res.data.message, "error");
+      if (res.data.status === 'error') {
+        toast(res.data.message, 'error');
         return;
       }
-      toast(res.data.message, "success");
+      toast(res.data.message, 'success');
       void getExtensions();
     } catch (err) {
-      toast(err, "error");
+      toast(err, 'error');
     }
   };
 
@@ -910,7 +916,7 @@ export const useExtensionPage = () => {
       extension_config.config = res.data.data.config;
       extension_config.i18n = res.data.data.i18n || {};
     } catch (err) {
-      toast(err, "error");
+      toast(err, 'error');
     }
   };
 
@@ -920,42 +926,42 @@ export const useExtensionPage = () => {
         curr_namespace.value,
         extension_config.config,
       );
-      if (res.data.status === "ok") {
-        toast(res.data.message, "success");
+      if (res.data.status === 'ok') {
+        toast(res.data.message, 'success');
       } else {
-        toast(res.data.message, "error");
+        toast(res.data.message, 'error');
       }
       configDialog.value = false;
-      currentConfigPlugin.value = "";
+      currentConfigPlugin.value = '';
       extension_config.metadata = {};
       extension_config.config = {};
       extension_config.i18n = {};
       void getExtensions();
     } catch (err) {
-      toast(err, "error");
+      toast(err, 'error');
     }
   };
 
   const showPluginInfo = (plugin) => {
     if (!plugin?.name) return;
     void router.push({
-      name: "ExtensionDetails",
+      name: 'ExtensionDetails',
       params: { pluginId: plugin.name },
-      hash: "#plugin-components",
+      hash: '#plugin-components',
     });
   };
 
   const reloadPlugin = async (plugin_name) => {
     try {
       const res = await pluginApi.reload(plugin_name);
-      if (res.data.status === "error") {
-        toast(res.data.message || tm("messages.reloadFailed"), "error");
+      if (res.data.status === 'error') {
+        toast(res.data.message || tm('messages.reloadFailed'), 'error');
         return;
       }
-      toast(tm("messages.reloadSuccess"), "success");
+      toast(tm('messages.reloadSuccess'), 'success');
       await getExtensions();
     } catch (err) {
-      toast(resolveErrorMessage(err, tm("messages.reloadFailed")), "error");
+      toast(resolveErrorMessage(err, tm('messages.reloadFailed')), 'error');
     }
   };
 
@@ -974,12 +980,12 @@ export const useExtensionPage = () => {
 
   const resetInstallDialogState = () => {
     selectedMarketInstallPlugin.value = null;
-    extension_url.value = "";
+    extension_url.value = '';
     upload_file.value = null;
-    uploadTab.value = "file";
+    uploadTab.value = 'file';
     installSupport.checked = false;
     installSupport.supported = true;
-    installSupport.message = "";
+    installSupport.message = '';
   };
 
   const openInstallDialog = () => {
@@ -994,13 +1000,13 @@ export const useExtensionPage = () => {
 
   const selectedInstallDownloadUrl = computed(() => {
     const plugin = selectedInstallPlugin.value;
-    const downloadUrl = String(plugin?.download_url || "").trim();
-    if (!downloadUrl) return "";
+    const downloadUrl = String(plugin?.download_url || '').trim();
+    if (!downloadUrl) return '';
     if (
       normalizeInstallUrl(plugin?.repo) !==
       normalizeInstallUrl(extension_url.value)
     ) {
-      return "";
+      return '';
     }
     return downloadUrl;
   });
@@ -1008,7 +1014,7 @@ export const useExtensionPage = () => {
   const selectedInstallSourceUrl = computed(
     () =>
       selectedInstallDownloadUrl.value ||
-      String(extension_url.value || "").trim(),
+      String(extension_url.value || '').trim(),
   );
 
   const installUsesGithubSource = computed(
@@ -1018,7 +1024,7 @@ export const useExtensionPage = () => {
 
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
-    if (plugin.tags?.includes("danger")) {
+    if (plugin.tags?.includes('danger')) {
       selectedDangerPlugin.value = plugin;
       dangerConfirmDialog.value = true;
     } else {
@@ -1026,7 +1032,7 @@ export const useExtensionPage = () => {
       extension_url.value = plugin.repo;
       upload_file.value = null;
       dialog.value = true;
-      uploadTab.value = "url";
+      uploadTab.value = 'url';
     }
   };
 
@@ -1037,7 +1043,7 @@ export const useExtensionPage = () => {
       extension_url.value = selectedDangerPlugin.value.repo;
       upload_file.value = null;
       dialog.value = true;
-      uploadTab.value = "url";
+      uploadTab.value = 'url';
     }
     dangerConfirmDialog.value = false;
     selectedDangerPlugin.value = null;
@@ -1053,18 +1059,18 @@ export const useExtensionPage = () => {
   const loadCustomSources = async () => {
     try {
       const res = await pluginApi.sources();
-      if (res.data.status === "ok") {
+      if (res.data.status === 'ok') {
         customSources.value = res.data.data?.sources || res.data.data || [];
       } else {
-        toast(res.data.message, "error");
+        toast(res.data.message, 'error');
       }
     } catch (_error) {
-      console.warn("Failed to load custom sources:", e);
+      console.warn('Failed to load custom sources:', e);
       customSources.value = [];
     }
 
     // 加载当前选中的插件源
-    const currentSource = localStorage.getItem("selectedPluginSource");
+    const currentSource = localStorage.getItem('selectedPluginSource');
     if (currentSource) {
       selectedSource.value = currentSource;
     }
@@ -1073,20 +1079,20 @@ export const useExtensionPage = () => {
   const saveCustomSources = async () => {
     try {
       const res = await pluginApi.replaceSources(customSources.value);
-      if (res.data.status !== "ok") {
-        toast(res.data.message, "error");
+      if (res.data.status !== 'ok') {
+        toast(res.data.message, 'error');
       }
     } catch (_error) {
-      toast(e, "error");
+      toast(e, 'error');
     }
   };
 
   const addCustomSource = () => {
     showSourceManagerDialog.value = false;
     editingSource.value = false;
-    originalSourceUrl.value = "";
-    sourceName.value = "";
-    sourceUrl.value = "";
+    originalSourceUrl.value = '';
+    sourceName.value = '';
+    sourceUrl.value = '';
     showSourceDialog.value = true;
   };
 
@@ -1098,16 +1104,16 @@ export const useExtensionPage = () => {
   const selectPluginSource = (sourceUrl) => {
     selectedSource.value = sourceUrl;
     if (sourceUrl) {
-      localStorage.setItem("selectedPluginSource", sourceUrl);
+      localStorage.setItem('selectedPluginSource', sourceUrl);
     } else {
-      localStorage.removeItem("selectedPluginSource");
+      localStorage.removeItem('selectedPluginSource');
     }
     // 重新加载插件市场数据
     void refreshPluginMarket();
   };
 
   const sourceSelectItems = computed(() => [
-    { title: tm("market.defaultSource"), value: "__default__" },
+    { title: tm('market.defaultSource'), value: '__default__' },
     ...customSources.value.map((source) => ({
       title: source.name,
       value: source.url,
@@ -1141,12 +1147,12 @@ export const useExtensionPage = () => {
       // 如果删除的是当前选中的源，切换到默认源
       if (selectedSource.value === sourceToRemove.value.url) {
         selectedSource.value = null;
-        localStorage.removeItem("selectedPluginSource");
+        localStorage.removeItem('selectedPluginSource');
         // 重新加载插件市场数据
         void refreshPluginMarket();
       }
 
-      toast(tm("market.sourceRemoved"), "success");
+      toast(tm('market.sourceRemoved'), 'success');
       showRemoveSourceDialog.value = false;
       sourceToRemove.value = null;
     }
@@ -1156,7 +1162,7 @@ export const useExtensionPage = () => {
     const normalizedUrl = sourceUrl.value.trim();
 
     if (!sourceName.value.trim() || !normalizedUrl) {
-      toast(tm("messages.fillSourceNameAndUrl"), "error");
+      toast(tm('messages.fillSourceNameAndUrl'), 'error');
       return;
     }
 
@@ -1164,7 +1170,7 @@ export const useExtensionPage = () => {
     try {
       new URL(normalizedUrl);
     } catch (_error) {
-      toast(tm("messages.invalidUrl"), "error");
+      toast(tm('messages.invalidUrl'), 'error');
       return;
     }
 
@@ -1182,7 +1188,7 @@ export const useExtensionPage = () => {
         // 如果编辑的是当前选中的源，更新选中源
         if (selectedSource.value === originalSourceUrl.value) {
           selectedSource.value = normalizedUrl;
-          localStorage.setItem("selectedPluginSource", selectedSource.value);
+          localStorage.setItem('selectedPluginSource', selectedSource.value);
           // 重新加载插件市场数据
           void refreshPluginMarket();
         }
@@ -1190,7 +1196,7 @@ export const useExtensionPage = () => {
     } else {
       // 添加模式：检查是否已存在
       if (customSources.value.some((source) => source.url === normalizedUrl)) {
-        toast(tm("market.sourceExists"), "error");
+        toast(tm('market.sourceExists'), 'error');
         return;
       }
 
@@ -1203,16 +1209,16 @@ export const useExtensionPage = () => {
     void saveCustomSources();
     toast(
       editingSource.value
-        ? tm("market.sourceUpdated")
-        : tm("market.sourceAdded"),
-      "success",
+        ? tm('market.sourceUpdated')
+        : tm('market.sourceAdded'),
+      'success',
     );
 
     // 重置表单
-    sourceName.value = "";
-    sourceUrl.value = "";
+    sourceName.value = '';
+    sourceUrl.value = '';
     editingSource.value = false;
-    originalSourceUrl.value = "";
+    originalSourceUrl.value = '';
     showSourceDialog.value = false;
   };
 
@@ -1221,9 +1227,9 @@ export const useExtensionPage = () => {
     pluginMarketData.value.forEach((plugin) => {
       if (plugin.name) {
         let name = plugin.name.trim().toLowerCase();
-        if (name.startsWith("astrbot_plugin_")) {
+        if (name.startsWith('astrbot_plugin_')) {
           plugin.trimmedName = name.substring(15);
-        } else if (name.startsWith("astrbot_") || name.startsWith("astrbot-")) {
+        } else if (name.startsWith('astrbot_') || name.startsWith('astrbot-')) {
           plugin.trimmedName = name.substring(8);
         } else plugin.trimmedName = plugin.name;
       }
@@ -1247,7 +1253,9 @@ export const useExtensionPage = () => {
 
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
-      const repoKey = plugin.repo ? normalizeInstallUrl(plugin.repo).toLowerCase() : undefined;
+      const repoKey = plugin.repo
+        ? normalizeInstallUrl(plugin.repo).toLowerCase()
+        : undefined;
       const matchedInstalled =
         (repoKey && installedByRepo.get(repoKey)) ||
         installedByName.get(normalizeStr(plugin.name));
@@ -1281,14 +1289,14 @@ export const useExtensionPage = () => {
     pluginMarketData.value = notInstalled.concat(installed);
   };
 
-  const normalizeAstrBotVersionSpec = (value) => String(value || "").trim();
+  const normalizeAstrBotVersionSpec = (value) => String(value || '').trim();
 
   const normalizeVersionParts = (value) => {
-    const version = String(value || "")
+    const version = String(value || '')
       .trim()
-      .replace(/^v/i, "")
+      .replace(/^v/i, '')
       .split(/[+-]/)[0];
-    const parts = version.split(".").map((part) => {
+    const parts = version.split('.').map((part) => {
       const match = part.match(/^\d+/);
       return match ? Number.parseInt(match[0], 10) : 0;
     });
@@ -1325,7 +1333,7 @@ export const useExtensionPage = () => {
     if (!normalizedTarget) return null;
     if (!/^v?\d+/.test(normalizedTarget)) return null;
 
-    if (operator === "~=") {
+    if (operator === '~=') {
       return (
         compareVersions(currentVersion, normalizedTarget) >= 0 &&
         compareVersions(
@@ -1336,31 +1344,31 @@ export const useExtensionPage = () => {
     }
 
     const comparison = compareVersions(currentVersion, normalizedTarget);
-    if (operator === ">" || operator === ">=") {
-      return operator === ">" ? comparison > 0 : comparison >= 0;
+    if (operator === '>' || operator === '>=') {
+      return operator === '>' ? comparison > 0 : comparison >= 0;
     }
-    if (operator === "<" || operator === "<=") {
-      return operator === "<" ? comparison < 0 : comparison <= 0;
+    if (operator === '<' || operator === '<=') {
+      return operator === '<' ? comparison < 0 : comparison <= 0;
     }
-    if (operator === "!=") return comparison !== 0;
+    if (operator === '!=') return comparison !== 0;
     return comparison === 0;
   };
 
   const checkAstrBotVersionSupport = (versionSpec, currentVersion) => {
     const normalizedSpec = normalizeAstrBotVersionSpec(versionSpec);
     if (!normalizedSpec) {
-      return { checked: false, supported: true, message: "" };
+      return { checked: false, supported: true, message: '' };
     }
     if (!currentVersion) {
-      return { checked: false, supported: true, message: "" };
+      return { checked: false, supported: true, message: '' };
     }
 
     const constraints = normalizedSpec
-      .split(",")
+      .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
     if (!constraints.length) {
-      return { checked: false, supported: true, message: "" };
+      return { checked: false, supported: true, message: '' };
     }
 
     for (const constraint of constraints) {
@@ -1370,7 +1378,7 @@ export const useExtensionPage = () => {
           checked: true,
           supported: false,
           message:
-            "Invalid astrbot_version. Use a PEP 440 range, e.g. >=4.16,<5.",
+            'Invalid astrbot_version. Use a PEP 440 range, e.g. >=4.16,<5.',
         };
       }
       if (!supported) {
@@ -1382,13 +1390,13 @@ export const useExtensionPage = () => {
       }
     }
 
-    return { checked: true, supported: true, message: "" };
+    return { checked: true, supported: true, message: '' };
   };
 
   const annotateMarketVersionSupport = async () => {
     const currentVersion =
       commonStore.astrbotVersion ||
-      (await commonStore.fetchAstrBotVersion().catch(() => ""));
+      (await commonStore.fetchAstrBotVersion().catch(() => ''));
     pluginMarketData.value.forEach((plugin) => {
       const result = checkAstrBotVersionSupport(
         plugin?.astrbot_version,
@@ -1410,7 +1418,7 @@ export const useExtensionPage = () => {
       await getExtensions();
     } catch (error) {
       console.debug(
-        "Failed to refresh extensions after install failure:",
+        'Failed to refresh extensions after install failure:',
         error,
       );
     }
@@ -1427,17 +1435,17 @@ export const useExtensionPage = () => {
 
   const handleInstallResponse = async (resData) => {
     if (
-      resData.status === "warning" &&
-      resData.data?.warning_type === "astrbot_version_unsupported"
+      resData.status === 'warning' &&
+      resData.data?.warning_type === 'astrbot_version_unsupported'
     ) {
-      toast(resData.message, "warning");
+      toast(resData.message, 'warning');
       showVersionSupportWarning(resData.message);
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
 
-    if (resData.status === "error") {
-      toast(resData.message, "error");
+    if (resData.status === 'error') {
+      toast(resData.message, 'error');
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
@@ -1447,17 +1455,17 @@ export const useExtensionPage = () => {
 
   const performInstallRequest = async ({ source, ignoreVersionCheck }) => {
     const shouldIgnoreVersionCheck = ignoreVersionCheck === true;
-    if (source === "file") {
+    if (source === 'file') {
       const formData = new FormData();
-      formData.append("file", upload_file.value);
-      formData.append("ignore_version_check", String(shouldIgnoreVersionCheck));
+      formData.append('file', upload_file.value);
+      formData.append('ignore_version_check', String(shouldIgnoreVersionCheck));
       return pluginApi.installUpload(formData);
     }
 
     const payload = {
       url: extension_url.value,
       download_url: selectedInstallDownloadUrl.value,
-      proxy: selectedInstallDownloadUrl.value ? "" : getSelectedGitHubProxy(),
+      proxy: selectedInstallDownloadUrl.value ? '' : getSelectedGitHubProxy(),
       ignore_version_check: shouldIgnoreVersionCheck,
     };
 
@@ -1467,13 +1475,13 @@ export const useExtensionPage = () => {
   };
 
   const finalizeSuccessfulInstall = async (resData, source) => {
-    if (source === "file") {
+    if (source === 'file') {
       upload_file.value = null;
     } else {
-      extension_url.value = "";
+      extension_url.value = '';
     }
 
-    toast(resData.message, "success");
+    toast(resData.message, 'success');
     dialog.value = false;
     selectedMarketInstallPlugin.value = null;
     await getExtensions();
@@ -1490,16 +1498,16 @@ export const useExtensionPage = () => {
 
   const newExtension = async (ignoreVersionCheck = false) => {
     const shouldIgnoreVersionCheck = ignoreVersionCheck === true;
-    if (extension_url.value === "" && upload_file.value === null) {
-      toast(tm("messages.fillUrlOrFile"), "error");
+    if (extension_url.value === '' && upload_file.value === null) {
+      toast(tm('messages.fillUrlOrFile'), 'error');
       return;
     }
 
-    if (extension_url.value !== "" && upload_file.value !== null) {
-      toast(tm("messages.dontFillBoth"), "error");
+    if (extension_url.value !== '' && upload_file.value !== null) {
+      toast(tm('messages.dontFillBoth'), 'error');
       return;
     }
-    const source = upload_file.value !== null ? "file" : "url";
+    const source = upload_file.value !== null ? 'file' : 'url';
     loading_.value = true;
 
     try {
@@ -1515,15 +1523,15 @@ export const useExtensionPage = () => {
       await finalizeSuccessfulInstall(res.data, source);
     } catch (err) {
       loading_.value = false;
-      const message = resolveErrorMessage(err, tm("messages.installFailed"));
-      toast(message, "error");
+      const message = resolveErrorMessage(err, tm('messages.installFailed'));
+      toast(message, 'error');
       await refreshExtensionsAfterInstallFailure();
     }
   };
 
   const normalizePlatformList = (platforms) => {
     if (!Array.isArray(platforms)) return [];
-    return platforms.filter((item) => typeof item === "string");
+    return platforms.filter((item) => typeof item === 'string');
   };
 
   const getPlatformDisplayList = (platforms) => {
@@ -1533,9 +1541,7 @@ export const useExtensionPage = () => {
   };
 
   const resolveSelectedInstallPlugin = () => {
-    if (
-      selectedMarketInstallPlugin.value?.repo === extension_url.value
-    ) {
+    if (selectedMarketInstallPlugin.value?.repo === extension_url.value) {
       return selectedMarketInstallPlugin.value;
     }
     for (const plugin of pluginMarketData.value) {
@@ -1557,13 +1563,13 @@ export const useExtensionPage = () => {
   );
 
   const selectedUpdateDownloadUrl = computed(() =>
-    String(selectedUpdateMarketPlugin.value?.download_url || "").trim(),
+    String(selectedUpdateMarketPlugin.value?.download_url || '').trim(),
   );
 
   const selectedUpdateSourceUrl = computed(
     () =>
       selectedUpdateDownloadUrl.value ||
-      String(selectedUpdateExtension.value?.repo || "").trim(),
+      String(selectedUpdateExtension.value?.repo || '').trim(),
   );
 
   const updateUsesGithubSource = computed(
@@ -1575,16 +1581,16 @@ export const useExtensionPage = () => {
   const checkInstallVersionSupport = async () => {
     installSupport.checked = false;
     installSupport.supported = true;
-    installSupport.message = "";
+    installSupport.message = '';
 
     const plugin = selectedInstallPlugin.value;
-    if (!plugin?.astrbot_version || uploadTab.value !== "url") {
+    if (!plugin?.astrbot_version || uploadTab.value !== 'url') {
       return;
     }
 
     const currentVersion =
       commonStore.astrbotVersion ||
-      (await commonStore.fetchAstrBotVersion().catch(() => ""));
+      (await commonStore.fetchAstrBotVersion().catch(() => ''));
     const result = checkAstrBotVersionSupport(
       plugin.astrbot_version,
       currentVersion,
@@ -1612,9 +1618,9 @@ export const useExtensionPage = () => {
       refreshRandomPlugins();
       currentPage.value = 1; // 重置到第一页
 
-      toast(tm("messages.refreshSuccess"), "success");
+      toast(tm('messages.refreshSuccess'), 'success');
     } catch (err) {
-      toast(`${tm("messages.refreshFailed")  } ${  err}`, "error");
+      toast(`${tm('messages.refreshFailed')} ${err}`, 'error');
     } finally {
       refreshingMarket.value = false;
       loading_.value = false;
@@ -1653,7 +1659,7 @@ export const useExtensionPage = () => {
       checkUpdate();
       refreshRandomPlugins();
     } catch (err) {
-      toast(`${tm("messages.getMarketDataFailed")  } ${  err}`, "error");
+      toast(`${tm('messages.getMarketDataFailed')} ${err}`, 'error');
     } finally {
       loading_.value = false;
     }
@@ -1668,11 +1674,11 @@ export const useExtensionPage = () => {
   };
 
   // 监听语言切换事件
-  window.addEventListener("astrbot-locale-changed", handleLocaleChange);
+  window.addEventListener('astrbot-locale-changed', handleLocaleChange);
 
   // 清理事件监听器
   onUnmounted(() => {
-    window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
+    window.removeEventListener('astrbot-locale-changed', handleLocaleChange);
   });
 
   // 搜索防抖处理
@@ -1692,10 +1698,10 @@ export const useExtensionPage = () => {
   watch(
     [() => dialog.value, () => extension_url.value, () => uploadTab.value],
     async ([dialogOpen, _, currentUploadTab]) => {
-      if (!dialogOpen || currentUploadTab !== "url") {
+      if (!dialogOpen || currentUploadTab !== 'url') {
         installSupport.checked = false;
         installSupport.supported = true;
-        installSupport.message = "";
+        installSupport.message = '';
         if (!dialogOpen) {
           selectedMarketInstallPlugin.value = null;
         }
@@ -1722,7 +1728,7 @@ export const useExtensionPage = () => {
   });
 
   watch(marketCategoryFilter, () => {
-    if (activeTab.value === "market") {
+    if (activeTab.value === 'market') {
       currentPage.value = 1;
     }
   });
@@ -1732,7 +1738,7 @@ export const useExtensionPage = () => {
     (newItems) => {
       const validValues = new Set(newItems.map((item) => item.value));
       if (!validValues.has(marketCategoryFilter.value)) {
-        marketCategoryFilter.value = "all";
+        marketCategoryFilter.value = 'all';
       }
     },
     { immediate: true },

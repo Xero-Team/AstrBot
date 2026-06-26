@@ -1,28 +1,28 @@
-import { createHighlighterCore } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import bash from "shiki/langs/bash.mjs";
-import css from "shiki/langs/css.mjs";
-import diff from "shiki/langs/diff.mjs";
-import dockerfile from "shiki/langs/dockerfile.mjs";
-import html from "shiki/langs/html.mjs";
-import ini from "shiki/langs/ini.mjs";
-import java from "shiki/langs/java.mjs";
-import javascript from "shiki/langs/javascript.mjs";
-import json from "shiki/langs/json.mjs";
-import jsx from "shiki/langs/jsx.mjs";
-import markdown from "shiki/langs/markdown.mjs";
-import powershell from "shiki/langs/powershell.mjs";
-import python from "shiki/langs/python.mjs";
-import sql from "shiki/langs/sql.mjs";
-import tsx from "shiki/langs/tsx.mjs";
-import typescript from "shiki/langs/typescript.mjs";
-import vue from "shiki/langs/vue.mjs";
-import xml from "shiki/langs/xml.mjs";
-import yaml from "shiki/langs/yaml.mjs";
-import githubDark from "shiki/themes/github-dark.mjs";
-import githubLight from "shiki/themes/github-light.mjs";
-import vitesseDark from "shiki/themes/vitesse-dark.mjs";
-import vitesseLight from "shiki/themes/vitesse-light.mjs";
+import { createHighlighterCore } from 'shiki/core';
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
+import bash from 'shiki/langs/bash.mjs';
+import css from 'shiki/langs/css.mjs';
+import diff from 'shiki/langs/diff.mjs';
+import dockerfile from 'shiki/langs/dockerfile.mjs';
+import html from 'shiki/langs/html.mjs';
+import ini from 'shiki/langs/ini.mjs';
+import java from 'shiki/langs/java.mjs';
+import javascript from 'shiki/langs/javascript.mjs';
+import json from 'shiki/langs/json.mjs';
+import jsx from 'shiki/langs/jsx.mjs';
+import markdown from 'shiki/langs/markdown.mjs';
+import powershell from 'shiki/langs/powershell.mjs';
+import python from 'shiki/langs/python.mjs';
+import sql from 'shiki/langs/sql.mjs';
+import tsx from 'shiki/langs/tsx.mjs';
+import typescript from 'shiki/langs/typescript.mjs';
+import vue from 'shiki/langs/vue.mjs';
+import xml from 'shiki/langs/xml.mjs';
+import yaml from 'shiki/langs/yaml.mjs';
+import githubDark from 'shiki/themes/github-dark.mjs';
+import githubLight from 'shiki/themes/github-light.mjs';
+import vitesseDark from 'shiki/themes/vitesse-dark.mjs';
+import vitesseLight from 'shiki/themes/vitesse-light.mjs';
 
 export const LIMITED_SHIKI_LANGUAGES = [
   ...bash,
@@ -47,40 +47,40 @@ export const LIMITED_SHIKI_LANGUAGES = [
 ];
 
 const THEME_BY_NAME = {
-  "github-dark": githubDark,
-  "github-light": githubLight,
-  "vitesse-dark": vitesseDark,
-  "vitesse-light": vitesseLight,
+  'github-dark': githubDark,
+  'github-light': githubLight,
+  'vitesse-dark': vitesseDark,
+  'vitesse-light': vitesseLight,
 };
 
-const BUILT_IN_LANGUAGES = ["text", "plaintext", "plain"];
+const BUILT_IN_LANGUAGES = ['text', 'plaintext', 'plain'];
 
 export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
-  bat: "powershell",
-  cjs: "javascript",
-  console: "bash",
-  cts: "typescript",
-  docker: "dockerfile",
-  htm: "html",
-  js: "javascript",
-  md: "markdown",
-  mjs: "javascript",
-  mts: "typescript",
-  plain: "text",
-  plaintext: "text",
-  ps1: "powershell",
-  pwsh: "powershell",
-  py: "python",
-  shell: "bash",
-  shellscript: "bash",
-  sh: "bash",
-  svg: "xml",
-  text: "text",
-  ts: "typescript",
-  txt: "text",
-  xhtml: "html",
-  yml: "yaml",
-  zsh: "bash",
+  bat: 'powershell',
+  cjs: 'javascript',
+  console: 'bash',
+  cts: 'typescript',
+  docker: 'dockerfile',
+  htm: 'html',
+  js: 'javascript',
+  md: 'markdown',
+  mjs: 'javascript',
+  mts: 'typescript',
+  plain: 'text',
+  plaintext: 'text',
+  ps1: 'powershell',
+  pwsh: 'powershell',
+  py: 'python',
+  shell: 'bash',
+  shellscript: 'bash',
+  sh: 'bash',
+  svg: 'xml',
+  text: 'text',
+  ts: 'typescript',
+  txt: 'text',
+  xhtml: 'html',
+  yml: 'yaml',
+  zsh: 'bash',
 };
 
 export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
@@ -92,12 +92,12 @@ export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
 ]);
 
 function getThemeName(theme) {
-  return typeof theme === "string" ? theme : theme?.name;
+  return typeof theme === 'string' ? theme : theme?.name;
 }
 
 function resolveTheme(theme) {
   if (!theme) return null;
-  if (typeof theme !== "string") return theme;
+  if (typeof theme !== 'string') return theme;
   return THEME_BY_NAME[theme] || null;
 }
 
@@ -117,21 +117,23 @@ function uniqueThemes(themes) {
 }
 
 export function normalizeLimitedShikiLanguage(language) {
-  const normalized = String(language || "text")
+  const normalized = String(language || 'text')
     .trim()
     .split(/\s+/, 1)[0]
     .toLowerCase();
 
-  if (!normalized) return "text";
+  if (!normalized) return 'text';
   if (normalized in LIMITED_SHIKI_LANGUAGE_ALIASES) {
     return LIMITED_SHIKI_LANGUAGE_ALIASES[normalized];
   }
 
-  return LIMITED_SHIKI_SUPPORTED_LANGUAGES.has(normalized) ? normalized : "text";
+  return LIMITED_SHIKI_SUPPORTED_LANGUAGES.has(normalized)
+    ? normalized
+    : 'text';
 }
 
 function normalizeCodeOptions(options) {
-  if (!options || typeof options !== "object") return options;
+  if (!options || typeof options !== 'object') return options;
   return {
     ...options,
     lang: normalizeLimitedShikiLanguage(options.lang),

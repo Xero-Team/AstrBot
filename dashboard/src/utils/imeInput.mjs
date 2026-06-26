@@ -13,16 +13,16 @@ export function isComposingEnter(
   lastCompositionEndAt = null,
 ) {
   const hasCompositionKeyCodeFallback =
-    typeof event.keyCode === "number" && event.keyCode === 229;
+    typeof event.keyCode === 'number' && event.keyCode === 229;
   const isAfterRecentCompositionEnd =
-    typeof event.timeStamp === "number" &&
-    typeof lastCompositionEndAt === "number" &&
+    typeof event.timeStamp === 'number' &&
+    typeof lastCompositionEndAt === 'number' &&
     event.timeStamp >= lastCompositionEndAt &&
     event.timeStamp - lastCompositionEndAt <
       RECENT_COMPOSITION_END_THRESHOLD_MS;
 
   return (
-    event.key === "Enter" &&
+    event.key === 'Enter' &&
     (compositionActive ||
       event.isComposing ||
       hasCompositionKeyCodeFallback ||

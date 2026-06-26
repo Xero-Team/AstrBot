@@ -1,9 +1,9 @@
 <script setup>
-import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
-import PluginSortControl from "@/components/extension/PluginSortControl.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import { computed } from "vue";
-import { normalizeTextInput } from "@/utils/inputValue";
+import MarketPluginCard from '@/components/extension/MarketPluginCard.vue';
+import PluginSortControl from '@/components/extension/PluginSortControl.vue';
+import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import { computed } from 'vue';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 const props = defineProps({
   state: {
@@ -40,24 +40,24 @@ const {
 
 const currentSourceName = computed(() => {
   if (!selectedSource.value) {
-    return tm("market.defaultSource");
+    return tm('market.defaultSource');
   }
   const matched = customSources.value.find(
     (s) => s.url === selectedSource.value,
   );
-  return matched?.name || tm("market.defaultSource");
+  return matched?.name || tm('market.defaultSource');
 });
 
 const marketSortItems = computed(() => [
-  { title: tm("sort.default"), value: "default" },
-  { title: tm("sort.stars"), value: "stars" },
-  { title: tm("sort.author"), value: "author" },
-  { title: tm("sort.updated"), value: "updated" },
+  { title: tm('sort.default'), value: 'default' },
+  { title: tm('sort.stars'), value: 'stars' },
+  { title: tm('sort.author'), value: 'author' },
+  { title: tm('sort.updated'), value: 'updated' },
 ]);
 
 const marketCategorySelectItems = computed(() =>
   marketCategoryItems.value.map((item) => ({
-    title: `${item.label || ""} (${item.count || 0})`,
+    title: `${item.label || ''} (${item.count || 0})`,
     value: item.value,
   })),
 );
@@ -65,9 +65,9 @@ const marketCategorySelectItems = computed(() =>
 const openMarketPluginDetail = (plugin) => {
   if (!plugin?.name) return;
   router.push({
-    name: "ExtensionDetails",
+    name: 'ExtensionDetails',
     params: { pluginId: plugin.name },
-    hash: "#market",
+    hash: '#market',
   });
 };
 </script>
@@ -77,7 +77,7 @@ const openMarketPluginDetail = (plugin) => {
     <div class="mb-6 pt-4 pb-4">
       <div class="d-flex align-center" style="gap: 12px">
         <div class="d-flex align-center" style="gap: 12px; min-width: 0">
-          <h2 class="text-h2 mb-0">{{ tm("tabs.market") }}</h2>
+          <h2 class="text-h2 mb-0">{{ tm('tabs.market') }}</h2>
 
           <v-tooltip location="top" :text="tm('market.sourceManagement')">
             <template #activator="{ props: activatorProps }">
@@ -120,7 +120,7 @@ const openMarketPluginDetail = (plugin) => {
         style="color: grey; line-height: 1.4"
       >
         <v-icon size="16" class="mr-1">mdi-alert-outline</v-icon>
-        <span>{{ tm("market.sourceSafetyWarning") }}</span>
+        <span>{{ tm('market.sourceSafetyWarning') }}</span>
       </div>
     </div>
 
@@ -162,7 +162,7 @@ const openMarketPluginDetail = (plugin) => {
       >
         <div class="d-flex align-center" style="gap: 6px">
           <h2>
-            {{ tm("market.allPlugins") }}
+            {{ tm('market.allPlugins') }}
           </h2>
           <v-btn
             icon
@@ -238,7 +238,7 @@ const openMarketPluginDetail = (plugin) => {
             style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
           >
             <h2>
-              {{ tm("market.randomPlugins") }}
+              {{ tm('market.randomPlugins') }}
             </h2>
             <v-btn
               color="primary"
@@ -247,7 +247,7 @@ const openMarketPluginDetail = (plugin) => {
               :disabled="pluginMarketData.length === 0"
               @click="refreshRandomPlugins"
             >
-              {{ tm("buttons.reshuffle") }}
+              {{ tm('buttons.reshuffle') }}
             </v-btn>
           </div>
 

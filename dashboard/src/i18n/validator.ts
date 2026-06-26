@@ -3,7 +3,12 @@
  * 国际化验证器，用于检查翻译完整性、使用情况分析和错误检测
  */
 
-import type { ValidationResult, ValidationError, UsageReport, TranslationStats } from './types';
+import type {
+  ValidationResult,
+  ValidationError,
+  UsageReport,
+  TranslationStats,
+} from './types';
 
 type LocaleTree = Record<string, unknown>;
 
@@ -14,7 +19,9 @@ export class I18nValidator {
   /**
    * 验证翻译完整性
    */
-  validateCompleteness(localeData: Record<string, LocaleTree>): ValidationResult {
+  validateCompleteness(
+    localeData: Record<string, LocaleTree>,
+  ): ValidationResult {
     const errors: ValidationError[] = [];
     const missingKeys: string[] = [];
     const extraKeys: string[] = [];
@@ -26,7 +33,7 @@ export class I18nValidator {
         type: 'missing',
         key: this.baseLocale,
         message: `基准语言 ${this.baseLocale} 数据缺失`,
-        severity: 'error'
+        severity: 'error',
       });
       return { isValid: false, missingKeys, extraKeys, errors };
     }
@@ -44,46 +51,46 @@ export class I18nValidator {
           type: 'missing',
           key: locale,
           message: `语言 ${locale} 数据缺失`,
-          severity: 'error'
+          severity: 'error',
         });
         continue;
       }
 
       const targetKeys = this.getAllKeys(targetData);
-      
+
       // 检查缺失的键
-      const missing = baseKeys.filter(key => !targetKeys.includes(key));
-      missingKeys.push(...missing.map(key => `${locale}.${key}`));
+      const missing = baseKeys.filter((key) => !targetKeys.includes(key));
+      missingKeys.push(...missing.map((key) => `${locale}.${key}`));
 
       // 检查多余的键
-      const extra = targetKeys.filter(key => !baseKeys.includes(key));
-      extraKeys.push(...extra.map(key => `${locale}.${key}`));
+      const extra = targetKeys.filter((key) => !baseKeys.includes(key));
+      extraKeys.push(...extra.map((key) => `${locale}.${key}`));
 
       // 添加详细错误信息
-      missing.forEach(key => {
+      missing.forEach((key) => {
         errors.push({
           type: 'missing',
           key: `${locale}.${key}`,
           message: `${locale} 中缺失键: ${key}`,
-          severity: 'error'
+          severity: 'error',
         });
       });
 
-      extra.forEach(key => {
+      extra.forEach((key) => {
         errors.push({
           type: 'extra',
           key: `${locale}.${key}`,
           message: `${locale} 中存在多余键: ${key}`,
-          severity: 'warning'
+          severity: 'warning',
         });
       });
     }
 
     return {
-      isValid: errors.filter(e => e.severity === 'error').length === 0,
+      isValid: errors.filter((e) => e.severity === 'error').length === 0,
       missingKeys,
       extraKeys,
-      errors
+      errors,
     };
   }
 
@@ -105,9 +112,9 @@ export class I18nValidator {
    */
   private validateNestedValues(
     obj: LocaleTree,
-    locale: string, 
-    parentKey: string, 
-    errors: ValidationError[]
+    locale: string,
+    parentKey: string,
+    errors: ValidationError[],
   ): void {
     for (const [key, value] of Object.entries(obj)) {
       const fullKey = parentKey ? `${parentKey}.${key}` : key;
@@ -121,7 +128,7 @@ export class I18nValidator {
             type: 'empty_value',
             key: `${locale}.${fullKey}`,
             message: `空翻译值: ${locale}.${fullKey}`,
-            severity: 'warning'
+            severity: 'warning',
           });
         }
 
@@ -133,7 +140,7 @@ export class I18nValidator {
               type: 'type_mismatch',
               key: `${locale}.${fullKey}`,
               message: `无效的插值占位符: ${placeholder} in ${locale}.${fullKey}`,
-              severity: 'warning'
+              severity: 'warning',
             });
           }
         }
@@ -142,7 +149,7 @@ export class I18nValidator {
           type: 'type_mismatch',
           key: `${locale}.${fullKey}`,
           message: `翻译值应为字符串，实际为: ${typeof value}`,
-          severity: 'error'
+          severity: 'error',
         });
       }
     }
@@ -152,15 +159,17 @@ export class I18nValidator {
    * 分析翻译使用情况
    */
   validateUsage(translationKeys: string[], usedKeys: string[]): UsageReport {
-    const unusedKeys = translationKeys.filter(key => !usedKeys.includes(key));
-    const undefinedKeys = usedKeys.filter(key => !translationKeys.includes(key));
+    const unusedKeys = translationKeys.filter((key) => !usedKeys.includes(key));
+    const undefinedKeys = usedKeys.filter(
+      (key) => !translationKeys.includes(key),
+    );
 
     return {
       unusedKeys,
       undefinedKeys,
       coverage: (usedKeys.length / translationKeys.length) * 100,
       totalKeys: translationKeys.length,
-      usedKeys: usedKeys.length
+      usedKeys: usedKeys.length,
     };
   }
 
@@ -174,14 +183,14 @@ export class I18nValidator {
       overall: {
         totalKeys: 0,
         averageCoverage: 0,
-        lastSync: new Date().toISOString()
-      }
+        lastSync: new Date().toISOString(),
+      },
     };
 
     // 分析每种语言
     for (const [locale, data] of Object.entries(localeData)) {
       const keys = this.getAllKeys(data);
-      const translatedKeys = keys.filter(key => {
+      const translatedKeys = keys.filter((key) => {
         const value = this.getValueByKey(data, key);
         return typeof value === 'string' && value.trim() !== '';
       });
@@ -189,7 +198,7 @@ export class I18nValidator {
       stats.locales[locale] = {
         totalKeys: keys.length,
         translatedKeys: translatedKeys.length,
-        coverage: (translatedKeys.length / keys.length) * 100
+        coverage: (translatedKeys.length / keys.length) * 100,
       };
 
       // 分析模块
@@ -198,8 +207,9 @@ export class I18nValidator {
 
     // 计算总体统计
     const locales = Object.values(stats.locales);
-    stats.overall.totalKeys = Math.max(...locales.map(l => l.totalKeys));
-    stats.overall.averageCoverage = locales.reduce((sum, l) => sum + l.coverage, 0) / locales.length;
+    stats.overall.totalKeys = Math.max(...locales.map((l) => l.totalKeys));
+    stats.overall.averageCoverage =
+      locales.reduce((sum, l) => sum + l.coverage, 0) / locales.length;
 
     return stats;
   }
@@ -217,7 +227,7 @@ export class I18nValidator {
         const moduleKey = `${locale}.${moduleName}`;
         const nestedModuleData = moduleData as LocaleTree;
         const keys = this.getAllKeys(nestedModuleData);
-        const translatedKeys = keys.filter(key => {
+        const translatedKeys = keys.filter((key) => {
           const value = this.getValueByKey(nestedModuleData, key);
           return typeof value === 'string' && value.trim() !== '';
         });
@@ -226,12 +236,13 @@ export class I18nValidator {
           modules[moduleKey] = {
             keys: 0,
             coverage: 0,
-            lastUpdated: new Date().toISOString()
+            lastUpdated: new Date().toISOString(),
           };
         }
 
         modules[moduleKey].keys = keys.length;
-        modules[moduleKey].coverage = (translatedKeys.length / keys.length) * 100;
+        modules[moduleKey].coverage =
+          (translatedKeys.length / keys.length) * 100;
       }
     }
   }
@@ -270,10 +281,12 @@ export class I18nValidator {
   /**
    * 检查插值一致性
    */
-  validateInterpolation(localeData: Record<string, LocaleTree>): ValidationError[] {
+  validateInterpolation(
+    localeData: Record<string, LocaleTree>,
+  ): ValidationError[] {
     const errors: ValidationError[] = [];
     const baseData = localeData[this.baseLocale];
-    
+
     if (!baseData) return errors;
 
     const baseKeys = this.getAllKeys(baseData);
@@ -293,14 +306,19 @@ export class I18nValidator {
         const targetValue = this.getValueByKey(targetData, key);
         if (typeof targetValue !== 'string') continue;
 
-        const targetPlaceholders = (targetValue.match(/\{[^}]+\}/g) || []).sort();
+        const targetPlaceholders = (
+          targetValue.match(/\{[^}]+\}/g) || []
+        ).sort();
 
-        if (JSON.stringify(basePlaceholders) !== JSON.stringify(targetPlaceholders)) {
+        if (
+          JSON.stringify(basePlaceholders) !==
+          JSON.stringify(targetPlaceholders)
+        ) {
           errors.push({
             type: 'type_mismatch',
             key: `${locale}.${key}`,
             message: `插值占位符不匹配: ${locale}.${key}，期望 ${basePlaceholders.join(', ')}，实际 ${targetPlaceholders.join(', ')}`,
-            severity: 'error'
+            severity: 'error',
           });
         }
       }
@@ -317,7 +335,13 @@ export class I18nValidator {
     const keyNamingPattern = /^[a-z][a-zA-Z0-9]*$/;
 
     for (const [locale, data] of Object.entries(localeData)) {
-      this.validateKeyNamingRecursive(data, locale, '', keyNamingPattern, errors);
+      this.validateKeyNamingRecursive(
+        data,
+        locale,
+        '',
+        keyNamingPattern,
+        errors,
+      );
     }
 
     return errors;
@@ -331,7 +355,7 @@ export class I18nValidator {
     locale: string,
     parentKey: string,
     pattern: RegExp,
-    errors: ValidationError[]
+    errors: ValidationError[],
   ): void {
     for (const key of Object.keys(obj)) {
       const fullKey = parentKey ? `${parentKey}.${key}` : key;
@@ -341,12 +365,18 @@ export class I18nValidator {
           type: 'type_mismatch',
           key: `${locale}.${fullKey}`,
           message: `键名不符合命名规范: ${key}，应使用小驼峰命名`,
-          severity: 'warning'
+          severity: 'warning',
         });
       }
 
       if (typeof obj[key] === 'object' && obj[key] !== null) {
-        this.validateKeyNamingRecursive(obj[key] as LocaleTree, locale, fullKey, pattern, errors);
+        this.validateKeyNamingRecursive(
+          obj[key] as LocaleTree,
+          locale,
+          fullKey,
+          pattern,
+          errors,
+        );
       }
     }
   }
@@ -367,37 +397,40 @@ export class I18nValidator {
     recommendations: string[];
   }> {
     const results: ValidationResult[] = [];
-    
+
     for (const locale of locales) {
       try {
         // 这里应该从实际的翻译文件中加载，暂时创建基本结构
         const localeData = { [locale]: {} };
         const result = this.validateCompleteness(localeData);
         results.push(result);
-             } catch (error) {
-         console.error(`验证语言包 ${locale} 时出错:`, error);
-         // 创建错误结果
-         const errorResult: ValidationResult = {
-           isValid: false,
-           missingKeys: [],
-           extraKeys: [],
-           errors: [
-             {
-               type: 'missing',
-               key: locale,
-               message: error instanceof Error ? error.message : '未知错误',
-               severity: 'error'
-             }
-           ]
-         };
-         results.push(errorResult);
-       }
+      } catch (error) {
+        console.error(`验证语言包 ${locale} 时出错:`, error);
+        // 创建错误结果
+        const errorResult: ValidationResult = {
+          isValid: false,
+          missingKeys: [],
+          extraKeys: [],
+          errors: [
+            {
+              type: 'missing',
+              key: locale,
+              message: error instanceof Error ? error.message : '未知错误',
+              severity: 'error',
+            },
+          ],
+        };
+        results.push(errorResult);
+      }
     }
-    
-        // 生成汇总报告
+
+    // 生成汇总报告
     const totalKeys = results.length * 100; // 估算的总键数
-    const missingKeys = results.reduce((sum, r) => sum + r.missingKeys.length, 0);
-    
+    const missingKeys = results.reduce(
+      (sum, r) => sum + r.missingKeys.length,
+      0,
+    );
+
     return {
       summary: {
         totalLocales: results.length,
@@ -405,21 +438,25 @@ export class I18nValidator {
         missingKeys,
         emptyValues: 0, // 暂时设为0
         invalidInterpolations: 0, // 暂时设为0
-        completeness: totalKeys > 0 ? ((totalKeys - missingKeys) / totalKeys) * 100 : 100
+        completeness:
+          totalKeys > 0 ? ((totalKeys - missingKeys) / totalKeys) * 100 : 100,
       },
       details: results,
       recommendations: [
         '建议优先翻译核心模块的缺失键',
         '检查所有空值并提供适当的翻译',
-        '确保插值占位符在所有语言中保持一致'
-      ]
+        '确保插值占位符在所有语言中保持一致',
+      ],
     };
   }
 
   /**
    * 生成验证报告
    */
-  generateReport(localeData: Record<string, LocaleTree>, usedKeys: string[] = []): {
+  generateReport(
+    localeData: Record<string, LocaleTree>,
+    usedKeys: string[] = [],
+  ): {
     completeness: ValidationResult;
     values: ValidationError[];
     interpolation: ValidationError[];
@@ -445,7 +482,7 @@ export class I18nValidator {
       interpolation,
       naming,
       usage,
-      stats
+      stats,
     };
   }
-} 
+}

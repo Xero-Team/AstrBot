@@ -3,7 +3,7 @@
     <button class="tool-call-header" type="button" @click="toggleExpanded">
       <v-icon size="16" class="tool-call-icon">{{ toolCallIcon }}</v-icon>
       <span class="tool-call-title">
-        {{ tm("actions.toolCallUsed", { name: displayToolName }) }}
+        {{ tm('actions.toolCallUsed', { name: displayToolName }) }}
       </span>
       <span class="tool-call-duration">{{ toolCallDuration }}</span>
       <v-icon
@@ -41,8 +41,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps({
   toolCall: {
@@ -59,37 +59,37 @@ const props = defineProps({
   },
 });
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const isExpanded = ref(props.initialExpanded);
 const currentTime = ref(Date.now() / 1000);
 let timer = null;
 
 const elapsedTime = computed(() => {
-  if (props.toolCall.finished_ts) return "";
+  if (props.toolCall.finished_ts) return '';
   const startTime = Number(props.toolCall.ts);
-  if (!Number.isFinite(startTime) || startTime <= 0) return "";
+  if (!Number.isFinite(startTime) || startTime <= 0) return '';
   return formatDuration(currentTime.value - startTime);
 });
 
-const displayToolName = computed(() => props.toolCall.name || "tool");
+const displayToolName = computed(() => props.toolCall.name || 'tool');
 
 const toolCallIcon = computed(() => {
-  const name = String(props.toolCall.name || "");
-  if (name === "astrbot_execute_ipython" || name === "astrbot_execute_python") {
-    return "mdi-code-json";
+  const name = String(props.toolCall.name || '');
+  if (name === 'astrbot_execute_ipython' || name === 'astrbot_execute_python') {
+    return 'mdi-code-json';
   }
-  if (name.includes("web_search") || name.includes("tavily")) {
-    return "mdi-web";
+  if (name.includes('web_search') || name.includes('tavily')) {
+    return 'mdi-web';
   }
-  if (name === "astrbot_execute_shell") {
-    return "mdi-console-line";
+  if (name === 'astrbot_execute_shell') {
+    return 'mdi-console-line';
   }
-  return "mdi-wrench";
+  return 'mdi-wrench';
 });
 
 const toolCallDuration = computed(() => {
   const startTime = Number(props.toolCall.ts);
-  if (!Number.isFinite(startTime) || startTime <= 0) return "";
+  if (!Number.isFinite(startTime) || startTime <= 0) return '';
   if (props.toolCall.finished_ts) {
     return formatDuration(Number(props.toolCall.finished_ts) - startTime);
   }
@@ -97,7 +97,7 @@ const toolCallDuration = computed(() => {
 });
 
 const formattedResult = computed(() => {
-  if (!props.toolCall.result) return "";
+  if (!props.toolCall.result) return '';
   try {
     const parsed = JSON.parse(props.toolCall.result);
     return JSON.stringify(parsed, null, 2);
@@ -107,7 +107,7 @@ const formattedResult = computed(() => {
 });
 
 const formatDuration = (seconds) => {
-  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  if (!Number.isFinite(seconds) || seconds < 0) return '';
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
   }

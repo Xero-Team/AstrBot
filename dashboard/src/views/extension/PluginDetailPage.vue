@@ -6,14 +6,14 @@ import {
   onMounted,
   ref,
   watch,
-} from "vue";
-import axios from "axios";
-import DOMPurify from "dompurify";
-import MarkdownIt from "markdown-it";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import { pluginApi } from "@/api/v1";
-import { usePluginI18n } from "@/utils/pluginI18n";
-import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+} from 'vue';
+import axios from 'axios';
+import DOMPurify from 'dompurify';
+import MarkdownIt from 'markdown-it';
+import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import { pluginApi } from '@/api/v1';
+import { usePluginI18n } from '@/utils/pluginI18n';
+import PluginPlatformChip from '@/components/shared/PluginPlatformChip.vue';
 
 const props = defineProps({
   plugin: {
@@ -26,7 +26,7 @@ const props = defineProps({
   },
   sourceTab: {
     type: String,
-    default: "installed",
+    default: 'installed',
   },
   state: {
     type: Object,
@@ -35,10 +35,7 @@ const props = defineProps({
 });
 
 const { tm, router } = props.state;
-const {
-  pluginName,
-  pluginDesc: resolvePluginDesc,
-} = usePluginI18n();
+const { pluginName, pluginDesc: resolvePluginDesc } = usePluginI18n();
 
 const markdown = new MarkdownIt({
   html: true,
@@ -47,51 +44,51 @@ const markdown = new MarkdownIt({
   breaks: false,
 });
 
-markdown.enable(["table", "strikethrough"]);
+markdown.enable(['table', 'strikethrough']);
 
 const MARKDOWN_SANITIZE_OPTIONS = {
   ALLOWED_TAGS: [
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "p",
-    "br",
-    "hr",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "pre",
-    "code",
-    "a",
-    "img",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "strong",
-    "em",
-    "del",
-    "s",
-    "div",
-    "span",
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'p',
+    'br',
+    'hr',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'pre',
+    'code',
+    'a',
+    'img',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+    'strong',
+    'em',
+    'del',
+    's',
+    'div',
+    'span',
   ],
-  ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "rel", "align"],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'align'],
 };
 
 const readmeLoading = ref(false);
-const readmeError = ref("");
+const readmeError = ref('');
 const readmeEmpty = ref(false);
-const renderedReadme = ref("");
+const renderedReadme = ref('');
 const changelogLoading = ref(false);
-const changelogError = ref("");
+const changelogError = ref('');
 const changelogEmpty = ref(false);
-const renderedChangelog = ref("");
+const renderedChangelog = ref('');
 const expandedCommandGroups = ref(new Set());
 const logoLoadFailed = ref(false);
 const detailPageRef = ref(null);
@@ -101,13 +98,13 @@ const pluginDetail = ref(null);
 const pluginData = computed(() => pluginDetail.value || props.plugin);
 const displayName = computed(() => pluginName(pluginData.value));
 const detailSourceTab = computed(() =>
-  props.sourceTab === "market" ? "market" : "installed",
+  props.sourceTab === 'market' ? 'market' : 'installed',
 );
-const isMarketDetail = computed(() => detailSourceTab.value === "market");
+const isMarketDetail = computed(() => detailSourceTab.value === 'market');
 const detailParentTitle = computed(() =>
   isMarketDetail.value
-    ? tm("tabs.market")
-    : tm("titles.installedAstrBotPlugins"),
+    ? tm('tabs.market')
+    : tm('titles.installedAstrBotPlugins'),
 );
 
 const pluginDesc = computed(() => {
@@ -117,16 +114,16 @@ const pluginDesc = computed(() => {
     plugin.description ||
     props.marketPlugin?.desc ||
     props.marketPlugin?.description ||
-    "";
-  return String(resolvePluginDesc(plugin, desc) || "").trim();
+    '';
+  return String(resolvePluginDesc(plugin, desc) || '').trim();
 });
 
 const logoSrc = computed(() => {
-  const logo = pluginData.value?.logo || props.marketPlugin?.logo || "";
+  const logo = pluginData.value?.logo || props.marketPlugin?.logo || '';
   if (logoLoadFailed.value) {
     return defaultPluginIcon;
   }
-  return typeof logo === "string" && logo.trim().length
+  return typeof logo === 'string' && logo.trim().length
     ? logo
     : defaultPluginIcon;
 });
@@ -143,21 +140,21 @@ const authorDisplay = computed(() => {
     marketPlugin.owner;
 
   if (Array.isArray(author)) {
-    return author.join(", ");
+    return author.join(', ');
   }
-  if (author && typeof author === "object") {
-    return author.name || "";
+  if (author && typeof author === 'object') {
+    return author.name || '';
   }
-  return typeof author === "string" ? author.trim() : "";
+  return typeof author === 'string' ? author.trim() : '';
 });
 
 const categoryDisplay = computed(() => {
   const rawCategory =
-    pluginData.value?.category || props.marketPlugin?.category || "";
-  const category = String(rawCategory || "").trim();
-  if (!category) return "";
+    pluginData.value?.category || props.marketPlugin?.category || '';
+  const category = String(rawCategory || '').trim();
+  if (!category) return '';
 
-  const normalized = category.toLowerCase().replace(/\s+/g, "_");
+  const normalized = category.toLowerCase().replace(/\s+/g, '_');
   const label = tm(`market.categories.${normalized}`);
   return label === `market.categories.${normalized}` ? category : label;
 });
@@ -172,12 +169,12 @@ const authorWebsite = computed(() => {
     marketPlugin.author_url ||
     plugin.homepage ||
     marketPlugin.homepage ||
-    ""
+    ''
   );
 });
 
 const repoUrl = computed(
-  () => pluginData.value?.repo || props.marketPlugin?.repo || "",
+  () => pluginData.value?.repo || props.marketPlugin?.repo || '',
 );
 
 const firstPresentValue = (...values) =>
@@ -185,14 +182,14 @@ const firstPresentValue = (...values) =>
     (value) =>
       value !== undefined &&
       value !== null &&
-      value !== "" &&
+      value !== '' &&
       (!Array.isArray(value) || value.length > 0),
   );
 
 const versionDisplay = computed(() =>
   String(
     firstPresentValue(pluginData.value?.version, props.marketPlugin?.version) ||
-      "",
+      '',
   ).trim(),
 );
 
@@ -201,7 +198,7 @@ const starsDisplay = computed(() => {
     pluginData.value?.stars,
     props.marketPlugin?.stars,
   );
-  return value === undefined ? "" : String(value);
+  return value === undefined ? '' : String(value);
 });
 
 const tagsDisplay = computed(() => {
@@ -210,7 +207,7 @@ const tagsDisplay = computed(() => {
     props.marketPlugin?.tags,
   );
   if (!Array.isArray(tags)) return [];
-  return tags.filter((tag) => typeof tag === "string" && tag.trim().length > 0);
+  return tags.filter((tag) => typeof tag === 'string' && tag.trim().length > 0);
 });
 
 const astrbotVersionDisplay = computed(() =>
@@ -218,7 +215,7 @@ const astrbotVersionDisplay = computed(() =>
     firstPresentValue(
       pluginData.value?.astrbot_version,
       props.marketPlugin?.astrbot_version,
-    ) || "",
+    ) || '',
   ).trim(),
 );
 
@@ -228,52 +225,52 @@ const supportPlatformsDisplay = computed(() => {
     props.marketPlugin?.support_platforms,
   );
   if (!Array.isArray(platforms)) return [];
-  return platforms.filter((platform) => typeof platform === "string");
+  return platforms.filter((platform) => typeof platform === 'string');
 });
 
 const infoRows = computed(() => {
   const rows = [
     {
-      label: tm("detail.info.version"),
+      label: tm('detail.info.version'),
       value: versionDisplay.value,
       optional: true,
     },
-    { label: tm("detail.info.author"), value: authorDisplay.value },
+    { label: tm('detail.info.author'), value: authorDisplay.value },
     {
-      label: tm("detail.info.category"),
+      label: tm('detail.info.category'),
       value: categoryDisplay.value,
       optional: true,
     },
     {
-      label: tm("detail.info.stars"),
+      label: tm('detail.info.stars'),
       value: starsDisplay.value,
       optional: true,
     },
     {
-      label: tm("detail.info.tags"),
+      label: tm('detail.info.tags'),
       value: tagsDisplay.value,
-      kind: "tags",
+      kind: 'tags',
       optional: true,
     },
     {
-      label: tm("detail.info.astrbotVersion"),
+      label: tm('detail.info.astrbotVersion'),
       value: astrbotVersionDisplay.value,
       optional: true,
     },
     {
-      label: tm("detail.info.supportPlatforms"),
+      label: tm('detail.info.supportPlatforms'),
       value: supportPlatformsDisplay.value,
-      kind: "platforms",
+      kind: 'platforms',
       optional: true,
     },
     {
-      label: tm("detail.info.authorWebsite"),
+      label: tm('detail.info.authorWebsite'),
       value: authorWebsite.value,
       href: authorWebsite.value,
       optional: true,
     },
     {
-      label: tm("detail.info.repository"),
+      label: tm('detail.info.repository'),
       value: repoUrl.value,
       href: repoUrl.value,
       optional: true,
@@ -288,15 +285,15 @@ const infoRows = computed(() => {
 });
 
 const normalizeHandlerList = (source) => {
-  if (!source || typeof source !== "object") return [];
+  if (!source || typeof source !== 'object') return [];
   if (Array.isArray(source.handlers)) {
     return source.handlers.filter(
-      (handler) => handler && typeof handler === "object",
+      (handler) => handler && typeof handler === 'object',
     );
   }
   if (Array.isArray(source.command_handlers)) {
     return source.command_handlers.filter(
-      (handler) => handler && typeof handler === "object",
+      (handler) => handler && typeof handler === 'object',
     );
   }
   if (Array.isArray(source.commands)) {
@@ -304,53 +301,59 @@ const normalizeHandlerList = (source) => {
       .filter(
         (command) =>
           command &&
-          (typeof command === "string" || typeof command === "object"),
+          (typeof command === 'string' || typeof command === 'object'),
       )
       .map((command) =>
-        typeof command === "string"
-          ? { cmd: command, type: "指令" }
-          : { type: command.type || "指令", ...command },
+        typeof command === 'string'
+          ? { cmd: command, type: '指令' }
+          : { type: command.type || '指令', ...command },
       );
   }
   return [];
 };
 
-const componentGroupOrder = ["skill", "command", "llm_tool", "listener", "hook"];
+const componentGroupOrder = [
+  'skill',
+  'command',
+  'llm_tool',
+  'listener',
+  'hook',
+];
 
 const componentGroupIcons = {
-  skill: "mdi-lightning-bolt",
-  command: "mdi-console-line",
-  llm_tool: "mdi-tools",
-  listener: "mdi-broadcast",
-  hook: "mdi-hook",
+  skill: 'mdi-lightning-bolt',
+  command: 'mdi-console-line',
+  llm_tool: 'mdi-tools',
+  listener: 'mdi-broadcast',
+  hook: 'mdi-hook',
 };
 
 const getFallbackHandlerGroupKey = (handler) => {
-  const type = String(handler?.type || "").trim();
-  const eventType = String(handler?.event_type || "").trim();
-  const eventTypeH = String(handler?.event_type_h || "").trim();
+  const type = String(handler?.type || '').trim();
+  const eventType = String(handler?.event_type || '').trim();
+  const eventTypeH = String(handler?.event_type_h || '').trim();
 
-  if (["指令", "指令组", "正则匹配"].includes(type)) {
-    return "command";
+  if (['指令', '指令组', '正则匹配'].includes(type)) {
+    return 'command';
   }
-  if (eventType === "OnCallingFuncToolEvent" || eventTypeH === "函数工具") {
-    return "llm_tool";
+  if (eventType === 'OnCallingFuncToolEvent' || eventTypeH === '函数工具') {
+    return 'llm_tool';
   }
-  if (type === "事件监听器") {
-    return "listener";
+  if (type === '事件监听器') {
+    return 'listener';
   }
-  return "hook";
+  return 'hook';
 };
 
 const getComponentGroupKey = (component) => {
   const type = String(
-    component?.type || component?.component_type || "",
+    component?.type || component?.component_type || '',
   ).trim();
   if (componentGroupOrder.includes(type)) return type;
   return getFallbackHandlerGroupKey(component);
 };
 
-const normalizeComponent = (component, fallbackType = "") => {
+const normalizeComponent = (component, fallbackType = '') => {
   const type = fallbackType || getComponentGroupKey(component);
   const normalized = { ...component, type };
   if (component?.type && component.type !== type && !normalized.display_type) {
@@ -360,18 +363,18 @@ const normalizeComponent = (component, fallbackType = "") => {
 };
 
 const normalizeComponentList = (source) => {
-  if (!source || typeof source !== "object") return [];
+  if (!source || typeof source !== 'object') return [];
   const { components } = source;
 
   if (
     components &&
-    typeof components === "object" &&
+    typeof components === 'object' &&
     !Array.isArray(components)
   ) {
     return componentGroupOrder.flatMap((key) =>
       Array.isArray(components[key])
         ? components[key]
-            .filter((component) => component && typeof component === "object")
+            .filter((component) => component && typeof component === 'object')
             .map((component) => normalizeComponent(component, key))
         : [],
     );
@@ -379,7 +382,7 @@ const normalizeComponentList = (source) => {
 
   if (Array.isArray(components)) {
     return components
-      .filter((component) => component && typeof component === "object")
+      .filter((component) => component && typeof component === 'object')
       .map((component) => normalizeComponent(component));
   }
 
@@ -418,21 +421,21 @@ const getHandlerCommand = (handler) =>
     handler?.name ||
       handler?.cmd ||
       handler?.handler_name ||
-      tm("status.unknown"),
+      tm('status.unknown'),
   ).trim();
 
 const getHandlerDisplayName = (handler, groupKey) => {
   if (handler?.name) {
     return handler.name;
   }
-  if (["llm_tool", "listener"].includes(groupKey)) {
-    return handler?.handler_name || handler?.cmd || tm("status.unknown");
+  if (['llm_tool', 'listener'].includes(groupKey)) {
+    return handler?.handler_name || handler?.cmd || tm('status.unknown');
   }
-  return handler?.cmd || handler?.handler_name || tm("status.unknown");
+  return handler?.cmd || handler?.handler_name || tm('status.unknown');
 };
 
 const getHandlerTiming = (handler) =>
-  String(handler?.event_type_h || handler?.event_type || "").trim();
+  String(handler?.event_type_h || handler?.event_type || '').trim();
 
 const isCommandGroupExpanded = (key) => expandedCommandGroups.value.has(key);
 
@@ -448,12 +451,12 @@ const toggleCommandGroup = (key) => {
 
 const getComponentDescription = (component) => {
   return String(
-    component?.description || component?.desc || tm("status.unknown"),
+    component?.description || component?.desc || tm('status.unknown'),
   ).trim();
 };
 
 const getCommandRowKey = (component, path) =>
-  component?.handler_full_name || component?.path || path.join(" ");
+  component?.handler_full_name || component?.path || path.join(' ');
 
 const buildCommandComponentRows = (commandComponents) => {
   const rows = [];
@@ -464,15 +467,15 @@ const buildCommandComponentRows = (commandComponents) => {
     const key = getCommandRowKey(component, nextPath);
     const children = Array.isArray(component?.subcommands)
       ? component.subcommands.filter(
-          (child) => child && typeof child === "object",
+          (child) => child && typeof child === 'object',
         )
       : [];
 
-    let kind = "handler";
+    let kind = 'handler';
     if (children.length > 0) {
-      kind = "group";
+      kind = 'group';
     } else if (depth > 0) {
-      kind = "subCommand";
+      kind = 'subCommand';
     }
 
     rows.push({
@@ -485,36 +488,40 @@ const buildCommandComponentRows = (commandComponents) => {
     });
 
     if (!children.length || !isCommandGroupExpanded(key)) return;
-    children.forEach((child) => { appendRows(child, nextPath, depth + 1); });
+    children.forEach((child) => {
+      appendRows(child, nextPath, depth + 1);
+    });
   };
 
-  commandComponents.forEach((component) => { appendRows(component); });
+  commandComponents.forEach((component) => {
+    appendRows(component);
+  });
   return rows;
 };
 
 const openExternal = (url) => {
   if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 const goBack = () => {
-  router.push({ name: "Extensions", hash: `#${detailSourceTab.value}` });
+  router.push({ name: 'Extensions', hash: `#${detailSourceTab.value}` });
 };
 
 const renderMarkdown = (source) => {
-  const normalizedSource = String(source || "")
+  const normalizedSource = String(source || '')
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'");
   const rawHtml = markdown.render(normalizedSource);
   const cleanHtml = DOMPurify.sanitize(rawHtml, MARKDOWN_SANITIZE_OPTIONS);
-  const container = document.createElement("div");
+  const container = document.createElement('div');
   container.innerHTML = cleanHtml;
 
-  container.querySelectorAll("a").forEach((link) => {
-    const href = link.getAttribute("href") || "";
-    if (href.startsWith("http") || href.startsWith("//")) {
-      link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener noreferrer");
+  container.querySelectorAll('a').forEach((link) => {
+    const href = link.getAttribute('href') || '';
+    if (href.startsWith('http') || href.startsWith('//')) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
     }
   });
 
@@ -531,11 +538,11 @@ const updateHeaderStuckState = () => {
 };
 
 const scrollToHashTarget = async () => {
-  if (window.location.hash !== "#plugin-components") return;
+  if (window.location.hash !== '#plugin-components') return;
   await nextTick();
-  document.getElementById("plugin-components")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
+  document.getElementById('plugin-components')?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
   });
 };
 
@@ -545,27 +552,27 @@ const fetchPluginDetail = async () => {
 
   try {
     const res = await pluginApi.get(props.plugin.name);
-    if (res.data.status === "ok" && res.data.data) {
+    if (res.data.status === 'ok' && res.data.data) {
       pluginDetail.value = res.data.data;
       await scrollToHashTarget();
     }
   } catch (err) {
-    console.debug("Failed to fetch plugin detail:", err);
+    console.debug('Failed to fetch plugin detail:', err);
   }
 };
 
 const getDocumentUrl = (fieldName) => {
   const plugin = pluginData.value || {};
   const marketPlugin = props.marketPlugin || {};
-  return String(plugin[fieldName] || marketPlugin[fieldName] || "").trim();
+  return String(plugin[fieldName] || marketPlugin[fieldName] || '').trim();
 };
 
 const fetchRemoteMarkdown = async (url) => {
   const res = await axios.get(url, {
-    responseType: "text",
+    responseType: 'text',
     transformResponse: [(data) => data],
   });
-  return typeof res.data === "string" ? res.data : String(res.data || "");
+  return typeof res.data === 'string' ? res.data : String(res.data || '');
 };
 
 const fetchReadme = async () => {
@@ -573,12 +580,12 @@ const fetchReadme = async () => {
   if (!plugin?.name) return;
 
   readmeLoading.value = true;
-  readmeError.value = "";
+  readmeError.value = '';
   readmeEmpty.value = false;
-  renderedReadme.value = "";
+  renderedReadme.value = '';
 
   if (isMarketDetail.value) {
-    const readmeUrl = getDocumentUrl("readme_url");
+    const readmeUrl = getDocumentUrl('readme_url');
     if (!readmeUrl) {
       readmeEmpty.value = true;
       readmeLoading.value = false;
@@ -609,7 +616,7 @@ const fetchReadme = async () => {
     props.marketPlugin?.README ||
     props.marketPlugin?.readme_content ||
     props.marketPlugin?.docs ||
-    "";
+    '';
 
   if (inlineReadme) {
     renderedReadme.value = renderMarkdown(inlineReadme);
@@ -620,12 +627,12 @@ const fetchReadme = async () => {
   try {
     const res = await pluginApi.readme(plugin.name);
 
-    if (res.data.status !== "ok") {
-      readmeError.value = res.data.message || tm("messages.operationFailed");
+    if (res.data.status !== 'ok') {
+      readmeError.value = res.data.message || tm('messages.operationFailed');
       return;
     }
 
-    const content = res.data.data?.content || "";
+    const content = res.data.data?.content || '';
     if (!content) {
       readmeEmpty.value = true;
       return;
@@ -644,12 +651,12 @@ const fetchChangelog = async () => {
   if (!plugin?.name) return;
 
   changelogLoading.value = true;
-  changelogError.value = "";
+  changelogError.value = '';
   changelogEmpty.value = false;
-  renderedChangelog.value = "";
+  renderedChangelog.value = '';
 
   if (isMarketDetail.value) {
-    const changelogUrl = getDocumentUrl("changelog_url");
+    const changelogUrl = getDocumentUrl('changelog_url');
     if (!changelogUrl) {
       changelogEmpty.value = true;
       changelogLoading.value = false;
@@ -674,12 +681,12 @@ const fetchChangelog = async () => {
   try {
     const res = await pluginApi.changelog(plugin.name);
 
-    if (res.data.status !== "ok") {
-      changelogError.value = res.data.message || tm("messages.operationFailed");
+    if (res.data.status !== 'ok') {
+      changelogError.value = res.data.message || tm('messages.operationFailed');
       return;
     }
 
-    const content = res.data.data?.content || "";
+    const content = res.data.data?.content || '';
     if (!content) {
       changelogEmpty.value = true;
       return;
@@ -694,11 +701,11 @@ const fetchChangelog = async () => {
 };
 
 const showDocsSection = computed(
-  () => !isMarketDetail.value || Boolean(getDocumentUrl("readme_url")),
+  () => !isMarketDetail.value || Boolean(getDocumentUrl('readme_url')),
 );
 
 const showChangelogSection = computed(
-  () => !isMarketDetail.value || Boolean(getDocumentUrl("changelog_url")),
+  () => !isMarketDetail.value || Boolean(getDocumentUrl('changelog_url')),
 );
 
 watch(
@@ -721,16 +728,16 @@ watch(
 onMounted(() => {
   updateHeaderStuckState();
   void scrollToHashTarget();
-  window.addEventListener("scroll", updateHeaderStuckState, { passive: true });
-  document.addEventListener("scroll", updateHeaderStuckState, {
+  window.addEventListener('scroll', updateHeaderStuckState, { passive: true });
+  document.addEventListener('scroll', updateHeaderStuckState, {
     capture: true,
     passive: true,
   });
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("scroll", updateHeaderStuckState);
-  document.removeEventListener("scroll", updateHeaderStuckState, {
+  window.removeEventListener('scroll', updateHeaderStuckState);
+  document.removeEventListener('scroll', updateHeaderStuckState, {
     capture: true,
   });
 });
@@ -771,7 +778,7 @@ onBeforeUnmount(() => {
       id="plugin-components"
       class="detail-section"
     >
-      <h3 class="detail-section__title">{{ tm("detail.contents") }}</h3>
+      <h3 class="detail-section__title">{{ tm('detail.contents') }}</h3>
       <div class="handler-groups">
         <div
           v-for="group in groupedComponentSections"
@@ -817,8 +824,8 @@ onBeforeUnmount(() => {
                         <v-icon size="18">
                           {{
                             isCommandGroupExpanded(item.key)
-                              ? "mdi-chevron-down"
-                              : "mdi-chevron-right"
+                              ? 'mdi-chevron-down'
+                              : 'mdi-chevron-right'
                           }}
                         </v-icon>
                       </v-btn>
@@ -844,7 +851,7 @@ onBeforeUnmount(() => {
                         }}</span>
                         <span class="handler-row__timing">
                           {{
-                            tm("detail.subCommandsCount", {
+                            tm('detail.subCommandsCount', {
                               count: item.children.length,
                             })
                           }}
@@ -900,7 +907,7 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="detail-section">
-      <h3 class="detail-section__title">{{ tm("detail.info.title") }}</h3>
+      <h3 class="detail-section__title">{{ tm('detail.info.title') }}</h3>
       <v-card class="rounded-lg" variant="outlined">
         <v-table class="detail-info-table">
           <tbody>
@@ -926,7 +933,7 @@ onBeforeUnmount(() => {
                     size="small"
                     variant="tonal"
                   >
-                    {{ tag === "danger" ? tm("tags.danger") : tag }}
+                    {{ tag === 'danger' ? tm('tags.danger') : tag }}
                   </v-chip>
                 </div>
                 <div v-else-if="row.kind === 'platforms'" class="detail-tags">
@@ -941,7 +948,7 @@ onBeforeUnmount(() => {
                   <span>{{ row.value }}</span>
                   <v-icon icon="mdi-open-in-new" size="16" />
                 </button>
-                <span v-else>{{ row.value || tm("status.unknown") }}</span>
+                <span v-else>{{ row.value || tm('status.unknown') }}</span>
               </td>
             </tr>
           </tbody>
@@ -950,7 +957,7 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-if="showDocsSection" class="detail-section">
-      <h3 class="detail-section__title">{{ tm("detail.docsTitle") }}</h3>
+      <h3 class="detail-section__title">{{ tm('detail.docsTitle') }}</h3>
       <v-card class="rounded-lg docs-card" variant="outlined">
         <v-card-text>
           <div v-if="readmeLoading" class="docs-state">
@@ -960,7 +967,7 @@ onBeforeUnmount(() => {
             {{ readmeError }}
           </v-alert>
           <div v-else-if="readmeEmpty" class="text-medium-emphasis">
-            {{ tm("detail.docsEmpty") }}
+            {{ tm('detail.docsEmpty') }}
           </div>
           <div v-else class="docs-markdown" v-html="renderedReadme"></div>
         </v-card-text>
@@ -969,7 +976,7 @@ onBeforeUnmount(() => {
 
     <section v-if="showChangelogSection" class="detail-section">
       <h3 class="detail-section__title">
-        {{ tm("detail.changelogTitle") }}
+        {{ tm('detail.changelogTitle') }}
       </h3>
       <v-card class="rounded-lg docs-card" variant="outlined">
         <v-card-text>
@@ -980,7 +987,7 @@ onBeforeUnmount(() => {
             {{ changelogError }}
           </v-alert>
           <div v-else-if="changelogEmpty" class="text-medium-emphasis">
-            {{ tm("detail.changelogEmpty") }}
+            {{ tm('detail.changelogEmpty') }}
           </div>
           <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
         </v-card-text>
@@ -1012,7 +1019,7 @@ onBeforeUnmount(() => {
 .detail-header--stuck::before {
   background: rgb(var(--v-theme-surface));
   box-shadow: 0 1px 0 rgba(var(--v-border-color), var(--v-border-opacity));
-  content: "";
+  content: '';
   inset: 0 calc(50% - 50vw);
   position: absolute;
   z-index: -1;

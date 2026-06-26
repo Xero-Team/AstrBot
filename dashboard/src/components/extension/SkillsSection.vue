@@ -5,14 +5,9 @@
         v-if="neoEnabled"
         class="d-flex justify-end align-center px-4 py-3 pb-4"
       >
-        <v-btn-toggle
-          v-model="mode"
-          mandatory
-          divided
-          density="comfortable"
-        >
-          <v-btn value="local">{{ tm("skills.modeLocal") }}</v-btn>
-          <v-btn value="neo">{{ tm("skills.modeNeo") }}</v-btn>
+        <v-btn-toggle v-model="mode" mandatory divided density="comfortable">
+          <v-btn value="local">{{ tm('skills.modeLocal') }}</v-btn>
+          <v-btn value="neo">{{ tm('skills.modeNeo') }}</v-btn>
         </v-btn-toggle>
       </v-row>
 
@@ -24,7 +19,7 @@
           density="comfortable"
           border="start"
         >
-          {{ tm("skills.sandboxDiscoveryPending") }}
+          {{ tm('skills.sandboxDiscoveryPending') }}
         </v-alert>
       </div>
 
@@ -48,8 +43,8 @@
 
         <div v-else-if="skills.length === 0" class="text-center pa-8">
           <v-icon size="64" color="grey-lighten-1">mdi-folder-open</v-icon>
-          <p class="text-grey mt-4">{{ tm("skills.empty") }}</p>
-          <small class="text-grey">{{ tm("skills.emptyHint") }}</small>
+          <p class="text-grey mt-4">{{ tm('skills.empty') }}</p>
+          <small class="text-grey">{{ tm('skills.emptyHint') }}</small>
         </div>
 
         <div v-else class="skills-list pb-3">
@@ -71,12 +66,12 @@
             </template>
 
             <div class="skill-description text-body-2 text-medium-emphasis">
-              {{ skill.description || tm("skills.noDescription") }}
+              {{ skill.description || tm('skills.noDescription') }}
             </div>
 
             <div class="skill-path text-caption text-medium-emphasis">
               <v-icon size="small" class="me-1">mdi-file-document</v-icon>
-              {{ tm("skills.path") }}: {{ skill.path }}
+              {{ tm('skills.path') }}: {{ skill.path }}
             </div>
 
             <template #actions>
@@ -88,13 +83,18 @@
                     variant="text"
                     size="small"
                     class="list-action-icon-btn"
-                    :disabled="itemLoading[skill.name] || isReadOnlySourceSkill(skill)"
+                    :disabled="
+                      itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                    "
                     @click.stop="downloadSkill(skill)"
                   />
                 </template>
               </v-tooltip>
 
-              <v-tooltip :text="t('core.common.itemCard.delete')" location="top">
+              <v-tooltip
+                :text="t('core.common.itemCard.delete')"
+                location="top"
+              >
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -102,7 +102,9 @@
                     variant="text"
                     size="small"
                     class="list-action-icon-btn"
-                    :disabled="itemLoading[skill.name] || isReadOnlySourceSkill(skill)"
+                    :disabled="
+                      itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                    "
                     @click.stop="confirmDelete(skill)"
                   />
                 </template>
@@ -120,15 +122,17 @@
                     inset
                     :model-value="skill.active"
                     :loading="itemLoading[skill.name] || false"
-                    :disabled="itemLoading[skill.name] || isSandboxPresetSkill(skill)"
+                    :disabled="
+                      itemLoading[skill.name] || isSandboxPresetSkill(skill)
+                    "
                     @click.stop
                     @update:model-value="toggleSkill(skill)"
                   />
                 </template>
                 <span>{{
                   skill.active
-                    ? t("core.common.itemCard.enabled")
-                    : t("core.common.itemCard.disabled")
+                    ? t('core.common.itemCard.enabled')
+                    : t('core.common.itemCard.disabled')
                 }}</span>
               </v-tooltip>
             </template>
@@ -144,7 +148,7 @@
             <div>
               <div class="text-subtitle-1 font-weight-bold">Neo Skills</div>
               <div class="text-caption text-medium-emphasis">
-                {{ tm("skills.neoFilterHint") }}
+                {{ tm('skills.neoFilterHint') }}
               </div>
             </div>
           </div>
@@ -209,7 +213,7 @@
 
         <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
           <v-card-title class="text-subtitle-1 font-weight-bold">{{
-            tm("skills.neoCandidates")
+            tm('skills.neoCandidates')
           }}</v-card-title>
           <v-data-table
             :headers="candidateHeaders"
@@ -219,7 +223,7 @@
             class="neo-data-table"
           >
             <template #item.latest_score="{ item }">
-              {{ item.latest_score ?? "-" }}
+              {{ item.latest_score ?? '-' }}
             </template>
             <template #item.actions="{ item }">
               <div class="d-flex ga-1 flex-wrap">
@@ -229,7 +233,7 @@
                   variant="tonal"
                   @click="evaluateCandidate(item, true)"
                 >
-                  {{ tm("skills.neoPass") }}
+                  {{ tm('skills.neoPass') }}
                 </v-btn>
                 <v-btn
                   size="x-small"
@@ -237,7 +241,7 @@
                   variant="tonal"
                   @click="evaluateCandidate(item, false)"
                 >
-                  {{ tm("skills.neoReject") }}
+                  {{ tm('skills.neoReject') }}
                 </v-btn>
                 <v-btn
                   size="x-small"
@@ -273,7 +277,7 @@
                   variant="tonal"
                   @click="deleteCandidate(item)"
                 >
-                  {{ tm("skills.neoDelete") }}
+                  {{ tm('skills.neoDelete') }}
                 </v-btn>
               </div>
             </template>
@@ -282,7 +286,7 @@
 
         <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
           <v-card-title class="text-subtitle-1 font-weight-bold">{{
-            tm("skills.neoReleases")
+            tm('skills.neoReleases')
           }}</v-card-title>
           <v-data-table
             :headers="releaseHeaders"
@@ -297,7 +301,7 @@
                 :color="item.is_active ? 'success' : 'default'"
                 variant="tonal"
               >
-                {{ item.is_active ? "active" : "inactive" }}
+                {{ item.is_active ? 'active' : 'inactive' }}
               </v-chip>
             </template>
             <template #item.actions="{ item }">
@@ -310,8 +314,8 @@
                 >
                   {{
                     item.is_active
-                      ? tm("skills.neoDeactivate")
-                      : tm("skills.neoRollback")
+                      ? tm('skills.neoDeactivate')
+                      : tm('skills.neoRollback')
                   }}
                 </v-btn>
                 <v-btn
@@ -320,7 +324,7 @@
                   variant="tonal"
                   @click="syncRelease(item)"
                 >
-                  {{ tm("skills.neoSync") }}
+                  {{ tm('skills.neoSync') }}
                 </v-btn>
                 <v-btn
                   size="x-small"
@@ -328,7 +332,7 @@
                   variant="tonal"
                   @click="deleteRelease(item)"
                 >
-                  {{ tm("skills.neoDelete") }}
+                  {{ tm('skills.neoDelete') }}
                 </v-btn>
               </div>
             </template>
@@ -375,7 +379,7 @@
         <v-card-title class="skills-upload-dialog__header px-6 pt-6 pb-2">
           <div class="skills-upload-dialog__heading">
             <div class="text-h4 font-weight-medium">
-              {{ tm("skills.uploadDialogTitle") }}
+              {{ tm('skills.uploadDialogTitle') }}
             </div>
           </div>
           <v-btn
@@ -391,12 +395,12 @@
           <p
             class="skills-upload-dialog__description skills-upload-dialog__description--body"
           >
-            {{ tm("skills.uploadHint") }}
+            {{ tm('skills.uploadHint') }}
           </p>
 
           <div class="skills-upload-structure-note">
             <v-icon size="18">mdi-information-outline</v-icon>
-            <span>{{ tm("skills.structureRequirement") }}</span>
+            <span>{{ tm('skills.structureRequirement') }}</span>
           </div>
 
           <div class="skills-upload-capabilities">
@@ -404,19 +408,19 @@
               <div class="skills-upload-capability__icon">
                 <v-icon size="18">mdi-layers-outline</v-icon>
               </div>
-              <span>{{ tm("skills.abilityMultiple") }}</span>
+              <span>{{ tm('skills.abilityMultiple') }}</span>
             </div>
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
                 <v-icon size="18">mdi-shield-check-outline</v-icon>
               </div>
-              <span>{{ tm("skills.abilityValidate") }}</span>
+              <span>{{ tm('skills.abilityValidate') }}</span>
             </div>
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
                 <v-icon size="18">mdi-skip-next-circle-outline</v-icon>
               </div>
-              <span>{{ tm("skills.abilitySkip") }}</span>
+              <span>{{ tm('skills.abilitySkip') }}</span>
             </div>
           </div>
 
@@ -437,13 +441,13 @@
               <v-icon size="34">mdi-folder-zip-outline</v-icon>
             </div>
             <div class="text-h6 font-weight-medium">
-              {{ tm("skills.dropzoneTitle") }}
+              {{ tm('skills.dropzoneTitle') }}
             </div>
             <div class="skills-dropzone__subtitle">
-              {{ tm("skills.dropzoneAction") }}
+              {{ tm('skills.dropzoneAction') }}
             </div>
             <div class="skills-dropzone__hint">
-              {{ tm("skills.dropzoneHint") }}
+              {{ tm('skills.dropzoneHint') }}
             </div>
             <input
               ref="uploadInput"
@@ -462,7 +466,7 @@
               class="skills-upload-summary__chip"
             >
               {{
-                tm("skills.summaryTotal", { count: uploadStateCounts.total })
+                tm('skills.summaryTotal', { count: uploadStateCounts.total })
               }}
             </v-chip>
             <v-chip
@@ -471,7 +475,7 @@
               class="skills-upload-summary__chip"
             >
               {{
-                tm("skills.summaryReady", {
+                tm('skills.summaryReady', {
                   count:
                     uploadStateCounts.waiting + uploadStateCounts.uploading,
                 })
@@ -483,7 +487,7 @@
               class="skills-upload-summary__chip skills-upload-summary__chip--success"
             >
               {{
-                tm("skills.summarySuccess", {
+                tm('skills.summarySuccess', {
                   count: uploadStateCounts.success,
                 })
               }}
@@ -494,7 +498,7 @@
               class="skills-upload-summary__chip skills-upload-summary__chip--error"
             >
               {{
-                tm("skills.summaryFailed", { count: uploadStateCounts.error })
+                tm('skills.summaryFailed', { count: uploadStateCounts.error })
               }}
             </v-chip>
             <v-chip
@@ -503,7 +507,7 @@
               class="skills-upload-summary__chip"
             >
               {{
-                tm("skills.summarySkipped", {
+                tm('skills.summarySkipped', {
                   count: uploadStateCounts.skipped,
                 })
               }}
@@ -512,7 +516,7 @@
 
           <div v-if="uploadItems.length > 0" class="skills-upload-list">
             <div class="skills-upload-list__header">
-              <span>{{ tm("skills.fileListTitle") }}</span>
+              <span>{{ tm('skills.fileListTitle') }}</span>
             </div>
             <div
               v-for="item in uploadItems"
@@ -547,7 +551,7 @@
             </div>
           </div>
           <div v-else class="skills-upload-empty">
-            {{ tm("skills.fileListEmpty") }}
+            {{ tm('skills.fileListEmpty') }}
           </div>
         </v-card-text>
 
@@ -561,7 +565,7 @@
             :disabled="uploading"
             @click="closeUploadDialog"
           >
-            {{ tm("skills.cancel") }}
+            {{ tm('skills.cancel') }}
           </v-btn>
           <v-btn
             class="skills-upload-dialog__action-btn"
@@ -571,7 +575,7 @@
             :disabled="!hasUploadableItems"
             @click="uploadSkillBatch"
           >
-            {{ tm("skills.confirmUpload") }}
+            {{ tm('skills.confirmUpload') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -579,14 +583,14 @@
 
     <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm("skills.deleteTitle") }}</v-card-title>
-        <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
+        <v-card-title>{{ tm('skills.deleteTitle') }}</v-card-title>
+        <v-card-text>{{ tm('skills.deleteMessage') }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
           <v-btn variant="text" @click="deleteDialog = false">{{
-            tm("skills.cancel")
+            tm('skills.cancel')
           }}</v-btn>
           <v-btn color="error" :loading="deleting" @click="deleteSkill">
-            {{ t("core.common.itemCard.delete") }}
+            {{ t('core.common.itemCard.delete') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -620,10 +624,12 @@
                   icon="mdi-arrow-up"
                   size="small"
                   variant="text"
-                  :disabled="!editorDialog.currentDir || editorDialog.loadingFiles"
+                  :disabled="
+                    !editorDialog.currentDir || editorDialog.loadingFiles
+                  "
                   @click="openParentSkillDir"
                 />
-                <span>{{ editorDialog.currentDir || "/" }}</span>
+                <span>{{ editorDialog.currentDir || '/' }}</span>
               </div>
 
               <v-progress-linear
@@ -646,9 +652,9 @@
                 >
                   <v-icon size="18">
                     {{
-                      entry.type === "directory"
-                        ? "mdi-folder-outline"
-                        : "mdi-file-document-outline"
+                      entry.type === 'directory'
+                        ? 'mdi-folder-outline'
+                        : 'mdi-file-document-outline'
                     }}
                   </v-icon>
                   <span>{{ entry.name }}</span>
@@ -657,7 +663,7 @@
                     size="x-small"
                     variant="tonal"
                   >
-                    {{ tm("skills.readonly") }}
+                    {{ tm('skills.readonly') }}
                   </v-chip>
                 </button>
               </div>
@@ -666,7 +672,7 @@
             <div class="skill-editor__content">
               <div class="skill-editor__content-header">
                 <div class="skill-editor__path">
-                  {{ editorDialog.filePath || tm("skills.noFileSelected") }}
+                  {{ editorDialog.filePath || tm('skills.noFileSelected') }}
                 </div>
                 <v-chip
                   v-if="editorDialog.fileDirty"
@@ -674,7 +680,7 @@
                   color="warning"
                   variant="tonal"
                 >
-                  {{ tm("skills.unsaved") }}
+                  {{ tm('skills.unsaved') }}
                 </v-chip>
               </div>
 
@@ -694,7 +700,7 @@
                   :theme="editorTheme"
                   :language="editorLanguage"
                   :options="editorOptions"
-                  style="height: 100%; width: 100%;"
+                  style="height: 100%; width: 100%"
                   @change="editorDialog.fileDirty = true"
                 />
               </div>
@@ -709,7 +715,7 @@
             :disabled="editorDialog.saving"
             @click="closeSkillEditor"
           >
-            {{ tm("skills.cancel") }}
+            {{ tm('skills.cancel') }}
           </v-btn>
           <v-btn
             color="primary"
@@ -722,7 +728,7 @@
             "
             @click="saveSkillFile"
           >
-            {{ tm("skills.saveFile") }}
+            {{ tm('skills.saveFile') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -730,13 +736,13 @@
 
     <v-dialog v-model="payloadDialog.show" max-width="820px">
       <v-card>
-        <v-card-title>{{ tm("skills.neoPayloadTitle") }}</v-card-title>
+        <v-card-title>{{ tm('skills.neoPayloadTitle') }}</v-card-title>
         <v-card-text>
           <pre class="payload-preview">{{ payloadDialog.content }}</pre>
         </v-card-text>
         <v-card-actions class="d-flex justify-end">
           <v-btn variant="text" @click="payloadDialog.show = false">{{
-            tm("skills.cancel")
+            tm('skills.cancel')
           }}</v-btn>
         </v-card-actions>
       </v-card>
@@ -754,32 +760,32 @@
 </template>
 
 <script>
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import "@/utils/monacoLoader";
-import { skillApi, systemConfigApi } from "@/api/v1";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
-import { useCustomizerStore } from "@/stores/customizer";
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import '@/utils/monacoLoader';
+import { skillApi, systemConfigApi } from '@/api/v1';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
+import { useCustomizerStore } from '@/stores/customizer';
 
-const STATUS_WAITING = "waiting";
-const STATUS_UPLOADING = "uploading";
-const STATUS_SUCCESS = "success";
-const STATUS_ERROR = "error";
-const STATUS_SKIPPED = "skipped";
+const STATUS_WAITING = 'waiting';
+const STATUS_UPLOADING = 'uploading';
+const STATUS_SUCCESS = 'success';
+const STATUS_ERROR = 'error';
+const STATUS_SKIPPED = 'skipped';
 
 export default {
-  name: "SkillsSection",
+  name: 'SkillsSection',
   components: { OutlinedActionListItem, VueMonacoEditor },
   setup() {
     const { t } = useI18n();
-    const { tm } = useModuleI18n("features/extension");
+    const { tm } = useModuleI18n('features/extension');
     const customizer = useCustomizerStore();
 
-    const mode = ref("local");
+    const mode = ref('local');
     const skills = ref([]);
     const loading = ref(false);
-    const runtime = ref("local");
+    const runtime = ref('local');
     const sandboxCache = reactive({ ready: false, count: 0, updated_at: null });
     const uploading = ref(false);
     const uploadDialog = ref(false);
@@ -790,86 +796,86 @@ export default {
     const deleteDialog = ref(false);
     const deleting = ref(false);
     const skillToDelete = ref(null);
-    const snackbar = reactive({ show: false, message: "", color: "success" });
+    const snackbar = reactive({ show: false, message: '', color: 'success' });
 
     const neoLoading = ref(false);
     const neoCandidates = ref([]);
     const neoReleases = ref([]);
     const neoFilters = reactive({
-      skill_key: "",
-      status: "",
-      stage: "",
+      skill_key: '',
+      status: '',
+      stage: '',
     });
     const candidatePromoteLoading = reactive({});
     const payloadDialog = reactive({
       show: false,
-      content: "",
+      content: '',
     });
     const editorDialog = reactive({
       show: false,
-      skillName: "",
-      currentDir: "",
+      skillName: '',
+      currentDir: '',
       entries: [],
-      filePath: "",
-      content: "",
+      filePath: '',
+      content: '',
       fileEditable: false,
       fileDirty: false,
       loadingFiles: false,
       loadingFile: false,
       saving: false,
-      error: "",
+      error: '',
     });
 
     const neoEnabled = ref(false);
-    const neoUnavailableMessage = ref("");
+    const neoUnavailableMessage = ref('');
     let nextUploadItemId = 0;
 
     const candidateStatusItems = computed(() => [
-      { title: tm("skills.neoAll"), value: "" },
-      { title: "draft", value: "draft" },
-      { title: "evaluating", value: "evaluating" },
-      { title: "promoted", value: "promoted" },
-      { title: "promoted_canary", value: "promoted_canary" },
-      { title: "promoted_stable", value: "promoted_stable" },
-      { title: "rejected", value: "rejected" },
-      { title: "rolled_back", value: "rolled_back" },
+      { title: tm('skills.neoAll'), value: '' },
+      { title: 'draft', value: 'draft' },
+      { title: 'evaluating', value: 'evaluating' },
+      { title: 'promoted', value: 'promoted' },
+      { title: 'promoted_canary', value: 'promoted_canary' },
+      { title: 'promoted_stable', value: 'promoted_stable' },
+      { title: 'rejected', value: 'rejected' },
+      { title: 'rolled_back', value: 'rolled_back' },
     ]);
 
     const releaseStageItems = computed(() => [
-      { title: tm("skills.neoAll"), value: "" },
-      { title: "canary", value: "canary" },
-      { title: "stable", value: "stable" },
+      { title: tm('skills.neoAll'), value: '' },
+      { title: 'canary', value: 'canary' },
+      { title: 'stable', value: 'stable' },
     ]);
 
     const activeReleaseCount = computed(
       () => neoReleases.value.filter((item) => item?.is_active).length,
     );
     const editorLanguage = computed(() => {
-      const path = String(editorDialog.filePath || "").toLowerCase();
-      if (path.endsWith(".json")) return "json";
-      if (path.endsWith(".yaml") || path.endsWith(".yml")) return "yaml";
-      if (path.endsWith(".toml") || path.endsWith(".ini")) return "ini";
-      if (path.endsWith(".py")) return "python";
-      if (path.endsWith(".js")) return "javascript";
-      if (path.endsWith(".ts")) return "typescript";
-      if (path.endsWith(".html")) return "html";
-      if (path.endsWith(".css")) return "css";
-      if (path.endsWith(".sh")) return "shell";
-      if (path.endsWith(".md") || path.endsWith(".txt")) return "markdown";
-      return "plaintext";
+      const path = String(editorDialog.filePath || '').toLowerCase();
+      if (path.endsWith('.json')) return 'json';
+      if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml';
+      if (path.endsWith('.toml') || path.endsWith('.ini')) return 'ini';
+      if (path.endsWith('.py')) return 'python';
+      if (path.endsWith('.js')) return 'javascript';
+      if (path.endsWith('.ts')) return 'typescript';
+      if (path.endsWith('.html')) return 'html';
+      if (path.endsWith('.css')) return 'css';
+      if (path.endsWith('.sh')) return 'shell';
+      if (path.endsWith('.md') || path.endsWith('.txt')) return 'markdown';
+      return 'plaintext';
     });
     const editorTheme = computed(() =>
-      customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light",
+      customizer.uiTheme === 'PurpleThemeDark' ? 'vs-dark' : 'vs-light',
     );
     const editorOptions = computed(() => ({
       automaticLayout: true,
       fontSize: 13,
-      lineNumbers: "on",
+      lineNumbers: 'on',
       minimap: { enabled: false },
       readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
       scrollBeyondLastLine: false,
       tabSize: 2,
-      wordWrap: "on",
+      wordWrap: 'on',
     }));
     const uploadStateCounts = computed(() =>
       uploadItems.value.reduce(
@@ -896,33 +902,33 @@ export default {
     );
 
     const candidateHeaders = computed(() => [
-      { title: "ID", key: "id", width: "180px" },
-      { title: "skill_key", key: "skill_key" },
-      { title: "status", key: "status", width: "130px" },
-      { title: "score", key: "latest_score", width: "90px" },
+      { title: 'ID', key: 'id', width: '180px' },
+      { title: 'skill_key', key: 'skill_key' },
+      { title: 'status', key: 'status', width: '130px' },
+      { title: 'score', key: 'latest_score', width: '90px' },
       {
-        title: tm("skills.actions"),
-        key: "actions",
+        title: tm('skills.actions'),
+        key: 'actions',
         sortable: false,
-        width: "420px",
+        width: '420px',
       },
     ]);
 
     const releaseHeaders = computed(() => [
-      { title: "ID", key: "id", width: "180px" },
-      { title: "skill_key", key: "skill_key" },
-      { title: "stage", key: "stage", width: "100px" },
-      { title: "version", key: "version", width: "90px" },
-      { title: "active", key: "is_active", width: "110px" },
+      { title: 'ID', key: 'id', width: '180px' },
+      { title: 'skill_key', key: 'skill_key' },
+      { title: 'stage', key: 'stage', width: '100px' },
+      { title: 'version', key: 'version', width: '90px' },
+      { title: 'active', key: 'is_active', width: '110px' },
       {
-        title: tm("skills.actions"),
-        key: "actions",
+        title: tm('skills.actions'),
+        key: 'actions',
         sortable: false,
-        width: "220px",
+        width: '220px',
       },
     ]);
 
-    const showMessage = (message, color = "success") => {
+    const showMessage = (message, color = 'success') => {
       snackbar.message = message;
       snackbar.color = color;
       snackbar.show = true;
@@ -931,13 +937,13 @@ export default {
     const normalizeSkillsPayload = (res) => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) {
-        runtime.value = "local";
+        runtime.value = 'local';
         sandboxCache.ready = false;
         sandboxCache.count = 0;
         sandboxCache.updated_at = null;
         return payload;
       }
-      runtime.value = payload.runtime || "local";
+      runtime.value = payload.runtime || 'local';
       const cache = payload.sandbox_cache || {};
       sandboxCache.ready = Boolean(cache.ready);
       sandboxCache.count = Number(cache.count || 0);
@@ -946,26 +952,26 @@ export default {
     };
 
     const sourceTypeLabel = (sourceType, skill = null) => {
-      if (sourceType === "plugin") {
-        return tm("skills.sourcePlugin", {
-          plugin: skill?.source_label || skill?.plugin_name || "",
+      if (sourceType === 'plugin') {
+        return tm('skills.sourcePlugin', {
+          plugin: skill?.source_label || skill?.plugin_name || '',
         });
       }
-      if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
-      if (sourceType === "both") return tm("skills.sourceBoth");
-      return tm("skills.sourceLocalOnly");
+      if (sourceType === 'sandbox_only') return tm('skills.sourceSandboxOnly');
+      if (sourceType === 'both') return tm('skills.sourceBoth');
+      return tm('skills.sourceLocalOnly');
     };
 
     const sourceTypeColor = (sourceType) => {
-      if (sourceType === "sandbox_only") return "indigo";
-      if (sourceType === "plugin") return "secondary";
-      if (sourceType === "both") return "success";
-      return "primary";
+      if (sourceType === 'sandbox_only') return 'indigo';
+      if (sourceType === 'plugin') return 'secondary';
+      if (sourceType === 'both') return 'success';
+      return 'primary';
     };
 
     const isSandboxPresetSkill = (skill) =>
-      skill?.source_type === "sandbox_only";
-    const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
+      skill?.source_type === 'sandbox_only';
+    const isPluginProvidedSkill = (skill) => skill?.source_type === 'plugin';
     const isReadOnlySourceSkill = (skill) =>
       isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
 
@@ -977,14 +983,14 @@ export default {
     };
 
     const formatFileSize = (size) => {
-      if (!Number.isFinite(size) || size <= 0) return "0 B";
+      if (!Number.isFinite(size) || size <= 0) return '0 B';
       if (size < 1024) return `${size} B`;
       if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
       return `${(size / (1024 * 1024)).toFixed(1)} MB`;
     };
 
     const normalizeUploadName = (name) =>
-      String(name || "")
+      String(name || '')
         .trim()
         .toLowerCase();
 
@@ -999,11 +1005,11 @@ export default {
     });
 
     const uploadStatusLabel = (status) => {
-      if (status === STATUS_UPLOADING) return tm("skills.statusUploading");
-      if (status === STATUS_SUCCESS) return tm("skills.statusSuccess");
-      if (status === STATUS_ERROR) return tm("skills.statusError");
-      if (status === STATUS_SKIPPED) return tm("skills.statusSkipped");
-      return tm("skills.statusWaiting");
+      if (status === STATUS_UPLOADING) return tm('skills.statusUploading');
+      if (status === STATUS_SUCCESS) return tm('skills.statusSuccess');
+      if (status === STATUS_ERROR) return tm('skills.statusError');
+      if (status === STATUS_SKIPPED) return tm('skills.statusSkipped');
+      return tm('skills.statusWaiting');
     };
 
     const statusChipClass = (status) =>
@@ -1013,7 +1019,7 @@ export default {
       uploadItems.value = [];
       isUploadDragging.value = false;
       if (uploadInput.value) {
-        uploadInput.value.value = "";
+        uploadInput.value.value = '';
       }
     };
 
@@ -1046,7 +1052,7 @@ export default {
             buildUploadItem(
               file,
               STATUS_SKIPPED,
-              tm("skills.validationDuplicate"),
+              tm('skills.validationDuplicate'),
             ),
           );
           continue;
@@ -1058,14 +1064,14 @@ export default {
             buildUploadItem(
               file,
               STATUS_SKIPPED,
-              tm("skills.validationZipOnly"),
+              tm('skills.validationZipOnly'),
             ),
           );
           continue;
         }
 
         nextItems.push(
-          buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")),
+          buildUploadItem(file, STATUS_WAITING, tm('skills.validationReady')),
         );
       }
 
@@ -1078,7 +1084,7 @@ export default {
       const selected = Array.from(event?.target?.files || []);
       addUploadFiles(selected);
       if (uploadInput.value) {
-        uploadInput.value.value = "";
+        uploadInput.value.value = '';
       }
     };
 
@@ -1127,7 +1133,7 @@ export default {
         const successEntry = takeFirstMatch(succeededMap, item.filenameKey);
         if (successEntry) {
           item.status = STATUS_SUCCESS;
-          item.validationMessage = tm("skills.validationUploadedAs", {
+          item.validationMessage = tm('skills.validationUploadedAs', {
             name: successEntry.name || item.name,
           });
           continue;
@@ -1137,7 +1143,7 @@ export default {
         if (skippedEntry) {
           item.status = STATUS_SKIPPED;
           item.validationMessage =
-            skippedEntry.error || tm("skills.validationDuplicate");
+            skippedEntry.error || tm('skills.validationDuplicate');
           continue;
         }
 
@@ -1145,12 +1151,12 @@ export default {
         if (failedEntry) {
           item.status = STATUS_ERROR;
           item.validationMessage =
-            failedEntry.error || tm("skills.validationUploadFailed");
+            failedEntry.error || tm('skills.validationUploadFailed');
           continue;
         }
 
         item.status = STATUS_ERROR;
-        item.validationMessage = tm("skills.validationNoResult");
+        item.validationMessage = tm('skills.validationNoResult');
       }
     };
 
@@ -1160,7 +1166,7 @@ export default {
         const res = await skillApi.list();
         skills.value = normalizeSkillsPayload(res);
       } catch (_err) {
-        showMessage(tm("skills.loadFailed"), "error");
+        showMessage(tm('skills.loadFailed'), 'error');
       } finally {
         loading.value = false;
       }
@@ -1172,13 +1178,12 @@ export default {
       failureMessageDefault,
       onSuccess,
     ) => {
-      if (res?.data?.status === "ok") {
-        showMessage(successMessage, "success");
+      if (res?.data?.status === 'ok') {
+        showMessage(successMessage, 'success');
         if (onSuccess) onSuccess();
       } else {
-        const msg =
-          (res?.data?.message) || failureMessageDefault;
-        showMessage(msg, "error");
+        const msg = res?.data?.message || failureMessageDefault;
+        showMessage(msg, 'error');
       }
     };
 
@@ -1192,7 +1197,7 @@ export default {
       uploading.value = true;
       for (const item of attemptedItems) {
         item.status = STATUS_UPLOADING;
-        item.validationMessage = tm("skills.validationUploading");
+        item.validationMessage = tm('skills.validationUploading');
       }
 
       try {
@@ -1209,14 +1214,14 @@ export default {
         const failedCount = Array.isArray(payload.failed)
           ? payload.failed.length
           : 0;
-        let responseColor = "success";
-        if (res?.data?.status === "error") {
-          responseColor = "error";
+        let responseColor = 'success';
+        if (res?.data?.status === 'error') {
+          responseColor = 'error';
         } else if (failedCount > 0) {
-          responseColor = "warning";
+          responseColor = 'warning';
         }
         showMessage(
-          res?.data?.message || tm("skills.uploadSuccess"),
+          res?.data?.message || tm('skills.uploadSuccess'),
           responseColor,
         );
 
@@ -1226,9 +1231,9 @@ export default {
       } catch (_err) {
         for (const item of attemptedItems) {
           item.status = STATUS_ERROR;
-          item.validationMessage = tm("skills.validationUploadFailed");
+          item.validationMessage = tm('skills.validationUploadFailed');
         }
-        showMessage(tm("skills.uploadFailed"), "error");
+        showMessage(tm('skills.uploadFailed'), 'error');
       } finally {
         uploading.value = false;
       }
@@ -1236,7 +1241,7 @@ export default {
 
     const toggleSkill = async (skill) => {
       if (isSandboxPresetSkill(skill)) {
-        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
         return;
       }
       const nextActive = !skill.active;
@@ -1245,14 +1250,14 @@ export default {
         const res = await skillApi.setEnabled(skill.name, nextActive);
         handleApiResponse(
           res,
-          tm("skills.updateSuccess"),
-          tm("skills.updateFailed"),
+          tm('skills.updateSuccess'),
+          tm('skills.updateFailed'),
           () => {
             skill.active = nextActive;
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.updateFailed"), "error");
+        showMessage(tm('skills.updateFailed'), 'error');
       } finally {
         itemLoading[skill.name] = false;
       }
@@ -1260,11 +1265,11 @@ export default {
 
     const confirmDelete = (skill) => {
       if (isSandboxPresetSkill(skill)) {
-        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
         return;
       }
       if (isPluginProvidedSkill(skill)) {
-        showMessage(tm("skills.pluginReadonly"), "warning");
+        showMessage(tm('skills.pluginReadonly'), 'warning');
         return;
       }
       skillToDelete.value = skill;
@@ -1278,15 +1283,15 @@ export default {
         const res = await skillApi.delete(skillToDelete.value.name);
         handleApiResponse(
           res,
-          tm("skills.deleteSuccess"),
-          tm("skills.deleteFailed"),
+          tm('skills.deleteSuccess'),
+          tm('skills.deleteFailed'),
           async () => {
             deleteDialog.value = false;
             await fetchSkills();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.deleteFailed"), "error");
+        showMessage(tm('skills.deleteFailed'), 'error');
       } finally {
         deleting.value = false;
       }
@@ -1294,66 +1299,66 @@ export default {
 
     const downloadSkill = async (skill) => {
       if (isSandboxPresetSkill(skill)) {
-        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
         return;
       }
       if (isPluginProvidedSkill(skill)) {
-        showMessage(tm("skills.pluginReadonly"), "warning");
+        showMessage(tm('skills.pluginReadonly'), 'warning');
         return;
       }
       itemLoading[skill.name] = true;
       try {
         const res = await skillApi.download(skill.name);
-        const blob = new Blob([res.data], { type: "application/zip" });
+        const blob = new Blob([res.data], { type: 'application/zip' });
         const url = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
+        const link = document.createElement('a');
         link.href = url;
         link.download = `${skill.name}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        showMessage(tm("skills.downloadSuccess"), "success");
+        showMessage(tm('skills.downloadSuccess'), 'success');
       } catch (_err) {
-        showMessage(tm("skills.downloadFailed"), "error");
+        showMessage(tm('skills.downloadFailed'), 'error');
       } finally {
         itemLoading[skill.name] = false;
       }
     };
 
     const resetEditorDialog = () => {
-      editorDialog.skillName = "";
-      editorDialog.currentDir = "";
+      editorDialog.skillName = '';
+      editorDialog.currentDir = '';
       editorDialog.entries = [];
-      editorDialog.filePath = "";
-      editorDialog.content = "";
+      editorDialog.filePath = '';
+      editorDialog.content = '';
       editorDialog.fileEditable = false;
       editorDialog.fileDirty = false;
       editorDialog.loadingFiles = false;
       editorDialog.loadingFile = false;
       editorDialog.saving = false;
-      editorDialog.error = "";
+      editorDialog.error = '';
     };
 
-    const loadSkillDir = async (path = "") => {
+    const loadSkillDir = async (path = '') => {
       if (!editorDialog.skillName) return [];
       editorDialog.loadingFiles = true;
-      editorDialog.error = "";
+      editorDialog.error = '';
       try {
         const res = await skillApi.listFiles(editorDialog.skillName, path);
-        if (res?.data?.status !== "ok") {
+        if (res?.data?.status !== 'ok') {
           editorDialog.error =
-            res?.data?.message || tm("skills.editorLoadFailed");
+            res?.data?.message || tm('skills.editorLoadFailed');
           return [];
         }
         const payload = res.data.data || {};
-        editorDialog.currentDir = payload.path || "";
+        editorDialog.currentDir = payload.path || '';
         editorDialog.entries = Array.isArray(payload.entries)
           ? payload.entries
           : [];
         return editorDialog.entries;
       } catch (_err) {
-        editorDialog.error = tm("skills.editorLoadFailed");
+        editorDialog.error = tm('skills.editorLoadFailed');
         return [];
       } finally {
         editorDialog.loadingFiles = false;
@@ -1364,27 +1369,27 @@ export default {
       if (!editorDialog.skillName || !path) return;
       if (
         editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
+        !window.confirm(tm('skills.discardChanges'))
       ) {
         return;
       }
       editorDialog.loadingFile = true;
-      editorDialog.error = "";
+      editorDialog.error = '';
       try {
         const res = await skillApi.getFile(editorDialog.skillName, path);
-        if (res?.data?.status !== "ok") {
+        if (res?.data?.status !== 'ok') {
           editorDialog.error =
-            res?.data?.message || tm("skills.editorLoadFailed");
+            res?.data?.message || tm('skills.editorLoadFailed');
           return;
         }
         const payload = res.data.data || {};
         editorDialog.filePath = payload.path || path;
-        editorDialog.content = payload.content || "";
+        editorDialog.content = payload.content || '';
         editorDialog.fileEditable = payload.editable !== false;
         await nextTick();
         editorDialog.fileDirty = false;
       } catch (_err) {
-        editorDialog.error = tm("skills.editorLoadFailed");
+        editorDialog.error = tm('skills.editorLoadFailed');
       } finally {
         editorDialog.loadingFile = false;
       }
@@ -1392,16 +1397,16 @@ export default {
 
     const openSkillEditor = async (skill) => {
       if (isSandboxPresetSkill(skill)) {
-        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
         return;
       }
       resetEditorDialog();
       editorDialog.skillName = skill.name;
       editorDialog.show = true;
-      const entries = await loadSkillDir("");
+      const entries = await loadSkillDir('');
       let skillMd = null;
       for (const entry of entries) {
-        if (entry.path === "SKILL.md") {
+        if (entry.path === 'SKILL.md') {
           skillMd = entry;
           break;
         }
@@ -1415,7 +1420,7 @@ export default {
       if (editorDialog.saving) return;
       if (
         editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
+        !window.confirm(tm('skills.discardChanges'))
       ) {
         return;
       }
@@ -1425,10 +1430,10 @@ export default {
 
     const openSkillEntry = async (entry) => {
       if (!entry) return;
-      if (entry.type === "directory") {
+      if (entry.type === 'directory') {
         if (
           editorDialog.fileDirty &&
-          !window.confirm(tm("skills.discardChanges"))
+          !window.confirm(tm('skills.discardChanges'))
         ) {
           return;
         }
@@ -1442,13 +1447,13 @@ export default {
       if (!editorDialog.currentDir) return;
       if (
         editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
+        !window.confirm(tm('skills.discardChanges'))
       ) {
         return;
       }
-      const parts = editorDialog.currentDir.split("/").filter(Boolean);
+      const parts = editorDialog.currentDir.split('/').filter(Boolean);
       parts.pop();
-      await loadSkillDir(parts.join("/"));
+      await loadSkillDir(parts.join('/'));
     };
 
     const saveSkillFile = async () => {
@@ -1460,25 +1465,25 @@ export default {
         return;
       }
       editorDialog.saving = true;
-      editorDialog.error = "";
+      editorDialog.error = '';
       try {
         const res = await skillApi.updateFile(
           editorDialog.skillName,
           editorDialog.filePath,
           editorDialog.content,
         );
-        if (res?.data?.status !== "ok") {
+        if (res?.data?.status !== 'ok') {
           editorDialog.error =
-            res?.data?.message || tm("skills.editorSaveFailed");
-          showMessage(editorDialog.error, "error");
+            res?.data?.message || tm('skills.editorSaveFailed');
+          showMessage(editorDialog.error, 'error');
           return;
         }
         editorDialog.fileDirty = false;
-        showMessage(tm("skills.editorSaveSuccess"), "success");
+        showMessage(tm('skills.editorSaveSuccess'), 'success');
         await fetchSkills();
       } catch (_err) {
-        editorDialog.error = tm("skills.editorSaveFailed");
-        showMessage(tm("skills.editorSaveFailed"), "error");
+        editorDialog.error = tm('skills.editorSaveFailed');
+        showMessage(tm('skills.editorSaveFailed'), 'error');
       } finally {
         editorDialog.saving = false;
       }
@@ -1500,7 +1505,7 @@ export default {
       };
       const res = await skillApi.neoReleases(params);
       neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
-        if (!item || typeof item !== "object") {
+        if (!item || typeof item !== 'object') {
           return item;
         }
         return {
@@ -1516,17 +1521,17 @@ export default {
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
         const currentRuntime =
-          providerSettings?.computer_use_runtime || "local";
-        const booter = providerSettings?.sandbox?.booter || "";
+          providerSettings?.computer_use_runtime || 'local';
+        const booter = providerSettings?.sandbox?.booter || '';
         neoEnabled.value =
-          currentRuntime === "sandbox" && booter === "shipyard_neo";
+          currentRuntime === 'sandbox' && booter === 'shipyard_neo';
       } catch (_err) {
         neoEnabled.value = false;
       }
 
-      neoUnavailableMessage.value = tm("skills.neoRuntimeRequired");
-      if (!neoEnabled.value && mode.value === "neo") {
-        mode.value = "local";
+      neoUnavailableMessage.value = tm('skills.neoRuntimeRequired');
+      if (!neoEnabled.value && mode.value === 'neo') {
+        mode.value = 'local';
       }
     };
 
@@ -1535,7 +1540,7 @@ export default {
       try {
         await Promise.all([fetchNeoCandidates(), fetchNeoReleases()]);
       } catch (_err) {
-        showMessage(tm("skills.neoLoadFailed"), "error");
+        showMessage(tm('skills.neoLoadFailed'), 'error');
       } finally {
         neoLoading.value = false;
       }
@@ -1547,28 +1552,30 @@ export default {
           candidate_id: candidate.id,
           passed,
           score: passed ? 1.0 : 0.0,
-          report: passed ? "approved_from_webui" : "rejected_from_webui",
+          report: passed ? 'approved_from_webui' : 'rejected_from_webui',
         });
         handleApiResponse(
           res,
-          tm("skills.neoEvaluateSuccess"),
-          tm("skills.neoEvaluateFailed"),
+          tm('skills.neoEvaluateSuccess'),
+          tm('skills.neoEvaluateFailed'),
           async () => {
             await fetchNeoCandidates();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.neoEvaluateFailed"), "error");
+        showMessage(tm('skills.neoEvaluateFailed'), 'error');
       }
     };
 
     const candidatePromoteLoadingKey = (candidateId, stage) =>
       `${candidateId}:${stage}`;
     const isCandidatePromoteLoading = (candidateId, stage) =>
-      Boolean(candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)]);
+      Boolean(
+        candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)],
+      );
     const isCandidatePromoting = (candidateId) =>
-      isCandidatePromoteLoading(candidateId, "canary") ||
-      isCandidatePromoteLoading(candidateId, "stable");
+      isCandidatePromoteLoading(candidateId, 'canary') ||
+      isCandidatePromoteLoading(candidateId, 'stable');
 
     const promoteCandidate = async (candidate, stage) => {
       const candidateId = candidate?.id;
@@ -1582,21 +1589,21 @@ export default {
           stage,
           sync_to_local: true,
         });
-        const ok = res?.data?.status === "ok";
+        const ok = res?.data?.status === 'ok';
         if (!ok) {
           showMessage(
-            res?.data?.message || tm("skills.neoPromoteFailed"),
-            "error",
+            res?.data?.message || tm('skills.neoPromoteFailed'),
+            'error',
           );
         } else {
-          showMessage(tm("skills.neoPromoteSuccess"), "success");
+          showMessage(tm('skills.neoPromoteSuccess'), 'success');
         }
         await fetchNeoData();
-        if (stage === "stable") {
+        if (stage === 'stable') {
           await fetchSkills();
         }
       } catch (_err) {
-        showMessage(tm("skills.neoPromoteFailed"), "error");
+        showMessage(tm('skills.neoPromoteFailed'), 'error');
       } finally {
         candidatePromoteLoading[loadingKey] = false;
       }
@@ -1609,14 +1616,14 @@ export default {
         });
         handleApiResponse(
           res,
-          tm("skills.neoRollbackSuccess"),
-          tm("skills.neoRollbackFailed"),
+          tm('skills.neoRollbackSuccess'),
+          tm('skills.neoRollbackFailed'),
           async () => {
             await fetchNeoData();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.neoRollbackFailed"), "error");
+        showMessage(tm('skills.neoRollbackFailed'), 'error');
       }
     };
 
@@ -1627,14 +1634,14 @@ export default {
         });
         handleApiResponse(
           res,
-          tm("skills.neoDeactivateSuccess"),
-          tm("skills.neoDeactivateFailed"),
+          tm('skills.neoDeactivateSuccess'),
+          tm('skills.neoDeactivateFailed'),
           async () => {
             await fetchNeoData();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.neoDeactivateFailed"), "error");
+        showMessage(tm('skills.neoDeactivateFailed'), 'error');
       }
     };
 
@@ -1653,14 +1660,14 @@ export default {
         });
         handleApiResponse(
           res,
-          tm("skills.neoSyncSuccess"),
-          tm("skills.neoSyncFailed"),
+          tm('skills.neoSyncSuccess'),
+          tm('skills.neoSyncFailed'),
           async () => {
             await fetchSkills();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.neoSyncFailed"), "error");
+        showMessage(tm('skills.neoSyncFailed'), 'error');
       }
     };
 
@@ -1668,10 +1675,10 @@ export default {
       if (!payloadRef) return;
       try {
         const res = await skillApi.neoPayload(payloadRef);
-        if (res?.data?.status !== "ok") {
+        if (res?.data?.status !== 'ok') {
           showMessage(
-            res?.data?.message || tm("skills.neoPayloadFailed"),
-            "error",
+            res?.data?.message || tm('skills.neoPayloadFailed'),
+            'error',
           );
           return;
         }
@@ -1679,7 +1686,7 @@ export default {
         payloadDialog.content = JSON.stringify(payload, null, 2);
         payloadDialog.show = true;
       } catch (_err) {
-        showMessage(tm("skills.neoPayloadFailed"), "error");
+        showMessage(tm('skills.neoPayloadFailed'), 'error');
       }
     };
 
@@ -1687,18 +1694,18 @@ export default {
       try {
         const res = await skillApi.deleteNeoCandidate({
           candidate_id: candidate.id,
-          reason: "deleted_from_webui",
+          reason: 'deleted_from_webui',
         });
         handleApiResponse(
           res,
-          tm("skills.neoDeleteSuccess"),
-          tm("skills.neoDeleteFailed"),
+          tm('skills.neoDeleteSuccess'),
+          tm('skills.neoDeleteFailed'),
           async () => {
             await fetchNeoData();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.neoDeleteFailed"), "error");
+        showMessage(tm('skills.neoDeleteFailed'), 'error');
       }
     };
 
@@ -1706,28 +1713,28 @@ export default {
       try {
         const res = await skillApi.deleteNeoRelease({
           release_id: release.id,
-          reason: "deleted_from_webui",
+          reason: 'deleted_from_webui',
         });
         handleApiResponse(
           res,
-          tm("skills.neoDeleteSuccess"),
-          tm("skills.neoDeleteFailed"),
+          tm('skills.neoDeleteSuccess'),
+          tm('skills.neoDeleteFailed'),
           async () => {
             await fetchNeoData();
           },
         );
       } catch (_err) {
-        showMessage(tm("skills.neoDeleteFailed"), "error");
+        showMessage(tm('skills.neoDeleteFailed'), 'error');
       }
     };
 
     const refreshCurrentMode = async () => {
-      if (mode.value === "neo") {
+      if (mode.value === 'neo') {
         await loadNeoAvailability();
         if (neoEnabled.value) {
           await fetchNeoData();
         } else {
-          showMessage(tm("skills.neoRuntimeRequired"), "warning");
+          showMessage(tm('skills.neoRuntimeRequired'), 'warning');
         }
       } else {
         await fetchSkills();
@@ -1735,7 +1742,7 @@ export default {
     };
 
     watch(mode, async (nextMode) => {
-      if (nextMode === "neo") {
+      if (nextMode === 'neo') {
         await loadNeoAvailability();
         if (neoEnabled.value) {
           await fetchNeoData();

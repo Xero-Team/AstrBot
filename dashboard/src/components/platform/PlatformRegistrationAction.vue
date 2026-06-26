@@ -8,7 +8,9 @@
       <div class="registration-qr-stage">
         <div
           class="registration-qr-shell"
-          :class="{ 'registration-qr-shell-created': flow.status === 'created' }"
+          :class="{
+            'registration-qr-shell-created': flow.status === 'created',
+          }"
         >
           <QrCodeViewer
             v-if="qrValue"
@@ -18,11 +20,17 @@
             :margin="1"
           />
           <div v-else class="registration-qr-loading">
-            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+            <v-progress-circular
+              indeterminate
+              color="primary"
+            ></v-progress-circular>
           </div>
         </div>
 
-        <div v-if="flow.status === 'created'" class="registration-created-overlay">
+        <div
+          v-if="flow.status === 'created'"
+          class="registration-created-overlay"
+        >
           <div class="registration-created-mark">
             <v-icon size="58" color="white">mdi-check</v-icon>
           </div>
@@ -121,10 +129,12 @@ export default {
       return this.platformConfig?.domain || FEISHU_DOMAIN;
     },
     qrValue() {
-      return this.flow.verification_uri_complete
-        || this.flow.qrcode_img_content
-        || this.flow.qrcode
-        || '';
+      return (
+        this.flow.verification_uri_complete ||
+        this.flow.qrcode_img_content ||
+        this.flow.qrcode ||
+        ''
+      );
     },
   },
   watch: {
@@ -180,7 +190,9 @@ export default {
           this.buildPayload('start'),
         );
         if (res.data.status !== 'ok') {
-          throw new Error(res.data.message || this.tm('registrationAction.startFailed'));
+          throw new Error(
+            res.data.message || this.tm('registrationAction.startFailed'),
+          );
         }
         this.flow = {
           ...res.data.data,
@@ -192,7 +204,10 @@ export default {
       } catch (err) {
         this.flow = {
           status: 'error',
-          message: err.response?.data?.message || err.message || this.tm('registrationAction.startFailed'),
+          message:
+            err.response?.data?.message ||
+            err.message ||
+            this.tm('registrationAction.startFailed'),
         };
         this.$emit('error', this.flow.message);
       } finally {
@@ -231,7 +246,9 @@ export default {
           this.buildPayload('poll', pollPayload),
         );
         if (res.data.status !== 'ok') {
-          throw new Error(res.data.message || this.tm('registrationAction.pollFailed'));
+          throw new Error(
+            res.data.message || this.tm('registrationAction.pollFailed'),
+          );
         }
         const data = res.data.data || {};
         this.flow = {
@@ -243,13 +260,20 @@ export default {
           this.applyRegistrationResult(data);
           this.stopPolling();
           this.$emit('created', data);
-          this.$emit('success', this.tm(this.action.successKey || 'registrationAction.created'));
+          this.$emit(
+            'success',
+            this.tm(this.action.successKey || 'registrationAction.created'),
+          );
           return;
         }
-        if (this.flow.status === 'pending' || this.flow.status === 'slow_down') {
-          const nextInterval = this.flow.status === 'slow_down'
-            ? Number(this.flow.interval || 5) + 5
-            : Number(this.flow.interval || 5);
+        if (
+          this.flow.status === 'pending' ||
+          this.flow.status === 'slow_down'
+        ) {
+          const nextInterval =
+            this.flow.status === 'slow_down'
+              ? Number(this.flow.interval || 5) + 5
+              : Number(this.flow.interval || 5);
           this.flow.interval = nextInterval;
           this.schedulePoll(nextInterval);
           return;
@@ -259,7 +283,10 @@ export default {
         this.flow = {
           ...this.flow,
           status: 'error',
-          message: err.response?.data?.message || err.message || this.tm('registrationAction.pollFailed'),
+          message:
+            err.response?.data?.message ||
+            err.message ||
+            this.tm('registrationAction.pollFailed'),
         };
         this.$emit('error', this.flow.message);
         this.stopPolling();
@@ -313,26 +340,35 @@ export default {
     },
     getStatusColor(status) {
       switch (status) {
-        case 'created': return 'success';
+        case 'created':
+          return 'success';
         case 'error':
         case 'denied':
-        case 'expired': return 'error';
+        case 'expired':
+          return 'error';
         case 'starting':
         case 'pending':
-        case 'slow_down': return 'warning';
-        default: return 'grey';
+        case 'slow_down':
+          return 'warning';
+        default:
+          return 'grey';
       }
     },
     getStatusIcon(status) {
       switch (status) {
-        case 'created': return 'mdi-check-circle';
+        case 'created':
+          return 'mdi-check-circle';
         case 'error':
         case 'denied':
-        case 'expired': return 'mdi-alert-circle';
-        case 'starting': return 'mdi-loading';
+        case 'expired':
+          return 'mdi-alert-circle';
+        case 'starting':
+          return 'mdi-loading';
         case 'pending':
-        case 'slow_down': return 'mdi-timer-sand';
-        default: return 'mdi-circle-outline';
+        case 'slow_down':
+          return 'mdi-timer-sand';
+        default:
+          return 'mdi-circle-outline';
       }
     },
   },
@@ -375,7 +411,9 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: filter 160ms ease, opacity 160ms ease;
+  transition:
+    filter 160ms ease,
+    opacity 160ms ease;
 }
 
 .registration-qr-shell :deep(.qr-code-image) {

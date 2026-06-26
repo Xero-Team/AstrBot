@@ -3,7 +3,7 @@
     <template #activator="{ props: activatorProps }">
       <slot name="activator" :props="activatorProps"></slot>
     </template>
-    
+
     <v-card
       class="styled-menu-card"
       :class="{ 'styled-menu-card-borderless': noBorder }"
@@ -19,16 +19,19 @@
 
 <script setup lang="ts">
 defineOptions({
-  inheritAttrs: false
-})
+  inheritAttrs: false,
+});
 
-withDefaults(defineProps<{
-  closeOnContentClick?: boolean
-  noBorder?: boolean
-}>(), {
-  closeOnContentClick: true,
-  noBorder: false
-})
+withDefaults(
+  defineProps<{
+    closeOnContentClick?: boolean;
+    noBorder?: boolean;
+  }>(),
+  {
+    closeOnContentClick: true,
+    noBorder: false,
+  },
+);
 </script>
 
 <style>

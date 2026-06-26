@@ -25,10 +25,10 @@
           </div>
           <div style="flex: 1">
             <h3>
-              {{ tm("createDialog.step1Title") }}
+              {{ tm('createDialog.step1Title') }}
             </h3>
             <small style="color: grey">{{
-              tm("createDialog.step1Hint")
+              tm('createDialog.step1Hint')
             }}</small>
             <div>
               <div v-if="!updatingMode">
@@ -66,7 +66,7 @@
                 <div v-if="selectedPlatformConfig" class="mt-3">
                   <div v-if="isLarkPlatform">
                     <div class="creation-mode-title mt-4 mb-1">
-                      {{ tm("registrationAction.mode.title") }}
+                      {{ tm('registrationAction.mode.title') }}
                     </div>
                     <v-radio-group
                       v-model="larkCreationMode"
@@ -105,7 +105,7 @@
                           @click="openTutorial"
                         >
                           <v-icon start>mdi-book-open-variant</v-icon>
-                          {{ tm("dialog.viewTutorial") }}
+                          {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
                       <AstrBotConfig
@@ -118,7 +118,7 @@
 
                   <div v-else-if="isDingtalkPlatform">
                     <div class="creation-mode-title mt-4 mb-1">
-                      {{ tm("registrationAction.mode.title") }}
+                      {{ tm('registrationAction.mode.title') }}
                     </div>
                     <v-radio-group
                       v-model="dingtalkCreationMode"
@@ -160,7 +160,7 @@
                           @click="openTutorial"
                         >
                           <v-icon start>mdi-book-open-variant</v-icon>
-                          {{ tm("dialog.viewTutorial") }}
+                          {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
                       <AstrBotConfig
@@ -173,7 +173,7 @@
 
                   <div v-else-if="isQqOfficialPlatform">
                     <div class="creation-mode-title mt-4 mb-1">
-                      {{ tm("registrationAction.mode.title") }}
+                      {{ tm('registrationAction.mode.title') }}
                     </div>
                     <v-radio-group
                       v-model="qqOfficialCreationMode"
@@ -215,7 +215,7 @@
                           @click="openTutorial"
                         >
                           <v-icon start>mdi-book-open-variant</v-icon>
-                          {{ tm("dialog.viewTutorial") }}
+                          {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
                       <AstrBotConfig
@@ -248,7 +248,7 @@
                         @click="openTutorial"
                       >
                         <v-icon start>mdi-book-open-variant</v-icon>
-                        {{ tm("dialog.viewTutorial") }}
+                        {{ tm('dialog.viewTutorial') }}
                       </v-btn>
                     </div>
                     <AstrBotConfig
@@ -294,7 +294,7 @@
               <div>
                 <div class="d-flex align-center">
                   <h3>
-                    {{ tm("createDialog.configFileTitle") }}
+                    {{ tm('createDialog.configFileTitle') }}
                   </h3>
                   <v-chip
                     v-if="!updatingMode"
@@ -303,14 +303,14 @@
                     variant="tonal"
                     rounded="sm"
                     class="ml-2"
-                    >{{ tm("createDialog.optional") }}</v-chip
+                    >{{ tm('createDialog.optional') }}</v-chip
                   >
                 </div>
                 <small style="color: grey">{{
-                  tm("createDialog.configHint")
+                  tm('createDialog.configHint')
                 }}</small>
                 <small v-if="!updatingMode" style="color: grey">{{
-                  tm("createDialog.configDefaultHint")
+                  tm('createDialog.configDefaultHint')
                 }}</small>
               </div>
               <div>
@@ -321,7 +321,7 @@
                   @click="toggleConfigSection"
                 >
                   <v-icon>{{
-                    showConfigSection ? "mdi-chevron-up" : "mdi-chevron-down"
+                    showConfigSection ? 'mdi-chevron-up' : 'mdi-chevron-down'
                   }}</v-icon>
                 </v-btn>
               </div>
@@ -336,7 +336,7 @@
                 >
                   <v-radio value="0">
                     <template #label>
-                      <span>{{ tm("createDialog.useExistingConfig") }}</span>
+                      <span>{{ tm('createDialog.useExistingConfig') }}</span>
                     </template>
                   </v-radio>
                   <div
@@ -422,7 +422,7 @@
                     class="config-preview-container"
                   >
                     <h4 class="mb-3">
-                      {{ tm("createDialog.newConfigTitle") }}
+                      {{ tm('createDialog.newConfigTitle') }}
                     </h4>
                     <AstrBotCoreConfigWrapper
                       :metadata="newConfigMetadata"
@@ -432,7 +432,7 @@
                   <div v-else class="text-center py-4 text-grey">
                     <v-icon>mdi-information-outline</v-icon>
                     <p class="mt-2">
-                      {{ tm("createDialog.newConfigLoadFailed") }}
+                      {{ tm('createDialog.newConfigLoadFailed') }}
                     </p>
                   </div>
                 </div>
@@ -449,7 +449,7 @@
                       @click="addNewRoute"
                     >
                       <v-icon start>mdi-plus</v-icon>
-                      {{ tm("createDialog.addRouteRule") }}
+                      {{ tm('createDialog.addRouteRule') }}
                     </v-btn>
                   </div>
                   <v-btn
@@ -459,12 +459,12 @@
                     @click="toggleEditMode"
                   >
                     <v-icon start>{{
-                      isEditingRoutes ? "mdi-eye" : "mdi-pencil"
+                      isEditingRoutes ? 'mdi-eye' : 'mdi-pencil'
                     }}</v-icon>
                     {{
                       isEditingRoutes
-                        ? tm("createDialog.viewMode")
-                        : tm("createDialog.editMode")
+                        ? tm('createDialog.viewMode')
+                        : tm('createDialog.editMode')
                     }}
                   </v-btn>
                 </div>
@@ -570,8 +570,8 @@
                           >
                           </v-text-field>
                           <small v-else>{{
-                            item.sessionId === "*"
-                              ? tm("createDialog.allSessions")
+                            item.sessionId === '*'
+                              ? tm('createDialog.allSessions')
                               : item.sessionId
                           }}</small>
                         </template>
@@ -622,7 +622,7 @@
                       "
                       style="color: red"
                       class="ml-2"
-                      >{{ tm("createDialog.configMissing") }}</small
+                      >{{ tm('createDialog.configMissing') }}</small
                     >
                   </template>
 
@@ -660,7 +660,7 @@
                   </template>
                 </v-data-table>
                 <small class="ml-2 mt-2 d-block" style="color: grey">{{
-                  tm("createDialog.routeHint")
+                  tm('createDialog.routeHint')
                 }}</small>
               </div>
             </div>
@@ -670,14 +670,14 @@
 
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn text @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
+        <v-btn text @click="closeDialog">{{ tm('dialog.cancel') }}</v-btn>
         <v-btn
           v-if="!updatingMode"
           :disabled="!canSave"
           color="primary"
           :loading="loading"
           @click="newPlatform"
-          >{{ tm("dialog.save") }}</v-btn
+          >{{ tm('dialog.save') }}</v-btn
         >
         <v-btn
           v-else
@@ -685,7 +685,7 @@
           color="primary"
           :loading="loading"
           @click="newPlatform"
-          >{{ tm("dialog.save") }}</v-btn
+          >{{ tm('dialog.save') }}</v-btn
         >
       </v-card-actions>
     </v-card>
@@ -696,10 +696,10 @@
     <v-card>
       <v-card-title class="text-h6 bg-warning d-flex align-center">
         <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
-        {{ tm("dialog.idConflict.title") }}
+        {{ tm('dialog.idConflict.title') }}
       </v-card-title>
       <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-        {{ tm("dialog.idConflict.message", { id: conflictId }) }}
+        {{ tm('dialog.idConflict.message', { id: conflictId }) }}
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
@@ -707,7 +707,7 @@
           color="grey"
           variant="text"
           @click="handleIdConflictConfirm(false)"
-          >{{ tm("dialog.idConflict.confirm") }}</v-btn
+          >{{ tm('dialog.idConflict.confirm') }}</v-btn
         >
       </v-card-actions>
     </v-card>
@@ -717,15 +717,15 @@
   <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
     <v-card>
       <v-card-title>
-        {{ tm("dialog.securityWarning.title") }}
+        {{ tm('dialog.securityWarning.title') }}
       </v-card-title>
       <v-card-text class="py-4">
-        <p>{{ tm("dialog.securityWarning.aiocqhttpTokenMissing") }}</p>
+        <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
         <span
           ><a
             href="https://docs.astrbot.app/platform/aiocqhttp.html"
             target="_blank"
-            >{{ tm("dialog.securityWarning.learnMore") }}</a
+            >{{ tm('dialog.securityWarning.learnMore') }}</a
           ></span
         >
       </v-card-text>
@@ -735,13 +735,13 @@
           color="error"
           @click="handleOneBotEmptyTokenWarningDismiss(true)"
         >
-          {{ tm("createDialog.warningContinue") }}
+          {{ tm('createDialog.warningContinue') }}
         </v-btn>
         <v-btn
           color="primary"
           @click="handleOneBotEmptyTokenWarningDismiss(false)"
         >
-          {{ tm("createDialog.warningEditAgain") }}
+          {{ tm('createDialog.warningEditAgain') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -759,10 +759,10 @@
       <div class="config-drawer-header">
         <div>
           <span class="text-h6">{{
-            tm("createDialog.configDrawerTitle")
+            tm('createDialog.configDrawerTitle')
           }}</span>
           <div v-if="configDrawerTargetId" class="text-caption text-grey">
-            {{ tm("createDialog.configDrawerIdLabel") }}:
+            {{ tm('createDialog.configDrawerIdLabel') }}:
             {{ configDrawerTargetId }}
           </div>
         </div>
@@ -782,21 +782,27 @@
 </template>
 
 <script>
-import { botApi, configProfileApi, configRouteApi, fileApi, sessionApi } from "@/api/v1";
-import { useModuleI18n } from "@/i18n/composables";
+import {
+  botApi,
+  configProfileApi,
+  configRouteApi,
+  fileApi,
+  sessionApi,
+} from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
 import {
   getPlatformIcon,
   getPlatformDescription,
   getTutorialLink,
-} from "@/utils/platformUtils";
-import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
-import ConfigPage from "@/views/ConfigPage.vue";
-import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+} from '@/utils/platformUtils';
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
+import ConfigPage from '@/views/ConfigPage.vue';
+import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
+import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 
 export default {
-  name: "AddNewPlatform",
+  name: 'AddNewPlatform',
   components: {
     AstrBotConfig,
     AstrBotCoreConfigWrapper,
@@ -826,21 +832,21 @@ export default {
       default: null,
     },
   },
-  emits: ["update:show", "show-toast", "refresh-config"],
+  emits: ['update:show', 'show-toast', 'refresh-config'],
   setup() {
-    const { tm } = useModuleI18n("features/platform");
+    const { tm } = useModuleI18n('features/platform');
     return { tm };
   },
   data() {
     return {
       selectedPlatformType: null,
       selectedPlatformConfig: null,
-      larkCreationMode: "",
-      dingtalkCreationMode: "",
-      qqOfficialCreationMode: "",
+      larkCreationMode: '',
+      dingtalkCreationMode: '',
+      qqOfficialCreationMode: '',
 
-      aBConfigRadioVal: "0",
-      selectedAbConfId: "default",
+      aBConfigRadioVal: '0',
+      selectedAbConfId: 'default',
       configInfoList: [],
 
       // 选中的配置文件预览数据
@@ -865,7 +871,7 @@ export default {
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
-      conflictId: "",
+      conflictId: '',
       idConflictResolve: null,
 
       // OneBot Empty Token Warning #2639
@@ -890,13 +896,12 @@ export default {
         return this.show;
       },
       set(value) {
-        this.$emit("update:show", value);
+        this.$emit('update:show', value);
       },
     },
     platformTemplates() {
       return (
-        this.metadata.platform_group?.metadata.platform?.config_template ||
-        {}
+        this.metadata.platform_group?.metadata.platform?.config_template || {}
       );
     },
     canSave() {
@@ -913,7 +918,7 @@ export default {
         return false;
       }
 
-      if (this.isLarkPlatform && this.larkCreationMode === "scan") {
+      if (this.isLarkPlatform && this.larkCreationMode === 'scan') {
         if (
           !this.selectedPlatformConfig?.app_id ||
           !this.selectedPlatformConfig?.app_secret
@@ -926,7 +931,7 @@ export default {
         return false;
       }
 
-      if (this.isDingtalkPlatform && this.dingtalkCreationMode === "scan") {
+      if (this.isDingtalkPlatform && this.dingtalkCreationMode === 'scan') {
         if (
           !this.selectedPlatformConfig?.client_id ||
           !this.selectedPlatformConfig?.client_secret
@@ -939,7 +944,7 @@ export default {
         return false;
       }
 
-      if (this.isQqOfficialPlatform && this.qqOfficialCreationMode === "scan") {
+      if (this.isQqOfficialPlatform && this.qqOfficialCreationMode === 'scan') {
         if (
           !this.selectedPlatformConfig?.appid ||
           !this.selectedPlatformConfig?.secret
@@ -956,12 +961,12 @@ export default {
       }
 
       // 如果是使用现有配置文件模式
-      if (this.aBConfigRadioVal === "0") {
+      if (this.aBConfigRadioVal === '0') {
         return Boolean(this.selectedAbConfId);
       }
 
       // 如果是创建新配置文件模式
-      if (this.aBConfigRadioVal === "1") {
+      if (this.aBConfigRadioVal === '1') {
         // 需要配置文件名称，且新配置数据已加载
         return Boolean(this.selectedAbConfId && this.newConfigData);
       }
@@ -971,13 +976,13 @@ export default {
     configTableHeaders() {
       return [
         {
-          title: this.tm("createDialog.configTableHeaders.configId"),
-          key: "name",
+          title: this.tm('createDialog.configTableHeaders.configId'),
+          key: 'name',
           sortable: false,
         },
         {
-          title: this.tm("createDialog.configTableHeaders.scope"),
-          key: "scope",
+          title: this.tm('createDialog.configTableHeaders.scope'),
+          key: 'scope',
           sortable: false,
         },
       ];
@@ -985,36 +990,36 @@ export default {
     routeTableHeaders() {
       return [
         {
-          title: this.tm("createDialog.routeTableHeaders.source"),
-          key: "source",
+          title: this.tm('createDialog.routeTableHeaders.source'),
+          key: 'source',
           sortable: false,
-          width: "60%",
+          width: '60%',
         },
         {
-          title: this.tm("createDialog.routeTableHeaders.config"),
-          key: "configId",
+          title: this.tm('createDialog.routeTableHeaders.config'),
+          key: 'configId',
           sortable: false,
-          width: "20%",
+          width: '20%',
         },
         {
-          title: this.tm("createDialog.routeTableHeaders.actions"),
-          key: "actions",
+          title: this.tm('createDialog.routeTableHeaders.actions'),
+          key: 'actions',
           sortable: false,
-          align: "center",
-          width: "20%",
+          align: 'center',
+          width: '20%',
         },
       ];
     },
     messageTypeOptions() {
       return [
-        { label: this.tm("createDialog.messageTypeOptions.all"), value: "*" },
+        { label: this.tm('createDialog.messageTypeOptions.all'), value: '*' },
         {
-          label: this.tm("createDialog.messageTypeOptions.group"),
-          value: "GroupMessage",
+          label: this.tm('createDialog.messageTypeOptions.group'),
+          value: 'GroupMessage',
         },
         {
-          label: this.tm("createDialog.messageTypeOptions.friend"),
-          value: "FriendMessage",
+          label: this.tm('createDialog.messageTypeOptions.friend'),
+          value: 'FriendMessage',
         },
       ];
     },
@@ -1023,10 +1028,10 @@ export default {
         return (
           this.updatingPlatformConfig?.id ||
           this.originalUpdatingPlatformId ||
-          ""
+          ''
         );
       }
-      return this.selectedPlatformConfig?.id || "";
+      return this.selectedPlatformConfig?.id || '';
     },
     filteredKnownRouteUmoItems() {
       const platformId = this.routePlatformId;
@@ -1036,16 +1041,16 @@ export default {
       });
     },
     isLarkPlatform() {
-      return this.selectedPlatformConfig?.type === "lark";
+      return this.selectedPlatformConfig?.type === 'lark';
     },
     isWeixinOcPlatform() {
-      return this.selectedPlatformConfig?.type === "weixin_oc";
+      return this.selectedPlatformConfig?.type === 'weixin_oc';
     },
     isDingtalkPlatform() {
-      return this.selectedPlatformConfig?.type === "dingtalk";
+      return this.selectedPlatformConfig?.type === 'dingtalk';
     },
     isQqOfficialPlatform() {
-      return ["qq_official", "qq_official_webhook"].includes(
+      return ['qq_official', 'qq_official_webhook'].includes(
         this.selectedPlatformConfig?.type,
       );
     },
@@ -1056,19 +1061,19 @@ export default {
         this.selectedPlatformConfig = JSON.parse(
           JSON.stringify(this.platformTemplates[newType]),
         );
-        this.larkCreationMode = "";
-        this.dingtalkCreationMode = "";
-        this.qqOfficialCreationMode = "";
+        this.larkCreationMode = '';
+        this.dingtalkCreationMode = '';
+        this.qqOfficialCreationMode = '';
       } else {
         this.selectedPlatformConfig = null;
-        this.larkCreationMode = "";
-        this.dingtalkCreationMode = "";
-        this.qqOfficialCreationMode = "";
+        this.larkCreationMode = '';
+        this.dingtalkCreationMode = '';
+        this.qqOfficialCreationMode = '';
       }
     },
     selectedAbConfId(newConfigId) {
       // 当选择配置文件改变时，获取配置文件数据用于预览
-      if (!this.updatingMode && this.aBConfigRadioVal === "0" && newConfigId) {
+      if (!this.updatingMode && this.aBConfigRadioVal === '0' && newConfigId) {
         this.getConfigForPreview(newConfigId);
       } else {
         this.selectedConfigData = null;
@@ -1077,17 +1082,17 @@ export default {
     },
     aBConfigRadioVal(newVal) {
       // 当切换到创建新配置文件时，获取默认配置模板
-      if (newVal === "1") {
+      if (newVal === '1') {
         this.selectedConfigData = null;
         this.selectedConfigMetadata = null;
         this.selectedAbConfId = null;
         this.getDefaultConfigTemplate();
-      } else if (newVal === "0") {
+      } else if (newVal === '0') {
         // 如果切换回使用现有配置文件但没有选择配置文件，重置为默认
         this.newConfigData = null;
         this.newConfigMetadata = null;
         if (!this.selectedAbConfId) {
-          this.selectedAbConfId = "default";
+          this.selectedAbConfId = 'default';
         }
       }
     },
@@ -1114,7 +1119,7 @@ export default {
       immediate: true,
     },
     showConfigSection(newValue) {
-      if (newValue && !this.updatingMode && this.aBConfigRadioVal === "0") {
+      if (newValue && !this.updatingMode && this.aBConfigRadioVal === '0') {
         this.getConfigForPreview(this.selectedAbConfId);
       }
       if (newValue) {
@@ -1148,12 +1153,12 @@ export default {
     resetForm() {
       this.selectedPlatformType = null;
       this.selectedPlatformConfig = null;
-      this.larkCreationMode = "";
-      this.dingtalkCreationMode = "";
-      this.qqOfficialCreationMode = "";
+      this.larkCreationMode = '';
+      this.dingtalkCreationMode = '';
+      this.qqOfficialCreationMode = '';
 
-      this.aBConfigRadioVal = "0";
-      this.selectedAbConfId = "default";
+      this.aBConfigRadioVal = '0';
+      this.selectedAbConfId = 'default';
 
       // 重置配置预览数据
       this.selectedConfigData = null;
@@ -1202,7 +1207,7 @@ export default {
         this.selectedConfigData = response.data.data.config;
         this.selectedConfigMetadata = response.data.data.metadata;
       } catch (error) {
-        console.error("获取配置文件预览数据失败:", error);
+        console.error('获取配置文件预览数据失败:', error);
         this.selectedConfigData = null;
         this.selectedConfigMetadata = null;
       } finally {
@@ -1218,7 +1223,7 @@ export default {
         this.newConfigData = response.data.data.config;
         this.newConfigMetadata = response.data.data.metadata;
       } catch (error) {
-        console.error("获取默认配置模板失败:", error);
+        console.error('获取默认配置模板失败:', error);
         this.newConfigData = null;
         this.newConfigMetadata = null;
       } finally {
@@ -1227,16 +1232,16 @@ export default {
     },
     openTutorial() {
       const tutorialUrl = getTutorialLink(this.selectedPlatformConfig.type);
-      window.open(tutorialUrl, "_blank");
+      window.open(tutorialUrl, '_blank');
     },
     openConfigDrawer(configId) {
-      const targetId = configId || "default";
+      const targetId = configId || 'default';
 
       if (
         configId &&
         this.configInfoList.findIndex((c) => c.id === configId) === -1
       ) {
-        this.showError(this.tm("messages.configNotFoundOpenConfig"));
+        this.showError(this.tm('messages.configNotFoundOpenConfig'));
       }
 
       this.configDrawerTargetId = targetId;
@@ -1248,16 +1253,18 @@ export default {
     newPlatform() {
       this.loading = true;
       if (this.updatingMode) {
-        if (this.updatingPlatformConfig.type === "aiocqhttp") {
+        if (this.updatingPlatformConfig.type === 'aiocqhttp') {
           const token = this.updatingPlatformConfig.ws_reverse_token;
-          if (!token || token.trim() === "") {
-            void this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
-              if (continueWithWarning) {
-                void this.updatePlatform();
-              } else {
-                this.loading = false;
-              }
-            });
+          if (!token || token.trim() === '') {
+            void this.showOneBotEmptyTokenWarning().then(
+              (continueWithWarning) => {
+                if (continueWithWarning) {
+                  void this.updatePlatform();
+                } else {
+                  this.loading = false;
+                }
+              },
+            );
             return;
           }
         }
@@ -1271,13 +1278,13 @@ export default {
         this.originalUpdatingPlatformId || this.updatingPlatformConfig.id;
       if (!id) {
         this.loading = false;
-        this.showError(this.tm("messages.updateMissingPlatformId"));
+        this.showError(this.tm('messages.updateMissingPlatformId'));
         return;
       }
 
       if (!this.isPlatformIdValid(id)) {
         this.loading = false;
-        this.showError(this.tm("dialog.invalidPlatformId"));
+        this.showError(this.tm('dialog.invalidPlatformId'));
         return;
       }
 
@@ -1285,9 +1292,9 @@ export default {
         // 更新平台配置
         let resp = await botApi.update(id, this.updatingPlatformConfig);
 
-        if (resp.data.status === "error") {
+        if (resp.data.status === 'error') {
           throw new Error(
-            resp.data.message || this.tm("messages.platformUpdateFailed"),
+            resp.data.message || this.tm('messages.platformUpdateFailed'),
           );
         }
 
@@ -1297,8 +1304,8 @@ export default {
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
-        this.$emit("refresh-config");
-        this.showSuccess(this.tm("messages.updateSuccess"));
+        this.$emit('refresh-config');
+        this.showSuccess(this.tm('messages.updateSuccess'));
       } catch (err) {
         this.loading = false;
         this.showError(err.response?.data?.message || err.message);
@@ -1307,7 +1314,7 @@ export default {
     async savePlatform() {
       if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
         this.loading = false;
-        this.showError(this.tm("dialog.invalidPlatformId"));
+        this.showError(this.tm('dialog.invalidPlatformId'));
         return;
       }
 
@@ -1315,7 +1322,7 @@ export default {
       const existingPlatform = this.configData.platform?.find(
         (p) => p.id === this.selectedPlatformConfig.id,
       );
-      if (existingPlatform || this.selectedPlatformConfig.id === "webchat") {
+      if (existingPlatform || this.selectedPlatformConfig.id === 'webchat') {
         const confirmed = await this.confirmIdConflict(
           this.selectedPlatformConfig.id,
         );
@@ -1326,9 +1333,9 @@ export default {
       }
 
       // 检查 aiocqhttp 适配器的安全设置
-      if (this.selectedPlatformConfig.type === "aiocqhttp") {
+      if (this.selectedPlatformConfig.type === 'aiocqhttp') {
         const token = this.selectedPlatformConfig.ws_reverse_token;
-        if (!token || token.trim() === "") {
+        if (!token || token.trim() === '') {
           const continueWithWarning = await this.showOneBotEmptyTokenWarning();
           if (!continueWithWarning) {
             return;
@@ -1346,9 +1353,9 @@ export default {
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
-        this.$emit("refresh-config");
+        this.$emit('refresh-config');
         this.showSuccess(
-          res.data.message || this.tm("messages.addSuccessWithConfig"),
+          res.data.message || this.tm('messages.addSuccessWithConfig'),
         );
       } catch (err) {
         this.loading = false;
@@ -1368,16 +1375,16 @@ export default {
       let configId = null;
 
       // 第一步：创建或获取配置文件ID
-      if (this.aBConfigRadioVal === "0") {
+      if (this.aBConfigRadioVal === '0') {
         // 使用现有配置文件
         configId = this.selectedAbConfId;
-      } else if (this.aBConfigRadioVal === "1") {
+      } else if (this.aBConfigRadioVal === '1') {
         // 创建新配置文件
         configId = await this.createNewConfigFile(this.selectedAbConfId);
       }
 
       if (!configId) {
-        throw new Error(this.tm("messages.configIdMissing"));
+        throw new Error(this.tm('messages.configIdMissing'));
       }
 
       // 第二步：统一更新路由表
@@ -1390,10 +1397,10 @@ export default {
 
         console.log(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (err) {
-        console.error("更新路由表失败:", err);
+        console.error('更新路由表失败:', err);
         const errorMessage = err.response?.data?.message || err.message;
         throw new Error(
-          this.tm("messages.routingUpdateFailed", { message: errorMessage }),
+          this.tm('messages.routingUpdateFailed', { message: errorMessage }),
         );
       }
     },
@@ -1402,7 +1409,7 @@ export default {
       try {
         // 准备配置数据，如果是创建模式且有新配置数据，使用用户填写的配置
         const configData =
-          this.aBConfigRadioVal === "1" && this.newConfigData
+          this.aBConfigRadioVal === '1' && this.newConfigData
             ? this.newConfigData
             : undefined;
 
@@ -1417,10 +1424,10 @@ export default {
 
         return newConfigId;
       } catch (err) {
-        console.error("创建新配置文件失败:", err);
+        console.error('创建新配置文件失败:', err);
         const errorMessage = err.response?.data?.message || err.message;
         throw new Error(
-          this.tm("messages.createConfigFailed", { message: errorMessage }),
+          this.tm('messages.createConfigFailed', { message: errorMessage }),
         );
       }
     },
@@ -1460,16 +1467,16 @@ export default {
     },
 
     showSuccess(message) {
-      this.$emit("show-toast", { message, type: "success" });
+      this.$emit('show-toast', { message, type: 'success' });
     },
 
     showError(message) {
-      this.$emit("show-toast", { message, type: "error" });
+      this.$emit('show-toast', { message, type: 'error' });
     },
 
     buildRandomPlatformIdSuffix() {
-      const letters = "abcdefghijklmnopqrstuvwxyz";
-      let suffix = "_";
+      const letters = 'abcdefghijklmnopqrstuvwxyz';
+      let suffix = '_';
       for (let i = 0; i < 4; i += 1) {
         suffix += letters[Math.floor(Math.random() * letters.length)];
       }
@@ -1477,27 +1484,29 @@ export default {
     },
 
     sanitizePlatformIdPart(value) {
-      return String(value || "")
+      return String(value || '')
         .trim()
-        .replace(/\s+/g, "")
-        .replace(/[!:]/g, "_");
+        .replace(/\s+/g, '')
+        .replace(/[!:]/g, '_');
     },
 
     handlePlatformRegistrationCreated(data) {
       if (!this.selectedPlatformConfig || !data) {
         return;
       }
-      const currentId = String(this.selectedPlatformConfig.id || "").trim();
+      const currentId = String(this.selectedPlatformConfig.id || '').trim();
       const platformType = this.selectedPlatformConfig.type;
       if (!currentId) {
         return;
       }
 
-      let suffix = "";
-      const explicitSuffix = this.sanitizePlatformIdPart(data.platform_id_suffix);
+      let suffix = '';
+      const explicitSuffix = this.sanitizePlatformIdPart(
+        data.platform_id_suffix,
+      );
       if (explicitSuffix) {
         suffix =
-          explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
+          explicitSuffix.startsWith('_') || explicitSuffix.startsWith('-')
             ? explicitSuffix
             : `_${explicitSuffix}`;
       } else if (data.bot_name) {
@@ -1505,7 +1514,7 @@ export default {
         if (safeBotName) {
           suffix = `-${safeBotName}`;
         }
-      } else if (platformType === "weixin_oc" || platformType === "dingtalk") {
+      } else if (platformType === 'weixin_oc' || platformType === 'dingtalk') {
         suffix = this.buildRandomPlatformIdSuffix();
       }
 
@@ -1514,7 +1523,7 @@ export default {
       }
 
       if (
-        (platformType === "weixin_oc" || platformType === "dingtalk") &&
+        (platformType === 'weixin_oc' || platformType === 'dingtalk') &&
         /_[a-z]{4}$/.test(currentId)
       ) {
         return;
@@ -1552,10 +1561,10 @@ export default {
             routes.push({
               umop,
               originalUmop: umop, // 保存原始 UMOP 用于更新时查找
-              sourceMode: "manual",
-              sourceUmo: parsedUmop.sessionId === "*" ? "" : umop,
-              messageType: parsedUmop.messageType || "*",
-              sessionId: parsedUmop.sessionId || "*",
+              sourceMode: 'manual',
+              sourceUmo: parsedUmop.sessionId === '*' ? '' : umop,
+              messageType: parsedUmop.messageType || '*',
+              sessionId: parsedUmop.sessionId || '*',
               configId: confId,
             });
           }
@@ -1568,15 +1577,15 @@ export default {
           this.platformRoutes.push({
             umop: null,
             originalUmop: null,
-            sourceMode: "manual",
-            sourceUmo: "",
-            messageType: "*",
-            sessionId: "*",
-            configId: "default",
+            sourceMode: 'manual',
+            sourceUmo: '',
+            messageType: '*',
+            sessionId: '*',
+            configId: 'default',
           });
         }
       } catch (err) {
-        console.error("获取平台路由配置失败:", err);
+        console.error('获取平台路由配置失败:', err);
         this.platformRoutes = [];
       }
     },
@@ -1589,7 +1598,7 @@ export default {
       this.loadingKnownRouteUmos = true;
       try {
         const res = await sessionApi.activeUmos();
-        if (res.data.status === "ok") {
+        if (res.data.status === 'ok') {
           const umos = Array.isArray(res.data.data?.umos)
             ? res.data.data.umos
             : [];
@@ -1599,7 +1608,7 @@ export default {
           this.mergeKnownRouteUmoInfos(res.data.data?.umo_infos || []);
         }
       } catch (err) {
-        console.error("获取已有消息来源失败:", err);
+        console.error('获取已有消息来源失败:', err);
       } finally {
         this.loadingKnownRouteUmos = false;
       }
@@ -1620,11 +1629,11 @@ export default {
       return (
         this.knownRouteUmoInfoMap[umo] || {
           umo,
-          platform: parsed?.platform || "",
-          message_type: parsed?.messageType || "",
+          platform: parsed?.platform || '',
+          message_type: parsed?.messageType || '',
           session_id: parsed?.sessionId || umo,
-          auto_name: "",
-          user_alias: "",
+          auto_name: '',
+          user_alias: '',
           display_name: umo,
         }
       );
@@ -1635,20 +1644,20 @@ export default {
       const parsed = this.parseUmop(umo);
       return {
         umo,
-        platform: info.platform || parsed?.platform || "",
-        messageType: info.message_type || parsed?.messageType || "",
-        sessionId: info.session_id || parsed?.sessionId || "",
-        autoName: info.auto_name || "",
-        userAlias: info.user_alias || "",
+        platform: info.platform || parsed?.platform || '',
+        messageType: info.message_type || parsed?.messageType || '',
+        sessionId: info.session_id || parsed?.sessionId || '',
+        autoName: info.auto_name || '',
+        userAlias: info.user_alias || '',
       };
     },
 
     getKnownRouteUmoSelectionText(umo) {
-      if (!umo) return "";
+      if (!umo) return '';
       const info = this.getKnownRouteUmoInfo(umo);
       const parsed = this.parseUmop(umo);
-      const aliasName = info.user_alias || "";
-      const autoName = info.auto_name || "";
+      const aliasName = info.user_alias || '';
+      const autoName = info.auto_name || '';
       if (aliasName && autoName && aliasName !== autoName) {
         return `${aliasName}（${autoName}）`;
       }
@@ -1664,27 +1673,27 @@ export default {
     },
 
     getRouteSourceMode(route) {
-      return route.sourceMode || "manual";
+      return route.sourceMode || 'manual';
     },
 
     getRouteSourceModeLinkText(route) {
-      return this.getRouteSourceMode(route) === "known"
-        ? this.tm("createDialog.routeSource.switchToManual")
-        : this.tm("createDialog.routeSource.switchToKnown");
+      return this.getRouteSourceMode(route) === 'known'
+        ? this.tm('createDialog.routeSource.switchToManual')
+        : this.tm('createDialog.routeSource.switchToKnown');
     },
 
     toggleRouteSourceMode(route) {
       const nextMode =
-        this.getRouteSourceMode(route) === "known" ? "manual" : "known";
+        this.getRouteSourceMode(route) === 'known' ? 'manual' : 'known';
       route.sourceMode = nextMode;
-      if (nextMode === "known") {
+      if (nextMode === 'known') {
         void this.loadKnownRouteUmos();
       }
     },
 
     applyKnownRouteSource(route, umo) {
       if (!umo) {
-        route.sourceUmo = "";
+        route.sourceUmo = '';
         return;
       }
 
@@ -1693,8 +1702,8 @@ export default {
         return;
       }
       route.sourceUmo = umo;
-      route.messageType = parsed.messageType || "*";
-      route.sessionId = parsed.sessionId || "*";
+      route.messageType = parsed.messageType || '*';
+      route.sessionId = parsed.sessionId || '*';
     },
 
     // 添加新路由
@@ -1702,11 +1711,11 @@ export default {
       this.platformRoutes.push({
         umop: null,
         originalUmop: null,
-        sourceMode: "manual",
-        sourceUmo: "",
-        messageType: "*",
-        sessionId: "*",
-        configId: "default",
+        sourceMode: 'manual',
+        sourceUmo: '',
+        messageType: '*',
+        sessionId: '*',
+        configId: 'default',
       });
     },
 
@@ -1745,7 +1754,7 @@ export default {
         this.updatingPlatformConfig?.id || originalPlatformId;
 
       if (!originalPlatformId && !newPlatformId) {
-        throw new Error(this.tm("messages.platformIdMissing"));
+        throw new Error(this.tm('messages.platformIdMissing'));
       }
 
       try {
@@ -1767,8 +1776,8 @@ export default {
         // 添加新路由（按顺序）
         for (const route of this.platformRoutes) {
           const messageType =
-            route.messageType === "*" ? "*" : route.messageType;
-          const sessionId = route.sessionId === "*" ? "*" : route.sessionId;
+            route.messageType === '*' ? '*' : route.messageType;
+          const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
           const platformIdForRoute = newPlatformId || originalPlatformId;
           const newUmop = `${platformIdForRoute}:${messageType}:${sessionId}`;
 
@@ -1782,10 +1791,10 @@ export default {
           routing: fullRoutingTable,
         });
       } catch (err) {
-        console.error("保存路由表失败:", err);
+        console.error('保存路由表失败:', err);
         const errorMessage = err.response?.data?.message || err.message;
         throw new Error(
-          this.tm("messages.routingSaveFailed", { message: errorMessage }),
+          this.tm('messages.routingSaveFailed', { message: errorMessage }),
         );
       }
     },
@@ -1813,18 +1822,18 @@ export default {
       if (!parsedUmop) return false;
       return (
         parsedUmop.platform === platformId ||
-        parsedUmop.platform === "" ||
-        parsedUmop.platform === "*"
+        parsedUmop.platform === '' ||
+        parsedUmop.platform === '*'
       );
     },
 
     parseUmop(umop) {
       if (!umop) return null;
 
-      const firstSeparatorIndex = umop.indexOf(":");
+      const firstSeparatorIndex = umop.indexOf(':');
       if (firstSeparatorIndex === -1) return null;
 
-      const secondSeparatorIndex = umop.indexOf(":", firstSeparatorIndex + 1);
+      const secondSeparatorIndex = umop.indexOf(':', firstSeparatorIndex + 1);
       if (secondSeparatorIndex === -1) return null;
 
       return {
@@ -1837,10 +1846,10 @@ export default {
     // 获取消息类型标签
     getMessageTypeLabel(messageType) {
       const typeMap = {
-        "*": this.tm("createDialog.messageTypeLabels.all"),
-        "": this.tm("createDialog.messageTypeLabels.all"),
-        GroupMessage: this.tm("createDialog.messageTypeLabels.group"),
-        FriendMessage: this.tm("createDialog.messageTypeLabels.friend"),
+        '*': this.tm('createDialog.messageTypeLabels.all'),
+        '': this.tm('createDialog.messageTypeLabels.all'),
+        GroupMessage: this.tm('createDialog.messageTypeLabels.group'),
+        FriendMessage: this.tm('createDialog.messageTypeLabels.friend'),
       };
       return typeMap[messageType] || messageType;
     },
@@ -1853,10 +1862,7 @@ export default {
     prepareData() {
       void this.getConfigInfoList();
       void this.getConfigForPreview(this.selectedAbConfId);
-      if (
-        this.updatingMode &&
-        this.updatingPlatformConfig?.id
-      ) {
+      if (this.updatingMode && this.updatingPlatformConfig?.id) {
         void this.getPlatformConfigs(this.updatingPlatformConfig.id);
       }
     },
@@ -1866,8 +1872,8 @@ export default {
       if (!el) {
         return;
       }
-      const scrollOptions = { top: el.scrollHeight, behavior: "smooth" };
-      if (typeof el.scrollTo === "function") {
+      const scrollOptions = { top: el.scrollHeight, behavior: 'smooth' };
+      if (typeof el.scrollTo === 'function') {
         el.scrollTo(scrollOptions);
       } else {
         el.scrollTop = el.scrollHeight;

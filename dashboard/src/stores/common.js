@@ -1,8 +1,8 @@
-import { defineStore } from "pinia";
-import { logApi, pluginApi, statsApi } from "@/api/v1";
-import { fetchWithAuth } from "@/api/http";
+import { defineStore } from 'pinia';
+import { logApi, pluginApi, statsApi } from '@/api/v1';
+import { fetchWithAuth } from '@/api/http';
 
-export const useCommonStore = defineStore("common", {
+export const useCommonStore = defineStore('common', {
   state: () => ({
     eventSource: null,
     log_cache: [],
@@ -10,8 +10,8 @@ export const useCommonStore = defineStore("common", {
 
     log_cache_max_len: 1000,
     startTime: -1,
-    astrbotVersion: "",
-    dashboardVersion: "",
+    astrbotVersion: '',
+    dashboardVersion: '',
 
     pluginMarketData: [],
   }),
@@ -26,30 +26,30 @@ export const useCommonStore = defineStore("common", {
       // 注意：这里如果之前改过 Polyfill 的话，可能需要保持原样
       // 如果是用 fetch 的话，这里是支持 Authorization Header 的
       const headers = {
-        "Content-Type": "multipart/form-data",
-        Authorization: `Bearer ${  localStorage.getItem("token")}`,
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
       };
 
       fetchWithAuth(logApi.liveUrl(), {
-        method: "GET",
+        method: 'GET',
         headers,
         signal,
-        cache: "no-cache",
+        cache: 'no-cache',
       })
         .then((response) => {
           if (!response.ok) {
             throw new Error(`SSE connection failed: ${response.status}`);
           }
-          console.log("SSE stream opened");
+          console.log('SSE stream opened');
           this.sse_connected = true;
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
-          let bufferedText = "";
+          let bufferedText = '';
 
           const processStream = ({ done, value }) => {
             if (done) {
-              console.log("SSE stream closed");
+              console.log('SSE stream closed');
               setTimeout(() => {
                 this.eventSource = null;
                 void this.createEventSource();
@@ -62,16 +62,16 @@ export const useCommonStore = defineStore("common", {
             bufferedText += text;
 
             // Split completed events; keep the trailing partial in buffer.
-            const segments = bufferedText.split("\n\n");
-            bufferedText = segments.pop() || "";
+            const segments = bufferedText.split('\n\n');
+            bufferedText = segments.pop() || '';
 
             segments.forEach((segment) => {
               const line = segment.trim();
-              if (!line.startsWith("data: ")) {
+              if (!line.startsWith('data: ')) {
                 return;
               }
 
-              const logLine = line.replace("data: ", "").trim();
+              const logLine = line.replace('data: ', '').trim();
               if (!logLine) {
                 return;
               }
@@ -82,18 +82,18 @@ export const useCommonStore = defineStore("common", {
                 // 修复：兼容 HTTP 环境的 UUID 生成
                 if (!logObject.uuid) {
                   if (
-                    typeof crypto !== "undefined" &&
-                    typeof crypto.randomUUID === "function"
+                    typeof crypto !== 'undefined' &&
+                    typeof crypto.randomUUID === 'function'
                   ) {
                     logObject.uuid = crypto.randomUUID();
                   } else {
                     // 手动生成 UUID v4
                     logObject.uuid =
-                      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+                      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
                         /[xy]/g,
                         (c) => {
                           var r = (Math.random() * 16) | 0,
-                            v = c === "x" ? r : (r & 0x3) | 0x8;
+                            v = c === 'x' ? r : (r & 0x3) | 0x8;
                           return v.toString(16);
                         },
                       );
@@ -110,7 +110,7 @@ export const useCommonStore = defineStore("common", {
                 }
               } catch (err) {
                 console.warn(
-                  "Failed to parse SSE log line, skipping:",
+                  'Failed to parse SSE log line, skipping:',
                   err,
                   logLine,
                 );
@@ -123,14 +123,14 @@ export const useCommonStore = defineStore("common", {
           void reader.read().then(processStream);
         })
         .catch((error) => {
-          console.error("SSE error:", error);
+          console.error('SSE error:', error);
           // Attempt to reconnect after a delay
           this.log_cache.push({
-            type: "log",
-            level: "ERROR",
+            type: 'log',
+            level: 'ERROR',
             time: Date.now() / 1000,
-            data: "SSE Connection failed, retrying in 5 seconds...",
-            uuid: `error-${  Date.now()}`,
+            data: 'SSE Connection failed, retrying in 5 seconds...',
+            uuid: `error-${Date.now()}`,
           });
           setTimeout(() => {
             this.eventSource = null;
@@ -155,9 +155,9 @@ export const useCommonStore = defineStore("common", {
       this.startTime = res.data.data.start_time;
       return this.startTime;
     },
-    setAstrBotVersion(version, dashboardVersion = "") {
-      this.astrbotVersion = String(version || "").replace(/^v/i, "");
-      this.dashboardVersion = String(dashboardVersion || "");
+    setAstrBotVersion(version, dashboardVersion = '') {
+      this.astrbotVersion = String(version || '').replace(/^v/i, '');
+      this.dashboardVersion = String(dashboardVersion || '');
     },
     async fetchAstrBotVersion(force = false) {
       if (!force && this.astrbotVersion) {
@@ -188,7 +188,7 @@ export const useCommonStore = defineStore("common", {
         })
         .then((res) => {
           let data = [];
-          if (res.data.data && typeof res.data.data === "object") {
+          if (res.data.data && typeof res.data.data === 'object') {
             for (let key in res.data.data) {
               const pluginData = res.data.data[key];
               let supportPlatforms = [];
@@ -204,31 +204,31 @@ export const useCommonStore = defineStore("common", {
                 ...pluginData,
                 name: pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
                 desc: pluginData.desc,
-                short_desc: pluginData?.short_desc ? pluginData.short_desc : "",
+                short_desc: pluginData?.short_desc ? pluginData.short_desc : '',
                 author: pluginData.author,
                 repo: pluginData.repo,
                 installed: false,
-                version: pluginData?.version ? pluginData.version : "未知",
+                version: pluginData?.version ? pluginData.version : '未知',
                 social_link: pluginData?.social_link,
                 tags: pluginData?.tags ? pluginData.tags : [],
-                logo: pluginData?.logo ? pluginData.logo : "",
+                logo: pluginData?.logo ? pluginData.logo : '',
                 pinned: pluginData?.pinned ? pluginData.pinned : false,
                 stars: pluginData?.stars ? pluginData.stars : 0,
-                updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
+                updated_at: pluginData?.updated_at ? pluginData.updated_at : '',
                 download_url: pluginData?.download_url
                   ? pluginData.download_url
-                  : "",
+                  : '',
                 display_name: pluginData?.display_name
                   ? pluginData.display_name
-                  : "",
+                  : '',
                 i18n:
-                  pluginData?.i18n && typeof pluginData.i18n === "object"
+                  pluginData?.i18n && typeof pluginData.i18n === 'object'
                     ? pluginData.i18n
                     : {},
                 astrbot_version: pluginData?.astrbot_version
                   ? pluginData.astrbot_version
-                  : "",
-                category: pluginData?.category ? pluginData.category : "",
+                  : '',
+                category: pluginData?.category ? pluginData.category : '',
                 support_platforms: supportPlatforms,
               });
             }

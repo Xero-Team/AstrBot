@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
-import "markstream-vue/index.css";
-import "katex/dist/katex.min.css";
-import "highlight.js/styles/github.css";
+import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import 'katex/dist/katex.min.css';
+import 'highlight.js/styles/github.css';
 
 enableKatex();
 enableMermaid();

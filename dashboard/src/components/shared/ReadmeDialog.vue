@@ -1,17 +1,17 @@
 <script setup>
-import { ref, watch, computed, onUnmounted } from "vue";
-import { useTheme } from "vuetify";
-import MarkdownIt from "markdown-it";
-import DOMPurify from "dompurify";
-import { pluginApi, statsApi } from "@/api/v1";
-import { useI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
+import { ref, watch, computed, onUnmounted } from 'vue';
+import { useTheme } from 'vuetify';
+import MarkdownIt from 'markdown-it';
+import DOMPurify from 'dompurify';
+import { pluginApi, statsApi } from '@/api/v1';
+import { useI18n } from '@/i18n/composables';
+import { copyToClipboard } from '@/utils/clipboard';
 import {
   escapeHtml,
   ensureShikiLanguages,
   normalizeShikiLanguage,
   renderShikiCode,
-} from "@/utils/shiki";
+} from '@/utils/shiki';
 
 // 1. 在 setup 作用域创建 MarkdownIt 实例
 const md = new MarkdownIt({
@@ -21,9 +21,9 @@ const md = new MarkdownIt({
   breaks: false,
 });
 
-md.enable(["table", "strikethrough"]);
+md.enable(['table', 'strikethrough']);
 md.renderer.rules.table_open = () => '<div class="table-container"><table>';
-md.renderer.rules.table_close = () => "</table></div>";
+md.renderer.rules.table_close = () => '</table></div>';
 
 // 2. 复制按钮的 SVG 图标常量
 const ICONS = {
@@ -36,16 +36,17 @@ const ICONS = {
 
 const props = defineProps({
   show: { type: Boolean, default: false },
-  pluginName: { type: String, default: "" },
+  pluginName: { type: String, default: '' },
   repoUrl: { type: String, default: null },
   mode: {
     type: String,
-    default: "readme",
-    validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
+    default: 'readme',
+    validator: (value) =>
+      ['readme', 'changelog', 'first-notice'].includes(value),
   },
 });
 
-const emit = defineEmits(["update:show"]);
+const emit = defineEmits(['update:show']);
 const { t, locale } = useI18n();
 const theme = useTheme();
 
@@ -57,113 +58,123 @@ const copyFeedbackTimer = ref(null);
 const lastRequestId = ref(0);
 const lastRenderId = ref(0);
 const scrollContainer = ref(null);
-const renderedHtml = ref("");
+const renderedHtml = ref('');
 const isDark = computed(() => theme.global.current.value.dark);
 
 const MARKDOWN_SANITIZE_OPTIONS = {
   ALLOWED_TAGS: [
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "p",
-    "br",
-    "hr",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "pre",
-    "code",
-    "a",
-    "img",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "strong",
-    "em",
-    "del",
-    "s",
-    "details",
-    "summary",
-    "div",
-    "span",
-    "input",
-    "button",
-    "svg",
-    "rect",
-    "path",
-    "polyline",
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'p',
+    'br',
+    'hr',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'pre',
+    'code',
+    'a',
+    'img',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+    'strong',
+    'em',
+    'del',
+    's',
+    'details',
+    'summary',
+    'div',
+    'span',
+    'input',
+    'button',
+    'svg',
+    'rect',
+    'path',
+    'polyline',
   ],
   ALLOWED_ATTR: [
-    "href",
-    "src",
-    "alt",
-    "title",
-    "class",
-    "id",
-    "target",
-    "rel",
-    "type",
-    "checked",
-    "disabled",
-    "open",
-    "align",
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points",
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry",
-    "data-code-block-index",
+    'href',
+    'src',
+    'alt',
+    'title',
+    'class',
+    'id',
+    'target',
+    'rel',
+    'type',
+    'checked',
+    'disabled',
+    'open',
+    'align',
+    'width',
+    'height',
+    'viewBox',
+    'fill',
+    'stroke',
+    'stroke-width',
+    'points',
+    'd',
+    'x',
+    'y',
+    'rx',
+    'ry',
+    'data-code-block-index',
   ],
 };
 
 const CODE_BLOCK_SANITIZE_OPTIONS = {
-  ALLOWED_TAGS: ["div", "span", "button", "svg", "rect", "path", "polyline", "pre", "code"],
+  ALLOWED_TAGS: [
+    'div',
+    'span',
+    'button',
+    'svg',
+    'rect',
+    'path',
+    'polyline',
+    'pre',
+    'code',
+  ],
   ALLOWED_ATTR: [
-    "class",
-    "title",
-    "type",
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points",
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry",
-    "style",
-    "tabindex",
+    'class',
+    'title',
+    'type',
+    'width',
+    'height',
+    'viewBox',
+    'fill',
+    'stroke',
+    'stroke-width',
+    'points',
+    'd',
+    'x',
+    'y',
+    'rx',
+    'ry',
+    'style',
+    'tabindex',
   ],
 };
 
 function slugifyHeading(text, slugCounts) {
-  const base = (text || "")
+  const base = (text || '')
     .trim()
     .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{Letter}\p{Number}\s-]/gu, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 
-  if (!base) return "";
+  if (!base) return '';
 
   const count = slugCounts.get(base) || 0;
   slugCounts.set(base, count + 1);
@@ -184,7 +195,7 @@ async function updateRenderedHtml() {
   void locale?.value;
 
   if (!source) {
-    renderedHtml.value = "";
+    renderedHtml.value = '';
     return;
   }
 
@@ -194,11 +205,11 @@ async function updateRenderedHtml() {
 
   try {
     const languages = tokens
-      .filter((token) => token.type === "fence")
+      .filter((token) => token.type === 'fence')
       .map((token) => normalizeShikiLanguage(token.info));
     highlighter = await ensureShikiLanguages(languages);
   } catch (err) {
-    console.error("Failed to initialize Shiki for README dialog:", err);
+    console.error('Failed to initialize Shiki for README dialog:', err);
   }
 
   if (renderId !== lastRenderId.value) return;
@@ -209,14 +220,18 @@ async function updateRenderedHtml() {
     const token = tokens[idx];
     const lang = normalizeShikiLanguage(token.info);
     const code = token.content;
-    const escapedLangLabel =
-      lang && lang !== "text" ? escapeHtml(lang) : "";
+    const escapedLangLabel = lang && lang !== 'text' ? escapeHtml(lang) : '';
     const highlighted = highlighter
-      ? renderShikiCode(highlighter, code, lang, isDark.value ? "dark" : "light")
+      ? renderShikiCode(
+          highlighter,
+          code,
+          lang,
+          isDark.value ? 'dark' : 'light',
+        )
       : `<pre class="shiki shiki-fallback"><code>${escapeHtml(code)}</code></pre>`;
     const html = sanitizeHighlightedBlock(`<div class="code-block-wrapper">
-      ${escapedLangLabel ? `<span class="code-lang-label">${escapedLangLabel}</span>` : ""}
-      <button class="copy-code-btn" title="${t("core.common.copy")}">
+      ${escapedLangLabel ? `<span class="code-lang-label">${escapedLangLabel}</span>` : ''}
+      <button class="copy-code-btn" title="${t('core.common.copy')}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       </button>
       ${highlighted}
@@ -230,11 +245,11 @@ async function updateRenderedHtml() {
 
   const cleanHtml = DOMPurify.sanitize(rawHtml, MARKDOWN_SANITIZE_OPTIONS);
 
-  const tempDiv = document.createElement("div");
+  const tempDiv = document.createElement('div');
   tempDiv.innerHTML = cleanHtml;
 
   const slugCounts = new Map();
-  tempDiv.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+  tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
     if (heading.id) {
       slugCounts.set(heading.id, (slugCounts.get(heading.id) || 0) + 1);
       return;
@@ -244,17 +259,17 @@ async function updateRenderedHtml() {
     if (slug) heading.id = slug;
   });
 
-  tempDiv.querySelectorAll("a").forEach((link) => {
-    const href = link.getAttribute("href");
-    if (href && (href.startsWith("http") || href.startsWith("//"))) {
-      link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener noreferrer");
+  tempDiv.querySelectorAll('a').forEach((link) => {
+    const href = link.getAttribute('href');
+    if (href && (href.startsWith('http') || href.startsWith('//'))) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
     }
   });
 
-  tempDiv.querySelectorAll("[data-code-block-index]").forEach((placeholder) => {
-    const index = Number(placeholder.getAttribute("data-code-block-index"));
-    placeholder.outerHTML = highlightedBlocks[index] || "";
+  tempDiv.querySelectorAll('[data-code-block-index]').forEach((placeholder) => {
+    const index = Number(placeholder.getAttribute('data-code-block-index'));
+    placeholder.outerHTML = highlightedBlocks[index] || '';
   });
 
   if (renderId === lastRenderId.value) {
@@ -263,43 +278,43 @@ async function updateRenderedHtml() {
 }
 
 const modeConfig = computed(() => {
-  if (props.mode === "changelog") {
+  if (props.mode === 'changelog') {
     return {
-      title: t("core.common.changelog.title"),
-      loading: t("core.common.changelog.loading"),
-      emptyTitle: t("core.common.changelog.empty.title"),
-      emptySubtitle: t("core.common.changelog.empty.subtitle"),
+      title: t('core.common.changelog.title'),
+      loading: t('core.common.changelog.loading'),
+      emptyTitle: t('core.common.changelog.empty.title'),
+      emptySubtitle: t('core.common.changelog.empty.subtitle'),
       showGithubButton: false,
       showRefreshButton: true,
-      refreshLabel: t("core.common.readme.buttons.refresh"),
+      refreshLabel: t('core.common.readme.buttons.refresh'),
     };
   }
 
-  if (props.mode === "first-notice") {
+  if (props.mode === 'first-notice') {
     return {
-      title: t("core.common.firstNotice.title"),
-      loading: t("core.common.firstNotice.loading"),
-      emptyTitle: t("core.common.firstNotice.empty.title"),
-      emptySubtitle: t("core.common.firstNotice.empty.subtitle"),
+      title: t('core.common.firstNotice.title'),
+      loading: t('core.common.firstNotice.loading'),
+      emptyTitle: t('core.common.firstNotice.empty.title'),
+      emptySubtitle: t('core.common.firstNotice.empty.subtitle'),
       showGithubButton: false,
       showRefreshButton: false,
-      refreshLabel: "",
+      refreshLabel: '',
     };
   }
 
   return {
-    title: t("core.common.readme.title"),
-    loading: t("core.common.readme.loading"),
-    emptyTitle: t("core.common.readme.empty.title"),
-    emptySubtitle: t("core.common.readme.empty.subtitle"),
+    title: t('core.common.readme.title'),
+    loading: t('core.common.readme.loading'),
+    emptyTitle: t('core.common.readme.empty.title'),
+    emptySubtitle: t('core.common.readme.empty.subtitle'),
     showGithubButton: true,
     showRefreshButton: true,
-    refreshLabel: t("core.common.readme.buttons.refresh"),
+    refreshLabel: t('core.common.readme.buttons.refresh'),
   };
 });
 
 const requiresPluginName = computed(
-  () => props.mode === "readme" || props.mode === "changelog",
+  () => props.mode === 'readme' || props.mode === 'changelog',
 );
 
 async function fetchContent() {
@@ -312,16 +327,16 @@ async function fetchContent() {
 
   try {
     let res;
-    if (props.mode === "changelog") {
+    if (props.mode === 'changelog') {
       res = await pluginApi.changelog(props.pluginName);
-    } else if (props.mode === "readme") {
+    } else if (props.mode === 'readme') {
       res = await pluginApi.readme(props.pluginName);
-    } else if (props.mode === "first-notice") {
+    } else if (props.mode === 'first-notice') {
       res = await statsApi.firstNotice(locale.value);
     }
     if (requestId !== lastRequestId.value) return;
 
-    if (res.data.status === "ok") {
+    if (res.data.status === 'ok') {
       if (res.data.data.content) content.value = res.data.data.content;
       else isEmpty.value = true;
     } else {
@@ -344,16 +359,20 @@ watch(
   { immediate: true },
 );
 
-watch([content, locale, isDark], () => {
-  void updateRenderedHtml();
-}, { immediate: true });
+watch(
+  [content, locale, isDark],
+  () => {
+    void updateRenderedHtml();
+  },
+  { immediate: true },
+);
 
 async function handleContainerClick(event) {
-  const btn = event.target.closest(".copy-code-btn");
+  const btn = event.target.closest('.copy-code-btn');
   if (btn) {
-    const code = btn.closest(".code-block-wrapper")?.querySelector("code");
+    const code = btn.closest('.code-block-wrapper')?.querySelector('code');
     if (code) {
-      const success = await copyToClipboard(code.textContent || "");
+      const success = await copyToClipboard(code.textContent || '');
       showCopyFeedback(btn, success);
     }
     return;
@@ -362,8 +381,8 @@ async function handleContainerClick(event) {
   const anchor = event.target.closest('a[href^="#"]');
   if (!anchor) return;
 
-  const rawHref = anchor.getAttribute("href");
-  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
+  const rawHref = anchor.getAttribute('href');
+  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : '';
   if (!targetId) return;
 
   const target = scrollContainer.value?.querySelector(
@@ -372,20 +391,20 @@ async function handleContainerClick(event) {
   if (!target) return;
 
   event.preventDefault();
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function showCopyFeedback(btn, success) {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
-  btn.setAttribute("title", t(`core.common.${success ? "copied" : "error"}`));
+  btn.setAttribute('title', t(`core.common.${success ? 'copied' : 'error'}`));
   btn.innerHTML = success ? ICONS.SUCCESS : ICONS.ERROR;
-  btn.style.color = success ? "var(--v-theme-success)" : "var(--v-theme-error)";
+  btn.style.color = success ? 'var(--v-theme-success)' : 'var(--v-theme-error)';
 
   copyFeedbackTimer.value = setTimeout(() => {
     if (document.body.contains(btn)) {
       btn.innerHTML = ICONS.COPY;
-      btn.style.color = "";
-      btn.setAttribute("title", t("core.common.copy"));
+      btn.style.color = '';
+      btn.setAttribute('title', t('core.common.copy'));
     }
     copyFeedbackTimer.value = null;
   }, 2000);
@@ -393,13 +412,15 @@ function showCopyFeedback(btn, success) {
 
 const _show = computed({
   get: () => props.show,
-  set: (val) => { emit("update:show", val); },
+  set: (val) => {
+    emit('update:show', val);
+  },
 });
 
 // 安全打开外部链接
 function openExternalLink(url) {
   if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 const showActionArea = computed(() => {
@@ -425,7 +446,7 @@ const showActionArea = computed(() => {
             prepend-icon="mdi-github"
             @click="openExternalLink(repoUrl)"
           >
-            {{ t("core.common.readme.buttons.viewOnGithub") }}
+            {{ t('core.common.readme.buttons.viewOnGithub') }}
           </v-btn>
           <v-btn
             v-if="modeConfig.showRefreshButton"
@@ -467,7 +488,7 @@ const showActionArea = computed(() => {
             >mdi-alert-circle-outline</v-icon
           >
           <p class="text-body-1 text-center mb-2">
-            {{ t("core.common.error") }}
+            {{ t('core.common.error') }}
           </p>
           <p class="text-body-2 text-center text-medium-emphasis">
             {{ error }}
@@ -493,7 +514,7 @@ const showActionArea = computed(() => {
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="primary" variant="tonal" @click="_show = false">
-          {{ t("core.common.close") }}
+          {{ t('core.common.close') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -503,17 +524,17 @@ const showActionArea = computed(() => {
 <style scoped>
 :deep(.markdown-body) {
   --markdown-border: rgba(128, 128, 128, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
 }
 
-:deep(.markdown-body [align="center"]) {
+:deep(.markdown-body [align='center']) {
   text-align: center;
 }
-:deep(.markdown-body [align="right"]) {
+:deep(.markdown-body [align='right']) {
   text-align: right;
 }
 
@@ -590,7 +611,7 @@ const showActionArea = computed(() => {
   background-color: rgba(110, 118, 129, 0.2);
   border-radius: 6px;
   font-size: 85%;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 }
 
 :deep(.markdown-body pre.shiki) {
@@ -634,8 +655,8 @@ const showActionArea = computed(() => {
   border-radius: 3px;
 }
 
-:deep(.markdown-body img[src*="shields.io"]),
-:deep(.markdown-body img[src*="badge"]) {
+:deep(.markdown-body img[src*='shields.io']),
+:deep(.markdown-body img[src*='badge']) {
   display: inline-block;
   vertical-align: middle;
   height: auto;
@@ -719,7 +740,7 @@ const showActionArea = computed(() => {
 }
 
 :deep(.markdown-body summary::before) {
-  content: "▶";
+  content: '▶';
   font-size: 0.75em;
   transition: transform 0.2s ease;
 }
@@ -732,5 +753,4 @@ const showActionArea = computed(() => {
 :deep(.markdown-body details > *:not(summary)) {
   margin-top: 12px;
 }
-
 </style>

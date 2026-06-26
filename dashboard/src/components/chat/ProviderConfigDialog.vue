@@ -1,8 +1,5 @@
 <template>
-  <v-dialog
-    v-model="dialog"
-    max-width="1600"
-  >
+  <v-dialog v-model="dialog" max-width="1600">
     <v-card class="provider-config-dialog">
       <div class="provider-config-dialog__body">
         <ProviderChatCompletionPanel
@@ -15,21 +12,23 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue'
+import { computed } from 'vue';
+import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue']);
 const dialog = computed({
   get: () => props.modelValue,
-  set: (val) => { emit('update:modelValue', val); }
-})
+  set: (val) => {
+    emit('update:modelValue', val);
+  },
+});
 </script>
 
 <style scoped>

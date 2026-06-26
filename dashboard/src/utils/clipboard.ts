@@ -10,51 +10,69 @@ export async function copyToClipboard(
   const debugInfo = {
     length: text?.length ?? 0,
     trimmedLength: text?.trim().length ?? 0,
-    isSecureContext: typeof window !== "undefined" ? window.isSecureContext : false,
+    isSecureContext:
+      typeof window !== 'undefined' ? window.isSecureContext : false,
     hasClipboardApi:
-      typeof navigator !== "undefined" && Boolean(navigator.clipboard?.writeText),
+      typeof navigator !== 'undefined' &&
+      Boolean(navigator.clipboard?.writeText),
     containerTag: container?.tagName ?? null,
     containerInBody:
-      typeof document !== "undefined" &&
+      typeof document !== 'undefined' &&
       container !== null &&
       container !== undefined &&
       document.body.contains(container),
   };
 
   if (!text) {
-    console.debug("[clipboard] empty text payload", debugInfo);
+    console.debug('[clipboard] empty text payload', debugInfo);
     return false;
   }
 
-  console.debug("[clipboard] copy request", debugInfo);
+  console.debug('[clipboard] copy request', debugInfo);
 
-  if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.clipboard &&
+    window.isSecureContext
+  ) {
     try {
       await navigator.clipboard.writeText(text);
-      console.info("[clipboard] copied via Clipboard API", debugInfo);
+      console.info('[clipboard] copied via Clipboard API', debugInfo);
       return true;
     } catch (err) {
-      console.warn("[clipboard] Clipboard API failed, falling back:", err, debugInfo);
+      console.warn(
+        '[clipboard] Clipboard API failed, falling back:',
+        err,
+        debugInfo,
+      );
     }
   }
 
   const fallbackOk = fallbackCopy(text, container);
   if (fallbackOk) {
-    console.info("[clipboard] fallback succeeded via document.execCommand('copy')", debugInfo);
+    console.info(
+      "[clipboard] fallback succeeded via document.execCommand('copy')",
+      debugInfo,
+    );
   } else {
-    console.warn("[clipboard] fallback failed via document.execCommand('copy')", debugInfo);
+    console.warn(
+      "[clipboard] fallback failed via document.execCommand('copy')",
+      debugInfo,
+    );
   }
   return fallbackOk;
 }
 
 function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
-  if (typeof document === "undefined" || !document.body) return false;
+  if (typeof document === 'undefined' || !document.body) return false;
 
   const mountTarget =
     container && document.body.contains(container) ? container : document.body;
-  const textArea = document.createElement("textarea");
+  const textArea = document.createElement('textarea');
   const activeElement =
-    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
   const selection = document.getSelection();
   const selectedRanges = selection
     ? Array.from({ length: selection.rangeCount }, (_, index) =>
@@ -65,11 +83,11 @@ function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
   textArea.value = text;
   textArea.readOnly = true;
   Object.assign(textArea.style, {
-    position: "fixed",
-    left: "-9999px",
-    top: "0",
-    opacity: "0",
-    pointerEvents: "none",
+    position: 'fixed',
+    left: '-9999px',
+    top: '0',
+    opacity: '0',
+    pointerEvents: 'none',
   });
 
   mountTarget.appendChild(textArea);
@@ -78,9 +96,9 @@ function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
   textArea.setSelectionRange(0, text.length);
 
   try {
-    return document.execCommand("copy");
+    return document.execCommand('copy');
   } catch (err) {
-    console.error("Fallback copy failed:", err);
+    console.error('Fallback copy failed:', err);
     return false;
   } finally {
     if (textArea.parentNode) {
@@ -88,7 +106,9 @@ function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
     }
     if (selection) {
       selection.removeAllRanges();
-      selectedRanges.forEach((range) => { selection.addRange(range); });
+      selectedRanges.forEach((range) => {
+        selection.addRange(range);
+      });
     }
     activeElement?.focus?.();
   }

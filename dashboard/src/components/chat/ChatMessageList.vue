@@ -11,7 +11,11 @@
         class="message-row"
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
       >
-        <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" :size="avatarSize">
+        <v-avatar
+          v-if="!isUserMessage(msg)"
+          class="bot-avatar"
+          :size="avatarSize"
+        >
           <v-progress-circular
             v-if="isMessageStreaming(msg, msgIndex)"
             class="bot-streaming-spinner"
@@ -77,7 +81,7 @@
             @mouseup="handleMouseUp($event, msg)"
           >
             <div v-if="messageContent(msg).isLoading" class="loading-message">
-              <span>{{ tm("message.loading") }}</span>
+              <span>{{ tm('message.loading') }}</span>
             </div>
 
             <template v-else-if="isEditingMessage(msg)">
@@ -102,7 +106,7 @@
                     variant="text"
                     @click="emit('cancelEdit')"
                   >
-                    {{ t("core.common.cancel") }}
+                    {{ t('core.common.cancel') }}
                   </v-btn>
                   <v-btn
                     class="inline-message-editor-action"
@@ -112,7 +116,7 @@
                     :loading="savingEdit"
                     @click="emit('saveEdit')"
                   >
-                    {{ t("core.common.save") }}
+                    {{ t('core.common.save') }}
                   </v-btn>
                 </div>
               </div>
@@ -148,18 +152,22 @@
                       @click="scrollToMessage(part.message_id)"
                     >
                       <v-icon size="15">mdi-reply</v-icon>
-                      <span>{{ replyPreview(part.message_id, part.selected_text) }}</span>
+                      <span>{{
+                        replyPreview(part.message_id, part.selected_text)
+                      }}</span>
                     </button>
 
                     <div
                       v-else-if="part.type === 'plain' && isUserMessage(msg)"
                       class="plain-content"
                     >
-                      {{ part.text || "" }}
+                      {{ part.text || '' }}
                     </div>
 
                     <div
-                      v-else-if="part.type === 'plain' && messageThreads(msg).length"
+                      v-else-if="
+                        part.type === 'plain' && messageThreads(msg).length
+                      "
                       class="threaded-message-content"
                     >
                       <ThreadedMarkdownMessagePart
@@ -188,7 +196,10 @@
                       type="button"
                       @click="openImage(partUrl(part))"
                     >
-                      <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                      <img
+                        :src="partUrl(part)"
+                        :alt="part.filename || 'image'"
+                      />
                     </button>
 
                     <audio
@@ -207,7 +218,7 @@
 
                     <div v-else-if="part.type === 'file'" class="file-part">
                       <v-icon size="20">mdi-file-document-outline</v-icon>
-                      <span>{{ part.filename || "file" }}</span>
+                      <span>{{ part.filename || 'file' }}</span>
                       <v-btn
                         icon="mdi-download"
                         size="x-small"
@@ -221,15 +232,21 @@
                       />
                     </div>
 
-                    <div v-else-if="part.type === 'tool_call'" class="tool-call-block">
+                    <div
+                      v-else-if="part.type === 'tool_call'"
+                      class="tool-call-block"
+                    >
                       <template
                         v-for="tool in part.tool_calls || []"
                         :key="tool.id || tool.name"
                       >
-                        <ToolCallItem v-if="isIPythonToolCall(tool)" :is-dark="isDark">
+                        <ToolCallItem
+                          v-if="isIPythonToolCall(tool)"
+                          :is-dark="isDark"
+                        >
                           <template #label>
                             <v-icon size="16">mdi-code-json</v-icon>
-                            <span>{{ tool.name || "python" }}</span>
+                            <span>{{ tool.name || 'python' }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
                             </span>
@@ -299,26 +316,37 @@
                   v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
                   class="stats-row"
                 >
-                  <span>{{ tm("stats.cachedTokens") }}</span>
+                  <span>{{ tm('stats.cachedTokens') }}</span>
                   <strong>{{
                     cachedInputTokens(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm("stats.inputTokens") }}</span>
-                  <strong>{{ inputTokens(messageContent(msg).agentStats) }}</strong>
+                  <span>{{ tm('stats.inputTokens') }}</span>
+                  <strong>{{
+                    inputTokens(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm("stats.outputTokens") }}</span>
-                  <strong>{{ outputTokens(messageContent(msg).agentStats) }}</strong>
+                  <span>{{ tm('stats.outputTokens') }}</span>
+                  <strong>{{
+                    outputTokens(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
-                <div v-if="agentTtft(messageContent(msg).agentStats)" class="stats-row">
-                  <span>{{ tm("stats.ttft") }}</span>
-                  <strong>{{ agentTtft(messageContent(msg).agentStats) }}</strong>
+                <div
+                  v-if="agentTtft(messageContent(msg).agentStats)"
+                  class="stats-row"
+                >
+                  <span>{{ tm('stats.ttft') }}</span>
+                  <strong>{{
+                    agentTtft(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm("stats.duration") }}</span>
-                  <strong>{{ agentDuration(messageContent(msg).agentStats) }}</strong>
+                  <span>{{ tm('stats.duration') }}</span>
+                  <strong>{{
+                    agentDuration(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
               </v-card>
             </v-menu>
@@ -335,7 +363,9 @@
                   type="button"
                 >
                   <v-icon size="14">mdi-source-branch</v-icon>
-                  <span>{{ threadCountLabel(messageThreads(msg).length) }}</span>
+                  <span>{{
+                    threadCountLabel(messageThreads(msg).length)
+                  }}</span>
                 </button>
               </template>
               <v-list-item
@@ -387,46 +417,46 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
-import axios from "axios";
-import { fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
+import { computed, nextTick, reactive, ref } from 'vue';
+import axios from 'axios';
+import { fileApi } from '@/api/v1';
+import { setCustomComponents } from 'markstream-vue';
+import 'markstream-vue/index.css';
 import RegenerateMenu, {
   type RegenerateModelSelection,
-} from "@/components/chat/RegenerateMenu.vue";
-import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
-import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
+} from '@/components/chat/RegenerateMenu.vue';
+import ThreadedMarkdownMessagePart from '@/components/chat/ThreadedMarkdownMessagePart.vue';
+import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
+import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
+import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
+import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
+import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
+import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
+import ThreadNode from '@/components/chat/message_list_comps/ThreadNode.vue';
+import ActionRef from '@/components/chat/message_list_comps/ActionRef.vue';
+import MarkdownMessagePart from '@/components/chat/message_list_comps/MarkdownMessagePart.vue';
+import ThemeAwareMarkdownCodeBlock from '@/components/shared/ThemeAwareMarkdownCodeBlock.vue';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
-} from "@/composables/useMessages";
+} from '@/composables/useMessages';
 import type {
   ChatContent,
   ChatRecord,
   ChatThread,
   MessagePart,
-} from "@/composables/useMessages";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
+} from '@/composables/useMessages';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { copyToClipboard } from '@/utils/clipboard';
 
 const props = withDefaults(
   defineProps<{
     messages: ChatRecord[];
     isDark?: boolean;
     isStreaming?: boolean;
-    variant?: "main" | "thread";
+    variant?: 'main' | 'thread';
     enableEdit?: boolean;
     enableRegenerate?: boolean;
     enableThreadSelection?: boolean;
@@ -439,20 +469,20 @@ const props = withDefaults(
   {
     isDark: false,
     isStreaming: false,
-    variant: "main",
+    variant: 'main',
     enableEdit: false,
     enableRegenerate: false,
     enableThreadSelection: false,
     enableCopy: true,
     manageRefsSidebar: true,
     editingMessageId: null,
-    editDraft: "",
+    editDraft: '',
     savingEdit: false,
   },
 );
 
 const emit = defineEmits<{
-  "update:editDraft": [value: string];
+  'update:editDraft': [value: string];
   openEdit: [message: ChatRecord];
   cancelEdit: [];
   saveEdit: [];
@@ -467,21 +497,21 @@ const emit = defineEmits<{
   openRefs: [refs: unknown];
 }>();
 
-setCustomComponents("chat-message", {
+setCustomComponents('chat-message', {
   ref: RefNode,
   thread: ThreadNode,
   code_block: ThemeAwareMarkdownCodeBlock,
 });
 
 const { t } = useI18n();
-const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const { tm } = useModuleI18n('features/chat');
+const customMarkdownTags = ['ref'];
 const downloadingFiles = ref(new Set<string>());
-const imagePreview = reactive({ visible: false, url: "" });
+const imagePreview = reactive({ visible: false, url: '' });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const listRoot = ref<HTMLElement | null>(null);
-const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
+const avatarSize = computed(() => (props.variant === 'thread' ? 36 : 56));
 
 interface MessageRefItem {
   index?: unknown;
@@ -507,22 +537,22 @@ interface AgentStatsLike {
 }
 
 function isUserMessage(message: ChatRecord) {
-  return messageContent(message).type === "user";
+  return messageContent(message).type === 'user';
 }
 
 function messageContent(message: ChatRecord): ChatContent {
-  return message.content || { type: "bot", message: [] };
+  return message.content || { type: 'bot', message: [] };
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
   const parts = messageContent(message).message;
   if (Array.isArray(parts)) return parts;
-  if (typeof parts === "string") return [{ type: "plain", text: parts }];
+  if (typeof parts === 'string') return [{ type: 'plain', text: parts }];
   return [];
 }
 
 function isAttachmentPart(part: MessagePart) {
-  return ["image", "record", "video", "file"].includes(part.type);
+  return ['image', 'record', 'video', 'file'].includes(part.type);
 }
 
 function userAttachmentParts(message: ChatRecord) {
@@ -533,13 +563,13 @@ function userAttachmentParts(message: ChatRecord) {
 function hasImageOnlyAttachments(message: ChatRecord) {
   const attachments = userAttachmentParts(message);
   return (
-    attachments.length > 0 &&
-    attachments.every((part) => part.type === "image")
+    attachments.length > 0 && attachments.every((part) => part.type === 'image')
   );
 }
 
 function bubbleParts(message: ChatRecord) {
-  if (!isUserMessage(message)) return displayMessageParts(messageContent(message));
+  if (!isUserMessage(message))
+    return displayMessageParts(messageContent(message));
   return messageParts(message).filter((part) => !isAttachmentPart(part));
 }
 
@@ -573,11 +603,11 @@ function isEditingMessage(message: ChatRecord) {
 function canEditMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableEdit &&
-      isUserMessage(message) &&
-      messageIndex === latestEditableUserIndex() &&
-      message.id !== null &&
-      message.id !== undefined &&
-      !String(message.id).startsWith("local-")
+    isUserMessage(message) &&
+    messageIndex === latestEditableUserIndex() &&
+    message.id !== null &&
+    message.id !== undefined &&
+    !String(message.id).startsWith('local-')
   );
 }
 
@@ -588,7 +618,7 @@ function latestEditableUserIndex() {
       isUserMessage(message) &&
       message.id !== null &&
       message.id !== undefined &&
-      !String(message.id).startsWith("local-")
+      !String(message.id).startsWith('local-')
     ) {
       return index;
     }
@@ -616,7 +646,7 @@ function showMessageMeta(message: ChatRecord, messageIndex: number) {
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
   if (isUserMessage(message)) {
     const parts = bubbleParts(message);
-    return parts.length ? [{ kind: "content", parts }] : [];
+    return parts.length ? [{ kind: 'content', parts }] : [];
   }
   return buildMessageBlocks(messageContent(message));
 }
@@ -624,80 +654,80 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
   return renderBlocks(message)
     .slice(blockIndex + 1)
-    .some((block) => block.kind === "content");
+    .some((block) => block.kind === 'content');
 }
 
 const attachmentTypeStyles: Record<
   string,
   { color: string; icon: string; label: string }
 > = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
+  pdf: { color: '#d32f2f', icon: 'mdi-file-pdf-box', label: 'PDF' },
+  txt: { color: '#1976d2', icon: 'mdi-file-document-outline', label: 'TXT' },
+  md: { color: '#1976d2', icon: 'mdi-language-markdown-outline', label: 'MD' },
   markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
+    color: '#1976d2',
+    icon: 'mdi-language-markdown-outline',
+    label: 'MD',
   },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
+  doc: { color: '#2b579a', icon: 'mdi-file-word-box', label: 'DOC' },
+  docx: { color: '#2b579a', icon: 'mdi-file-word-box', label: 'DOCX' },
+  xls: { color: '#217346', icon: 'mdi-file-excel-box', label: 'XLS' },
+  xlsx: { color: '#217346', icon: 'mdi-file-excel-box', label: 'XLSX' },
+  csv: { color: '#217346', icon: 'mdi-file-delimited-outline', label: 'CSV' },
+  ppt: { color: '#d24726', icon: 'mdi-file-powerpoint-box', label: 'PPT' },
+  pptx: { color: '#d24726', icon: 'mdi-file-powerpoint-box', label: 'PPTX' },
+  zip: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'ZIP' },
+  rar: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'RAR' },
+  '7z': { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: '7Z' },
+  tar: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'TAR' },
+  gz: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'GZ' },
+  json: { color: '#6a1b9a', icon: 'mdi-code-json', label: 'JSON' },
+  yaml: { color: '#6a1b9a', icon: 'mdi-code-braces', label: 'YAML' },
+  yml: { color: '#6a1b9a', icon: 'mdi-code-braces', label: 'YML' },
+  js: { color: '#b8860b', icon: 'mdi-language-javascript', label: 'JS' },
+  ts: { color: '#3178c6', icon: 'mdi-language-typescript', label: 'TS' },
+  html: { color: '#e34c26', icon: 'mdi-language-html5', label: 'HTML' },
+  css: { color: '#264de4', icon: 'mdi-language-css3', label: 'CSS' },
+  py: { color: '#3776ab', icon: 'mdi-language-python', label: 'PY' },
+  java: { color: '#b07219', icon: 'mdi-language-java', label: 'JAVA' },
+  mp3: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'MP3' },
+  wav: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'WAV' },
+  flac: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'FLAC' },
+  mp4: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'MP4' },
+  mov: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'MOV' },
+  webm: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'WEBM' },
 };
 
 function attachmentName(part: MessagePart) {
-  return part.embedded_file?.filename || part.filename || part.type || "file";
+  return part.embedded_file?.filename || part.filename || part.type || 'file';
 }
 
 function attachmentExtension(part: MessagePart) {
   const name = attachmentName(part);
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
+  const extension = name.split('.').pop()?.toLowerCase() || '';
+  return extension === name.toLowerCase() ? '' : extension;
 }
 
 function attachmentPresentation(part: MessagePart) {
-  if (part.type === "record") {
-    return { color: "#00897b", icon: "mdi-microphone", label: "AUDIO" };
+  if (part.type === 'record') {
+    return { color: '#00897b', icon: 'mdi-microphone', label: 'AUDIO' };
   }
-  if (part.type === "video") {
-    return { color: "#5e35b1", icon: "mdi-file-video-outline", label: "VIDEO" };
+  if (part.type === 'video') {
+    return { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'VIDEO' };
   }
   const extension = attachmentExtension(part);
   return (
     attachmentTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
+      color: '#607d8b',
+      icon: 'mdi-file-document-outline',
+      label: extension ? extension.slice(0, 4).toUpperCase() : 'FILE',
     }
   );
 }
 
 function handleMouseUp(event: MouseEvent, message: ChatRecord) {
   if (props.enableThreadSelection && !isUserMessage(message)) {
-    emit("selectBotText", event, message);
+    emit('selectBotText', event, message);
   }
 }
 
@@ -706,11 +736,11 @@ function messageThreads(message: ChatRecord) {
 }
 
 function threadCountLabel(count: number) {
-  return tm("thread.count", { count });
+  return tm('thread.count', { count });
 }
 
 function threadPreview(thread: ChatThread) {
-  return truncate(thread.selected_text || tm("thread.title"), 48);
+  return truncate(thread.selected_text || tm('thread.title'), 48);
 }
 
 function partUrl(part: MessagePart) {
@@ -722,14 +752,14 @@ function partUrl(part: MessagePart) {
   if (part.filename) {
     return fileApi.byNameUrl(part.filename);
   }
-  return "";
+  return '';
 }
 
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
-    .filter((part) => part.type === "plain" && part.text)
+    .filter((part) => part.type === 'plain' && part.text)
     .map((part) => part.text)
-    .join("\n");
+    .join('\n');
 }
 
 function replyPreview(messageId?: string | number, fallback?: string) {
@@ -737,8 +767,8 @@ function replyPreview(messageId?: string | number, fallback?: string) {
   const found = props.messages.find(
     (message) => String(message.id) === String(messageId),
   );
-  const text = found ? plainTextFromMessage(found) : "";
-  return text ? truncate(text, 80) : tm("reply.replyTo");
+  const text = found ? plainTextFromMessage(found) : '';
+  return text ? truncate(text, 80) : tm('reply.replyTo');
 }
 
 function truncate(value: string, max: number) {
@@ -753,13 +783,13 @@ function scrollToMessage(messageId?: string | number) {
   if (index < 0) return;
   void nextTick(() => {
     listRoot.value
-      ?.querySelectorAll(".message-row")
-      [index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      ?.querySelectorAll('.message-row')
+      [index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 }
 
 function formatJson(value: unknown) {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     const parsed = parseJsonSafe(value);
     if (parsed !== value) return JSON.stringify(parsed, null, 2);
     return value;
@@ -767,12 +797,12 @@ function formatJson(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    return String(value ?? "");
+    return String(value ?? '');
   }
 }
 
 function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -806,7 +836,7 @@ function normalizeRefItems(items: unknown[]) {
       const refItem = item as Partial<MessageRefItem>;
       return {
         index: refItem.index,
-        title: refItem.title || refItem.url || tm("refs.title"),
+        title: refItem.title || refItem.url || tm('refs.title'),
         url: refItem.url,
         snippet: refItem.snippet,
         favicon: refItem.favicon,
@@ -817,11 +847,11 @@ function normalizeRefItems(items: unknown[]) {
 
 function handleOpenRefs(refs: unknown) {
   if (!props.manageRefsSidebar) {
-    emit("openRefs", refs);
+    emit('openRefs', refs);
     return;
   }
   selectedRefs.value =
-    refs && typeof refs === "object"
+    refs && typeof refs === 'object'
       ? (refs as Record<string, unknown>)
       : undefined;
   refsSidebarOpen.value = true;
@@ -831,20 +861,20 @@ function normalizeToolCall(tool: Record<string, unknown>) {
   const normalized = { ...tool };
   normalized.args = normalized.args ?? normalized.arguments ?? {};
   normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
+  if (normalized.result && typeof normalized.result === 'object') {
     normalized.result = JSON.stringify(normalized.result, null, 2);
   }
   return normalized;
 }
 
 function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
+  const name = String(tool.name || '').toLowerCase();
+  return name.includes('python') || name.includes('ipython');
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
+  if (tool.finished_ts) return tm('toolStatus.done');
+  return tm('toolStatus.running');
 }
 
 async function copyMessage(message: ChatRecord) {
@@ -854,15 +884,15 @@ async function copyMessage(message: ChatRecord) {
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || "";
+  const key = part.attachment_id || part.filename || '';
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
-    const response = await axios.get(partUrl(part), { responseType: "blob" });
+    const response = await axios.get(partUrl(part), { responseType: 'blob' });
     const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement("a");
+    const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = part.filename || "file";
+    anchor.download = part.filename || 'file';
     anchor.click();
     URL.revokeObjectURL(url);
   } finally {
@@ -879,13 +909,13 @@ function openImage(url: string) {
 
 function closeImage() {
   imagePreview.visible = false;
-  imagePreview.url = "";
+  imagePreview.url = '';
 }
 
 function formatTime(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function inputTokens(stats: AgentStatsLike | unknown) {
@@ -894,41 +924,46 @@ function inputTokens(stats: AgentStatsLike | unknown) {
 }
 
 function outputTokens(stats: AgentStatsLike | unknown) {
-  return Number((stats as AgentStatsLike | undefined)?.token_usage?.output) || 0;
+  return (
+    Number((stats as AgentStatsLike | undefined)?.token_usage?.output) || 0
+  );
 }
 
 function cachedInputTokens(stats: AgentStatsLike | unknown) {
   return (
-    Number((stats as AgentStatsLike | undefined)?.token_usage?.input_cached) || 0
+    Number((stats as AgentStatsLike | undefined)?.token_usage?.input_cached) ||
+    0
   );
 }
 
 function agentDuration(stats: AgentStatsLike | unknown) {
   const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
+    'duration',
+    'total_duration',
   ]);
   if (directDuration !== null) return formatDuration(directDuration);
 
-  const startTime = readPositiveNumber(stats, ["start_time"]);
-  const endTime = readPositiveNumber(stats, ["end_time"]);
-  if (startTime === null || endTime === null || endTime < startTime) return "-";
+  const startTime = readPositiveNumber(stats, ['start_time']);
+  const endTime = readPositiveNumber(stats, ['end_time']);
+  if (startTime === null || endTime === null || endTime < startTime) return '-';
   return formatDuration(endTime - startTime);
 }
 
 function agentTtft(stats: AgentStatsLike | unknown) {
   const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
+    'time_to_first_token',
+    'ttft',
+    'first_token_latency',
   ]);
-  if (ttft === null) return "";
+  if (ttft === null) return '';
   return formatDuration(ttft);
 }
 
 function readPositiveNumber(source: AgentStatsLike | unknown, keys: string[]) {
   for (const key of keys) {
-    const value = Number((source as Record<string, unknown> | undefined)?.[key]);
+    const value = Number(
+      (source as Record<string, unknown> | undefined)?.[key],
+    );
     if (Number.isFinite(value) && value > 0) return value;
   }
   return null;

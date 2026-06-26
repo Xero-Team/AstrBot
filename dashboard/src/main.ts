@@ -26,7 +26,9 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
 
     // 1. 若当前是 system 模式，重新用 matchMedia 计算，防止 SSR / 构建时偏差
     if (customizer.themeMode === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const prefersDark = window.matchMedia(
+        '(prefers-color-scheme: dark)',
+      ).matches;
       const uiTheme = prefersDark ? 'PurpleThemeDark' : 'PurpleTheme';
       customizer.uiTheme = uiTheme;
       localStorage.setItem('uiTheme', uiTheme);
@@ -45,8 +47,10 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
         if (!theme?.colors) return;
         if (storedPrimary) theme.colors.primary = storedPrimary;
         if (storedSecondary) theme.colors.secondary = storedSecondary;
-        if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
-        if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
+        if (storedPrimary && theme.colors.darkprimary)
+          theme.colors.darkprimary = storedPrimary;
+        if (storedSecondary && theme.colors.darksecondary)
+          theme.colors.darksecondary = storedSecondary;
       });
     }
 
@@ -63,31 +67,33 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
 }
 
 // 初始化新的i18n系统，等待完成后再挂载应用
-void setupI18n().then(async () => {
-  console.log('🌍 新i18n系统初始化完成');
+void setupI18n()
+  .then(async () => {
+    console.log('🌍 新i18n系统初始化完成');
 
-  const app = createApp(App);
-  const pinia = createPinia();
-  app.use(pinia);
-  app.use(router);
-  app.use(vuetify);
-  app.use(confirmPlugin);
-  await router.isReady();
-  app.mount('#app');
+    const app = createApp(App);
+    const pinia = createPinia();
+    app.use(pinia);
+    app.use(router);
+    app.use(vuetify);
+    app.use(confirmPlugin);
+    await router.isReady();
+    app.mount('#app');
 
-  setupThemeSync(pinia);
-}).catch(error => {
-  console.error('❌ 新i18n系统初始化失败:', error);
+    setupThemeSync(pinia);
+  })
+  .catch((error) => {
+    console.error('❌ 新i18n系统初始化失败:', error);
 
-  // 即使i18n初始化失败，也要挂载应用（使用回退机制）
-  const app = createApp(App);
-  const pinia = createPinia();
-  app.use(pinia);
-  app.use(router);
-  app.use(vuetify);
-  app.use(confirmPlugin);
-  app.mount('#app');
-  waitForRouterReadyInBackground(router);
+    // 即使i18n初始化失败，也要挂载应用（使用回退机制）
+    const app = createApp(App);
+    const pinia = createPinia();
+    app.use(pinia);
+    app.use(router);
+    app.use(vuetify);
+    app.use(confirmPlugin);
+    app.mount('#app');
+    waitForRouterReadyInBackground(router);
 
-  setupThemeSync(pinia);
-});
+    setupThemeSync(pinia);
+  });

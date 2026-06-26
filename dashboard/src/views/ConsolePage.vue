@@ -19,29 +19,48 @@ const { tm } = useModuleI18n('features/console');
       <div class="d-flex align-center">
         <v-switch
           v-model="autoScrollEnabled"
-          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
+          :label="
+            autoScrollEnabled
+              ? tm('autoScroll.enabled')
+              : tm('autoScroll.disabled')
+          "
           hide-details
           density="compact"
           inset
           color="primary"
-          style="margin-right: 16px;"
+          style="margin-right: 16px"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
           <template #activator="{ props }">
-            <v-btn variant="plain" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
+            <v-btn variant="plain" v-bind="props">{{
+              tm('pipInstall.button')
+            }}</v-btn>
           </template>
           <v-card>
             <v-card-title>
               <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
             </v-card-title>
             <v-card-text>
-              <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
-              <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
+              <v-text-field
+                v-model="pipInstallPayload.package"
+                :label="tm('pipInstall.packageLabel')"
+                variant="outlined"
+              ></v-text-field>
+              <v-text-field
+                v-model="pipInstallPayload.mirror"
+                :label="tm('pipInstall.mirrorLabel')"
+                variant="outlined"
+              ></v-text-field>
               <small>{{ tm('pipInstall.mirrorHint') }}</small>
             </v-card-text>
             <v-card-actions>
               <v-spacer></v-spacer>
-              <v-btn color="blue-darken-1" variant="text" :loading="loading" @click="pipInstall">
+              <v-btn
+                color="blue-darken-1"
+                variant="text"
+                :loading="loading"
+                @click="pipInstall"
+              >
                 {{ tm('pipInstall.installButton') }}
               </v-btn>
             </v-card-actions>
@@ -56,18 +75,19 @@ const { tm } = useModuleI18n('features/console');
 export default {
   name: 'ConsolePage',
   components: {
-    ConsoleDisplayer
+    ConsoleDisplayer,
   },
   data() {
     return {
-      autoScrollEnabled: localStorage.getItem('console_auto_scroll') !== 'false',
+      autoScrollEnabled:
+        localStorage.getItem('console_auto_scroll') !== 'false',
       pipDialog: false,
       pipInstallPayload: {
         package: '',
-        mirror: ''
+        mirror: '',
       },
-      loading: false
-    }
+      loading: false,
+    };
   },
   watch: {
     autoScrollEnabled(val) {
@@ -75,7 +95,7 @@ export default {
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }
-    }
+    },
   },
   mounted() {
     if (this.$refs.consoleDisplayer) {
@@ -86,8 +106,9 @@ export default {
     pipInstall() {
       const toast = useToast();
       this.loading = true;
-      updatesApi.installPip(this.pipInstallPayload)
-        .then(res => {
+      updatesApi
+        .installPip(this.pipInstallPayload)
+        .then((res) => {
           if (res.data.status === 'ok') {
             toast.success(res.data.message || tm('pipInstall.installSuccess'));
             this.pipDialog = false;
@@ -95,15 +116,17 @@ export default {
             toast.error(res.data.message || tm('pipInstall.installFailed'));
           }
         })
-        .catch(err => {
-          toast.error(err.response?.data?.message || tm('pipInstall.requestFailed'));
-        }).finally(() => {
+        .catch((err) => {
+          toast.error(
+            err.response?.data?.message || tm('pipInstall.requestFailed'),
+          );
+        })
+        .finally(() => {
           this.loading = false;
         });
-    }
-  }
-}
-
+    },
+  },
+};
 </script>
 
 <style scoped>

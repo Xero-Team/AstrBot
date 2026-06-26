@@ -1,5 +1,9 @@
 <template>
-  <v-dialog v-model="visible" max-width="520" :persistent="blockingRecovery || restarting">
+  <v-dialog
+    v-model="visible"
+    max-width="520"
+    :persistent="blockingRecovery || restarting"
+  >
     <v-card>
       <v-card-title class="upgrade-recovery-title">
         <span>{{ t('core.common.upgradeRecovery.title') }}</span>
@@ -14,7 +18,12 @@
             })
           }}
         </p>
-        <v-alert type="warning" variant="tonal" density="comfortable" class="mb-3">
+        <v-alert
+          type="warning"
+          variant="tonal"
+          density="comfortable"
+          class="mb-3"
+        >
           {{ t('core.common.upgradeRecovery.hint') }}
         </v-alert>
         <v-progress-linear
@@ -30,7 +39,12 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn v-if="!blockingRecovery" variant="text" :disabled="restarting" @click="dismiss">
+        <v-btn
+          v-if="!blockingRecovery"
+          variant="text"
+          :disabled="restarting"
+          @click="dismiss"
+        >
           {{ t('core.common.upgradeRecovery.laterButton') }}
         </v-btn>
         <v-btn
@@ -93,8 +107,8 @@ function versionsMismatch(core?: string | null, dashboard?: string | null) {
   const normalizedDashboard = normalizeVersion(dashboard);
   return Boolean(
     normalizedCore &&
-      normalizedDashboard &&
-      normalizedCore !== normalizedDashboard,
+    normalizedDashboard &&
+    normalizedCore !== normalizedDashboard,
   );
 }
 

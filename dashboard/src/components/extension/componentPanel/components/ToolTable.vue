@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import type { BuiltinToolConfigTag, ToolConfigCondition, ToolItem } from '../types';
+import type {
+  BuiltinToolConfigTag,
+  ToolConfigCondition,
+  ToolItem,
+} from '../types';
 
 const { tm: tmTool } = useModuleI18n('features/tooluse');
 
@@ -12,23 +16,48 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle-tool', tool: ToolItem): void;
-  (e: 'update-permission', tool: ToolItem, permission: 'admin' | 'member'): void;
+  (
+    e: 'update-permission',
+    tool: ToolItem,
+    permission: 'admin' | 'member',
+  ): void;
 }>();
 
 const toolHeaders = computed(() => [
   { title: tmTool('functionTools.title'), key: 'name', minWidth: '320px' },
   { title: tmTool('functionTools.description'), key: 'description' },
-  { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '100px' },
-  { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '140px' },
-  { title: tmTool('functionTools.table.permission'), key: 'permission', sortable: false, width: '110px' },
-  { title: tmTool('functionTools.table.actions'), key: 'actions', sortable: false, width: '100px' }
+  {
+    title: tmTool('functionTools.table.origin'),
+    key: 'origin',
+    sortable: false,
+    width: '100px',
+  },
+  {
+    title: tmTool('functionTools.table.originName'),
+    key: 'origin_name',
+    sortable: false,
+    width: '140px',
+  },
+  {
+    title: tmTool('functionTools.table.permission'),
+    key: 'permission',
+    sortable: false,
+    width: '110px',
+  },
+  {
+    title: tmTool('functionTools.table.actions'),
+    key: 'actions',
+    sortable: false,
+    width: '100px',
+  },
 ]);
 
-const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
+const parameterEntries = (tool: ToolItem) =>
+  Object.entries(tool.parameters?.properties || {});
 
 const formatConfigValue = (value: unknown) => {
   if (Array.isArray(value)) {
-    return value.map(item => String(item)).join(', ');
+    return value.map((item) => String(item)).join(', ');
   }
   if (typeof value === 'boolean') {
     return value ? 'true' : 'false';
@@ -47,29 +76,29 @@ const formatCondition = (condition: ToolConfigCondition) => {
   switch (condition.operator) {
     case 'truthy':
       return tmTool('functionTools.configTags.conditions.truthy', {
-        key: condition.key
+        key: condition.key,
       });
     case 'equals':
       return tmTool('functionTools.configTags.conditions.equals', {
         key: condition.key,
-        expected: formatConfigValue(condition.expected)
+        expected: formatConfigValue(condition.expected),
       });
     case 'in':
       return tmTool('functionTools.configTags.conditions.in', {
         key: condition.key,
-        expected: formatConfigValue(condition.expected)
+        expected: formatConfigValue(condition.expected),
       });
     default:
       return tmTool('functionTools.configTags.conditions.fallback', {
         key: condition.key,
-        actual: formatConfigValue(condition.actual)
+        actual: formatConfigValue(condition.actual),
       });
   }
 };
 
 const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
   if (tool.origin !== 'builtin') return [];
-  return (tool.builtin_config_tags || []).filter(tag => tag.enabled);
+  return (tool.builtin_config_tags || []).filter((tag) => tag.enabled);
 };
 
 const getPermissionColor = (permission?: string): string => {
@@ -107,7 +136,9 @@ const getPermissionLabel = (permission?: string): string => {
       <template #item.name="{ item }">
         <div class="py-2">
           <div class="d-flex flex-wrap align-center ga-1">
-            <div class="tool-name text-body-2 font-weight-medium">{{ item.name }}</div>
+            <div class="tool-name text-body-2 font-weight-medium">
+              {{ item.name }}
+            </div>
             <v-tooltip
               v-for="tag in enabledConfigTags(item)"
               :key="`${item.name}-${tag.conf_id}`"
@@ -127,7 +158,11 @@ const getPermissionLabel = (permission?: string): string => {
 
               <div class="tool-config-tooltip">
                 <div class="text-body-2 font-weight-medium mb-2">
-                  {{ tmTool('functionTools.configTags.tooltipTitle', { config: tag.conf_name }) }}
+                  {{
+                    tmTool('functionTools.configTags.tooltipTitle', {
+                      config: tag.conf_name,
+                    })
+                  }}
                 </div>
                 <div
                   v-for="(condition, index) in tag.matched_conditions"
@@ -143,19 +178,42 @@ const getPermissionLabel = (permission?: string): string => {
       </template>
 
       <template #item.description="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.description">
+        <div
+          class="text-body-2 text-medium-emphasis"
+          style="
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
+          :title="item.description"
+        >
           {{ item.description || '-' }}
         </div>
       </template>
 
       <template #item.origin="{ item }">
-        <v-chip size="x-small" variant="tonal" color="info" class="text-caption font-weight-medium">
+        <v-chip
+          size="x-small"
+          variant="tonal"
+          color="info"
+          class="text-caption font-weight-medium"
+        >
           {{ item.origin || '-' }}
         </v-chip>
       </template>
 
       <template #item.origin_name="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.origin_name">
+        <div
+          class="text-body-2 text-medium-emphasis"
+          style="
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
+          :title="item.origin_name"
+        >
           {{ item.origin_name || '-' }}
         </div>
       </template>
@@ -190,14 +248,18 @@ const getPermissionLabel = (permission?: string): string => {
               :active="item.permission !== 'admin'"
               @click="emit('update-permission', item, 'member')"
             >
-              <v-list-item-title>{{ tmTool('functionTools.table.permissionEveryone') }}</v-list-item-title>
+              <v-list-item-title>{{
+                tmTool('functionTools.table.permissionEveryone')
+              }}</v-list-item-title>
             </v-list-item>
             <v-list-item
               :value="'admin'"
               :active="item.permission === 'admin'"
               @click="emit('update-permission', item, 'admin')"
             >
-              <v-list-item-title>{{ tmTool('functionTools.table.permissionAdmin') }}</v-list-item-title>
+              <v-list-item-title>{{
+                tmTool('functionTools.table.permissionAdmin')
+              }}</v-list-item-title>
             </v-list-item>
           </v-list>
         </v-menu>
@@ -218,7 +280,9 @@ const getPermissionLabel = (permission?: string): string => {
 
       <template #no-data>
         <div class="text-center pa-8">
-          <v-icon size="64" color="info" class="mb-4">mdi-function-variant</v-icon>
+          <v-icon size="64" color="info" class="mb-4"
+            >mdi-function-variant</v-icon
+          >
           <div class="text-h5 mb-2">{{ tmTool('functionTools.empty') }}</div>
         </div>
       </template>
@@ -228,31 +292,52 @@ const getPermissionLabel = (permission?: string): string => {
           <div class="d-flex align-start ga-4">
             <v-icon size="20" color="primary">mdi-code-json</v-icon>
             <div class="flex-1">
-              <div class="text-subtitle-2 font-weight-medium mb-2">{{ tmTool('functionTools.parameters') }}</div>
-              <div v-if="parameterEntries(item).length === 0" class="text-caption text-medium-emphasis">
+              <div class="text-subtitle-2 font-weight-medium mb-2">
+                {{ tmTool('functionTools.parameters') }}
+              </div>
+              <div
+                v-if="parameterEntries(item).length === 0"
+                class="text-caption text-medium-emphasis"
+              >
                 {{ tmTool('functionTools.noParameters') }}
               </div>
-              <v-table
-                v-else
-                density="compact"
-                class="param-table"
-              >
+              <v-table v-else density="compact" class="param-table">
                 <thead>
                   <tr>
-                    <th class="text-left text-caption text-medium-emphasis">{{ tmTool('functionTools.table.paramName') }}</th>
-                    <th class="text-left text-caption text-medium-emphasis" style="width: 140px;">{{ tmTool('functionTools.table.type') }}</th>
-                    <th class="text-left text-caption text-medium-emphasis">{{ tmTool('functionTools.table.description') }}</th>
+                    <th class="text-left text-caption text-medium-emphasis">
+                      {{ tmTool('functionTools.table.paramName') }}
+                    </th>
+                    <th
+                      class="text-left text-caption text-medium-emphasis"
+                      style="width: 140px"
+                    >
+                      {{ tmTool('functionTools.table.type') }}
+                    </th>
+                    <th class="text-left text-caption text-medium-emphasis">
+                      {{ tmTool('functionTools.table.description') }}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="([paramName, param]) in parameterEntries(item)" :key="paramName">
-                    <td class="font-weight-medium text-body-2">{{ paramName }}</td>
+                  <tr
+                    v-for="[paramName, param] in parameterEntries(item)"
+                    :key="paramName"
+                  >
+                    <td class="font-weight-medium text-body-2">
+                      {{ paramName }}
+                    </td>
                     <td class="text-body-2">
-                      <v-chip size="x-small" color="primary" class="text-caption">
+                      <v-chip
+                        size="x-small"
+                        color="primary"
+                        class="text-caption"
+                      >
                         {{ param?.type || '-' }}
                       </v-chip>
                     </td>
-                    <td class="text-body-2 text-medium-emphasis">{{ param?.description || '-' }}</td>
+                    <td class="text-body-2 text-medium-emphasis">
+                      {{ param?.description || '-' }}
+                    </td>
                   </tr>
                 </tbody>
               </v-table>

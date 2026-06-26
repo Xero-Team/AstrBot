@@ -1,11 +1,15 @@
 <template>
   <div class="d-flex align-center justify-space-between">
-    <span v-if="!hasSelection" style="color: rgb(var(--v-theme-primaryText));">
+    <span v-if="!hasSelection" style="color: rgb(var(--v-theme-primaryText))">
       {{ tm('providerSelector.notSelected') }}
     </span>
     <span v-else class="provider-name-text">
       <template v-if="multiple">
-        {{ tm('providerSelector.selectedCount', { count: selectedProviders.length }) }}
+        {{
+          tm('providerSelector.selectedCount', {
+            count: selectedProviders.length,
+          })
+        }}
       </template>
       <template v-else>
         {{ modelValue }}
@@ -16,7 +20,10 @@
     </v-btn>
   </div>
 
-  <div v-if="multiple && selectedProviders.length > 0" class="selected-preview mt-2">
+  <div
+    v-if="multiple && selectedProviders.length > 0"
+    class="selected-preview mt-2"
+  >
     <v-chip
       v-for="providerId in selectedProviders"
       :key="`preview-${providerId}`"
@@ -35,7 +42,7 @@
     <v-card>
       <v-card-title
         class="text-h3 py-4 d-flex align-center justify-space-between gap-4 flex-wrap"
-        style="font-weight: normal;"
+        style="font-weight: normal"
       >
         <span>{{ tm('providerSelector.dialogTitle') }}</span>
         <v-btn
@@ -48,13 +55,21 @@
           {{ tm('providerSelector.createProvider') }}
         </v-btn>
       </v-card-title>
-      
-      <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
-        <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
+
+      <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto">
+        <v-progress-linear
+          v-if="loading"
+          indeterminate
+          color="primary"
+        ></v-progress-linear>
 
         <div v-if="multiple && selectedProviders.length > 0" class="pa-3">
           <div class="text-caption text-medium-emphasis mb-2">
-            {{ tm('providerSelector.selectedCount', { count: selectedProviders.length }) }}
+            {{
+              tm('providerSelector.selectedCount', {
+                count: selectedProviders.length,
+              })
+            }}
           </div>
           <v-list density="compact" class="selected-order-list">
             <v-list-item
@@ -92,7 +107,7 @@
           </v-list>
           <v-divider class="ma-1"></v-divider>
         </div>
-        
+
         <v-list v-if="!loading && providerList.length > 0" density="compact">
           <!-- 不选择选项 -->
           <v-list-item
@@ -102,17 +117,24 @@
             :active="selectedProvider === ''"
             rounded="md"
             class="ma-1"
-            @click="selectProvider({ id: '' })">
-            <v-list-item-title>{{ tm('providerSelector.clearSelection') }}</v-list-item-title>
-            <v-list-item-subtitle>{{ tm('providerSelector.clearSelectionSubtitle') }}</v-list-item-subtitle>
-            
+            @click="selectProvider({ id: '' })"
+          >
+            <v-list-item-title>{{
+              tm('providerSelector.clearSelection')
+            }}</v-list-item-title>
+            <v-list-item-subtitle>{{
+              tm('providerSelector.clearSelectionSubtitle')
+            }}</v-list-item-subtitle>
+
             <template #append>
-              <v-icon v-if="selectedProvider === ''" color="primary">mdi-check-circle</v-icon>
+              <v-icon v-if="selectedProvider === ''" color="primary"
+                >mdi-check-circle</v-icon
+              >
             </template>
           </v-list-item>
-          
+
           <v-divider class="ma-1"></v-divider>
-          
+
           <v-list-item
             v-for="provider in providerList"
             :key="provider.id"
@@ -120,33 +142,43 @@
             :active="isProviderSelected(provider.id)"
             rounded="md"
             class="ma-1"
-            @click="selectProvider(provider)">
+            @click="selectProvider(provider)"
+          >
             <v-list-item-title>{{ provider.id }}</v-list-item-title>
             <v-list-item-subtitle>
-              {{ provider.type || provider.provider_type || tm('providerSelector.unknownType') }}
+              {{
+                provider.type ||
+                provider.provider_type ||
+                tm('providerSelector.unknownType')
+              }}
               <span v-if="provider.model">- {{ provider.model }}</span>
             </v-list-item-subtitle>
-            
+
             <template #append>
-              <v-icon v-if="isProviderSelected(provider.id)" color="primary">mdi-check-circle</v-icon>
+              <v-icon v-if="isProviderSelected(provider.id)" color="primary"
+                >mdi-check-circle</v-icon
+              >
             </template>
           </v-list-item>
         </v-list>
-        
-        <div v-else-if="!loading && providerList.length === 0" class="text-center py-8">
+
+        <div
+          v-else-if="!loading && providerList.length === 0"
+          class="text-center py-8"
+        >
           <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
           <p class="text-grey mt-4">{{ tm('providerSelector.noProviders') }}</p>
         </div>
       </v-card-text>
-      
+
       <v-divider></v-divider>
-      
+
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">{{ tm('providerSelector.cancelSelection') }}</v-btn>
-        <v-btn 
-          color="primary" 
-          @click="confirmSelection">
+        <v-btn variant="text" @click="cancelSelection">{{
+          tm('providerSelector.cancelSelection')
+        }}</v-btn>
+        <v-btn color="primary" @click="confirmSelection">
           {{ tm('providerSelector.confirmSelection') }}
         </v-btn>
       </v-card-actions>
@@ -168,9 +200,7 @@
         </v-btn>
       </div>
       <div class="provider-drawer-content">
-        <ProviderChatCompletionPanel
-          v-if="defaultTab === 'chat_completion'"
-        />
+        <ProviderChatCompletionPanel v-if="defaultTab === 'chat_completion'" />
         <ProviderPage v-else :default-tab="defaultTab" />
       </div>
     </v-card>
@@ -178,190 +208,198 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { providerApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
-import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue'
-import ProviderPage from '@/views/ProviderPage.vue'
+import { computed, ref, watch } from 'vue';
+import { providerApi } from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
+import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
+import ProviderPage from '@/views/ProviderPage.vue';
 
 const props = defineProps({
   modelValue: {
     type: [String, Array],
-    default: ''
+    default: '',
   },
   providerType: {
     type: String,
-    default: 'chat_completion'
+    default: 'chat_completion',
   },
   providerSubtype: {
     type: String,
-    default: ''
+    default: '',
   },
   buttonText: {
     type: String,
-    default: ''
+    default: '',
   },
   multiple: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
-const { tm } = useModuleI18n('core.shared')
+const emit = defineEmits(['update:modelValue']);
+const { tm } = useModuleI18n('core.shared');
 
-const dialog = ref(false)
-const providerList = ref([])
-const loading = ref(false)
-const selectedProvider = ref('')
-const selectedProviders = ref([])
-const providerDrawer = ref(false)
+const dialog = ref(false);
+const providerList = ref([]);
+const loading = ref(false);
+const selectedProvider = ref('');
+const selectedProviders = ref([]);
+const providerDrawer = ref(false);
 
 const hasSelection = computed(() => {
   if (props.multiple) {
-    return selectedProviders.value.length > 0
+    return selectedProviders.value.length > 0;
   }
-  return Boolean(props.modelValue)
-})
+  return Boolean(props.modelValue);
+});
 
 const defaultTab = computed(() => {
   if (props.providerType === 'agent_runner' && props.providerSubtype) {
-    return `select_agent_runner_provider:${props.providerSubtype}`
+    return `select_agent_runner_provider:${props.providerSubtype}`;
   }
-  return props.providerType || 'chat_completion'
-})
+  return props.providerType || 'chat_completion';
+});
 
 // 监听 modelValue 变化，同步到 selectedProvider
-watch(() => props.modelValue, (newValue) => {
-  if (props.multiple) {
-    selectedProviders.value = Array.isArray(newValue)
-      ? [...newValue.filter((v) => typeof v === 'string' && v)]
-      : []
-    return
-  }
-  selectedProvider.value = typeof newValue === 'string' ? newValue : ''
-}, { immediate: true })
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (props.multiple) {
+      selectedProviders.value = Array.isArray(newValue)
+        ? [...newValue.filter((v) => typeof v === 'string' && v)]
+        : [];
+      return;
+    }
+    selectedProvider.value = typeof newValue === 'string' ? newValue : '';
+  },
+  { immediate: true },
+);
 
 watch(providerDrawer, (isOpen, wasOpen) => {
   if (!isOpen && wasOpen) {
-    void loadProviders()
+    void loadProviders();
   }
-})
+});
 
 async function openDialog() {
   if (props.multiple) {
     selectedProviders.value = Array.isArray(props.modelValue)
       ? [...props.modelValue.filter((v) => typeof v === 'string' && v)]
-      : []
+      : [];
   } else {
-    selectedProvider.value = typeof props.modelValue === 'string' ? props.modelValue : ''
+    selectedProvider.value =
+      typeof props.modelValue === 'string' ? props.modelValue : '';
   }
-  dialog.value = true
-  await loadProviders()
+  dialog.value = true;
+  await loadProviders();
 }
 
 async function loadProviders() {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await providerApi.listByProviderType(props.providerType)
+    const response = await providerApi.listByProviderType(props.providerType);
     if (response.data.status === 'ok') {
-      const providers = response.data.data || []
+      const providers = response.data.data || [];
       providerList.value = props.providerSubtype
-        ? providers.filter((provider) => matchesProviderSubtype(provider, props.providerSubtype))
-        : providers
+        ? providers.filter((provider) =>
+            matchesProviderSubtype(provider, props.providerSubtype),
+          )
+        : providers;
     }
   } catch (error) {
-    console.error('加载提供商列表失败:', error)
-    providerList.value = []
+    console.error('加载提供商列表失败:', error);
+    providerList.value = [];
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function matchesProviderSubtype(provider, subtype) {
   if (!subtype) {
-    return true
+    return true;
   }
-  const normalized = String(subtype).toLowerCase()
+  const normalized = String(subtype).toLowerCase();
   const candidates = [provider.type, provider.provider, provider.id]
     .filter(Boolean)
-    .map((value) => String(value).toLowerCase())
-  return candidates.includes(normalized)
+    .map((value) => String(value).toLowerCase());
+  return candidates.includes(normalized);
 }
 
 function selectProvider(provider) {
   if (props.multiple) {
     if (!provider.id) {
-      selectedProviders.value = []
-      return
+      selectedProviders.value = [];
+      return;
     }
-    const idx = selectedProviders.value.indexOf(provider.id)
+    const idx = selectedProviders.value.indexOf(provider.id);
     if (idx >= 0) {
-      selectedProviders.value.splice(idx, 1)
+      selectedProviders.value.splice(idx, 1);
     } else {
-      selectedProviders.value.push(provider.id)
+      selectedProviders.value.push(provider.id);
     }
-    return
+    return;
   }
-  selectedProvider.value = provider.id
+  selectedProvider.value = provider.id;
 }
 
 function confirmSelection() {
   if (props.multiple) {
-    emit('update:modelValue', [...selectedProviders.value])
+    emit('update:modelValue', [...selectedProviders.value]);
   } else {
-    emit('update:modelValue', selectedProvider.value)
+    emit('update:modelValue', selectedProvider.value);
   }
-  dialog.value = false
+  dialog.value = false;
 }
 
 function cancelSelection() {
   if (props.multiple) {
     selectedProviders.value = Array.isArray(props.modelValue)
       ? [...props.modelValue.filter((v) => typeof v === 'string' && v)]
-      : []
+      : [];
   } else {
-    selectedProvider.value = typeof props.modelValue === 'string' ? props.modelValue : ''
+    selectedProvider.value =
+      typeof props.modelValue === 'string' ? props.modelValue : '';
   }
-  dialog.value = false
+  dialog.value = false;
 }
 
 function isProviderSelected(providerId) {
   if (props.multiple) {
-    return selectedProviders.value.includes(providerId)
+    return selectedProviders.value.includes(providerId);
   }
-  return selectedProvider.value === providerId
+  return selectedProvider.value === providerId;
 }
 
 function removeSelected(providerId) {
-  const idx = selectedProviders.value.indexOf(providerId)
+  const idx = selectedProviders.value.indexOf(providerId);
   if (idx >= 0) {
-    selectedProviders.value.splice(idx, 1)
+    selectedProviders.value.splice(idx, 1);
   }
 }
 
 function moveSelected(index, delta) {
-  const targetIndex = index + delta
+  const targetIndex = index + delta;
   if (
-    targetIndex < 0
-    || targetIndex >= selectedProviders.value.length
-    || index < 0
-    || index >= selectedProviders.value.length
+    targetIndex < 0 ||
+    targetIndex >= selectedProviders.value.length ||
+    index < 0 ||
+    index >= selectedProviders.value.length
   ) {
-    return
+    return;
   }
-  const copied = [...selectedProviders.value]
-  const [item] = copied.splice(index, 1)
-  copied.splice(targetIndex, 0, item)
-  selectedProviders.value = copied
+  const copied = [...selectedProviders.value];
+  const [item] = copied.splice(index, 1);
+  copied.splice(targetIndex, 0, item);
+  selectedProviders.value = copied;
 }
 
 function openProviderDrawer() {
-  providerDrawer.value = true
+  providerDrawer.value = true;
 }
 
 function closeProviderDrawer() {
-  providerDrawer.value = false
+  providerDrawer.value = false;
 }
 </script>
 

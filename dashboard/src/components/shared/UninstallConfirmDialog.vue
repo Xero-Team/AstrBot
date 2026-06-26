@@ -1,7 +1,7 @@
 <template>
-  <v-dialog 
-    v-model="show" 
-    max-width="500" 
+  <v-dialog
+    v-model="show"
+    max-width="500"
     @click:outside="handleCancel"
     @keydown.esc="handleCancel"
   >
@@ -9,16 +9,16 @@
       <v-card-title class="text-h5">
         {{ tm('dialogs.uninstall.title') }}
       </v-card-title>
-      
+
       <v-card-text>
         <div class="mb-4">
           {{ tm('dialogs.uninstall.message') }}
         </div>
-        
+
         <v-divider class="my-4"></v-divider>
-        
+
         <div class="text-subtitle-2 mb-3">{{ t('core.common.actions') }}:</div>
-        
+
         <v-checkbox
           v-model="deleteConfig"
           :label="tm('dialogs.uninstall.deleteConfig')"
@@ -29,13 +29,15 @@
           <template #append>
             <v-tooltip location="top">
               <template #activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" size="small" color="grey">mdi-information-outline</v-icon>
+                <v-icon v-bind="tooltipProps" size="small" color="grey"
+                  >mdi-information-outline</v-icon
+                >
               </template>
               <span>{{ tm('dialogs.uninstall.configHint') }}</span>
             </v-tooltip>
           </template>
         </v-checkbox>
-        
+
         <v-checkbox
           v-model="deleteData"
           :label="tm('dialogs.uninstall.deleteData')"
@@ -45,13 +47,15 @@
           <template #append>
             <v-tooltip location="top">
               <template #activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" size="small" color="grey">mdi-information-outline</v-icon>
+                <v-icon v-bind="tooltipProps" size="small" color="grey"
+                  >mdi-information-outline</v-icon
+                >
               </template>
               <span>{{ tm('dialogs.uninstall.dataHint') }}</span>
             </v-tooltip>
           </template>
         </v-checkbox>
-        
+
         <v-alert
           v-if="deleteConfig || deleteData"
           type="warning"
@@ -65,21 +69,13 @@
           {{ t('messages.validation.operation_cannot_be_undone') }}
         </v-alert>
       </v-card-text>
-      
+
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn
-          color="grey"
-          variant="text"
-          @click="handleCancel"
-        >
+        <v-btn color="grey" variant="text" @click="handleCancel">
           {{ t('core.common.cancel') }}
         </v-btn>
-        <v-btn
-          color="error"
-          variant="elevated"
-          @click="handleConfirm"
-        >
+        <v-btn color="error" variant="elevated" @click="handleConfirm">
           {{ t('core.common.confirm') }}
         </v-btn>
       </v-card-actions>
@@ -107,14 +103,17 @@ const show = ref(props.modelValue);
 const deleteConfig = ref(false);
 const deleteData = ref(false);
 
-watch(() => props.modelValue, (val) => {
-  show.value = val;
-  if (val) {
-    // 重置选项
-    deleteConfig.value = false;
-    deleteData.value = false;
-  }
-});
+watch(
+  () => props.modelValue,
+  (val) => {
+    show.value = val;
+    if (val) {
+      // 重置选项
+      deleteConfig.value = false;
+      deleteData.value = false;
+    }
+  },
+);
 
 watch(show, (val) => {
   emit('update:modelValue', val);

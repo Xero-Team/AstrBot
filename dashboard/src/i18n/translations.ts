@@ -133,7 +133,7 @@ export const translations = {
       status: zhCNStatus,
       navigation: zhCNNavigation,
       header: zhCNHeader,
-      shared: zhCNShared
+      shared: zhCNShared,
     },
     features: {
       chat: zhCNChat,
@@ -157,23 +157,23 @@ export const translations = {
       alkaid: {
         index: zhCNAlkaidIndex,
         'knowledge-base': zhCNAlkaidKnowledgeBase,
-        memory: zhCNAlkaidMemory
+        memory: zhCNAlkaidMemory,
       },
       'knowledge-base': {
         index: zhCNKnowledgeBaseIndex,
         detail: zhCNKnowledgeBaseDetail,
-        document: zhCNKnowledgeBaseDocument
+        document: zhCNKnowledgeBaseDocument,
       },
       persona: zhCNPersona,
       command: zhCNCommand,
       subagent: zhCNSubagent,
-      welcome: zhCNWelcome
+      welcome: zhCNWelcome,
     },
     messages: {
       errors: zhCNErrors,
       success: zhCNSuccess,
-      validation: zhCNValidation
-    }
+      validation: zhCNValidation,
+    },
   },
   'en-US': {
     core: {
@@ -182,7 +182,7 @@ export const translations = {
       status: enUSStatus,
       navigation: enUSNavigation,
       header: enUSHeader,
-      shared: enUSShared
+      shared: enUSShared,
     },
     features: {
       chat: enUSChat,
@@ -206,23 +206,23 @@ export const translations = {
       alkaid: {
         index: enUSAlkaidIndex,
         'knowledge-base': enUSAlkaidKnowledgeBase,
-        memory: enUSAlkaidMemory
+        memory: enUSAlkaidMemory,
       },
       'knowledge-base': {
         index: enUSKnowledgeBaseIndex,
         detail: enUSKnowledgeBaseDetail,
-        document: enUSKnowledgeBaseDocument
+        document: enUSKnowledgeBaseDocument,
       },
       persona: enUSPersona,
       command: enUSCommand,
       subagent: enUSSubagent,
-      welcome: enUSWelcome
+      welcome: enUSWelcome,
     },
     messages: {
       errors: enUSErrors,
       success: enUSSuccess,
-      validation: enUSValidation
-    }
+      validation: enUSValidation,
+    },
   },
   'ru-RU': {
     core: {
@@ -231,7 +231,7 @@ export const translations = {
       status: ruRUStatus,
       navigation: ruRUNavigation,
       header: ruRUHeader,
-      shared: ruRUShared
+      shared: ruRUShared,
     },
     features: {
       chat: ruRUChat,
@@ -255,24 +255,24 @@ export const translations = {
       alkaid: {
         index: ruRUAlkaidIndex,
         'knowledge-base': ruRUAlkaidKnowledgeBase,
-        memory: ruRUAlkaidMemory
+        memory: ruRUAlkaidMemory,
       },
       'knowledge-base': {
         index: ruRUKnowledgeBaseIndex,
         detail: ruRUKnowledgeBaseDetail,
-        document: ruRUKnowledgeBaseDocument
+        document: ruRUKnowledgeBaseDocument,
       },
       persona: ruRUPersona,
       command: ruRUCommand,
       subagent: ruRUSubagent,
-      welcome: ruRUWelcome
+      welcome: ruRUWelcome,
     },
     messages: {
       errors: ruRUErrors,
       success: ruRUSuccess,
-      validation: ruRUValidation
-    }
-  }
+      validation: ruRUValidation,
+    },
+  },
 };
 
-export type TranslationData = typeof translations; 
+export type TranslationData = typeof translations;

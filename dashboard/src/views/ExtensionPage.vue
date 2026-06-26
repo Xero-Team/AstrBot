@@ -1,19 +1,19 @@
 <script setup>
-import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
-import ProxySelector from "@/components/shared/ProxySelector.vue";
-import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
-import McpServersSection from "@/components/extension/McpServersSection.vue";
-import SkillsSection from "@/components/extension/SkillsSection.vue";
-import ComponentPanel from "@/components/extension/componentPanel/index.vue";
-import InstalledPluginsTab from "./extension/InstalledPluginsTab.vue";
-import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
-import PluginDetailPage from "./extension/PluginDetailPage.vue";
-import { useExtensionPage } from "./extension/useExtensionPage";
-import { computed } from "vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import { usePluginI18n } from "@/utils/pluginI18n";
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
+import ProxySelector from '@/components/shared/ProxySelector.vue';
+import UninstallConfirmDialog from '@/components/shared/UninstallConfirmDialog.vue';
+import McpServersSection from '@/components/extension/McpServersSection.vue';
+import SkillsSection from '@/components/extension/SkillsSection.vue';
+import ComponentPanel from '@/components/extension/componentPanel/index.vue';
+import InstalledPluginsTab from './extension/InstalledPluginsTab.vue';
+import MarketPluginsTab from './extension/MarketPluginsTab.vue';
+import PluginDetailPage from './extension/PluginDetailPage.vue';
+import { useExtensionPage } from './extension/useExtensionPage';
+import { computed } from 'vue';
+import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import { usePluginI18n } from '@/utils/pluginI18n';
 
 const pageState = useExtensionPage();
 const { pluginName, pluginDesc } = usePluginI18n();
@@ -98,11 +98,11 @@ const {
 
 const selectedPluginId = computed(() => {
   const pluginId = route.params.pluginId;
-  return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
+  return Array.isArray(pluginId) ? pluginId[0] : pluginId || '';
 });
 
 const selectedDetailTab = computed(
-  () => extractTabFromHash(route.hash) || "installed",
+  () => extractTabFromHash(route.hash) || 'installed',
 );
 
 const selectedInstalledPlugin = computed(() => {
@@ -138,14 +138,14 @@ const selectedMarketPlugin = computed(() => {
 });
 
 const selectedDetailPlugin = computed(() => {
-  if (selectedDetailTab.value === "market" && selectedMarketPlugin.value) {
+  if (selectedDetailTab.value === 'market' && selectedMarketPlugin.value) {
     return selectedMarketPlugin.value;
   }
   return selectedInstalledPlugin.value || selectedMarketPlugin.value;
 });
 
 const installDialogPluginName = computed(() =>
-  selectedInstallPlugin.value ? pluginName(selectedInstallPlugin.value) : "",
+  selectedInstallPlugin.value ? pluginName(selectedInstallPlugin.value) : '',
 );
 
 const installDialogPluginDesc = computed(() =>
@@ -155,22 +155,22 @@ const installDialogPluginDesc = computed(() =>
           selectedInstallPlugin.value,
           selectedInstallPlugin.value.desc ||
             selectedInstallPlugin.value.description ||
-            "",
+            '',
         )
-      : "",
+      : '',
   ).trim(),
 );
 
 const installDialogPluginAuthor = computed(() => {
   const author = selectedInstallPlugin.value?.author;
-  if (Array.isArray(author)) return author.join(", ");
-  if (author && typeof author === "object") return author.name || "";
-  return typeof author === "string" ? author.trim() : "";
+  if (Array.isArray(author)) return author.join(', ');
+  if (author && typeof author === 'object') return author.name || '';
+  return typeof author === 'string' ? author.trim() : '';
 });
 
 const installDialogPluginLogo = computed(() => {
   const logo = selectedInstallPlugin.value?.logo;
-  return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
+  return typeof logo === 'string' && logo.trim() ? logo : defaultPluginIcon;
 });
 
 const updateDialogPlugin = computed(
@@ -178,21 +178,22 @@ const updateDialogPlugin = computed(
 );
 
 const updateDialogPluginName = computed(() =>
-  updateDialogPlugin.value ? pluginName(updateDialogPlugin.value) : "",
+  updateDialogPlugin.value ? pluginName(updateDialogPlugin.value) : '',
 );
 
 const updateDialogCurrentVersion = computed(() =>
-  String(selectedUpdateExtension.value?.version || "").trim(),
+  String(selectedUpdateExtension.value?.version || '').trim(),
 );
 
 const updateDialogTargetVersion = computed(() =>
-  String(selectedUpdateMarketPlugin.value?.version || "").trim(),
+  String(selectedUpdateMarketPlugin.value?.version || '').trim(),
 );
 
 const updateDialogPluginLogo = computed(() => {
   const logo =
-    selectedUpdateMarketPlugin.value?.logo || selectedUpdateExtension.value?.logo;
-  return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
+    selectedUpdateMarketPlugin.value?.logo ||
+    selectedUpdateExtension.value?.logo;
+  return typeof logo === 'string' && logo.trim() ? logo : defaultPluginIcon;
 });
 </script>
 
@@ -221,16 +222,16 @@ const updateDialogPluginLogo = computed(() => {
       />
       <h2 class="text-h3 mb-0 ml-2">
         {{
-          selectedDetailTab === "market"
-            ? tm("tabs.market")
-            : tm("titles.installedAstrBotPlugins")
+          selectedDetailTab === 'market'
+            ? tm('tabs.market')
+            : tm('titles.installedAstrBotPlugins')
         }}
         <v-icon icon="mdi-chevron-right" size="24" class="mx-1" />
         {{ selectedPluginId }}
       </h2>
     </div>
     <v-alert type="warning" variant="tonal">
-      {{ tm("detail.notFound") }}
+      {{ tm('detail.notFound') }}
     </v-alert>
   </div>
 
@@ -246,7 +247,7 @@ const updateDialogPluginLogo = computed(() => {
           <v-tab-item v-if="activeTab === 'components'">
             <div class="mb-4 pt-4 pb-4">
               <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
+                <h2 class="text-h2 mb-0">{{ tm('tabs.handlersOperation') }}</h2>
               </div>
             </div>
             <v-card
@@ -266,10 +267,10 @@ const updateDialogPluginLogo = computed(() => {
               <div class="mb-4 pt-4 pb-4">
                 <div class="d-flex flex-column" style="gap: 6px">
                   <h2 class="text-h2 mb-0">
-                    {{ tm("tabs.installedMcpServers") }}
+                    {{ tm('tabs.installedMcpServers') }}
                   </h2>
                   <div class="text-body-2 text-medium-emphasis">
-                    {{ t("features.tooluse.mcpServers.description") }}
+                    {{ t('features.tooluse.mcpServers.description') }}
                   </div>
                 </div>
               </div>
@@ -290,9 +291,9 @@ const updateDialogPluginLogo = computed(() => {
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
                 <div class="d-flex flex-column" style="gap: 6px">
-                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+                  <h2 class="text-h2 mb-0">{{ tm('tabs.skills') }}</h2>
                   <div class="text-body-2 text-medium-emphasis">
-                    {{ tm("skills.runtimeHint") }}
+                    {{ tm('skills.runtimeHint') }}
                   </div>
                 </div>
               </div>
@@ -325,7 +326,7 @@ const updateDialogPluginLogo = computed(() => {
           color="primary"
           class="text-none"
         >
-          {{ tm("market.devDocs") }}
+          {{ tm('market.devDocs') }}
         </v-btn>
         <div
           style="
@@ -342,7 +343,7 @@ const updateDialogPluginLogo = computed(() => {
           color="primary"
           class="text-none"
         >
-          {{ tm("market.submitRepo") }}
+          {{ tm('market.submitRepo') }}
         </v-btn>
       </div>
     </v-col>
@@ -352,7 +353,7 @@ const updateDialogPluginLogo = computed(() => {
   <v-dialog v-model="configDialog" max-width="900">
     <v-card>
       <v-card-title class="text-h2 pa-4 pl-6 pb-0">{{
-        tm("dialogs.config.title")
+        tm('dialogs.config.title')
       }}</v-card-title>
       <v-card-text>
         <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
@@ -364,19 +365,19 @@ const updateDialogPluginLogo = computed(() => {
             :plugin-name="curr_namespace"
             :plugin-i18n="extension_config.i18n"
           />
-          <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
+          <p v-else>{{ tm('dialogs.config.noConfig') }}</p>
         </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="blue-darken-1" variant="text" @click="updateConfig">{{
-          tm("buttons.saveAndClose")
+          tm('buttons.saveAndClose')
         }}</v-btn>
         <v-btn
           color="blue-darken-1"
           variant="text"
           @click="configDialog = false"
-          >{{ tm("buttons.close") }}</v-btn
+          >{{ tm('buttons.close') }}</v-btn
         >
       </v-card-actions>
     </v-card>
@@ -409,7 +410,7 @@ const updateDialogPluginLogo = computed(() => {
         </div>
 
         <div style="margin-top: 32px">
-          <h3>{{ tm("dialogs.loading.logs") }}</h3>
+          <h3>{{ tm('dialogs.loading.logs') }}</h3>
           <ConsoleDisplayer
             history-num="10"
             style="height: 200px; margin-top: 16px; margin-bottom: 24px"
@@ -426,7 +427,7 @@ const updateDialogPluginLogo = computed(() => {
           color="blue-darken-1"
           variant="text"
           @click="resetLoadingDialog"
-          >{{ tm("buttons.close") }}</v-btn
+          >{{ tm('buttons.close') }}</v-btn
         >
       </v-card-actions>
     </v-card>
@@ -467,12 +468,12 @@ const updateDialogPluginLogo = computed(() => {
     <v-card class="rounded-lg">
       <v-card-title class="d-flex align-center pa-4">
         <v-icon color="warning" class="mr-2">mdi-update</v-icon>
-        {{ tm("dialogs.updateAllConfirm.title") }}
+        {{ tm('dialogs.updateAllConfirm.title') }}
       </v-card-title>
       <v-card-text>
         <p class="text-body-1">
           {{
-            tm("dialogs.updateAllConfirm.message", {
+            tm('dialogs.updateAllConfirm.message', {
               count: updatableExtensions.length,
             })
           }}
@@ -481,10 +482,10 @@ const updateDialogPluginLogo = computed(() => {
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelUpdateAll">{{
-          tm("buttons.cancel")
+          tm('buttons.cancel')
         }}</v-btn>
         <v-btn color="warning" variant="flat" @click="confirmUpdateAll">{{
-          tm("dialogs.updateAllConfirm.confirm")
+          tm('dialogs.updateAllConfirm.confirm')
         }}</v-btn>
       </v-card-actions>
     </v-card>
@@ -495,7 +496,7 @@ const updateDialogPluginLogo = computed(() => {
     <v-card class="rounded-lg">
       <v-card-title class="d-flex align-center pa-4">
         <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
-        {{ tm("conflicts.title") }}
+        {{ tm('conflicts.title') }}
       </v-card-title>
       <v-card-text class="px-4 pb-2">
         <div class="d-flex align-center mb-3">
@@ -507,22 +508,22 @@ const updateDialogPluginLogo = computed(() => {
           >
             {{ conflictDialog.count }}
           </v-chip>
-          <span class="ml-2 text-body-1">{{ tm("conflicts.pairs") }}</span>
+          <span class="ml-2 text-body-1">{{ tm('conflicts.pairs') }}</span>
         </div>
         <p
           class="text-body-2"
           style="color: rgba(var(--v-theme-on-surface), 0.7)"
         >
-          {{ tm("conflicts.message") }}
+          {{ tm('conflicts.message') }}
         </p>
       </v-card-text>
       <v-card-actions class="pa-4 pt-2">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="conflictDialog.show = false">{{
-          tm("conflicts.later")
+          tm('conflicts.later')
         }}</v-btn>
         <v-btn color="warning" variant="flat" @click="handleConflictConfirm">
-          {{ tm("conflicts.goToManage") }}
+          {{ tm('conflicts.goToManage') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -533,18 +534,18 @@ const updateDialogPluginLogo = computed(() => {
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
-        {{ tm("dialogs.danger_warning.title") }}
+        {{ tm('dialogs.danger_warning.title') }}
       </v-card-title>
       <v-card-text>
-        <div>{{ tm("dialogs.danger_warning.message") }}</div>
+        <div>{{ tm('dialogs.danger_warning.message') }}</div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" @click="cancelDangerInstall">
-          {{ tm("dialogs.danger_warning.cancel") }}
+          {{ tm('dialogs.danger_warning.cancel') }}
         </v-btn>
         <v-btn color="warning" @click="confirmDangerInstall">
-          {{ tm("dialogs.danger_warning.confirm") }}
+          {{ tm('dialogs.danger_warning.confirm') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -555,10 +556,10 @@ const updateDialogPluginLogo = computed(() => {
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
-        {{ tm("dialogs.versionSupport.title") }}
+        {{ tm('dialogs.versionSupport.title') }}
       </v-card-title>
       <v-card-text>
-        <div class="mb-2">{{ tm("dialogs.versionSupport.message") }}</div>
+        <div class="mb-2">{{ tm('dialogs.versionSupport.message') }}</div>
         <div class="text-medium-emphasis">
           {{ versionSupportDialog.message }}
         </div>
@@ -566,10 +567,10 @@ const updateDialogPluginLogo = computed(() => {
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" @click="cancelInstallOnVersionWarning">
-          {{ tm("dialogs.versionSupport.cancel") }}
+          {{ tm('dialogs.versionSupport.cancel') }}
         </v-btn>
         <v-btn color="warning" @click="continueInstallIgnoringVersionWarning">
-          {{ tm("dialogs.versionSupport.confirm") }}
+          {{ tm('dialogs.versionSupport.confirm') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -581,7 +582,7 @@ const updateDialogPluginLogo = computed(() => {
       class="v-card v-card--density-default rounded-lg v-card--variant-elevated"
     >
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-        {{ tm("dialogs.install.title") }}
+        {{ tm('dialogs.install.title') }}
       </v-card-title>
 
       <div class="v-card-text">
@@ -600,7 +601,7 @@ const updateDialogPluginLogo = computed(() => {
                 v-if="installDialogPluginAuthor"
                 class="market-install-confirm__author"
               >
-                {{ tm("detail.info.author") }}: {{ installDialogPluginAuthor }}
+                {{ tm('detail.info.author') }}: {{ installDialogPluginAuthor }}
               </div>
             </div>
           </div>
@@ -612,7 +613,7 @@ const updateDialogPluginLogo = computed(() => {
             class="market-install-confirm__section"
           >
             <div class="market-install-confirm__section-title">
-              {{ tm("table.headers.description") }}
+              {{ tm('table.headers.description') }}
             </div>
             <div class="market-install-confirm__desc">
               {{ installDialogPluginDesc }}
@@ -627,7 +628,7 @@ const updateDialogPluginLogo = computed(() => {
               variant="outlined"
               class="mr-2 mb-2"
             >
-              {{ tm("card.status.astrbotVersion") }}:
+              {{ tm('card.status.astrbotVersion') }}:
               {{ selectedInstallPlugin.astrbot_version }}
             </v-chip>
             <v-chip
@@ -640,11 +641,11 @@ const updateDialogPluginLogo = computed(() => {
               variant="outlined"
               class="mb-2"
             >
-              {{ tm("card.status.supportPlatform") }}:
+              {{ tm('card.status.supportPlatform') }}:
               {{
                 getPlatformDisplayList(
                   selectedInstallPlugin.support_platforms,
-                ).join(", ")
+                ).join(', ')
               }}
             </v-chip>
             <v-alert
@@ -666,13 +667,13 @@ const updateDialogPluginLogo = computed(() => {
             v-if="selectedInstallSourceUrl"
             class="market-install-confirm__section-title mt-4"
           >
-            {{ tm("dialogs.install.sectionTitle") }}
+            {{ tm('dialogs.install.sectionTitle') }}
           </div>
           <div
             v-if="selectedInstallSourceUrl"
             class="market-install-source text-caption text-medium-emphasis mb-3"
           >
-            <div>{{ tm("dialogs.install.downloadSource") }}</div>
+            <div>{{ tm('dialogs.install.downloadSource') }}</div>
             <div class="market-install-source__url">
               {{ selectedInstallSourceUrl }}
             </div>
@@ -685,7 +686,7 @@ const updateDialogPluginLogo = computed(() => {
             density="comfortable"
             class="market-install-alert mt-4 mb-4"
           >
-            {{ tm("dialogs.install.githubSecurityWarning") }}
+            {{ tm('dialogs.install.githubSecurityWarning') }}
           </v-alert>
 
           <ProxySelector v-if="!selectedInstallDownloadUrl" class="mt-4" />
@@ -693,8 +694,8 @@ const updateDialogPluginLogo = computed(() => {
 
         <template v-else>
           <v-tabs v-model="uploadTab" color="primary">
-            <v-tab value="file">{{ tm("dialogs.install.fromFile") }}</v-tab>
-            <v-tab value="url">{{ tm("dialogs.install.fromUrl") }}</v-tab>
+            <v-tab value="file">{{ tm('dialogs.install.fromFile') }}</v-tab>
+            <v-tab value="url">{{ tm('dialogs.install.fromUrl') }}</v-tab>
           </v-tabs>
 
           <v-window v-model="uploadTab" class="mt-4">
@@ -717,11 +718,11 @@ const updateDialogPluginLogo = computed(() => {
                   elevation="2"
                   @click="$refs.fileInput.click()"
                 >
-                  {{ tm("buttons.selectFile") }}
+                  {{ tm('buttons.selectFile') }}
                 </v-btn>
 
                 <div class="text-body-2 text-medium-emphasis mt-2">
-                  {{ tm("messages.supportedFormats") }}
+                  {{ tm('messages.supportedFormats') }}
                 </div>
 
                 <div v-if="upload_file" class="mt-4 text-center">
@@ -762,7 +763,7 @@ const updateDialogPluginLogo = computed(() => {
                     variant="outlined"
                     class="mr-2 mb-2"
                   >
-                    {{ tm("card.status.astrbotVersion") }}:
+                    {{ tm('card.status.astrbotVersion') }}:
                     {{ selectedInstallPlugin.astrbot_version }}
                   </v-chip>
                   <v-chip
@@ -776,11 +777,11 @@ const updateDialogPluginLogo = computed(() => {
                     variant="outlined"
                     class="mb-2"
                   >
-                    {{ tm("card.status.supportPlatform") }}:
+                    {{ tm('card.status.supportPlatform') }}:
                     {{
                       getPlatformDisplayList(
                         selectedInstallPlugin.support_platforms,
-                      ).join(", ")
+                      ).join(', ')
                     }}
                   </v-chip>
                   <v-alert
@@ -802,13 +803,13 @@ const updateDialogPluginLogo = computed(() => {
                   v-if="selectedInstallSourceUrl"
                   class="market-install-confirm__section-title mt-4"
                 >
-                  {{ tm("dialogs.install.sectionTitle") }}
+                  {{ tm('dialogs.install.sectionTitle') }}
                 </div>
                 <div
                   v-if="selectedInstallSourceUrl"
                   class="market-install-source text-caption text-medium-emphasis mb-3"
                 >
-                  <div>{{ tm("dialogs.install.downloadSource") }}</div>
+                  <div>{{ tm('dialogs.install.downloadSource') }}</div>
                   <div class="market-install-source__url">
                     {{ selectedInstallSourceUrl }}
                   </div>
@@ -821,7 +822,7 @@ const updateDialogPluginLogo = computed(() => {
                   density="comfortable"
                   class="market-install-alert mb-4"
                 >
-                  {{ tm("dialogs.install.githubSecurityWarning") }}
+                  {{ tm('dialogs.install.githubSecurityWarning') }}
                 </v-alert>
 
                 <ProxySelector
@@ -836,7 +837,7 @@ const updateDialogPluginLogo = computed(() => {
       <div class="v-card-actions">
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
-          tm("buttons.cancel")
+          tm('buttons.cancel')
         }}</v-btn>
         <v-btn
           color="primary"
@@ -844,7 +845,7 @@ const updateDialogPluginLogo = computed(() => {
           :loading="loading_"
           :disabled="loading_"
           @click="newExtension()"
-          >{{ tm("buttons.install") }}</v-btn
+          >{{ tm('buttons.install') }}</v-btn
         >
       </div>
     </div>
@@ -854,7 +855,7 @@ const updateDialogPluginLogo = computed(() => {
   <v-dialog v-model="showSourceManagerDialog" width="640">
     <v-card>
       <v-card-title class="text-h3 pa-4 pl-6">{{
-        tm("market.sourceManagement")
+        tm('market.sourceManagement')
       }}</v-card-title>
       <v-card-text>
         <v-select
@@ -871,7 +872,7 @@ const updateDialogPluginLogo = computed(() => {
         ></v-select>
 
         <div class="d-flex align-center justify-space-between mb-2">
-          <div class="text-subtitle-2">{{ tm("market.availableSources") }}</div>
+          <div class="text-subtitle-2">{{ tm('market.availableSources') }}</div>
           <v-btn
             size="small"
             color="primary"
@@ -879,7 +880,7 @@ const updateDialogPluginLogo = computed(() => {
             prepend-icon="mdi-plus"
             @click="addCustomSource"
           >
-            {{ tm("market.addSource") }}
+            {{ tm('market.addSource') }}
           </v-btn>
         </div>
 
@@ -898,7 +899,7 @@ const updateDialogPluginLogo = computed(() => {
               ></v-icon>
             </template>
             <v-list-item-title>{{
-              tm("market.defaultSource")
+              tm('market.defaultSource')
             }}</v-list-item-title>
           </v-list-item>
 
@@ -946,7 +947,7 @@ const updateDialogPluginLogo = computed(() => {
           color="primary"
           variant="text"
           @click="showSourceManagerDialog = false"
-          >{{ tm("buttons.close") }}</v-btn
+          >{{ tm('buttons.close') }}</v-btn
         >
       </v-card-actions>
     </v-card>
@@ -956,7 +957,7 @@ const updateDialogPluginLogo = computed(() => {
   <v-dialog v-model="showSourceDialog" width="500">
     <v-card>
       <v-card-title class="text-h5">{{
-        editingSource ? tm("market.editSource") : tm("market.addSource")
+        editingSource ? tm('market.editSource') : tm('market.addSource')
       }}</v-card-title>
       <v-card-text>
         <div class="pa-2">
@@ -980,17 +981,17 @@ const updateDialogPluginLogo = computed(() => {
           ></v-text-field>
 
           <div class="text-caption text-medium-emphasis mt-2">
-            {{ tm("messages.enterJsonUrl") }}
+            {{ tm('messages.enterJsonUrl') }}
           </div>
         </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="showSourceDialog = false">{{
-          tm("buttons.cancel")
+          tm('buttons.cancel')
         }}</v-btn>
         <v-btn color="primary" variant="text" @click="saveCustomSource">{{
-          tm("buttons.save")
+          tm('buttons.save')
         }}</v-btn>
       </v-card-actions>
     </v-card>
@@ -1001,10 +1002,10 @@ const updateDialogPluginLogo = computed(() => {
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
-        {{ tm("dialogs.uninstall.title") }}
+        {{ tm('dialogs.uninstall.title') }}
       </v-card-title>
       <v-card-text>
-        <div>{{ tm("market.confirmRemoveSource") }}</div>
+        <div>{{ tm('market.confirmRemoveSource') }}</div>
         <div v-if="sourceToRemove" class="mt-2">
           <strong>{{ sourceToRemove.name }}</strong>
           <div class="text-caption">{{ sourceToRemove.url }}</div>
@@ -1016,10 +1017,10 @@ const updateDialogPluginLogo = computed(() => {
           color="grey"
           variant="text"
           @click="showRemoveSourceDialog = false"
-          >{{ tm("buttons.cancel") }}</v-btn
+          >{{ tm('buttons.cancel') }}</v-btn
         >
         <v-btn color="error" variant="text" @click="confirmRemoveSource">{{
-          tm("buttons.deleteSource")
+          tm('buttons.deleteSource')
         }}</v-btn>
       </v-card-actions>
     </v-card>
@@ -1029,7 +1030,7 @@ const updateDialogPluginLogo = computed(() => {
   <v-dialog v-model="updateConfirmDialog.show" width="500">
     <v-card class="rounded-lg">
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-        {{ tm("dialogs.update.title") }}
+        {{ tm('dialogs.update.title') }}
       </v-card-title>
       <v-card-text>
         <div class="market-install-confirm">
@@ -1048,13 +1049,13 @@ const updateDialogPluginLogo = computed(() => {
                 class="market-install-confirm__author"
               >
                 <template v-if="updateDialogTargetVersion">
-                  {{ updateDialogCurrentVersion || tm("status.unknown") }}
+                  {{ updateDialogCurrentVersion || tm('status.unknown') }}
                   <v-icon icon="mdi-arrow-right" size="14" class="mx-1" />
                   {{ updateDialogTargetVersion }}
                 </template>
                 <template v-else>
-                  {{ tm("detail.info.version") }}:
-                  {{ updateDialogCurrentVersion || tm("status.unknown") }}
+                  {{ tm('detail.info.version') }}:
+                  {{ updateDialogCurrentVersion || tm('status.unknown') }}
                 </template>
               </div>
             </div>
@@ -1066,13 +1067,13 @@ const updateDialogPluginLogo = computed(() => {
             v-if="selectedUpdateSourceUrl"
             class="market-install-confirm__section-title"
           >
-            {{ tm("dialogs.update.sectionTitle") }}
+            {{ tm('dialogs.update.sectionTitle') }}
           </div>
           <div
             v-if="selectedUpdateSourceUrl"
             class="market-install-source text-caption text-medium-emphasis mb-3"
           >
-            <div>{{ tm("dialogs.update.downloadSource") }}</div>
+            <div>{{ tm('dialogs.update.downloadSource') }}</div>
             <div class="market-install-source__url">
               {{ selectedUpdateSourceUrl }}
             </div>
@@ -1085,7 +1086,7 @@ const updateDialogPluginLogo = computed(() => {
             density="comfortable"
             class="market-install-alert mt-4 mb-4"
           >
-            {{ tm("dialogs.install.githubSecurityWarning") }}
+            {{ tm('dialogs.install.githubSecurityWarning') }}
           </v-alert>
 
           <ProxySelector v-if="!selectedUpdateDownloadUrl" class="mt-4" />
@@ -1094,10 +1095,10 @@ const updateDialogPluginLogo = computed(() => {
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
-          {{ tm("buttons.cancel") }}
+          {{ tm('buttons.cancel') }}
         </v-btn>
         <v-btn color="primary" variant="flat" @click="confirmUpdatePlugin">
-          {{ tm("dialogs.update.confirm") }}
+          {{ tm('dialogs.update.confirm') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -1108,18 +1109,18 @@ const updateDialogPluginLogo = computed(() => {
     <v-card class="rounded-lg">
       <v-card-title class="text-h6 d-flex align-center">
         <v-icon color="info" class="mr-2">mdi-information-outline</v-icon>
-        {{ tm("dialogs.forceUpdate.title") }}
+        {{ tm('dialogs.forceUpdate.title') }}
       </v-card-title>
       <v-card-text>
-        {{ tm("dialogs.forceUpdate.message") }}
+        {{ tm('dialogs.forceUpdate.message') }}
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="forceUpdateDialog.show = false">{{
-          tm("buttons.cancel")
+          tm('buttons.cancel')
         }}</v-btn>
         <v-btn color="primary" variant="flat" @click="confirmForceUpdate">{{
-          tm("dialogs.forceUpdate.confirm")
+          tm('dialogs.forceUpdate.confirm')
         }}</v-btn>
       </v-card-actions>
     </v-card>

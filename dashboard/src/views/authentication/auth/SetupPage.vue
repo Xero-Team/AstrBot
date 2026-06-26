@@ -16,9 +16,13 @@ const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
 
 const themeOptions = [
-  { mode: 'light'  as const, icon: 'mdi-white-balance-sunny', labelKey: 'theme.light'  },
-  { mode: 'dark'   as const, icon: 'mdi-weather-night',       labelKey: 'theme.dark'   },
-  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'theme.system' },
+  {
+    mode: 'light' as const,
+    icon: 'mdi-white-balance-sunny',
+    labelKey: 'theme.light',
+  },
+  { mode: 'dark' as const, icon: 'mdi-weather-night', labelKey: 'theme.dark' },
+  { mode: 'system' as const, icon: 'mdi-sync', labelKey: 'theme.system' },
 ] as const;
 
 function setThemeMode(mode: 'light' | 'dark' | 'system') {
@@ -38,11 +42,10 @@ onMounted(async () => {
   try {
     const setupStatus = await authApi.setupStatus();
     const setupRequired = Boolean(setupStatus.data?.data?.setup_required);
-    const canSkipDefaultPassword = Boolean(setupStatus.data?.data?.skip_default_password_auth);
-    if (
-      !setupRequired ||
-      (!hasToken && !canSkipDefaultPassword)
-    ) {
+    const canSkipDefaultPassword = Boolean(
+      setupStatus.data?.data?.skip_default_password_auth,
+    );
+    if (!setupRequired || (!hasToken && !canSkipDefaultPassword)) {
       void router.push('/auth/login');
     }
   } catch {
@@ -57,20 +60,27 @@ onMounted(async () => {
       <v-card-title>
         <div class="setup-header">
           <div class="setup-brand">
-            <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
+            <img
+              width="80"
+              src="@/assets/images/plugin_icon.png"
+              alt="AstrBot Logo"
+            />
           </div>
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider
-vertical class="mx-1"
-              style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
+              vertical
+              class="mx-1"
+              style="
+                height: 24px !important;
+                opacity: 0.9 !important;
+                align-self: center !important;
+                border-color: rgba(var(--v-theme-primary), 0.45) !important;
+              "
+            ></v-divider>
 
             <!-- 主题切换下拉菜单 -->
-            <v-menu
-              open-on-click
-              location="bottom center"
-              offset="6"
-            >
+            <v-menu open-on-click location="bottom center" offset="6">
               <template #activator="{ props: themeMenuProps }">
                 <v-btn
                   v-bind="themeMenuProps"
@@ -99,16 +109,23 @@ vertical class="mx-1"
                     v-for="option in themeOptions"
                     :key="option.mode"
                     :class="{
-                      'styled-menu-item-active': customizer.themeMode === option.mode,
+                      'styled-menu-item-active':
+                        customizer.themeMode === option.mode,
                     }"
                     class="styled-menu-item"
                     rounded="md"
                     @click="setThemeMode(option.mode)"
                   >
                     <template #prepend>
-                      <v-icon size="16" style="margin-right: 8px; opacity: 0.85;">{{ option.icon }}</v-icon>
+                      <v-icon
+                        size="16"
+                        style="margin-right: 8px; opacity: 0.85"
+                        >{{ option.icon }}</v-icon
+                      >
                     </template>
-                    <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+                    <v-list-item-title>{{
+                      t(option.labelKey)
+                    }}</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-card>

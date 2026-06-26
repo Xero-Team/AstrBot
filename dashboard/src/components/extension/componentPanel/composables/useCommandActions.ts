@@ -3,15 +3,20 @@
  */
 import { reactive } from 'vue';
 import { commandApi } from '@/api/v1';
-import type { CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
+import type {
+  CommandItem,
+  RenameDialogState,
+  DetailsDialogState,
+  TypeInfo,
+  StatusInfo,
+} from '../types';
 
 export function useCommandActions(
   toast: (message: string, color?: string) => void,
-  fetchCommands: () => Promise<void>
+  fetchCommands: () => Promise<void>,
 ) {
-  const getErrorMessage = (error: unknown, fallback: string) => (
-    error instanceof Error && error.message ? error.message : fallback
-  );
+  const getErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error && error.message ? error.message : fallback;
 
   // 重命名对话框状态
   const renameDialog = reactive<RenameDialogState>({
@@ -19,13 +24,13 @@ export function useCommandActions(
     command: null,
     newName: '',
     aliases: [],
-    loading: false
+    loading: false,
   });
 
   // 详情对话框状态
   const detailsDialog = reactive<DetailsDialogState>({
     show: false,
-    command: null
+    command: null,
   });
 
   /**
@@ -34,11 +39,11 @@ export function useCommandActions(
   const toggleCommand = async (
     cmd: CommandItem,
     successMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
     try {
       const res = await commandApi.update(cmd.handler_full_name, {
-        enabled: !cmd.enabled
+        enabled: !cmd.enabled,
       });
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');
@@ -64,15 +69,21 @@ export function useCommandActions(
   /**
    * 确认重命名
    */
-  const confirmRename = async (successMessage: string, errorMessage: string) => {
+  const confirmRename = async (
+    successMessage: string,
+    errorMessage: string,
+  ) => {
     if (!renameDialog.command || !renameDialog.newName.trim()) return;
 
     renameDialog.loading = true;
     try {
-      const res = await commandApi.update(renameDialog.command.handler_full_name, {
-        alias: renameDialog.newName.trim(),
-        aliases: renameDialog.aliases.filter(a => a.trim())
-      });
+      const res = await commandApi.update(
+        renameDialog.command.handler_full_name,
+        {
+          alias: renameDialog.newName.trim(),
+          aliases: renameDialog.aliases.filter((a) => a.trim()),
+        },
+      );
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');
         renameDialog.show = false;
@@ -98,14 +109,29 @@ export function useCommandActions(
   /**
    * 获取类型显示信息
    */
-  const getTypeInfo = (type: string, translations: { group: string; subCommand: string; command: string }): TypeInfo => {
+  const getTypeInfo = (
+    type: string,
+    translations: { group: string; subCommand: string; command: string },
+  ): TypeInfo => {
     switch (type) {
       case 'group':
-        return { text: translations.group, color: 'info', icon: 'mdi-folder-outline' };
+        return {
+          text: translations.group,
+          color: 'info',
+          icon: 'mdi-folder-outline',
+        };
       case 'sub_command':
-        return { text: translations.subCommand, color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
+        return {
+          text: translations.subCommand,
+          color: 'secondary',
+          icon: 'mdi-subdirectory-arrow-right',
+        };
       default:
-        return { text: translations.command, color: 'primary', icon: 'mdi-console-line' };
+        return {
+          text: translations.command,
+          color: 'primary',
+          icon: 'mdi-console-line',
+        };
     }
   };
 
@@ -114,18 +140,25 @@ export function useCommandActions(
    */
   const getPermissionColor = (permission: string): string => {
     switch (permission) {
-      case 'admin': return 'error';
-      default: return 'success';
+      case 'admin':
+        return 'error';
+      default:
+        return 'success';
     }
   };
 
   /**
    * 获取权限标签
    */
-  const getPermissionLabel = (permission: string, translations: { admin: string; everyone: string }): string => {
+  const getPermissionLabel = (
+    permission: string,
+    translations: { admin: string; everyone: string },
+  ): string => {
     switch (permission) {
-      case 'admin': return translations.admin;
-      default: return translations.everyone;
+      case 'admin':
+        return translations.admin;
+      default:
+        return translations.everyone;
     }
   };
 
@@ -134,7 +167,7 @@ export function useCommandActions(
    */
   const getStatusInfo = (
     cmd: CommandItem,
-    translations: { conflict: string; enabled: string; disabled: string }
+    translations: { conflict: string; enabled: string; disabled: string },
   ): StatusInfo => {
     if (cmd.has_conflict) {
       return { text: translations.conflict, color: 'warning', variant: 'flat' };
@@ -169,11 +202,11 @@ export function useCommandActions(
     cmd: CommandItem,
     permission: 'admin' | 'member',
     successMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
     try {
       const res = await commandApi.update(cmd.handler_full_name, {
-        permission_group: permission
+        permission_group: permission,
       });
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');
@@ -201,6 +234,6 @@ export function useCommandActions(
     getPermissionColor,
     getPermissionLabel,
     getStatusInfo,
-    getRowProps
+    getRowProps,
   };
 }

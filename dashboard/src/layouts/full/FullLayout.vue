@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed, watch, defineAsyncComponent } from "vue";
-import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
-import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
-import { useCustomizerStore } from "@/stores/customizer";
-import { useRouterLoadingStore } from "@/stores/routerLoading";
-import { useCommonStore } from "@/stores/common";
-import { statsApi } from "@/api/v1";
-import { useI18n } from "@/i18n/composables";
+import { RouterView, useRoute } from 'vue-router';
+import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue';
+import VerticalSidebarVue from './vertical-sidebar/VerticalSidebar.vue';
+import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
+import { useCustomizerStore } from '@/stores/customizer';
+import { useRouterLoadingStore } from '@/stores/routerLoading';
+import { useCommonStore } from '@/stores/common';
+import { statsApi } from '@/api/v1';
+import { useI18n } from '@/i18n/composables';
 
-const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
+const FIRST_NOTICE_SEEN_KEY = 'astrbot:first_notice_seen:v1';
 const ReadmeDialog = defineAsyncComponent(
-  () => import("@/components/shared/ReadmeDialog.vue"),
+  () => import('@/components/shared/ReadmeDialog.vue'),
 );
-const Chat = defineAsyncComponent(() => import("@/components/chat/Chat.vue"));
+const Chat = defineAsyncComponent(() => import('@/components/chat/Chat.vue'));
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
@@ -21,7 +21,7 @@ const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+  () => route.path === '/chat' || route.path.startsWith('/chat/'),
 );
 const isFullScreenRoute = computed(() => isCurrentChatRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
@@ -37,32 +37,32 @@ watch(isCurrentChatRoute, (isChatRoute) => {
 });
 
 const maybeShowFirstNotice = async () => {
-  if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
+  if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === '1') {
     return;
   }
 
   try {
     const response = await statsApi.firstNotice(locale.value);
-    if (response.data.status !== "ok") {
+    if (response.data.status !== 'ok') {
       return;
     }
 
     const content = response.data?.data?.content;
-    if (typeof content === "string" && content.trim().length > 0) {
+    if (typeof content === 'string' && content.trim().length > 0) {
       showFirstNoticeDialog.value = true;
       return;
     }
 
-    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, "1");
+    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, '1');
   } catch (error) {
-    console.error("Failed to load first notice:", error);
+    console.error('Failed to load first notice:', error);
   }
 };
 
 const onFirstNoticeDialogUpdate = (visible: boolean) => {
   showFirstNoticeDialog.value = visible;
   if (!visible) {
-    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, "1");
+    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, '1');
   }
 };
 
@@ -70,14 +70,14 @@ onMounted(() => {
   setTimeout(async () => {
     try {
       const response = await statsApi.version();
-      if (response.data.status === "ok") {
+      if (response.data.status === 'ok') {
         commonStore.setAstrBotVersion(
           response.data.data?.version,
           response.data.data?.dashboard_version,
         );
       }
     } catch (error) {
-      console.error("Failed to load version info:", error);
+      console.error('Failed to load version info:', error);
     }
     await maybeShowFirstNotice();
   }, 1000);

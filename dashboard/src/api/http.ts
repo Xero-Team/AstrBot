@@ -86,7 +86,9 @@ function normalizeAxiosError(error: AxiosError) {
         'change_pwd_hint',
         'md5_pwd_hint',
         'password_upgrade_required',
-      ].forEach((key) => { localStorage.removeItem(key); });
+      ].forEach((key) => {
+        localStorage.removeItem(key);
+      });
 
       if (!window.location.hash.startsWith('#/auth/login')) {
         window.location.hash = '/auth/login';
@@ -105,7 +107,10 @@ function normalizeAxiosError(error: AxiosError) {
 
 function installAxiosInterceptors(instance: AxiosInstance) {
   instance.interceptors.request.use(attachAxiosHeaders);
-  instance.interceptors.response.use((response) => response, normalizeAxiosError);
+  instance.interceptors.response.use(
+    (response) => response,
+    normalizeAxiosError,
+  );
 }
 
 export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
@@ -118,9 +123,7 @@ export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
   }
 
   const requestHeaders =
-    typeof input !== 'string' && 'headers' in input
-      ? (input).headers
-      : undefined;
+    typeof input !== 'string' && 'headers' in input ? input.headers : undefined;
   const headers = new Headers(init?.headers || requestHeaders);
 
   if (token && !headers.has(AUTH_HEADER)) {

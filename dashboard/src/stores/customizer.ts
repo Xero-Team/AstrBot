@@ -3,7 +3,6 @@ import config, { type ThemeMode, resolveUiTheme } from '@/config';
 
 const DARK_THEMES: ReadonlySet<string> = new Set(['PurpleThemeDark']);
 
-
 export const useCustomizerStore = defineStore('customizer', {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
@@ -17,7 +16,7 @@ export const useCustomizerStore = defineStore('customizer', {
   }),
 
   getters: {
-    isDark: (state) => state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false,
+    isDark: (state) => (state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false),
   },
 
   actions: {

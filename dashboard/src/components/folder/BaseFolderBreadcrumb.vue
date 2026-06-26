@@ -1,20 +1,27 @@
 <template>
-    <v-breadcrumbs :items="computedItems" class="base-folder-breadcrumb pa-0">
-        <template #prepend>
-            <v-icon size="small" class="mr-1">mdi-folder-outline</v-icon>
-        </template>
-        <template #item="{ item }">
-            <v-breadcrumbs-item
-:disabled="toBreadcrumbItem(item).disabled" :class="{ 'breadcrumb-link': !toBreadcrumbItem(item).disabled }"
-                @click="!toBreadcrumbItem(item).disabled && handleClick(toBreadcrumbItem(item).folderId)">
-                <v-icon v-if="toBreadcrumbItem(item).isRoot" size="small" class="mr-1">mdi-home</v-icon>
-                {{ toBreadcrumbItem(item).title }}
-            </v-breadcrumbs-item>
-        </template>
-        <template #divider>
-            <v-icon size="small">mdi-chevron-right</v-icon>
-        </template>
-    </v-breadcrumbs>
+  <v-breadcrumbs :items="computedItems" class="base-folder-breadcrumb pa-0">
+    <template #prepend>
+      <v-icon size="small" class="mr-1">mdi-folder-outline</v-icon>
+    </template>
+    <template #item="{ item }">
+      <v-breadcrumbs-item
+        :disabled="toBreadcrumbItem(item).disabled"
+        :class="{ 'breadcrumb-link': !toBreadcrumbItem(item).disabled }"
+        @click="
+          !toBreadcrumbItem(item).disabled &&
+          handleClick(toBreadcrumbItem(item).folderId)
+        "
+      >
+        <v-icon v-if="toBreadcrumbItem(item).isRoot" size="small" class="mr-1"
+          >mdi-home</v-icon
+        >
+        {{ toBreadcrumbItem(item).title }}
+      </v-breadcrumbs-item>
+    </template>
+    <template #divider>
+      <v-icon size="small">mdi-chevron-right</v-icon>
+    </template>
+  </v-breadcrumbs>
 </template>
 
 <script lang="ts">
@@ -22,67 +29,67 @@ import { defineComponent, type PropType } from 'vue';
 import type { BreadcrumbItem, FolderTreeNode } from './types';
 
 export default defineComponent({
-    name: 'BaseFolderBreadcrumb',
-    props: {
-        breadcrumbPath: {
-            type: Array as PropType<FolderTreeNode[]>,
-            required: true
-        },
-        currentFolderId: {
-            type: String as PropType<string | null>,
-            default: null
-        },
-        rootFolderName: {
-            type: String,
-            default: '根目录'
-        }
+  name: 'BaseFolderBreadcrumb',
+  props: {
+    breadcrumbPath: {
+      type: Array as PropType<FolderTreeNode[]>,
+      required: true,
     },
-    emits: ['navigate'],
-    computed: {
-        computedItems(): BreadcrumbItem[] {
-            const items: BreadcrumbItem[] = [
-                {
-                    title: this.rootFolderName,
-                    folderId: null,
-                    disabled: this.currentFolderId === null,
-                    isRoot: true
-                }
-            ];
-
-            this.breadcrumbPath.forEach((folder, index) => {
-                items.push({
-                    title: folder.name,
-                    folderId: folder.folder_id,
-                    disabled: index === this.breadcrumbPath.length - 1,
-                    isRoot: false
-                });
-            });
-
-            return items;
-        }
+    currentFolderId: {
+      type: String as PropType<string | null>,
+      default: null,
     },
-    methods: {
-        toBreadcrumbItem(item: unknown): BreadcrumbItem {
-            return item as BreadcrumbItem;
+    rootFolderName: {
+      type: String,
+      default: '根目录',
+    },
+  },
+  emits: ['navigate'],
+  computed: {
+    computedItems(): BreadcrumbItem[] {
+      const items: BreadcrumbItem[] = [
+        {
+          title: this.rootFolderName,
+          folderId: null,
+          disabled: this.currentFolderId === null,
+          isRoot: true,
         },
-        handleClick(folderId: string | null) {
-            this.$emit('navigate', folderId);
-        }
-    }
+      ];
+
+      this.breadcrumbPath.forEach((folder, index) => {
+        items.push({
+          title: folder.name,
+          folderId: folder.folder_id,
+          disabled: index === this.breadcrumbPath.length - 1,
+          isRoot: false,
+        });
+      });
+
+      return items;
+    },
+  },
+  methods: {
+    toBreadcrumbItem(item: unknown): BreadcrumbItem {
+      return item as BreadcrumbItem;
+    },
+    handleClick(folderId: string | null) {
+      this.$emit('navigate', folderId);
+    },
+  },
 });
 </script>
 
 <style scoped>
 .base-folder-breadcrumb {
-    font-size: 14px;
+  font-size: 14px;
 }
 
 .breadcrumb-link {
-    cursor: pointer;
-    transition: color 0.2s;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
 .breadcrumb-link:hover {
-    color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
 }
 </style>

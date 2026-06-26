@@ -15,7 +15,7 @@
         </v-btn>
       </div>
     </template>
-    
+
     <v-card class="t2i-template-editor">
       <v-card-title class="d-flex align-center justify-space-between">
         <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
@@ -30,7 +30,7 @@
             variant="outlined"
             class="flex-grow-1"
             autofocus
-            :rules="[v => !!v || tm('t2iTemplateEditor.nameRequired')]"
+            :rules="[(v) => !!v || tm('t2iTemplateEditor.nameRequired')]"
           ></v-text-field>
           <v-select
             v-else
@@ -72,24 +72,25 @@
               </v-list-item>
             </template>
           </v-select>
-          <v-btn
-            variant="text"
-            icon
-            @click="closeDialog"
-          >
+          <v-btn variant="text" icon @click="closeDialog">
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>
       </v-card-title>
 
       <v-card-text class="pa-0">
-        <v-row no-gutters style="height: 70vh;">
+        <v-row no-gutters style="height: 70vh">
           <!-- 左侧编辑器 -->
           <v-col cols="6" class="d-flex flex-column">
             <v-toolbar density="compact" color="surface-variant">
-              <v-toolbar-title class="text-subtitle-2">{{ tm('t2iTemplateEditor.templateEditor') }}</v-toolbar-title>
+              <v-toolbar-title class="text-subtitle-2">{{
+                tm('t2iTemplateEditor.templateEditor')
+              }}</v-toolbar-title>
               <v-spacer></v-spacer>
-              <div class="d-flex align-center pa-1" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;">
+              <div
+                class="d-flex align-center pa-1"
+                style="border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px"
+              >
                 <v-btn
                   variant="text"
                   size="small"
@@ -113,7 +114,11 @@
                   variant="text"
                   size="small"
                   color="error"
-                  :disabled="isCreatingNew || selectedTemplate === 'base' || !selectedTemplate"
+                  :disabled="
+                    isCreatingNew ||
+                    selectedTemplate === 'base' ||
+                    !selectedTemplate
+                  "
                   @click="promptDelete"
                 >
                   {{ tm('t2iTemplateEditor.delete') }}
@@ -124,20 +129,26 @@
                   size="small"
                   :loading="saveLoading"
                   color="primary"
-                  :disabled="(isCreatingNew && !editingName) || (!isCreatingNew && !selectedTemplate)"
+                  :disabled="
+                    (isCreatingNew && !editingName) ||
+                    (!isCreatingNew && !selectedTemplate)
+                  "
                   @click="saveTemplate"
                 >
                   {{ tm('t2iTemplateEditor.save') }}
                 </v-btn>
               </div>
             </v-toolbar>
-            <div class="flex-grow-1" style="border-right: 1px solid rgba(0,0,0,0.1);">
+            <div
+              class="flex-grow-1"
+              style="border-right: 1px solid rgba(0, 0, 0, 0.1)"
+            >
               <VueMonacoEditor
                 v-model:value="templateContent"
                 :theme="editorTheme"
                 language="html"
                 :options="editorOptions"
-                style="height: 100%;"
+                style="height: 100%"
               />
             </div>
           </v-col>
@@ -145,7 +156,9 @@
           <!-- 右侧预览 -->
           <v-col cols="6" class="d-flex flex-column">
             <v-toolbar density="compact" color="surface-variant">
-              <v-toolbar-title class="text-subtitle-2">{{ tm('t2iTemplateEditor.livePreview') }}</v-toolbar-title>
+              <v-toolbar-title class="text-subtitle-2">{{
+                tm('t2iTemplateEditor.livePreview')
+              }}</v-toolbar-title>
               <v-spacer></v-spacer>
               <v-btn
                 variant="text"
@@ -160,7 +173,7 @@
               <iframe
                 ref="previewFrame"
                 :srcdoc="previewContent"
-                style="width: 100%; height: 100%; border: none; zoom: 0.6;"
+                style="width: 100%; height: 100%; border: none; zoom: 0.6"
               />
             </div>
           </v-col>
@@ -176,10 +189,7 @@
             </div>
           </v-col>
           <v-col cols="auto">
-            <v-btn
-              variant="text"
-              @click="closeDialog"
-            >
+            <v-btn variant="text" @click="closeDialog">
               {{ t('core.common.cancel') }}
             </v-btn>
             <v-btn
@@ -205,8 +215,16 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="warning" variant="tonal" :loading="resetLoading" @click="confirmReset">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
+          <v-btn text @click="resetDialog = false">{{
+            t('core.common.cancel')
+          }}</v-btn>
+          <v-btn
+            color="warning"
+            variant="tonal"
+            :loading="resetLoading"
+            @click="confirmReset"
+            >{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -216,12 +234,24 @@
       <v-card>
         <v-card-title>{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
         <v-card-text>
-          {{ tm('t2iTemplateEditor.confirmDeleteMessage', { name: selectedTemplate }) }}
+          {{
+            tm('t2iTemplateEditor.confirmDeleteMessage', {
+              name: selectedTemplate,
+            })
+          }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="error" variant="tonal" :loading="saveLoading" @click="confirmDelete">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
+          <v-btn text @click="deleteDialog = false">{{
+            t('core.common.cancel')
+          }}</v-btn>
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="saveLoading"
+            @click="confirmDelete"
+            >{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -231,56 +261,67 @@
       <v-card>
         <v-card-title>{{ tm('t2iTemplateEditor.confirmAction') }}</v-card-title>
         <v-card-text>
-          {{ tm('t2iTemplateEditor.confirmApplyMessage', { name: selectedTemplate }) }}
+          {{
+            tm('t2iTemplateEditor.confirmApplyMessage', {
+              name: selectedTemplate,
+            })
+          }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" variant="tonal" :loading="saveLoading" @click="confirmApplyAndClose">{{ t('core.common.confirm') }}</v-btn>
+          <v-btn text @click="applyAndCloseDialog = false">{{
+            t('core.common.cancel')
+          }}</v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="saveLoading"
+            @click="confirmApplyAndClose"
+            >{{ t('core.common.confirm') }}</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
-
   </v-dialog>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch } from 'vue'
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import '@/utils/monacoLoader'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
-import { useToast } from '@/utils/toast'
-import { statsApi, t2iApi } from '@/api/v1'
+import { ref, computed, nextTick, watch } from 'vue';
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import '@/utils/monacoLoader';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useToast } from '@/utils/toast';
+import { statsApi, t2iApi } from '@/api/v1';
 
-const { t } = useI18n()
-const { tm } = useModuleI18n('core.shared')
-const toast = useToast()
+const { t } = useI18n();
+const { tm } = useModuleI18n('core.shared');
+const toast = useToast();
 
 // --- 响应式数据 ---
-const dialog = ref(false)
-const loading = ref(false) // 用于加载模板列表
-const saveLoading = ref(false)
-const resetLoading = ref(false)
-const previewLoading = ref(false)
-const applyLoading = ref(false)
+const dialog = ref(false);
+const loading = ref(false); // 用于加载模板列表
+const saveLoading = ref(false);
+const resetLoading = ref(false);
+const previewLoading = ref(false);
+const applyLoading = ref(false);
 
 // 模板管理
-const templates = ref([])
-const activeTemplate = ref('base')
-const selectedTemplate = ref(null)
-const editingName = ref('') // 用于新建模式下的名称输入
-const templateContent = ref('')
-const isCreatingNew = ref(false)
+const templates = ref([]);
+const activeTemplate = ref('base');
+const selectedTemplate = ref(null);
+const editingName = ref(''); // 用于新建模式下的名称输入
+const templateContent = ref('');
+const isCreatingNew = ref(false);
 
 // 对话框状态
-const resetDialog = ref(false)
-const deleteDialog = ref(false)
-const applyAndCloseDialog = ref(false)
+const resetDialog = ref(false);
+const deleteDialog = ref(false);
+const applyAndCloseDialog = ref(false);
 
-const previewFrame = ref(null)
+const previewFrame = ref(null);
 
 // --- 编辑器配置 ---
-const editorTheme = computed(() => 'vs-light')
+const editorTheme = computed(() => 'vs-light');
 const editorOptions = {
   automaticLayout: true,
   fontSize: 12,
@@ -288,248 +329,277 @@ const editorOptions = {
   wordWrap: 'on',
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
-}
+};
 
 // --- 预览逻辑 ---
-const previewVersion = ref('v4.0.0')
+const previewVersion = ref('v4.0.0');
 const syncPreviewVersion = async () => {
   try {
-    const res = await statsApi.version()
-    const rawVersion = res?.data?.data?.version || res?.data?.version
+    const res = await statsApi.version();
+    const rawVersion = res?.data?.data?.version || res?.data?.version;
     if (rawVersion) {
-      previewVersion.value = rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`
+      previewVersion.value = rawVersion.startsWith('v')
+        ? rawVersion
+        : `v${rawVersion}`;
     }
   } catch (error) {
-    console.warn('Failed to fetch version:', error)
+    console.warn('Failed to fetch version:', error);
   }
-}
+};
 
 const previewData = computed(() => ({
-  text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: previewVersion.value
-}))
+  text:
+    tm('t2iTemplateEditor.previewText') ||
+    '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
+  version: previewVersion.value,
+}));
 
 const injectShikiRuntime = (content) => {
   if (content.includes('astrbot-t2i-shiki-runtime')) {
-    return content
+    return content;
   }
 
-  const runtimeScript = getShikiRuntimeScript()
-  const headClose = content.search(/<\/head\s*>/i)
+  const runtimeScript = getShikiRuntimeScript();
+  const headClose = content.search(/<\/head\s*>/i);
   if (headClose >= 0) {
-    return `${content.slice(0, headClose)}  ${runtimeScript}\n${content.slice(headClose)}`
+    return `${content.slice(0, headClose)}  ${runtimeScript}\n${content.slice(headClose)}`;
   }
 
-  return `${runtimeScript}\n${content}`
-}
+  return `${runtimeScript}\n${content}`;
+};
 
 const getShikiRuntimeScript = () =>
-  `<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr${"ipt>"}`
+  `<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr${'ipt>'}`;
 
-const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
+const hasMarkdownSource = (content) =>
+  /<[^>]+\bid=["']markdown-source["']/i.test(content);
 
 const insertMarkdownSource = (content) => {
-  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n'
-  const markedScript = content.search(/^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im)
+  const sourceElement =
+    '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n';
+  const markedScript = content.search(
+    /^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im,
+  );
   if (markedScript >= 0) {
-    return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`
+    return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`;
   }
 
-  const bodyClose = content.search(/<\/body\s*>/i)
+  const bodyClose = content.search(/<\/body\s*>/i);
   if (bodyClose >= 0) {
-    return `${content.slice(0, bodyClose)}${sourceElement}${content.slice(bodyClose)}`
+    return `${content.slice(0, bodyClose)}${sourceElement}${content.slice(bodyClose)}`;
   }
 
-  return `${sourceElement}${content}`
-}
+  return `${sourceElement}${content}`;
+};
 
 const normalizeMarkdownSource = (content) => {
   let normalized = content.replace(
     /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
-    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>'
-  )
+    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>',
+  );
 
   normalized = normalized.replace(
     /decodeBase64Utf8\("\{\{\s*text_base64\s*\}\}"\)/g,
-    'document.getElementById("markdown-source").value'
-  )
+    'document.getElementById("markdown-source").value',
+  );
   normalized = normalized.replace(
     /document\.getElementById\(["']markdown-source["']\)\.textContent/g,
-    'document.getElementById("markdown-source").value'
-  )
+    'document.getElementById("markdown-source").value',
+  );
 
-  if (/\{\{\s*text_base64\s*\}\}/.test(normalized) && !hasMarkdownSource(normalized)) {
-    normalized = insertMarkdownSource(normalized)
+  if (
+    /\{\{\s*text_base64\s*\}\}/.test(normalized) &&
+    !hasMarkdownSource(normalized)
+  ) {
+    normalized = insertMarkdownSource(normalized);
   }
 
-  return normalized
-}
+  return normalized;
+};
 
 const previewContent = computed(() => {
   try {
-    let content = normalizeMarkdownSource(templateContent.value)
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
-    let usedExistingShikiPlaceholder = false
-    content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
-      usedExistingShikiPlaceholder = true
-      return getShikiRuntimeScript()
-    })
-    content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
-      usedExistingShikiPlaceholder = true
-      return getShikiRuntimeScript()
-    })
-    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content)
+    let content = normalizeMarkdownSource(templateContent.value);
+    content = content.replace(
+      /\{\{\s*text\s*\|\s*safe\s*\}\}/g,
+      () => previewData.value.text,
+    );
+    content = content.replace(
+      /\{\{\s*version\s*\}\}/g,
+      () => previewData.value.version,
+    );
+    let usedExistingShikiPlaceholder = false;
+    content = content.replace(
+      /<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
+      () => {
+        usedExistingShikiPlaceholder = true;
+        return getShikiRuntimeScript();
+      },
+    );
+    content = content.replace(
+      /\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g,
+      () => {
+        usedExistingShikiPlaceholder = true;
+        return getShikiRuntimeScript();
+      },
+    );
+    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`;
   }
-})
+});
 
 // --- API 调用方法 ---
 const loadInitialData = async () => {
-  loading.value = true
+  loading.value = true;
   try {
     const [listRes, activeRes] = await Promise.all([
       t2iApi.listTemplates(),
-      t2iApi.getActiveTemplate()
-    ])
+      t2iApi.getActiveTemplate(),
+    ]);
 
     if (listRes.data.status === 'ok') {
-      templates.value = listRes.data.data
+      templates.value = listRes.data.data;
     } else {
-      console.error('加载模板列表失败:', listRes.data.message)
+      console.error('加载模板列表失败:', listRes.data.message);
     }
 
     if (activeRes.data.status === 'ok') {
-      activeTemplate.value = activeRes.data.data.active_template
+      activeTemplate.value = activeRes.data.data.active_template;
     } else {
-      console.error('加载活动模板失败:', activeRes.data.message)
+      console.error('加载活动模板失败:', activeRes.data.message);
     }
 
     // 设置初始选中的模板
     if (templates.value.length > 0) {
-      selectedTemplate.value = activeTemplate.value
+      selectedTemplate.value = activeTemplate.value;
     }
-
   } catch (error) {
-    console.error('加载初始数据失败:', error)
+    console.error('加载初始数据失败:', error);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const loadTemplateContent = async (name) => {
-  if (!name) return
-  previewLoading.value = true
+  if (!name) return;
+  previewLoading.value = true;
   try {
-    const response = await t2iApi.getTemplate(name)
+    const response = await t2iApi.getTemplate(name);
     if (response.data.status === 'ok') {
-      templateContent.value = response.data.data.content
+      templateContent.value = response.data.data.content;
     } else {
-      console.error(`加载模板 '${name}' 失败:`, response.data.message)
+      console.error(`加载模板 '${name}' 失败:`, response.data.message);
     }
   } catch (error) {
-    console.error(`加载模板 '${name}' 失败:`, error)
+    console.error(`加载模板 '${name}' 失败:`, error);
   } finally {
-    previewLoading.value = false
+    previewLoading.value = false;
   }
-}
+};
 
 const saveTemplate = async () => {
-  saveLoading.value = true
+  saveLoading.value = true;
   try {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
-      if (!editingName.value) return
+      if (!editingName.value) return;
       const response = await t2iApi.createTemplate({
         name: editingName.value,
-        content: templateContent.value
-      })
-      await loadInitialData() // 重新加载所有数据
-      selectedTemplate.value = response.data.data.name
-      isCreatingNew.value = false
+        content: templateContent.value,
+      });
+      await loadInitialData(); // 重新加载所有数据
+      selectedTemplate.value = response.data.data.name;
+      isCreatingNew.value = false;
     } else {
       // --- 更新现有模板 ---
-      if (!selectedTemplate.value) return
-      await t2iApi.updateTemplate(selectedTemplate.value, templateContent.value)
+      if (!selectedTemplate.value) return;
+      await t2iApi.updateTemplate(
+        selectedTemplate.value,
+        templateContent.value,
+      );
     }
   } catch (error) {
-    const msg = error?.response?.data?.message || error?.message || String(error)
-    console.error('保存模板失败:', msg)
-    toast.error(msg)
+    const msg =
+      error?.response?.data?.message || error?.message || String(error);
+    console.error('保存模板失败:', msg);
+    toast.error(msg);
   } finally {
-    saveLoading.value = false
+    saveLoading.value = false;
   }
-}
+};
 
 const setActiveTemplate = async (name) => {
-  applyLoading.value = true
+  applyLoading.value = true;
   try {
-    await t2iApi.setActiveTemplate(name)
-    activeTemplate.value = name
+    await t2iApi.setActiveTemplate(name);
+    activeTemplate.value = name;
   } catch (error) {
-    const msg = error?.response?.data?.message || error?.message || String(error)
-    console.error(`应用模板 '${name}' 失败:`, msg)
-    toast.error(msg)
+    const msg =
+      error?.response?.data?.message || error?.message || String(error);
+    console.error(`应用模板 '${name}' 失败:`, msg);
+    toast.error(msg);
   } finally {
-    applyLoading.value = false
+    applyLoading.value = false;
   }
-}
+};
 
 const confirmDelete = async () => {
-  if (!selectedTemplate.value || selectedTemplate.value === 'base') return
-  saveLoading.value = true
+  if (!selectedTemplate.value || selectedTemplate.value === 'base') return;
+  saveLoading.value = true;
   try {
-    const nameToDelete = selectedTemplate.value
-    await t2iApi.deleteTemplate(nameToDelete)
-    deleteDialog.value = false
+    const nameToDelete = selectedTemplate.value;
+    await t2iApi.deleteTemplate(nameToDelete);
+    deleteDialog.value = false;
 
     // 如果删除的是当前活动模板，则将活动模板重置为base
     if (activeTemplate.value === nameToDelete) {
-        await setActiveTemplate('base')
+      await setActiveTemplate('base');
     }
-    await loadInitialData()
-    selectedTemplate.value = 'base'
+    await loadInitialData();
+    selectedTemplate.value = 'base';
   } catch (error) {
-    const msg = error?.response?.data?.message || error?.message || String(error)
-    console.error(`删除模板失败:`, msg)
-    toast.error(msg)
+    const msg =
+      error?.response?.data?.message || error?.message || String(error);
+    console.error(`删除模板失败:`, msg);
+    toast.error(msg);
   } finally {
-    saveLoading.value = false
+    saveLoading.value = false;
   }
-}
+};
 
 const confirmReset = async () => {
-  resetLoading.value = true
+  resetLoading.value = true;
   try {
-    await t2iApi.resetDefaultTemplate()
-    resetDialog.value = false
+    await t2iApi.resetDefaultTemplate();
+    resetDialog.value = false;
     if (selectedTemplate.value === 'base') {
-      await loadTemplateContent('base')
+      await loadTemplateContent('base');
     }
     if (activeTemplate.value !== 'base') {
-        await setActiveTemplate('base')
+      await setActiveTemplate('base');
     }
   } catch (error) {
-    const msg = error?.response?.data?.message || error?.message || String(error)
-    console.error('重置模板失败:', msg)
-    toast.error(msg)
+    const msg =
+      error?.response?.data?.message || error?.message || String(error);
+    console.error('重置模板失败:', msg);
+    toast.error(msg);
   } finally {
-    resetLoading.value = false
+    resetLoading.value = false;
   }
-}
+};
 
 // --- UI 交互方法 ---
 
 const resetToDefault = () => {
-  resetDialog.value = true
-}
+  resetDialog.value = true;
+};
 
 const newTemplate = () => {
-  isCreatingNew.value = true
-  selectedTemplate.value = null
-  editingName.value = ''
+  isCreatingNew.value = true;
+  selectedTemplate.value = null;
+  editingName.value = '';
   templateContent.value = `<!doctype html>
 <html>
 <head>
@@ -541,71 +611,71 @@ const newTemplate = () => {
   <article>{{ text | safe }}</article>
 </body>
 </html>
-`
-}
+`;
+};
 
 const promptDelete = () => {
   if (selectedTemplate.value && selectedTemplate.value !== 'base') {
-    deleteDialog.value = true
+    deleteDialog.value = true;
   }
-}
+};
 
 const promptApplyAndClose = () => {
   if (!isCreatingNew.value && selectedTemplate.value) {
-    applyAndCloseDialog.value = true
+    applyAndCloseDialog.value = true;
   }
-}
+};
 
 const confirmApplyAndClose = async () => {
-  if (isCreatingNew.value) return
-  
-  await saveTemplate()
-  await setActiveTemplate(selectedTemplate.value)
-  applyAndCloseDialog.value = false
-  closeDialog()
-}
+  if (isCreatingNew.value) return;
+
+  await saveTemplate();
+  await setActiveTemplate(selectedTemplate.value);
+  applyAndCloseDialog.value = false;
+  closeDialog();
+};
 
 const refreshPreview = () => {
-  previewLoading.value = true
-  void syncPreviewVersion()
+  previewLoading.value = true;
+  void syncPreviewVersion();
   void nextTick(() => {
     if (previewFrame.value) {
-      previewFrame.value.contentWindow.location.reload()
+      previewFrame.value.contentWindow.location.reload();
     }
-    setTimeout(() => previewLoading.value = false, 500)
-  })
-}
+    setTimeout(() => (previewLoading.value = false), 500);
+  });
+};
 
 const closeDialog = () => {
-  dialog.value = false
-}
+  dialog.value = false;
+};
 
 // --- 监听器和生命周期 ---
 
 watch(dialog, (newVal) => {
   if (newVal) {
-    void syncPreviewVersion()
-    void loadInitialData()
+    void syncPreviewVersion();
+    void loadInitialData();
   } else {
     // 关闭时重置状态
-    selectedTemplate.value = null
-    templateContent.value = ''
-    isCreatingNew.value = false
+    selectedTemplate.value = null;
+    templateContent.value = '';
+    isCreatingNew.value = false;
   }
-})
+});
 
 watch(selectedTemplate, (newName) => {
   if (newName) {
-    isCreatingNew.value = false
-    void loadTemplateContent(newName)
+    isCreatingNew.value = false;
+    void loadTemplateContent(newName);
   }
-})
+});
 
 defineExpose({
   openDialog: () => {
-    dialog.value = true
-  }
-})
+    dialog.value = true;
+  },
+});
 </script>
 
 <style scoped>
@@ -634,19 +704,23 @@ defineExpose({
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: 
-    linear-gradient(45deg, #ccc 25%, transparent 25%), 
-    linear-gradient(-45deg, #ccc 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #ccc 75%), 
+  background-image:
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
     linear-gradient(-45deg, transparent 75%, #ccc 75%);
   background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    -10px 0px;
   opacity: 0.1;
   pointer-events: none;
 }
 
 code {
-  background-color: rgba(0,0,0,0.05);
+  background-color: rgba(0, 0, 0, 0.05);
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.875em;

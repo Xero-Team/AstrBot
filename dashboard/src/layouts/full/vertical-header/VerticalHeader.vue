@@ -6,51 +6,51 @@ import {
   onMounted,
   onUnmounted,
   defineAsyncComponent,
-} from "vue";
-import { useCustomizerStore } from "@/stores/customizer";
-import Logo from "@/components/shared/Logo.vue";
-import { useAuthStore } from "@/stores/auth";
-import { useCommonStore } from "@/stores/common";
-import { useI18n } from "@/i18n/composables";
-import { router } from "@/router";
-import { useRoute } from "vue-router";
-import { useTheme } from "vuetify";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { useLanguageSwitcher } from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
-import { authApi, statsApi, updatesApi } from "@/api/v1";
-import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
+} from 'vue';
+import { useCustomizerStore } from '@/stores/customizer';
+import Logo from '@/components/shared/Logo.vue';
+import { useAuthStore } from '@/stores/auth';
+import { useCommonStore } from '@/stores/common';
+import { useI18n } from '@/i18n/composables';
+import { router } from '@/router';
+import { useRoute } from 'vue-router';
+import { useTheme } from 'vuetify';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
+import { useLanguageSwitcher } from '@/i18n/composables';
+import type { Locale } from '@/i18n/types';
+import { authApi, statsApi, updatesApi } from '@/api/v1';
+import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 
 const LazyMarkdownRender = defineAsyncComponent(
-  () => import("@/components/shared/LazyMarkdownRender.vue"),
+  () => import('@/components/shared/LazyMarkdownRender.vue'),
 );
-const AboutPage = defineAsyncComponent(() => import("@/views/AboutPage.vue"));
+const AboutPage = defineAsyncComponent(() => import('@/views/AboutPage.vue'));
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
 const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
-const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
-const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
-const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
+const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
+const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
+const SHOW_PRE_RELEASES_KEY = 'astrbot:updateDialog:showPreReleases';
 let dialog = ref(false);
 let accountWarning = ref(false);
 let accountWarningMd5 = ref(false);
 let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
-const username = localStorage.getItem("user");
-let password = ref("");
-let newPassword = ref("");
-let confirmPassword = ref("");
-let newUsername = ref("");
-let updateStatus = ref("");
-let releaseMessage = ref("");
+const username = localStorage.getItem('user');
+let password = ref('');
+let newPassword = ref('');
+let confirmPassword = ref('');
+let newUsername = ref('');
+let updateStatus = ref('');
+let releaseMessage = ref('');
 let hasNewVersion = ref(false);
-let botCurrVersion = ref("");
+let botCurrVersion = ref('');
 let dashboardHasNewVersion = ref(false);
-let dashboardCurrentVersion = ref("");
+let dashboardCurrentVersion = ref('');
 type ReleaseItem = {
   tag_name: string;
   published_at: string;
@@ -59,9 +59,9 @@ type ReleaseItem = {
 let releases = ref<ReleaseItem[]>([]);
 let releasesLoading = ref(false);
 const showPreReleases = ref(
-  typeof window === "undefined"
+  typeof window === 'undefined'
     ? false
-    : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === "true",
+    : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === 'true',
 );
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
@@ -74,7 +74,7 @@ let restartReloadCountdown = ref(3);
 let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
 const RESTART_FEEDBACK_DELAY_SECONDS = 3;
 const RESTART_START_TIME_POLL_INTERVAL_MS = 2000;
-type DownloadStageStatus = "pending" | "running" | "done" | "error";
+type DownloadStageStatus = 'pending' | 'running' | 'done' | 'error';
 type DownloadStage = {
   status: DownloadStageStatus;
   downloaded: number;
@@ -84,7 +84,7 @@ type DownloadStage = {
 };
 type UpdateProgress = {
   id: string;
-  status: "idle" | "running" | "success" | "error";
+  status: 'idle' | 'running' | 'success' | 'error';
   stage: string;
   version: string;
   message: string;
@@ -92,7 +92,7 @@ type UpdateProgress = {
   stages: Record<string, DownloadStage>;
 };
 const createEmptyDownloadStage = (
-  status: DownloadStageStatus = "pending",
+  status: DownloadStageStatus = 'pending',
 ): DownloadStage => ({
   status,
   downloaded: 0,
@@ -101,11 +101,11 @@ const createEmptyDownloadStage = (
   speed: 0,
 });
 const createEmptyUpdateProgress = (): UpdateProgress => ({
-  id: "",
-  status: "idle",
-  stage: "preparing",
-  version: "",
-  message: "",
+  id: '',
+  status: 'idle',
+  stage: 'preparing',
+  version: '',
+  message: '',
   overall_percent: 0,
   stages: {
     dashboard: createEmptyDownloadStage(),
@@ -115,27 +115,27 @@ const createEmptyUpdateProgress = (): UpdateProgress => ({
 let updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
 let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
 const isDesktopReleaseMode = ref(
-  typeof window !== "undefined" && Boolean(window.astrbotDesktop?.isDesktop),
+  typeof window !== 'undefined' && Boolean(window.astrbotDesktop?.isDesktop),
 );
 const desktopUpdateDialog = ref(false);
 const desktopUpdateChecking = ref(false);
 const desktopUpdateInstalling = ref(false);
 const desktopUpdateHasNewVersion = ref(false);
-const desktopUpdateCurrentVersion = ref("-");
-const desktopUpdateLatestVersion = ref("-");
-const desktopUpdateStatus = ref("");
+const desktopUpdateCurrentVersion = ref('-');
+const desktopUpdateLatestVersion = ref('-');
+const desktopUpdateStatus = ref('');
 const isChatPath = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+  () => route.path === '/chat' || route.path.startsWith('/chat/'),
 );
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return null;
   }
   const bridge = window.astrbotAppUpdater;
   if (
     bridge &&
-    typeof bridge.checkForAppUpdate === "function" &&
-    typeof bridge.installAppUpdate === "function"
+    typeof bridge.checkForAppUpdate === 'function' &&
+    typeof bridge.installAppUpdate === 'function'
   ) {
     return bridge;
   }
@@ -143,25 +143,25 @@ const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
 };
 
 const getSelectedGitHubProxy = () => {
-  if (typeof window === "undefined" || !window.localStorage) return "";
-  return localStorage.getItem("githubProxyRadioValue") === "1"
-    ? localStorage.getItem("selectedGitHubProxy") || ""
-    : "";
+  if (typeof window === 'undefined' || !window.localStorage) return '';
+  return localStorage.getItem('githubProxyRadioValue') === '1'
+    ? localStorage.getItem('selectedGitHubProxy') || ''
+    : '';
 };
 
 // Release Notes Modal
 let releaseNotesDialog = ref(false);
-let selectedReleaseNotes = ref("");
-let selectedReleaseTag = ref("");
+let selectedReleaseNotes = ref('');
+let selectedReleaseTag = ref('');
 
 const releasesHeader = computed(() => [
-  { title: t("core.header.updateDialog.table.tag"), key: "tag_name" },
+  { title: t('core.header.updateDialog.table.tag'), key: 'tag_name' },
   {
-    title: t("core.header.updateDialog.table.publishDate"),
-    key: "published_at",
+    title: t('core.header.updateDialog.table.publishDate'),
+    key: 'published_at',
   },
-  { title: t("core.header.updateDialog.table.content"), key: "body" },
-  { title: t("core.header.updateDialog.table.actions"), key: "switch" },
+  { title: t('core.header.updateDialog.table.content'), key: 'body' },
+  { title: t('core.header.updateDialog.table.actions'), key: 'switch' },
 ]);
 const visibleReleases = computed(() =>
   showPreReleases.value
@@ -174,73 +174,73 @@ const firstReleasePageHasPreRelease = computed(() =>
 );
 const updateStageItems = computed(() => [
   {
-    key: "dashboard",
-    title: t("core.header.updateDialog.progress.dashboard"),
+    key: 'dashboard',
+    title: t('core.header.updateDialog.progress.dashboard'),
     progress:
       updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
   },
   {
-    key: "core",
-    title: t("core.header.updateDialog.progress.core"),
+    key: 'core',
+    title: t('core.header.updateDialog.progress.core'),
     progress: updateProgress.value.stages.core || createEmptyDownloadStage(),
   },
 ]);
 const updateProgressMessage = computed(() => {
-  if (updateProgress.value.status === "error") {
+  if (updateProgress.value.status === 'error') {
     return (
       updateProgress.value.message ||
-      t("core.header.updateDialog.progress.failed")
+      t('core.header.updateDialog.progress.failed')
     );
   }
-  if (updateProgress.value.status === "success") {
+  if (updateProgress.value.status === 'success') {
     return (
       updateProgress.value.message ||
-      t("core.header.updateDialog.progress.completed")
+      t('core.header.updateDialog.progress.completed')
     );
   }
-  if (updateProgress.value.stage === "dependencies") {
-    return t("core.header.updateDialog.progress.dependencies");
+  if (updateProgress.value.stage === 'dependencies') {
+    return t('core.header.updateDialog.progress.dependencies');
   }
-  if (updateProgress.value.stage === "restart") {
-    return t("core.header.updateDialog.progress.restart");
+  if (updateProgress.value.stage === 'restart') {
+    return t('core.header.updateDialog.progress.restart');
   }
   return (
     updateProgress.value.message ||
-    t("core.header.updateDialog.progress.preparing")
+    t('core.header.updateDialog.progress.preparing')
   );
 });
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
   (v: string) =>
-    Boolean(v) || t("core.header.accountDialog.validation.passwordRequired"),
+    Boolean(v) || t('core.header.accountDialog.validation.passwordRequired'),
   (v: string) =>
     v.length >= 8 ||
-    t("core.header.accountDialog.validation.passwordMinLength"),
+    t('core.header.accountDialog.validation.passwordMinLength'),
   (v: string) =>
     /[A-Z]/.test(v) ||
-    t("core.header.accountDialog.validation.passwordUppercase"),
+    t('core.header.accountDialog.validation.passwordUppercase'),
   (v: string) =>
     /[a-z]/.test(v) ||
-    t("core.header.accountDialog.validation.passwordLowercase"),
+    t('core.header.accountDialog.validation.passwordLowercase'),
   (v: string) =>
-    /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
+    /\d/.test(v) || t('core.header.accountDialog.validation.passwordDigit'),
 ]);
 const confirmPasswordRules = computed(() => [
   (v: string) =>
     !newPassword.value ||
     Boolean(v) ||
-    t("core.header.accountDialog.validation.passwordRequired"),
+    t('core.header.accountDialog.validation.passwordRequired'),
   (v: string) =>
     !newPassword.value ||
     v === newPassword.value ||
-    t("core.header.accountDialog.validation.passwordMatch"),
+    t('core.header.accountDialog.validation.passwordMatch'),
 ]);
 const usernameRules = computed(() => [
   (v: string) =>
     !v ||
     v.length >= 3 ||
-    t("core.header.accountDialog.validation.usernameMinLength"),
+    t('core.header.accountDialog.validation.usernameMinLength'),
 ]);
 
 // 显示密码相关
@@ -253,7 +253,7 @@ const accountEditStatus = ref({
   loading: false,
   success: false,
   error: false,
-  message: "",
+  message: '',
 });
 
 function cancelDesktopUpdate() {
@@ -268,15 +268,15 @@ async function openDesktopUpdateDialog() {
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
   desktopUpdateHasNewVersion.value = false;
-  desktopUpdateCurrentVersion.value = "-";
-  desktopUpdateLatestVersion.value = "-";
-  desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checking");
+  desktopUpdateCurrentVersion.value = '-';
+  desktopUpdateLatestVersion.value = '-';
+  desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.checking');
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
     desktopUpdateChecking.value = false;
     desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.checkFailed",
+      'core.header.updateDialog.desktopApp.checkFailed',
     );
     return;
   }
@@ -284,25 +284,25 @@ async function openDesktopUpdateDialog() {
   try {
     const result = await bridge.checkForAppUpdate();
     if (!result?.ok) {
-      desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
+      desktopUpdateCurrentVersion.value = result?.currentVersion || '-';
       desktopUpdateLatestVersion.value =
-        result?.latestVersion || result?.currentVersion || "-";
+        result?.latestVersion || result?.currentVersion || '-';
       desktopUpdateStatus.value =
-        result?.reason || t("core.header.updateDialog.desktopApp.checkFailed");
+        result?.reason || t('core.header.updateDialog.desktopApp.checkFailed');
       return;
     }
 
-    desktopUpdateCurrentVersion.value = result.currentVersion || "-";
+    desktopUpdateCurrentVersion.value = result.currentVersion || '-';
     desktopUpdateLatestVersion.value =
-      result.latestVersion || result.currentVersion || "-";
+      result.latestVersion || result.currentVersion || '-';
     desktopUpdateHasNewVersion.value = Boolean(result.hasUpdate);
     desktopUpdateStatus.value = result.hasUpdate
-      ? t("core.header.updateDialog.desktopApp.hasNewVersion")
-      : t("core.header.updateDialog.desktopApp.isLatest");
+      ? t('core.header.updateDialog.desktopApp.hasNewVersion')
+      : t('core.header.updateDialog.desktopApp.isLatest');
   } catch (error) {
     console.error(error);
     desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.checkFailed",
+      'core.header.updateDialog.desktopApp.checkFailed',
     );
   } finally {
     desktopUpdateChecking.value = false;
@@ -317,14 +317,14 @@ async function confirmDesktopUpdate() {
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
     desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.installFailed",
+      'core.header.updateDialog.desktopApp.installFailed',
     );
     return;
   }
 
   desktopUpdateInstalling.value = true;
   desktopUpdateStatus.value = t(
-    "core.header.updateDialog.desktopApp.installing",
+    'core.header.updateDialog.desktopApp.installing',
   );
 
   try {
@@ -334,11 +334,11 @@ async function confirmDesktopUpdate() {
       return;
     }
     desktopUpdateStatus.value =
-      result?.reason || t("core.header.updateDialog.desktopApp.installFailed");
+      result?.reason || t('core.header.updateDialog.desktopApp.installFailed');
   } catch (error) {
     console.error(error);
     desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.installFailed",
+      'core.header.updateDialog.desktopApp.installFailed',
     );
   } finally {
     desktopUpdateInstalling.value = false;
@@ -357,7 +357,7 @@ function handleUpdateClick() {
 
 // 检测是否为预发布版本
 const isPreRelease = (version: string) => {
-  const preReleaseKeywords = ["alpha", "beta", "rc", "pre", "preview", "dev"];
+  const preReleaseKeywords = ['alpha', 'beta', 'rc', 'pre', 'preview', 'dev'];
   const lowerVersion = version.toLowerCase();
   return preReleaseKeywords.some((keyword) => lowerVersion.includes(keyword));
 };
@@ -368,11 +368,11 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const currentPasswordValue = password.value ? password.value : "";
-  const newPasswordValue = newPassword.value ? newPassword.value : "";
+  const currentPasswordValue = password.value ? password.value : '';
+  const newPasswordValue = newPassword.value ? newPassword.value : '';
   const confirmPasswordValue = confirmPassword.value
     ? confirmPassword.value
-    : "";
+    : '';
 
   authApi
     .updateAccount({
@@ -382,16 +382,16 @@ function accountEdit() {
       new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
-      if (res.data.status === "error") {
+      if (res.data.status === 'error') {
         accountEditStatus.value.error = true;
-        accountEditStatus.value.message = res.data.message || "";
-        password.value = "";
-        newPassword.value = "";
-        confirmPassword.value = "";
+        accountEditStatus.value.message = res.data.message || '';
+        password.value = '';
+        newPassword.value = '';
+        confirmPassword.value = '';
         return;
       }
       accountEditStatus.value.success = true;
-      accountEditStatus.value.message = res.data.message || "";
+      accountEditStatus.value.message = res.data.message || '';
       setTimeout(() => {
         dialog.value = !dialog.value;
         const authStore = useAuthStore();
@@ -402,12 +402,12 @@ function accountEdit() {
       console.log(err);
       accountEditStatus.value.error = true;
       accountEditStatus.value.message =
-        typeof err === "string"
+        typeof err === 'string'
           ? err
-          : t("core.header.accountDialog.messages.updateFailed");
-      password.value = "";
-      newPassword.value = "";
-      confirmPassword.value = "";
+          : t('core.header.accountDialog.messages.updateFailed');
+      password.value = '';
+      newPassword.value = '';
+      confirmPassword.value = '';
     })
     .finally(() => {
       accountEditStatus.value.loading = false;
@@ -418,10 +418,10 @@ function getVersion() {
   statsApi
     .version()
     .then((res) => {
-      botCurrVersion.value = `v${  res.data.data.version || ""}`;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
+      botCurrVersion.value = `v${res.data.data.version || ''}`;
+      dashboardCurrentVersion.value = res.data.data?.dashboard_version || '';
       commonStore.setAstrBotVersion(
-        res.data.data.version || "",
+        res.data.data.version || '',
         res.data.data?.dashboard_version || undefined,
       );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
@@ -434,30 +434,27 @@ function getVersion() {
         accountWarningUpgrade.value = Boolean(password_upgrade_required);
         accountWarningMd5.value =
           Boolean(md5_pwd_hint) && !password_upgrade_required;
-        if (
-          change_pwd_hint ||
-          (md5_pwd_hint && !password_upgrade_required)
-        ) {
-          localStorage.setItem("change_pwd_hint", "true");
+        if (change_pwd_hint || (md5_pwd_hint && !password_upgrade_required)) {
+          localStorage.setItem('change_pwd_hint', 'true');
         } else {
-          localStorage.removeItem("change_pwd_hint");
+          localStorage.removeItem('change_pwd_hint');
         }
         if (md5_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem("md5_pwd_hint", "true");
+          localStorage.setItem('md5_pwd_hint', 'true');
         } else {
-          localStorage.removeItem("md5_pwd_hint");
+          localStorage.removeItem('md5_pwd_hint');
         }
         if (password_upgrade_required) {
-          localStorage.setItem("password_upgrade_required", "true");
+          localStorage.setItem('password_upgrade_required', 'true');
         } else {
-          localStorage.removeItem("password_upgrade_required");
+          localStorage.removeItem('password_upgrade_required');
         }
       } else {
         accountWarningMd5.value = false;
         accountWarningUpgrade.value = false;
-        localStorage.removeItem("change_pwd_hint");
-        localStorage.removeItem("md5_pwd_hint");
-        localStorage.removeItem("password_upgrade_required");
+        localStorage.removeItem('change_pwd_hint');
+        localStorage.removeItem('md5_pwd_hint');
+        localStorage.removeItem('password_upgrade_required');
       }
     })
     .catch((err) => {
@@ -466,32 +463,30 @@ function getVersion() {
 }
 
 function initPasswordWarningFromStorage() {
-  const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
-  const hasMd5PwdHint =
-    localStorage.getItem("md5_pwd_hint") === "true";
+  const hasChangePwdHint = localStorage.getItem('change_pwd_hint') === 'true';
+  const hasMd5PwdHint = localStorage.getItem('md5_pwd_hint') === 'true';
   const hasPasswordUpgradeRequired =
-    localStorage.getItem("password_upgrade_required") === "true";
+    localStorage.getItem('password_upgrade_required') === 'true';
   if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningMd5.value =
-      hasMd5PwdHint && !hasPasswordUpgradeRequired;
+    accountWarningMd5.value = hasMd5PwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
 function checkUpdate() {
-  updateStatus.value = t("core.header.updateDialog.status.checking");
+  updateStatus.value = t('core.header.updateDialog.status.checking');
   updatesApi
     .check()
     .then((res) => {
       hasNewVersion.value = res.data.data.has_new_version;
 
       if (res.data.data.has_new_version) {
-        releaseMessage.value = res.data.message || "";
-        updateStatus.value = t("core.header.version.hasNewVersion");
+        releaseMessage.value = res.data.message || '';
+        updateStatus.value = t('core.header.version.hasNewVersion');
       } else {
-        updateStatus.value = res.data.message || "";
+        updateStatus.value = res.data.message || '';
       }
       dashboardHasNewVersion.value = isDesktopReleaseMode.value
         ? false
@@ -499,7 +494,7 @@ function checkUpdate() {
     })
     .catch((err) => {
       if (err.response?.status === 401) {
-        console.log("401");
+        console.log('401');
         const authStore = useAuthStore();
         authStore.logout();
         return;
@@ -518,11 +513,13 @@ function getReleases() {
       releases.value = releaseItems.map((item) => {
         const release = item as Partial<ReleaseItem>;
         return {
-          tag_name: release.tag_name || "",
+          tag_name: release.tag_name || '',
           published_at: new Date(
-            typeof release.published_at === "string" ? release.published_at : "",
+            typeof release.published_at === 'string'
+              ? release.published_at
+              : '',
           ).toLocaleString(),
-          body: release.body || "",
+          body: release.body || '',
         };
       });
     })
@@ -536,7 +533,7 @@ function getReleases() {
 
 function formatDownloadSize(value: number) {
   if (!value || value <= 0) {
-    return "-";
+    return '-';
   }
   if (value < 1024 * 1024) {
     return `${(value / 1024).toFixed(1)} KB`;
@@ -546,7 +543,7 @@ function formatDownloadSize(value: number) {
 
 function formatDownloadSpeed(value: number) {
   if (!value || value <= 0) {
-    return "-";
+    return '-';
   }
   if (value < 1024) {
     return `${value.toFixed(1)} KB/s`;
@@ -555,29 +552,29 @@ function formatDownloadSpeed(value: number) {
 }
 
 function getStageStatusColor(status: DownloadStageStatus) {
-  if (status === "done") {
-    return "success";
+  if (status === 'done') {
+    return 'success';
   }
-  if (status === "running") {
-    return "primary";
+  if (status === 'running') {
+    return 'primary';
   }
-  if (status === "error") {
-    return "error";
+  if (status === 'error') {
+    return 'error';
   }
-  return "grey";
+  return 'grey';
 }
 
 function getStageStatusIcon(status: DownloadStageStatus) {
-  if (status === "done") {
-    return "mdi-check-circle";
+  if (status === 'done') {
+    return 'mdi-check-circle';
   }
-  if (status === "running") {
-    return "mdi-progress-download";
+  if (status === 'running') {
+    return 'mdi-progress-download';
   }
-  if (status === "error") {
-    return "mdi-alert-circle";
+  if (status === 'error') {
+    return 'mdi-alert-circle';
   }
-  return "mdi-circle-outline";
+  return 'mdi-circle-outline';
 }
 
 function stopUpdateProgressPolling() {
@@ -613,7 +610,7 @@ async function fetchAstrBotStartTime() {
   const res = await statsApi.startTime();
   const rawStartTime = res.data?.data?.start_time;
   const parsedStartTime =
-    typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
+    typeof rawStartTime === 'number' ? rawStartTime : Number(rawStartTime || 0);
   const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
   commonStore.startTime = startTime;
   return startTime;
@@ -626,7 +623,7 @@ function reloadAfterUpdate() {
 
 function reloadWithCacheBuster() {
   const url = new URL(window.location.href);
-  url.searchParams.set("_r", Date.now().toString());
+  url.searchParams.set('_r', Date.now().toString());
   window.location.replace(url.toString());
 }
 
@@ -641,9 +638,9 @@ function showRestartCompleted() {
   restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
   updateProgress.value = {
     ...updateProgress.value,
-    status: "success",
-    stage: "done",
-    message: t("core.header.updateDialog.progress.successReady"),
+    status: 'success',
+    stage: 'done',
+    message: t('core.header.updateDialog.progress.successReady'),
     overall_percent: 100,
   };
   restartReloadTimer = setInterval(() => {
@@ -667,9 +664,9 @@ function waitForAstrBotRestart(
     restartStartTime.value = initialStartTime;
     updateProgress.value = {
       ...updateProgress.value,
-      stage: "restart",
-      status: "success",
-      message: t("core.header.updateDialog.progress.restarting"),
+      stage: 'restart',
+      status: 'success',
+      message: t('core.header.updateDialog.progress.restarting'),
       overall_percent: 100,
     };
   }
@@ -703,9 +700,9 @@ function waitForAstrBotRestart(
 
 function applyUpdateProgress(payload: UpdateProgress) {
   if (
-    payload.status === "idle" &&
+    payload.status === 'idle' &&
     payload.id === updateProgress.value.id &&
-    updateProgress.value.status !== "idle"
+    updateProgress.value.status !== 'idle'
   ) {
     return;
   }
@@ -717,18 +714,18 @@ function applyUpdateProgress(payload: UpdateProgress) {
       ...(payload.stages || {}),
     },
   };
-  if (payload.stage === "restart") {
+  if (payload.stage === 'restart') {
     stopUpdateProgressPolling();
     waitForAstrBotRestart(restartStartTime.value);
     return;
   }
-  if (payload.status === "success" || payload.status === "error") {
+  if (payload.status === 'success' || payload.status === 'error') {
     stopUpdateProgressPolling();
   }
-  if (payload.status === "error") {
+  if (payload.status === 'error') {
     stopRestartPolling();
   }
-  if (payload.status === "success") {
+  if (payload.status === 'success') {
     waitForAstrBotRestart(restartStartTime.value);
   }
 }
@@ -753,7 +750,7 @@ function startUpdateProgressPolling(progressId: string) {
 
 async function switchVersion(targetVersion: string) {
   const progressId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   let initialStartTime: number | string | null = commonStore.getStartTime();
@@ -763,12 +760,12 @@ async function switchVersion(targetVersion: string) {
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     id: progressId,
-    status: "running",
+    status: 'running',
     version: targetVersion,
-    message: t("core.header.updateDialog.progress.preparing"),
+    message: t('core.header.updateDialog.progress.preparing'),
   };
   resetRestartFeedbackState();
-  updateStatus.value = t("core.header.updateDialog.status.switching");
+  updateStatus.value = t('core.header.updateDialog.status.switching');
   installLoading.value = true;
 
   if (initialStartTime === null) {
@@ -789,16 +786,15 @@ async function switchVersion(targetVersion: string) {
       progress_id: progressId,
     })
     .then((res) => {
-      updateStatus.value = res.data.message || "";
-      if (res.data.status === "error") {
+      updateStatus.value = res.data.message || '';
+      if (res.data.status === 'error') {
         stopUpdateProgressPolling();
         stopRestartPolling();
         updateProgress.value = {
           ...updateProgress.value,
-          status: "error",
+          status: 'error',
           message:
-            res.data.message ||
-            t("core.header.updateDialog.progress.failed"),
+            res.data.message || t('core.header.updateDialog.progress.failed'),
         };
       }
     })
@@ -807,18 +803,18 @@ async function switchVersion(targetVersion: string) {
       stopUpdateProgressPolling();
       if (!err?.response && restartPollTimer) {
         waitForAstrBotRestart(restartStartTime.value);
-        updateStatus.value = t("core.header.updateDialog.progress.restarting");
+        updateStatus.value = t('core.header.updateDialog.progress.restarting');
         return;
       }
       stopRestartPolling();
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,
-        status: "error",
+        status: 'error',
         message:
           err?.response?.data?.message ||
           err?.message ||
-          t("core.header.updateDialog.progress.failed"),
+          t('core.header.updateDialog.progress.failed'),
       };
     })
     .finally(() => {
@@ -828,12 +824,12 @@ async function switchVersion(targetVersion: string) {
 
 function updateDashboard() {
   updatingDashboardLoading.value = true;
-  updateStatus.value = t("core.header.updateDialog.status.updating");
+  updateStatus.value = t('core.header.updateDialog.status.updating');
   updatesApi
     .dashboard()
     .then((res) => {
-      updateStatus.value = res.data.message || "";
-      if (res.data.status === "ok") {
+      updateStatus.value = res.data.message || '';
+      if (res.data.status === 'ok') {
         setTimeout(() => {
           reloadWithCacheBuster();
         }, 1000);
@@ -850,9 +846,21 @@ function updateDashboard() {
 
 // 主题选项配置
 const themeOptions = [
-  { mode: 'light' as const,  icon: 'mdi-white-balance-sunny', labelKey: 'core.header.buttons.theme.light'  },
-  { mode: 'dark'  as const,  icon: 'mdi-weather-night',       labelKey: 'core.header.buttons.theme.dark'   },
-  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'core.header.buttons.theme.system' },
+  {
+    mode: 'light' as const,
+    icon: 'mdi-white-balance-sunny',
+    labelKey: 'core.header.buttons.theme.light',
+  },
+  {
+    mode: 'dark' as const,
+    icon: 'mdi-weather-night',
+    labelKey: 'core.header.buttons.theme.dark',
+  },
+  {
+    mode: 'system' as const,
+    icon: 'mdi-sync',
+    labelKey: 'core.header.buttons.theme.system',
+  },
 ] as const;
 
 function setThemeMode(mode: 'light' | 'dark' | 'system') {
@@ -870,7 +878,7 @@ function handleLogoClick() {
   if (isChatPath.value) {
     aboutDialog.value = true;
   } else {
-    void router.push("/about");
+    void router.push('/about');
   }
 }
 
@@ -890,19 +898,19 @@ onUnmounted(() => {
 // 视图模式切换
 onMounted(() => {
   // 初次加載時保存當前路由
-  if (typeof window !== "undefined") {
+  if (typeof window !== 'undefined') {
     if (isChatPath.value) {
       // 保存 chat ID
-      const parts = route.fullPath.split("/");
+      const parts = route.fullPath.split('/');
       const sessionId = parts[2];
       if (sessionId) {
         sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
-        console.log("Initial save chat ID:", sessionId);
+        console.log('Initial save chat ID:', sessionId);
       }
     } else {
       // 保存 bot 路由（非 chat 頁面）
       sessionStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
-      console.log("Initial save bot route:", route.fullPath);
+      console.log('Initial save bot route:', route.fullPath);
     }
   }
 });
@@ -911,15 +919,15 @@ onMounted(() => {
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
 watch(showPreReleases, (value) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? "true" : "false");
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? 'true' : 'false');
 });
 
 watch(
   () => route.fullPath,
   (newPath) => {
-    if (typeof window === "undefined") return;
-    console.log("Route changed:", {
+    if (typeof window === 'undefined') return;
+    console.log('Route changed:', {
       newPath,
       isChat: isChatPath.value,
       currentChatId: route.params.id,
@@ -935,7 +943,7 @@ watch(
 
       // ✅ chat：只存 sessionId
       if (isChat) {
-        const parts = newPath.split("/");
+        const parts = newPath.split('/');
         const sessionId = parts[2];
 
         if (sessionId) {
@@ -943,38 +951,38 @@ watch(
         }
       }
     } catch (e) {
-      console.error("Failed to save route:", e);
+      console.error('Failed to save route:', e);
     }
   },
 );
 
 const currentMode = computed({
-  get: () => (isChatPath.value ? "chat" : "bot"),
-  set: (val: "chat" | "bot") => {
+  get: () => (isChatPath.value ? 'chat' : 'bot'),
+  set: (val: 'chat' | 'bot') => {
     try {
       // 檢查 window 和 sessionStorage 是否存在
       if (
-        typeof window === "undefined" ||
-        typeof sessionStorage === "undefined"
+        typeof window === 'undefined' ||
+        typeof sessionStorage === 'undefined'
       ) {
         // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
-        console.warn("sessionStorage is not available in this environment");
+        console.warn('sessionStorage is not available in this environment');
         return;
       }
 
-      if (val === "chat") {
+      if (val === 'chat') {
         const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
-        void router.push(lastSessionId ? `/chat/${lastSessionId}` : "/chat");
+        void router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
       } else {
-        let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || "/";
-        if (lastBotRoute.startsWith("/chat")) {
-          lastBotRoute = "/";
+        let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+        if (lastBotRoute.startsWith('/chat')) {
+          lastBotRoute = '/';
         }
         void router.push(lastBotRoute);
       }
     } catch (e) {
       // 在受限隱私模式等環境中，sessionStorage 操作可能會拋出 SecurityError
-      console.warn("Failed to access sessionStorage in currentMode setter:", e);
+      console.warn('Failed to access sessionStorage in currentMode setter:', e);
     }
   },
 });
@@ -1083,10 +1091,10 @@ onMounted(async () => {
     <!-- 版本提示信息 - 在手机上隐藏 -->
     <div class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
-        {{ t("core.header.version.hasNewVersion") }}
+        {{ t('core.header.version.hasNewVersion') }}
       </small>
       <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
-        {{ t("core.header.version.dashboardHasNewVersion") }}
+        {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
 
@@ -1169,7 +1177,7 @@ onMounted(async () => {
               <v-icon>mdi-translate</v-icon>
             </template>
             <v-list-item-title>{{
-              t("core.common.language")
+              t('core.common.language')
             }}</v-list-item-title>
             <template #append>
               <span class="language-group-current">{{
@@ -1229,7 +1237,7 @@ onMounted(async () => {
               <v-icon>mdi-brightness-6</v-icon>
             </template>
             <v-list-item-title>{{
-              t("core.header.buttons.theme.title")
+              t('core.header.buttons.theme.title')
             }}</v-list-item-title>
             <template #append>
               <span class="theme-group-current">
@@ -1241,7 +1249,9 @@ onMounted(async () => {
                       : 'mdi-white-balance-sunny'
                 }}</v-icon>
               </span>
-              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+              <v-icon size="18" class="language-group-arrow"
+                >mdi-chevron-right</v-icon
+              >
             </template>
           </v-list-item>
         </template>
@@ -1264,7 +1274,9 @@ onMounted(async () => {
               @click="setThemeMode(option.mode)"
             >
               <template #prepend>
-                <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+                <v-icon size="18" class="theme-option-icon">{{
+                  option.icon
+                }}</v-icon>
               </template>
               <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
             </v-list-item>
@@ -1282,7 +1294,7 @@ onMounted(async () => {
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
         <v-list-item-title>{{
-          t("core.header.updateDialog.title")
+          t('core.header.updateDialog.title')
         }}</v-list-item-title>
         <template
           v-if="
@@ -1302,7 +1314,7 @@ onMounted(async () => {
           <v-icon>mdi-account</v-icon>
         </template>
         <v-list-item-title>{{
-          t("core.header.accountDialog.title")
+          t('core.header.accountDialog.title')
         }}</v-list-item-title>
       </v-list-item>
     </StyledMenu>
@@ -1316,7 +1328,7 @@ onMounted(async () => {
       <v-card>
         <v-card-title class="mobile-card-title">
           <span class="text-h3 pa-4">{{
-            t("core.header.updateDialog.title")
+            t('core.header.updateDialog.title')
           }}</span>
           <v-btn
             v-if="$vuetify.display.xs"
@@ -1331,7 +1343,7 @@ onMounted(async () => {
             <div class="update-summary">
               <div>
                 <div class="text-caption text-medium-emphasis">
-                  {{ t("core.header.updateDialog.currentVersion") }}
+                  {{ t('core.header.updateDialog.currentVersion') }}
                 </div>
                 <div class="text-h2 font-weight-bold">{{ botCurrVersion }}</div>
               </div>
@@ -1342,7 +1354,7 @@ onMounted(async () => {
               >
                 {{
                   hasNewVersion
-                    ? t("core.header.version.hasNewVersion")
+                    ? t('core.header.version.hasNewVersion')
                     : updateStatus
                 }}
               </v-chip>
@@ -1363,11 +1375,11 @@ onMounted(async () => {
                   size="46"
                 ></v-icon>
                 <div class="text-subtitle-1 font-weight-medium">
-                  {{ t("core.header.updateDialog.progress.successReady") }}
+                  {{ t('core.header.updateDialog.progress.successReady') }}
                 </div>
                 <div class="text-caption text-medium-emphasis">
                   {{
-                    t("core.header.updateDialog.progress.autoReloadIn", {
+                    t('core.header.updateDialog.progress.autoReloadIn', {
                       seconds: restartReloadCountdown,
                     })
                   }}
@@ -1379,7 +1391,7 @@ onMounted(async () => {
                   @click="reloadAfterUpdate"
                 >
                   <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
-                  {{ t("core.header.updateDialog.progress.reloadNow") }}
+                  {{ t('core.header.updateDialog.progress.reloadNow') }}
                 </v-btn>
               </div>
 
@@ -1391,7 +1403,7 @@ onMounted(async () => {
                   width="4"
                 ></v-progress-circular>
                 <div class="text-subtitle-1 font-weight-medium">
-                  {{ t("core.header.updateDialog.progress.restarting") }}
+                  {{ t('core.header.updateDialog.progress.restarting') }}
                 </div>
               </div>
 
@@ -1402,8 +1414,8 @@ onMounted(async () => {
                       {{ updateProgressMessage }}
                     </div>
                     <div class="text-caption text-medium-emphasis">
-                      {{ t("core.header.updateDialog.progress.target") }}
-                      {{ updateProgress.version || "latest" }}
+                      {{ t('core.header.updateDialog.progress.target') }}
+                      {{ updateProgress.version || 'latest' }}
                     </div>
                   </div>
                   <div class="text-h6 font-weight-bold">
@@ -1462,7 +1474,7 @@ onMounted(async () => {
             <div v-if="releaseMessage && !installLoading" class="mt-5">
               <div class="d-flex align-center justify-space-between mb-2">
                 <h3 class="text-subtitle-1 font-weight-medium">
-                  {{ t("core.header.updateDialog.releaseNotes.title") }}
+                  {{ t('core.header.updateDialog.releaseNotes.title') }}
                 </h3>
                 <v-btn
                   variant="text"
@@ -1474,7 +1486,7 @@ onMounted(async () => {
                     )
                   "
                 >
-                  {{ t("core.header.updateDialog.table.view") }}
+                  {{ t('core.header.updateDialog.table.view') }}
                 </v-btn>
               </div>
               <div class="release-message-preview">
@@ -1490,7 +1502,7 @@ onMounted(async () => {
             <div class="mt-5">
               <div class="release-table-toolbar mb-3">
                 <div class="text-subtitle-1 font-weight-medium">
-                  {{ t("core.header.updateDialog.releases") }}
+                  {{ t('core.header.updateDialog.releases') }}
                 </div>
                 <v-switch
                   v-model="showPreReleases"
@@ -1516,11 +1528,11 @@ onMounted(async () => {
                 </template>
                 <div class="text-body-2">
                   <strong>{{
-                    t("core.header.updateDialog.preReleaseWarning.title")
+                    t('core.header.updateDialog.preReleaseWarning.title')
                   }}</strong>
                   <br />
                   {{
-                    t("core.header.updateDialog.preReleaseWarning.description")
+                    t('core.header.updateDialog.preReleaseWarning.description')
                   }}
                   <a
                     href="https://github.com/AstrBotDevs/AstrBot/issues"
@@ -1528,7 +1540,7 @@ onMounted(async () => {
                     class="text-decoration-none"
                   >
                     {{
-                      t("core.header.updateDialog.preReleaseWarning.issueLink")
+                      t('core.header.updateDialog.preReleaseWarning.issueLink')
                     }}
                   </a>
                 </div>
@@ -1552,7 +1564,7 @@ onMounted(async () => {
                       variant="tonal"
                       class="ml-2"
                     >
-                      {{ t("core.header.updateDialog.preRelease") }}
+                      {{ t('core.header.updateDialog.preRelease') }}
                     </v-chip>
                   </div>
                 </template>
@@ -1569,7 +1581,7 @@ onMounted(async () => {
                     color="primary"
                     size="x-small"
                     @click="openReleaseNotesDialog(item.body, item.tag_name)"
-                    >{{ t("core.header.updateDialog.table.view") }}</v-btn
+                    >{{ t('core.header.updateDialog.table.view') }}</v-btn
                   >
                 </template>
                 <template
@@ -1582,7 +1594,7 @@ onMounted(async () => {
                     :disabled="installLoading"
                     @click="switchVersion(item.tag_name)"
                   >
-                    {{ t("core.header.updateDialog.table.switch") }}
+                    {{ t('core.header.updateDialog.table.switch') }}
                   </v-btn>
                 </template>
               </v-data-table>
@@ -1597,7 +1609,7 @@ onMounted(async () => {
                 "
               >
                 <span>{{
-                  t("core.header.updateDialog.advancedSettings")
+                  t('core.header.updateDialog.advancedSettings')
                 }}</span>
                 <v-icon
                   :icon="
@@ -1615,12 +1627,12 @@ onMounted(async () => {
               >
                 <div>
                   <div class="font-weight-medium">
-                    {{ t("core.header.updateDialog.dashboardUpdate.title") }}
+                    {{ t('core.header.updateDialog.dashboardUpdate.title') }}
                   </div>
                   <div class="text-caption text-medium-emphasis">
                     {{
                       t(
-                        "core.header.updateDialog.dashboardUpdate.currentVersion",
+                        'core.header.updateDialog.dashboardUpdate.currentVersion',
                       )
                     }}
                     {{ dashboardCurrentVersion }}
@@ -1629,9 +1641,9 @@ onMounted(async () => {
                     {{
                       dashboardHasNewVersion
                         ? t(
-                            "core.header.updateDialog.dashboardUpdate.hasNewVersion",
+                            'core.header.updateDialog.dashboardUpdate.hasNewVersion',
                           )
-                        : t("core.header.updateDialog.dashboardUpdate.fallback")
+                        : t('core.header.updateDialog.dashboardUpdate.fallback')
                     }}
                   </div>
                 </div>
@@ -1643,7 +1655,7 @@ onMounted(async () => {
                 >
                   {{
                     t(
-                      "core.header.updateDialog.dashboardUpdate.downloadAndUpdate",
+                      'core.header.updateDialog.dashboardUpdate.downloadAndUpdate',
                     )
                   }}
                 </v-btn>
@@ -1658,7 +1670,7 @@ onMounted(async () => {
             variant="text"
             @click="updateStatusDialog = false"
           >
-            {{ t("core.common.close") }}
+            {{ t('core.common.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -1668,7 +1680,7 @@ onMounted(async () => {
     <v-dialog v-model="releaseNotesDialog" max-width="800">
       <v-card>
         <v-card-title class="text-h3 pa-4">
-          {{ t("core.header.updateDialog.releaseNotes.title") }}:
+          {{ t('core.header.updateDialog.releaseNotes.title') }}:
           {{ selectedReleaseTag }}
         </v-card-title>
         <v-card-text
@@ -1687,7 +1699,7 @@ onMounted(async () => {
             variant="text"
             @click="releaseNotesDialog = false"
           >
-            {{ t("core.common.close") }}
+            {{ t('core.common.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -1696,19 +1708,19 @@ onMounted(async () => {
     <v-dialog v-model="desktopUpdateDialog" max-width="460">
       <v-card>
         <v-card-title class="text-h3 pa-4 pl-6 pb-0">
-          {{ t("core.header.updateDialog.desktopApp.title") }}
+          {{ t('core.header.updateDialog.desktopApp.title') }}
         </v-card-title>
         <v-card-text>
           <div class="mb-3">
-            {{ t("core.header.updateDialog.desktopApp.message") }}
+            {{ t('core.header.updateDialog.desktopApp.message') }}
           </div>
           <v-alert type="info" variant="tonal" density="compact">
             <div>
-              {{ t("core.header.updateDialog.desktopApp.currentVersion") }}
+              {{ t('core.header.updateDialog.desktopApp.currentVersion') }}
               <strong>{{ desktopUpdateCurrentVersion }}</strong>
             </div>
             <div>
-              {{ t("core.header.updateDialog.desktopApp.latestVersion") }}
+              {{ t('core.header.updateDialog.desktopApp.latestVersion') }}
               <strong v-if="!desktopUpdateChecking">{{
                 desktopUpdateLatestVersion
               }}</strong>
@@ -1733,7 +1745,7 @@ onMounted(async () => {
             :disabled="desktopUpdateInstalling"
             @click="cancelDesktopUpdate"
           >
-            {{ t("core.common.dialog.cancelButton") }}
+            {{ t('core.common.dialog.cancelButton') }}
           </v-btn>
           <v-btn
             color="primary"
@@ -1746,7 +1758,7 @@ onMounted(async () => {
             "
             @click="confirmDesktopUpdate"
           >
-            {{ t("core.common.dialog.confirmButton") }}
+            {{ t('core.common.dialog.confirmButton') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -1776,10 +1788,10 @@ onMounted(async () => {
             <strong>{{
               t(
                 accountWarningUpgrade
-                  ? "core.header.accountDialog.securityWarningUpgrade"
+                  ? 'core.header.accountDialog.securityWarningUpgrade'
                   : accountWarningMd5
-                  ? "core.header.accountDialog.securityWarningMd5"
-                  : "core.header.accountDialog.securityWarning",
+                    ? 'core.header.accountDialog.securityWarningMd5'
+                    : 'core.header.accountDialog.securityWarning',
               )
             }}</strong>
           </v-alert>
@@ -1865,7 +1877,7 @@ onMounted(async () => {
           </v-form>
 
           <div class="text-caption text-medium-emphasis mt-2">
-            {{ t("core.header.accountDialog.form.defaultCredentials") }}
+            {{ t('core.header.accountDialog.form.defaultCredentials') }}
           </div>
         </v-card-text>
 
@@ -1878,7 +1890,7 @@ onMounted(async () => {
             :disabled="accountEditStatus.loading"
             @click="dialog = false"
           >
-            {{ t("core.header.accountDialog.actions.cancel") }}
+            {{ t('core.header.accountDialog.actions.cancel') }}
           </v-btn>
           <v-btn
             color="primary"
@@ -1887,7 +1899,7 @@ onMounted(async () => {
             prepend-icon="mdi-content-save"
             @click="accountEdit"
           >
-            {{ t("core.header.accountDialog.actions.save") }}
+            {{ t('core.header.accountDialog.actions.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -2113,7 +2125,7 @@ onMounted(async () => {
 }
 
 .update-progress-panel::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(
@@ -2138,7 +2150,7 @@ onMounted(async () => {
 }
 
 .release-message-preview::after {
-  content: "";
+  content: '';
   position: absolute;
   right: 0;
   bottom: 0;

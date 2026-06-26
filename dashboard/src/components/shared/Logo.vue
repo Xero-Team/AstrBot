@@ -2,13 +2,17 @@
   <div class="logo-container">
     <div class="logo-content">
       <div class="logo-image">
-        <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
+        <img
+          width="80"
+          src="@/assets/images/plugin_icon.png"
+          alt="AstrBot Logo"
+        />
       </div>
       <div class="logo-text">
-        <h2 
-          v-html="formatTitle(title || t('core.header.logoTitle'))"
-        ></h2>
-        <h4 class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
+        <h2 v-html="formatTitle(title || t('core.header.logoTitle'))"></h2>
+        <h4 class="hint-text">
+          {{ subtitle || t('core.header.accountDialog.title') }}
+        </h4>
       </div>
     </div>
   </div>
@@ -19,13 +23,16 @@ import { useI18n } from '@/i18n/composables';
 
 const { t } = useI18n();
 
-withDefaults(defineProps<{
-  title?: string;
-  subtitle?: string;
-}>(), {
-  title: '',  // 默认为空，组件会使用翻译值
-  subtitle: ''
-})
+withDefaults(
+  defineProps<{
+    title?: string;
+    subtitle?: string;
+  }>(),
+  {
+    title: '', // 默认为空，组件会使用翻译值
+    subtitle: '',
+  },
+);
 
 // 智能格式化标题，在小屏幕上允许在合适位置换行
 const formatTitle = (title: string) => {
@@ -35,7 +42,7 @@ const formatTitle = (title: string) => {
     return title.replace(/(AstrBot)\s+(.+)/, '$1<wbr> $2');
   }
   return title;
-}
+};
 </script>
 
 <style scoped>
@@ -105,15 +112,15 @@ const formatTitle = (title: string) => {
   .logo-content {
     gap: 8px;
   }
-  
+
   .logo-text h2 {
     font-size: 1.6rem;
   }
-  
+
   .logo-text h4 {
     font-size: 0.9rem;
   }
-  
+
   .logo-image img {
     width: 64px;
   }

@@ -8,7 +8,7 @@ import type { ToolItem, ToolSummary } from '../types';
 
 export function useToolActions(
   tools: Ref<ToolItem[]>,
-  toast: (message: string, color?: string) => void
+  toast: (message: string, color?: string) => void,
 ) {
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (!error || typeof error !== 'object') {
@@ -29,16 +29,16 @@ export function useToolActions(
 
     // Filter builtin tools
     if (!showBuiltinTools.value) {
-      result = result.filter(tool => tool.origin !== 'builtin');
+      result = result.filter((tool) => tool.origin !== 'builtin');
     }
 
     // Filter by search query
     const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
     if (query) {
       result = result.filter(
-        tool =>
+        (tool) =>
           tool.name?.toLowerCase().includes(query) ||
-          tool.description?.toLowerCase().includes(query)
+          tool.description?.toLowerCase().includes(query),
       );
     }
 
@@ -49,8 +49,8 @@ export function useToolActions(
     const all = tools.value;
     return {
       total: all.length,
-      active: all.filter(t => t.active).length,
-      inactive: all.filter(t => !t.active).length,
+      active: all.filter((t) => t.active).length,
+      inactive: all.filter((t) => !t.active).length,
     };
   });
 
@@ -61,7 +61,7 @@ export function useToolActions(
     tool: ToolItem,
     readonlyMessage: string,
     successMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
     if (tool.readonly) {
       toast(readonlyMessage, 'info');
@@ -91,7 +91,7 @@ export function useToolActions(
     permission: 'admin' | 'member',
     successMessage: string,
     builtinMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
     if (tool.origin === 'builtin') {
       toast(builtinMessage, 'info');

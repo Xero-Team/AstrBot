@@ -46,12 +46,17 @@ function getErrorMessage(error: unknown, fallback?: unknown): string {
   }
   const errorLike = error as {
     message?: string;
-    response?: { status?: number; data?: { message?: string; data?: { totp_required?: boolean } } };
+    response?: {
+      status?: number;
+      data?: { message?: string; data?: { totp_required?: boolean } };
+    };
   };
-  return errorLike.response?.data?.message || errorLike.message || String(fallback);
+  return (
+    errorLike.response?.data?.message || errorLike.message || String(fallback)
+  );
 }
 
-export const useAuthStore = defineStore("auth", {
+export const useAuthStore = defineStore('auth', {
   state: () => ({
     username: '',
     returnUrl: null as string | null,
@@ -148,10 +153,20 @@ export const useAuthStore = defineStore("auth", {
           }
         }
 
-        await this.finishAuthenticatedSession(res.data.data as unknown as AuthSessionData);
+        await this.finishAuthenticatedSession(
+          res.data.data as unknown as AuthSessionData,
+        );
       } catch (error) {
-        const typedError = error as { response?: { status?: number; data?: { data?: { totp_required?: boolean } } } };
-        if (typedError.response?.status === 401 && typedError.response?.data?.data?.totp_required) {
+        const typedError = error as {
+          response?: {
+            status?: number;
+            data?: { data?: { totp_required?: boolean } };
+          };
+        };
+        if (
+          typedError.response?.status === 401 &&
+          typedError.response?.data?.data?.totp_required
+        ) {
           return 'totp_required';
         }
         throw new Error(getErrorMessage(error, error));
@@ -173,16 +188,20 @@ export const useAuthStore = defineStore("auth", {
           throw new Error(String(res.data.message || ''));
         }
 
-        await this.finishAuthenticatedSession(res.data.data as unknown as AuthSessionData);
+        await this.finishAuthenticatedSession(
+          res.data.data as unknown as AuthSessionData,
+        );
       } catch (error) {
-        throw (error instanceof Error ? error : new Error(String(error)));
+        throw error instanceof Error ? error : new Error(String(error));
       }
     },
     async checkOnboardingCompleted(): Promise<boolean> {
       try {
         // 1. 检查平台配置
         const platformRes = await systemConfigApi.get();
-        const systemConfig = ((platformRes.data.data as SystemConfigPayload | undefined)?.config) || {};
+        const systemConfig =
+          (platformRes.data.data as SystemConfigPayload | undefined)?.config ||
+          {};
         const hasPlatform = (systemConfig.platform || []).length > 0;
         if (!hasPlatform) return false;
 
@@ -192,13 +211,15 @@ export const useAuthStore = defineStore("auth", {
           ? (providerRes.data.data.providers as ProviderRecord[])
           : [];
         const sources = Array.isArray(providerRes.data.data?.provider_sources)
-          ? (providerRes.data.data.provider_sources as unknown as ProviderSourceRecord[])
+          ? (providerRes.data.data
+              .provider_sources as unknown as ProviderSourceRecord[])
           : [];
         const sourceMap = new Map<string, string | undefined>();
         sources.forEach((s) => sourceMap.set(s.id, s.provider_type));
-        
+
         const hasProvider = providers.some((provider) => {
-          if (provider.provider_type) return provider.provider_type === 'chat_completion';
+          if (provider.provider_type)
+            return provider.provider_type === 'chat_completion';
           if (provider.provider_source_id) {
             const type = sourceMap.get(provider.provider_source_id);
             if (type === 'chat_completion') return true;
@@ -224,6 +245,6 @@ export const useAuthStore = defineStore("auth", {
     },
     has_token(): boolean {
       return Boolean(localStorage.getItem('token'));
-    }
-  }
+    },
+  },
 });

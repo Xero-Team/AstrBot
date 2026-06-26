@@ -14,15 +14,17 @@ const { t } = useI18n();
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
 const emit = defineEmits(['update:modelValue']);
 
 const dialog = computed({
   get: () => props.modelValue,
-  set: (value) => { emit('update:modelValue', value); }
+  set: (value) => {
+    emit('update:modelValue', value);
+  },
 });
 
 const changelogContent = ref('');
@@ -50,7 +52,8 @@ async function getCurrentVersion() {
 
 // 加载更新日志
 async function loadChangelog(version) {
-  const targetVersion = version || selectedVersion.value || changelogVersion.value;
+  const targetVersion =
+    version || selectedVersion.value || changelogVersion.value;
   if (!targetVersion) {
     changelogError.value = t('core.navigation.changelogDialog.selectVersion');
     return;
@@ -62,16 +65,20 @@ async function loadChangelog(version) {
 
   try {
     const res = await changelogApi.get(targetVersion);
-    
+
     if (res.data.status === 'ok') {
       changelogContent.value = res.data.data.content;
       selectedVersion.value = targetVersion;
     } else {
-      changelogError.value = res.data.message || t('core.navigation.changelogDialog.error');
+      changelogError.value =
+        res.data.message || t('core.navigation.changelogDialog.error');
     }
   } catch (err) {
     console.error('Failed to load changelog:', err);
-    if (err.response?.status === 404 || err.response?.data?.message?.includes('not found')) {
+    if (
+      err.response?.status === 404 ||
+      err.response?.data?.message?.includes('not found')
+    ) {
       changelogError.value = t('core.navigation.changelogDialog.notFound');
     } else {
       changelogError.value = t('core.navigation.changelogDialog.error');
@@ -126,14 +133,17 @@ watch(dialog, async (newValue) => {
   if (newValue) {
     // 加载版本列表
     await loadAvailableVersions();
-    
+
     // 获取当前版本
     if (!changelogVersion.value) {
       await getCurrentVersion();
     }
-    
+
     // 如果当前版本在列表中，默认选择当前版本
-    if (changelogVersion.value && availableVersions.value.includes(changelogVersion.value)) {
+    if (
+      changelogVersion.value &&
+      availableVersions.value.includes(changelogVersion.value)
+    ) {
       selectedVersion.value = changelogVersion.value;
       await loadChangelog();
     } else if (availableVersions.value.length > 0) {
@@ -153,16 +163,18 @@ void getCurrentVersion();
 </script>
 
 <template>
-  <v-dialog 
-    :model-value="dialog" 
+  <v-dialog
+    :model-value="dialog"
     :width="$vuetify.display.smAndDown ? '100%' : '800'"
     :fullscreen="$vuetify.display.xs"
-    max-width="1000" 
+    max-width="1000"
     @update:model-value="dialog = $event"
   >
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h3">{{ t('core.navigation.changelogDialog.title') }}</span>
+        <span class="text-h3">{{
+          t('core.navigation.changelogDialog.title')
+        }}</span>
         <v-btn icon flat @click="dialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
@@ -193,22 +205,36 @@ void getCurrentVersion();
             </template>
           </v-select>
         </div>
-        
+
         <!-- 更新日志内容 -->
         <div
           ref="scrollContainer"
-          style="max-height: 70vh; overflow-y: auto;"
+          style="max-height: 70vh; overflow-y: auto"
           @click="handleChangelogClick"
         >
           <div v-if="changelogLoading" class="text-center py-8">
-            <v-progress-circular indeterminate color="primary"></v-progress-circular>
-            <div class="mt-4">{{ t('core.navigation.changelogDialog.loading') }}</div>
+            <v-progress-circular
+              indeterminate
+              color="primary"
+            ></v-progress-circular>
+            <div class="mt-4">
+              {{ t('core.navigation.changelogDialog.loading') }}
+            </div>
           </div>
-          <v-alert v-else-if="changelogError" type="error" variant="tonal" border="start">
+          <v-alert
+            v-else-if="changelogError"
+            type="error"
+            variant="tonal"
+            border="start"
+          >
             {{ changelogError }}
           </v-alert>
           <div v-else-if="changelogContent" class="changelog-content">
-            <MarkdownRender :content="changelogContent" :typewriter="false" class="markdown-content" />
+            <MarkdownRender
+              :content="changelogContent"
+              :typewriter="false"
+              class="markdown-content"
+            />
           </div>
         </div>
       </v-card-text>

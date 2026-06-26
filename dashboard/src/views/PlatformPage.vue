@@ -11,8 +11,16 @@
           </p>
         </div>
         <v-btn
-color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
-          size="x-large" @click="updatingMode = false; showAddPlatformDialog = true">
+          color="primary"
+          prepend-icon="mdi-plus"
+          variant="tonal"
+          rounded="xl"
+          size="x-large"
+          @click="
+            updatingMode = false;
+            showAddPlatformDialog = true;
+          "
+        >
           {{ tm('addAdapter') }}
         </v-btn>
       </v-row>
@@ -26,15 +34,34 @@ color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
         </v-row>
 
         <v-row v-else>
-          <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
+          <v-col
+            v-for="(platform, index) in config_data.platform || []"
+            :key="index"
+            cols="12"
+            md="6"
+            lg="4"
+            xl="3"
+          >
             <item-card
-:item="platform" title-field="id" enabled-field="enable"
+              :item="platform"
+              title-field="id"
+              enabled-field="enable"
               variant="outlined"
-              :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
-              @delete="deletePlatform" @edit="editPlatform">
+              :bglogo="getPlatformIcon(platform.type || platform.id)"
+              @toggle-enabled="platformStatusChange"
+              @delete="deletePlatform"
+              @edit="editPlatform"
+            >
               <template #item-details="{ item }">
                 <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
-                <div v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)" class="platform-status-row mb-2">
+                <div
+                  v-if="
+                    getPlatformStat(item.id) &&
+                    (getPlatformStat(item.id)?.status !== 'running' ||
+                      getPlatformStat(item.id)?.error_count > 0)
+                  "
+                  class="platform-status-row mb-2"
+                >
                   <!-- 状态 chip - 只在非 running 状态时显示 -->
                   <v-chip
                     v-if="getPlatformStat(item.id)?.status !== 'running'"
@@ -43,8 +70,15 @@ color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
                     variant="tonal"
                     class="status-chip"
                   >
-                    <v-icon size="small" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
-                    {{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}
+                    <v-icon size="small" start>{{
+                      getStatusIcon(getPlatformStat(item.id)?.status)
+                    }}</v-icon>
+                    {{
+                      tm(
+                        'runtimeStatus.' +
+                          (getPlatformStat(item.id)?.status || 'unknown'),
+                      )
+                    }}
                   </v-chip>
                   <!-- 错误数量提示 -->
                   <v-chip
@@ -53,17 +87,17 @@ color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
                     color="error"
                     variant="tonal"
                     class="error-chip"
-                    :class="{ 'ms-2': getPlatformStat(item.id)?.status !== 'running' }"
+                    :class="{
+                      'ms-2': getPlatformStat(item.id)?.status !== 'running',
+                    }"
                     @click.stop="showErrorDetails(item)"
                   >
                     <v-icon size="small" start>mdi-bug</v-icon>
-                    {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
+                    {{ getPlatformStat(item.id)?.error_count }}
+                    {{ tm('runtimeStatus.errors') }}
                   </v-chip>
                 </div>
-                <div
-                  v-if="hasQrPayload(item.id)"
-                  class="platform-qr-chip"
-                >
+                <div v-if="hasQrPayload(item.id)" class="platform-qr-chip">
                   <v-chip
                     size="small"
                     color="primary"
@@ -75,7 +109,13 @@ color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
                     {{ tm('platformQr.show') }}
                   </v-chip>
                 </div>
-                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
+                <div
+                  v-if="
+                    getPlatformStat(item.id)?.unified_webhook &&
+                    item.webhook_uuid
+                  "
+                  class="webhook-info"
+                >
                   <v-chip
                     size="small"
                     color="primary"
@@ -99,16 +139,23 @@ color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
           <v-icon class="me-2">mdi-console-line</v-icon>
           <span class="text-h4">{{ tm('logs.title') }}</span>
           <v-spacer></v-spacer>
-          <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
+          <v-btn
+            variant="text"
+            color="primary"
+            @click="showConsole = !showConsole"
+          >
             {{ showConsole ? tm('logs.collapse') : tm('logs.expand') }}
-            <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+            <v-icon>{{
+              showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down'
+            }}</v-icon>
           </v-btn>
         </v-card-title>
 
-
         <v-expand-transition>
           <v-card-text v-if="showConsole" class="pa-0">
-            <ConsoleDisplayer style="background-color: #1e1e1e; height: 300px; border-radius: 0"></ConsoleDisplayer>
+            <ConsoleDisplayer
+              style="background-color: #1e1e1e; height: 300px; border-radius: 0"
+            ></ConsoleDisplayer>
           </v-card-text>
         </v-expand-transition>
       </v-card>
@@ -116,9 +163,16 @@ color="primary" prepend-icon="mdi-plus" variant="tonal" rounded="xl"
 
     <!-- 添加平台适配器对话框 -->
     <AddNewPlatform
-ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata" :config-data="config_data"
-      :updating-mode="updatingMode" :updating-platform-config="updatingPlatformConfig" @update="getConfig"
-      @show-toast="showToast" @refresh-config="getConfig"/>
+      ref="addPlatformDialog"
+      v-model:show="showAddPlatformDialog"
+      :metadata="metadata"
+      :config-data="config_data"
+      :updating-mode="updatingMode"
+      :updating-platform-config="updatingPlatformConfig"
+      @update="getConfig"
+      @show-toast="showToast"
+      @refresh-config="getConfig"
+    />
 
     <!-- Webhook URL 对话框 -->
     <v-dialog v-model="showWebhookDialog" max-width="600">
@@ -128,7 +182,9 @@ ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata
           {{ tm('webhookDialog.title') }}
         </v-card-title>
         <v-card-text class="px-4 pb-2">
-          <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('webhookDialog.description') }}</p>
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            {{ tm('webhookDialog.description') }}
+          </p>
           <v-text-field
             :model-value="currentWebhookUrl"
             readonly
@@ -150,7 +206,11 @@ ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata
         </v-card-text>
         <v-card-actions class="pa-4 pt-2">
           <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showWebhookDialog = false">
+          <v-btn
+            variant="tonal"
+            color="primary"
+            @click="showWebhookDialog = false"
+          >
             {{ tm('webhookDialog.close') }}
           </v-btn>
         </v-card-actions>
@@ -165,10 +225,18 @@ ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata
         </v-card-title>
         <v-card-text class="px-4 pb-4">
           <div class="platform-qr-status">
-            {{ tm('platformQr.status') }}: {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status || tm('platformQr.waiting') }}
+            {{ tm('platformQr.status') }}:
+            {{
+              getPlatformQrLoginStat(currentQrPlatformId)?.qr_status ||
+              tm('platformQr.waiting')
+            }}
           </div>
           <QrCodeViewer
-            :value="(getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content || getPlatformQrLoginStat(currentQrPlatformId)?.qrcode || '')"
+            :value="
+              getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content ||
+              getPlatformQrLoginStat(currentQrPlatformId)?.qrcode ||
+              ''
+            "
             :alt="tm('platformQr.title')"
           />
         </v-card-text>
@@ -190,32 +258,47 @@ ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata
         </v-card-title>
         <v-card-text v-if="currentErrorPlatform" class="px-4 pb-4">
           <div class="mb-3">
-            <strong>{{ tm('errorDialog.platformId') }}:</strong> {{ currentErrorPlatform.id }}
+            <strong>{{ tm('errorDialog.platformId') }}:</strong>
+            {{ currentErrorPlatform.id }}
           </div>
           <div class="mb-3">
-            <strong>{{ tm('errorDialog.errorCount') }}:</strong> {{ currentErrorPlatform.error_count }}
+            <strong>{{ tm('errorDialog.errorCount') }}:</strong>
+            {{ currentErrorPlatform.error_count }}
           </div>
           <div v-if="currentErrorPlatform.last_error" class="error-details">
             <div class="mb-2">
               <strong>{{ tm('errorDialog.lastError') }}:</strong>
             </div>
             <v-alert type="error" variant="tonal" class="mb-3">
-              <div class="error-message">{{ currentErrorPlatform.last_error.message }}</div>
+              <div class="error-message">
+                {{ currentErrorPlatform.last_error.message }}
+              </div>
               <div class="error-time text-caption text-medium-emphasis mt-1">
-                {{ tm('errorDialog.occurredAt') }}: {{ new Date(currentErrorPlatform.last_error.timestamp).toLocaleString() }}
+                {{ tm('errorDialog.occurredAt') }}:
+                {{
+                  new Date(
+                    currentErrorPlatform.last_error.timestamp,
+                  ).toLocaleString()
+                }}
               </div>
             </v-alert>
             <div v-if="currentErrorPlatform.last_error.traceback">
               <div class="mb-2">
                 <strong>{{ tm('errorDialog.traceback') }}:</strong>
               </div>
-              <pre class="traceback-box">{{ currentErrorPlatform.last_error.traceback }}</pre>
+              <pre class="traceback-box">{{
+                currentErrorPlatform.last_error.traceback
+              }}</pre>
             </div>
           </div>
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showErrorDialog = false">
+          <v-btn
+            variant="tonal"
+            color="primary"
+            @click="showErrorDialog = false"
+          >
             {{ tm('errorDialog.close') }}
           </v-btn>
         </v-card-actions>
@@ -224,8 +307,12 @@ ref="addPlatformDialog" v-model:show="showAddPlatformDialog" :metadata="metadata
 
     <!-- 消息提示 -->
     <v-snackbar
-v-model="save_message_snack" :timeout="3000" elevation="24" :color="save_message_success"
-      location="top">
+      v-model="save_message_snack"
+      :timeout="3000"
+      elevation="24"
+      :color="save_message_success"
+      location="top"
+    >
       {{ save_message }}
     </v-snackbar>
   </div>
@@ -238,11 +325,15 @@ import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import { useCommonStore } from '@/stores/common';
-import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
+import {
+  useI18n,
+  useModuleI18n,
+  mergeDynamicTranslations,
+} from '@/i18n/composables';
 import { getPlatformIcon } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog
+  useConfirmDialog,
 } from '@/utils/confirmDialog';
 import { copyToClipboard } from '@/utils/clipboard';
 
@@ -262,7 +353,7 @@ export default {
     return {
       t,
       tm,
-      confirmDialog
+      confirmDialog,
     };
   },
   data() {
@@ -276,8 +367,8 @@ export default {
       updatingMode: false,
 
       save_message_snack: false,
-      save_message: "",
-      save_message_success: "success",
+      save_message: '',
+      save_message_success: 'success',
 
       showConsole: localStorage.getItem('platformPage_showConsole') === 'true',
 
@@ -292,10 +383,10 @@ export default {
       showErrorDialog: false,
       currentErrorPlatform: null,
       showQrDialog: false,
-      currentQrPlatformId: "",
+      currentQrPlatformId: '',
 
-      store: useCommonStore()
-    }
+      store: useCommonStore(),
+    };
   },
   computed: {
     // 安全访问翻译的计算属性
@@ -305,12 +396,12 @@ export default {
         addSuccess: this.tm('messages.addSuccess'),
         deleteSuccess: this.tm('messages.deleteSuccess'),
         statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('messages.deleteConfirm')
+        deleteConfirm: this.tm('messages.deleteConfirm'),
       };
     },
     currentWebhookUrl() {
       return this.getWebhookUrl(this.currentWebhookUuid);
-    }
+    },
   },
 
   watch: {
@@ -330,7 +421,7 @@ export default {
         this.oneBotEmptyTokenWarningResolve(true);
         this.oneBotEmptyTokenWarningResolve = null;
       }
-    }
+    },
   },
 
   mounted() {
@@ -340,7 +431,7 @@ export default {
     this.statsRefreshInterval = setInterval(() => {
       this.getPlatformStats();
     }, 5000);
-    
+
     // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
     window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
@@ -350,7 +441,10 @@ export default {
       clearInterval(this.statsRefreshInterval);
     }
     // 移除语言切换事件监听器
-    window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
+    window.removeEventListener(
+      'astrbot-locale-changed',
+      this.handleLocaleChange,
+    );
   },
 
   methods: {
@@ -362,43 +456,52 @@ export default {
     // 从工具函数导入
     getPlatformIcon(platform_id) {
       // 首先检查是否有来自插件的 logo_token
-      const template = this.metadata.platform_group?.metadata.platform?.config_template?.[platform_id];
+      const template =
+        this.metadata.platform_group?.metadata.platform?.config_template?.[
+          platform_id
+        ];
       if (template?.logo_token) {
-          // 通过文件服务访问插件提供的 logo
+        // 通过文件服务访问插件提供的 logo
         return fileApi.tokenUrl(template.logo_token);
       }
       return getPlatformIcon(platform_id);
     },
 
     getConfig() {
-      systemConfigApi.runtime().then((res) => {
-        this.config_data = res.data.data.config;
-        this.fetched = true
-        this.metadata = res.data.data.metadata;
+      systemConfigApi
+        .runtime()
+        .then((res) => {
+          this.config_data = res.data.data.config;
+          this.fetched = true;
+          this.metadata = res.data.data.metadata;
 
-        // 将插件平台适配器的 i18n 翻译注入到前端 i18n 系统中
-        const platformI18n = res.data.data.platform_i18n_translations;
-        if (platformI18n && typeof platformI18n === 'object') {
-          mergeDynamicTranslations('features.config-metadata', platformI18n);
-        }
-      }).catch((err) => {
-        this.showError(err);
-      });
+          // 将插件平台适配器的 i18n 翻译注入到前端 i18n 系统中
+          const platformI18n = res.data.data.platform_i18n_translations;
+          if (platformI18n && typeof platformI18n === 'object') {
+            mergeDynamicTranslations('features.config-metadata', platformI18n);
+          }
+        })
+        .catch((err) => {
+          this.showError(err);
+        });
     },
 
     async getPlatformStats() {
-      await botApi.stats().then((res) => {
-        if (res.data.status === 'ok') {
-          // 将数组转换为以 id 为 key 的对象，方便查找
-          const stats = {};
-          for (const platform of res.data.data.platforms || []) {
-            stats[platform.id] = platform;
+      await botApi
+        .stats()
+        .then((res) => {
+          if (res.data.status === 'ok') {
+            // 将数组转换为以 id 为 key 的对象，方便查找
+            const stats = {};
+            for (const platform of res.data.data.platforms || []) {
+              stats[platform.id] = platform;
+            }
+            this.platformStats = stats;
           }
-          this.platformStats = stats;
-        }
-      }).catch((err) => {
-        console.warn('获取平台统计信息失败:', err);
-      });
+        })
+        .catch((err) => {
+          console.warn('获取平台统计信息失败:', err);
+        });
     },
 
     getPlatformStat(platformId) {
@@ -415,9 +518,13 @@ export default {
       if (stat?.weixin_oc) {
         return stat.weixin_oc;
       }
-      if (stat && typeof stat === "object") {
+      if (stat && typeof stat === 'object') {
         for (const value of Object.values(stat)) {
-          if (value && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value)) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            ('qrcode_img_content' in value || 'qrcode' in value)
+          ) {
             return value;
           }
         }
@@ -432,21 +539,31 @@ export default {
 
     getStatusColor(status) {
       switch (status) {
-        case 'running': return 'success';
-        case 'error': return 'error';
-        case 'pending': return 'warning';
-        case 'stopped': return 'grey';
-        default: return 'grey';
+        case 'running':
+          return 'success';
+        case 'error':
+          return 'error';
+        case 'pending':
+          return 'warning';
+        case 'stopped':
+          return 'grey';
+        default:
+          return 'grey';
       }
     },
 
     getStatusIcon(status) {
       switch (status) {
-        case 'running': return 'mdi-check-circle';
-        case 'error': return 'mdi-alert-circle';
-        case 'pending': return 'mdi-clock-outline';
-        case 'stopped': return 'mdi-stop-circle';
-        default: return 'mdi-help-circle';
+        case 'running':
+          return 'mdi-check-circle';
+        case 'error':
+          return 'mdi-alert-circle';
+        case 'pending':
+          return 'mdi-clock-outline';
+        case 'stopped':
+          return 'mdi-stop-circle';
+        default:
+          return 'mdi-help-circle';
       }
     },
 
@@ -459,7 +576,9 @@ export default {
     },
 
     findPlatformTemplate(platform) {
-      const templates = this.metadata?.platform_group?.metadata?.platform?.config_template || {};
+      const templates =
+        this.metadata?.platform_group?.metadata?.platform?.config_template ||
+        {};
 
       if (platform?.type && templates[platform.type]) {
         return templates[platform.type];
@@ -479,8 +598,16 @@ export default {
     mergeConfigWithTemplate(sourceConfig, templateConfig) {
       const merge = (source, reference) => {
         const target = {};
-        const sourceObj = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
-        const referenceObj = reference && typeof reference === 'object' && !Array.isArray(reference) ? reference : null;
+        const sourceObj =
+          source && typeof source === 'object' && !Array.isArray(source)
+            ? source
+            : {};
+        const referenceObj =
+          reference &&
+          typeof reference === 'object' &&
+          !Array.isArray(reference)
+            ? reference
+            : null;
 
         if (!referenceObj) {
           for (const [key, value] of Object.entries(sourceObj)) {
@@ -500,12 +627,19 @@ export default {
           const hasSourceKey = Object.hasOwn(sourceObj, key);
           const sourceValue = sourceObj[key];
 
-          if (refValue && typeof refValue === 'object' && !Array.isArray(refValue)) {
+          if (
+            refValue &&
+            typeof refValue === 'object' &&
+            !Array.isArray(refValue)
+          ) {
             target[key] = merge(
-              hasSourceKey && sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)
+              hasSourceKey &&
+                sourceValue &&
+                typeof sourceValue === 'object' &&
+                !Array.isArray(sourceValue)
                 ? sourceValue
                 : {},
-              refValue
+              refValue,
             );
             continue;
           }
@@ -564,24 +698,32 @@ export default {
         return;
       }
 
-      botApi.delete(platform.id).then((res) => {
-        this.getConfig();
-        this.showSuccess(res.data.message || this.messages.deleteSuccess);
-      }).catch((err) => {
-        this.showError(err.response?.data?.message || err.message);
-      });
+      botApi
+        .delete(platform.id)
+        .then((res) => {
+          this.getConfig();
+          this.showSuccess(res.data.message || this.messages.deleteSuccess);
+        })
+        .catch((err) => {
+          this.showError(err.response?.data?.message || err.message);
+        });
     },
 
     platformStatusChange(platform) {
       platform.enable = !platform.enable; // 切换状态
 
-      botApi.setEnabled(platform.id, { enabled: platform.enable }).then((res) => {
-        this.getConfig();
-        this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
-      }).catch((err) => {
-        platform.enable = !platform.enable; // 发生错误时回滚状态
-        this.showError(err.response?.data?.message || err.message);
-      });
+      botApi
+        .setEnabled(platform.id, { enabled: platform.enable })
+        .then((res) => {
+          this.getConfig();
+          this.showSuccess(
+            res.data.message || this.messages.statusUpdateSuccess,
+          );
+        })
+        .catch((err) => {
+          platform.enable = !platform.enable; // 发生错误时回滚状态
+          this.showError(err.response?.data?.message || err.message);
+        });
     },
 
     showToast({ message, type }) {
@@ -594,20 +736,20 @@ export default {
 
     showSuccess(message) {
       this.save_message = message;
-      this.save_message_success = "success";
+      this.save_message_success = 'success';
       this.save_message_snack = true;
     },
 
     showError(message) {
       this.save_message = message;
-      this.save_message_success = "error";
+      this.save_message_success = 'error';
       this.save_message_snack = true;
     },
 
     getWebhookUrl(webhookUuid) {
       let callbackBase = this.config_data.callback_api_base || '';
       if (!callbackBase) {
-        callbackBase = "http(s)://<your-domain-or-ip>";
+        callbackBase = 'http(s)://<your-domain-or-ip>';
       }
       if (callbackBase) {
         return `${callbackBase.replace(/\/$/, '')}/api/v1/webhooks/platforms/${webhookUuid}`;
@@ -628,9 +770,9 @@ export default {
       } else {
         this.showError(this.tm('webhookCopyFailed'));
       }
-    }
-  }
-}
+    },
+  },
+};
 </script>
 
 <style scoped>

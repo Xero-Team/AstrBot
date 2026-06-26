@@ -7,11 +7,7 @@ import { useRouterLoadingStore } from '@/stores/routerLoading';
 
 export const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
-  routes: [
-    MainRoutes,
-    AuthRoutes,
-    ChatBoxRoutes
-  ]
+  routes: [MainRoutes, AuthRoutes, ChatBoxRoutes],
 });
 
 interface AuthStore {
@@ -39,15 +35,17 @@ router.beforeEach(async (to, from, next) => {
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === '/auth/login' && auth.has_token()) {
-    next('/welcome'); return;
+    next('/welcome');
+    return;
   }
 
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
-      next('/auth/login'); return;
+      next('/auth/login');
+      return;
     }
-    next(); 
+    next();
   } else {
     next();
   }

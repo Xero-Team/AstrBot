@@ -28,9 +28,9 @@
       </div>
     </div>
     <div class="command-suggestion-hint">
-      <span>↑↓ {{ tm("commandSuggestion.navigate") }}</span>
-      <span>Enter {{ tm("commandSuggestion.select") }}</span>
-      <span>Esc {{ tm("commandSuggestion.close") }}</span>
+      <span>↑↓ {{ tm('commandSuggestion.navigate') }}</span>
+      <span>Enter {{ tm('commandSuggestion.select') }}</span>
+      <span>Esc {{ tm('commandSuggestion.close') }}</span>
     </div>
   </div>
   <!-- Tooltip: 鼠标悬停时显示完整用途 -->
@@ -47,8 +47,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { computed, reactive } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 export interface SuggestionCommand {
   handler_full_name: string;
@@ -76,20 +76,20 @@ const emit = defineEmits<{
   updateSelectedIndex: [index: number];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 
 const filteredCommands = computed(() => props.commands);
 
 // Tooltip 状态：鼠标悬停在指令上时显示完整用途
 const tooltip = reactive({
   visible: false,
-  text: "",
+  text: '',
   x: 0,
   y: 0,
 });
 
 const tooltipStyle = computed(() => ({
-  position: "fixed" as const,
+  position: 'fixed' as const,
   left: `${tooltip.x + 12}px`,
   top: `${tooltip.y + 12}px`,
   zIndex: 10000,
@@ -98,17 +98,17 @@ const tooltipStyle = computed(() => ({
 const panelStyle = computed(() => {
   if (props.caretPosition) {
     return {
-      position: "absolute" as const,
+      position: 'absolute' as const,
       left: `${props.caretPosition.left}px`,
       bottom: `${props.caretPosition.top + 8}px`,
       zIndex: 1000,
     };
   }
   return {
-    position: "absolute" as const,
-    left: "18px",
-    bottom: "100%",
-    marginBottom: "8px",
+    position: 'absolute' as const,
+    left: '18px',
+    bottom: '100%',
+    marginBottom: '8px',
     zIndex: 1000,
   };
 });
@@ -116,12 +116,12 @@ const panelStyle = computed(() => {
 function handleSelect(index: number) {
   const cmd = props.commands[index];
   if (cmd) {
-    emit("select", cmd);
+    emit('select', cmd);
   }
 }
 
 function handleMouseEnter(index: number) {
-  emit("updateSelectedIndex", index);
+  emit('updateSelectedIndex', index);
   // 显示 tooltip
   const cmd = props.commands[index];
   if (cmd?.description) {
@@ -190,7 +190,7 @@ function handleMouseLeave() {
 }
 
 .command-name {
-  font-family: "Fira Code", "Consolas", monospace;
+  font-family: 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
   font-weight: 600;
   color: rgb(var(--v-theme-primary));

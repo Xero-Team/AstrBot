@@ -23,38 +23,38 @@
         +{{ refs.used.length - 3 }}
       </span>
       <span class="refs-label">
-        {{ tm("refs.sources") }}
+        {{ tm('refs.sources') }}
       </span>
     </div>
   </div>
 </template>
 
 <script>
-import { useModuleI18n } from "@/i18n/composables";
+import { useModuleI18n } from '@/i18n/composables';
 
 export default {
-  name: "ActionRef",
+  name: 'ActionRef',
   props: {
     refs: {
       type: Object,
       default: null,
     },
   },
-  emits: ["open-refs"],
+  emits: ['open-refs'],
   setup() {
-    const { tm } = useModuleI18n("features/chat");
+    const { tm } = useModuleI18n('features/chat');
     return { tm };
   },
   methods: {
     // Get first character of ref title for fallback display
     getRefInitial(title) {
-      if (!title) return "?";
+      if (!title) return '?';
       return title.charAt(0).toUpperCase();
     },
 
     // Handle click to open refs sidebar
     handleClick() {
-      this.$emit("open-refs", this.refs);
+      this.$emit('open-refs', this.refs);
     },
   },
 };

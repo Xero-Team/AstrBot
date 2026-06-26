@@ -1,43 +1,47 @@
-const INVALID_ERROR_STRINGS = new Set(["[object Object]", "undefined", "null", ""]);
+const INVALID_ERROR_STRINGS = new Set([
+  '[object Object]',
+  'undefined',
+  'null',
+  '',
+]);
 
 const pickResponseMessage = (responseData) => {
-  if (typeof responseData === "string") {
+  if (typeof responseData === 'string') {
     return responseData.trim();
   }
-  if (!responseData || typeof responseData !== "object") {
-    return "";
+  if (!responseData || typeof responseData !== 'object') {
+    return '';
   }
 
-  const keys = ["message", "error", "detail", "details", "msg"];
+  const keys = ['message', 'error', 'detail', 'details', 'msg'];
   for (const key of keys) {
     const value = responseData[key];
-    if (typeof value === "string" && value.trim()) {
+    if (typeof value === 'string' && value.trim()) {
       return value.trim();
     }
   }
-  return "";
+  return '';
 };
 
-export const resolveErrorMessage = (err, fallbackMessage = "") => {
-  if (typeof err === "string") {
+export const resolveErrorMessage = (err, fallbackMessage = '') => {
+  if (typeof err === 'string') {
     return err.trim() || fallbackMessage;
   }
-  if (typeof err === "number" || typeof err === "boolean") {
+  if (typeof err === 'number' || typeof err === 'boolean') {
     return String(err);
   }
 
   const fromResponse =
     pickResponseMessage(err?.response?.data) ||
-    (typeof err?.response?.statusText === "string"
+    (typeof err?.response?.statusText === 'string'
       ? err.response.statusText.trim()
-      : "");
-  const fromError =
-    typeof err?.message === "string" ? err.message.trim() : "";
+      : '');
+  const fromError = typeof err?.message === 'string' ? err.message.trim() : '';
 
-  let fromString = "";
-  if (typeof err?.toString === "function") {
+  let fromString = '';
+  if (typeof err?.toString === 'function') {
     const value = err.toString().trim();
-    fromString = INVALID_ERROR_STRINGS.has(value) ? "" : value;
+    fromString = INVALID_ERROR_STRINGS.has(value) ? '' : value;
   }
 
   return fromResponse || fromError || fromString || fallbackMessage;

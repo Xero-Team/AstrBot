@@ -24,7 +24,9 @@
         <div v-if="selectedProviderSource" class="provider-config-shell">
           <div class="provider-config-header">
             <div class="provider-config-headline">
-              <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
+              <div class="provider-config-title">
+                {{ selectedProviderSource.id }}
+              </div>
               <div class="provider-config-subtitle">
                 {{ selectedProviderSource.api_base || 'N/A' }}
               </div>
@@ -50,7 +52,9 @@
           <div class="provider-config-body">
             <section class="provider-section">
               <div class="provider-section-head">
-                <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                <div class="provider-section-title">
+                  {{ tm('providers.settings') }}
+                </div>
               </div>
               <AstrBotConfig
                 v-if="basicSourceConfig"
@@ -65,7 +69,9 @@
 
             <section v-if="advancedSourceConfig" class="provider-section">
               <div class="provider-section-head">
-                <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                <div class="provider-section-title">
+                  {{ tm('providerSources.advancedConfig') }}
+                </div>
               </div>
               <AstrBotConfig
                 :iterable="advancedSourceConfig"
@@ -105,7 +111,9 @@
         </div>
 
         <div v-else class="provider-empty-state">
-          <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
+          <v-icon size="48" color="grey-lighten-1"
+            >mdi-cursor-default-click</v-icon
+          >
           <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
         </div>
       </div>
@@ -133,7 +141,9 @@
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
+          <v-btn variant="text" @click="showManualModelDialog = false"
+            >取消</v-btn
+          >
           <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
         </v-card-actions>
       </v-card>
@@ -170,38 +180,43 @@
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="top"
+    >
       {{ snackbar.message }}
     </v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
-import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
-import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
-import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
-import { useProviderSources } from '@/composables/useProviderSources'
+import { ref } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue';
+import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue';
+import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
+import { useProviderSources } from '@/composables/useProviderSources';
 
 const props = defineProps({
   showBorder: {
     type: Boolean,
-    default: true
-  }
-})
+    default: true,
+  },
+});
 
-const { tm } = useModuleI18n('features/provider')
+const { tm } = useModuleI18n('features/provider');
 
 const snackbar = ref({
   show: false,
   message: '',
-  color: 'success'
-})
+  color: 'success',
+});
 
 function showMessage(message, color = 'success') {
-  snackbar.value = { show: true, message, color }
+  snackbar.value = { show: true, message, color };
 }
 
 const {
@@ -239,14 +254,14 @@ const {
   testProvider,
   toggleProviderEnable,
   loadConfig,
-  modelAlreadyConfigured
+  modelAlreadyConfigured,
 } = useProviderSources({
   defaultTab: 'chat_completion',
   tm,
-  showMessage
-})
+  showMessage,
+});
 
-const showManualModelDialog = ref(false)
+const showManualModelDialog = ref(false);
 
 const {
   showProviderEditDialog,
@@ -256,7 +271,7 @@ const {
   providerEditDialogTitle,
   openProviderEdit,
   openModelAddDialog,
-  saveEditedProvider
+  saveEditedProvider,
 } = useProviderModelConfigDialog({
   selectedProviderSource,
   configSchema,
@@ -264,36 +279,35 @@ const {
   modelAlreadyConfigured,
   loadConfig,
   tm,
-  showMessage
-})
+  showMessage,
+});
 
 function openManualModelDialog() {
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm('providerSources.selectHint'), 'error');
+    return;
   }
-  manualModelId.value = ''
-  showManualModelDialog.value = true
+  manualModelId.value = '';
+  showManualModelDialog.value = true;
 }
 
 async function confirmManualModel() {
-  const modelId = manualModelId.value.trim()
+  const modelId = manualModelId.value.trim();
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm('providerSources.selectHint'), 'error');
+    return;
   }
   if (!modelId) {
-    showMessage(tm('models.manualModelRequired'), 'error')
-    return
+    showMessage(tm('models.manualModelRequired'), 'error');
+    return;
   }
   if (modelAlreadyConfigured(modelId)) {
-    showMessage(tm('models.manualModelExists'), 'error')
-    return
+    showMessage(tm('models.manualModelExists'), 'error');
+    return;
   }
-  showManualModelDialog.value = false
-  openModelAddDialog(modelId)
+  showManualModelDialog.value = false;
+  openModelAddDialog(modelId);
 }
-
 </script>
 
 <style scoped>

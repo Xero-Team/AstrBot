@@ -6,10 +6,10 @@
         <v-icon size="20" class="project-action-icon mr-2">
           mdi-folder-outline
         </v-icon>
-        <span class="project-btn-title">{{ tm("project.title") }}</span>
+        <span class="project-btn-title">{{ tm('project.title') }}</span>
         <v-spacer />
         <v-icon size="18" class="project-toggle-icon">
-          {{ expanded ? "mdi-chevron-up" : "mdi-chevron-down" }}
+          {{ expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
         </v-icon>
       </v-btn>
     </div>
@@ -25,7 +25,7 @@
           <span class="project-emoji">
             <v-icon size="18">mdi-plus</v-icon>
           </span>
-          <span class="project-title">{{ tm("project.create") }}</span>
+          <span class="project-title">{{ tm('project.create') }}</span>
         </button>
 
         <button
@@ -36,7 +36,7 @@
           type="button"
           @click="$emit('selectProject', project.project_id)"
         >
-          <span class="project-emoji">{{ project.emoji || "📁" }}</span>
+          <span class="project-emoji">{{ project.emoji || '📁' }}</span>
           <span class="project-title">{{ project.title }}</span>
           <span class="project-actions">
             <v-btn
@@ -62,9 +62,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
-import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import { ref } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 export interface Project {
   project_id: string;
@@ -93,27 +93,27 @@ const emit = defineEmits<{
   deleteProject: [projectId: string];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 
 const confirmDialog = useConfirmDialog();
 
 const expanded = ref(props.initialExpanded);
 
 // 从 localStorage 读取项目展开状态
-const savedProjectsExpandedState = localStorage.getItem("projectsExpanded");
+const savedProjectsExpandedState = localStorage.getItem('projectsExpanded');
 if (savedProjectsExpandedState !== null) {
   expanded.value = JSON.parse(savedProjectsExpandedState);
 }
 
 function toggleExpanded() {
   expanded.value = !expanded.value;
-  localStorage.setItem("projectsExpanded", JSON.stringify(expanded.value));
+  localStorage.setItem('projectsExpanded', JSON.stringify(expanded.value));
 }
 
 async function handleDeleteProject(project: Project) {
-  const message = tm("project.confirmDelete", { title: project.title });
+  const message = tm('project.confirmDelete', { title: project.title });
   if (await askForConfirmation(message, confirmDialog)) {
-    emit("deleteProject", project.project_id);
+    emit('deleteProject', project.project_id);
   }
 }
 </script>

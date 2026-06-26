@@ -685,12 +685,17 @@ function providerConfig(config: OpenConfig): ProviderConfigRequest {
   return { config };
 }
 
-function providerTypeToCapabilities(providerType: string): ProviderCapability[] {
+function providerTypeToCapabilities(
+  providerType: string,
+): ProviderCapability[] {
   return providerType
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => PROVIDER_TYPE_TO_CAPABILITY[item] || (item as ProviderCapability));
+    .map(
+      (item) =>
+        PROVIDER_TYPE_TO_CAPABILITY[item] || (item as ProviderCapability),
+    );
 }
 
 export const configProfileApi = {
@@ -768,7 +773,9 @@ export const systemConfigApi = {
 
 export const configRouteApi = {
   list() {
-    return typed<{ routing?: Record<string, string> }>(openApiV1.listConfigRoutes());
+    return typed<{ routing?: Record<string, string> }>(
+      openApiV1.listConfigRoutes(),
+    );
   },
   replace(payload: ConfigRoutesReplaceRequest) {
     return typed<OpenConfig>(openApiV1.replaceConfigRoutes({ body: payload }));
@@ -779,9 +786,7 @@ export const configRouteApi = {
     );
   },
   delete(umo: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteConfigRoute({ path: { umo } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteConfigRoute({ path: { umo } }));
   },
 };
 
@@ -867,7 +872,9 @@ export const providerApi = {
       openApiV1.listProviders({ query: generatedQuery(params) }),
     );
   },
-  async listByProviderType(providerType: string): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
+  async listByProviderType(
+    providerType: string,
+  ): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
     const capabilities = providerTypeToCapabilities(providerType);
     if (capabilities.length === 0) {
       const response = await providerApi.list();
@@ -888,7 +895,9 @@ export const providerApi = {
       ...first,
       data: {
         ...first.data,
-        data: responses.flatMap((response) => response.data.data.providers || []),
+        data: responses.flatMap(
+          (response) => response.data.data.providers || [],
+        ),
       },
     };
   },
@@ -897,7 +906,10 @@ export const providerApi = {
       openApiV1.createProvider({ body: providerConfig(config) }),
     );
   },
-  listBySource(sourceId: string, params?: Pick<ProviderListParams, 'capability'>) {
+  listBySource(
+    sourceId: string,
+    params?: Pick<ProviderListParams, 'capability'>,
+  ) {
     return typed<{ providers: OpenConfig[] }>(
       openApiV1.listProvidersBySourceId({
         query: { source_id: sourceId, ...params },
@@ -976,9 +988,7 @@ export const authApi = {
     return typed<TotpSetupData>(openApiV1.recoverTotp());
   },
   updateAccount(payload: UpdateAccountRequest) {
-    return typed<OpenConfig>(
-      openApiV1.updateAuthAccount({ body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.updateAuthAccount({ body: payload }));
   },
 };
 
@@ -987,7 +997,9 @@ export const apiKeyApi = {
     return typed<OpenConfig[]>(openApiV1.listApiKeys());
   },
   create(payload: CreateApiKeyRequest) {
-    return typed<{ api_key?: string }>(openApiV1.createApiKey({ body: payload }));
+    return typed<{ api_key?: string }>(
+      openApiV1.createApiKey({ body: payload }),
+    );
   },
   revoke(keyId: string) {
     return typed<OpenConfig>(
@@ -1006,9 +1018,7 @@ export const traceApi = {
     return typed<OpenConfig>(openApiV1.getTraceSettings());
   },
   updateSettings(settings: TraceSettingsRequest) {
-    return typed<OpenConfig>(
-      openApiV1.updateTraceSettings({ body: settings }),
-    );
+    return typed<OpenConfig>(openApiV1.updateTraceSettings({ body: settings }));
   },
 };
 
@@ -1035,15 +1045,15 @@ export const updatesApi = {
     );
   },
   installPip(payload: PipInstallRequest) {
-    return typed<OpenConfig>(
-      openApiV1.installPipPackage({ body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.installPipPackage({ body: payload }));
   },
 };
 
 export const backupApi = {
   list(params?: BackupListParams) {
-    return typed<OpenConfig>(openApiV1.listBackups({ query: generatedQuery(params) }));
+    return typed<OpenConfig>(
+      openApiV1.listBackups({ query: generatedQuery(params) }),
+    );
   },
   create(payload?: BackupExportRequest) {
     return typed<OpenConfig>(openApiV1.createBackup({ body: payload }));
@@ -1066,7 +1076,9 @@ export const backupApi = {
   uploadChunk(formData: FormData | BackupChunkUploadRequest) {
     return typed<OpenConfig>(
       openApiV1.uploadBackupChunk({
-        body: generatedFormData(formData) as unknown as BackupChunkUploadRequest,
+        body: generatedFormData(
+          formData,
+        ) as unknown as BackupChunkUploadRequest,
       }),
     );
   },
@@ -1077,9 +1089,7 @@ export const backupApi = {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
   check(filename: string) {
-    return typed<OpenConfig>(
-      openApiV1.checkBackup({ path: { filename } }),
-    );
+    return typed<OpenConfig>(openApiV1.checkBackup({ path: { filename } }));
   },
   import(filename: string, confirmed = true) {
     const payload: BackupImportRequest = { confirmed };
@@ -1091,9 +1101,7 @@ export const backupApi = {
     );
   },
   delete(filename: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteBackup({ path: { filename } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteBackup({ path: { filename } }));
   },
   rename(filename: string, payload: BackupRenameRequest) {
     return typed<OpenConfig>(
@@ -1151,7 +1159,9 @@ export const chatApi = {
     );
   },
   batchDeleteSessions(payload: ChatSessionBatchDeleteRequest) {
-    return typed<ChatBatchDeleteData>(openApiV1.batchDeleteChatSessions({ body: payload }));
+    return typed<ChatBatchDeleteData>(
+      openApiV1.batchDeleteChatSessions({ body: payload }),
+    );
   },
   stopSession(sessionId: string) {
     return typed<OpenConfig>(
@@ -1279,7 +1289,9 @@ export const fileApi = {
 
 export const sessionApi = {
   list(params?: SessionListParams) {
-    return typed<OpenConfig>(openApiV1.listSessions({ query: generatedQuery(params) }));
+    return typed<OpenConfig>(
+      openApiV1.listSessions({ query: generatedQuery(params) }),
+    );
   },
   activeUmos() {
     return typed<ActiveUmosData>(openApiV1.listActiveUmos());
@@ -1328,7 +1340,9 @@ export const sessionApi = {
 
 export const cronApi = {
   list(params?: CronJobListParams) {
-    return typed<OpenConfig[]>(openApiV1.listCronJobs({ query: generatedQuery(params) }));
+    return typed<OpenConfig[]>(
+      openApiV1.listCronJobs({ query: generatedQuery(params) }),
+    );
   },
   create(payload: CronJobRequest) {
     return typed<OpenConfig>(openApiV1.createCronJob({ body: payload }));
@@ -1339,7 +1353,9 @@ export const cronApi = {
     );
   },
   delete(jobId: string) {
-    return typed<OpenConfig>(openApiV1.deleteCronJob({ path: { job_id: jobId } }));
+    return typed<OpenConfig>(
+      openApiV1.deleteCronJob({ path: { job_id: jobId } }),
+    );
   },
   run(jobId: string) {
     return typed<OpenConfig>(openApiV1.runCronJob({ path: { job_id: jobId } }));
@@ -1351,9 +1367,7 @@ export const subagentApi = {
     return typed<OpenConfig>(openApiV1.getSubagentConfig());
   },
   updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSubagentConfig({ body: config }),
-    );
+    return typed<OpenConfig>(openApiV1.updateSubagentConfig({ body: config }));
   },
   availableTools() {
     return typed<OpenConfig>(openApiV1.listSubagentAvailableTools());
@@ -1383,7 +1397,9 @@ export const commandApi = {
 
 export const toolApi = {
   list(params?: ToolListParams) {
-    return typed<ToolItem[]>(openApiV1.listTools({ query: generatedQuery(params) }));
+    return typed<ToolItem[]>(
+      openApiV1.listTools({ query: generatedQuery(params) }),
+    );
   },
   setEnabled(toolId: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1456,9 +1472,7 @@ export const t2iApi = {
     );
   },
   createTemplate(payload: T2iTemplateRequest) {
-    return typed<OpenConfig>(
-      openApiV1.createT2iTemplate({ body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.createT2iTemplate({ body: payload }));
   },
   updateTemplate(name: string, content: string) {
     return typed<OpenConfig>(
@@ -1469,12 +1483,12 @@ export const t2iApi = {
     );
   },
   deleteTemplate(name: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteT2iTemplate({ path: { name } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteT2iTemplate({ path: { name } }));
   },
   getActiveTemplate() {
-    return typed<{ active_template?: string }>(openApiV1.getActiveT2iTemplate());
+    return typed<{ active_template?: string }>(
+      openApiV1.getActiveT2iTemplate(),
+    );
   },
   setActiveTemplate(name: string) {
     return typed<OpenConfig>(
@@ -1554,9 +1568,7 @@ export const pluginApi = {
     );
   },
   updateMany(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updatePlugins({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.updatePlugins({ body }));
   },
   checkVersionSupport(payload: PluginVersionSupportRequest) {
     return typed<OpenConfig>(
@@ -1630,25 +1642,29 @@ export const pluginApi = {
   installUpload(formData: FormData) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromUpload({
-        body: generatedFormData(formData) as unknown as PluginUploadInstallRequest,
+        body: generatedFormData(
+          formData,
+        ) as unknown as PluginUploadInstallRequest,
       }),
     );
   },
   installGithub(body: PluginGithubInstallRequest) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromGithub({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.installPluginFromGithub({ body }));
   },
   installUrl(body: PluginUrlInstallRequest) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUrl({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.installPluginFromUrl({ body }));
   },
 };
 
 export const knowledgeApi = {
-  list(params?: { page?: number; page_size?: number; refresh_stats?: boolean }) {
-    return typed<PagedItemsData<KnowledgeBaseData>>(openApiV1.listKnowledgeBases({ query: params }));
+  list(params?: {
+    page?: number;
+    page_size?: number;
+    refresh_stats?: boolean;
+  }) {
+    return typed<PagedItemsData<KnowledgeBaseData>>(
+      openApiV1.listKnowledgeBases({ query: params }),
+    );
   },
   get(kbId: string) {
     return typed<KnowledgeBaseData>(
@@ -1685,11 +1701,16 @@ export const knowledgeApi = {
     return typed<OpenConfig>(
       openApiV1.uploadKnowledgeDocument({
         path: { kb_id: kbId },
-        body: generatedFormData(formData) as unknown as KnowledgeDocumentUploadRequest,
+        body: generatedFormData(
+          formData,
+        ) as unknown as KnowledgeDocumentUploadRequest,
       }),
     );
   },
-  importDocumentFromUrl(kbId: string, payload: KnowledgeDocumentUrlImportRequest) {
+  importDocumentFromUrl(
+    kbId: string,
+    payload: KnowledgeDocumentUrlImportRequest,
+  ) {
     return typed<OpenConfig>(
       openApiV1.importKnowledgeDocumentFromUrl({
         path: { kb_id: kbId },
@@ -1750,9 +1771,7 @@ export const skillApi = {
     return typed<SkillListData>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {
-    return typed<OpenConfig>(
-      openApiV1.uploadSkillsBatch({ body: { files } }),
-    );
+    return typed<OpenConfig>(openApiV1.uploadSkillsBatch({ body: { files } }));
   },
   setEnabled(skillName: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1794,7 +1813,9 @@ export const skillApi = {
     );
   },
   neoCandidates(params?: { skill_key?: string; status?: string }) {
-    return typed<OpenConfig>(openApiV1.listNeoSkillCandidates({ query: params }));
+    return typed<OpenConfig>(
+      openApiV1.listNeoSkillCandidates({ query: params }),
+    );
   },
   neoReleases(params?: { skill_key?: string; stage?: string }) {
     return typed<OpenConfig>(openApiV1.listNeoSkillReleases({ query: params }));
@@ -1805,34 +1826,22 @@ export const skillApi = {
     );
   },
   evaluateNeoCandidate(body: NeoCandidateActionRequest) {
-    return typed<OpenConfig>(
-      openApiV1.evaluateNeoSkillCandidate({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.evaluateNeoSkillCandidate({ body }));
   },
   promoteNeoCandidate(body: NeoCandidateActionRequest) {
-    return typed<OpenConfig>(
-      openApiV1.promoteNeoSkillCandidate({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.promoteNeoSkillCandidate({ body }));
   },
   rollbackNeoRelease(body: NeoReleaseActionRequest) {
-    return typed<OpenConfig>(
-      openApiV1.rollbackNeoSkillRelease({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.rollbackNeoSkillRelease({ body }));
   },
   syncNeoRelease(body: NeoReleaseActionRequest) {
-    return typed<OpenConfig>(
-      openApiV1.syncNeoSkillRelease({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.syncNeoSkillRelease({ body }));
   },
   deleteNeoCandidate(body: NeoCandidateActionRequest) {
-    return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillCandidate({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteNeoSkillCandidate({ body }));
   },
   deleteNeoRelease(body: NeoReleaseActionRequest) {
-    return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillRelease({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteNeoSkillRelease({ body }));
   },
 };
 
@@ -1850,7 +1859,9 @@ export const personaApi = {
   },
   createFolder(folder: PersonaFolderInput) {
     return typed<OpenConfig>(
-      openApiV1.createPersonaFolder({ body: folder as unknown as PersonaFolderRequest }),
+      openApiV1.createPersonaFolder({
+        body: folder as unknown as PersonaFolderRequest,
+      }),
     );
   },
   updateFolder(folderId: string, folder: PersonaFolderInput) {
@@ -1901,9 +1912,7 @@ export const personaApi = {
       persona_id: personaId,
       folder_id: folderId ?? undefined,
     };
-    return typed<OpenConfig>(
-      openApiV1.movePersonaItem({ body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.movePersonaItem({ body: payload }));
   },
   reorder(items: ReorderRequest['items']) {
     return typed<OpenConfig>(
@@ -1916,10 +1925,7 @@ export const conversationApi = {
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<ConversationListResponseData>(
       openApiV1.listConversations(
-        generatedOptions(
-          { query: generatedQuery(params) },
-          requestConfig,
-        ),
+        generatedOptions({ query: generatedQuery(params) }, requestConfig),
       ),
     );
   },
@@ -1962,7 +1968,9 @@ export const conversationApi = {
     );
   },
   batchDelete(payload: ConversationBatchDeleteRequest) {
-    return typed<ConversationBatchDeleteData>(openApiV1.batchDeleteConversations({ body: payload }));
+    return typed<ConversationBatchDeleteData>(
+      openApiV1.batchDeleteConversations({ body: payload }),
+    );
   },
   export(payload: ConversationExportRequest) {
     return openApiV1.exportConversations({

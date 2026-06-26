@@ -16,7 +16,9 @@
         <v-tab value="documents">
           <v-icon start>mdi-file-document-multiple</v-icon>
           {{ t('tabs.documents') }}
-          <v-chip class="ml-2" size="small" variant="tonal">{{ kb.doc_count || 0 }}</v-chip>
+          <v-chip class="ml-2" size="small" variant="tonal">{{
+            kb.doc_count || 0
+          }}</v-chip>
         </v-tab>
         <v-tab value="retrieval">
           <v-icon start>mdi-magnify</v-icon>
@@ -29,7 +31,7 @@
       </v-tabs>
 
       <!-- 标签页内容 -->
-      <v-window v-model="activeTab" style="padding: 8px;">
+      <v-window v-model="activeTab" style="padding: 8px">
         <!-- 概览 -->
         <v-window-item value="overview">
           <v-row>
@@ -42,40 +44,60 @@
                       <template #prepend>
                         <v-icon>mdi-label</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.name') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ kb.kb_name }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.name')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.kb_name
+                      }}</v-list-item-subtitle>
                     </v-list-item>
 
                     <v-list-item v-if="kb.description">
                       <template #prepend>
                         <v-icon>mdi-text</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.description') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ kb.description }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.description')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.description
+                      }}</v-list-item-subtitle>
                     </v-list-item>
 
                     <v-list-item>
                       <template #prepend>
                         <v-icon>mdi-emoticon</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.emoji') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ kb.emoji || '📚' }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.emoji')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.emoji || '📚'
+                      }}</v-list-item-subtitle>
                     </v-list-item>
 
                     <v-list-item>
                       <template #prepend>
                         <v-icon>mdi-calendar-plus</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.createdAt') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ formatDate(kb.created_at) }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.createdAt')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        formatDate(kb.created_at)
+                      }}</v-list-item-subtitle>
                     </v-list-item>
 
                     <v-list-item>
                       <template #prepend>
                         <v-icon>mdi-calendar-edit</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.updatedAt') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ formatDate(kb.updated_at) }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.updatedAt')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        formatDate(kb.updated_at)
+                      }}</v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
                 </v-card-text>
@@ -89,16 +111,24 @@
                   <v-row>
                     <v-col cols="6">
                       <div class="stat-box">
-                        <v-icon size="48" color="primary">mdi-file-document</v-icon>
+                        <v-icon size="48" color="primary"
+                          >mdi-file-document</v-icon
+                        >
                         <div class="stat-value">{{ kb.doc_count || 0 }}</div>
-                        <div class="stat-label">{{ t('overview.docCount') }}</div>
+                        <div class="stat-label">
+                          {{ t('overview.docCount') }}
+                        </div>
                       </div>
                     </v-col>
                     <v-col cols="6">
                       <div class="stat-box">
-                        <v-icon size="48" color="secondary">mdi-text-box</v-icon>
+                        <v-icon size="48" color="secondary"
+                          >mdi-text-box</v-icon
+                        >
                         <div class="stat-value">{{ kb.chunk_count || 0 }}</div>
-                        <div class="stat-label">{{ t('overview.chunkCount') }}</div>
+                        <div class="stat-label">
+                          {{ t('overview.chunkCount') }}
+                        </div>
                       </div>
                     </v-col>
                   </v-row>
@@ -113,16 +143,24 @@
                       <template #prepend>
                         <v-icon>mdi-vector-point</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.embeddingModel') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ kb.embedding_provider_id || t('overview.notSet') }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.embeddingModel')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.embedding_provider_id || t('overview.notSet')
+                      }}</v-list-item-subtitle>
                     </v-list-item>
 
                     <v-list-item>
                       <template #prepend>
                         <v-icon>mdi-sort-ascending</v-icon>
                       </template>
-                      <v-list-item-title>{{ t('overview.rerankModel') }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ kb.rerank_provider_id || t('overview.notSet') }}</v-list-item-subtitle>
+                      <v-list-item-title>{{
+                        t('overview.rerankModel')
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.rerank_provider_id || t('overview.notSet')
+                      }}</v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
                 </v-card-text>
@@ -138,7 +176,7 @@
 
         <!-- 知识库检索 -->
         <v-window-item value="retrieval">
-          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name || ''"/>
+          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name || ''" />
         </v-window-item>
 
         <!-- 设置 -->
@@ -156,93 +194,93 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { knowledgeApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
-import DocumentsTab from './components/DocumentsTab.vue'
-import RetrievalTab from './components/RetrievalTab.vue'
-import SettingsTab from './components/SettingsTab.vue'
+import { ref, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { knowledgeApi } from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
+import DocumentsTab from './components/DocumentsTab.vue';
+import RetrievalTab from './components/RetrievalTab.vue';
+import SettingsTab from './components/SettingsTab.vue';
 
 interface KnowledgeBaseDetail {
-  kb_id?: string
-  kb_name?: string
-  description?: string | null
-  emoji?: string | null
-  created_at?: string
-  updated_at?: string
-  doc_count?: number
-  chunk_count?: number
-  embedding_provider_id?: string | null
-  rerank_provider_id?: string | null
+  kb_id?: string;
+  kb_name?: string;
+  description?: string | null;
+  emoji?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  doc_count?: number;
+  chunk_count?: number;
+  embedding_provider_id?: string | null;
+  rerank_provider_id?: string | null;
 }
 
-const { tm: t } = useModuleI18n('features/knowledge-base/detail')
-const route = useRoute()
+const { tm: t } = useModuleI18n('features/knowledge-base/detail');
+const route = useRoute();
 
 const emit = defineEmits<{
-  (event: 'title-change', title: string): void
-}>()
+  (event: 'title-change', title: string): void;
+}>();
 
-const kbId = ref(route.params.kbId as string)
-const loading = ref(true)
-const activeTab = ref('overview')
-const kb = ref<KnowledgeBaseDetail>({})
+const kbId = ref(route.params.kbId as string);
+const loading = ref(true);
+const activeTab = ref('overview');
+const kb = ref<KnowledgeBaseDetail>({});
 
 const snackbar = ref({
   show: false,
   text: '',
-  color: 'success'
-})
+  color: 'success',
+});
 
 const showSnackbar = (text: string, color: string = 'success') => {
-  snackbar.value.text = text
-  snackbar.value.color = color
-  snackbar.value.show = true
-}
+  snackbar.value.text = text;
+  snackbar.value.color = color;
+  snackbar.value.show = true;
+};
 
 // 加载知识库详情
 const loadKB = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await knowledgeApi.get(kbId.value)
+    const response = await knowledgeApi.get(kbId.value);
     if (response.data.status === 'ok') {
-      kb.value = response.data.data
-      emit('title-change', kb.value.kb_name || '')
+      kb.value = response.data.data;
+      emit('title-change', kb.value.kb_name || '');
     } else {
-      showSnackbar(response.data.message || '加载失败', 'error')
+      showSnackbar(response.data.message || '加载失败', 'error');
     }
   } catch (error) {
-    console.error('Failed to load knowledge base:', error)
-    showSnackbar('加载知识库详情失败', 'error')
+    console.error('Failed to load knowledge base:', error);
+    showSnackbar('加载知识库详情失败', 'error');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 格式化日期
 const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
-  })
-}
+    minute: '2-digit',
+  });
+};
 
 onMounted(() => {
-  void loadKB()
-})
+  void loadKB();
+});
 
 watch(
   () => kb.value?.kb_name,
   (name) => {
-    emit('title-change', name || '')
+    emit('title-change', name || '');
   },
-)
+);
 </script>
 
 <style scoped>

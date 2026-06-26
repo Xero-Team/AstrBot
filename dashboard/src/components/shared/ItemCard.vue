@@ -1,7 +1,14 @@
 <template>
-  <v-card class="item-card hover-elevation" style="padding: 4px;" :variant="variant" elevation="0">
+  <v-card
+    class="item-card hover-elevation"
+    style="padding: 4px"
+    :variant="variant"
+    elevation="0"
+  >
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-      <span class="text-h2 text-truncate" :title="getItemTitle()">{{ getItemTitle() }}</span>
+      <span class="text-h2 text-truncate" :title="getItemTitle()">{{
+        getItemTitle()
+      }}</span>
       <v-tooltip location="top">
         <template #activator="{ props }">
           <v-switch
@@ -15,7 +22,11 @@
             @update:model-value="toggleEnabled"
           ></v-switch>
         </template>
-        <span>{{ getItemEnabled() ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
+        <span>{{
+          getItemEnabled()
+            ? t('core.common.itemCard.enabled')
+            : t('core.common.itemCard.disabled')
+        }}</span>
       </v-tooltip>
     </v-card-title>
 
@@ -23,28 +34,28 @@
       <slot name="item-details" :item="item"></slot>
     </v-card-text>
 
-  <v-card-actions style="margin: 8px;">
-    <v-btn
-      variant="outlined"
-      color="error"
-      size="small"
-      rounded="xl"
-      :disabled="loading || disableDelete"
-      @click="$emit('delete', item)"
-    >
-      {{ t('core.common.itemCard.delete') }}
-    </v-btn>
-    <v-btn
-      v-if="showEditButton"
-      variant="tonal"
-      color="primary"
-      size="small"
-      rounded="xl"
-      :disabled="loading"
-      @click="$emit('edit', item)"
-    >
-      {{ t('core.common.itemCard.edit') }}
-    </v-btn>
+    <v-card-actions style="margin: 8px">
+      <v-btn
+        variant="outlined"
+        color="error"
+        size="small"
+        rounded="xl"
+        :disabled="loading || disableDelete"
+        @click="$emit('delete', item)"
+      >
+        {{ t('core.common.itemCard.delete') }}
+      </v-btn>
+      <v-btn
+        v-if="showEditButton"
+        variant="tonal"
+        color="primary"
+        size="small"
+        rounded="xl"
+        :disabled="loading"
+        @click="$emit('edit', item)"
+      >
+        {{ t('core.common.itemCard.edit') }}
+      </v-btn>
       <v-btn
         v-if="showCopyButton"
         variant="tonal"
@@ -60,13 +71,12 @@
       <v-spacer></v-spacer>
     </v-card-actions>
 
-    <div v-if="bglogo" class="d-flex justify-end align-center" style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;">
-      <v-img
-        :src="bglogo"
-        contain
-        width="120"
-        height="120"
-      ></v-img>
+    <div
+      v-if="bglogo"
+      class="d-flex justify-end align-center"
+      style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2"
+    >
+      <v-img :src="bglogo" contain width="120" height="120"></v-img>
     </div>
   </v-card>
 </template>
@@ -79,44 +89,44 @@ export default {
   props: {
     item: {
       type: Object,
-      required: true
+      required: true,
     },
     titleField: {
       type: String,
-      default: 'id'
+      default: 'id',
     },
     enabledField: {
       type: String,
-      default: 'enable'
+      default: 'enable',
     },
     bglogo: {
       type: String,
-      default: null
+      default: null,
     },
     loading: {
       type: Boolean,
-      default: false
+      default: false,
     },
     showCopyButton: {
       type: Boolean,
-      default: false
+      default: false,
     },
     showEditButton: {
       type: Boolean,
-      default: true
+      default: true,
     },
     disableToggle: {
       type: Boolean,
-      default: false
+      default: false,
     },
     disableDelete: {
       type: Boolean,
-      default: false
+      default: false,
     },
     variant: {
       type: String,
-      default: undefined
-    }
+      default: undefined,
+    },
   },
   emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
   setup() {
@@ -132,9 +142,9 @@ export default {
     },
     toggleEnabled() {
       this.$emit('toggle-enabled', this.item);
-    }
-  }
-}
+    },
+  },
+};
 </script>
 
 <style scoped>
@@ -142,7 +152,9 @@ export default {
   background: rgb(var(--v-theme-surface));
   position: relative;
   border-radius: 18px;
-  transition: background-color 0.16s ease, transform 0.3s ease;
+  transition:
+    background-color 0.16s ease,
+    transform 0.3s ease;
   overflow: hidden;
   min-height: 220px;
   height: 100%;

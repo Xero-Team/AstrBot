@@ -1,10 +1,10 @@
 <script setup>
-import { computed } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
-import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
-import { usePluginI18n } from "@/utils/pluginI18n";
+import { computed } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
+import PluginPlatformChip from '@/components/shared/PluginPlatformChip.vue';
+import { usePluginI18n } from '@/utils/pluginI18n';
 
-const { tm } = useModuleI18n("features/extension");
+const { tm } = useModuleI18n('features/extension');
 const { pluginShortDesc } = usePluginI18n();
 
 const props = defineProps({
@@ -22,11 +22,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["install", "open"]);
+const emit = defineEmits(['install', 'open']);
 
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
-  return platforms.filter((item) => typeof item === "string");
+  return platforms.filter((item) => typeof item === 'string');
 };
 
 const platformDisplayList = computed(() =>
@@ -34,17 +34,19 @@ const platformDisplayList = computed(() =>
 );
 
 const cardDescription = computed(() =>
-  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
+  pluginShortDesc(
+    props.plugin,
+    props.plugin?.short_desc || props.plugin?.desc || '',
+  ),
 );
 
 const handleInstall = (plugin) => {
-  emit("install", plugin);
+  emit('install', plugin);
 };
 
 const handleOpen = () => {
-  emit("open", props.plugin);
+  emit('open', props.plugin);
 };
-
 </script>
 
 <template>
@@ -55,10 +57,7 @@ const handleOpen = () => {
     :ripple="false"
     @click="handleOpen"
   >
-
-    <v-card-text
-      class="plugin-card-content"
-    >
+    <v-card-text class="plugin-card-content">
       <div class="plugin-cover">
         <img
           :src="plugin?.logo || defaultPluginIcon"
@@ -74,8 +73,8 @@ const handleOpen = () => {
               plugin.display_name?.length
                 ? plugin.display_name
                 : showPluginFullName
-                ? plugin.name
-                : plugin.trimmedName
+                  ? plugin.name
+                  : plugin.trimmedName
             }}
           </div>
           <v-chip
@@ -85,7 +84,7 @@ const handleOpen = () => {
             label
             class="market-recommended-chip"
           >
-            {{ tm("market.recommended") }}
+            {{ tm('market.recommended') }}
           </v-chip>
           <v-chip
             v-if="plugin?.astrbot_version_supported === false"
@@ -94,7 +93,7 @@ const handleOpen = () => {
             label
             class="market-unsupported-chip"
           >
-            {{ tm("status.unsupported") }}
+            {{ tm('status.unsupported') }}
           </v-chip>
         </div>
 
@@ -158,10 +157,7 @@ const handleOpen = () => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
-      <div
-        v-if="platformDisplayList.length"
-        class="plugin-badges"
-      >
+      <div v-if="platformDisplayList.length" class="plugin-badges">
         <PluginPlatformChip
           :platforms="plugin.support_platforms"
           size="x-small"
@@ -180,7 +176,7 @@ const handleOpen = () => {
         style="height: 32px"
       >
         <v-icon icon="mdi-github" start size="small"></v-icon>
-        {{ tm("buttons.viewRepo") }}
+        {{ tm('buttons.viewRepo') }}
       </v-btn>
       <v-btn
         v-if="!plugin?.installed"
@@ -191,7 +187,7 @@ const handleOpen = () => {
         style="height: 32px"
         @click="handleInstall(plugin)"
       >
-        {{ tm("buttons.install") }}
+        {{ tm('buttons.install') }}
       </v-btn>
       <v-btn
         v-else
@@ -202,7 +198,7 @@ const handleOpen = () => {
         class="market-action-btn"
         style="height: 32px"
       >
-        ✓ {{ tm("status.installed") }}
+        ✓ {{ tm('status.installed') }}
       </v-btn>
     </v-card-actions>
   </v-card>

@@ -48,11 +48,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["click"]);
+const emit = defineEmits(['click']);
 
 const handleClick = (event) => {
   if (!props.clickable) return;
-  emit("click", event);
+  emit('click', event);
 };
 </script>
 
@@ -123,7 +123,8 @@ const handleClick = (event) => {
 }
 
 .outlined-action-list-item:hover .outlined-action-list-item__hover-actions,
-.outlined-action-list-item:focus-within .outlined-action-list-item__hover-actions {
+.outlined-action-list-item:focus-within
+  .outlined-action-list-item__hover-actions {
   opacity: 1;
   pointer-events: auto;
 }

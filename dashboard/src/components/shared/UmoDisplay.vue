@@ -2,7 +2,11 @@
   <div class="umo-display" :class="{ 'umo-display--compact': compact }">
     <div class="umo-display__main">
       <div class="umo-display__line">
-        <span class="umo-display__name" :class="{ 'umo-display__name--umo': !hasReadableName }" :title="displayNameTitle">
+        <span
+          class="umo-display__name"
+          :class="{ 'umo-display__name--umo': !hasReadableName }"
+          :title="displayNameTitle"
+        >
           {{ displayName }}
         </span>
       </div>
@@ -12,12 +16,24 @@
       </div>
     </div>
 
-    <v-chip v-if="showPlatform && resolvedPlatform" size="x-small" :color="platformColor" class="umo-display__platform">
+    <v-chip
+      v-if="showPlatform && resolvedPlatform"
+      size="x-small"
+      :color="platformColor"
+      class="umo-display__platform"
+    >
       {{ resolvedPlatform }}
     </v-chip>
 
     <div v-if="editable || showInfo" class="umo-display__actions">
-      <v-btn v-if="editable" icon size="x-small" variant="text" class="umo-display__edit" @click.stop="$emit('edit')">
+      <v-btn
+        v-if="editable"
+        icon
+        size="x-small"
+        variant="text"
+        class="umo-display__edit"
+        @click.stop="$emit('edit')"
+      >
         <v-icon size="small" color="grey">mdi-pencil-outline</v-icon>
         <v-tooltip v-if="editTooltip" activator="parent" location="top">
           {{ editTooltip }}
@@ -25,7 +41,9 @@
       </v-btn>
       <v-tooltip v-if="showInfo" location="top">
         <template #activator="{ props }">
-          <v-icon v-bind="props" size="small" class="umo-display__info"> mdi-information-outline </v-icon>
+          <v-icon v-bind="props" size="small" class="umo-display__info">
+            mdi-information-outline
+          </v-icon>
         </template>
         <div>
           <p>UMO: {{ umo }}</p>
@@ -95,31 +113,33 @@ export default {
   emits: ['edit'],
   computed: {
     umoParts() {
-      return this.umo.split(':')
+      return this.umo.split(':');
     },
     resolvedPlatform() {
-      return this.platform || this.umoParts[0] || ''
+      return this.platform || this.umoParts[0] || '';
     },
     resolvedMessageType() {
-      return this.messageType || this.umoParts[1] || ''
+      return this.messageType || this.umoParts[1] || '';
     },
     resolvedSessionId() {
-      return this.sessionId || this.umoParts.slice(2).join(':') || this.umo
+      return this.sessionId || this.umoParts.slice(2).join(':') || this.umo;
     },
     aliasName() {
-      return this.userAlias || this.customName || ''
+      return this.userAlias || this.customName || '';
     },
     displayName() {
       if (this.aliasName && this.autoName && this.aliasName !== this.autoName) {
-        return `${this.aliasName}（${this.autoName}）`
+        return `${this.aliasName}（${this.autoName}）`;
       }
-      return this.aliasName || this.autoName || this.umo
+      return this.aliasName || this.autoName || this.umo;
     },
     displayNameTitle() {
-      return this.hasReadableName ? `${this.displayName} / UMO: ${this.umo}` : this.umo
+      return this.hasReadableName
+        ? `${this.displayName} / UMO: ${this.umo}`
+        : this.umo;
     },
     hasReadableName() {
-      return Boolean(this.aliasName || this.autoName)
+      return Boolean(this.aliasName || this.autoName);
     },
     platformColor() {
       const colors = {
@@ -128,11 +148,11 @@ export default {
         telegram: 'light-blue',
         discord: 'indigo',
         webchat: 'orange',
-      }
-      return colors[this.resolvedPlatform] || 'grey'
+      };
+      return colors[this.resolvedPlatform] || 'grey';
     },
   },
-}
+};
 </script>
 
 <style scoped>
@@ -178,7 +198,9 @@ export default {
 
 .umo-display__name--umo {
   color: rgba(var(--v-theme-on-surface), 0.78);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
   font-size: 12px;
 }
 
@@ -207,7 +229,9 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
 }
 
 .umo-display--compact .umo-display__name {

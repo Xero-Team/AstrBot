@@ -4,7 +4,7 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
-import { useCustomizerStore } from "@/stores/customizer";
+import { useCustomizerStore } from '@/stores/customizer';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { authApi, publicApi, type PublicVersionData } from '@/api/v1';
@@ -22,16 +22,23 @@ type VersionItem = { key: string; label: string; value: string };
 type VersionWarning = { key: string; title: string; message: string };
 
 const logoTitle = computed(() => {
-  if (authLoginRef.value?.stage === 'totp' || authLoginRef.value?.stage === 'recovery') {
+  if (
+    authLoginRef.value?.stage === 'totp' ||
+    authLoginRef.value?.stage === 'recovery'
+  ) {
     return t('logo.totpTitle');
   }
   return t('logo.title');
 });
 
 const themeOptions = [
-  { mode: 'light'  as const, icon: 'mdi-white-balance-sunny', labelKey: 'theme.light'  },
-  { mode: 'dark'   as const, icon: 'mdi-weather-night',       labelKey: 'theme.dark'   },
-  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'theme.system' },
+  {
+    mode: 'light' as const,
+    icon: 'mdi-white-balance-sunny',
+    labelKey: 'theme.light',
+  },
+  { mode: 'dark' as const, icon: 'mdi-weather-night', labelKey: 'theme.dark' },
+  { mode: 'system' as const, icon: 'mdi-sync', labelKey: 'theme.system' },
 ] as const;
 
 function setThemeMode(mode: 'light' | 'dark' | 'system') {
@@ -68,14 +75,22 @@ const versionWarnings = computed(() => {
   const normalized = normalizedVersionValues.value;
   const warnings: VersionWarning[] = [];
 
-  if (normalized.webui && normalized.runtime && normalized.webui !== normalized.runtime) {
+  if (
+    normalized.webui &&
+    normalized.runtime &&
+    normalized.webui !== normalized.runtime
+  ) {
     warnings.push({
       key: 'webui-runtime',
       title: t('versions.webuiMismatchTitle'),
       message: t('versions.webuiMismatchMessage'),
     });
   }
-  if (normalized.runtime && normalized.code && normalized.runtime !== normalized.code) {
+  if (
+    normalized.runtime &&
+    normalized.code &&
+    normalized.runtime !== normalized.code
+  ) {
     warnings.push({
       key: 'runtime-code',
       title: t('versions.runtimeMismatchTitle'),
@@ -113,7 +128,8 @@ const versionItems = computed(() => {
 });
 
 onMounted(async () => {
-  publicApi.versions()
+  publicApi
+    .versions()
     .then((res) => {
       publicVersions.value = res.data?.data || null;
     })
@@ -159,19 +175,26 @@ onMounted(async () => {
     <v-card class="login-card" elevation="1">
       <v-card-title>
         <div class="d-flex justify-space-between align-center w-100">
-          <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+          <img
+            width="80"
+            src="@/assets/images/icon-no-shadow.svg"
+            alt="AstrBot Logo"
+          />
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider
-vertical class="mx-1"
-              style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
+              vertical
+              class="mx-1"
+              style="
+                height: 24px !important;
+                opacity: 0.9 !important;
+                align-self: center !important;
+                border-color: rgba(var(--v-theme-primary), 0.45) !important;
+              "
+            ></v-divider>
 
             <!-- 主题切换下拉菜单 -->
-            <v-menu
-              open-on-click
-              location="bottom center"
-              offset="6"
-            >
+            <v-menu open-on-click location="bottom center" offset="6">
               <template #activator="{ props: themeMenuProps }">
                 <v-btn
                   v-bind="themeMenuProps"
@@ -200,30 +223,49 @@ vertical class="mx-1"
                     v-for="option in themeOptions"
                     :key="option.mode"
                     :class="{
-                      'styled-menu-item-active': customizer.themeMode === option.mode,
+                      'styled-menu-item-active':
+                        customizer.themeMode === option.mode,
                     }"
                     class="styled-menu-item"
                     rounded="md"
                     @click="setThemeMode(option.mode)"
                   >
                     <template #prepend>
-                      <v-icon size="16" style="margin-right: 8px; opacity: 0.85;">{{ option.icon }}</v-icon>
+                      <v-icon
+                        size="16"
+                        style="margin-right: 8px; opacity: 0.85"
+                        >{{ option.icon }}</v-icon
+                      >
                     </template>
-                    <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+                    <v-list-item-title>{{
+                      t(option.labelKey)
+                    }}</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-card>
             </v-menu>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px;">{{ logoTitle }}</div>
-        <div v-if="authLoginRef?.stage !== 'totp' && authLoginRef?.stage !== 'recovery'" class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('logo.subtitle') }}</div>
+        <div class="ml-2" style="font-size: 26px">{{ logoTitle }}</div>
+        <div
+          v-if="
+            authLoginRef?.stage !== 'totp' && authLoginRef?.stage !== 'recovery'
+          "
+          class="mt-2 ml-2"
+          style="font-size: 14px; color: grey"
+        >
+          {{ t('logo.subtitle') }}
+        </div>
       </v-card-title>
       <v-card-text>
         <AuthLogin ref="authLoginRef" />
       </v-card-text>
       <div v-if="versionItems.length" class="login-version-info">
-        <span v-for="item in versionItems" :key="item.key" class="login-version-item">
+        <span
+          v-for="item in versionItems"
+          :key="item.key"
+          class="login-version-item"
+        >
           <span class="login-version-label">{{ item.label }}</span>
           <span class="login-version-value">{{ item.value }}</span>
         </span>
@@ -270,7 +312,11 @@ vertical class="mx-1"
             {{ t('versions.faq') }}
           </v-btn>
           <v-spacer />
-          <v-btn color="primary" variant="text" @click="versionDialogVisible = false">
+          <v-btn
+            color="primary"
+            variant="text"
+            @click="versionDialogVisible = false"
+          >
             {{ t('versions.close') }}
           </v-btn>
         </v-card-actions>

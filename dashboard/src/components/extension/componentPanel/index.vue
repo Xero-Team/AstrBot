@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 组件管理页面 - 主入口
- * 
+ *
  * 模块化结构：
  * - types.ts: 类型定义
  * - composables/useComponentData.ts: 数据获取和状态管理
@@ -33,7 +33,7 @@ import type { CommandItem, ToolItem } from './types';
 
 defineOptions({ name: 'ComponentPanel' });
 const props = withDefaults(defineProps<{ active?: boolean }>(), {
-  active: true
+  active: true,
 });
 
 const { tm } = useModuleI18n('features/command');
@@ -42,16 +42,16 @@ const { tm: tmTool } = useModuleI18n('features/tooluse');
 const viewMode = ref<'commands' | 'tools'>('commands');
 
 // 数据管理
-const { 
-  loading, 
-  commands, 
+const {
+  loading,
+  commands,
   tools,
   toolsLoading,
-  summary, 
-  snackbar, 
-  toast, 
+  summary,
+  snackbar,
+  toast,
   fetchCommands,
-  fetchTools 
+  fetchTools,
 } = useComponentData();
 
 // 过滤逻辑
@@ -67,7 +67,7 @@ const {
   effectiveShowSystemPlugins,
   availablePlugins,
   filteredCommands,
-  toggleGroupExpand
+  toggleGroupExpand,
 } = useCommandFilters(commands);
 
 // 操作方法
@@ -78,7 +78,7 @@ const {
   updatePermission,
   openRenameDialog,
   confirmRename,
-  openDetailsDialog
+  openDetailsDialog,
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
 // 工具操作方法
@@ -93,42 +93,74 @@ const {
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
-  await toggleCommand(cmd, tm('messages.toggleSuccess'), tm('messages.toggleFailed'));
+  await toggleCommand(
+    cmd,
+    tm('messages.toggleSuccess'),
+    tm('messages.toggleFailed'),
+  );
 };
 
-const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'member') => {
-  await updatePermission(cmd, permission, tm('messages.updateSuccess'), tm('messages.updateFailed'));
+const handleUpdatePermission = async (
+  cmd: CommandItem,
+  permission: 'admin' | 'member',
+) => {
+  await updatePermission(
+    cmd,
+    permission,
+    tm('messages.updateSuccess'),
+    tm('messages.updateFailed'),
+  );
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
-  await toggleTool(tool, tmTool('messages.toggleToolReadonly'), tmTool('messages.toggleToolSuccess'), tmTool('messages.toggleToolError', { error: '' }));
+  await toggleTool(
+    tool,
+    tmTool('messages.toggleToolReadonly'),
+    tmTool('messages.toggleToolSuccess'),
+    tmTool('messages.toggleToolError', { error: '' }),
+  );
 };
 
-const handleUpdateToolPermission = async (tool: ToolItem, permission: 'admin' | 'member') => {
-  await updateToolPermission(tool, permission, tmTool('messages.updateToolPermissionSuccess', { name: tool.name }), tmTool('messages.updateToolPermissionBuiltin'), tmTool('messages.updateToolPermissionFailed'));
+const handleUpdateToolPermission = async (
+  tool: ToolItem,
+  permission: 'admin' | 'member',
+) => {
+  await updateToolPermission(
+    tool,
+    permission,
+    tmTool('messages.updateToolPermissionSuccess', { name: tool.name }),
+    tmTool('messages.updateToolPermissionBuiltin'),
+    tmTool('messages.updateToolPermissionFailed'),
+  );
 };
 
 // 处理确认重命名
 const handleConfirmRename = async () => {
-  await confirmRename(tm('messages.renameSuccess'), tm('messages.renameFailed'));
+  await confirmRename(
+    tm('messages.renameSuccess'),
+    tm('messages.renameFailed'),
+  );
 };
 
 // 生命周期
 onMounted(async () => {
   await Promise.all([
     fetchCommands(tm('messages.loadFailed')),
-    fetchTools(tmTool('messages.getToolsError', { error: '' }))
+    fetchTools(tmTool('messages.getToolsError', { error: '' })),
   ]);
 });
 
-watch(() => props.active, async (isActive) => {
-  if (!isActive) return;
-  if (viewMode.value === 'commands') {
-    await fetchCommands(tm('messages.loadFailed'));
-  } else {
-    await fetchTools(tmTool('messages.getToolsError', { error: '' }));
-  }
-});
+watch(
+  () => props.active,
+  async (isActive) => {
+    if (!isActive) return;
+    if (viewMode.value === 'commands') {
+      await fetchCommands(tm('messages.loadFailed'));
+    } else {
+      await fetchTools(tmTool('messages.getToolsError', { error: '' }));
+    }
+  },
+);
 
 watch(viewMode, async (mode) => {
   if (mode === 'commands') {
@@ -143,9 +175,17 @@ watch(viewMode, async (mode) => {
   <v-row>
     <v-col cols="12">
       <v-card variant="flat" style="background-color: transparent">
-        <v-card-text style="padding: 20px 12px; padding-top: 0px;">
-          <div class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3">
-            <v-btn-toggle v-model="viewMode" color="primary" variant="outlined" density="comfortable" mandatory>
+        <v-card-text style="padding: 20px 12px; padding-top: 0px">
+          <div
+            class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3"
+          >
+            <v-btn-toggle
+              v-model="viewMode"
+              color="primary"
+              variant="outlined"
+              density="comfortable"
+              mandatory
+            >
               <v-btn value="commands">
                 <v-icon size="18" class="mr-1">mdi-console-line</v-icon>
                 {{ tm('type.command') }}
@@ -159,13 +199,13 @@ watch(viewMode, async (mode) => {
               v-if="viewMode === 'commands' && loading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1;"
+              style="max-width: 220px; flex: 1"
             />
             <v-progress-linear
               v-else-if="viewMode === 'tools' && toolsLoading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1;"
+              style="max-width: 220px; flex: 1"
             />
           </div>
 
@@ -189,19 +229,31 @@ watch(viewMode, async (mode) => {
             >
               <template #stats>
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-console-line</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-primary">{{ filteredCommands.length }}</span>
+                  <v-icon size="18" color="primary" class="mr-1"
+                    >mdi-console-line</v-icon
+                  >
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tm('summary.total') }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-primary">{{
+                    filteredCommands.length
+                  }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider vertical class="mx-1" style="height: 20px" />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.disabled') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-error">{{ summary.disabled }}</span>
+                  <v-icon size="18" color="error" class="mr-1"
+                    >mdi-close-circle-outline</v-icon
+                  >
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tm('summary.disabled') }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-error">{{
+                    summary.disabled
+                  }}</span>
                 </div>
               </template>
             </CommandFilters>
-            
+
             <v-alert
               v-if="summary.conflicts > 0"
               type="error"
@@ -217,7 +269,9 @@ watch(viewMode, async (mode) => {
                 {{ tm('conflictAlert.title') }}
               </v-alert-title>
               <div class="text-body-2 mt-1">
-                {{ tm('conflictAlert.description', { count: summary.conflicts }) }}
+                {{
+                  tm('conflictAlert.description', { count: summary.conflicts })
+                }}
               </div>
               <div class="text-body-2 mt-2">
                 <v-icon size="16" class="mr-1">mdi-lightbulb-outline</v-icon>
@@ -239,7 +293,7 @@ watch(viewMode, async (mode) => {
 
           <div v-else>
             <div class="d-flex flex-wrap align-center ga-4 mb-4">
-              <div style="min-width: 240px; max-width: 380px; flex: 1;">
+              <div style="min-width: 240px; max-width: 380px; flex: 1">
                 <v-text-field
                   v-model="toolSearch"
                   prepend-inner-icon="mdi-magnify"
@@ -253,24 +307,42 @@ watch(viewMode, async (mode) => {
 
               <div class="d-flex align-center ga-4">
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-function-variant</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.total') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-primary">{{ toolSummary.total }}</span>
+                  <v-icon size="18" color="primary" class="mr-1"
+                    >mdi-function-variant</v-icon
+                  >
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tmTool('functionTools.summary.total') }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-primary">{{
+                    toolSummary.total
+                  }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider vertical class="mx-1" style="height: 20px" />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.active') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-success">{{ toolSummary.active }}</span>
+                  <v-icon size="18" color="success" class="mr-1"
+                    >mdi-check-circle-outline</v-icon
+                  >
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tmTool('functionTools.summary.active') }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-success">{{
+                    toolSummary.active
+                  }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider vertical class="mx-1" style="height: 20px" />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.inactive') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-error">{{ toolSummary.inactive }}</span>
+                  <v-icon size="18" color="error" class="mr-1"
+                    >mdi-close-circle-outline</v-icon
+                  >
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tmTool('functionTools.summary.inactive') }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-error">{{
+                    toolSummary.inactive
+                  }}</span>
                 </div>
 
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider vertical class="mx-1" style="height: 20px" />
                 <v-checkbox
                   v-model="showBuiltinTools"
                   :label="tmTool('functionTools.filter.showBuiltin')"
@@ -314,7 +386,12 @@ watch(viewMode, async (mode) => {
   />
 
   <!-- Snackbar -->
-  <v-snackbar v-model="snackbar.show" :timeout="2000" elevation="24" :color="snackbar.color">
+  <v-snackbar
+    v-model="snackbar.show"
+    :timeout="2000"
+    elevation="24"
+    :color="snackbar.color"
+  >
     {{ snackbar.message }}
   </v-snackbar>
 </template>

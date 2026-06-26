@@ -31,7 +31,7 @@
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
           >
             <div v-if="messageContent(msg).isLoading" class="loading-message">
-              <span>{{ tm("message.loading") }}</span>
+              <span>{{ tm('message.loading') }}</span>
             </div>
 
             <template v-else>
@@ -71,7 +71,7 @@
                       v-else-if="part.type === 'plain' && isUserMessage(msg)"
                       class="plain-content"
                     >
-                      {{ part.text || "" }}
+                      {{ part.text || '' }}
                     </div>
 
                     <MarkdownMessagePart
@@ -89,7 +89,10 @@
                       type="button"
                       @click="openImage(partUrl(part))"
                     >
-                      <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                      <img
+                        :src="partUrl(part)"
+                        :alt="part.filename || 'image'"
+                      />
                     </button>
 
                     <audio
@@ -108,7 +111,7 @@
 
                     <div v-else-if="part.type === 'file'" class="file-part">
                       <v-icon size="20">mdi-file-document-outline</v-icon>
-                      <span>{{ part.filename || "file" }}</span>
+                      <span>{{ part.filename || 'file' }}</span>
                       <v-btn
                         icon="mdi-download"
                         size="x-small"
@@ -136,7 +139,7 @@
                         >
                           <template #label>
                             <v-icon size="16">mdi-code-json</v-icon>
-                            <span>{{ tool.name || "python" }}</span>
+                            <span>{{ tool.name || 'python' }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
                             </span>
@@ -190,19 +193,19 @@
                   v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
                   class="stats-row"
                 >
-                  <span>{{ tm("stats.cachedTokens") }}</span>
+                  <span>{{ tm('stats.cachedTokens') }}</span>
                   <strong>{{
                     cachedInputTokens(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm("stats.inputTokens") }}</span>
+                  <span>{{ tm('stats.inputTokens') }}</span>
                   <strong>{{
                     inputTokens(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm("stats.outputTokens") }}</span>
+                  <span>{{ tm('stats.outputTokens') }}</span>
                   <strong>{{
                     outputTokens(messageContent(msg).agentStats)
                   }}</strong>
@@ -211,13 +214,13 @@
                   v-if="agentTtft(messageContent(msg).agentStats)"
                   class="stats-row"
                 >
-                  <span>{{ tm("stats.ttft") }}</span>
+                  <span>{{ tm('stats.ttft') }}</span>
                   <strong>{{
                     agentTtft(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm("stats.duration") }}</span>
+                  <span>{{ tm('stats.duration') }}</span>
                   <strong>{{
                     agentDuration(messageContent(msg).agentStats)
                   }}</strong>
@@ -254,32 +257,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
-import axios from "axios";
-import { fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import { computed, nextTick, reactive, ref } from 'vue';
+import axios from 'axios';
+import { fileApi } from '@/api/v1';
+import { setCustomComponents } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
+import MarkdownMessagePart from '@/components/chat/message_list_comps/MarkdownMessagePart.vue';
+import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
+import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
+import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
+import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
+import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
+import ActionRef from '@/components/chat/message_list_comps/ActionRef.vue';
+import ThemeAwareMarkdownCodeBlock from '@/components/shared/ThemeAwareMarkdownCodeBlock.vue';
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
-} from "@/composables/useMessages";
+} from '@/composables/useMessages';
 import type {
   ChatContent,
   ChatRecord,
   MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
+} from '@/composables/useMessages';
+import { useModuleI18n } from '@/i18n/composables';
+import { copyToClipboard } from '@/utils/clipboard';
 
 const props = withDefaults(
   defineProps<{
@@ -295,16 +298,16 @@ const props = withDefaults(
   },
 );
 
-setCustomComponents("chat-message", {
+setCustomComponents('chat-message', {
   ref: RefNode,
   code_block: ThemeAwareMarkdownCodeBlock,
 });
 
-const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const { tm } = useModuleI18n('features/chat');
+const customMarkdownTags = ['ref'];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
-const imagePreview = reactive({ visible: false, url: "" });
+const imagePreview = reactive({ visible: false, url: '' });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 
@@ -334,11 +337,11 @@ interface AgentStatsLike {
 const messages = computed(() => props.messages || []);
 
 function isUserMessage(message: ChatRecord) {
-  return messageContent(message).type === "user";
+  return messageContent(message).type === 'user';
 }
 
 function messageContent(message: ChatRecord): ChatContent {
-  return message.content || { type: "bot", message: [] };
+  return message.content || { type: 'bot', message: [] };
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
@@ -352,7 +355,7 @@ function isMessageStreaming(messageIndex: number) {
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
   if (isUserMessage(message)) {
     const parts = messageParts(message);
-    return parts.length ? [{ kind: "content", parts }] : [];
+    return parts.length ? [{ kind: 'content', parts }] : [];
   }
   return buildMessageBlocks(messageContent(message));
 }
@@ -360,7 +363,7 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
   return renderBlocks(message)
     .slice(blockIndex + 1)
-    .some((block) => block.kind === "content");
+    .some((block) => block.kind === 'content');
 }
 
 function partUrl(part: MessagePart) {
@@ -372,11 +375,11 @@ function partUrl(part: MessagePart) {
   if (part.filename) {
     return fileApi.byNameUrl(part.filename);
   }
-  return "";
+  return '';
 }
 
 function formatJson(value: unknown) {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     const parsed = parseJsonSafe(value);
     if (parsed !== value) return JSON.stringify(parsed, null, 2);
     return value;
@@ -384,7 +387,7 @@ function formatJson(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    return String(value ?? "");
+    return String(value ?? '');
   }
 }
 
@@ -393,15 +396,15 @@ function replyPreview(messageId?: string | number, fallback?: string) {
   const found = messages.value.find(
     (message) => String(message.id) === String(messageId),
   );
-  const text = found ? plainTextFromMessage(found) : "";
-  return text ? truncate(text, 80) : tm("reply.replyTo");
+  const text = found ? plainTextFromMessage(found) : '';
+  return text ? truncate(text, 80) : tm('reply.replyTo');
 }
 
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
-    .filter((part) => part.type === "plain" && part.text)
+    .filter((part) => part.type === 'plain' && part.text)
     .map((part) => part.text)
-    .join("\n");
+    .join('\n');
 }
 
 function truncate(value: string, max: number) {
@@ -415,8 +418,8 @@ function scrollToMessage(messageId?: string | number) {
   );
   if (index < 0) return;
   void nextTick(() => {
-    const rows = messageListRoot.value?.querySelectorAll(".message-row");
-    rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const rows = messageListRoot.value?.querySelectorAll('.message-row');
+    rows?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 }
 
@@ -453,7 +456,7 @@ function normalizeRefItems(items: unknown[]) {
       const refItem = item as Partial<MessageRefItem>;
       return {
         index: refItem.index,
-        title: refItem.title || refItem.url || tm("refs.title"),
+        title: refItem.title || refItem.url || tm('refs.title'),
         url: refItem.url,
         snippet: refItem.snippet,
         favicon: refItem.favicon,
@@ -464,7 +467,7 @@ function normalizeRefItems(items: unknown[]) {
 
 function openRefsSidebar(refs: unknown) {
   selectedRefs.value =
-    refs && typeof refs === "object"
+    refs && typeof refs === 'object'
       ? (refs as Record<string, unknown>)
       : undefined;
   refsSidebarOpen.value = true;
@@ -477,24 +480,24 @@ function normalizeToolCall(tool: Record<string, unknown>) {
   );
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
+  if (normalized.result && typeof normalized.result === 'object') {
     normalized.result = JSON.stringify(normalized.result, null, 2);
   }
   return normalized;
 }
 
 function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
+  const name = String(tool.name || '').toLowerCase();
+  return name.includes('python') || name.includes('ipython');
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
+  if (tool.finished_ts) return tm('toolStatus.done');
+  return tm('toolStatus.running');
 }
 
 function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -509,15 +512,15 @@ async function copyMessage(message: ChatRecord) {
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || "";
+  const key = part.attachment_id || part.filename || '';
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
-    const response = await axios.get(partUrl(part), { responseType: "blob" });
+    const response = await axios.get(partUrl(part), { responseType: 'blob' });
     const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement("a");
+    const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = part.filename || "file";
+    anchor.download = part.filename || 'file';
     anchor.click();
     URL.revokeObjectURL(url);
   } finally {
@@ -535,13 +538,13 @@ function openImage(url: string) {
 
 function closeImage() {
   imagePreview.visible = false;
-  imagePreview.url = "";
+  imagePreview.url = '';
 }
 
 function formatTime(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function inputTokens(stats: AgentStatsLike | unknown) {
@@ -550,39 +553,46 @@ function inputTokens(stats: AgentStatsLike | unknown) {
 }
 
 function outputTokens(stats: AgentStatsLike | unknown) {
-  return Number((stats as AgentStatsLike | undefined)?.token_usage?.output) || 0;
+  return (
+    Number((stats as AgentStatsLike | undefined)?.token_usage?.output) || 0
+  );
 }
 
 function cachedInputTokens(stats: AgentStatsLike | unknown) {
-  return Number((stats as AgentStatsLike | undefined)?.token_usage?.input_cached) || 0;
+  return (
+    Number((stats as AgentStatsLike | undefined)?.token_usage?.input_cached) ||
+    0
+  );
 }
 
 function agentDuration(stats: AgentStatsLike | unknown) {
   const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
+    'duration',
+    'total_duration',
   ]);
   if (directDuration !== null) return formatDuration(directDuration);
 
-  const startTime = readPositiveNumber(stats, ["start_time"]);
-  const endTime = readPositiveNumber(stats, ["end_time"]);
-  if (startTime === null || endTime === null || endTime < startTime) return "-";
+  const startTime = readPositiveNumber(stats, ['start_time']);
+  const endTime = readPositiveNumber(stats, ['end_time']);
+  if (startTime === null || endTime === null || endTime < startTime) return '-';
   return formatDuration(endTime - startTime);
 }
 
 function agentTtft(stats: AgentStatsLike | unknown) {
   const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
+    'time_to_first_token',
+    'ttft',
+    'first_token_latency',
   ]);
-  if (ttft === null) return "";
+  if (ttft === null) return '';
   return formatDuration(ttft);
 }
 
 function readPositiveNumber(source: AgentStatsLike | unknown, keys: string[]) {
   for (const key of keys) {
-    const value = Number((source as Record<string, unknown> | undefined)?.[key]);
+    const value = Number(
+      (source as Record<string, unknown> | undefined)?.[key],
+    );
     if (Number.isFinite(value) && value > 0) return value;
   }
   return null;

@@ -28,7 +28,7 @@ const updateTraceSettings = async () => {
   loading.value = true;
   try {
     await traceApi.updateSettings({
-      trace_enable: traceEnabled.value
+      trace_enable: traceEnabled.value,
     });
     // Refresh the TraceDisplayer component to reconnect SSE
     traceDisplayerKey.value += 1;
@@ -66,7 +66,9 @@ onMounted(() => {
             @update:model-value="updateTraceSettings"
           >
             <template #label>
-              <span class="switch-label">{{ traceEnabled ? tm('recording') : tm('paused') }}</span>
+              <span class="switch-label">{{
+                traceEnabled ? tm('recording') : tm('paused')
+              }}</span>
             </template>
           </v-switch>
         </div>
@@ -82,8 +84,8 @@ onMounted(() => {
 export default {
   name: 'TracePage',
   components: {
-    TraceDisplayer
-  }
+    TraceDisplayer,
+  },
 };
 </script>
 

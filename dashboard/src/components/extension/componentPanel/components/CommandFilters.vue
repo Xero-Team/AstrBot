@@ -31,29 +31,28 @@ const emit = defineEmits<{
 // Computed items for selects
 const pluginItems = computed(() => [
   { title: tm('filters.all'), value: 'all' },
-  ...props.availablePlugins.map(p => ({ title: p, value: p }))
+  ...props.availablePlugins.map((p) => ({ title: p, value: p })),
 ]);
 
 const typeItems = [
   { title: tm('filters.all'), value: 'all' },
   { title: tm('type.group'), value: 'group' },
   { title: tm('type.command'), value: 'command' },
-  { title: tm('type.subCommand'), value: 'sub_command' }
+  { title: tm('type.subCommand'), value: 'sub_command' },
 ];
 
 const permissionItems = [
   { title: tm('filters.all'), value: 'all' },
   { title: tm('permission.everyone'), value: 'everyone' },
-  { title: tm('permission.admin'), value: 'admin' }
+  { title: tm('permission.admin'), value: 'admin' },
 ];
 
 const statusItems = [
   { title: tm('filters.all'), value: 'all' },
   { title: tm('filters.enabled'), value: 'enabled' },
   { title: tm('filters.disabled'), value: 'disabled' },
-  { title: tm('filters.conflict'), value: 'conflict' }
+  { title: tm('filters.conflict'), value: 'conflict' },
 ];
-
 </script>
 
 <template>
@@ -107,7 +106,15 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
+    <div
+      style="
+        min-width: 200px;
+        max-width: 350px;
+        flex: 1;
+        border: 1px solid #b9b9b9;
+        border-radius: 16px;
+      "
+    >
       <v-text-field
         :model-value="searchQuery"
         density="compact"
@@ -118,12 +125,14 @@ const statusItems = [
         flat
         hide-details
         single-line
-        @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"
+        @update:model-value="
+          emit('update:searchQuery', normalizeTextInput($event))
+        "
       />
     </div>
     <div class="d-flex align-center ga-4">
       <slot name="stats"></slot>
-      <v-divider vertical class="mx-1" style="height: 20px;" />
+      <v-divider vertical class="mx-1" style="height: 20px" />
       <v-checkbox
         :model-value="effectiveShowSystemPlugins"
         :label="tm('filters.showSystemPlugins')"
@@ -137,7 +146,13 @@ const statusItems = [
           <span class="text-body-2">{{ tm('filters.showSystemPlugins') }}</span>
           <v-tooltip v-if="hasSystemPluginConflict" location="top">
             <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="16" color="warning" class="ml-1">mdi-alert-circle</v-icon>
+              <v-icon
+                v-bind="tooltipProps"
+                size="16"
+                color="warning"
+                class="ml-1"
+                >mdi-alert-circle</v-icon
+              >
             </template>
             {{ tm('filters.systemPluginConflictHint') }}
           </v-tooltip>

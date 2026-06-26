@@ -17,8 +17,11 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
         <div class="trace-cell fields"></div>
       </div>
       <div
-v-for="event in events" :key="event.span_id" class="trace-group"
-        :class="{ highlight: highlightMap[event.span_id] }">
+        v-for="event in events"
+        :key="event.span_id"
+        class="trace-group"
+        :class="{ highlight: highlightMap[event.span_id] }"
+      >
         <div class="trace-row trace-event">
           <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
           <div class="trace-cell span" :title="event.span_id">
@@ -34,33 +37,62 @@ v-for="event in events" :key="event.span_id" class="trace-group"
             <div class="event-meta">{{ formatTime(event.last_time) }}</div>
           </div> -->
           <div class="trace-cell sender">
-            <div class="event-sub" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{
-              event.sender_name || '-' }}</div>
+            <div
+              class="event-sub"
+              style="
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              "
+            >
+              {{ event.sender_name || '-' }}
+            </div>
           </div>
           <div class="trace-cell outline">
-            <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
+            <div class="event-sub outline">
+              {{ event.message_outline || '-' }}
+            </div>
           </div>
           <div class="trace-cell fields event-controls">
-            <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
+            <v-btn
+              size="x-small"
+              variant="text"
+              color="primary"
+              @click="toggleEvent(event.span_id)"
+            >
               {{ event.collapsed ? 'Expand' : 'Collapse' }}
               <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
         </div>
         <div v-if="!event.collapsed" class="trace-records">
-          <div v-for="record in getVisibleRecords(event)" :key="record.key" class="trace-record">
+          <div
+            v-for="record in getVisibleRecords(event)"
+            :key="record.key"
+            class="trace-record"
+          >
             <div class="trace-record-time">{{ record.timeLabel }}</div>
             <div class="trace-record-action">{{ record.action }}</div>
             <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
           </div>
-          <div v-if="event.visibleCount < event.records.length" class="event-more">
-            <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
+          <div
+            v-if="event.visibleCount < event.records.length"
+            class="event-more"
+          >
+            <v-btn
+              size="x-small"
+              variant="tonal"
+              color="primary"
+              @click="showMore(event.span_id)"
+            >
               Show more
             </v-btn>
           </div>
         </div>
       </div>
-      <div v-if="events.length === 0" class="trace-empty">No trace data yet.</div>
+      <div v-if="events.length === 0" class="trace-empty">
+        No trace data yet.
+      </div>
     </div>
   </div>
 </template>
@@ -71,12 +103,12 @@ export default {
   props: {
     autoScroll: {
       type: Boolean,
-      default: true
+      default: true,
     },
     maxItems: {
       type: Number,
-      default: 300
-    }
+      default: 300,
+    },
   },
   data() {
     return {
@@ -90,7 +122,7 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
-      tableHeight: 'auto'
+      tableHeight: 'auto',
     };
   },
   async mounted() {
@@ -116,7 +148,8 @@ export default {
       this.$nextTick(() => {
         const el = this.$refs.scrollEl;
         if (!el || typeof window === 'undefined') return;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const viewportHeight =
+          window.innerHeight || document.documentElement.clientHeight;
         const offsetTop = el.getBoundingClientRect().top;
         const height = Math.max(viewportHeight - offsetTop, 0);
         this.tableHeight = `${height}px`;
@@ -142,10 +175,10 @@ export default {
 
       this.eventSource = new EventSourcePolyfill(logApi.liveUrl(), {
         headers: {
-          Authorization: token ? `Bearer ${token}` : ''
+          Authorization: token ? `Bearer ${token}` : '',
         },
         heartbeatTimeout: 300000,
-        withCredentials: true
+        withCredentials: true,
       });
 
       this.eventSource.onopen = () => {
@@ -184,7 +217,7 @@ export default {
 
         const delay = Math.min(
           this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000
+          30000,
         );
 
         if (this.retryTimer) {
@@ -222,7 +255,7 @@ export default {
             collapsed: true,
             visibleCount: 20,
             records: [],
-            hasAgentPrepare: trace.action === 'astr_agent_prepare'
+            hasAgentPrepare: trace.action === 'astr_agent_prepare',
           };
           this.eventIndex[trace.span_id] = event;
           this.events.push(event);
@@ -237,7 +270,7 @@ export default {
           action: trace.action,
           fieldsText: this.formatFields(trace.fields),
           timeLabel: this.formatTime(trace.time),
-          key: recordKey
+          key: recordKey,
         });
         if (trace.action === 'astr_agent_prepare') {
           event.hasAgentPrepare = true;
@@ -288,7 +321,10 @@ export default {
     showMore(spanId) {
       const event = this.eventIndex[spanId];
       if (!event) return;
-      event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
+      event.visibleCount = Math.min(
+        event.records.length,
+        event.visibleCount + 20,
+      );
     },
     pulseEvent(spanId) {
       if (!spanId) return;
@@ -332,8 +368,8 @@ export default {
       } catch (_error) {
         return String(fields);
       }
-    }
-  }
+    },
+  },
 };
 </script>
 

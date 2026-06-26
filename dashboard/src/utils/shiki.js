@@ -1,11 +1,11 @@
 import {
   createHighlighter,
   normalizeLimitedShikiLanguage,
-} from "./shikiLimitedBundle";
+} from './shikiLimitedBundle';
 
 export const SHIKI_THEMES = {
-  light: "github-light",
-  dark: "github-dark",
+  light: 'github-light',
+  dark: 'github-dark',
 };
 
 let highlighterPromise;
@@ -14,13 +14,13 @@ function normalizeLanguage(language) {
   return normalizeLimitedShikiLanguage(language);
 }
 
-export function escapeHtml(value = "") {
+export function escapeHtml(value = '') {
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 export async function getShikiHighlighter() {
@@ -39,12 +39,17 @@ export async function ensureShikiLanguages() {
   return highlighter;
 }
 
-export function renderShikiCode(highlighter, code, language, colorMode = "auto") {
+export function renderShikiCode(
+  highlighter,
+  code,
+  language,
+  colorMode = 'auto',
+) {
   const normalizedLanguage = normalizeLanguage(language);
   let options = { lang: normalizedLanguage, themes: SHIKI_THEMES };
-  if (colorMode === "dark") {
+  if (colorMode === 'dark') {
     options = { lang: normalizedLanguage, theme: SHIKI_THEMES.dark };
-  } else if (colorMode === "light") {
+  } else if (colorMode === 'light') {
     options = { lang: normalizedLanguage, theme: SHIKI_THEMES.light };
   }
 
@@ -56,11 +61,11 @@ export function renderShikiCode(highlighter, code, language, colorMode = "auto")
       err,
     );
 
-    let fallbackOptions = { lang: "text", themes: SHIKI_THEMES };
-    if (colorMode === "dark") {
-      fallbackOptions = { lang: "text", theme: SHIKI_THEMES.dark };
-    } else if (colorMode === "light") {
-      fallbackOptions = { lang: "text", theme: SHIKI_THEMES.light };
+    let fallbackOptions = { lang: 'text', themes: SHIKI_THEMES };
+    if (colorMode === 'dark') {
+      fallbackOptions = { lang: 'text', theme: SHIKI_THEMES.dark };
+    } else if (colorMode === 'light') {
+      fallbackOptions = { lang: 'text', theme: SHIKI_THEMES.light };
     }
 
     return highlighter.codeToHtml(code, fallbackOptions);
@@ -72,7 +77,7 @@ export function collectMarkdownFenceLanguages(markdownIt, markdown) {
 
   return markdownIt
     .parse(markdown, {})
-    .filter((token) => token.type === "fence")
+    .filter((token) => token.type === 'fence')
     .map((token) => normalizeLanguage(token.info));
 }
 

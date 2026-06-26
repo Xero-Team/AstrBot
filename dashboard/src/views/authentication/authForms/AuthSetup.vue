@@ -15,63 +15,116 @@ const loading = ref(false);
 
 const usernameRules = [
   (value: string) => Boolean(value) || t('setup.validation.usernameRequired'),
-  (value: string) => (value && value.length >= 3) || t('setup.validation.usernameMinLength'),
+  (value: string) =>
+    (value && value.length >= 3) || t('setup.validation.usernameMinLength'),
 ];
 const passwordRules = [
   (value: string) => Boolean(value) || t('setup.validation.passwordRequired'),
-  (value: string) => (value && value.length >= 8) || t('setup.validation.passwordMinLength'),
-  (value: string) => /[A-Z]/.test(value) || t('setup.validation.passwordUppercase'),
-  (value: string) => /[a-z]/.test(value) || t('setup.validation.passwordLowercase'),
+  (value: string) =>
+    (value && value.length >= 8) || t('setup.validation.passwordMinLength'),
+  (value: string) =>
+    /[A-Z]/.test(value) || t('setup.validation.passwordUppercase'),
+  (value: string) =>
+    /[a-z]/.test(value) || t('setup.validation.passwordLowercase'),
   (value: string) => /\d/.test(value) || t('setup.validation.passwordDigit'),
 ];
 const confirmPasswordRules = [
-  (value: string) => Boolean(value) || t('setup.validation.confirmPasswordRequired'),
-  (value: string) => value === password.value || t('setup.validation.passwordMatch'),
+  (value: string) =>
+    Boolean(value) || t('setup.validation.confirmPasswordRequired'),
+  (value: string) =>
+    value === password.value || t('setup.validation.passwordMatch'),
 ];
 
 interface SetupFormContext {
   setErrors: (errors: Record<string, string>) => void;
 }
 
-async function validate(_values: Record<string, unknown>, { setErrors }: SetupFormContext) {
+async function validate(
+  _values: Record<string, unknown>,
+  { setErrors }: SetupFormContext,
+) {
   loading.value = true;
   const authStore = useAuthStore();
-  return authStore.setup(username.value, password.value, confirmPassword.value).catch((err) => {
-    setErrors({ apiError: err });
-  }).finally(() => {
-    loading.value = false;
-  });
+  return authStore
+    .setup(username.value, password.value, confirmPassword.value)
+    .catch((err) => {
+      setErrors({ apiError: err });
+    })
+    .finally(() => {
+      loading.value = false;
+    });
 }
 </script>
 
 <template>
-  <Form v-slot="{ errors, isSubmitting }" class="mt-4 setup-form" @submit="validate">
+  <Form
+    v-slot="{ errors, isSubmitting }"
+    class="mt-4 setup-form"
+    @submit="validate"
+  >
     <v-text-field
-v-model="username" :label="t('setup.username')" class="mb-5 input-field" required hide-details="auto"
-      variant="outlined" prepend-inner-icon="mdi-account-edit" :disabled="loading" :rules="usernameRules"></v-text-field>
+      v-model="username"
+      :label="t('setup.username')"
+      class="mb-5 input-field"
+      required
+      hide-details="auto"
+      variant="outlined"
+      prepend-inner-icon="mdi-account-edit"
+      :disabled="loading"
+      :rules="usernameRules"
+    ></v-text-field>
 
     <v-text-field
-v-model="password" :label="t('setup.password')" required variant="outlined" hide-details="auto"
-      :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'" :type="showPassword ? 'text' : 'password'"
-      class="pwd-input mb-5" prepend-inner-icon="mdi-lock-plus" :disabled="loading"
-      :rules="passwordRules" @click:append-inner="showPassword = !showPassword"></v-text-field>
+      v-model="password"
+      :label="t('setup.password')"
+      required
+      variant="outlined"
+      hide-details="auto"
+      :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+      :type="showPassword ? 'text' : 'password'"
+      class="pwd-input mb-5"
+      prepend-inner-icon="mdi-lock-plus"
+      :disabled="loading"
+      :rules="passwordRules"
+      @click:append-inner="showPassword = !showPassword"
+    ></v-text-field>
 
     <v-text-field
-v-model="confirmPassword" :label="t('setup.confirmPassword')" required variant="outlined"
-      hide-details="auto" :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
-      :type="showConfirmPassword ? 'text' : 'password'" class="pwd-input"
-      prepend-inner-icon="mdi-lock-check" :disabled="loading" :rules="confirmPasswordRules" @click:append-inner="showConfirmPassword = !showConfirmPassword"></v-text-field>
+      v-model="confirmPassword"
+      :label="t('setup.confirmPassword')"
+      required
+      variant="outlined"
+      hide-details="auto"
+      :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
+      :type="showConfirmPassword ? 'text' : 'password'"
+      class="pwd-input"
+      prepend-inner-icon="mdi-lock-check"
+      :disabled="loading"
+      :rules="confirmPasswordRules"
+      @click:append-inner="showConfirmPassword = !showConfirmPassword"
+    ></v-text-field>
 
     <small class="setup-hint">{{ t('setup.passwordHint') }}</small>
 
     <v-btn
-color="secondary" :loading="isSubmitting || loading" block class="setup-btn mt-8" variant="flat" size="large"
-      type="submit">
+      color="secondary"
+      :loading="isSubmitting || loading"
+      block
+      class="setup-btn mt-8"
+      variant="flat"
+      size="large"
+      type="submit"
+    >
       <span class="setup-btn-text">{{ t('setup.submit') }}</span>
     </v-btn>
 
     <div v-if="errors.apiError" class="mt-4 error-container">
-      <v-alert color="error" variant="tonal" icon="mdi-alert-circle" border="start">
+      <v-alert
+        color="error"
+        variant="tonal"
+        icon="mdi-alert-circle"
+        border="start"
+      >
         {{ errors.apiError }}
       </v-alert>
     </div>

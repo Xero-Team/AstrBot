@@ -5,8 +5,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, useSlots, type VNode } from "vue";
-import type { ChatThread } from "@/composables/useMessages";
+import { computed, inject, useSlots, type VNode } from 'vue';
+import type { ChatThread } from '@/composables/useMessages';
 
 const props = defineProps<{
   node?: {
@@ -16,11 +16,11 @@ const props = defineProps<{
 
 const slots = useSlots();
 const threadMap = inject<() => Record<string, ChatThread>>(
-  "chatThreadMap",
+  'chatThreadMap',
   () => ({}),
 );
 const openThread = inject<(thread: ChatThread) => void>(
-  "openChatThread",
+  'openChatThread',
   (_thread) => undefined,
 );
 
@@ -31,7 +31,7 @@ const threadId = computed(() => {
 });
 
 const thread = computed(() => {
-  const map = typeof threadMap === "function" ? threadMap() : threadMap;
+  const map = typeof threadMap === 'function' ? threadMap() : threadMap;
   return map[threadId.value] || null;
 });
 
@@ -44,11 +44,12 @@ function open() {
 function slotText(nodes: VNode[] = []): string {
   return nodes
     .map((node) => {
-      if (typeof node.children === "string") return node.children;
-      if (Array.isArray(node.children)) return slotText(node.children as VNode[]);
-      return "";
+      if (typeof node.children === 'string') return node.children;
+      if (Array.isArray(node.children))
+        return slotText(node.children as VNode[]);
+      return '';
     })
-    .join("");
+    .join('');
 }
 </script>
 

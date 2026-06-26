@@ -15,8 +15,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide } from "vue";
-import { MarkdownRender } from "markstream-vue";
+import { computed, provide } from 'vue';
+import { MarkdownRender } from 'markstream-vue';
 
 const props = defineProps<{
   content: string;
@@ -39,6 +39,6 @@ const refsByIndex = computed(() => {
   }, {});
 });
 
-provide("isDark", isDarkRef);
-provide("webSearchResults", () => refsByIndex.value);
+provide('isDark', isDarkRef);
+provide('webSearchResults', () => refsByIndex.value);
 </script>

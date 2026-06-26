@@ -22,14 +22,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue';
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
   type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+} from '@/composables/useMessages';
+import { useModuleI18n } from '@/i18n/composables';
+import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -39,13 +39,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
+  'update:modelValue': [value: boolean];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 
 const activityCounts = computed(() =>
-  reasoningActivityCounts(props.parts, props.reasoning || ""),
+  reasoningActivityCounts(props.parts, props.reasoning || ''),
 );
 
 const reasoningTitle = computed(() =>
@@ -53,7 +53,7 @@ const reasoningTitle = computed(() =>
 );
 
 function close() {
-  emit("update:modelValue", false);
+  emit('update:modelValue', false);
 }
 </script>
 

@@ -47,7 +47,7 @@
                   </button>
                 </template>
                 <template #default="{ isActive }">
-                  <v-card style="padding: 16px;">
+                  <v-card style="padding: 16px">
                     <v-card-title class="d-flex align-center">
                       <span>{{ tm('mcpServers.status.availableTools') }}</span>
                     </v-card-title>
@@ -56,7 +56,7 @@
                         <li
                           v-for="(tool, idx) in server.tools"
                           :key="idx"
-                          style="margin: 8px 0px;"
+                          style="margin: 8px 0px"
                         >
                           {{ tool }}
                         </li>
@@ -165,62 +165,100 @@
     <v-dialog v-model="showMcpServerDialog" max-width="750px">
       <v-card>
         <v-card-title class="pa-4 pl-6">
-          <v-icon class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ isEditMode ? tm('dialogs.addServer.editTitle') : tm('dialogs.addServer.title') }}</span>
+          <v-icon class="me-2">{{
+            isEditMode ? 'mdi-pencil' : 'mdi-plus'
+          }}</v-icon>
+          <span>{{
+            isEditMode
+              ? tm('dialogs.addServer.editTitle')
+              : tm('dialogs.addServer.title')
+          }}</span>
         </v-card-title>
 
         <v-card-text class="py-4">
           <v-form ref="form" @submit.prevent="saveServer">
             <v-text-field
-v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined"
-              :rules="[v => !!v || tm('dialogs.addServer.fields.nameRequired')]" required class="mb-3"></v-text-field>
+              v-model="currentServer.name"
+              :label="tm('dialogs.addServer.fields.name')"
+              variant="outlined"
+              :rules="[
+                (v) => !!v || tm('dialogs.addServer.fields.nameRequired'),
+              ]"
+              required
+              class="mb-3"
+            ></v-text-field>
 
             <div class="mb-2 d-flex align-center">
-              <span class="text-subtitle-1">{{ tm('dialogs.addServer.fields.config') }}</span>
+              <span class="text-subtitle-1">{{
+                tm('dialogs.addServer.fields.config')
+              }}</span>
               <v-spacer></v-spacer>
-              <v-btn size="small" color="primary" variant="tonal" class="me-1" @click="setConfigTemplate('stdio')">
+              <v-btn
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="me-1"
+                @click="setConfigTemplate('stdio')"
+              >
                 {{ tm('mcpServers.buttons.useTemplateStdio') }}
               </v-btn>
               <v-btn
-size="small" color="primary" variant="tonal" class="me-1"
-                @click="setConfigTemplate('streamable_http')">
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="me-1"
+                @click="setConfigTemplate('streamable_http')"
+              >
                 {{ tm('mcpServers.buttons.useTemplateStreamableHttp') }}
               </v-btn>
-              <v-btn size="small" color="primary" variant="tonal" class="me-1" @click="setConfigTemplate('sse')">
+              <v-btn
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="me-1"
+                @click="setConfigTemplate('sse')"
+              >
                 {{ tm('mcpServers.buttons.useTemplateSse') }}
               </v-btn>
             </div>
 
-            <small style="color: grey">*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small>
+            <small style="color: grey"
+              >*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small
+            >
 
             <v-alert type="info" variant="tonal" density="compact" class="mt-3">
               {{ tm('dialogs.addServer.tips.transportRecommendation') }}
             </v-alert>
 
-            <div class="monaco-container" style="margin-top: 16px;">
+            <div class="monaco-container" style="margin-top: 16px">
               <VueMonacoEditor
-v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
-                minimap: {
-                  enabled: false
-                },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                lineNumbers: 'on',
-                roundedSelection: true,
-                tabSize: 2
-              }" @change="validateJson" />
+                v-model:value="serverConfigJson"
+                theme="vs-dark"
+                language="json"
+                :options="{
+                  minimap: {
+                    enabled: false,
+                  },
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  lineNumbers: 'on',
+                  roundedSelection: true,
+                  tabSize: 2,
+                }"
+                @change="validateJson"
+              />
             </div>
 
             <div v-if="jsonError" class="mt-2 text-error">
-              <v-icon color="error" size="small" class="me-1">mdi-alert-circle</v-icon>
+              <v-icon color="error" size="small" class="me-1"
+                >mdi-alert-circle</v-icon
+              >
               <span>{{ jsonError }}</span>
             </div>
-
           </v-form>
-          <div style="margin-top: 8px;">
+          <div style="margin-top: 8px">
             <small>{{ addServerDialogMessage }}</small>
           </div>
-
         </v-card-text>
 
         <v-card-actions class="pa-4">
@@ -228,10 +266,19 @@ v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
           <v-btn variant="text" :disabled="loading" @click="closeServerDialog">
             {{ tm('dialogs.addServer.buttons.cancel') }}
           </v-btn>
-          <v-btn variant="text" :disabled="loading" @click="testServerConnection">
+          <v-btn
+            variant="text"
+            :disabled="loading"
+            @click="testServerConnection"
+          >
             {{ tm('dialogs.addServer.buttons.testConnection') }}
           </v-btn>
-          <v-btn color="primary" :loading="loading" :disabled="!isServerFormValid" @click="saveServer">
+          <v-btn
+            color="primary"
+            :loading="loading"
+            :disabled="!isServerFormValid"
+            @click="saveServer"
+          >
             {{ tm('dialogs.addServer.buttons.save') }}
           </v-btn>
         </v-card-actions>
@@ -247,37 +294,61 @@ v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
 
         <v-card-text class="py-4">
           <v-select
-v-model="selectedMcpServerProvider" :items="mcpServerProviderList"
-            label="选择平台" variant="outlined" required></v-select>
+            v-model="selectedMcpServerProvider"
+            :items="mcpServerProviderList"
+            label="选择平台"
+            variant="outlined"
+            required
+          ></v-select>
           <div v-if="selectedMcpServerProvider === 'modelscope'">
             <v-timeline align="start" side="end">
-              <v-timeline-item icon="mdi-numeric-1" icon-color="rgb(var(--v-theme-background))">
+              <v-timeline-item
+                icon="mdi-numeric-1"
+                icon-color="rgb(var(--v-theme-background))"
+              >
                 <div>
                   <div class="text-h4">发现 MCP 服务器</div>
                   <p class="mt-2">
-                    访问 <a href="https://www.modelscope.cn/mcp" target="_blank">ModelScope 平台</a> 浏览需要的 MCP 服务器。
+                    访问
+                    <a href="https://www.modelscope.cn/mcp" target="_blank"
+                      >ModelScope 平台</a
+                    >
+                    浏览需要的 MCP 服务器。
                   </p>
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item icon="mdi-numeric-2" icon-color="rgb(var(--v-theme-background))">
+              <v-timeline-item
+                icon="mdi-numeric-2"
+                icon-color="rgb(var(--v-theme-background))"
+              >
                 <div>
                   <div class="text-h4">获取访问令牌</div>
                   <p class="mt-2">
-                    从<a href="https://modelscope.cn/my/myaccesstoken" target="_blank">账户设置</a>中获取个人访问令牌。
+                    从<a
+                      href="https://modelscope.cn/my/myaccesstoken"
+                      target="_blank"
+                      >账户设置</a
+                    >中获取个人访问令牌。
                   </p>
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item icon="mdi-numeric-3" icon-color="rgb(var(--v-theme-background))">
+              <v-timeline-item
+                icon="mdi-numeric-3"
+                icon-color="rgb(var(--v-theme-background))"
+              >
                 <div>
                   <div class="text-h4">输入您的访问令牌</div>
-                  <p class="mt-2">
-                    输入您的访问令牌以同步 MCP 服务器。
-                  </p>
+                  <p class="mt-2">输入您的访问令牌以同步 MCP 服务器。</p>
                   <v-text-field
-v-model="mcpProviderToken" type="password" variant="outlined"
-                    label="访问令牌" class="mt-2" hide-details/>
+                    v-model="mcpProviderToken"
+                    type="password"
+                    variant="outlined"
+                    label="访问令牌"
+                    class="mt-2"
+                    hide-details
+                  />
                 </div>
               </v-timeline-item>
             </v-timeline>
@@ -286,10 +357,19 @@ v-model="mcpProviderToken" type="password" variant="outlined"
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" :disabled="loading" @click="showSyncMcpServerDialog = false">
+          <v-btn
+            variant="text"
+            :disabled="loading"
+            @click="showSyncMcpServerDialog = false"
+          >
             {{ tm('dialogs.addServer.buttons.cancel') }}
           </v-btn>
-          <v-btn color="primary" :loading="loading" :disabled="loading" @click="syncMcpServers">
+          <v-btn
+            color="primary"
+            :loading="loading"
+            :disabled="loading"
+            @click="syncMcpServers"
+          >
             {{ tm('dialogs.addServer.buttons.sync') }}
           </v-btn>
         </v-card-actions>
@@ -297,7 +377,13 @@ v-model="mcpProviderToken" type="password" variant="outlined"
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar v-model="save_message_snack" :timeout="3000" elevation="24" :color="save_message_success" location="top">
+    <v-snackbar
+      v-model="save_message_snack"
+      :timeout="3000"
+      elevation="24"
+      :color="save_message_success"
+      location="top"
+    >
       {{ save_message }}
     </v-snackbar>
   </div>
@@ -311,14 +397,14 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import {
   askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog
+  useConfirmDialog,
 } from '@/utils/confirmDialog';
 
 export default {
   name: 'McpServersSection',
   components: {
     VueMonacoEditor,
-    OutlinedActionListItem
+    OutlinedActionListItem,
   },
   setup() {
     const { t } = useI18n();
@@ -345,12 +431,12 @@ export default {
       currentServer: {
         name: '',
         active: true,
-        tools: []
+        tools: [],
       },
       originalServerName: '',
       save_message_snack: false,
       save_message: '',
-      save_message_success: 'success'
+      save_message_success: 'success',
     };
   },
   computed: {
@@ -365,11 +451,13 @@ export default {
         if (server.command) {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
-        const configKeys = Object.keys(server).filter(key =>
-          !['name', 'active', 'tools'].includes(key)
+        const configKeys = Object.keys(server).filter(
+          (key) => !['name', 'active', 'tools'].includes(key),
         );
         if (configKeys.length > 0) {
-          return this.tm('mcpServers.status.configSummary', { keys: configKeys.join(', ') });
+          return this.tm('mcpServers.status.configSummary', {
+            keys: configKeys.join(', '),
+          });
         }
         return this.tm('mcpServers.status.noConfig');
       };
@@ -388,7 +476,7 @@ export default {
         }
         return 'mdi-file-code-outline';
       };
-    }
+    },
   },
   mounted() {
     this.getServers();
@@ -408,22 +496,29 @@ export default {
     },
     getServers() {
       this.loadingGettingServers = true;
-      mcpApi.list()
-        .then(response => {
+      mcpApi
+        .list()
+        .then((response) => {
           if (response.data.status === 'error') {
-            this.showError(response.data.message || this.tm('messages.getServersError', { error: 'Unknown error' }));
+            this.showError(
+              response.data.message ||
+                this.tm('messages.getServersError', { error: 'Unknown error' }),
+            );
             return;
           }
           this.mcpServers = response.data.data || [];
-          this.mcpServers.forEach(server => {
+          this.mcpServers.forEach((server) => {
             if (!this.mcpServerUpdateLoaders[server.name]) {
               this.mcpServerUpdateLoaders[server.name] = false;
             }
           });
         })
-        .catch(error => {
-          this.showError(this.tm('messages.getServersError', { error: error.message }));
-        }).finally(() => {
+        .catch((error) => {
+          this.showError(
+            this.tm('messages.getServersError', { error: error.message }),
+          );
+        })
+        .finally(() => {
           this.loadingGettingServers = false;
         });
     },
@@ -437,7 +532,9 @@ export default {
         this.jsonError = null;
         return true;
       } catch (e) {
-        this.jsonError = this.tm('dialogs.addServer.errors.jsonFormat', { error: e.message });
+        this.jsonError = this.tm('dialogs.addServer.errors.jsonFormat', {
+          error: e.message,
+        });
         return false;
       }
     },
@@ -449,7 +546,7 @@ export default {
           url: 'your mcp server url',
           headers: {},
           timeout: 5,
-          sse_read_timeout: 300
+          sse_read_timeout: 300,
         };
       } else if (type === 'sse') {
         template = {
@@ -457,12 +554,12 @@ export default {
           url: 'your mcp server url',
           headers: {},
           timeout: 5,
-          sse_read_timeout: 300
+          sse_read_timeout: 300,
         };
       } else {
         template = {
           command: 'python',
-          args: ['-m', 'your_module']
+          args: ['-m', 'your_module'],
         };
       }
       this.serverConfigJson = JSON.stringify(template, null, 2);
@@ -477,34 +574,48 @@ export default {
         const serverData = {
           name: this.currentServer.name,
           active: this.currentServer.active,
-          ...configObj
+          ...configObj,
         };
         if (this.isEditMode && this.originalServerName) {
           serverData.oldName = this.originalServerName;
         }
         const request = this.isEditMode
-          ? mcpApi.update(this.originalServerName || serverData.name, serverData)
+          ? mcpApi.update(
+              this.originalServerName || serverData.name,
+              serverData,
+            )
           : mcpApi.create(serverData);
         request
-          .then(response => {
+          .then((response) => {
             this.loading = false;
             if (response.data.status === 'error') {
-              this.showError(response.data.message || this.tm('messages.saveError', { error: 'Unknown error' }));
+              this.showError(
+                response.data.message ||
+                  this.tm('messages.saveError', { error: 'Unknown error' }),
+              );
               return;
             }
             this.showMcpServerDialog = false;
             this.addServerDialogMessage = '';
             this.getServers();
-            this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
+            this.showSuccess(
+              response.data.message || this.tm('messages.saveSuccess'),
+            );
             this.resetForm();
           })
-          .catch(error => {
+          .catch((error) => {
             this.loading = false;
-            this.showError(this.tm('messages.saveError', { error: error.response?.data?.message || error.message }));
+            this.showError(
+              this.tm('messages.saveError', {
+                error: error.response?.data?.message || error.message,
+              }),
+            );
           });
       } catch (e) {
         this.loading = false;
-        this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
+        this.showError(
+          this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }),
+        );
       }
     },
     async deleteServer(server) {
@@ -514,13 +625,20 @@ export default {
         return;
       }
 
-      mcpApi.delete(serverName)
-        .then(response => {
+      mcpApi
+        .delete(serverName)
+        .then((response) => {
           this.getServers();
-          this.showSuccess(response.data.message || this.tm('messages.deleteSuccess'));
+          this.showSuccess(
+            response.data.message || this.tm('messages.deleteSuccess'),
+          );
         })
-        .catch(error => {
-          this.showError(this.tm('messages.deleteError', { error: error.response?.data?.message || error.message }));
+        .catch((error) => {
+          this.showError(
+            this.tm('messages.deleteError', {
+              error: error.response?.data?.message || error.message,
+            }),
+          );
         });
     },
     editServer(server) {
@@ -532,7 +650,7 @@ export default {
       this.currentServer = {
         name: server.name,
         active: server.active,
-        tools: server.tools || []
+        tools: server.tools || [],
       };
       this.originalServerName = server.name;
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
@@ -542,13 +660,20 @@ export default {
     updateServerStatus(server) {
       this.mcpServerUpdateLoaders[server.name] = true;
       server.active = !server.active;
-      mcpApi.setEnabled(server.name, server.active)
-        .then(response => {
+      mcpApi
+        .setEnabled(server.name, server.active)
+        .then((response) => {
           this.getServers();
-          this.showSuccess(response.data.message || this.tm('messages.updateSuccess'));
+          this.showSuccess(
+            response.data.message || this.tm('messages.updateSuccess'),
+          );
         })
-        .catch(error => {
-          this.showError(this.tm('messages.updateError', { error: error.response?.data?.message || error.message }));
+        .catch((error) => {
+          this.showError(
+            this.tm('messages.updateError', {
+              error: error.response?.data?.message || error.message,
+            }),
+          );
           server.active = !server.active;
         })
         .finally(() => {
@@ -570,24 +695,31 @@ export default {
         configObj = JSON.parse(this.serverConfigJson);
       } catch (e) {
         this.loading = false;
-        this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
+        this.showError(
+          this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }),
+        );
         return;
       }
-      mcpApi.test(this.currentServer.name || 'draft', configObj)
-        .then(response => {
+      mcpApi
+        .test(this.currentServer.name || 'draft', configObj)
+        .then((response) => {
           this.loading = false;
           this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
         })
-        .catch(error => {
+        .catch((error) => {
           this.loading = false;
-          this.showError(this.tm('messages.testError', { error: error.response?.data?.message || error.message }));
+          this.showError(
+            this.tm('messages.testError', {
+              error: error.response?.data?.message || error.message,
+            }),
+          );
         });
     },
     resetForm() {
       this.currentServer = {
         name: '',
         active: true,
-        tools: []
+        tools: [],
       };
       this.serverConfigJson = '';
       this.jsonError = null;
@@ -612,7 +744,7 @@ export default {
       this.loading = true;
       try {
         const requestData = {
-          name: this.selectedMcpServerProvider
+          name: this.selectedMcpServerProvider,
         };
         if (this.selectedMcpServerProvider === 'modelscope') {
           if (!this.mcpProviderToken.trim()) {
@@ -623,25 +755,38 @@ export default {
           requestData.access_token = this.mcpProviderToken.trim();
         }
         const response = await mcpApi.syncModelScope({
-          access_token: requestData.access_token || ''
+          access_token: requestData.access_token || '',
         });
         if (response.data.status === 'ok') {
-          this.showSuccess(response.data.message || this.tm('syncProvider.messages.syncSuccess'));
+          this.showSuccess(
+            response.data.message ||
+              this.tm('syncProvider.messages.syncSuccess'),
+          );
           this.showSyncMcpServerDialog = false;
           this.mcpProviderToken = '';
           this.getServers();
         } else {
-          this.showError(response.data.message || this.tm('syncProvider.messages.syncError', { error: 'Unknown error' }));
+          this.showError(
+            response.data.message ||
+              this.tm('syncProvider.messages.syncError', {
+                error: 'Unknown error',
+              }),
+          );
         }
       } catch (error) {
-        this.showError(this.tm('syncProvider.messages.syncError', {
-          error: error.response?.data?.message || error.message || '网络连接或访问令牌问题'
-        }));
+        this.showError(
+          this.tm('syncProvider.messages.syncError', {
+            error:
+              error.response?.data?.message ||
+              error.message ||
+              '网络连接或访问令牌问题',
+          }),
+        );
       } finally {
         this.loading = false;
       }
-    }
-  }
+    },
+  },
 };
 </script>
 
@@ -725,5 +870,4 @@ export default {
   margin-top: 4px;
   overflow: hidden;
 }
-
 </style>

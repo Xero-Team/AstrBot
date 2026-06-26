@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, useAttrs } from "vue";
-import { useCustomizerStore } from "@/stores/customizer";
-import { useModuleI18n } from "@/i18n/composables";
-import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
-import PluginPlatformChip from "./PluginPlatformChip.vue";
-import StyledMenu from "./StyledMenu.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import { usePluginI18n } from "@/utils/pluginI18n";
+import { ref, computed, watch, useAttrs } from 'vue';
+import { useCustomizerStore } from '@/stores/customizer';
+import { useModuleI18n } from '@/i18n/composables';
+import UninstallConfirmDialog from './UninstallConfirmDialog.vue';
+import PluginPlatformChip from './PluginPlatformChip.vue';
+import StyledMenu from './StyledMenu.vue';
+import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import { usePluginI18n } from '@/utils/pluginI18n';
 
 const props = defineProps({
   extension: {
@@ -29,15 +29,15 @@ const props = defineProps({
 
 // 定义要发送到父组件的事件
 const emit = defineEmits([
-  "configure",
-  "update",
-  "reload",
-  "uninstall",
-  "toggle-activation",
-  "view-handlers",
-  "view-readme",
-  "view-changelog",
-  "toggle-pin",
+  'configure',
+  'update',
+  'reload',
+  'uninstall',
+  'toggle-activation',
+  'view-handlers',
+  'view-readme',
+  'view-changelog',
+  'toggle-pin',
 ]);
 
 const showUninstallDialog = ref(false);
@@ -45,7 +45,7 @@ const showUninstallDialog = ref(false);
 const attrs = useAttrs();
 
 // 国际化
-const { tm } = useModuleI18n("features/extension");
+const { tm } = useModuleI18n('features/extension');
 const { pluginName, pluginDesc } = usePluginI18n();
 
 const supportPlatforms = computed(() => {
@@ -53,14 +53,14 @@ const supportPlatforms = computed(() => {
   if (!Array.isArray(platforms)) {
     return [];
   }
-  return platforms.filter((item) => typeof item === "string");
+  return platforms.filter((item) => typeof item === 'string');
 });
 
 const astrbotVersionRequirement = computed(() => {
   const versionSpec = props.extension?.astrbot_version;
-  return typeof versionSpec === "string" && versionSpec.trim().length
+  return typeof versionSpec === 'string' && versionSpec.trim().length
     ? versionSpec.trim()
-    : "";
+    : '';
 });
 
 const logoLoadFailed = ref(false);
@@ -70,7 +70,7 @@ const logoSrc = computed(() => {
   if (logoLoadFailed.value) {
     return defaultPluginIcon;
   }
-  return typeof logo === "string" && logo.trim().length
+  return typeof logo === 'string' && logo.trim().length
     ? logo
     : defaultPluginIcon;
 });
@@ -88,15 +88,15 @@ watch(
 
 // 操作函数
 const configure = () => {
-  emit("configure", props.extension);
+  emit('configure', props.extension);
 };
 
 const updateExtension = () => {
-  emit("update", props.extension);
+  emit('update', props.extension);
 };
 
 const reloadExtension = () => {
-  emit("reload", props.extension);
+  emit('reload', props.extension);
 };
 
 const uninstallExtension = async () => {
@@ -107,23 +107,23 @@ const handleUninstallConfirm = (options: {
   deleteConfig: boolean;
   deleteData: boolean;
 }) => {
-  emit("uninstall", props.extension, options);
+  emit('uninstall', props.extension, options);
 };
 
 const toggleActivation = () => {
-  emit("toggle-activation", props.extension);
+  emit('toggle-activation', props.extension);
 };
 
 const viewHandlers = () => {
-  emit("view-handlers", props.extension);
+  emit('view-handlers', props.extension);
 };
 
 const viewReadme = () => {
-  emit("view-readme", props.extension);
+  emit('view-readme', props.extension);
 };
 
 const togglePin = () => {
-  emit("toggle-pin", props.extension);
+  emit('toggle-pin', props.extension);
 };
 </script>
 
@@ -171,16 +171,17 @@ const togglePin = () => {
               <v-tooltip
                 location="top"
                 :text="
-                  localizedName?.length &&
-                  localizedName !== extension.name
+                  localizedName?.length && localizedName !== extension.name
                     ? `${localizedName} (${extension.name})`
                     : extension.name
                 "
               >
                 <template #activator="{ props: titleTooltipProps }">
-                  <span v-bind="titleTooltipProps" class="extension-title__text">{{
-                    localizedName
-                  }}</span>
+                  <span
+                    v-bind="titleTooltipProps"
+                    class="extension-title__text"
+                    >{{ localizedName }}</span
+                  >
                 </template>
               </v-tooltip>
               <span v-if="extension.version" class="extension-version">
@@ -192,7 +193,7 @@ const togglePin = () => {
                 size="x-small"
                 class="extension-system-chip"
               >
-                {{ tm("status.system") }}
+                {{ tm('status.system') }}
               </v-chip>
               <v-tooltip
                 v-if="extension?.has_update && !marketMode"
@@ -210,7 +211,7 @@ const togglePin = () => {
                   ></v-icon>
                 </template>
                 <span
-                  >{{ tm("card.status.hasUpdate") }}:
+                  >{{ tm('card.status.hasUpdate') }}:
                   {{ extension.online_version }}</span
                 >
               </v-tooltip>
@@ -236,7 +237,9 @@ const togglePin = () => {
                   </div>
                 </template>
                 <span>{{
-                  extension.activated ? tm("buttons.disable") : tm("buttons.enable")
+                  extension.activated
+                    ? tm('buttons.disable')
+                    : tm('buttons.enable')
                 }}</span>
               </v-tooltip>
             </template>
@@ -261,7 +264,7 @@ const togglePin = () => {
               label
               size="small"
             >
-              {{ tag === "danger" ? tm("tags.danger") : tag }}
+              {{ tag === 'danger' ? tm('tags.danger') : tag }}
             </v-chip>
             <PluginPlatformChip :platforms="supportPlatforms" />
             <v-chip
@@ -301,7 +304,7 @@ const togglePin = () => {
               @click.stop="togglePin"
             ></v-btn>
           </template>
-          <span>{{ isPinned ? tm("buttons.unpin") : tm("buttons.pin") }}</span>
+          <span>{{ isPinned ? tm('buttons.unpin') : tm('buttons.pin') }}</span>
         </v-tooltip>
 
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
@@ -355,26 +358,40 @@ const togglePin = () => {
             ></v-btn>
           </template>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click.stop="viewHandlers">
-            <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-information"
+            @click.stop="viewHandlers"
+          >
+            <v-list-item-title>{{ tm('buttons.viewInfo') }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click.stop="updateExtension">
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-update"
+            @click.stop="updateExtension"
+          >
             <v-list-item-title>{{
               extension.has_update
-                ? tm("card.actions.updateTo") + " " + extension.online_version
-                : tm("card.actions.reinstall")
+                ? tm('card.actions.updateTo') + ' ' + extension.online_version
+                : tm('card.actions.reinstall')
             }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click.stop="uninstallExtension">
-            <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-delete"
+            @click.stop="uninstallExtension"
+          >
+            <v-list-item-title class="text-error">{{
+              tm('card.actions.uninstallPlugin')
+            }}</v-list-item-title>
           </v-list-item>
         </StyledMenu>
       </template>
       <template v-else>
         <v-btn color="primary" size="small" @click.stop="viewReadme">
-          {{ tm("buttons.viewDocs") }}
+          {{ tm('buttons.viewDocs') }}
         </v-btn>
       </template>
     </v-card-actions>

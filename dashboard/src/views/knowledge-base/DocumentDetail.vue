@@ -9,7 +9,9 @@
       />
       <div class="header-content">
         <h1 class="text-h4">{{ document.doc_name }}</h1>
-        <p class="text-subtitle-1 text-medium-emphasis mt-2">{{ t('title') }}</p>
+        <p class="text-subtitle-1 text-medium-emphasis mt-2">
+          {{ t('title') }}
+        </p>
       </div>
     </div>
 
@@ -29,7 +31,9 @@
               <div class="info-item">
                 <v-icon start>mdi-label</v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.name') }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.name') }}
+                  </div>
                   <div class="text-body-1">{{ document.doc_name }}</div>
                 </div>
               </div>
@@ -40,7 +44,9 @@
                   {{ getFileIcon(document.file_type) }}
                 </v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.type') }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.type') }}
+                  </div>
                   <div class="text-body-1">{{ document.file_type || '-' }}</div>
                 </div>
               </div>
@@ -49,8 +55,12 @@
               <div class="info-item">
                 <v-icon start>mdi-file-chart</v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.size') }}</div>
-                  <div class="text-body-1">{{ formatFileSize(document.file_size) }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.size') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ formatFileSize(document.file_size) }}
+                  </div>
                 </div>
               </div>
             </v-col>
@@ -58,7 +68,9 @@
               <div class="info-item">
                 <v-icon start>mdi-text-box</v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.chunkCount') }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.chunkCount') }}
+                  </div>
                   <div class="text-body-1">{{ document.chunk_count || 0 }}</div>
                 </div>
               </div>
@@ -67,8 +79,12 @@
               <div class="info-item">
                 <v-icon start>mdi-calendar</v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.createdAt') }}</div>
-                  <div class="text-body-1">{{ formatDate(document.created_at) }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.createdAt') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ formatDate(document.created_at) }}
+                  </div>
                 </div>
               </div>
             </v-col>
@@ -142,17 +158,22 @@
 
             <template #no-data>
               <div class="text-center py-8">
-                <v-icon size="64" color="grey-lighten-2">mdi-text-box-outline</v-icon>
+                <v-icon size="64" color="grey-lighten-2"
+                  >mdi-text-box-outline</v-icon
+                >
                 <p class="mt-4 text-medium-emphasis">{{ t('chunks.empty') }}</p>
               </div>
             </template>
           </v-data-table>
-          
 
           <!-- 自定义分页器 -->
-          <div v-if="!searchQuery && totalChunks > 0" class="pa-4 d-flex align-center justify-space-between">
+          <div
+            v-if="!searchQuery && totalChunks > 0"
+            class="pa-4 d-flex align-center justify-space-between"
+          >
             <div class="text-caption text-medium-emphasis">
-              {{ t('chunks.showing') }} {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, totalChunks) }} / {{ totalChunks }}
+              {{ t('chunks.showing') }} {{ (page - 1) * pageSize + 1 }} -
+              {{ Math.min(page * pageSize, totalChunks) }} / {{ totalChunks }}
             </div>
             <div class="d-flex align-center gap-2">
               <v-select
@@ -182,7 +203,11 @@
         <v-card-title class="pa-4">
           <span>{{ t('view.title') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            @click="showViewDialog = false"
+          />
         </v-card-title>
         <v-card-text class="pa-6">
           <v-list density="comfortable">
@@ -191,7 +216,11 @@
                 <v-icon>mdi-pound</v-icon>
               </template>
               <v-list-item-title>{{ t('view.index') }}</v-list-item-title>
-              <v-list-item-subtitle>#{{ (selectedChunk?.chunk_index || 0) + 1 }}</v-list-item-subtitle>
+              <v-list-item-subtitle
+                >#{{
+                  (selectedChunk?.chunk_index || 0) + 1
+                }}</v-list-item-subtitle
+              >
             </v-list-item>
 
             <v-list-item>
@@ -199,7 +228,9 @@
                 <v-icon>mdi-text</v-icon>
               </template>
               <v-list-item-title>{{ t('view.charCount') }}</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedChunk?.char_count || 0 }} 字符</v-list-item-subtitle>
+              <v-list-item-subtitle
+                >{{ selectedChunk?.char_count || 0 }} 字符</v-list-item-subtitle
+              >
             </v-list-item>
 
             <v-list-item>
@@ -207,11 +238,15 @@
                 <v-icon>mdi-key</v-icon>
               </template>
               <v-list-item-title>{{ t('view.vecDocId') }}</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedChunk?.chunk_id || '-' }}</v-list-item-subtitle>
+              <v-list-item-subtitle>{{
+                selectedChunk?.chunk_id || '-'
+              }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
 
-          <div class="text-caption text-medium-emphasis mb-2">{{ t('view.content') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ t('view.content') }}
+          </div>
           <div class="chunk-content-view">
             {{ selectedChunk?.content }}
           </div>
@@ -233,196 +268,201 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { knowledgeApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
-import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
+import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
+import { knowledgeApi } from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 interface KnowledgeDocument {
-  doc_name?: string
-  file_type?: string
-  file_size?: number
-  chunk_count?: number
-  created_at?: string
+  doc_name?: string;
+  file_type?: string;
+  file_size?: number;
+  chunk_count?: number;
+  created_at?: string;
 }
 
 interface KnowledgeChunk {
-  chunk_id: string
-  chunk_index: number
-  content: string
-  char_count: number
+  chunk_id: string;
+  chunk_index: number;
+  content: string;
+  char_count: number;
 }
 
-const { tm: t } = useModuleI18n('features/knowledge-base/document')
-const route = useRoute()
+const { tm: t } = useModuleI18n('features/knowledge-base/document');
+const route = useRoute();
 
-const confirmDialog = useConfirmDialog()
+const confirmDialog = useConfirmDialog();
 
-const kbId = ref(route.params.kbId as string)
-const docId = ref(route.params.docId as string)
+const kbId = ref(route.params.kbId as string);
+const docId = ref(route.params.docId as string);
 
 // 状态
-const loading = ref(true)
-const loadingChunks = ref(false)
-const document = ref<KnowledgeDocument>({})
-const chunks = ref<KnowledgeChunk[]>([])
-const searchQuery = ref('')
-const showViewDialog = ref(false)
-const selectedChunk = ref<KnowledgeChunk | null>(null)
+const loading = ref(true);
+const loadingChunks = ref(false);
+const document = ref<KnowledgeDocument>({});
+const chunks = ref<KnowledgeChunk[]>([]);
+const searchQuery = ref('');
+const showViewDialog = ref(false);
+const selectedChunk = ref<KnowledgeChunk | null>(null);
 
 // 分页状态
-const page = ref(1)
-const pageSize = ref(10)
-const totalChunks = ref(0)
+const page = ref(1);
+const pageSize = ref(10);
+const totalChunks = ref(0);
 
 const snackbar = ref({
   show: false,
   text: '',
-  color: 'success'
-})
+  color: 'success',
+});
 
 const showSnackbar = (text: string, color: string = 'success') => {
-  snackbar.value.text = text
-  snackbar.value.color = color
-  snackbar.value.show = true
-}
+  snackbar.value.text = text;
+  snackbar.value.color = color;
+  snackbar.value.show = true;
+};
 
 // 表格列
 const headers = [
   { title: t('chunks.index'), key: 'chunk_index', width: 100 },
   { title: t('chunks.content'), key: 'content', sortable: false },
   { title: t('chunks.charCount'), key: 'char_count', width: 150 },
-  { title: t('chunks.actions'), key: 'actions', sortable: false, width: 150 }
-]
+  { title: t('chunks.actions'), key: 'actions', sortable: false, width: 150 },
+];
 
 // 过滤分块
 const filteredChunks = computed(() => {
-  if (!searchQuery.value) return chunks.value
-  const query = searchQuery.value.toLowerCase()
-  return chunks.value.filter(chunk =>
-    chunk.content.toLowerCase().includes(query)
-  )
-})
+  if (!searchQuery.value) return chunks.value;
+  const query = searchQuery.value.toLowerCase();
+  return chunks.value.filter((chunk) =>
+    chunk.content.toLowerCase().includes(query),
+  );
+});
 
 // 加载文档详情
 const loadDocument = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await knowledgeApi.document(kbId.value, docId.value)
+    const response = await knowledgeApi.document(kbId.value, docId.value);
     if (response.data.status === 'ok') {
-      document.value = response.data.data
+      document.value = response.data.data;
     }
   } catch (error) {
-    console.error('Failed to load document:', error)
-    showSnackbar('加载文档详情失败', 'error')
+    console.error('Failed to load document:', error);
+    showSnackbar('加载文档详情失败', 'error');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 加载分块列表
 const loadChunks = async () => {
-  loadingChunks.value = true
+  loadingChunks.value = true;
   try {
     const response = await knowledgeApi.chunks(kbId.value, {
-        document_id: docId.value, 
-        page: page.value,
-        page_size: pageSize.value
-    })
+      document_id: docId.value,
+      page: page.value,
+      page_size: pageSize.value,
+    });
     if (response.data.status === 'ok') {
-      chunks.value = response.data.data.items || []
-      totalChunks.value = response.data.data.total || 0
+      chunks.value = response.data.data.items || [];
+      totalChunks.value = response.data.data.total || 0;
     }
   } catch (error) {
-    console.error('Failed to load chunks:', error)
-    showSnackbar('加载分块列表失败', 'error')
+    console.error('Failed to load chunks:', error);
+    showSnackbar('加载分块列表失败', 'error');
   } finally {
-    loadingChunks.value = false
+    loadingChunks.value = false;
   }
-}
+};
 
 // 处理分页变化
 const handlePageChange = (newPage: number) => {
-  page.value = newPage
-  void loadChunks()
-}
+  page.value = newPage;
+  void loadChunks();
+};
 
 const handlePageSizeChange = (newPageSize: number) => {
-  pageSize.value = newPageSize
-  page.value = 1
-  void loadChunks()
-}
+  pageSize.value = newPageSize;
+  page.value = 1;
+  void loadChunks();
+};
 
 // 查看分块
 const viewChunk = (chunk: KnowledgeChunk) => {
-  selectedChunk.value = chunk
-  showViewDialog.value = true
-}
+  selectedChunk.value = chunk;
+  showViewDialog.value = true;
+};
 
 // 删除分块
 const deleteChunk = async (chunk: KnowledgeChunk) => {
-  if (!(await askForConfirmation(t('chunks.deleteConfirm'), confirmDialog))) return
+  if (!(await askForConfirmation(t('chunks.deleteConfirm'), confirmDialog)))
+    return;
   try {
-    const response = await knowledgeApi.deleteChunk(kbId.value, chunk.chunk_id, docId.value)
+    const response = await knowledgeApi.deleteChunk(
+      kbId.value,
+      chunk.chunk_id,
+      docId.value,
+    );
     if (response.data.status === 'ok') {
-      showSnackbar(t('chunks.deleteSuccess'))
-      void loadChunks()
+      showSnackbar(t('chunks.deleteSuccess'));
+      void loadChunks();
     } else {
-      showSnackbar(t('chunks.deleteFailed'), 'error')
+      showSnackbar(t('chunks.deleteFailed'), 'error');
     }
   } catch (error) {
-    console.error('Failed to delete chunk:', error)
-    showSnackbar(t('chunks.deleteFailed'), 'error')
+    console.error('Failed to delete chunk:', error);
+    showSnackbar(t('chunks.deleteFailed'), 'error');
   }
-}
+};
 
 // 工具函数
 const getFileIcon = (fileType?: string) => {
-  const type = fileType?.toLowerCase() || ''
-  if (type.includes('pdf')) return 'mdi-file-pdf-box'
-  if (type.includes('epub')) return 'mdi-book-open-page-variant'
-  if (type.includes('md')) return 'mdi-language-markdown'
-  if (type.includes('txt')) return 'mdi-file-document-outline'
-  return 'mdi-file'
-}
+  const type = fileType?.toLowerCase() || '';
+  if (type.includes('pdf')) return 'mdi-file-pdf-box';
+  if (type.includes('epub')) return 'mdi-book-open-page-variant';
+  if (type.includes('md')) return 'mdi-language-markdown';
+  if (type.includes('txt')) return 'mdi-file-document-outline';
+  return 'mdi-file';
+};
 
 const getFileColor = (fileType?: string) => {
-  const type = fileType?.toLowerCase() || ''
-  if (type.includes('pdf')) return 'error'
-  if (type.includes('epub')) return 'warning'
-  if (type.includes('md')) return 'info'
-  if (type.includes('txt')) return 'success'
-  return 'grey'
-}
+  const type = fileType?.toLowerCase() || '';
+  if (type.includes('pdf')) return 'error';
+  if (type.includes('epub')) return 'warning';
+  if (type.includes('md')) return 'info';
+  if (type.includes('txt')) return 'success';
+  return 'grey';
+};
 
 const formatFileSize = (bytes?: number) => {
-  if (!bytes) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let size = bytes
-  let unitIndex = 0
+  if (!bytes) return '-';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
+    size /= 1024;
+    unitIndex++;
   }
-  return `${size.toFixed(2)} ${units[unitIndex]}`
-}
+  return `${size.toFixed(2)} ${units[unitIndex]}`;
+};
 
 const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
+  if (!dateStr) return '-';
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
-  })
-}
+    minute: '2-digit',
+  });
+};
 
 onMounted(() => {
-  void loadDocument()
-  void loadChunks()
-})
+  void loadDocument();
+  void loadChunks();
+});
 </script>
 
 <style scoped>

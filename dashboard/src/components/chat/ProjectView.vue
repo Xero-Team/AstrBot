@@ -2,7 +2,7 @@
   <div class="project-sessions-container fade-in">
     <div class="project-header">
       <div class="project-header-info">
-        <span class="project-header-emoji">{{ project?.emoji || "📁" }}</span>
+        <span class="project-header-emoji">{{ project?.emoji || '📁' }}</span>
         <h2 class="project-header-title">{{ project?.title }}</h2>
       </div>
       <p v-if="project?.description" class="project-header-description">
@@ -24,7 +24,7 @@
           @click="$emit('selectSession', session.session_id)"
         >
           <v-list-item-title>
-            {{ session.display_name || tm("conversation.newConversation") }}
+            {{ session.display_name || tm('conversation.newConversation') }}
           </v-list-item-title>
           <v-list-item-subtitle>
             {{ formatDate(session.updated_at) }}
@@ -62,16 +62,16 @@
           size="large"
           color="grey-lighten-1"
         ></v-icon>
-        <p>{{ tm("project.noSessions") }}</p>
+        <p>{{ tm('project.noSessions') }}</p>
       </div>
     </v-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useModuleI18n } from "@/i18n/composables";
-import type { Project } from "@/components/chat/ProjectList.vue";
-import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import { useModuleI18n } from '@/i18n/composables';
+import type { Project } from '@/components/chat/ProjectList.vue';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 interface Session {
   session_id: string;
@@ -92,7 +92,7 @@ const emit = defineEmits<{
   deleteSession: [sessionId: string];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 
 const confirmDialog = useConfirmDialog();
 
@@ -102,10 +102,10 @@ function formatDate(dateString: string): string {
 
 async function handleDeleteSession(session: Session) {
   const sessionTitle =
-    session.display_name || tm("conversation.newConversation");
-  const message = tm("conversation.confirmDelete", { name: sessionTitle });
+    session.display_name || tm('conversation.newConversation');
+  const message = tm('conversation.confirmDelete', { name: sessionTitle });
   if (await askForConfirmation(message, confirmDialog)) {
-    emit("deleteSession", session.session_id);
+    emit('deleteSession', session.session_id);
   }
 }
 </script>

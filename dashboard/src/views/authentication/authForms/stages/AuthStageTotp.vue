@@ -26,7 +26,13 @@ function onSubmit() {
 <template>
   <div class="account-stage-header">
     <div class="account-stage-user">{{ props.username }}</div>
-    <v-btn variant="text" size="small" color="primary" :disabled="props.loading" @click="emit('back')">
+    <v-btn
+      variant="text"
+      size="small"
+      color="primary"
+      :disabled="props.loading"
+      @click="emit('back')"
+    >
       {{ t('setup.totp.back') }}
     </v-btn>
   </div>
@@ -52,10 +58,18 @@ function onSubmit() {
       color="secondary"
       density="comfortable"
       hide-details
-      @update:model-value="(value: boolean | null) => emit('update:trustDevice', !!value)"
+      @update:model-value="
+        (value: boolean | null) => emit('update:trustDevice', !!value)
+      "
     ></v-checkbox>
 
-    <v-btn variant="text" size="small" color="primary" :disabled="props.loading" @click="emit('useRecovery')">
+    <v-btn
+      variant="text"
+      size="small"
+      color="primary"
+      :disabled="props.loading"
+      @click="emit('useRecovery')"
+    >
       {{ t('recovery.useRecoveryCode') }}
     </v-btn>
   </div>

@@ -18,18 +18,50 @@ const emit = defineEmits<{
   (e: 'toggle-command', cmd: CommandItem): void;
   (e: 'rename', cmd: CommandItem): void;
   (e: 'view-details', cmd: CommandItem): void;
-  (e: 'update-permission', cmd: CommandItem, permission: 'admin' | 'member'): void;
+  (
+    e: 'update-permission',
+    cmd: CommandItem,
+    permission: 'admin' | 'member',
+  ): void;
 }>();
 
 // 表格表头
 const commandHeaders = computed(() => [
-  { title: tm('table.headers.command'), key: 'effective_command', minWidth: '100px' },
-  { title: tm('table.headers.type'), key: 'type', sortable: false, width: '100px' },
+  {
+    title: tm('table.headers.command'),
+    key: 'effective_command',
+    minWidth: '100px',
+  },
+  {
+    title: tm('table.headers.type'),
+    key: 'type',
+    sortable: false,
+    width: '100px',
+  },
   { title: tm('table.headers.plugin'), key: 'plugin', width: '140px' },
-  { title: tm('table.headers.description'), key: 'description', sortable: false },
-  { title: tm('table.headers.permission'), key: 'permission', sortable: false, width: '100px' },
-  { title: tm('table.headers.status'), key: 'enabled', sortable: false, width: '100px' },
-  { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '140px' }
+  {
+    title: tm('table.headers.description'),
+    key: 'description',
+    sortable: false,
+  },
+  {
+    title: tm('table.headers.permission'),
+    key: 'permission',
+    sortable: false,
+    width: '100px',
+  },
+  {
+    title: tm('table.headers.status'),
+    key: 'enabled',
+    sortable: false,
+    width: '100px',
+  },
+  {
+    title: tm('table.headers.actions'),
+    key: 'actions',
+    sortable: false,
+    width: '140px',
+  },
 ]);
 
 // 检查组是否展开
@@ -41,27 +73,43 @@ const isGroupExpanded = (cmd: CommandItem): boolean => {
 const getTypeInfo = (type: string): TypeInfo => {
   switch (type) {
     case 'group':
-      return { text: tm('type.group'), color: 'info', icon: 'mdi-folder-outline' };
+      return {
+        text: tm('type.group'),
+        color: 'info',
+        icon: 'mdi-folder-outline',
+      };
     case 'sub_command':
-      return { text: tm('type.subCommand'), color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
+      return {
+        text: tm('type.subCommand'),
+        color: 'secondary',
+        icon: 'mdi-subdirectory-arrow-right',
+      };
     default:
-      return { text: tm('type.command'), color: 'primary', icon: 'mdi-console-line' };
+      return {
+        text: tm('type.command'),
+        color: 'primary',
+        icon: 'mdi-console-line',
+      };
   }
 };
 
 // 获取权限颜色
 const getPermissionColor = (permission: string): string => {
   switch (permission) {
-    case 'admin': return 'error';
-    default: return 'success';
+    case 'admin':
+      return 'error';
+    default:
+      return 'success';
   }
 };
 
 // 获取权限标签
 const getPermissionLabel = (permission: string): string => {
   switch (permission) {
-    case 'admin': return tm('permission.admin');
-    default: return tm('permission.everyone');
+    case 'admin':
+      return tm('permission.admin');
+    default:
+      return tm('permission.everyone');
   }
 };
 
@@ -113,13 +161,18 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
             class="mr-1"
             @click.stop="emit('toggle-expand', item)"
           >
-            <v-icon size="18">{{ isGroupExpanded(item) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+            <v-icon size="18">{{
+              isGroupExpanded(item) ? 'mdi-chevron-down' : 'mdi-chevron-right'
+            }}</v-icon>
           </v-btn>
           <!-- 子指令缩进 -->
           <div v-else-if="item.type === 'sub_command'" class="ml-6"></div>
           <div>
             <div class="text-subtitle-1 font-weight-medium">
-              <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ item.effective_command }}</code>
+              <code
+                :class="{ 'sub-command-code': item.type === 'sub_command' }"
+                >{{ item.effective_command }}</code
+              >
             </div>
           </div>
         </div>
@@ -132,16 +185,32 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
           variant="tonal"
         >
           <v-icon start size="14">{{ getTypeInfo(item.type).icon }}</v-icon>
-          {{ getTypeInfo(item.type).text }}{{ item.is_group && item.sub_commands?.length > 0 ? `(${item.sub_commands.length})` : '' }}
+          {{ getTypeInfo(item.type).text
+          }}{{
+            item.is_group && item.sub_commands?.length > 0
+              ? `(${item.sub_commands.length})`
+              : ''
+          }}
         </v-chip>
       </template>
 
       <template #item.plugin="{ item }">
-        <div class="text-body-2">{{ item.plugin_display_name || item.plugin }}</div>
+        <div class="text-body-2">
+          {{ item.plugin_display_name || item.plugin }}
+        </div>
       </template>
 
       <template #item.description="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.description">
+        <div
+          class="text-body-2 text-medium-emphasis"
+          style="
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
+          :title="item.description"
+        >
           {{ item.description || '-' }}
         </div>
       </template>
@@ -166,14 +235,18 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               :active="item.permission !== 'admin'"
               @click="$emit('update-permission', item, 'member')"
             >
-              <v-list-item-title>{{ tm('permission.everyone') }}</v-list-item-title>
+              <v-list-item-title>{{
+                tm('permission.everyone')
+              }}</v-list-item-title>
             </v-list-item>
             <v-list-item
               :value="'admin'"
               :active="item.permission === 'admin'"
               @click="$emit('update-permission', item, 'admin')"
             >
-              <v-list-item-title>{{ tm('permission.admin') }}</v-list-item-title>
+              <v-list-item-title>{{
+                tm('permission.admin')
+              }}</v-list-item-title>
             </v-list-item>
           </v-list>
         </v-menu>
@@ -201,7 +274,9 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               @click="emit('toggle-command', item)"
             >
               <v-icon size="22">mdi-play</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.enable') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                tm('tooltips.enable')
+              }}</v-tooltip>
             </v-btn>
             <v-btn
               v-else
@@ -211,17 +286,28 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               @click="emit('toggle-command', item)"
             >
               <v-icon size="22">mdi-pause</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                tm('tooltips.disable')
+              }}</v-tooltip>
             </v-btn>
 
-            <v-btn icon size="small" color="warning" @click="emit('rename', item)">
+            <v-btn
+              icon
+              size="small"
+              color="warning"
+              @click="emit('rename', item)"
+            >
               <v-icon size="22">mdi-pencil</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.rename') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                tm('tooltips.rename')
+              }}</v-tooltip>
             </v-btn>
 
             <v-btn icon size="small" @click="emit('view-details', item)">
               <v-icon size="22">mdi-information</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDetails') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                tm('tooltips.viewDetails')
+              }}</v-tooltip>
             </v-btn>
           </v-btn-group>
         </div>
@@ -256,12 +342,20 @@ code.sub-command-code {
 <style>
 /* 冲突行高亮 */
 .v-data-table .conflict-row {
-  background: linear-gradient(90deg, rgba(var(--v-theme-warning), 0.15) 0%, rgba(var(--v-theme-warning), 0.05) 100%) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--v-theme-warning), 0.15) 0%,
+    rgba(var(--v-theme-warning), 0.05) 100%
+  ) !important;
   border-left: 3px solid rgb(var(--v-theme-warning)) !important;
 }
 
 .v-data-table .conflict-row:hover {
-  background: linear-gradient(90deg, rgba(var(--v-theme-warning), 0.25) 0%, rgba(var(--v-theme-warning), 0.1) 100%) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--v-theme-warning), 0.25) 0%,
+    rgba(var(--v-theme-warning), 0.1) 100%
+  ) !important;
 }
 
 /* 指令组行样式 */
@@ -286,4 +380,3 @@ code.sub-command-code {
   cursor: pointer;
 }
 </style>
-

@@ -35,11 +35,7 @@
           @keyup.enter="confirm"
         ></v-text-field>
         <div class="d-flex justify-end ga-2 mt-4">
-          <v-btn
-            variant="text"
-            :disabled="saving"
-            @click="onCancel"
-          >
+          <v-btn variant="text" :disabled="saving" @click="onCancel">
             {{ tm('system_group.system.dashboard.totp.configSaveCancel') }}
           </v-btn>
           <v-btn
@@ -58,53 +54,53 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { ref } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   errorMessage: {
     type: String,
-    default: ''
+    default: '',
   },
   saving: {
     type: Boolean,
-    default: false
+    default: false,
   },
   rotationHint: {
     type: String,
-    default: ''
-  }
-})
+    default: '',
+  },
+});
 
-const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(['update:modelValue', 'confirm', 'cancel']);
+const { tm } = useModuleI18n('features/config-metadata');
 
-const code = ref('')
+const code = ref('');
 
 function resetState() {
-  code.value = ''
+  code.value = '';
 }
 
 function onVisibilityChange(val) {
   if (!val) {
-    resetState()
+    resetState();
   }
-  emit('update:modelValue', val)
+  emit('update:modelValue', val);
 }
 
 function onCancel() {
-  resetState()
-  emit('cancel')
-  emit('update:modelValue', false)
+  resetState();
+  emit('cancel');
+  emit('update:modelValue', false);
 }
 
 function confirm() {
-  if (!code.value) return
-  emit('confirm', code.value)
+  if (!code.value) return;
+  emit('confirm', code.value);
 }
 </script>
 

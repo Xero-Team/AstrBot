@@ -51,7 +51,9 @@
             :class="{ 'mr-2': !isSidebarCollapsed }"
             >mdi-creation</v-icon
           >
-          <span v-if="!isSidebarCollapsed">{{ tm("actions.providerConfig") }}</span>
+          <span v-if="!isSidebarCollapsed">{{
+            tm('actions.providerConfig')
+          }}</span>
         </v-btn>
 
         <v-btn
@@ -67,7 +69,7 @@
             :class="{ 'mr-2': !isSidebarCollapsed }"
             >mdi-square-edit-outline</v-icon
           >
-          <span v-if="!isSidebarCollapsed">{{ tm("actions.newChat") }}</span>
+          <span v-if="!isSidebarCollapsed">{{ tm('actions.newChat') }}</span>
         </v-btn>
 
         <ProjectList
@@ -86,7 +88,10 @@
           v-for="session in sessions"
           :key="session.session_id"
           class="session-item"
-          :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
+          :class="{
+            active:
+              !isProviderWorkspace && currSessionId === session.session_id,
+          }"
           role="button"
           tabindex="0"
           @click="selectSession(session.session_id)"
@@ -127,7 +132,7 @@
           v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
           class="empty-sessions"
         >
-          {{ tm("conversation.noHistory") }}
+          {{ tm('conversation.noHistory') }}
         </div>
       </div>
 
@@ -152,7 +157,7 @@
                 >mdi-cog-outline</v-icon
               >
               <span v-if="!isSidebarCollapsed">{{
-                t("core.common.settings")
+                t('core.common.settings')
               }}</span>
             </v-btn>
           </template>
@@ -174,7 +179,7 @@
                     <v-icon size="18">mdi-connection</v-icon>
                   </template>
                   <v-list-item-title>{{
-                    tm("transport.title")
+                    tm('transport.title')
                   }}</v-list-item-title>
                   <template #append>
                     <span class="settings-menu-value">{{
@@ -226,7 +231,7 @@
                     <v-icon size="18">mdi-translate</v-icon>
                   </template>
                   <v-list-item-title>{{
-                    t("core.common.language")
+                    t('core.common.language')
                   }}</v-list-item-title>
                   <template #append>
                     <span class="settings-menu-value">{{
@@ -270,11 +275,11 @@
             >
               <template #prepend>
                 <v-icon size="18">{{
-                  isDark ? "mdi-white-balance-sunny" : "mdi-weather-night"
+                  isDark ? 'mdi-white-balance-sunny' : 'mdi-weather-night'
                 }}</v-icon>
               </template>
               <v-list-item-title>{{
-                isDark ? tm("modes.lightMode") : tm("modes.darkMode")
+                isDark ? tm('modes.lightMode') : tm('modes.darkMode')
               }}</v-list-item-title>
             </v-list-item>
           </div>
@@ -285,8 +290,11 @@
     <main
       class="chat-main"
       :class="{
-        'empty-chat': !isProviderWorkspace &&
-          !selectedProject && !loadingMessages && !activeMessages.length,
+        'empty-chat':
+          !isProviderWorkspace &&
+          !selectedProject &&
+          !loadingMessages &&
+          !activeMessages.length,
       }"
     >
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
@@ -353,7 +361,7 @@
           </div>
 
           <div v-else-if="!activeMessages.length" class="welcome-state">
-            <div class="welcome-title">{{ tm("welcome.title") }}</div>
+            <div class="welcome-title">{{ tm('welcome.title') }}</div>
           </div>
 
           <div
@@ -434,7 +442,7 @@
         type="button"
         @click="createThreadFromSelection"
       >
-        {{ tm("thread.askInThread") }}
+        {{ tm('thread.askInThread') }}
       </button>
     </div>
 
@@ -446,7 +454,7 @@
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
       <v-card>
         <v-card-title class="text-h6">
-          {{ tm("conversation.editDisplayName") }}
+          {{ tm('conversation.editDisplayName') }}
         </v-card-title>
         <v-card-text>
           <v-text-field
@@ -462,14 +470,14 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="sessionTitleDialogOpen = false">
-            {{ t("core.common.cancel") }}
+            {{ t('core.common.cancel') }}
           </v-btn>
           <v-btn
             color="primary"
             :loading="savingSessionTitle"
             @click="saveSessionTitleDialog"
           >
-            {{ t("core.common.save") }}
+            {{ t('core.common.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -500,24 +508,24 @@ import {
   reactive,
   ref,
   watch,
-} from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useDisplay } from "vuetify";
-import { isAxiosError } from "axios";
-import { chatApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
+} from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useDisplay } from 'vuetify';
+import { isAxiosError } from 'axios';
+import { chatApi } from '@/api/v1';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
 import ProjectDialog, {
   type ProjectFormData,
-} from "@/components/chat/ProjectDialog.vue";
-import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
-import ProjectView from "@/components/chat/ProjectView.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
-import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
-import ThreadPanel from "@/components/chat/ThreadPanel.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+} from '@/components/chat/ProjectDialog.vue';
+import ProjectList, { type Project } from '@/components/chat/ProjectList.vue';
+import ProjectView from '@/components/chat/ProjectView.vue';
+import ChatInput from '@/components/chat/ChatInput.vue';
+import ChatMessageList from '@/components/chat/ChatMessageList.vue';
+import type { RegenerateModelSelection } from '@/components/chat/RegenerateMenu.vue';
+import ReasoningSidebar from '@/components/chat/ReasoningSidebar.vue';
+import ThreadPanel from '@/components/chat/ThreadPanel.vue';
+import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
+import { useSessions, type Session } from '@/composables/useSessions';
 import {
   messageBlocks as buildMessageBlocks,
   useMessages,
@@ -525,32 +533,35 @@ import {
   type ChatThread,
   type MessagePart,
   type TransportMode,
-} from "@/composables/useMessages";
-import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
-import { useProjects } from "@/composables/useProjects";
-import { useCustomizerStore } from "@/stores/customizer";
-import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
+} from '@/composables/useMessages';
+import { useMediaHandling } from '@/composables/useMediaHandling';
+import { useRecording } from '@/composables/useRecording';
+import { useProjects } from '@/composables/useProjects';
+import { useCustomizerStore } from '@/stores/customizer';
+import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
 import {
   useI18n,
   useLanguageSwitcher,
   useModuleI18n,
-} from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
-import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import { useToast } from "@/utils/toast";
+} from '@/i18n/composables';
+import type { Locale } from '@/i18n/types';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
+import { useToast } from '@/utils/toast';
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
-  chatboxMode: false,
-  active: true,
-});
+const props = withDefaults(
+  defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
+  {
+    chatboxMode: false,
+    active: true,
+  },
+);
 
 const route = useRoute();
 const router = useRouter();
 const { lgAndUp } = useDisplay();
 const customizer = useCustomizerStore();
 const { t } = useI18n();
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
 const { languageOptions, currentLanguage, switchLanguage, locale } =
@@ -590,23 +601,23 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-type WorkspaceView = "chat" | "providers";
+type WorkspaceView = 'chat' | 'providers';
 
 const sidebarCollapsed = ref(false);
-const activeWorkspace = ref<WorkspaceView>("chat");
+const activeWorkspace = ref<WorkspaceView>('chat');
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
 const sessionTitleDialogOpen = ref(false);
-const sessionTitleDraft = ref("");
-const editingSessionTitleId = ref("");
+const sessionTitleDraft = ref('');
+const editingSessionTitleId = ref('');
 const refreshProjectSessionsAfterTitleSave = ref(false);
 const savingSessionTitle = ref(false);
-const messageEditDraft = ref("");
+const messageEditDraft = ref('');
 const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
-const draft = ref("");
+const draft = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
@@ -632,10 +643,10 @@ const threadSelection = reactive<{
   left: 0,
   top: 0,
   message: null,
-  selectedText: "",
+  selectedText: '',
 });
 const enableStreaming = ref(true);
-const sendShortcut = ref<"enter" | "shift_enter">("enter");
+const sendShortcut = ref<'enter' | 'shift_enter'>('enter');
 const {
   isRecording,
   startRecording: startRecorder,
@@ -653,15 +664,15 @@ const isSidebarCollapsed = computed(() =>
   lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
 );
 const isProviderWorkspace = computed(
-  () => activeWorkspace.value === "providers",
+  () => activeWorkspace.value === 'providers',
 );
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
   const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
+    activeReasoningTarget.value.message.content || { type: 'bot', message: [] },
   );
   const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
+  return block?.kind === 'thinking' ? block.parts : [];
 });
 
 watch(reasoningPanelOpen, (open) => {
@@ -697,26 +708,26 @@ const {
 });
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
+    ? 'websocket'
+    : 'sse',
 );
 const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
-  { value: "sse", labelKey: "transport.sse" },
-  { value: "websocket", labelKey: "transport.websocket" },
+  { value: 'sse', labelKey: 'transport.sse' },
+  { value: 'websocket', labelKey: 'transport.websocket' },
 ];
 const currentTransportLabel = computed(() =>
   tm(
     transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
+      ?.labelKey || 'transport.sse',
   ),
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
+  localStorage.setItem('chat.transportMode', mode);
 });
 
-const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
+const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
 const canSend = computed(
   () =>
     Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
@@ -735,7 +746,7 @@ const sessionProject = computed(() =>
   currSessionId.value ? sessionProjects[currSessionId.value] : null,
 );
 const currentSessionTitle = computed(() =>
-  currentSession.value ? sessionTitle(currentSession.value) : "",
+  currentSession.value ? sessionTitle(currentSession.value) : '',
 );
 const selectedProject = computed(
   () =>
@@ -748,19 +759,19 @@ const chatInputReplyTarget = computed(() =>
     ? null
     : {
         messageId: replyTarget.value.id,
-        selectedText: replyPreview(replyTarget.value.id, ""),
+        selectedText: replyPreview(replyTarget.value.id, ''),
       },
 );
 
-provide("isDark", isDark);
+provide('isDark', isDark);
 
 onMounted(async () => {
   loadingSessions.value = true;
   try {
     await Promise.all([getSessions(), getProjects()]);
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
+    if (routeSessionId === 'models') {
+      activeWorkspace.value = 'providers';
     } else if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
@@ -777,8 +788,8 @@ watch(
   () => route.params.conversationId,
   async () => {
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
+    if (routeSessionId === 'models') {
+      activeWorkspace.value = 'providers';
       return;
     }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
@@ -787,7 +798,7 @@ watch(
       await selectSession(routeSessionId, false);
     } else if (!routeSessionId && currSessionId.value) {
       showChatWorkspace();
-      currSessionId.value = "";
+      currSessionId.value = '';
     }
   },
 );
@@ -800,11 +811,11 @@ watch(activeMessages, () => {
 
 function getRouteSessionId() {
   const raw = route.params.conversationId;
-  return Array.isArray(raw) ? raw[0] : raw || "";
+  return Array.isArray(raw) ? raw[0] : raw || '';
 }
 
 function basePath() {
-  return props.chatboxMode ? "/chatbox" : "/chat";
+  return props.chatboxMode ? '/chatbox' : '/chat';
 }
 
 function closeMobileSidebar() {
@@ -824,12 +835,12 @@ function closeSecondaryPanels() {
 }
 
 function showChatWorkspace() {
-  activeWorkspace.value = "chat";
+  activeWorkspace.value = 'chat';
 }
 
 async function openProviderWorkspace() {
   closeSecondaryPanels();
-  activeWorkspace.value = "providers";
+  activeWorkspace.value = 'providers';
   const targetPath = `${basePath()}/models`;
   if (route.path !== targetPath) {
     await router.push(targetPath);
@@ -838,7 +849,7 @@ async function openProviderWorkspace() {
 }
 
 function sessionTitle(session: Session) {
-  return session.display_name?.trim() || tm("conversation.newConversation");
+  return session.display_name?.trim() || tm('conversation.newConversation');
 }
 
 async function startNewChat() {
@@ -863,7 +874,7 @@ function openEditProjectDialog(project: Project) {
 async function selectProject(projectId: string) {
   showChatWorkspace();
   selectedProjectId.value = projectId;
-  currSessionId.value = "";
+  currSessionId.value = '';
   replyTarget.value = null;
   await router.push(basePath());
   await loadProjectSessions(projectId);
@@ -924,12 +935,12 @@ async function saveSessionTitleDialog() {
 }
 
 function editSidebarSessionTitle(session: Session) {
-  openSessionTitleDialog(session.session_id, session.display_name || "");
+  openSessionTitleDialog(session.session_id, session.display_name || '');
 }
 
 async function deleteSidebarSession(session: Session) {
   const title = sessionTitle(session);
-  const message = tm("conversation.confirmDelete", { name: title });
+  const message = tm('conversation.confirmDelete', { name: title });
   if (!(await askForConfirmation(message, confirmDialog))) return;
 
   const wasCurrent = currSessionId.value === session.session_id;
@@ -1019,7 +1030,7 @@ async function sendCurrentMessage() {
     });
     updateTitleFromText(sessionId, text);
 
-    draft.value = "";
+    draft.value = '';
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
     scrollToBottom();
@@ -1030,13 +1041,13 @@ async function sendCurrentMessage() {
       parts: outgoingParts,
       transport: transportMode.value,
       enableStreaming: enableStreaming.value,
-      selectedProvider: selection?.providerId || "",
-      selectedModel: selection?.modelName || "",
+      selectedProvider: selection?.providerId || '',
+      selectedModel: selection?.modelName || '',
       userRecord,
       botRecord,
     });
   } catch (error) {
-    console.error("Failed to send message:", error);
+    console.error('Failed to send message:', error);
   } finally {
     sending.value = false;
     await focusChatInput();
@@ -1047,13 +1058,13 @@ function buildOutgoingParts(text: string): MessagePart[] {
   const parts: MessagePart[] = [];
   if (replyTarget.value?.id !== null && replyTarget.value?.id !== undefined) {
     parts.push({
-      type: "reply",
+      type: 'reply',
       message_id: replyTarget.value.id,
-      selected_text: "",
+      selected_text: '',
     });
   }
   if (text) {
-    parts.push({ type: "plain", text });
+    parts.push({ type: 'plain', text });
   }
   stagedFiles.value.forEach((file) => {
     parts.push({
@@ -1077,15 +1088,15 @@ function replyPreview(messageId?: string | number, fallback?: string) {
   const found = activeMessages.value.find(
     (message) => String(message.id) === String(messageId),
   );
-  const text = found ? plainTextFromMessage(found) : "";
-  return text ? truncate(text, 80) : tm("reply.replyTo");
+  const text = found ? plainTextFromMessage(found) : '';
+  return text ? truncate(text, 80) : tm('reply.replyTo');
 }
 
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
-    .filter((part) => part.type === "plain" && part.text)
+    .filter((part) => part.type === 'plain' && part.text)
     .map((part) => part.text)
-    .join("\n");
+    .join('\n');
 }
 
 function truncate(value: string, max: number) {
@@ -1098,19 +1109,21 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  const rows = messagesContainer.value?.querySelectorAll(".message-row");
-  rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const rows = messagesContainer.value?.querySelectorAll('.message-row');
+  rows?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function openMessageEdit(message: ChatRecord) {
   messageEditDraft.value = plainTextFromMessage(message);
   editingMessage.value = message;
-  void nextTick(() => { scrollToMessage(message.id); });
+  void nextTick(() => {
+    scrollToMessage(message.id);
+  });
 }
 
 function cancelMessageEdit() {
   editingMessage.value = null;
-  messageEditDraft.value = "";
+  messageEditDraft.value = '';
 }
 
 async function saveMessageEdit() {
@@ -1131,8 +1144,8 @@ async function saveMessageEdit() {
         sessionId: currSessionId.value,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
-        selectedProvider: selection?.providerId || "",
-        selectedModel: selection?.modelName || "",
+        selectedProvider: selection?.providerId || '',
+        selectedModel: selection?.modelName || '',
       });
       scrollToBottom();
     } else if (result.needsRegenerate) {
@@ -1147,7 +1160,7 @@ async function saveMessageEdit() {
       }
     }
   } catch (error) {
-    console.error("Failed to edit message:", error);
+    console.error('Failed to edit message:', error);
   } finally {
     savingMessageEdit.value = false;
   }
@@ -1162,8 +1175,8 @@ async function handleRegenerateMessage(
   await regenerateMessage(
     currSessionId.value,
     message,
-    selection?.providerId || "",
-    selection?.modelName || "",
+    selection?.providerId || '',
+    selection?.modelName || '',
   );
 }
 
@@ -1171,13 +1184,13 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
   if (
     message.id === null ||
     message.id === undefined ||
-    String(message.id).startsWith("local-")
+    String(message.id).startsWith('local-')
   )
     return;
   const container = event.currentTarget as HTMLElement | null;
   window.setTimeout(() => {
     const selection = window.getSelection();
-    const selectedText = selection?.toString().trim() || "";
+    const selectedText = selection?.toString().trim() || '';
     if (!selection || !selectedText) {
       threadSelection.visible = false;
       return;
@@ -1205,20 +1218,21 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
+  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
+    return;
   try {
     const response = await chatApi.createThread({
       session_id: currSessionId.value,
       parent_message_id: message.id,
       selected_text: threadSelection.selectedText,
     });
-    if (response.data?.status !== "ok") {
-      toast.error(response.data?.message || tm("thread.createFailed"));
+    if (response.data?.status !== 'ok') {
+      toast.error(response.data?.message || tm('thread.createFailed'));
       return;
     }
     const thread = response.data?.data as ChatThread | undefined;
     if (!thread) {
-      toast.error(tm("thread.createFailed"));
+      toast.error(tm('thread.createFailed'));
       return;
     }
     message.threads = message.threads || [];
@@ -1231,9 +1245,9 @@ async function createThreadFromSelection() {
     toast.error(
       isAxiosError(error)
         ? error.response?.data?.message || error.message
-        : tm("thread.createFailed"),
+        : tm('thread.createFailed'),
     );
-    console.error("Failed to create thread:", error);
+    console.error('Failed to create thread:', error);
   } finally {
     threadSelection.visible = false;
   }
@@ -1253,7 +1267,7 @@ function openRefsSidebar(refs: unknown) {
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   selectedRefs.value =
-    refs && typeof refs === "object"
+    refs && typeof refs === 'object'
       ? (refs as Record<string, unknown>)
       : undefined;
   refsSidebarOpen.value = true;
@@ -1273,7 +1287,8 @@ function openReasoningPanel(payload: {
 
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
-  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
+  if (!(await askForConfirmation(tm('thread.confirmDelete'), confirmDialog)))
+    return;
   deletingThread.value = true;
   try {
     await chatApi.deleteThread(thread.thread_id);
@@ -1283,7 +1298,7 @@ async function deleteThread(thread: ChatThread) {
       activeThread.value = null;
     }
   } catch (error) {
-    console.error("Failed to delete thread:", error);
+    console.error('Failed to delete thread:', error);
   } finally {
     deletingThread.value = false;
   }
@@ -1301,7 +1316,7 @@ function removeThreadFromMessages(threadId: string) {
 async function handleFilesSelected(files: FileList) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
-    if (file.type.startsWith("image/")) {
+    if (file.type.startsWith('image/')) {
       await processAndUploadImage(file);
     } else {
       await processAndUploadFile(file);
@@ -1317,8 +1332,8 @@ async function startRecording() {
   try {
     await startRecorder();
   } catch (error) {
-    console.error("Failed to start recording:", error);
-    toast.error(tm("voice.error"));
+    console.error('Failed to start recording:', error);
+    toast.error(tm('voice.error'));
   }
 }
 
@@ -1327,11 +1342,11 @@ async function stopRecording() {
     const audioFile = await stopRecorder();
     const uploaded = await processAndUploadFile(audioFile);
     if (!uploaded) {
-      toast.error(tm("voice.error"));
+      toast.error(tm('voice.error'));
     }
   } catch (error) {
-    console.error("Failed to stop recording:", error);
-    toast.error(tm("voice.error"));
+    console.error('Failed to stop recording:', error);
+    toast.error(tm('voice.error'));
   }
 }
 
@@ -1365,12 +1380,12 @@ async function stopCurrentSession() {
   try {
     await stopSession(currSessionId.value);
   } catch (error) {
-    console.error("Failed to stop session:", error);
+    console.error('Failed to stop session:', error);
   }
 }
 
 function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
+  customizer.SET_UI_THEME(isDark.value ? 'PurpleTheme' : 'PurpleThemeDark');
 }
 </script>
 
@@ -1391,13 +1406,13 @@ function toggleTheme() {
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    'Segoe UI',
     Roboto,
     Oxygen,
     Ubuntu,
     Cantarell,
-    "Open Sans",
-    "Helvetica Neue",
+    'Open Sans',
+    'Helvetica Neue',
     sans-serif;
 }
 
@@ -1726,7 +1741,7 @@ function toggleTheme() {
 }
 
 .composer-shell::before {
-  content: "";
+  content: '';
   position: absolute;
   z-index: -1;
   left: 0;
@@ -1761,20 +1776,20 @@ kbd {
 }
 
 :deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  opacity: 0.5;
+  border-top-width: 0.3px;
 }
 
 :deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
+  margin: 0.5rem 0;
+  line-height: 1.7;
 }
 
 :deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 @media (max-width: 760px) {

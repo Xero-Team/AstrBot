@@ -86,9 +86,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv lock \
     && uv export --format requirements.txt --output-file requirements.txt --frozen \
     && uv pip install -r requirements.txt --no-cache-dir --system \
-    && uv pip install socksio pilk --no-cache-dir --system \
-    && uv tool install --force ruff \
-    && uv tool install --force mypy
+    && uv pip install socksio pilk --no-cache-dir --system
 
 RUN mkdir -p /etc/profile.d \
     && cat <<'EOF' >/etc/profile.d/astrbot-dev-tools.sh

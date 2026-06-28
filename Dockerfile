@@ -10,6 +10,7 @@ ENV UV_INSTALL_DIR=/usr/local/bin \
     CARGO_HOME=/usr/local/cargo \
     RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:${PATH} \
+    XDG_BIN_HOME=/usr/local/bin \
     UV_LINK_MODE=copy
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -35,6 +36,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     git \
     gh \
+    fzf \
+    zsh \
+    shellcheck \
     zip \
     unzip \
     tree \
@@ -60,11 +64,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable \
     && cargo --version \
-    && cargo install --locked \
+    && tmpdir="$(mktemp -d)" \
+    && curl -L --proto '=https' --tlsv1.2 -sSf \
+        https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz \
+        | tar -C "$tmpdir" -xzf - \
+    && install -m 0755 "$tmpdir/cargo-binstall" /usr/local/cargo/bin/cargo-binstall \
+    && rm -rf "$tmpdir" \
+    && cargo binstall --no-confirm \
         git-delta \
         du-dust \
         procs \
-        bandwhich \
         tokei \
         hyperfine \
         sd \
@@ -77,7 +86,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv lock \
     && uv export --format requirements.txt --output-file requirements.txt --frozen \
     && uv pip install -r requirements.txt --no-cache-dir --system \
-    && uv pip install socksio pilk --no-cache-dir --system
+    && uv pip install socksio pilk --no-cache-dir --system \
+    && uv tool install --force ruff \
+    && uv tool install --force mypy
 
 RUN mkdir -p /etc/profile.d \
     && cat <<'EOF' >/etc/profile.d/astrbot-dev-tools.sh

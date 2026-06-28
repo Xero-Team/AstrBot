@@ -20,6 +20,7 @@ venv/
 # IDEs and editors
 .vscode/
 .idea/
+.zed/
 
 # Operating system files
 .DS_Store

@@ -71,3 +71,5 @@ dashboard/bun.lock
 *.log
 napcat/
 ntqq/
+
+.make/

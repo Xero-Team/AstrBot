@@ -368,6 +368,20 @@ def detect_image_mime_type(
     return IMAGE_FORMAT_MIME_TYPES.get(image_format, default_mime_type)
 
 
+async def detect_image_mime_type_async(
+    image_bytes: bytes,
+    *,
+    default_mime_type: str | None = "image/jpeg",
+) -> str | None:
+    """Detect an image MIME type without blocking the event loop."""
+
+    return await asyncio.to_thread(
+        detect_image_mime_type,
+        image_bytes,
+        default_mime_type=default_mime_type,
+    )
+
+
 def _guess_mime_type(path: Path, fallback: str | None = None) -> str | None:
     """Guess a MIME type from a filename, with an optional fallback."""
     return mimetypes.guess_type(path.name)[0] or fallback

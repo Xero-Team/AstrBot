@@ -118,6 +118,8 @@ class FakeLlmTools:
         self.disabled_servers: list[str] = []
         self.tested_configs: list[dict] = []
         self.synced_modelscope_tokens: list[str] = []
+        self.activated_tools: list[str] = []
+        self.deactivated_tools: list[str] = []
 
     def load_mcp_config(self) -> dict:
         return copy.deepcopy(self.config)
@@ -151,10 +153,13 @@ class FakeLlmTools:
     def is_builtin_tool(self, _tool_name: str) -> bool:
         return False
 
-    def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
+    async def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
+        _ = star_map
+        self.activated_tools.append(_tool_name)
         return True
 
-    def deactivate_llm_tool(self, _tool_name: str) -> bool:
+    async def deactivate_llm_tool(self, _tool_name: str) -> bool:
+        self.deactivated_tools.append(_tool_name)
         return True
 
 
@@ -169,6 +174,8 @@ class FakeProviderManager:
         self.stt_provider_insts: list[object] = []
         self.tts_provider_insts: list[object] = []
         self.set_provider_calls: list[dict] = []
+        self.cleared_provider_calls: list[dict] = []
+        self.cleared_all_provider_calls: list[str] = []
         self.llm_tools = FakeLlmTools()
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
@@ -254,6 +261,14 @@ class FakeProviderManager:
                 "umo": umo,
             }
         )
+
+    async def clear_provider_override(self, umo: str, provider_type) -> None:
+        self.cleared_provider_calls.append(
+            {"umo": umo, "provider_type": provider_type}
+        )
+
+    async def clear_all_provider_overrides(self, umo: str) -> None:
+        self.cleared_all_provider_calls.append(umo)
 
 
 class FakeProviderInstance:
@@ -662,7 +677,9 @@ def fake_core_lifecycle():
         astrbot_updator=FakeAstrBotUpdator(),
         start_time=1234567890,
         astrbot_config_mgr=SimpleNamespace(
-            confs={"default": config}, default_conf=config
+            confs={"default": config},
+            default_conf=config,
+            get_conf_list=lambda: [{"id": "default", "name": "default"}],
         ),
         reload_pipeline_scheduler=reload_pipeline_scheduler,
         reloaded_config_ids=reloaded_config_ids,
@@ -1544,12 +1561,12 @@ async def test_plugin_service_market_install_uses_registry_entry(
         plugin_info,
         payload,
         *,
-        fallback_method,
+        install_method,
         repo_url,
         download_url,
     ):
         captured["persist_payload"] = payload
-        captured["persist_fallback_method"] = fallback_method
+        captured["persist_install_method"] = install_method
         captured["persist_repo_url"] = repo_url
         captured["persist_download_url"] = download_url
 
@@ -1594,7 +1611,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
     assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
     assert captured["proxy"] == "https://proxy.example"
     assert captured["ignore_version_check"] is True
-    assert captured["persist_fallback_method"] == "github"
+    assert captured["persist_install_method"] == "market"
     assert (
         captured["persist_repo_url"]
         == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
@@ -2062,7 +2079,7 @@ async def test_plugin_service_persist_install_source_resolves_registry_before_re
             "install_method": "market",
             "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
         },
-        fallback_method="url",
+        install_method="market",
         repo_url="https://github.com/AstrBotDevs/astrbot-plugin-demo",
         download_url="",
     )
@@ -2076,7 +2093,7 @@ async def test_plugin_service_persist_install_source_resolves_registry_before_re
     assert record["registry_name"] == "Custom"
 
 
-def test_plugin_service_missing_install_source_is_implicit_for_display(
+def test_plugin_service_missing_install_source_returns_none(
     asgi_app: FastAPI,
 ):
     plugin_service = asgi_app.state.services.plugins
@@ -2089,13 +2106,7 @@ def test_plugin_service_missing_install_source_is_implicit_for_display(
 
     record = plugin_service.resolve_effective_plugin_install_source(plugin, {})
 
-    assert record["install_method"] == "market"
-    assert record["registry_url"] is None
-    assert record["registry_name"] == "Default"
-    assert record["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-    assert record["implicit"] is True
-    assert record["name"] == "astrbot_plugin_demo"
-    assert record["marketplace_name"] == "astrbot-plugin-demo"
+    assert record is None
 
 
 @pytest.mark.asyncio
@@ -2551,6 +2562,168 @@ async def test_v1_mcp_scope_accepts_api_key(
     data = response.json()
     assert data["status"] == "ok"
     assert any(server["name"] == "demo-server" for server in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_v1_tool_toggle_uses_async_manager(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    headers = _jwt_headers()
+
+    activate_response = await asgi_client.patch(
+        "/api/v1/tools/demo-tool/enabled",
+        json={"enabled": True},
+        headers=headers,
+    )
+    deactivate_response = await asgi_client.patch(
+        "/api/v1/tools/demo-tool/enabled",
+        json={"enabled": False},
+        headers=headers,
+    )
+
+    assert activate_response.status_code == 200
+    assert deactivate_response.status_code == 200
+    assert fake_tools.activated_tools == ["demo-tool"]
+    assert fake_tools.deactivated_tools == ["demo-tool"]
+
+
+@pytest.mark.asyncio
+async def test_v1_session_groups_use_async_shared_preferences(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store: dict[str, dict] = {}
+
+    async def fake_global_get(key: str, default=None):
+        return store.get(key, default)
+
+    async def fake_global_put(key: str, value):
+        store[key] = copy.deepcopy(value)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.session_management_service.sp.global_get",
+        fake_global_get,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.session_management_service.sp.global_put",
+        fake_global_put,
+    )
+
+    headers = _jwt_headers()
+    create_response = await asgi_client.post(
+        "/api/v1/session-groups",
+        json={"name": "Ops", "umos": ["umo-1"]},
+        headers=headers,
+    )
+    assert create_response.status_code == 200
+    group_id = create_response.json()["data"]["group"]["id"]
+
+    list_response = await asgi_client.get("/api/v1/session-groups", headers=headers)
+    update_response = await asgi_client.put(
+        f"/api/v1/session-groups/{group_id}",
+        json={"add_umos": ["umo-2"]},
+        headers=headers,
+    )
+    delete_response = await asgi_client.delete(
+        f"/api/v1/session-groups/{group_id}",
+        headers=headers,
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["groups"] == [
+        {
+            "id": group_id,
+            "name": "Ops",
+            "umos": ["umo-1"],
+            "umo_count": 1,
+        }
+    ]
+    assert update_response.status_code == 200
+    assert set(update_response.json()["data"]["group"]["umos"]) == {"umo-1", "umo-2"}
+    assert delete_response.status_code == 200
+    assert store["session_groups"] == {}
+
+
+@pytest.mark.asyncio
+async def test_v1_batch_session_service_uses_async_shared_preferences(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = {
+        ("umo-1", "session_service_config"): {"llm_enabled": True, "tts_enabled": True}
+    }
+
+    async def fake_session_get(umo: str, key: str, default=None):
+        return copy.deepcopy(store.get((umo, key), default))
+
+    async def fake_session_put(umo: str, key: str, value):
+        store[(umo, key)] = copy.deepcopy(value)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.session_management_service.sp.session_get",
+        fake_session_get,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.session_management_service.sp.session_put",
+        fake_session_put,
+    )
+
+    response = await asgi_client.patch(
+        "/api/v1/sessions/service",
+        json={"umos": ["umo-1"], "llm_enabled": False, "session_enabled": False},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["success_count"] == 1
+    assert store[("umo-1", "session_service_config")] == {
+        "llm_enabled": False,
+        "tts_enabled": True,
+        "session_enabled": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_session_provider_rule_uses_provider_manager_cache_path(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/sessions/rules",
+        json={
+            "umo": "umo-1",
+            "rule_key": "provider_perf_chat_completion",
+            "rule_value": "gpt-mini",
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert len(fake_core_lifecycle.provider_manager.set_provider_calls) == 1
+    call = fake_core_lifecycle.provider_manager.set_provider_calls[0]
+    assert call["provider_id"] == "gpt-mini"
+    assert call["umo"] == "umo-1"
+    assert getattr(call["provider_type"], "value", None) == "chat_completion"
+
+
+@pytest.mark.asyncio
+async def test_v1_delete_session_provider_rule_clears_provider_manager_cache_path(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/sessions/rules/delete",
+        json={"umo": "umo-1", "rule_key": "provider_perf_chat_completion"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert len(fake_core_lifecycle.provider_manager.cleared_provider_calls) == 1
+    call = fake_core_lifecycle.provider_manager.cleared_provider_calls[0]
+    assert call["umo"] == "umo-1"
+    assert getattr(call["provider_type"], "value", None) == "chat_completion"
 
 
 @pytest.mark.asyncio

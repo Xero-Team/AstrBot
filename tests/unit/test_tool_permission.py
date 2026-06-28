@@ -1,5 +1,6 @@
 """Tests for per-tool permission management."""
 
+import asyncio
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,8 +12,6 @@ from astrbot.core.provider.func_tool_manager import (
     _PermissionGuardedTool,
 )
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
-
-# ── helpers ──────────────────────────────────────────────────────────
 
 
 def _make_context(role: str = "member", sender_id: str = "user_123"):
@@ -51,20 +50,17 @@ def _dummy_tool(name: str = "test_tool") -> FunctionTool:
 
 
 def _clear_tool_permissions() -> None:
-    sp.put("tool_permissions", {}, scope="global", scope_id="global")
+    asyncio.run(sp.global_put("tool_permissions", {}))
+
+
+async def _clear_tool_permissions_async() -> None:
+    await sp.global_put("tool_permissions", {})
 
 
 def _make_tools_service(
     tool_mgr: FunctionToolManager | None = None,
 ) -> ToolsService:
-    """Create a minimal tools service for permission unit tests.
-
-    Args:
-        tool_mgr: Optional tool manager to attach to the service.
-
-    Returns:
-        A ToolsService with mocked lifecycle config access.
-    """
+    """Create a minimal tools service for permission unit tests."""
     service = ToolsService.__new__(ToolsService)
     service.core_lifecycle = MagicMock()
     service.core_lifecycle.astrbot_config_mgr = MagicMock()
@@ -74,108 +70,92 @@ def _make_tools_service(
     return service
 
 
-# ── _default_permission ──────────────────────────────────────────────
-
-
-def test_default_permission_is_member():
+def test_default_permission_is_admin():
     mgr = FunctionToolManager()
-    assert mgr._default_permission("any_mcp_tool") == "member"
-
-
-# ── _check_tool_permission ───────────────────────────────────────────
+    assert mgr._default_permission("any_mcp_tool") == "admin"
 
 
 @pytest.mark.asyncio
-async def test_check_permission_passes_when_no_config():
-    _clear_tool_permissions()
+async def test_check_permission_denies_member_when_no_config():
+    await _clear_tool_permissions_async()
     mgr = FunctionToolManager()
     context = _make_context(role="member")
 
-    error = mgr._check_tool_permission("no_such_tool", context)
-    assert error is None
+    error = await mgr._check_tool_permission("no_such_tool", context)
+    assert error is not None
+    assert "Permission denied" in error
 
 
 @pytest.mark.asyncio
 async def test_check_permission_passes_for_admin_with_admin_tool():
-    sp.put(
+    await sp.global_put(
         "tool_permissions",
         {"_default": {"dangerous_tool": "admin"}},
-        scope="global",
-        scope_id="global",
     )
     try:
         mgr = FunctionToolManager()
         context = _make_context(role="admin", sender_id="admin_001")
-        error = mgr._check_tool_permission("dangerous_tool", context)
+        error = await mgr._check_tool_permission("dangerous_tool", context)
         assert error is None
     finally:
-        _clear_tool_permissions()
+        await _clear_tool_permissions_async()
 
 
 @pytest.mark.asyncio
 async def test_check_permission_denies_member_for_admin_tool():
-    sp.put(
+    await sp.global_put(
         "tool_permissions",
         {"_default": {"dangerous_tool": "admin"}},
-        scope="global",
-        scope_id="global",
     )
     try:
         mgr = FunctionToolManager()
         context = _make_context(role="member", sender_id="user_999")
-        error = mgr._check_tool_permission("dangerous_tool", context)
+        error = await mgr._check_tool_permission("dangerous_tool", context)
         assert error is not None
         assert "dangerous_tool" in str(error)
         assert "admin" in str(error).lower()
         assert "user_999" in str(error)
     finally:
-        _clear_tool_permissions()
+        await _clear_tool_permissions_async()
 
 
 @pytest.mark.asyncio
 async def test_check_permission_denies_when_no_event():
-    sp.put(
+    await sp.global_put(
         "tool_permissions",
         {"_default": {"dangerous_tool": "admin"}},
-        scope="global",
-        scope_id="global",
     )
     try:
         mgr = FunctionToolManager()
 
         class FakeWrapper:
-            pass  # no .context.event
+            pass
 
-        error = mgr._check_tool_permission("dangerous_tool", FakeWrapper())
+        error = await mgr._check_tool_permission("dangerous_tool", FakeWrapper())
         assert error is not None
         assert "admin" in str(error).lower()
     finally:
-        _clear_tool_permissions()
+        await _clear_tool_permissions_async()
 
 
 @pytest.mark.asyncio
 async def test_check_permission_passes_for_member_when_configured_member():
-    sp.put(
+    await sp.global_put(
         "tool_permissions",
         {"_default": {"safe_tool": "member"}},
-        scope="global",
-        scope_id="global",
     )
     try:
         mgr = FunctionToolManager()
         context = _make_context(role="member")
-        error = mgr._check_tool_permission("safe_tool", context)
+        error = await mgr._check_tool_permission("safe_tool", context)
         assert error is None
     finally:
-        _clear_tool_permissions()
-
-
-# ── _PermissionGuardedTool ───────────────────────────────────────────
+        await _clear_tool_permissions_async()
 
 
 @pytest.mark.asyncio
 async def test_guarded_tool_delegates_handler_with_event_when_permission_passes():
-    _clear_tool_permissions()
+    await sp.global_put("tool_permissions", {"_default": {"delegated": "member"}})
     mgr = FunctionToolManager()
 
     called = False
@@ -205,11 +185,9 @@ async def test_guarded_tool_delegates_handler_with_event_when_permission_passes(
 
 @pytest.mark.asyncio
 async def test_guarded_tool_blocks_when_permission_denied():
-    sp.put(
+    await sp.global_put(
         "tool_permissions",
         {"_default": {"blocked_tool": "admin"}},
-        scope="global",
-        scope_id="global",
     )
     try:
         mgr = FunctionToolManager()
@@ -234,12 +212,12 @@ async def test_guarded_tool_blocks_when_permission_denied():
         assert isinstance(result, str)
         assert "Permission denied" in result
     finally:
-        _clear_tool_permissions()
+        await _clear_tool_permissions_async()
 
 
 @pytest.mark.asyncio
 async def test_guarded_tool_delegates_to_wrapped_call():
-    _clear_tool_permissions()
+    await sp.global_put("tool_permissions", {"_default": {"has_call": "member"}})
     mgr = FunctionToolManager()
 
     class CallableTool(FunctionTool):
@@ -259,8 +237,8 @@ async def test_guarded_tool_delegates_to_wrapped_call():
 
 
 @pytest.mark.asyncio
-async def test_guarded_tool_delegates_to_wrapped_run():
-    _clear_tool_permissions()
+async def test_guarded_tool_rejects_legacy_run_only_tools():
+    await sp.global_put("tool_permissions", {"_default": {"has_run": "member"}})
     mgr = FunctionToolManager()
 
     class RunnableTool(FunctionTool):
@@ -276,12 +254,12 @@ async def test_guarded_tool_delegates_to_wrapped_run():
     context = _make_context(sender_id="runner")
 
     result = await guarded.call(context, value="ok")
-    assert result == "from run(): runner ok"
+    assert result == "error: tool has no callable handler"
 
 
 @pytest.mark.asyncio
 async def test_guarded_tool_handles_async_generator_handler():
-    _clear_tool_permissions()
+    await sp.global_put("tool_permissions", {"_default": {"gen_tool": "member"}})
     mgr = FunctionToolManager()
 
     async def gen_handler(event, **kw):  # type: ignore[misc]
@@ -300,22 +278,15 @@ async def test_guarded_tool_handles_async_generator_handler():
     context = _make_context()
 
     result = await guarded.call(context)
-    # should return the last yielded value
     assert result == "C"
 
 
-# ── get_full_tool_set ────────────────────────────────────────────────
-
-
 def test_get_full_tool_set_excludes_builtin_tools():
-    """Builtin tools are added separately by astr_main_agent.py, not through
-    get_full_tool_set()."""
+    """Builtin tools are added separately by astr_main_agent.py, not here."""
     mgr = FunctionToolManager()
     tool_set = mgr.get_full_tool_set()
 
     names = {t.name for t in tool_set.tools}
-    # Builtin tools are injected individually by the agent builder —
-    # they must NOT appear in the generic tool set.
     assert "astrbot_execute_shell" not in names
 
 
@@ -328,39 +299,43 @@ def test_get_full_tool_set_wraps_non_builtin():
 
     plugin_tools = [t for t in tool_set.tools if t.name == "my_plugin_tool"]
     assert plugin_tools
-    assert isinstance(plugin_tools[0], _PermissionGuardedTool), (
-        "non-builtin tools must be wrapped"
-    )
-
-
-# ── API: get_tool_list permission fields ──────────────────────────────
+    assert isinstance(plugin_tools[0], _PermissionGuardedTool)
 
 
 class TestGetToolListPermission:
     @pytest.mark.asyncio
     async def test_list_includes_permission_fields_for_non_builtin(self):
         service = _make_tools_service()
-        sp.put(
+        await sp.global_put(
             "tool_permissions",
             {"_default": {"my_plugin_tool": "admin"}},
-            scope="global",
-            scope_id="global",
         )
         try:
             service.tool_mgr.func_list.append(_dummy_tool("my_plugin_tool"))
-            tools = service.get_tool_list()
+            tools = await service.get_tool_list()
 
             target = next(t for t in tools if t["name"] == "my_plugin_tool")
             assert target["permission"] == "admin"
             assert target["permission_configured"] is True
             assert target["readonly"] is False
         finally:
-            _clear_tool_permissions()
+            await _clear_tool_permissions_async()
+
+    @pytest.mark.asyncio
+    async def test_list_defaults_non_builtin_permission_to_admin(self):
+        service = _make_tools_service()
+        service.tool_mgr.func_list.append(_dummy_tool("my_plugin_tool"))
+
+        tools = await service.get_tool_list()
+
+        target = next(t for t in tools if t["name"] == "my_plugin_tool")
+        assert target["permission"] == "admin"
+        assert target["permission_configured"] is False
 
     @pytest.mark.asyncio
     async def test_list_no_permission_fields_for_builtin(self):
         service = _make_tools_service()
-        tools = service.get_tool_list()
+        tools = await service.get_tool_list()
 
         target = next(t for t in tools if t["name"] == "astrbot_execute_shell")
         assert "permission" not in target
@@ -368,22 +343,19 @@ class TestGetToolListPermission:
         assert target["readonly"] is True
 
 
-# ── API: update_tool_permission ──────────────────────────────────────
-
-
 class TestUpdateToolPermission:
     @pytest.mark.asyncio
     async def test_set_admin_permission(self):
         service = _make_tools_service()
         service.tool_mgr.func_list.append(_dummy_tool("target_tool"))
-        _clear_tool_permissions()
+        await _clear_tool_permissions_async()
 
-        message = service.update_tool_permission(
+        message = await service.update_tool_permission(
             {"name": "target_tool", "permission": "admin"}
         )
         assert "target_tool" in message
 
-        stored = sp.get("tool_permissions", {}, scope="global", scope_id="global")
+        stored = await sp.global_get("tool_permissions", {})
         assert stored["_default"]["target_tool"] == "admin"
 
     @pytest.mark.asyncio
@@ -391,7 +363,7 @@ class TestUpdateToolPermission:
         service = _make_tools_service()
 
         with pytest.raises(ToolsServiceError, match="Builtin"):
-            service.update_tool_permission(
+            await service.update_tool_permission(
                 {"name": "astrbot_execute_shell", "permission": "admin"}
             )
 
@@ -400,7 +372,7 @@ class TestUpdateToolPermission:
         service = _make_tools_service()
 
         with pytest.raises(ToolsServiceError, match="not found"):
-            service.update_tool_permission(
+            await service.update_tool_permission(
                 {"name": "ghost_tool", "permission": "admin"}
             )
 
@@ -410,6 +382,6 @@ class TestUpdateToolPermission:
         service.tool_mgr.func_list.append(_dummy_tool("target_tool"))
 
         with pytest.raises(ToolsServiceError, match="admin or member"):
-            service.update_tool_permission(
+            await service.update_tool_permission(
                 {"name": "target_tool", "permission": "everyone"}
             )

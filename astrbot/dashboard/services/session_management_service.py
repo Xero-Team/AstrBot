@@ -52,6 +52,16 @@ class SessionManagementService:
             or ":friendmessage:" in umo_lower
         )
 
+    @staticmethod
+    def _provider_type_from_rule_key(rule_key: str) -> ProviderType | None:
+        prefix = "provider_perf_"
+        if not rule_key.startswith(prefix):
+            return None
+        try:
+            return ProviderType(rule_key.removeprefix(prefix))
+        except ValueError:
+            return None
+
     async def list_known_umos(self) -> list[str]:
         async with self.db_helper.get_db() as session:
             session: AsyncSession
@@ -89,7 +99,7 @@ class SessionManagementService:
         if scope == "custom_group":
             if not group_id:
                 raise SessionManagementServiceError("请指定分组 ID")
-            groups = self.get_groups()
+            groups = await self.get_groups()
             if group_id not in groups:
                 raise SessionManagementServiceError(f"分组 '{group_id}' 不存在")
             return groups[group_id].get("umos", [])
@@ -256,7 +266,19 @@ class SessionManagementService:
         if rule_key == "session_plugin_config":
             rule_value = {umo: rule_value}
 
-        await sp.session_put(umo, rule_key, rule_value)
+        provider_type = self._provider_type_from_rule_key(rule_key)
+        if provider_type is not None:
+            if not isinstance(rule_value, str) or not rule_value:
+                raise SessionManagementServiceError(
+                    f"规则 {rule_key} 需要非空 provider_id"
+                )
+            await self.core_lifecycle.provider_manager.set_provider(
+                provider_id=rule_value,
+                provider_type=provider_type,
+                umo=umo,
+            )
+        else:
+            await sp.session_put(umo, rule_key, rule_value)
         return {"message": f"规则 {rule_key} 已更新", "umo": umo}
 
     async def delete_session_rule(self, data: object) -> dict:
@@ -270,9 +292,17 @@ class SessionManagementService:
         if rule_key:
             if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
                 raise SessionManagementServiceError(f"不支持的规则键: {rule_key}")
-            await sp.session_remove(umo, rule_key)
+            provider_type = self._provider_type_from_rule_key(rule_key)
+            if provider_type is not None:
+                await self.core_lifecycle.provider_manager.clear_provider_override(
+                    umo,
+                    provider_type,
+                )
+            else:
+                await sp.session_remove(umo, rule_key)
             return {"message": f"规则 {rule_key} 已删除", "umo": umo}
 
+        await self.core_lifecycle.provider_manager.clear_all_provider_overrides(umo)
         await sp.clear_async("umo", umo)
         return {"message": "所有规则已删除", "umo": umo}
 
@@ -304,8 +334,18 @@ class SessionManagementService:
         for umo in umos:
             try:
                 if rule_key:
-                    await sp.session_remove(umo, rule_key)
+                    provider_type = self._provider_type_from_rule_key(rule_key)
+                    if provider_type is not None:
+                        await self.core_lifecycle.provider_manager.clear_provider_override(
+                            umo,
+                            provider_type,
+                        )
+                    else:
+                        await sp.session_remove(umo, rule_key)
                 else:
+                    await self.core_lifecycle.provider_manager.clear_all_provider_overrides(
+                        umo
+                    )
                     await sp.clear_async("umo", umo)
                 success_count += 1
             except Exception as exc:
@@ -456,10 +496,9 @@ class SessionManagementService:
 
         for umo in umos:
             try:
-                session_config = (
-                    sp.get("session_service_config", {}, scope="umo", scope_id=umo)
-                    or {}
-                )
+                session_config = await sp.session_get(umo, "session_service_config", {})
+                if not isinstance(session_config, dict):
+                    session_config = {}
 
                 if llm_enabled is not None:
                     session_config["llm_enabled"] = llm_enabled
@@ -468,12 +507,7 @@ class SessionManagementService:
                 if session_enabled is not None:
                     session_config["session_enabled"] = session_enabled
 
-                sp.put(
-                    "session_service_config",
-                    session_config,
-                    scope="umo",
-                    scope_id=umo,
-                )
+                await sp.session_put(umo, "session_service_config", session_config)
                 success_count += 1
             except Exception as exc:
                 logger.error(f"更新 {umo} 服务状态失败: {exc!s}")
@@ -546,14 +580,15 @@ class SessionManagementService:
             "failed_umos": failed_umos,
         }
 
-    def get_groups(self) -> dict:
-        return sp.get("session_groups", {})
+    async def get_groups(self) -> dict:
+        groups = await sp.global_get("session_groups", {})
+        return groups if isinstance(groups, dict) else {}
 
-    def save_groups(self, groups: dict) -> None:
-        sp.put("session_groups", groups)
+    async def save_groups(self, groups: dict) -> None:
+        await sp.global_put("session_groups", groups)
 
-    def list_groups(self) -> dict:
-        groups = self.get_groups()
+    async def list_groups(self) -> dict:
+        groups = await self.get_groups()
         return {
             "groups": [
                 {
@@ -566,7 +601,7 @@ class SessionManagementService:
             ]
         }
 
-    def create_group(self, data: object) -> dict:
+    async def create_group(self, data: object) -> dict:
         payload = self._payload(data)
         name = str(payload.get("name", "")).strip()
         umos = payload.get("umos", [])
@@ -574,13 +609,13 @@ class SessionManagementService:
         if not name:
             raise SessionManagementServiceError("分组名称不能为空")
 
-        groups = self.get_groups()
+        groups = await self.get_groups()
         group_id = str(uuid.uuid4())[:8]
         groups[group_id] = {
             "name": name,
             "umos": umos,
         }
-        self.save_groups(groups)
+        await self.save_groups(groups)
 
         return {
             "message": f"分组 '{name}' 创建成功",
@@ -592,7 +627,7 @@ class SessionManagementService:
             },
         }
 
-    def update_group(self, data: object) -> dict:
+    async def update_group(self, data: object) -> dict:
         payload = self._payload(data)
         group_id = payload.get("id") or payload.get("group_id")
         name = payload.get("name")
@@ -603,7 +638,7 @@ class SessionManagementService:
         if not group_id:
             raise SessionManagementServiceError("分组 ID 不能为空")
 
-        groups = self.get_groups()
+        groups = await self.get_groups()
         if group_id not in groups:
             raise SessionManagementServiceError(f"分组 '{group_id}' 不存在")
 
@@ -621,7 +656,7 @@ class SessionManagementService:
                 current_umos.difference_update(remove_umos)
             group["umos"] = list(current_umos)
 
-        self.save_groups(groups)
+        await self.save_groups(groups)
 
         return {
             "message": f"分组 '{group['name']}' 更新成功",
@@ -633,20 +668,20 @@ class SessionManagementService:
             },
         }
 
-    def delete_group(self, data: object) -> dict:
+    async def delete_group(self, data: object) -> dict:
         payload = self._payload(data)
         group_id = payload.get("id") or payload.get("group_id")
 
         if not group_id:
             raise SessionManagementServiceError("分组 ID 不能为空")
 
-        groups = self.get_groups()
+        groups = await self.get_groups()
         if group_id not in groups:
             raise SessionManagementServiceError(f"分组 '{group_id}' 不存在")
 
         group_name = groups[group_id].get("name", group_id)
         del groups[group_id]
-        self.save_groups(groups)
+        await self.save_groups(groups)
         return {"message": f"分组 '{group_name}' 已删除"}
 
     @staticmethod

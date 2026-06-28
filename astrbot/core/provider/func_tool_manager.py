@@ -227,7 +227,7 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
 
@@ -235,7 +235,7 @@ class _PermissionGuardedTool(FunctionTool):
         if self._wrapped.handler is not None:
             event = context.context.event
             result = self._wrapped.handler(event, **kwargs)
-            if _inspect.isasyncgen(result):
+            if isinstance(result, AsyncGenerator):
                 last: Any = None
                 async for item in result:
                     last = item
@@ -248,20 +248,6 @@ class _PermissionGuardedTool(FunctionTool):
         call_override = getattr(type(self._wrapped), "call", None)
         if call_override is not None and call_override is not FunctionTool.call:
             return await self._wrapped.call(context, **kwargs)
-
-        # Compatibility fallback: if the tool has a "run" method, invoke it. This is for legacy tools that don't use the new handler/call interface.
-        run = getattr(self._wrapped, "run", None)
-        if run is not None:
-            event = context.context.event
-            result = run(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
 
         return "error: tool has no callable handler"
 
@@ -416,11 +402,12 @@ class FunctionToolManager:
     def _default_permission(self, tool_name: str) -> str:
         """Compute the fallback permission for a non-builtin tool.
 
-        All non-builtin tools default to ``"member"`` (no restriction).
+        All non-builtin tools default to ``"admin"``.
         Builtin tools are never routed through this method."""
-        return "member"
+        del tool_name
+        return "admin"
 
-    def _check_tool_permission(
+    async def _check_tool_permission(
         self,
         tool_name: str,
         context: Any,
@@ -432,9 +419,7 @@ class FunctionToolManager:
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
         try:
-            perms_raw = sp.get(
-                "tool_permissions", {}, scope="global", scope_id="global"
-            )
+            perms_raw = await sp.global_get("tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
@@ -443,7 +428,7 @@ class FunctionToolManager:
             effective = self._default_permission(tool_name)
 
         if effective != "admin":
-            return None  # member or unknown → pass
+            return None
 
         try:
             event = context.context.event
@@ -560,7 +545,7 @@ class FunctionToolManager:
                     name=name,
                     cfg=cfg,
                     shutdown_event=shutdown_event,
-                    timeout=init_timeout,
+                    timeout_seconds=init_timeout,
                 ),
                 name=f"mcp-init:{name}",
             )
@@ -660,6 +645,8 @@ class FunctionToolManager:
                 await self._terminate_mcp_client(name)
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
+        if mcp_client is None:
+            raise RuntimeError(f"MCP client {name} was not initialized")
         async with self._runtime_lock:
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
@@ -916,7 +903,7 @@ class FunctionToolManager:
         toolset = ToolSet(tools)
         return toolset.google_schema()
 
-    def deactivate_llm_tool(self, name: str) -> bool:
+    async def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
         Returns:
@@ -927,26 +914,16 @@ class FunctionToolManager:
         if func_tool is not None:
             func_tool.active = False
 
-            inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools",
-                [],
-                scope="global",
-                scope_id="global",
-            )
+            inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
             if name not in inactivated_llm_tools:
                 inactivated_llm_tools.append(name)
-                sp.put(
-                    "inactivated_llm_tools",
-                    inactivated_llm_tools,
-                    scope="global",
-                    scope_id="global",
-                )
+                await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
             return True
         return False
 
     # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
-    def activate_llm_tool(self, name: str, star_map: dict) -> bool:
+    async def activate_llm_tool(self, name: str, star_map: dict) -> bool:
         func_tool = self.get_tool(name)
         if func_tool is not None:
             if func_tool.handler_module_path in star_map:
@@ -957,20 +934,10 @@ class FunctionToolManager:
 
             func_tool.active = True
 
-            inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools",
-                [],
-                scope="global",
-                scope_id="global",
-            )
+            inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
-                sp.put(
-                    "inactivated_llm_tools",
-                    inactivated_llm_tools,
-                    scope="global",
-                    scope_id="global",
-                )
+                await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
             return True
         return False

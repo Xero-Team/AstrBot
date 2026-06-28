@@ -178,7 +178,7 @@ async def list_session_groups(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.list_groups())
+        return ok(await service.list_groups())
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -192,7 +192,7 @@ async def create_session_group(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.create_group(payload.model_dump(exclude_none=True)))
+        return ok(await service.create_group(payload.model_dump(exclude_none=True)))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -208,7 +208,7 @@ async def update_session_group(
 ):
     try:
         body = payload.model_dump(exclude_none=True)
-        return ok(service.update_group({"group_id": group_id, **body}))
+        return ok(await service.update_group({"group_id": group_id, **body}))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -222,7 +222,7 @@ async def delete_session_group(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.delete_group({"group_id": group_id}))
+        return ok(await service.delete_group({"group_id": group_id}))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:

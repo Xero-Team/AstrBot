@@ -342,7 +342,7 @@ class Context:
         """获取 LLM Tool Manager，其用于管理注册的所有的 Function-calling tools"""
         return self.provider_manager.llm_tools
 
-    def activate_llm_tool(self, name: str) -> bool:
+    async def activate_llm_tool(self, name: str) -> bool:
         """激活一个已经注册的函数调用工具。
 
         Args:
@@ -354,9 +354,9 @@ class Context:
         Note:
             注册的工具默认是激活状态。
         """
-        return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
+        return await self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
 
-    def deactivate_llm_tool(self, name: str) -> bool:
+    async def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
         Args:
@@ -365,7 +365,7 @@ class Context:
         Returns:
             如果成功停用返回 True，如果没找到工具返回 False。
         """
-        return self.provider_manager.llm_tools.deactivate_llm_tool(name)
+        return await self.provider_manager.llm_tools.deactivate_llm_tool(name)
 
     def get_provider_by_id(
         self,

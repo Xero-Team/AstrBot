@@ -48,6 +48,7 @@ from astrbot.dashboard.services.update_service import (
     call_pip_install,
 )
 
+from .public_routes import router as public_routes_router
 from .router import API_V1_PREFIX, build_api_router
 from .static_files import router as static_files_router
 
@@ -131,5 +132,6 @@ def create_dashboard_asgi_app(
         return JSONResponse(error(detail), status_code=exc.status_code)
 
     app.include_router(build_api_router())
+    app.include_router(public_routes_router)
     app.include_router(static_files_router)
     return app

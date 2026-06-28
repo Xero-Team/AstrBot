@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import cmp_to_key
 from pathlib import Path
+from typing import Any
 
 import aiohttp
 import psutil
@@ -233,7 +234,7 @@ class StatService:
                     }
                 )
 
-            stat_dict = {"platform": grouped_platform}
+            stat_dict: dict[str, Any] = {"platform": grouped_platform}
 
             cpu_percent = psutil.cpu_percent(interval=0.5)
             thread_count = threading.active_count()

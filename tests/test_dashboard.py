@@ -2,6 +2,7 @@ import asyncio
 import copy
 import io
 import os
+import re
 import shutil
 import sys
 import uuid
@@ -9,6 +10,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import pyotp
 import pytest
@@ -63,6 +65,11 @@ def _assert_cookie_samesite_strict(cookie_header: str) -> None:
         cookie_header: The raw Set-Cookie header value to inspect.
     """
     assert "samesite=strict" in cookie_header.lower()
+
+
+def _strip_query(url: str) -> str:
+    parts = urlsplit(url)
+    return parts.path
 
 
 async def _wait_for_update_progress(
@@ -286,7 +293,7 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     assert server.data_path == str(bundled_dist)
 
 
-def test_dashboard_falls_back_to_mismatched_data_dist_without_bundled(
+def test_dashboard_ignores_mismatched_data_dist_without_bundled(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
     tmp_path,
@@ -310,7 +317,7 @@ def test_dashboard_falls_back_to_mismatched_data_dist_without_bundled(
     shutdown_event = asyncio.Event()
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
 
-    assert server.data_path == str(user_dist)
+    assert server.data_path is None
 
 
 def test_dashboard_ignores_incomplete_mismatched_data_dist_without_bundled(

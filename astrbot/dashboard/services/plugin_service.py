@@ -308,13 +308,11 @@ class PluginService:
     @staticmethod
     def get_market_plugin_id(
         data: dict[str, Any] | None,
-        fallback_name: str | None = None,
     ) -> str:
         """Return a marketplace plugin ID from explicit fields or author/name.
 
         Args:
             data: Marketplace entry or persisted source record.
-            fallback_name: Marketplace root key to use as name for legacy entries.
 
         Returns:
             The marketplace plugin ID, or an empty string.
@@ -326,9 +324,6 @@ class PluginService:
             return market_plugin_id
         author_name = str(data.get("author") or "").strip()
         plugin_name = str(data.get("name") or "").strip()
-        fallback_name = str(fallback_name or "").strip()
-        if not plugin_name and fallback_name and "/" not in fallback_name:
-            plugin_name = fallback_name
         if author_name and plugin_name:
             return f"{author_name}/{plugin_name}"
         return ""
@@ -372,9 +367,9 @@ class PluginService:
         Returns:
             The source record when one is available.
         """
-        for key in (plugin.root_dir_name, plugin.name):
-            if key and isinstance(records.get(key), dict):
-                return records[key]
+        key = plugin.root_dir_name
+        if key and isinstance(records.get(key), dict):
+            return records[key]
         return None
 
     def resolve_effective_plugin_install_source(
@@ -389,29 +384,10 @@ class PluginService:
             records: Persisted source records.
 
         Returns:
-            The persisted source record, an implicit display-only source record, or None.
+            The persisted source record or None.
         """
         record = self.resolve_plugin_install_source(plugin, records)
-        if isinstance(record, dict):
-            return record
-        if plugin.reserved:
-            return None
-
-        plugin_name = str(plugin.name or "").strip()
-        implicit_record = {
-            "schema_version": 1,
-            "root_dir_name": plugin.root_dir_name,
-            "install_method": "market",
-            "registry_url": None,
-            "registry_name": PLUGIN_DEFAULT_REGISTRY_NAME,
-            "repo": str(plugin.repo or "").strip(),
-            "download_url": "",
-            "implicit": True,
-        }
-        if plugin_name:
-            implicit_record["name"] = plugin_name
-            implicit_record["marketplace_name"] = plugin_name.replace("_", "-")
-        return implicit_record
+        return record if isinstance(record, dict) else None
 
     def find_plugin_by_name(self, plugin_name: str | None) -> StarMetadata | None:
         """Find a loaded plugin by metadata name.
@@ -497,7 +473,7 @@ class PluginService:
         plugin: StarMetadata,
         payload: dict[str, Any],
         *,
-        fallback_method: str,
+        install_method: str,
         repo_url: str,
         download_url: str,
         registry_name: str,
@@ -507,7 +483,7 @@ class PluginService:
         Args:
             plugin: Loaded plugin metadata after installation.
             payload: Installation request payload.
-            fallback_method: Method to use when the request did not declare one.
+            install_method: Canonical install method for the stored record.
             repo_url: Repository URL used for installation.
             download_url: Download URL used for installation.
             registry_name: Resolved registry display name.
@@ -515,10 +491,9 @@ class PluginService:
         Returns:
             A serializable installation source record.
         """
-        requested_method = str(payload.get("install_method") or "").strip().lower()
-        install_method = requested_method or fallback_method
-        if install_method != "market":
-            install_method = fallback_method
+        install_method = install_method.strip().lower()
+        if install_method not in {"market", "github", "upload", "url"}:
+            raise ValueError(f"Unsupported install method: {install_method}")
 
         record = {
             "schema_version": 1,
@@ -544,7 +519,7 @@ class PluginService:
         plugin_info: dict[str, Any] | None,
         payload: dict[str, Any],
         *,
-        fallback_method: str,
+        install_method: str,
         repo_url: str,
         download_url: str,
     ) -> None:
@@ -553,7 +528,7 @@ class PluginService:
         Args:
             plugin_info: Plugin information returned by PluginManager.
             payload: Installation request payload.
-            fallback_method: Method to use for non-market installs.
+            install_method: Canonical install method for persistence.
             repo_url: Repository URL used for installation.
             download_url: Download URL used for installation.
         """
@@ -570,7 +545,7 @@ class PluginService:
         records[plugin.root_dir_name] = self.build_install_source_record(
             plugin,
             payload,
-            fallback_method=fallback_method,
+            install_method=install_method,
             repo_url=repo_url,
             download_url=download_url,
             registry_name=registry_name,
@@ -649,6 +624,7 @@ class PluginService:
         plugin: StarMetadata,
     ) -> list[dict]:
         components = [
+            *self.get_plugin_page_components(plugin),
             *self.get_plugin_skill_components(plugin),
             *await self.get_plugin_handler_components(plugin.star_handler_full_names),
         ]
@@ -656,6 +632,36 @@ class PluginService:
             components,
             key=lambda item: PLUGIN_COMPONENT_TYPE_ORDER.get(item["type"], 99),
         )
+
+    def get_plugin_page_components(self, plugin: StarMetadata) -> list[dict]:
+        plugin_dir_name = str(plugin.root_dir_name or plugin.name or "").strip()
+        if not plugin_dir_name:
+            return []
+
+        pages_root = (
+            Path(self.plugin_manager.plugin_store_path) / plugin_dir_name / "pages"
+        )
+        if not pages_root.is_dir():
+            return []
+
+        components: list[dict] = []
+        for page_dir in sorted(pages_root.iterdir()):
+            if not page_dir.is_dir() or not (page_dir / "index.html").is_file():
+                continue
+            page_name = page_dir.name
+            components.append(
+                {
+                    "type": "page",
+                    "name": page_name,
+                    "title": page_name,
+                    "page_name": page_name,
+                    "i18n_key": f"pages.{page_name}",
+                    "description": "Plugin Page entry",
+                    "plugin_name": str(plugin.name or ""),
+                    "plugin_marketplace_name": str(plugin.name or "").replace("_", "-"),
+                }
+            )
+        return components
 
     async def get_plugin_handler_components(
         self,
@@ -1004,7 +1010,10 @@ class PluginService:
     def build_registry_source(custom_url: str | None) -> RegistrySource:
         data_dir = get_astrbot_data_path()
         if custom_url:
-            url_hash = hashlib.md5(custom_url.encode()).hexdigest()[:8]
+            url_hash = hashlib.md5(
+                custom_url.encode(),
+                usedforsecurity=False,
+            ).hexdigest()[:8]
             cache_file = os.path.join(data_dir, f"plugins_custom_{url_hash}.json")
             md5_url = (
                 custom_url[:-5] + "-md5.json"
@@ -1131,7 +1140,7 @@ class PluginService:
                     entry = value
                     if "/" not in str(key) and not str(value.get("name") or "").strip():
                         entry = {**value, "name": str(key)}
-                    yield PluginService.get_market_plugin_id(entry, str(key)), entry
+                    yield PluginService.get_market_plugin_id(entry), entry
             return
         if isinstance(market_data, list):
             for value in market_data:
@@ -1278,7 +1287,7 @@ class PluginService:
             raise PluginServiceError("插件不存在")
         records = await self.get_plugin_install_sources()
         record = self.resolve_plugin_install_source(plugin, records)
-        if not isinstance(record, dict) or record.get("implicit"):
+        if not isinstance(record, dict):
             raise PluginServiceError(
                 PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
                 public_message=PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
@@ -1544,9 +1553,13 @@ class PluginService:
             await self.persist_plugin_install_source(
                 plugin_info,
                 payload,
-                fallback_method="github"
-                if self.repo_identifier_from_url(repo_url)
-                else "url",
+                install_method=(
+                    "market"
+                    if market_install_info
+                    else (
+                        "github" if self.repo_identifier_from_url(repo_url) else "url"
+                    )
+                ),
                 repo_url=repo_url,
                 download_url=download_url,
             )
@@ -1709,7 +1722,7 @@ class PluginService:
             await self.persist_plugin_install_source(
                 plugin_info,
                 {},
-                fallback_method="upload",
+                install_method="upload",
                 repo_url="",
                 download_url="",
             )

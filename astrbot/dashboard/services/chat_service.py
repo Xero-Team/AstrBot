@@ -588,7 +588,7 @@ class ChatService:
         await file.save(str(file_path))
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
-                file_path,
+                file_path.read_bytes(),
                 default_mime_type=None,
             )
             if detected_mime_type:

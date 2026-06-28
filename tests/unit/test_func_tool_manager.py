@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -25,18 +26,13 @@ def test_get_builtin_tool_by_class_returns_cached_instance():
 
 def test_builtin_tool_ignores_inactivated_llm_tools():
     manager = FunctionToolManager()
-    sp.put(
-        "inactivated_llm_tools",
-        ["send_message_to_user"],
-        scope="global",
-        scope_id="global",
-    )
+    asyncio.run(sp.global_put("inactivated_llm_tools", ["send_message_to_user"]))
 
     try:
         tool = manager.get_builtin_tool(SendMessageToUserTool)
         assert tool.active is True
     finally:
-        sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
+        asyncio.run(sp.global_put("inactivated_llm_tools", []))
 
 
 def test_computer_tools_are_registered_as_builtin_tools():

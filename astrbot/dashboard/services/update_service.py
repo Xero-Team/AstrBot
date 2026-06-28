@@ -6,7 +6,7 @@ import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from astrbot.core import DEMO_MODE as _DEMO_MODE
 from astrbot.core import logger
@@ -44,7 +44,7 @@ async def call_extract_dashboard(*args, **kwargs):
         return await extract_dashboard(*args, **kwargs)
     result = await asyncio.to_thread(extract_dashboard, *args, **kwargs)
     if inspect.isawaitable(result):
-        return await result
+        return await cast(Awaitable[Any], result)
     return result
 
 
@@ -53,7 +53,10 @@ async def call_get_dashboard_version(*args, **kwargs):
 
 
 async def call_pip_install(*args, **kwargs):
-    return await pip_installer.install(*args, **kwargs)
+    result = pip_installer.install(*args, **kwargs)
+    if inspect.isawaitable(result):
+        return await cast(Awaitable[Any], result)
+    return result
 
 
 @dataclass

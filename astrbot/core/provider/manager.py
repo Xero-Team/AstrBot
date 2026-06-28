@@ -77,6 +77,7 @@ class ProviderManager:
             Callable[[str, ProviderType, str | None], None]
         ] = []
         self._mcp_init_task: asyncio.Task | None = None
+        self._session_provider_overrides: dict[str, dict[ProviderType, str]] = {}
 
     def register_provider_change_hook(
         self,
@@ -121,6 +122,9 @@ class ProviderManager:
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
         if umo:
+            self._session_provider_overrides.setdefault(umo, {})[provider_type] = (
+                provider_id
+            )
             await sp.session_put(
                 umo,
                 f"provider_perf_{provider_type.value}",
@@ -172,6 +176,47 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
+    @staticmethod
+    def _provider_pref_key(provider_type: ProviderType) -> str:
+        return f"provider_perf_{provider_type.value}"
+
+    async def _load_session_provider_overrides(self) -> None:
+        overrides: dict[str, dict[ProviderType, str]] = {}
+        prefs = await sp.session_get(None, None)
+        for pref in prefs:
+            key = pref.key
+            if not isinstance(key, str) or not key.startswith("provider_perf_"):
+                continue
+            provider_value = (
+                pref.value.get("val") if isinstance(pref.value, dict) else None
+            )
+            if not isinstance(provider_value, str) or not provider_value:
+                continue
+            provider_type_value = key.removeprefix("provider_perf_")
+            try:
+                provider_type = ProviderType(provider_type_value)
+            except ValueError:
+                continue
+            overrides.setdefault(pref.scope_id, {})[provider_type] = provider_value
+        self._session_provider_overrides = overrides
+
+    async def clear_provider_override(
+        self,
+        umo: str,
+        provider_type: ProviderType,
+    ) -> None:
+        provider_overrides = self._session_provider_overrides.get(umo)
+        if provider_overrides is not None:
+            provider_overrides.pop(provider_type, None)
+            if not provider_overrides:
+                self._session_provider_overrides.pop(umo, None)
+        await sp.session_remove(umo, self._provider_pref_key(provider_type))
+
+    async def clear_all_provider_overrides(self, umo: str) -> None:
+        overrides = self._session_provider_overrides.pop(umo, {})
+        for provider_type in list(overrides):
+            await sp.session_remove(umo, self._provider_pref_key(provider_type))
+
     def get_using_provider(
         self, provider_type: ProviderType, umo=None
     ) -> Providers | None:
@@ -188,11 +233,8 @@ class ProviderManager:
         provider = None
         provider_id = None
         if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
+            provider_id = self._session_provider_overrides.get(umo, {}).get(
+                provider_type
             )
             if provider_id:
                 provider = self.inst_map.get(provider_id)
@@ -237,6 +279,7 @@ class ProviderManager:
         return provider
 
     async def initialize(self) -> None:
+        await self._load_session_provider_overrides()
         # 逐个初始化提供商
         for provider_config in self.providers_config:
             try:

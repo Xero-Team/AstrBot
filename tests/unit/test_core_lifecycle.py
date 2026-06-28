@@ -398,6 +398,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_astrbot_config_mgr = MagicMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
+        mock_astrbot_config_mgr.initialize = AsyncMock()
 
         mock_persona_mgr = MagicMock()
         mock_persona_mgr.initialize = AsyncMock()

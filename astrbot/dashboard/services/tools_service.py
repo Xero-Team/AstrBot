@@ -245,7 +245,7 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to test MCP connection: {exc!s}") from exc
 
-    def get_tool_list(self) -> list[dict]:
+    async def get_tool_list(self) -> list[dict]:
         try:
             tools = list(self.tool_mgr.func_list)
             existing_names = {tool.name for tool in tools}
@@ -254,15 +254,21 @@ class ToolsService:
                     tools.append(tool)
 
             config_entries = self._get_config_entries()
+            perms_store = await sp.global_get("tool_permissions", {})
+            defaults = (
+                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+            )
             tools_dict = []
             for tool in tools:
-                tools_dict.append(self._serialize_tool(tool, config_entries))
+                tools_dict.append(
+                    self._serialize_tool(tool, config_entries, defaults=defaults)
+                )
             return tools_dict
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
 
-    def update_tool_permission(self, data: Any) -> str:
+    async def update_tool_permission(self, data: Any) -> str:
         """Set a tool permission level.
 
         Args:
@@ -292,12 +298,7 @@ class ToolsService:
             if not any(t.name == tool_name for t in self.tool_mgr.func_list):
                 raise ToolsServiceError(f"Tool '{tool_name}' not found")
 
-            perms_store = sp.get(
-                "tool_permissions",
-                {},
-                scope="global",
-                scope_id="global",
-            )
+            perms_store = await sp.global_get("tool_permissions", {})
             if not isinstance(perms_store, dict):
                 perms_store = {}
             defaults = perms_store.get("_default", {})
@@ -305,12 +306,7 @@ class ToolsService:
                 defaults = {}
             defaults[tool_name] = permission
             perms_store["_default"] = defaults
-            sp.put(
-                "tool_permissions",
-                perms_store,
-                scope="global",
-                scope_id="global",
-            )
+            await sp.global_put("tool_permissions", perms_store)
 
             return f"Tool '{tool_name}' permission set to {permission}"
         except ToolsServiceError:
@@ -321,7 +317,7 @@ class ToolsService:
                 f"Failed to update tool permission: {exc!s}"
             ) from exc
 
-    def toggle_tool(self, data: Any) -> str:
+    async def toggle_tool(self, data: Any) -> str:
         try:
             tool_name = data.get("name")
             action = data.get("activate")
@@ -336,13 +332,16 @@ class ToolsService:
 
             if action:
                 try:
-                    ok = self.tool_mgr.activate_llm_tool(tool_name, star_map=star_map)
+                    ok = await self.tool_mgr.activate_llm_tool(
+                        tool_name,
+                        star_map=star_map,
+                    )
                 except ValueError as exc:
                     raise ToolsServiceError(
                         f"Failed to activate tool: {exc!s}"
                     ) from exc
             else:
-                ok = self.tool_mgr.deactivate_llm_tool(tool_name)
+                ok = await self.tool_mgr.deactivate_llm_tool(tool_name)
 
             if ok:
                 return "Operation successful."
@@ -525,7 +524,13 @@ class ToolsService:
             )
         return config_entries
 
-    def _serialize_tool(self, tool, config_entries: list[dict]) -> dict:
+    def _serialize_tool(
+        self,
+        tool,
+        config_entries: list[dict],
+        *,
+        defaults: dict[str, str],
+    ) -> dict:
         readonly = False
         builtin_config_statuses = []
         builtin_config_tags = []
@@ -563,17 +568,12 @@ class ToolsService:
             "builtin_config_tags": builtin_config_tags,
         }
         if not readonly:
-            perms_store = sp.get(
-                "tool_permissions",
-                {},
-                scope="global",
-                scope_id="global",
-            )
-            defaults = (
-                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
-            )
             configured = tool.name in defaults
-            permission = defaults[tool.name] if configured else "member"
+            permission = (
+                defaults[tool.name]
+                if configured
+                else self.tool_mgr._default_permission(tool.name)
+            )
             tool_info["permission"] = permission
             tool_info["permission_configured"] = configured
         return tool_info

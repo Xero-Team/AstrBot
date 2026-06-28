@@ -42,25 +42,23 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
-        self.abconf_data = None
-        self._load_all_configs()
+        self.abconf_data: dict[str, dict[str, str]] = {}
 
-    def _get_abconf_data(self) -> dict:
+    async def initialize(self) -> None:
+        await self._load_all_configs()
+
+    def _get_abconf_data(self) -> dict[str, dict[str, str]]:
         """获取所有的 abconf 数据"""
-        if self.abconf_data is None:
-            self.abconf_data = self.sp.get(
-                "abconf_mapping",
-                {},
-                scope="global",
-                scope_id="global",
-            )
         return self.abconf_data
 
-    def _load_all_configs(self) -> None:
+    async def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""
-        abconf_data = self._get_abconf_data()
+        loaded = await self.sp.global_get("abconf_mapping", {})
+        abconf_data = loaded if isinstance(loaded, dict) else {}
         self.abconf_data = abconf_data
         for uuid_, meta in abconf_data.items():
+            if not isinstance(meta, dict):
+                continue
             filename = meta["path"]
             conf_path = os.path.join(get_astrbot_config_path(), filename)
             if os.path.exists(conf_path):
@@ -100,25 +98,20 @@ class AstrBotConfigManager:
 
         return DEFAULT_CONFIG_CONF_INFO
 
-    def _save_conf_mapping(
+    async def _save_conf_mapping(
         self,
         abconf_path: str,
         abconf_id: str,
         abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        )
+        abconf_data = dict(self._get_abconf_data())
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "path": abconf_path,
             "name": random_word,
         }
-        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
+        await self.sp.global_put("abconf_mapping", abconf_data)
         self.abconf_data = abconf_data
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
@@ -160,7 +153,7 @@ class AstrBotConfigManager:
         conf_list.append(DEFAULT_CONFIG_CONF_INFO)
         return conf_list
 
-    def create_conf(
+    async def create_conf(
         self,
         config: dict = DEFAULT_CONFIG,
         name: str | None = None,
@@ -170,11 +163,11 @@ class AstrBotConfigManager:
         conf_path = os.path.join(get_astrbot_config_path(), conf_file_name)
         conf = AstrBotConfig(config_path=conf_path, default_config=config)
         conf.save_config()
-        self._save_conf_mapping(conf_file_name, conf_uuid, abconf_name=name)
+        await self._save_conf_mapping(conf_file_name, conf_uuid, abconf_name=name)
         self.confs[conf_uuid] = conf
         return conf_uuid
 
-    def delete_conf(self, conf_id: str) -> bool:
+    async def delete_conf(self, conf_id: str) -> bool:
         """删除指定配置文件
 
         Args:
@@ -191,12 +184,7 @@ class AstrBotConfigManager:
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        )
+        abconf_data = dict(self._get_abconf_data())
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
             return False
@@ -222,13 +210,13 @@ class AstrBotConfigManager:
 
         # 从映射中移除
         del abconf_data[conf_id]
-        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
+        await self.sp.global_put("abconf_mapping", abconf_data)
         self.abconf_data = abconf_data
 
         logger.info(f"成功删除配置文件 {conf_id}")
         return True
 
-    def update_conf_info(self, conf_id: str, name: str | None = None) -> bool:
+    async def update_conf_info(self, conf_id: str, name: str | None = None) -> bool:
         """更新配置文件信息
 
         Args:
@@ -242,12 +230,7 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        )
+        abconf_data = dict(self._get_abconf_data())
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
             return False
@@ -257,7 +240,7 @@ class AstrBotConfigManager:
             abconf_data[conf_id]["name"] = name
 
         # 保存更新
-        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
+        await self.sp.global_put("abconf_mapping", abconf_data)
         self.abconf_data = abconf_data
         logger.info(f"成功更新配置文件 {conf_id} 的信息")
         return True

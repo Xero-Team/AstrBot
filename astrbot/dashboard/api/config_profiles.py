@@ -115,7 +115,7 @@ async def rename_config_profile(
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
-    service.rename_profile(config_id, payload.name)
+    await service.rename_profile(config_id, payload.name)
     return ok(message="更新成功")
 
 
@@ -125,7 +125,7 @@ async def delete_config_profile(
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
-    service.delete_profile(config_id)
+    await service.delete_profile(config_id)
     return ok(message="删除成功")
 
 

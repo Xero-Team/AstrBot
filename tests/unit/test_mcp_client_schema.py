@@ -1,6 +1,10 @@
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from astrbot.core.agent import mcp_client as mcp_client_module
 from astrbot.core.agent.mcp_client import MCPTool, _normalize_mcp_input_schema
 
 
@@ -115,3 +119,71 @@ class TestMCPToolSchemaNormalization:
         assert tool.parameters["required"] == ["stock_code"]
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
+
+
+@pytest.mark.asyncio
+async def test_streamable_http_connection_uses_native_http_client_path(monkeypatch):
+    client = mcp_client_module.MCPClient()
+    session = MagicMock()
+    session.initialize = AsyncMock()
+
+    quick_test = AsyncMock(return_value=(True, ""))
+    monkeypatch.setattr(mcp_client_module, "_quick_test_mcp_connection", quick_test)
+
+    transport_calls: list[dict] = []
+
+    @asynccontextmanager
+    async def fake_streamable_http_client(
+        url: str,
+        *,
+        http_client,
+        terminate_on_close: bool = True,
+    ):
+        transport_calls.append(
+            {
+                "url": url,
+                "http_client": http_client,
+                "terminate_on_close": terminate_on_close,
+            }
+        )
+        yield ("read-stream", "write-stream", lambda: "session-id")
+
+    @asynccontextmanager
+    async def fake_client_session(*args, **kwargs):
+        assert args == ()
+        assert kwargs["read_stream"] == "read-stream"
+        assert kwargs["write_stream"] == "write-stream"
+        yield session
+
+    monkeypatch.setattr(
+        mcp_client_module,
+        "streamable_http_client",
+        fake_streamable_http_client,
+    )
+    monkeypatch.setattr(
+        mcp_client_module,
+        "mcp",
+        SimpleNamespace(ClientSession=fake_client_session),
+    )
+
+    await client.connect_to_server(
+        {
+            "url": "https://example.com/mcp",
+            "transport": "streamable_http",
+            "headers": {"X-Test": "1"},
+            "timeout": 12,
+            "sse_read_timeout": 34,
+            "session_read_timeout": 56,
+            "terminate_on_close": False,
+        },
+        "demo",
+    )
+
+    assert quick_test.await_count == 1
+    assert len(transport_calls) == 1
+    assert transport_calls[0]["url"] == "https://example.com/mcp"
+    assert transport_calls[0]["terminate_on_close"] is False
+    assert transport_calls[0]["http_client"].headers["x-test"] == "1"
+    session.initialize.assert_awaited_once()
+
+    await client.cleanup()

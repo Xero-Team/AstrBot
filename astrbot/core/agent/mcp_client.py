@@ -113,22 +113,16 @@ else:
     mcp = _mcp
     sse_client = _sse_client
 
-streamable_http_client_legacy = None
 streamable_http_client = None
 
 try:
     from mcp.client.streamable_http import (
-        streamablehttp_client as streamable_http_client_legacy,
+        streamable_http_client as streamable_http_client,
     )
 except ModuleNotFoundError, ImportError:
-    try:
-        from mcp.client.streamable_http import (
-            streamable_http_client as streamable_http_client,
-        )
-    except ModuleNotFoundError, ImportError:
-        logger.warning(
-            "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
-        )
+    logger.warning(
+        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+    )
 
 
 def _prepare_config(config: dict) -> dict:
@@ -485,17 +479,7 @@ class MCPClient:
             else:
                 timeout_seconds = cfg.get("timeout", 30)
                 sse_read_timeout_seconds = cfg.get("sse_read_timeout", 60 * 5)
-                if streamable_http_client_legacy:
-                    timeout = timedelta(seconds=timeout_seconds)
-                    sse_read_timeout = timedelta(seconds=sse_read_timeout_seconds)
-                    self._streams_context = streamable_http_client_legacy(
-                        url=cfg["url"],
-                        headers=cfg.get("headers", {}),
-                        timeout=timeout,
-                        sse_read_timeout=sse_read_timeout,
-                        terminate_on_close=cfg.get("terminate_on_close", True),
-                    )
-                elif streamable_http_client:
+                if streamable_http_client:
                     http_client = await self.exit_stack.enter_async_context(
                         httpx.AsyncClient(
                             headers=cfg.get("headers", {}),

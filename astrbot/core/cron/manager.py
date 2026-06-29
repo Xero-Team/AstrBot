@@ -17,7 +17,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:

@@ -398,25 +398,6 @@ class LLMResponse:
         else:
             self._completion_text = value
 
-    def to_openai_tool_calls(self) -> list[dict]:
-        """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
-        ret = []
-        for idx, tool_call_arg in enumerate(self.tools_call_args):
-            payload = {
-                "id": self.tools_call_ids[idx],
-                "function": {
-                    "name": self.tools_call_name[idx],
-                    "arguments": json.dumps(tool_call_arg),
-                },
-                "type": "function",
-            }
-            if self.tools_call_extra_content.get(self.tools_call_ids[idx]):
-                payload["extra_content"] = self.tools_call_extra_content[
-                    self.tools_call_ids[idx]
-                ]
-            ret.append(payload)
-        return ret
-
     def to_openai_to_calls_model(self) -> list[ToolCall]:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []

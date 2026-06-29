@@ -28,7 +28,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,

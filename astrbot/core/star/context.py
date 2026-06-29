@@ -3,8 +3,6 @@ from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
-from deprecated import deprecated
-
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
@@ -28,10 +26,6 @@ from astrbot.core.provider.provider import (
     RerankProvider,
     STTProvider,
     TTSProvider,
-)
-from astrbot.core.star.filter.platform_adapter_type import (
-    ADAPTER_NAME_2_TYPE,
-    PlatformAdapterType,
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
@@ -582,30 +576,6 @@ class Context:
     def get_event_queue(self) -> Queue:
         """获取事件队列。"""
         return self._event_queue
-
-    @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
-    def get_platform(self, platform_type: PlatformAdapterType | str) -> Platform | None:
-        """获取指定类型的平台适配器。
-
-        Args:
-            platform_type: 平台类型或平台名称。
-
-        Returns:
-            平台适配器实例，如果未找到则返回 None。
-
-        Note:
-            该方法已经过时，请使用 get_platform_inst 方法。(>= AstrBot v4.0.0)
-        """
-        for platform in self.platform_manager.platform_insts:
-            name = platform.meta().name
-            if isinstance(platform_type, str):
-                if name == platform_type:
-                    return platform
-            elif (
-                name in ADAPTER_NAME_2_TYPE
-                and ADAPTER_NAME_2_TYPE[name] & platform_type
-            ):
-                return platform
 
     def get_platform_inst(self, platform_id: str) -> Platform | None:
         """获取指定 ID 的平台适配器实例。

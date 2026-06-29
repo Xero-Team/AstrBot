@@ -1,1 +1,1 @@
-本页面已弃用，请参考 [Coze Agent 执行器](../agent-runners/coze.md)。
+本页面已迁移至 [Coze Agent 执行器](../agent-runners/coze.md)。

@@ -4,7 +4,7 @@
 
 ### 当管理面板打开时遇到 404 错误
 
-在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `AstrBot-vxxxxx-dashboard.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
+在 [release](https://github.com/BegoniaHe/AstrBot/releases) 页面下载管理面板 ZIP 资源，解压到 `AstrBot/data` 下，然后重启 AstrBot。如果还不行，再尝试重启电脑。
 
 ### 首次登录的默认账号和随机密码
 
@@ -13,7 +13,7 @@
 ```text
 [00:27:40.590] [Core] [INFO] [dashboard.server:523]:
  ✨✨✨
-  AstrBot v4.24.3 WebUI is ready
+  AstrBot vX.Y.Z WebUI is ready
 
    ➜  Local: http://localhost:6185
    ➜  Initial username: astrbot
@@ -23,7 +23,7 @@
 Set dashboard.host in data/cmd_config.json to enable remote access.
 ```
 
-其中的 `UiYVpZxnW8k22IWqf0ru5pOy` 就是默认密码。在使用默认密码登录后，会自动进入设置账户环节。
+其中的 `UiYVpZxnW8k22IWqf0ru5pOy` 只是这次启动打印出来的初始密码示例。在使用初始密码登录后，会自动进入设置账户环节。
 
 ### 管理面板的密码忘记了
 
@@ -105,12 +105,14 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 通过 AstrBot Launcher 安装的 AstrBot，data 目录在哪？
 
-如果是旧版本的 AstrBot Launcher（Powershell），data 目录就在 Launcher bat 脚本的同级目录下。
+AstrBot Launcher 属于外部工具，`data` 目录位置取决于你使用的 Launcher 实现。
 
-如果是新版本的 AstrBot Launcher（可视化），data 目录在家目录下的 `.astrbot_launcher` 目录下。
+当前常见的可视化 Launcher 一般会把数据放在家目录下的 `.astrbot_launcher` 目录中：
 
 - Windows: `C:\Users\你的用户名\.astrbot_launcher`
 - MacOS / Linux: `/Users/你的用户名/.astrbot_launcher` 或者 `/home/你的用户名/.astrbot_launcher`
+
+如果你使用的是其他外部 Launcher 变体，请以对应 Launcher 的说明或实际启动目录为准。
 
 ### 机器人在群聊无法聊天
 
@@ -122,7 +124,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 
-可以自定义字体。详见 -> [#957](https://github.com/AstrBotDevs/AstrBot/issues/957#issuecomment-2749981802)
+可以在当前启用的 t2i 模板 CSS 中自定义字体，例如设置 `font-family: 'Maple Mono', 'Noto Sans CJK SC', sans-serif;`。
 
 推荐 [Maple Mono](https://github.com/subframe7536/maple-font) 字体。
 

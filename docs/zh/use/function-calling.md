@@ -22,7 +22,7 @@ outline: deep
 
 不支持的模型比较常见的有 Deepseek-R1, Gemini 2.0 的 thinking 类等较老模型。
 
-在 AstrBot 中，默认提供了网页搜索、待办提醒、代码执行器这些工具。很多插件，如:
+在 AstrBot 中，可以通过函数调用暴露网页搜索、待办提醒以及 Agent / 沙盒相关工具链。很多插件，如:
 
 - astrbot_plugin_cloudmusic
 - astrbot_plugin_bilibili

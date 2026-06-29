@@ -1,6 +1,6 @@
 # Context Compression
 
-Starting from v4.11.0, AstrBot introduced an automatic context compression feature.
+AstrBot includes automatic context compression.
 
 ![alt text](https://files.astrbot.app/docs/source/images/context-compress/image.png)
 

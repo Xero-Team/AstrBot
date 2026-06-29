@@ -8,7 +8,7 @@ Navigate to the TokenPony [API Keys](https://www.tokenpony.cn/#/user/keys) page 
 
 Visit the TokenPony [Models page](https://www.tokenpony.cn/#/model) to select your desired model. Note down the model name for later use.
 
-Open the AstrBot WebUI, click `Service Providers` in the left sidebar -> `Add Provider` -> select `TokenPony` (requires version >= 4.3.3)
+Open the AstrBot WebUI, click `Service Providers` in the left sidebar -> `Add Provider` -> select `TokenPony`.
 
 ![Configuring Chat Model](https://files.astrbot.app/docs/source/images/tokenpony/image.png)
 

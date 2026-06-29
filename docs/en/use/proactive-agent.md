@@ -4,7 +4,7 @@ AstrBot introduces a Proactive Agent system, enabling AstrBot to not only respon
 
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image.png)
 
-Introduced in v4.14.0, this is currently an **experimental feature** and not yet stable.
+This is currently an **experimental feature** and not yet stable.
 
 ## Future Tasks (FutureTask)
 

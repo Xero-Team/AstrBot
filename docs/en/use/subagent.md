@@ -2,7 +2,7 @@
 
 SubAgent Orchestration is an advanced agent organization method provided by AstrBot. It allows you to decompose complex tasks into multiple specialized SubAgents, reducing the Main Agent's prompt length and improving task execution success rates.
 
-v4.14.0 introduced this feature, which is currently an **experimental feature** and not yet stable.
+This is currently an **experimental feature** and not yet stable.
 
 ![](https://files.astrbot.app/docs/source/images/subagent/image.png)
 

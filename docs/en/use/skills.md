@@ -2,7 +2,7 @@
 
 Anthropic's Agent Skills are a modular extension standard designed to turn Claude from a "general-purpose chatbot" into a "task executor" with domain-specific expertise. A Skill is a structured folder containing instructions, scripts, metadata, and reference resources. It is more than just a prompt—it functions like a specialized "operation manual" that is dynamically loaded only when the Agent needs to perform a specific task. A Tool is the model's concrete interface for interacting with the outside world (APIs/functions), while a Skill standardizes the combination of instructions, templates, and tools into a reusable task execution guide. Traditional Tools require all API definitions to be injected into the prompt at conversation start. If there are more than 50 tools, tens of thousands of tokens can be consumed before any conversation begins, making responses slower and costlier.
 
-Support for Anthropic Skills was introduced in AstrBot starting from v4.13.0, allowing users to easily integrate and use various predefined skill modules to improve the Agent's performance on specific tasks.
+AstrBot supports Anthropic Skills, allowing users to integrate and use various predefined skill modules to improve the Agent's performance on specific tasks.
 
 ## Key Features
 

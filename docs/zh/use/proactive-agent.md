@@ -4,7 +4,7 @@ AstrBot 引入了主动 Agent（Proactive Agent）系统，使 AstrBot 不仅能
 
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image.png)
 
-在 v4.14.0 引入，目前是**实验性功能**，未稳定。
+目前这是一个**实验性功能**，尚未稳定。
 
 ## 未来任务 (FutureTask)
 

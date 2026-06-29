@@ -24,7 +24,7 @@ Mainstream models released after 2025 typically support function calling.
 
 Commonly unsupported models include older models such as DeepSeek-R1 and Gemini 2.0 thinking-type models.
 
-In AstrBot, web search, todo reminders, and code interpreter tools are provided by default. Many plugins, such as:
+In AstrBot, tools such as web search, todo reminders, and Agent / sandbox-related toolchains can be exposed for function calling. Many plugins, such as:
 
 - astrbot_plugin_cloudmusic
 - astrbot_plugin_bilibili

@@ -3,7 +3,7 @@
 > [!NOTE]
 > The "unified message origin" mentioned below refers to UMO. A UMO uniquely identifies a specific conversation on a messaging platform.
 
-Since version v4.7.0, we have refactored AstrBot's original "Session Management" feature into the "Custom Rules" feature to reduce conflicts with configuration files.
+AstrBot uses "Custom Rules" to handle per-conversation overrides without forcing you to split behavior across multiple configuration files.
 
 You can think of custom rules as more flexible, mandatory processing rules for specified message sources, which have higher priority than configuration files.
 

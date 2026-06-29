@@ -4,7 +4,7 @@
 
 ### Encountering 404 Error When Opening the Dashboard
 
-Download `AstrBot-vxxxxx-dashboard.zip` from the [release](https://github.com/AstrBotDevs/AstrBot/releases) page, extract it, and move it to `AstrBot/data`. If it still doesn't work, try restarting your computer (based on community feedback).
+Download the dashboard ZIP asset from the [release](https://github.com/BegoniaHe/AstrBot/releases) page, extract it into `AstrBot/data`, and then restart AstrBot. If it still does not work, try restarting your computer as well.
 
 ### First Login Account and Random Password
 
@@ -13,7 +13,7 @@ On first startup, the WebUI account is `astrbot` by default, and the default pas
 ```text
 [00:27:40.590] [Core] [INFO] [dashboard.server:523]:
  ✨✨✨
-  AstrBot v4.24.3 WebUI is ready
+  AstrBot vX.Y.Z WebUI is ready
 
    ➜  Local: http://localhost:6185
    ➜  Initial username: astrbot
@@ -23,7 +23,7 @@ On first startup, the WebUI account is `astrbot` by default, and the default pas
 Set dashboard.host in data/cmd_config.json to enable remote access.
 ```
 
-`UiYVpZxnW8k22IWqf0ru5pOy` is the default password.
+`UiYVpZxnW8k22IWqf0ru5pOy` in this example is the initial password printed by that run.
 
 ### Forgot Dashboard Password
 
@@ -96,6 +96,24 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 > For security reasons, when runtime environment is set to `local`, AstrBot only allows AstrBot administrators to use computer capabilities by default.
 > You can select `sandbox` for the runtime environment, which allows all users to use computer capabilities (in an isolated sandbox). For more details, see [AstrBot Sandbox Environment](/en/use/astrbot-agent-sandbox.md)
 
+### Where Is the `data` Directory for an AstrBot Desktop Install?
+
+It is stored under the `.astrbot` directory in your home directory.
+
+- Windows: `C:\Users\<your-username>\.astrbot`
+- macOS / Linux: `/Users/<your-username>/.astrbot` or `/home/<your-username>/.astrbot`
+
+### Where Is the `data` Directory for an AstrBot Launcher Install?
+
+AstrBot Launcher is an external tool, so the `data` directory location depends on the Launcher implementation you use.
+
+For the current common GUI Launcher builds, data is usually stored under the `.astrbot_launcher` directory in your home directory:
+
+- Windows: `C:\Users\<your-username>\.astrbot_launcher`
+- macOS / Linux: `/Users/<your-username>/.astrbot_launcher` or `/home/<your-username>/.astrbot_launcher`
+
+If you are using another Launcher variant, follow that Launcher's documentation or actual working directory layout.
+
 ### Bot Cannot Chat in Group Conversations
 
 1. In group chats, to prevent message flooding, the bot will not respond to every monitored message. Please try mentioning (@) the bot or using a wake word to chat, such as the default `/`, for example: `/hello`.
@@ -106,7 +124,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### Chinese Characters Garbled When Locally Rendering Markdown Images (t2i)
 
-You can customize the font. See details -> [#957](https://github.com/AstrBotDevs/AstrBot/issues/957#issuecomment-2749981802)
+You can customize the font in your active t2i template CSS, for example with `font-family: 'Maple Mono', 'Noto Sans CJK SC', sans-serif;`.
 
 Recommended font: [Maple Mono](https://github.com/subframe7536/maple-font).
 
@@ -144,3 +162,22 @@ Based on the error message, refer to the plugin's README to manually install dep
 ![image](https://files.astrbot.app/docs/source/images/faq/image-1.png)
 
 If you find that the plugin author did not include a `requirements.txt` file, please submit an issue in the plugin repository to remind the author to add it.
+
+## OneBot v11 / NapCat Related
+
+### I Followed the Docs, so Why Can't NapCat Connect to AstrBot?
+
+1. If **both** AstrBot and NapCat are deployed with Docker, try running:
+
+```bash
+sudo docker network create newnet
+sudo docker network connect newnet astrbot
+sudo docker network connect newnet napcat
+sudo docker restart astrbot
+sudo docker restart napcat
+```
+
+If these commands succeed, go back to NapCat WebUI and change the WebSocket URL in the network configuration from `ws://127.0.0.1:6199/ws` to `ws://astrbot:6199/ws`.
+
+2. If only NapCat is deployed with Docker, change the WebSocket URL in NapCat WebUI from `ws://127.0.0.1:6199/ws` to `ws://<host-ip>:6199/ws`, where `<host-ip>` is the IP address of the machine running AstrBot.
+3. If neither side is deployed with Docker, use `ws://localhost:6199/ws` or `ws://127.0.0.1:6199/ws` in NapCat WebUI.

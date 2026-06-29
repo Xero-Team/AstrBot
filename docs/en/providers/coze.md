@@ -1,1 +1,1 @@
-This page is deprecated. Please refer to [Coze Agent Runner](../agent-runners/coze.md).
+This page has moved to [Coze Agent Runner](../agent-runners/coze.md).

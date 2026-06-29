@@ -1,6 +1,6 @@
 # Unified Webhook Mode
 
-Starting from v4.8.0, AstrBot supports Unified Webhook Mode (unified_webhook_mode). When this mode is enabled, all platform adapters that support it will use the same Webhook callback endpoint, simplifying reverse proxy and domain configuration. You no longer need to configure separate ports, domains, and reverse proxies for each bot adapter.
+AstrBot supports Unified Webhook Mode (`unified_webhook_mode`). When this mode is enabled, all platform adapters that support it use the same Webhook callback endpoint, simplifying reverse proxy and domain configuration. You no longer need to configure separate ports, domains, and reverse proxies for each bot adapter.
 
 Platform adapters that support Unified Webhook Mode include:
 

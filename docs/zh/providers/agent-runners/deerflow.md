@@ -1,6 +1,6 @@
 # 接入 DeerFlow
 
-在 v4.19.2 及之后，AstrBot 支持接入 [DeerFlow](https://github.com/bytedance/deer-flow) Agent Runner。
+AstrBot 支持接入 [DeerFlow](https://github.com/bytedance/deer-flow) Agent Runner。
 
 当前适配面向 DeerFlow **2.0 `main` 分支**。DeerFlow 官方已将原始 Deep Research 框架迁移到 `main-1.x` 分支持续维护，因此如果你使用的是 2.0，请以 `main` 分支文档和后端 API 为准。
 

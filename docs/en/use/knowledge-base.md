@@ -1,7 +1,7 @@
 # AstrBot Knowledge Base
 
 > [!TIP]
-> Requires AstrBot version >= 4.5.0.
+> This guide documents the current knowledge base system used by this fork. Legacy workflows are not part of the supported path here.
 
 ![Knowledge Base Preview](https://files.astrbot.app/docs/en/use/image-3.png)
 
@@ -9,7 +9,7 @@
 
 Open the service provider page, click "Add Service Provider", and select Embedding.
 
-Currently, AstrBot supports embedding vector services compatible with OpenAI API and Gemini API.
+Built-in embedding provider types currently include OpenAI-compatible services, Gemini, NVIDIA NIM, and Ollama.
 
 Click on the provider card above to enter the configuration page and fill in the configuration.
 
@@ -19,7 +19,7 @@ After completing the configuration, click Save.
 
 A reranker model can improve the precision of final retrieval results to some extent.
 
-Similar to configuring the embedding model, open the service provider page, click "Add Service Provider", and select Reranker. For more information about reranker models, please refer to online resources.
+Similar to configuring the embedding model, open the service provider page, click "Add Service Provider", and select Reranker. Built-in reranker provider types currently include vLLM-compatible, Xinference, Bailian, and NVIDIA rerank services.
 
 ## Creating a Knowledge Base
 

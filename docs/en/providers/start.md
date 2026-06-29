@@ -13,7 +13,7 @@ AstrBot supports the native API formats of OpenAI, Google GenAI, and Anthropic. 
 >
 > These providers support the OpenAI API format. You can find the API Base URL and API Key from their documentation and fill them into AstrBot provider settings.
 >
-> Please note that using non-compliant third-party model services may introduce availability, privacy, or legal risks. For details, see the [EULA](https://github.com/AstrBotDevs/AstrBot/blob/master/EULA.md).
+> Please note that using non-compliant third-party model services may introduce availability, privacy, or legal risks. For details, see the [EULA](https://github.com/BegoniaHe/AstrBot/blob/master/EULA.md).
 
 For example, you may choose to connect model services provided by (but not limited to):
 
@@ -35,7 +35,5 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 7. Go to the Configuration page, find the conversational model, click the selection button on the right, choose the provider and model you just added, then click the Save Configuration button at the bottom-right of the screen.
 
 ## Using Environment Variables to Load Keys
-
-> Introduced in v4.13.0.
 
 You can use environment variables to load provider API keys. In the provider configuration page, set the API Key field to `$ENV_VARIABLE_NAME`, for example: `$DEEPSEEK_API_KEY`.

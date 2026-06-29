@@ -2,8 +2,6 @@
 
 The Agent Runner is a component in AstrBot used to execute Agents.
 
-Starting from version v4.7.0, we have migrated three providers—Dify, Coze, and Alibaba Cloud Bailian Application—to the Agent Runner layer, reducing some conflicts with AstrBot's existing features. Rest assured, if you upgrade from an older version to v4.7.0, you don't need to take any action as AstrBot will automatically migrate for you. Later versions also added DeerFlow support as an Agent Runner provider.
-
 AstrBot currently supports five Agent Runners:
 
 - AstrBot Built-in Agent Runner
@@ -16,7 +14,7 @@ By default, the AstrBot Built-in Agent Runner is the default runner.
 
 ## Why Abstract the Agent Runner
 
-In earlier versions, platforms with "built-in Agent capabilities" like Dify, Coze, and Alibaba Cloud Bailian Application were integrated into AstrBot as regular Chat Providers. In practice, we found that they are fundamentally different from traditional Chat Providers that "only handle text completion". Forcing them into the same layer caused many design and usage conflicts. Therefore, starting from v4.7.0, we abstracted them into independent Agent Runners.
+Platforms with built-in Agent capabilities such as Dify, Coze, Alibaba Cloud Bailian Application, and DeerFlow are fundamentally different from traditional Chat Providers that only perform model completion. Treating them as plain Chat Providers creates design and usage conflicts, so AstrBot models them as independent Agent Runners.
 
 From an architectural perspective, you can understand it as:
 

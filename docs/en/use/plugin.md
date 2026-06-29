@@ -1,6 +1,6 @@
 # AstrBot Star
 
-Starting from version `3.4.0`, AstrBot renamed plugins to `Star`. AstrBot is a highly modular project, and plugins leverage this modularity to implement various functionalities.
+AstrBot calls plugins `Stars`. AstrBot is a highly modular project, and Stars leverage this modularity to implement various functionalities.
 
 Use `/plugin` to view all plugins. You can also manage installed plugins in the admin panel.
 

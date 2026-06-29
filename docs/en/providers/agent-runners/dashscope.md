@@ -1,6 +1,6 @@
 # Connect to Alibaba Cloud Bailian Application
 
-Since v3.4.30, AstrBot supports connecting to Alibaba Cloud Bailian Application.
+AstrBot supports connecting to Alibaba Cloud Bailian Application.
 
 ## Configure Alibaba Cloud Bailian Application in AstrBot
 

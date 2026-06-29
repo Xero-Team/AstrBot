@@ -1,9 +1,9 @@
 # Agent 沙盒环境 ⛵️
 
 > [!TIP]
-> 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/AstrBotDevs/AstrBot/issues) 上提交 issue。
+> 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/BegoniaHe/AstrBot/issues) 上提交 issue。
 
-在 `v4.12.0` 版本及之后，AstrBot 引入了 Agent 沙盒环境，以替代之前的代码执行器功能。沙盒环境给 Agent 提供了更安全、更灵活的代码执行和自动化操作能力。
+Agent 沙盒环境已经取代之前的代码执行器路径，为 Agent 提供更安全、更灵活的代码执行和自动化操作能力。
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
@@ -376,7 +376,7 @@ gc:
 ## 配置 AstrBot 使用沙盒环境
 
 > [!TIP]
-> 请确保您的 AstrBot 版本在 `v4.12.0` 及之后。
+> 请使用本仓库文档对应的当前分支版本。更早的旧版本并不包含这里描述的沙盒运行时。
 
 在 AstrBot 控制台，进入 “AI 配置” -> “Agent Computer Use”。
 

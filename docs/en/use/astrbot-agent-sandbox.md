@@ -1,9 +1,9 @@
 # Agent Sandbox Environment ⛵️
 
 > [!TIP]
-> This feature is currently in technical preview and may have some bugs. If you encounter any issues, please submit an issue on [GitHub](https://github.com/AstrBotDevs/AstrBot/issues).
+> This feature is currently in technical preview and may have some bugs. If you encounter any issues, please submit an issue on [GitHub](https://github.com/BegoniaHe/AstrBot/issues).
 
-Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environment to replace the previous code executor functionality. The sandbox environment provides Agents with safer and more flexible code execution and automation capabilities.
+The Agent sandbox environment replaces the previous code executor path and provides Agents with safer and more flexible code execution and automation capabilities.
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
@@ -274,7 +274,7 @@ For more detailed explanations of TTL and persistence behavior, see the later se
 ## Configuring AstrBot to Use the Sandbox Environment
 
 > [!TIP]
-> Please make sure your AstrBot version is `v4.12.0` or later.
+> Use the current branch builds documented in this repository. Earlier legacy builds do not include the sandbox runtime described here.
 
 In the AstrBot console, go to **AI Settings** -> **Agent Computer Use**.
 

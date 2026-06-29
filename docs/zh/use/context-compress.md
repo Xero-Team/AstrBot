@@ -1,6 +1,6 @@
 # 上下文压缩
 
-在 v4.11.0 之后，AstrBot 引入了自动上下文压缩功能。
+AstrBot 内置了自动上下文压缩功能。
 
 ![alt text](https://files.astrbot.app/docs/source/images/context-compress/image.png)
 

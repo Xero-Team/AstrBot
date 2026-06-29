@@ -16,6 +16,14 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 
 For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
 
+The login page now also shows public version information before authentication:
+
+- WebUI version
+- AstrBot runtime version
+- AstrBot code version when it differs from the runtime package version
+
+If the login page detects a WebUI/runtime mismatch or runtime/code mismatch, it shows a warning dialog so you can fix stale static assets before signing in.
+
 ## Two-Factor Authentication
 
 AstrBot WebUI supports TOTP (Time-based One-Time Password) based two-factor authentication.
@@ -111,7 +119,7 @@ When AstrBot starts, it automatically checks if the admin panel needs updating. 
 
 Use the `/dashboard_update` command to manually update the admin panel (admin command).
 
-Admin panel files are located in the data/dist directory. If you need to manually replace them, download `dist.zip` from <https://github.com/AstrBotDevs/AstrBot/releases/> and extract it to the data directory.
+Admin panel files are located in the `data/dist` directory. If you need to replace them manually, download the dashboard ZIP asset from <https://github.com/BegoniaHe/AstrBot/releases/> and extract it into the `data` directory.
 
 ## Customizing WebUI Port
 
@@ -119,7 +127,15 @@ Modify the `port` in the `dashboard` configuration in the data/cmd_config.json f
 
 ## Forgot Password
 
-Modify the `password` in the `dashboard` configuration in the data/cmd_config.json file and delete the entire password key-value pair.
+Prefer the CLI reset flows first:
+
+```bash
+astrbot password
+# or
+astrbot run --reset-password
+```
+
+If you must reset it manually, edit `data/cmd_config.json` and remove these `dashboard` fields together: `username`, `password`, `pbkdf2_password`, `password_storage_upgraded`, `password_change_required`, and `jwt_secret`. Then restart AstrBot so it generates a new random initial password and prints it in startup logs.
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).

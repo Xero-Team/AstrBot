@@ -4,7 +4,7 @@ MCP (Model Context Protocol) is a new open standard protocol for establishing se
 
 ![image](https://files.astrbot.app/docs/source/images/function-calling/image3.png)
 
-AstrBot v3.5.0 supports the MCP protocol, enabling you to add multiple MCP servers and use function tools from MCP servers.
+AstrBot supports the MCP protocol, so you can add multiple MCP servers and use function tools exposed by those servers.
 
 ![image](https://files.astrbot.app/docs/source/images/function-calling/image2.png)
 

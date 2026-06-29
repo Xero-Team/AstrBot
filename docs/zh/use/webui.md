@@ -16,6 +16,14 @@ AstrBot 管理面板具有管理插件、查看日志、可视化配置、查看
 
 新用户首次登录时，AstrBot 会生成一个随机初始密码并写入启动日志。请先在启动日志中查找并使用该密码登录（用户名通常为 `astrbot`），登录后请立即修改密码。
 
+当前登录页在未登录前也会公开展示版本信息：
+
+- WebUI 版本
+- AstrBot 运行时版本
+- 当代码版本与运行时版本不一致时，还会显示 AstrBot 代码版本
+
+如果登录页检测到 WebUI/运行时版本不匹配，或者运行时/代码版本不匹配，会弹出提示对话框，帮助你先处理静态资源版本不一致的问题。
+
 ## 双因素认证
 
 AstrBot WebUI支持基于 TOTP（Time-based One-Time Password）的双因素认证。
@@ -111,7 +119,7 @@ ChatUI 支持以下常用能力：
 
 使用 `/dashboard_update` 命令可以手动更新管理面板（管理员指令）。
 
-管理面板文件在 data/dist 目录下。如果需要手动替换，请在 <https://github.com/AstrBotDevs/AstrBot/releases/> 下载 `dist.zip` 然后解压到 data 目录下。
+管理面板文件在 `data/dist` 目录下。如果需要手动替换，请在 <https://github.com/BegoniaHe/AstrBot/releases/> 下载管理面板 ZIP 资源，然后解压到 `data` 目录下。
 
 ## 自定义 WebUI 端口
 
@@ -119,7 +127,15 @@ ChatUI 支持以下常用能力：
 
 ## 忘记密码
 
-修改 data/cmd_config.json 文件内 `dashboard` 配置中的 `password`，将 password 整个键值对删除。
+优先使用 CLI 重置：
+
+```bash
+astrbot password
+# 或
+astrbot run --reset-password
+```
+
+如果必须手动重置，请编辑 `data/cmd_config.json`，把 `dashboard` 下的 `username`、`password`、`pbkdf2_password`、`password_storage_upgraded`、`password_change_required`、`jwt_secret` 这六个字段一起删除，然后重启 AstrBot。程序会重新生成随机初始密码，并在启动日志中打印。
 
 > [!TIP]
 > 详细说明请参阅 [FAQ - 管理面板的密码忘记了](/faq.md#管理面板的密码忘记了)。

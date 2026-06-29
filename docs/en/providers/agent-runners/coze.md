@@ -1,6 +1,6 @@
 # Connect to Coze
 
-AstrBot v4.2.1 and later versions support connecting to [Coze](https://www.coze.cn/) Agent service.
+AstrBot supports connecting to [Coze](https://www.coze.cn/) Agent service.
 
 ## Preparation: Get API Key
 

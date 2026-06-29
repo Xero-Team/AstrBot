@@ -1,6 +1,6 @@
 # 接入 Coze
 
-AstrBot v4.2.1 之后的版本, 支持接入 [Coze](https://www.coze.cn/) 的 Agent 服务。
+AstrBot 支持接入 [Coze](https://www.coze.cn/) 的 Agent 服务。
 
 ## 预备工作：准备 API Key
 

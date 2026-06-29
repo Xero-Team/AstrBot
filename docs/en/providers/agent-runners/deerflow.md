@@ -1,6 +1,6 @@
 # Connect to DeerFlow
 
-Starting from v4.19.2, AstrBot supports connecting to the [DeerFlow](https://github.com/bytedance/deer-flow) Agent Runner.
+AstrBot supports connecting to the [DeerFlow](https://github.com/bytedance/deer-flow) Agent Runner.
 
 ## Preparation: Deploy DeerFlow
 

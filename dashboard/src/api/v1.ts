@@ -664,11 +664,9 @@ function generatedFormData(
 }
 
 function botConfig(config: OpenConfig): BotConfigRequest {
-  const type = String(config.type || '').trim();
   return {
     config,
-    type,
-  } as unknown as BotConfigRequest;
+  };
 }
 
 function providerConfig(config: OpenConfig): ProviderConfigRequest {

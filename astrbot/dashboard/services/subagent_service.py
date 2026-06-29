@@ -71,9 +71,6 @@ class SubAgentService:
                 "agents": [],
             }
 
-        if "main_enable" not in data and "enable" in data:
-            data["main_enable"] = bool(data.get("enable", False))
-
         data.setdefault("main_enable", False)
         data.setdefault("remove_main_duplicate_tools", False)
         data.setdefault("agents", [])

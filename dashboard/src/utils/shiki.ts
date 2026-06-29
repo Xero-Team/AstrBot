@@ -1,3 +1,5 @@
+import type MarkdownIt from 'markdown-it';
+
 import {
   createHighlighter,
   normalizeLimitedShikiLanguage,
@@ -6,15 +8,18 @@ import {
 export const SHIKI_THEMES = {
   light: 'github-light',
   dark: 'github-dark',
-};
+} as const;
 
-let highlighterPromise;
+type ShikiHighlighter = Awaited<ReturnType<typeof createHighlighter>>;
+type ColorMode = 'auto' | 'dark' | 'light';
 
-function normalizeLanguage(language) {
+let highlighterPromise: Promise<ShikiHighlighter> | undefined;
+
+function normalizeLanguage(language: unknown): string {
   return normalizeLimitedShikiLanguage(language);
 }
 
-export function escapeHtml(value = '') {
+export function escapeHtml(value = ''): string {
   return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -23,7 +28,7 @@ export function escapeHtml(value = '') {
     .replaceAll("'", '&#39;');
 }
 
-export async function getShikiHighlighter() {
+export async function getShikiHighlighter(): Promise<ShikiHighlighter> {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
       themes: Object.values(SHIKI_THEMES),
@@ -33,20 +38,23 @@ export async function getShikiHighlighter() {
   return highlighterPromise;
 }
 
-export async function ensureShikiLanguages() {
-  const highlighter = await getShikiHighlighter();
-
-  return highlighter;
+export async function ensureShikiLanguages(): Promise<ShikiHighlighter> {
+  return getShikiHighlighter();
 }
 
 export function renderShikiCode(
-  highlighter,
-  code,
-  language,
-  colorMode = 'auto',
-) {
+  highlighter: ShikiHighlighter,
+  code: string,
+  language: unknown,
+  colorMode: ColorMode = 'auto',
+): string {
   const normalizedLanguage = normalizeLanguage(language);
-  let options = { lang: normalizedLanguage, themes: SHIKI_THEMES };
+  let options:
+    | { lang: string; themes: typeof SHIKI_THEMES }
+    | { lang: string; theme: string } = {
+    lang: normalizedLanguage,
+    themes: SHIKI_THEMES,
+  };
   if (colorMode === 'dark') {
     options = { lang: normalizedLanguage, theme: SHIKI_THEMES.dark };
   } else if (colorMode === 'light') {
@@ -55,13 +63,18 @@ export function renderShikiCode(
 
   try {
     return highlighter.codeToHtml(code, options);
-  } catch (err) {
+  } catch (error: unknown) {
     console.warn(
       `Failed to render code with Shiki language "${normalizedLanguage}". Falling back to plain text.`,
-      err,
+      error,
     );
 
-    let fallbackOptions = { lang: 'text', themes: SHIKI_THEMES };
+    let fallbackOptions:
+      | { lang: string; themes: typeof SHIKI_THEMES }
+      | { lang: string; theme: string } = {
+      lang: 'text',
+      themes: SHIKI_THEMES,
+    };
     if (colorMode === 'dark') {
       fallbackOptions = { lang: 'text', theme: SHIKI_THEMES.dark };
     } else if (colorMode === 'light') {
@@ -72,7 +85,10 @@ export function renderShikiCode(
   }
 }
 
-export function collectMarkdownFenceLanguages(markdownIt, markdown) {
+export function collectMarkdownFenceLanguages(
+  markdownIt: MarkdownIt,
+  markdown: string,
+): string[] {
   if (!markdown) return [];
 
   return markdownIt
@@ -81,6 +97,6 @@ export function collectMarkdownFenceLanguages(markdownIt, markdown) {
     .map((token) => normalizeLanguage(token.info));
 }
 
-export function normalizeShikiLanguage(language) {
+export function normalizeShikiLanguage(language: unknown): string {
   return normalizeLanguage(language);
 }

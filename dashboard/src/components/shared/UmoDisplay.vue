@@ -40,8 +40,12 @@
         </v-tooltip>
       </v-btn>
       <v-tooltip v-if="showInfo" location="top">
-        <template #activator="{ props }">
-          <v-icon v-bind="props" size="small" class="umo-display__info">
+        <template #activator="{ props: activatorProps }">
+          <v-icon
+            v-bind="activatorProps"
+            size="small"
+            class="umo-display__info"
+          >
             mdi-information-outline
           </v-icon>
         </template>
@@ -53,106 +57,75 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: 'UmoDisplay',
-  props: {
-    umo: {
-      type: String,
-      required: true,
-    },
-    platform: {
-      type: String,
-      default: '',
-    },
-    messageType: {
-      type: String,
-      default: '',
-    },
-    sessionId: {
-      type: String,
-      default: '',
-    },
-    autoName: {
-      type: String,
-      default: '',
-    },
-    userAlias: {
-      type: String,
-      default: '',
-    },
-    customName: {
-      type: String,
-      default: '',
-    },
-    compact: {
-      type: Boolean,
-      default: false,
-    },
-    showPlatform: {
-      type: Boolean,
-      default: true,
-    },
-    showInfo: {
-      type: Boolean,
-      default: true,
-    },
-    showMeta: {
-      type: Boolean,
-      default: true,
-    },
-    editable: {
-      type: Boolean,
-      default: false,
-    },
-    editTooltip: {
-      type: String,
-      default: '',
-    },
+<script setup lang="ts">
+import { computed } from 'vue';
+
+const props = withDefaults(
+  defineProps<{
+    umo: string;
+    platform?: string;
+    messageType?: string;
+    sessionId?: string;
+    autoName?: string;
+    userAlias?: string;
+    customName?: string;
+    compact?: boolean;
+    showPlatform?: boolean;
+    showInfo?: boolean;
+    showMeta?: boolean;
+    editable?: boolean;
+    editTooltip?: string;
+  }>(),
+  {
+    platform: '',
+    messageType: '',
+    sessionId: '',
+    autoName: '',
+    userAlias: '',
+    customName: '',
+    compact: false,
+    showPlatform: true,
+    showInfo: true,
+    showMeta: true,
+    editable: false,
+    editTooltip: '',
   },
-  emits: ['edit'],
-  computed: {
-    umoParts() {
-      return this.umo.split(':');
-    },
-    resolvedPlatform() {
-      return this.platform || this.umoParts[0] || '';
-    },
-    resolvedMessageType() {
-      return this.messageType || this.umoParts[1] || '';
-    },
-    resolvedSessionId() {
-      return this.sessionId || this.umoParts.slice(2).join(':') || this.umo;
-    },
-    aliasName() {
-      return this.userAlias || this.customName || '';
-    },
-    displayName() {
-      if (this.aliasName && this.autoName && this.aliasName !== this.autoName) {
-        return `${this.aliasName}（${this.autoName}）`;
-      }
-      return this.aliasName || this.autoName || this.umo;
-    },
-    displayNameTitle() {
-      return this.hasReadableName
-        ? `${this.displayName} / UMO: ${this.umo}`
-        : this.umo;
-    },
-    hasReadableName() {
-      return Boolean(this.aliasName || this.autoName);
-    },
-    platformColor() {
-      const colors = {
-        aiocqhttp: 'blue',
-        qq_official: 'purple',
-        telegram: 'light-blue',
-        discord: 'indigo',
-        webchat: 'orange',
-      };
-      return colors[this.resolvedPlatform] || 'grey';
-    },
-  },
+);
+
+defineEmits<{
+  edit: [];
+}>();
+
+const PLATFORM_COLORS: Record<string, string> = {
+  aiocqhttp: 'blue',
+  qq_official: 'purple',
+  telegram: 'light-blue',
+  discord: 'indigo',
+  webchat: 'orange',
 };
+
+const umoParts = computed(() => props.umo.split(':'));
+const resolvedPlatform = computed(
+  () => props.platform || umoParts.value[0] || '',
+);
+const aliasName = computed(() => props.userAlias || props.customName || '');
+const hasReadableName = computed(() =>
+  Boolean(aliasName.value || props.autoName),
+);
+const displayName = computed(() => {
+  if (aliasName.value && props.autoName && aliasName.value !== props.autoName) {
+    return `${aliasName.value}（${props.autoName}）`;
+  }
+  return aliasName.value || props.autoName || props.umo;
+});
+const displayNameTitle = computed(() =>
+  hasReadableName.value
+    ? `${displayName.value} / UMO: ${props.umo}`
+    : props.umo,
+);
+const platformColor = computed(
+  () => PLATFORM_COLORS[resolvedPlatform.value] || 'grey',
+);
 </script>
 
 <style scoped>

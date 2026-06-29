@@ -47,6 +47,15 @@ interface PersonaApiRecord {
 
 type PersonaSelectableItem = SelectableItem & PersonaApiRecord;
 
+function isPersonaSelectableItem(
+  item: SelectableItem,
+): item is PersonaSelectableItem {
+  return (
+    typeof item.persona_id === 'string' &&
+    typeof item.system_prompt === 'string'
+  );
+}
+
 const props = defineProps({
   modelValue: {
     type: String,
@@ -186,8 +195,12 @@ function openCreatePersona() {
 }
 
 // 打开编辑人格对话框
-function openEditPersona(persona: PersonaSelectableItem) {
-  editingPersona.value = persona;
+function openEditPersona(item: SelectableItem) {
+  if (!isPersonaSelectableItem(item)) {
+    return;
+  }
+
+  editingPersona.value = item;
   showPersonaDialog.value = true;
 }
 

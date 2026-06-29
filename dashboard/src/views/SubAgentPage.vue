@@ -301,6 +301,7 @@ import PersonaSelector from '@/components/shared/PersonaSelector.vue';
 import ProviderSelector from '@/components/shared/ProviderSelector.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 type SubAgentItem = {
   __key: string;
@@ -366,17 +367,6 @@ const hasUnsavedChanges = computed(
   () => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value,
 );
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as {
-    message?: string;
-    response?: { data?: { message?: string } };
-  };
-  return errorLike.response?.data?.message || errorLike.message || fallback;
-}
-
 function normalizeConfig(raw: RawSubAgentConfig): SubAgentConfig {
   const main_enable = Boolean(raw?.main_enable);
   const remove_main_duplicate_tools = Boolean(raw?.remove_main_duplicate_tools);
@@ -425,7 +415,7 @@ async function loadConfig() {
       toast(res.data.message || tm('messages.loadConfigFailed'), 'error');
     }
   } catch (e) {
-    toast(getErrorMessage(e, tm('messages.loadConfigFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.loadConfigFailed')), 'error');
   } finally {
     loading.value = false;
   }
@@ -512,7 +502,7 @@ async function save() {
       toast(res.data.message || tm('messages.saveFailed'), 'error');
     }
   } catch (e) {
-    toast(getErrorMessage(e, tm('messages.saveFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.saveFailed')), 'error');
   } finally {
     saving.value = false;
   }

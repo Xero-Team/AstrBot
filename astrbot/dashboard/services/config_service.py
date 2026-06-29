@@ -31,6 +31,7 @@ from astrbot.core.utils.totp import (
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.upload_utils import save_upload_to_path
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -482,15 +483,6 @@ class ConfigProfileService:
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
-    async def create_profile_from_dashboard_payload(
-        self,
-        payload: object,
-    ) -> dict:
-        data = payload if isinstance(payload, dict) else {}
-        if not data:
-            raise ValueError("缺少配置数据")
-        return await self.create_profile(data.get("name"), data.get("config"))
-
     def get_profile(self, config_id: str) -> dict:
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
@@ -498,27 +490,6 @@ class ConfigProfileService:
             "config": self.acm.confs[config_id],
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
-
-    def get_profile_from_dashboard_query(
-        self,
-        *,
-        config_id: str | None,
-        system_config: bool,
-    ) -> dict:
-        if not config_id and not system_config:
-            raise ValueError("缺少配置文件 ID")
-        if system_config:
-            return self.get_system_schema()
-        if config_id is None:
-            raise ValueError("abconf_id cannot be None")
-        return self.get_profile(config_id)
-
-    def get_profile_from_dashboard_args(self, args) -> dict:
-        system_config = str(args.get("system_config", "0")).lower() == "1"
-        return self.get_profile_from_dashboard_query(
-            config_id=args.get("id"),
-            system_config=system_config,
-        )
 
     async def update_profile(
         self,
@@ -562,25 +533,6 @@ class ConfigProfileService:
             return f"保存成功。{warning}"
         return "保存成功~"
 
-    async def update_profile_from_dashboard_payload(
-        self,
-        payload: object,
-        *,
-        two_factor_code: str | None = None,
-    ) -> str | None:
-        data = payload if isinstance(payload, dict) else {}
-        if not isinstance(payload, dict):
-            raise ValueError("Invalid request payload")
-        config = data.get("config")
-        conf_id = data.get("conf_id")
-        if not isinstance(config, dict):
-            raise ValueError("Invalid config payload")
-        return await self.update_profile(
-            str(conf_id),
-            config,
-            two_factor_code=two_factor_code,
-        )
-
     @staticmethod
     async def _verify_config_2fa(
         current_config: dict,
@@ -602,30 +554,10 @@ class ConfigProfileService:
         if not await self.acm.update_conf_info(config_id, name=name):
             raise ValueError("Failed to update config profile")
 
-    async def rename_profile_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        if not data:
-            raise ValueError("缺少配置数据")
-        conf_id = data.get("id")
-        if not conf_id:
-            raise ValueError("缺少配置文件 ID")
-        await self.rename_profile(str(conf_id), name=data.get("name"))
-        return "更新成功"
-
     async def delete_profile(self, config_id: str) -> None:
         if not await self.acm.delete_conf(config_id):
             raise ValueError("Failed to delete config profile")
         self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
-
-    async def delete_profile_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        if not data:
-            raise ValueError("缺少配置数据")
-        conf_id = data.get("id")
-        if not conf_id:
-            raise ValueError("缺少配置文件 ID")
-        await self.delete_profile(str(conf_id))
-        return "删除成功"
 
 
 class ConfigRoutingService:
@@ -638,56 +570,16 @@ class ConfigRoutingService:
     async def replace_route_mapping(self, routing: dict[str, str]) -> None:
         await self.ucr.update_routing_data(routing)
 
-    async def replace_routes(self, data: object) -> None:
-        payload = data if isinstance(data, dict) else {}
-        new_routing = payload.get("routing")
-        if not isinstance(new_routing, dict):
-            raise ValueError("缺少或错误的路由表数据")
-        await self.replace_route_mapping(new_routing)
-
-    async def replace_routes_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict) or not payload:
-            raise ValueError("缺少配置数据")
-        await self.replace_routes(payload)
-        return "更新成功"
-
-    async def upsert_route(self, data: object) -> None:
-        payload = data if isinstance(data, dict) else {}
-        umo = payload.get("umo")
-        conf_id = payload.get("conf_id")
-        if not umo or not conf_id:
-            raise ValueError("缺少 UMO 或配置文件 ID")
-        await self.set_route(str(umo), str(conf_id))
-
     async def set_route(self, umo: str, config_id: str) -> None:
         if config_id == "default":
             await self.delete_route_by_umo(umo)
             return
         await self.ucr.update_route(umo, config_id)
 
-    async def upsert_route_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict) or not payload:
-            raise ValueError("缺少配置数据")
-        await self.upsert_route(payload)
-        return "更新成功"
-
-    async def delete_route(self, data: object) -> None:
-        payload = data if isinstance(data, dict) else {}
-        umo = payload.get("umo")
-        if not umo:
-            raise ValueError("缺少 UMO")
-        await self.delete_route_by_umo(str(umo))
-
     async def delete_route_by_umo(self, umo: str) -> None:
         if umo in self.ucr.umop_to_conf_id:
             del self.ucr.umop_to_conf_id[umo]
             await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
-
-    async def delete_route_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict) or not payload:
-            raise ValueError("缺少配置数据")
-        await self.delete_route(payload)
-        return "删除成功"
 
 
 class ConfigDisplayService:
@@ -700,9 +592,6 @@ class ConfigDisplayService:
         if not plugin_name:
             return await self.get_astrbot_config()
         return self.get_plugin_config(plugin_name)
-
-    async def get_configs_from_dashboard_args(self, args) -> dict:
-        return await self.get_configs(args.get("plugin_name", None))
 
     async def get_astrbot_config(self) -> dict:
         metadata = copy.deepcopy(CONFIG_METADATA_2)
@@ -925,23 +814,13 @@ class ConfigFileService:
         metadata.config.save_config(post_configs)
         await self.core_lifecycle.plugin_manager.reload(plugin_name)
 
-    async def save_plugin_configs_from_dashboard_payload(
-        self,
-        payload: object,
-        *,
-        plugin_name: str,
-    ) -> str:
-        post_configs = payload if isinstance(payload, dict) else {}
-        await self.save_plugin_configs(post_configs, plugin_name)
-        return f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件。"
-
     async def upload_config_file(
         self,
         *,
         scope: str | None,
         name: str | None,
         key_path: str | None,
-        files,
+        files: list,
     ) -> dict:
         _, name, key_path, _, config = self.resolve_config_file_scope(
             scope=scope,
@@ -962,15 +841,10 @@ class ConfigFileService:
         errors: list[str] = []
         folder = _config_key_to_folder(key_path)
 
-        for file in files.values():
+        for file in files:
             filename = _sanitize_filename(file.filename or "")
             if not filename:
                 errors.append("Invalid filename")
-                continue
-
-            file_size = getattr(file, "content_length", None)
-            if isinstance(file_size, int) and file_size > MAX_FILE_BYTES:
-                errors.append(f"File too large: {filename}")
                 continue
 
             ext = os.path.splitext(filename)[1].lstrip(".").lower()
@@ -985,7 +859,7 @@ class ConfigFileService:
                 continue
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            await file.save(str(save_path))
+            await save_upload_to_path(file, save_path)
             if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
                 save_path.unlink()
                 errors.append(f"File too large: {filename}")
@@ -998,14 +872,6 @@ class ConfigFileService:
             )
 
         return {"uploaded": uploaded, "errors": errors}
-
-    async def upload_config_file_from_dashboard_request(self, args, files) -> dict:
-        return await self.upload_config_file(
-            scope=args.get("scope"),
-            name=args.get("name"),
-            key_path=args.get("key"),
-            files=files,
-        )
 
     def delete_config_file(
         self,
@@ -1033,32 +899,6 @@ class ConfigFileService:
             raise ValueError("Invalid path parameter")
         if target_path.is_file():
             target_path.unlink()
-
-    def delete_config_file_from_dashboard_payload(
-        self,
-        *,
-        scope: str | None,
-        name: str | None,
-        payload: object,
-    ) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        self.delete_config_file(
-            scope=scope,
-            name=name,
-            rel_path=data.get("path"),
-        )
-        return "Deleted"
-
-    def delete_config_file_from_dashboard_request(
-        self,
-        args,
-        payload: object,
-    ) -> str:
-        return self.delete_config_file_from_dashboard_payload(
-            scope=args.get("scope") or "plugin",
-            name=args.get("name"),
-            payload=payload,
-        )
 
     def list_config_files(
         self,
@@ -1097,13 +937,6 @@ class ConfigFileService:
             if rel_path.startswith("files/"):
                 files.append(rel_path)
         return {"files": files}
-
-    def list_config_files_from_dashboard_args(self, args) -> dict:
-        return self.list_config_files(
-            scope=args.get("scope"),
-            name=args.get("name"),
-            key_path=args.get("key"),
-        )
 
     @staticmethod
     def _allowed_file_extensions(meta: dict) -> list[str]:
@@ -1215,45 +1048,6 @@ class BotConfigService:
                 return
         raise ValueError(f"Bot {bot_id} not found")
 
-    def list_platforms_for_dashboard(self) -> dict:
-        return {"platforms": self.list_bots()["bots"]}
-
-    async def create_bot_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict):
-            raise ValueError("参数错误")
-        await self.create_bot(payload)
-        return "新增平台配置成功~"
-
-    async def update_bot_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        origin_platform_id = data.get("id")
-        new_config = data.get("config")
-        if not origin_platform_id or not isinstance(new_config, dict):
-            raise ValueError("参数错误")
-        if origin_platform_id != new_config.get("id"):
-            raise ValueError("机器人名称不允许修改")
-
-        try:
-            await self.update_bot(origin_platform_id, new_config)
-        except ValueError as exc:
-            if "not found" in str(exc):
-                raise ValueError("未找到对应平台") from exc
-            raise
-        return "更新平台配置成功~"
-
-    async def delete_bot_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        platform_id = data.get("id")
-        if not platform_id:
-            raise ValueError("缺少平台 ID")
-        try:
-            await self.delete_bot(str(platform_id))
-        except ValueError as exc:
-            if "not found" in str(exc):
-                raise ValueError("未找到对应平台") from exc
-            raise
-        return "删除平台配置成功~"
-
     def _find_bot(self, bot_id: str) -> dict | None:
         for bot in self.config.get("platform", []):
             if bot.get("id") == bot_id:
@@ -1262,19 +1056,61 @@ class BotConfigService:
 
 
 class ProviderConfigService:
-    CAPABILITY_TO_PROVIDER_TYPE = {
-        "chat": "chat_completion",
-        "agent": "agent_runner",
-        "stt": "speech_to_text",
-        "tts": "text_to_speech",
-        "embedding": "embedding",
-        "rerank": "rerank",
-    }
-
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.provider_manager = core_lifecycle.provider_manager
+
+    def _resolve_provider_type_value(self, adapter_type: object) -> str | None:
+        if not isinstance(adapter_type, str) or not adapter_type:
+            return None
+
+        from astrbot.core.provider.register import provider_cls_map
+
+        provider_metadata = provider_cls_map.get(adapter_type)
+        if provider_metadata is None:
+            dynamic_import_provider = getattr(
+                self.provider_manager,
+                "dynamic_import_provider",
+                None,
+            )
+            if not callable(dynamic_import_provider):
+                return None
+            try:
+                dynamic_import_provider(adapter_type)
+            except ImportError, ModuleNotFoundError:
+                return None
+            provider_metadata = provider_cls_map.get(adapter_type)
+
+        if provider_metadata is None:
+            return None
+
+        provider_type = getattr(provider_metadata, "provider_type", None)
+        value = getattr(provider_type, "value", None)
+        return value if isinstance(value, str) and value else None
+
+    def _ensure_provider_type(self, config: dict) -> dict:
+        provider_type = config.get("provider_type")
+        if isinstance(provider_type, str) and provider_type:
+            return config
+
+        resolved_provider_type = self._resolve_provider_type_value(config.get("type"))
+        if resolved_provider_type:
+            config["provider_type"] = resolved_provider_type
+        return config
+
+    def _build_provider_source_response(self, source: dict) -> dict:
+        return self._ensure_provider_type(copy.deepcopy(source))
+
+    def _build_provider_response(self, provider: dict) -> dict:
+        if provider.get("provider_source_id"):
+            normalized = self.provider_manager.get_merged_provider_config(provider)
+        else:
+            normalized = copy.deepcopy(provider)
+        return self._ensure_provider_type(normalized)
+
+    def _build_raw_provider_response(self, provider: dict) -> dict:
+        return self._ensure_provider_type(copy.deepcopy(provider))
 
     def get_provider_schema(self) -> dict:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
@@ -1297,23 +1133,32 @@ class ProviderConfigService:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
         return {
             "config_schema": config_schema,
-            "providers": self.config.get("provider", []),
-            "provider_sources": self.config.get("provider_sources", []),
+            "providers": [
+                self._build_provider_response(provider)
+                for provider in self.config.get("provider", [])
+            ],
+            "provider_sources": [
+                self._build_provider_source_response(source)
+                for source in self.config.get("provider_sources", [])
+            ],
         }
 
     def list_provider_sources(self) -> dict:
         return {
-            "provider_sources": copy.deepcopy(self.config.get("provider_sources", []))
+            "provider_sources": [
+                self._build_provider_source_response(source)
+                for source in self.config.get("provider_sources", [])
+            ]
         }
 
     def get_provider_source(self, source_id: str) -> dict:
         source = self._find_provider_source(source_id)
         if source is None:
             raise ValueError(f"Provider source {source_id} not found")
-        return {"provider_source": copy.deepcopy(source)}
+        return {"provider_source": self._build_provider_source_response(source)}
 
     async def upsert_provider_source(self, source_id: str, config: dict) -> None:
-        config = copy.deepcopy(config)
+        config = self._ensure_provider_type(copy.deepcopy(config))
         next_source_id = str(config.get("id") or source_id).strip()
         if not next_source_id:
             raise ValueError("Provider source config must have an 'id' field")
@@ -1352,42 +1197,6 @@ class ProviderConfigService:
         await self.provider_manager.delete_provider(provider_source_id=source_id)
         save_config(self.config, self.config, is_core=True)
         self.provider_manager.provider_sources_config = next_sources
-
-    async def upsert_provider_source_from_dashboard_payload(
-        self, payload: object
-    ) -> str:
-        if not isinstance(payload, dict) or not payload:
-            raise ValueError("缺少配置数据")
-
-        new_source_config = payload.get("config") or payload
-        original_id = payload.get("original_id")
-        if not original_id:
-            raise ValueError("缺少 original_id")
-        if not isinstance(new_source_config, dict):
-            raise ValueError("缺少或错误的配置数据")
-        if not new_source_config.get("id"):
-            new_source_config["id"] = original_id
-
-        await self.upsert_provider_source(str(original_id), new_source_config)
-        return "更新 provider source 成功"
-
-    async def delete_provider_source_from_dashboard_payload(
-        self, payload: object
-    ) -> str:
-        if not isinstance(payload, dict) or not payload:
-            raise ValueError("缺少配置数据")
-
-        provider_source_id = payload.get("id")
-        if not provider_source_id:
-            raise ValueError("缺少 provider_source_id")
-
-        try:
-            await self.delete_provider_source(str(provider_source_id))
-        except ValueError as exc:
-            if "not found" in str(exc):
-                raise ValueError("未找到对应的 provider source") from exc
-            raise
-        return "删除 provider source 成功"
 
     async def list_provider_source_models(self, source_id: str) -> dict:
         source = self._find_provider_source(source_id)
@@ -1431,16 +1240,6 @@ class ProviderConfigService:
             if callable(terminate_fn):
                 await run_maybe_async(terminate_fn)
 
-    async def list_provider_source_models_for_dashboard(
-        self,
-        source_id: str | None,
-    ) -> dict:
-        if not source_id:
-            raise ValueError("缺少参数 source_id")
-        data = await self.list_provider_source_models(source_id)
-        data.pop("provider_source_id", None)
-        return data
-
     async def list_provider_models(self, provider_id: str) -> dict:
         from astrbot.core.provider import Provider
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -1463,29 +1262,16 @@ class ProviderConfigService:
             },
         }
 
-    async def list_provider_models_for_dashboard(
-        self,
-        provider_id: str | None,
-    ) -> dict:
-        if not provider_id:
-            raise ValueError("缺少参数 provider_id")
-        return await self.list_provider_models(provider_id)
-
-    async def list_provider_models_from_dashboard_args(self, args) -> dict:
-        return await self.list_provider_models_for_dashboard(
-            args.get("provider_id", None)
-        )
-
     async def get_embedding_dimension(self, provider_config: dict | None) -> dict:
         if not provider_config:
-            raise ValueError("缺少参数 provider_config")
+            raise ValueError("缺少提供商配置")
 
         from astrbot.core.provider.provider import EmbeddingProvider
         from astrbot.core.provider.register import provider_cls_map
 
         provider_type = provider_config.get("type")
         if not provider_type:
-            raise ValueError("provider_config 缺少 type 字段")
+            raise ValueError("提供商配置缺少 type 字段")
 
         if provider_type not in provider_cls_map:
             try:
@@ -1527,44 +1313,30 @@ class ProviderConfigService:
             if callable(terminate_fn):
                 await run_maybe_async(terminate_fn)
 
-    async def get_embedding_dimension_from_dashboard_payload(
-        self,
-        payload: object,
-    ) -> dict:
-        data = payload if isinstance(payload, dict) else {}
-        return await self.get_embedding_dimension(data.get("provider_config"))
-
     def list_providers(
         self,
         *,
-        capability: str | None = None,
-        source_id: str | None = None,
+        provider_type: str | None = None,
+        provider_source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
-        provider_type = self._resolve_provider_type(capability)
-        providers = []
-        source_provider_type = {
-            source["id"]: source.get("provider_type", "chat_completion")
-            for source in self.provider_manager.provider_sources_config
+        provider_types = {
+            item.strip() for item in (provider_type or "").split(",") if item.strip()
         }
+        providers = []
         for provider in self.provider_manager.providers_config:
-            if source_id and provider.get("provider_source_id") != source_id:
+            if (
+                provider_source_id
+                and provider.get("provider_source_id") != provider_source_id
+            ):
                 continue
             if enabled is not None and bool(provider.get("enable", False)) != enabled:
                 continue
-            effective_type = provider.get("provider_type")
-            if not effective_type and provider.get("provider_source_id"):
-                effective_type = source_provider_type.get(
-                    provider.get("provider_source_id"), "chat_completion"
-                )
-            if provider_type and effective_type != provider_type:
+            normalized_provider = self._build_provider_response(provider)
+            effective_type = normalized_provider.get("provider_type")
+            if provider_types and effective_type not in provider_types:
                 continue
-            if provider.get("provider_source_id"):
-                providers.append(
-                    self.provider_manager.get_merged_provider_config(provider)
-                )
-            else:
-                providers.append(copy.deepcopy(provider))
+            providers.append(normalized_provider)
         return {"providers": providers}
 
     def list_providers_for_dashboard_types(
@@ -1572,21 +1344,7 @@ class ProviderConfigService:
     ) -> list[dict]:
         if not provider_type:
             raise ValueError("缺少参数 provider_type")
-
-        provider_list = []
-        seen_ids = set()
-        for item in provider_type.split(","):
-            providers = self.list_providers(capability=item)["providers"]
-            for provider in providers:
-                provider_id = provider.get("id")
-                if provider_id in seen_ids:
-                    continue
-                seen_ids.add(provider_id)
-                provider_list.append(provider)
-        return provider_list
-
-    def list_providers_from_dashboard_args(self, args) -> list[dict]:
-        return self.list_providers_for_dashboard_types(args.get("provider_type", None))
+        return self.list_providers(provider_type=provider_type)["providers"]
 
     def get_provider(self, provider_id: str, *, merged: bool = False) -> dict:
         provider = self.provider_manager.get_provider_config_by_id(
@@ -1595,17 +1353,24 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
-        return {"provider": provider}
+        if merged:
+            return {"provider": self._ensure_provider_type(provider)}
+        return {"provider": self._build_raw_provider_response(provider)}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)
         if source_id:
             config["provider_source_id"] = source_id
+        else:
+            self._ensure_provider_type(config)
         await self.provider_manager.create_provider(config)
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
+        config = copy.deepcopy(config)
         if not config.get("id"):
             config["id"] = provider_id
+        if not config.get("provider_source_id"):
+            self._ensure_provider_type(config)
         await self.provider_manager.update_provider(provider_id, config)
 
     async def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:
@@ -1617,31 +1382,6 @@ class ProviderConfigService:
 
     async def delete_provider(self, provider_id: str) -> None:
         await self.provider_manager.delete_provider(provider_id=provider_id)
-
-    async def create_provider_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict):
-            raise ValueError("参数错误")
-        await self.create_provider(payload)
-        return "新增服务提供商配置成功"
-
-    async def update_provider_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        origin_provider_id = data.get("id")
-        new_config = data.get("config")
-        if not origin_provider_id or not isinstance(new_config, dict):
-            raise ValueError("参数错误")
-
-        await self.update_provider(origin_provider_id, new_config)
-        return "更新成功，已经实时生效~"
-
-    async def delete_provider_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
-        provider_id = data.get("id", "")
-        if not provider_id:
-            raise ValueError("缺少参数 id")
-
-        await self.delete_provider(provider_id)
-        return "删除成功，已经实时生效。"
 
     async def test_provider(self, provider_id: str) -> dict:
         target = self.provider_manager.inst_map.get(provider_id)
@@ -1664,23 +1404,11 @@ class ProviderConfigService:
             result["error"] = str(exc)
         return result
 
-    async def test_provider_from_dashboard_args(self, args) -> dict:
-        provider_id = args.get("id")
-        if not provider_id:
-            raise ValueError("Missing provider_id parameter")
-        logger.info(f"API call: /config/provider/check_one id={provider_id}")
-        return await self.test_provider(provider_id)
-
     def _find_provider_source(self, source_id: str) -> dict | None:
         for source in self.config.get("provider_sources", []):
             if source.get("id") == source_id:
                 return source
         return None
-
-    def _resolve_provider_type(self, capability: str | None) -> str | None:
-        if not capability:
-            return None
-        return self.CAPABILITY_TO_PROVIDER_TYPE.get(capability, capability)
 
     async def _reload_providers_for_source(self, source_id: str) -> None:
         await self._reload_providers(

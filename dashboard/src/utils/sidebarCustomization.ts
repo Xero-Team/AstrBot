@@ -1,27 +1,43 @@
-// Utility for managing sidebar customization in localStorage
+import { MORE_GROUP_KEY } from '@/layouts/full/vertical-sidebar/sidebarItem';
+
 const STORAGE_KEY = 'astrbot_sidebar_customization';
 
-/**
- * Get the customized sidebar configuration from localStorage
- * @returns {Object|null} The customization config or null if not set
- */
-export function getSidebarCustomization() {
+export interface SidebarCustomization {
+  mainItems: string[];
+  moreItems: string[];
+}
+
+export interface SidebarItem {
+  title: string;
+  icon?: string;
+  children?: SidebarItem[];
+  [key: string]: unknown;
+}
+
+interface ResolveSidebarOptions {
+  cloneItems?: boolean;
+  assembleMoreGroup?: boolean;
+}
+
+interface ResolvedSidebarItems {
+  mainItems: SidebarItem[];
+  moreItems: SidebarItem[];
+  merged?: SidebarItem[];
+  normalizedMainKeys: string[];
+  normalizedMoreKeys: string[];
+}
+
+export function getSidebarCustomization(): SidebarCustomization | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
+    return stored ? (JSON.parse(stored) as SidebarCustomization) : null;
   } catch (error) {
     console.error('Error reading sidebar customization:', error);
     return null;
   }
 }
 
-/**
- * Save the sidebar customization to localStorage
- * @param {Object} config - The customization configuration
- * @param {Array} config.mainItems - Array of item titles for main sidebar
- * @param {Array} config.moreItems - Array of item titles for "More Features" group
- */
-export function setSidebarCustomization(config) {
+export function setSidebarCustomization(config: SidebarCustomization): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch (error) {
@@ -29,10 +45,7 @@ export function setSidebarCustomization(config) {
   }
 }
 
-/**
- * Clear the sidebar customization (reset to default)
- */
-export function clearSidebarCustomization() {
+export function clearSidebarCustomization(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch (error) {
@@ -40,24 +53,17 @@ export function clearSidebarCustomization() {
   }
 }
 
-/**
- * 解析侧边栏默认项与用户定制，返回主区/更多区及可选的合并结果
- * @param {Array} defaultItems - 默认侧边栏结构
- * @param {Object|null} customization - 用户定制（mainItems/moreItems）
- * @param {Object} options
- * @param {boolean} [options.cloneItems=false] - 是否克隆条目以避免外部引用被修改
- * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
- * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
- */
-import { MORE_GROUP_KEY } from '@/layouts/full/vertical-sidebar/sidebarItem';
-
-export function resolveSidebarItems(defaultItems, customization, options = {}) {
+export function resolveSidebarItems(
+  defaultItems: SidebarItem[],
+  customization: SidebarCustomization | null,
+  options: ResolveSidebarOptions = {},
+): ResolvedSidebarItems {
   const { cloneItems = false, assembleMoreGroup = false } = options;
 
-  const normalizeKeys = (keys = []) => {
+  const normalizeKeys = (keys: unknown = []): string[] => {
     const list = Array.isArray(keys) ? keys : [];
-    const deduped = [];
-    const seen = new Set();
+    const deduped: string[] = [];
+    const seen = new Set<string>();
 
     list.forEach((key) => {
       if (typeof key !== 'string') return;
@@ -69,29 +75,29 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     return deduped;
   };
 
-  const all = new Map();
-  const defaultMain = [];
-  const defaultMore = [];
+  const all = new Map<string, SidebarItem>();
+  const defaultMain: string[] = [];
+  const defaultMore: string[] = [];
 
-  // 收集所有条目，按 title 建索引
   defaultItems.forEach((item) => {
     if (item.children && item.title === MORE_GROUP_KEY) {
       item.children.forEach((child) => {
         all.set(child.title, cloneItems ? { ...child } : child);
         defaultMore.push(child.title);
       });
-    } else {
-      all.set(item.title, cloneItems ? { ...item } : item);
-      defaultMain.push(item.title);
+      return;
     }
+
+    all.set(item.title, cloneItems ? { ...item } : item);
+    defaultMain.push(item.title);
   });
 
   const hasCustomization = Boolean(customization);
   let mainKeys = hasCustomization
-    ? normalizeKeys(customization.mainItems || [])
+    ? normalizeKeys(customization?.mainItems || [])
     : [...defaultMain];
   let moreKeys = hasCustomization
-    ? normalizeKeys(customization.moreItems || [])
+    ? normalizeKeys(customization?.moreItems || [])
     : [...defaultMore];
 
   if (hasCustomization) {
@@ -100,7 +106,6 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   }
 
   if (hasCustomization) {
-    // 如果同一项同时出现在主区与更多区，主区优先。
     const mainSet = new Set(mainKeys);
     moreKeys = moreKeys.filter((title) => !mainSet.has(title));
   }
@@ -109,10 +114,11 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     ? new Set([...mainKeys, ...moreKeys])
     : new Set(defaultMain.concat(defaultMore));
 
-  const mainItems = mainKeys.map((title) => all.get(title)).filter(Boolean);
+  const mainItems = mainKeys
+    .map((title) => all.get(title))
+    .filter((item): item is SidebarItem => Boolean(item));
 
   if (hasCustomization) {
-    // 补充新增默认主区项
     defaultMain.forEach((title) => {
       if (!used.has(title)) {
         const item = all.get(title);
@@ -121,10 +127,11 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     });
   }
 
-  const moreItems = moreKeys.map((title) => all.get(title)).filter(Boolean);
+  const moreItems = moreKeys
+    .map((title) => all.get(title))
+    .filter((item): item is SidebarItem => Boolean(item));
 
   if (hasCustomization) {
-    // 补充新增默认更多区项
     defaultMore.forEach((title) => {
       if (!used.has(title)) {
         const item = all.get(title);
@@ -133,7 +140,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     });
   }
 
-  let merged;
+  let merged: SidebarItem[] | undefined;
   if (assembleMoreGroup) {
     const children = cloneItems
       ? moreItems.map((item) => ({ ...item }))
@@ -161,12 +168,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   };
 }
 
-/**
- * 应用侧边栏定制，返回包含更多分组的完整结构
- * @param {Array} defaultItems - 默认侧边栏结构
- * @returns {Array} 自定义后的结构（新数组，不修改入参）
- */
-export function applySidebarCustomization(defaultItems) {
+export function applySidebarCustomization(defaultItems: SidebarItem[]) {
   const customization = getSidebarCustomization();
   const { merged, normalizedMainKeys, normalizedMoreKeys } =
     resolveSidebarItems(defaultItems, customization, {

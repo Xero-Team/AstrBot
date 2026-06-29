@@ -304,7 +304,7 @@
             variant="text"
             color="primary"
             prepend-icon="mdi-plus"
-            @click="$emit('create')"
+            @click="emit('create')"
           >
             {{ labels.createButton || '新建' }}
           </v-btn>
@@ -325,8 +325,9 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { useDisplay } from 'vuetify';
 import BaseMoveTargetNode from './BaseMoveTargetNode.vue';
 import type {
   BreadcrumbItem,
@@ -335,274 +336,257 @@ import type {
   SelectableItem,
 } from './types';
 
-export default defineComponent({
-  name: 'BaseFolderItemSelector',
-  components: {
-    BaseMoveTargetNode,
+const props = withDefaults(
+  defineProps<{
+    modelValue?: string;
+    folderTree?: FolderTreeNode[];
+    items?: SelectableItem[];
+    treeLoading?: boolean;
+    itemsLoading?: boolean;
+    labels?: Partial<FolderItemSelectorLabels>;
+    showCreateButton?: boolean;
+    showEditButton?: boolean;
+    defaultItem?: SelectableItem | null;
+    itemIdField?: string;
+    itemNameField?: string;
+    itemDescriptionField?: string;
+    displayValueFormatter?: ((value: string) => string) | null;
+  }>(),
+  {
+    modelValue: '',
+    folderTree: () => [],
+    items: () => [],
+    treeLoading: false,
+    itemsLoading: false,
+    labels: () => ({}),
+    showCreateButton: false,
+    showEditButton: false,
+    defaultItem: null,
+    itemIdField: 'id',
+    itemNameField: 'name',
+    itemDescriptionField: 'description',
+    displayValueFormatter: null,
   },
-  props: {
-    modelValue: {
-      type: String,
-      default: '',
-    },
-    // 文件夹树数据
-    folderTree: {
-      type: Array as PropType<FolderTreeNode[]>,
-      default: () => [],
-    },
-    // 当前项目列表
-    items: {
-      type: Array as PropType<SelectableItem[]>,
-      default: () => [],
-    },
-    // 加载状态
-    treeLoading: {
-      type: Boolean,
-      default: false,
-    },
-    itemsLoading: {
-      type: Boolean,
-      default: false,
-    },
-    // 标签配置
-    labels: {
-      type: Object as PropType<Partial<FolderItemSelectorLabels>>,
-      default: () => ({}),
-    },
-    // 是否显示创建按钮
-    showCreateButton: {
-      type: Boolean,
-      default: false,
-    },
-    // 是否显示编辑按钮
-    showEditButton: {
-      type: Boolean,
-      default: false,
-    },
-    // 默认项（如 "默认人格"）
-    defaultItem: {
-      type: Object as PropType<SelectableItem | null>,
-      default: null,
-    },
-    // 项目字段映射
-    itemIdField: {
-      type: String,
-      default: 'id',
-    },
-    itemNameField: {
-      type: String,
-      default: 'name',
-    },
-    itemDescriptionField: {
-      type: String,
-      default: 'description',
-    },
-    // 显示值的格式化函数（用于显示选中项的名称）
-    displayValueFormatter: {
-      type: Function as unknown as PropType<((value: string) => string) | null>,
-      default: null,
-    },
-  },
-  emits: ['update:modelValue', 'navigate', 'create', 'edit'],
-  data() {
-    return {
-      dialog: false,
-      selectedItemId: '',
-      currentFolderId: null as string | null,
-      breadcrumbPath: [] as FolderTreeNode[],
-    };
-  },
-  computed: {
-    isCompactLayout(): boolean {
-      return this.$vuetify.display.smAndDown;
-    },
+);
 
-    currentFolderLabel(): string {
-      if (this.currentFolderId === null) {
-        return this.labels.rootFolder || '根目录';
-      }
-      const currentFolder = this.breadcrumbPath[this.breadcrumbPath.length - 1];
-      return currentFolder?.name || this.labels.rootFolder || '根目录';
-    },
+const emit = defineEmits<{
+  'update:modelValue': [value: string];
+  navigate: [folderId: string | null];
+  create: [];
+  edit: [item: SelectableItem];
+}>();
 
-    displayValue(): string {
-      if (this.displayValueFormatter) {
-        return this.displayValueFormatter(this.modelValue);
-      }
-      // 如果是默认项
-      if (
-        this.defaultItem &&
-        this.modelValue === this.getItemId(this.defaultItem)
-      ) {
-        return this.labels.defaultItem || this.getItemName(this.defaultItem);
-      }
-      return this.modelValue;
-    },
+const { smAndDown } = useDisplay();
 
-    currentItems(): SelectableItem[] {
-      const items: SelectableItem[] = [];
+const dialog = ref(false);
+const selectedItemId = ref('');
+const currentFolderId = ref<string | null>(null);
+const breadcrumbPath = ref<FolderTreeNode[]>([]);
 
-      // 如果在根目录且有默认项，添加到列表开头
-      if (this.currentFolderId === null && this.defaultItem) {
-        items.push(this.defaultItem);
-      }
+const isCompactLayout = computed(() => smAndDown.value);
 
-      // 添加当前文件夹的项目
-      items.push(...this.items);
+const currentFolderLabel = computed(() => {
+  if (currentFolderId.value === null) {
+    return props.labels.rootFolder || '根目录';
+  }
 
-      return items;
-    },
-
-    currentSubFolders(): FolderTreeNode[] {
-      if (this.currentFolderId === null) {
-        return this.folderTree;
-      }
-      const folder = this.findFolderInTree(this.currentFolderId);
-      return folder?.children || [];
-    },
-
-    breadcrumbItems(): BreadcrumbItem[] {
-      const items: BreadcrumbItem[] = [
-        {
-          title: this.labels.rootFolder || '根目录',
-          folderId: null,
-          disabled: this.currentFolderId === null,
-          isRoot: true,
-        },
-      ];
-
-      this.breadcrumbPath.forEach((folder, index) => {
-        items.push({
-          title: folder.name,
-          folderId: folder.folder_id,
-          disabled: index === this.breadcrumbPath.length - 1,
-          isRoot: false,
-        });
-      });
-
-      return items;
-    },
-  },
-  methods: {
-    toBreadcrumbItem(item: unknown): BreadcrumbItem {
-      return item as BreadcrumbItem;
-    },
-    getItemId(item: SelectableItem): string {
-      return String(item[this.itemIdField] || item.id || '');
-    },
-
-    getItemName(item: SelectableItem): string {
-      return String(item[this.itemNameField] || item.name || '');
-    },
-
-    getItemDescription(item: SelectableItem): string {
-      return String(item[this.itemDescriptionField] || item.description || '');
-    },
-
-    truncateText(text: string, maxLength: number): string {
-      if (!text) return '';
-      return text.length > maxLength
-        ? `${text.substring(0, maxLength)}...`
-        : text;
-    },
-
-    openDialog() {
-      this.selectedItemId = this.modelValue || '';
-      this.currentFolderId = null;
-      this.breadcrumbPath = [];
-      this.dialog = true;
-      this.$emit('navigate', null);
-    },
-
-    navigateToFolder(folderId: string | null) {
-      this.currentFolderId = folderId;
-      this.updateBreadcrumb(folderId);
-      this.$emit('navigate', folderId);
-    },
-
-    navigateToParentFolder() {
-      if (this.currentFolderId === null) {
-        return;
-      }
-
-      if (this.breadcrumbPath.length <= 1) {
-        this.navigateToFolder(null);
-        return;
-      }
-
-      const parent = this.breadcrumbPath[this.breadcrumbPath.length - 2];
-      this.navigateToFolder(parent?.folder_id ?? null);
-    },
-
-    findFolderInTree(folderId: string): FolderTreeNode | null {
-      const findNode = (nodes: FolderTreeNode[]): FolderTreeNode | null => {
-        for (const node of nodes) {
-          if (node.folder_id === folderId) {
-            return node;
-          }
-          if (node.children && node.children.length > 0) {
-            const found = findNode(node.children);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      return findNode(this.folderTree);
-    },
-
-    findPathToFolder(folderId: string): FolderTreeNode[] {
-      const findPath = (
-        nodes: FolderTreeNode[],
-        path: FolderTreeNode[],
-      ): FolderTreeNode[] | null => {
-        for (const node of nodes) {
-          if (node.folder_id === folderId) {
-            return [...path, node];
-          }
-          if (node.children && node.children.length > 0) {
-            const result = findPath(node.children, [...path, node]);
-            if (result) return result;
-          }
-        }
-        return null;
-      };
-      return findPath(this.folderTree, []) || [];
-    },
-
-    updateBreadcrumb(folderId: string | null) {
-      if (folderId === null) {
-        this.breadcrumbPath = [];
-      } else {
-        this.breadcrumbPath = this.findPathToFolder(folderId);
-      }
-    },
-
-    selectItem(item: SelectableItem) {
-      this.selectedItemId = this.getItemId(item);
-    },
-
-    confirmSelection() {
-      this.$emit('update:modelValue', this.selectedItemId);
-      this.dialog = false;
-    },
-
-    cancelSelection() {
-      this.selectedItemId = this.modelValue || '';
-      this.dialog = false;
-    },
-
-    isDefaultItem(item: SelectableItem): boolean {
-      if (this.defaultItem === null) {
-        return false;
-      }
-      return this.getItemId(item) === this.getItemId(this.defaultItem);
-    },
-
-    handleEditItem(item: SelectableItem) {
-      this.$emit('edit', item);
-    },
-  },
+  const currentFolder = breadcrumbPath.value.at(-1);
+  return currentFolder?.name || props.labels.rootFolder || '根目录';
 });
+
+const displayValue = computed(() => {
+  if (props.displayValueFormatter) {
+    return props.displayValueFormatter(props.modelValue);
+  }
+
+  if (props.defaultItem && props.modelValue === getItemId(props.defaultItem)) {
+    return props.labels.defaultItem || getItemName(props.defaultItem);
+  }
+
+  return props.modelValue;
+});
+
+const currentItems = computed<SelectableItem[]>(() => {
+  const items: SelectableItem[] = [];
+
+  if (currentFolderId.value === null && props.defaultItem) {
+    items.push(props.defaultItem);
+  }
+
+  items.push(...props.items);
+  return items;
+});
+
+const currentSubFolders = computed<FolderTreeNode[]>(() => {
+  if (currentFolderId.value === null) {
+    return props.folderTree;
+  }
+
+  return findFolderInTree(currentFolderId.value)?.children || [];
+});
+
+const breadcrumbItems = computed<BreadcrumbItem[]>(() => {
+  const items: BreadcrumbItem[] = [
+    {
+      title: props.labels.rootFolder || '根目录',
+      folderId: null,
+      disabled: currentFolderId.value === null,
+      isRoot: true,
+    },
+  ];
+
+  breadcrumbPath.value.forEach((folder, index) => {
+    items.push({
+      title: folder.name,
+      folderId: folder.folder_id,
+      disabled: index === breadcrumbPath.value.length - 1,
+      isRoot: false,
+    });
+  });
+
+  return items;
+});
+
+function normalizeTextValue(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  return '';
+}
+
+function getItemFieldValue(
+  item: SelectableItem,
+  primaryField: string,
+  fallbackField: keyof SelectableItem,
+): string {
+  return (
+    normalizeTextValue(item[primaryField]) ||
+    normalizeTextValue(item[fallbackField])
+  );
+}
+
+function toBreadcrumbItem(item: unknown): BreadcrumbItem {
+  return item as BreadcrumbItem;
+}
+
+function getItemId(item: SelectableItem): string {
+  return getItemFieldValue(item, props.itemIdField, 'id');
+}
+
+function getItemName(item: SelectableItem): string {
+  return getItemFieldValue(item, props.itemNameField, 'name');
+}
+
+function getItemDescription(item: SelectableItem): string {
+  return getItemFieldValue(item, props.itemDescriptionField, 'description');
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (!text) {
+    return '';
+  }
+
+  return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+}
+
+function openDialog() {
+  selectedItemId.value = props.modelValue;
+  currentFolderId.value = null;
+  breadcrumbPath.value = [];
+  dialog.value = true;
+  emit('navigate', null);
+}
+
+function navigateToFolder(folderId: string | null) {
+  currentFolderId.value = folderId;
+  updateBreadcrumb(folderId);
+  emit('navigate', folderId);
+}
+
+function navigateToParentFolder() {
+  if (currentFolderId.value === null) {
+    return;
+  }
+
+  if (breadcrumbPath.value.length <= 1) {
+    navigateToFolder(null);
+    return;
+  }
+
+  const parent = breadcrumbPath.value.at(-2);
+  navigateToFolder(parent?.folder_id ?? null);
+}
+
+function findFolderInTree(folderId: string): FolderTreeNode | null {
+  const findNode = (nodes: FolderTreeNode[]): FolderTreeNode | null => {
+    for (const node of nodes) {
+      if (node.folder_id === folderId) {
+        return node;
+      }
+      if (node.children.length > 0) {
+        const found = findNode(node.children);
+        if (found) {
+          return found;
+        }
+      }
+    }
+    return null;
+  };
+
+  return findNode(props.folderTree);
+}
+
+function findPathToFolder(folderId: string): FolderTreeNode[] {
+  const findPath = (
+    nodes: FolderTreeNode[],
+    path: FolderTreeNode[],
+  ): FolderTreeNode[] | null => {
+    for (const node of nodes) {
+      if (node.folder_id === folderId) {
+        return [...path, node];
+      }
+      if (node.children.length > 0) {
+        const result = findPath(node.children, [...path, node]);
+        if (result) {
+          return result;
+        }
+      }
+    }
+    return null;
+  };
+
+  return findPath(props.folderTree, []) || [];
+}
+
+function updateBreadcrumb(folderId: string | null) {
+  breadcrumbPath.value = folderId === null ? [] : findPathToFolder(folderId);
+}
+
+function selectItem(item: SelectableItem) {
+  selectedItemId.value = getItemId(item);
+}
+
+function confirmSelection() {
+  emit('update:modelValue', selectedItemId.value);
+  dialog.value = false;
+}
+
+function cancelSelection() {
+  selectedItemId.value = props.modelValue;
+  dialog.value = false;
+}
+
+function isDefaultItem(item: SelectableItem): boolean {
+  if (props.defaultItem === null) {
+    return false;
+  }
+
+  return getItemId(item) === getItemId(props.defaultItem);
+}
+
+function handleEditItem(item: SelectableItem) {
+  emit('edit', item);
+}
 </script>
 
 <style scoped>

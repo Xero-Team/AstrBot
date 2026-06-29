@@ -6,7 +6,7 @@
       rounded="lg"
       :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
       class="folder-item"
-      @click.stop="!isDisabled && $emit('select', folder.folder_id)"
+      @click.stop="!isDisabled && emit('select', folder.folder_id)"
     >
       <template #prepend>
         <v-btn
@@ -50,57 +50,45 @@
           :depth="depth + 1"
           :selected-folder-id="selectedFolderId"
           :disabled-folder-ids="disabledFolderIds"
-          @select="$emit('select', $event)"
+          @select="emit('select', $event)"
         />
       </div>
     </v-expand-transition>
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
 import type { FolderTreeNode } from './types';
 
-export default defineComponent({
-  name: 'BaseMoveTargetNode',
-  props: {
-    folder: {
-      type: Object as PropType<FolderTreeNode>,
-      required: true,
-    },
-    depth: {
-      type: Number,
-      default: 0,
-    },
-    selectedFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    disabledFolderIds: {
-      type: Array as PropType<string[]>,
-      default: () => [],
-    },
+const props = withDefaults(
+  defineProps<{
+    folder: FolderTreeNode;
+    depth?: number;
+    selectedFolderId?: string | null;
+    disabledFolderIds?: string[];
+  }>(),
+  {
+    depth: 0,
+    selectedFolderId: null,
+    disabledFolderIds: () => [],
   },
-  emits: ['select'],
-  data() {
-    return {
-      isExpanded: true,
-    };
-  },
-  computed: {
-    hasChildren(): boolean {
-      return this.folder.children && this.folder.children.length > 0;
-    },
-    isDisabled(): boolean {
-      return this.disabledFolderIds.includes(this.folder.folder_id);
-    },
-  },
-  methods: {
-    toggleExpand() {
-      this.isExpanded = !this.isExpanded;
-    },
-  },
-});
+);
+
+const emit = defineEmits<{
+  select: [folderId: string];
+}>();
+
+const isExpanded = ref(true);
+
+const hasChildren = computed(() => props.folder.children.length > 0);
+const isDisabled = computed(() =>
+  props.disabledFolderIds.includes(props.folder.folder_id),
+);
+
+function toggleExpand() {
+  isExpanded.value = !isExpanded.value;
+}
 </script>
 
 <style scoped>

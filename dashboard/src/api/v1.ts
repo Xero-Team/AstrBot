@@ -43,12 +43,12 @@ import type {
   PersonaMoveRequest,
   PersonaRequest,
   PipInstallRequest,
-  PluginVersionSupportRequest,
   PluginConfigFileDeleteRequest,
+  PluginBatchUpdateRequest,
   PluginGithubInstallRequest,
   PluginSourceBindRequest,
-  PluginValidateRepoRequest,
   PluginSourceRequest,
+  PluginUpdateRequest,
   PluginUrlInstallRequest,
   ProviderConfigRequest,
   BatchSessionProviderRequest,
@@ -577,8 +577,15 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
-  source_id?: string;
+  provider_type?:
+    | 'chat_completion'
+    | 'agent_runner'
+    | 'speech_to_text'
+    | 'text_to_speech'
+    | 'embedding'
+    | 'rerank'
+    | string;
+  provider_source_id?: string;
   enabled?: boolean;
 }
 
@@ -615,17 +622,6 @@ export interface ChatSessionListParams {
 export interface CronJobListParams {
   type?: string;
 }
-
-type ProviderCapability = NonNullable<ProviderListParams['capability']>;
-
-const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
-  chat_completion: 'chat',
-  agent_runner: 'agent',
-  speech_to_text: 'stt',
-  text_to_speech: 'tts',
-  embedding: 'embedding',
-  rerank: 'rerank',
-};
 
 type V1Response<T> = Promise<AxiosResponse<ApiEnvelope<T>>>;
 type ListConversationsQuery = NonNullable<ListConversationsData['query']>;
@@ -668,36 +664,15 @@ function generatedFormData(
 }
 
 function botConfig(config: OpenConfig): BotConfigRequest {
-  let enabled: boolean | undefined;
-  if (typeof config.enable === 'boolean') {
-    enabled = config.enable;
-  } else if (typeof config.enabled === 'boolean') {
-    enabled = config.enabled;
-  }
-
+  const type = String(config.type || '').trim();
   return {
-    id: typeof config.id === 'string' ? config.id : undefined,
-    type: typeof config.type === 'string' ? config.type : '',
-    enabled,
     config,
-  };
+    type,
+  } as unknown as BotConfigRequest;
 }
 
 function providerConfig(config: OpenConfig): ProviderConfigRequest {
   return { config };
-}
-
-function providerTypeToCapabilities(
-  providerType: string,
-): ProviderCapability[] {
-  return providerType
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(
-      (item) =>
-        PROVIDER_TYPE_TO_CAPABILITY[item] || (item as ProviderCapability),
-    );
 }
 
 export const configProfileApi = {
@@ -817,27 +792,27 @@ export const botApi = {
   },
   get(botId: string) {
     return typed<{ bot: OpenConfig }>(
-      openApiV1.getBotById({ query: { bot_id: botId } }),
+      openApiV1.getBot({ path: { bot_id: botId } }),
     );
   },
   update(botId: string, config: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.updateBotById({
-        body: { bot_id: botId, config },
+      openApiV1.updateBot({
+        path: { bot_id: botId },
+        body: botConfig(config),
       }),
     );
   },
   setEnabled(botId: string, payload: EnabledPatch) {
     return typed<OpenConfig>(
-      openApiV1.setBotEnabledById({
-        body: { bot_id: botId, enabled: payload.enabled },
+      openApiV1.setBotEnabled({
+        path: { bot_id: botId },
+        body: payload,
       }),
     );
   },
   delete(botId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteBotById({ query: { bot_id: botId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteBot({ path: { bot_id: botId } }));
   },
 };
 
@@ -852,20 +827,21 @@ export const providerApi = {
   },
   upsertSource(sourceId: string, config: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.upsertProviderSourceById({
-        body: { source_id: sourceId, config },
+      openApiV1.upsertProviderSource({
+        path: { source_id: sourceId },
+        body: { config },
       }),
     );
   },
   deleteSource(sourceId: string) {
     return typed<OpenConfig>(
-      openApiV1.deleteProviderSourceById({ query: { source_id: sourceId } }),
+      openApiV1.deleteProviderSource({ path: { source_id: sourceId } }),
     );
   },
   sourceModels(sourceId: string) {
     return typed<ProviderSourceModelsData>(
-      openApiV1.listProviderSourceModelsById({
-        query: { source_id: sourceId },
+      openApiV1.listProviderSourceModels({
+        path: { source_id: sourceId },
       }),
     );
   },
@@ -877,29 +853,14 @@ export const providerApi = {
   async listByProviderType(
     providerType: string,
   ): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
-    const capabilities = providerTypeToCapabilities(providerType);
-    if (capabilities.length === 0) {
-      const response = await providerApi.list();
-      return {
-        ...response,
-        data: {
-          ...response.data,
-          data: response.data.data.providers || [],
-        },
-      };
-    }
-
-    const responses = await Promise.all(
-      capabilities.map((capability) => providerApi.list({ capability })),
+    const response = await providerApi.list(
+      providerType ? { provider_type: providerType } : undefined,
     );
-    const first = responses[0];
     return {
-      ...first,
+      ...response,
       data: {
-        ...first.data,
-        data: responses.flatMap(
-          (response) => response.data.data.providers || [],
-        ),
+        ...response.data,
+        data: response.data.data.providers || [],
       },
     };
   },
@@ -910,58 +871,63 @@ export const providerApi = {
   },
   listBySource(
     sourceId: string,
-    params?: Pick<ProviderListParams, 'capability'>,
+    params?: Pick<ProviderListParams, 'provider_type'>,
   ) {
     return typed<{ providers: OpenConfig[] }>(
-      openApiV1.listProvidersBySourceId({
-        query: { source_id: sourceId, ...params },
+      openApiV1.listProvidersBySource({
+        path: { source_id: sourceId },
+        query: generatedQuery(params),
       }),
     );
   },
   createInSource(sourceId: string, config: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.createProviderInSourceById({
-        body: { source_id: sourceId, config },
+      openApiV1.createProviderInSource({
+        path: { source_id: sourceId },
+        body: { config },
       }),
     );
   },
   get(providerId: string, merged = false) {
     return typed<{ provider: OpenConfig }>(
-      openApiV1.getProviderById({
-        query: { provider_id: providerId, merged },
+      openApiV1.getProvider({
+        path: { provider_id: providerId },
+        query: { merged },
       }),
     );
   },
   update(providerId: string, config: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.updateProviderById({
-        body: { provider_id: providerId, config },
+      openApiV1.updateProvider({
+        path: { provider_id: providerId },
+        body: { config },
       }),
     );
   },
   setEnabled(providerId: string, payload: EnabledPatch) {
     return typed<OpenConfig>(
-      openApiV1.setProviderEnabledById({
-        body: { provider_id: providerId, enabled: payload.enabled },
+      openApiV1.setProviderEnabled({
+        path: { provider_id: providerId },
+        body: payload,
       }),
     );
   },
   delete(providerId: string) {
     return typed<OpenConfig>(
-      openApiV1.deleteProviderById({ query: { provider_id: providerId } }),
+      openApiV1.deleteProvider({ path: { provider_id: providerId } }),
     );
   },
   test(providerId: string) {
     return typed<ProviderTestData>(
-      openApiV1.testProviderById({ body: { provider_id: providerId } }),
+      openApiV1.testProvider({ path: { provider_id: providerId } }),
     );
   },
   embeddingDimension(providerId: string, providerConfig?: OpenConfig) {
     return typed<ProviderEmbeddingDimensionData>(
-      openApiV1.getProviderEmbeddingDimensionById({
+      openApiV1.getProviderEmbeddingDimension({
+        path: { provider_id: providerId },
         body: {
-          provider_id: providerId,
-          ...(providerConfig ? { provider_config: providerConfig } : {}),
+          ...(providerConfig ? { config: providerConfig } : {}),
         },
       }),
     );
@@ -1017,7 +983,7 @@ export const apiKeyApi = {
 
 export const traceApi = {
   getSettings() {
-    return typed<OpenConfig>(openApiV1.getTraceSettings());
+    return typed<TraceSettingsRequest>(openApiV1.getTraceSettings());
   },
   updateSettings(settings: TraceSettingsRequest) {
     return typed<OpenConfig>(openApiV1.updateTraceSettings({ body: settings }));
@@ -1430,30 +1396,30 @@ export const mcpApi = {
   },
   update(serverName: string, config: McpServerConfig) {
     return typed<OpenConfig>(
-      openApiV1.updateMcpServerByName({
-        body: { server_name: serverName, config },
+      openApiV1.updateMcpServer({
+        path: { server_name: serverName },
+        body: config,
       }),
     );
   },
   delete(serverName: string) {
     return typed<OpenConfig>(
-      openApiV1.deleteMcpServerByName({ query: { server_name: serverName } }),
+      openApiV1.deleteMcpServer({ path: { server_name: serverName } }),
     );
   },
   setEnabled(serverName: string, enabled: boolean) {
     return typed<OpenConfig>(
-      openApiV1.setMcpServerEnabledByName({
-        body: { server_name: serverName, enabled },
+      openApiV1.setMcpServerEnabled({
+        path: { server_name: serverName },
+        body: { enabled },
       }),
     );
   },
   test(serverName: string, config?: DynamicConfig) {
     return typed<OpenConfig>(
-      openApiV1.testMcpServerByName({
-        body: {
-          server_name: serverName,
-          ...(config ? { mcp_server_config: config } : {}),
-        },
+      openApiV1.testMcpServer({
+        path: { server_name: serverName },
+        body: config ? { config } : undefined,
       }),
     );
   },
@@ -1517,7 +1483,7 @@ export const pluginApi = {
   },
   get(pluginId: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPlugin({ path: { plugin_id: pluginId } }),
     );
   },
   failed() {
@@ -1544,82 +1510,80 @@ export const pluginApi = {
     options?: { delete_config?: boolean; delete_data?: boolean },
   ) {
     return typed<OpenConfig>(
-      openApiV1.uninstallPluginById({
-        query: { plugin_id: pluginId },
+      openApiV1.uninstallPlugin({
+        path: { plugin_id: pluginId },
         body: options,
       }),
     );
   },
   reload(pluginId: string) {
     return typed<OpenConfig>(
-      openApiV1.reloadPluginById({ body: { plugin_id: pluginId } }),
+      openApiV1.reloadPlugin({ path: { plugin_id: pluginId } }),
     );
   },
   setEnabled(pluginId: string, enabled: boolean) {
     return typed<OpenConfig>(
-      openApiV1.setPluginEnabledById({
-        body: { plugin_id: pluginId, enabled },
+      openApiV1.setPluginEnabled({
+        path: { plugin_id: pluginId },
+        body: { enabled },
       }),
     );
   },
-  update(pluginId: string, body?: OpenConfig) {
+  update(pluginId: string, body?: PluginUpdateRequest) {
     return typed<OpenConfig>(
-      openApiV1.updatePlugins({
-        body: { plugin_id: pluginId, ...(body || {}) },
+      openApiV1.updatePlugin({
+        path: { plugin_id: pluginId },
+        body,
       }),
     );
   },
-  updateMany(body: OpenConfig) {
+  updateMany(body: PluginBatchUpdateRequest) {
     return typed<OpenConfig>(openApiV1.updatePlugins({ body }));
-  },
-  checkVersionSupport(payload: PluginVersionSupportRequest) {
-    return typed<OpenConfig>(
-      openApiV1.checkPluginVersionSupport({ body: payload }),
-    );
   },
   config(pluginId: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginConfigById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPluginConfig({ path: { plugin_id: pluginId } }),
     );
   },
   updateConfig(pluginId: string, config: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.updatePluginConfigById({
-        body: { plugin_id: pluginId, config },
+      openApiV1.updatePluginConfig({
+        path: { plugin_id: pluginId },
+        body: { config },
       }),
     );
   },
   listConfigFiles(pluginId: string, configKey: string) {
     return typed<PluginConfigFilesData>(
-      openApiV1.listPluginConfigFilesById({
-        query: { plugin_id: pluginId, config_key: configKey },
+      openApiV1.listPluginConfigFiles({
+        path: { plugin_id: pluginId, config_key: configKey },
       }),
     );
   },
   uploadConfigFiles(pluginId: string, configKey: string, formData: FormData) {
     return typed<PluginConfigUploadData>(
-      openApiV1.uploadPluginConfigFilesById({
-        query: { plugin_id: pluginId, config_key: configKey },
+      openApiV1.uploadPluginConfigFiles({
+        path: { plugin_id: pluginId, config_key: configKey },
         body: generatedFormData(formData) as Record<string, unknown>,
       }),
     );
   },
   deleteConfigFile(pluginId: string, payload: PluginConfigFileDeleteRequest) {
     return typed<OpenConfig>(
-      openApiV1.deletePluginConfigFileById({
-        query: { plugin_id: pluginId },
+      openApiV1.deletePluginConfigFile({
+        path: { plugin_id: pluginId },
         body: payload,
       }),
     );
   },
   readme(pluginId: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPluginReadme({ path: { plugin_id: pluginId } }),
     );
   },
   changelog(pluginId: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginChangelogById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPluginChangelog({ path: { plugin_id: pluginId } }),
     );
   },
   market(params?: {
@@ -1655,9 +1619,6 @@ export const pluginApi = {
   },
   installUrl(body: PluginUrlInstallRequest) {
     return typed<OpenConfig>(openApiV1.installPluginFromUrl({ body }));
-  },
-  validateRepo(body: PluginValidateRepoRequest) {
-    return typed<OpenConfig>(openApiV1.validatePluginRepo({ body }));
   },
   bindSource(pluginId: string, body: PluginSourceBindRequest) {
     return typed<OpenConfig>(
@@ -1791,40 +1752,43 @@ export const skillApi = {
   },
   setEnabled(skillName: string, enabled: boolean) {
     return typed<OpenConfig>(
-      openApiV1.updateSkillByName({
-        body: { skill_name: skillName, enabled },
+      openApiV1.updateSkill({
+        path: { skill_name: skillName },
+        body: { active: enabled },
       }),
     );
   },
   delete(skillName: string) {
     return typed<OpenConfig>(
-      openApiV1.deleteSkillByName({ query: { skill_name: skillName } }),
+      openApiV1.deleteSkill({ path: { skill_name: skillName } }),
     );
   },
   download(skillName: string) {
-    return openApiV1.downloadSkillByName({
-      query: { skill_name: skillName },
+    return openApiV1.downloadSkill({
+      path: { skill_name: skillName },
       responseType: 'blob',
     });
   },
   listFiles(skillName: string, path = '') {
     return typed<OpenConfig>(
-      openApiV1.listSkillFilesByName({
-        query: { skill_name: skillName, ...(path ? { path } : {}) },
+      openApiV1.listSkillFiles({
+        path: { skill_name: skillName },
+        query: path ? { path } : undefined,
       }),
     );
   },
   getFile(skillName: string, path: string) {
     return typed<OpenConfig>(
-      openApiV1.getSkillFileByName({
-        query: { skill_name: skillName, path },
+      openApiV1.getSkillFile({
+        path: { skill_name: skillName, file_path: path },
       }),
     );
   },
   updateFile(skillName: string, path: string, content: string) {
     return typed<OpenConfig>(
-      openApiV1.updateSkillFileByName({
-        body: { skill_name: skillName, path, content },
+      openApiV1.updateSkillFile({
+        path: { skill_name: skillName, file_path: path },
+        body: content,
       }),
     );
   },
@@ -1903,7 +1867,7 @@ export const personaApi = {
   },
   get(personaId: string) {
     return typed<PersonaData>(
-      openApiV1.getPersonaById({ query: { persona_id: personaId } }),
+      openApiV1.getPersona({ path: { persona_id: personaId } }),
     );
   },
   create(persona: PersonaInput) {
@@ -1913,14 +1877,15 @@ export const personaApi = {
   },
   update(personaId: string, persona: Omit<PersonaInput, 'persona_id'>) {
     return typed<OpenConfig>(
-      openApiV1.updatePersonaById({
-        body: { persona_id: personaId, ...persona },
+      openApiV1.updatePersona({
+        path: { persona_id: personaId },
+        body: persona as unknown as PersonaRequest,
       }),
     );
   },
   delete(personaId: string) {
     return typed<OpenConfig>(
-      openApiV1.deletePersonaById({ query: { persona_id: personaId } }),
+      openApiV1.deletePersona({ path: { persona_id: personaId } }),
     );
   },
   move(personaId: string, folderId: string | null) {

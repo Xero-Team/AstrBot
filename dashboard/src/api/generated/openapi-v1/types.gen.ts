@@ -24,8 +24,6 @@ export type JsonSchema = {
     [key: string]: unknown;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
-
 export type LoginRequest = {
     username: string;
     password: string;
@@ -88,13 +86,6 @@ export type ConfigRouteUpsertRequest = {
 };
 
 export type BotConfigRequest = {
-    id?: string;
-    name?: string;
-    /**
-     * Platform adapter type, such as aiocqhttp, telegram, lark.
-     */
-    type: string;
-    enabled?: boolean;
     config: DynamicConfig;
 };
 
@@ -116,16 +107,15 @@ export type ToolPermissionPatch = {
 };
 
 export type ProviderSourceConfigRequest = {
-    id?: string;
     config: DynamicConfig;
 };
 
 export type ProviderConfigRequest = {
-    id?: string;
-    provider_source_id?: string;
-    capability?: ProviderCapability;
-    enabled?: boolean;
     config: DynamicConfig;
+};
+
+export type ProviderEmbeddingDimensionRequest = {
+    config?: DynamicConfig;
 };
 
 export type ChatRequest = {
@@ -217,7 +207,7 @@ export type FileUploadRequest = {
 };
 
 export type PluginUpdateRequest = {
-    reinstall?: boolean;
+    proxy?: string;
 };
 
 export type PluginSourceBindRequest = {
@@ -227,18 +217,8 @@ export type PluginSourceBindRequest = {
 };
 
 export type PluginBatchUpdateRequest = {
-    /**
-     * When set, update this single plugin instead of a batch.
-     */
-    plugin_id?: string;
-    plugin_ids?: Array<string>;
-    reinstall?: boolean;
-    update_all?: boolean;
-    [key: string]: unknown;
-};
-
-export type PluginVersionSupportRequest = {
-    astrbot_version?: string;
+    names: Array<string>;
+    proxy?: string;
 };
 
 export type PluginGithubInstallRequest = {
@@ -246,7 +226,6 @@ export type PluginGithubInstallRequest = {
      * GitHub URL or owner/repository slug.
      */
     repository: string;
-    ref?: string;
     /**
      * Optional downloadable ZIP URL to use instead of GitHub archive resolution.
      */
@@ -269,12 +248,6 @@ export type PluginUrlInstallRequest = {
     install_method?: string;
     registry_url?: string;
     market_plugin_id?: string;
-};
-
-export type PluginValidateRepoRequest = {
-    repository?: string;
-    url?: string;
-    proxy?: string;
 };
 
 export type PluginUploadInstallRequest = {
@@ -300,7 +273,7 @@ export type CommandPatchRequest = {
 
 export type McpServerConfig = {
     name: string;
-    enabled?: boolean;
+    active?: boolean;
     transport?: 'stdio' | 'sse' | 'streamable_http';
     command?: string;
     args?: Array<string>;
@@ -322,9 +295,7 @@ export type SkillUploadRequest = {
 };
 
 export type SkillPatchRequest = {
-    enabled?: boolean;
-    display_name?: string;
-    description?: string;
+    active: boolean;
 };
 
 export type NeoCandidateActionRequest = {
@@ -530,10 +501,12 @@ export type GhproxyTestRequest = {
     proxy_url: string;
 };
 
+export type StorageCleanupRequest = {
+    target?: string;
+};
+
 export type TraceSettingsRequest = {
-    enabled?: boolean;
-    level?: string;
-    [key: string]: unknown;
+    enabled: boolean;
 };
 
 export type T2iTemplateRequest = {
@@ -545,6 +518,14 @@ export type T2iTemplateRequest = {
 export type T2iTemplateContentRequest = {
     content: string;
     [key: string]: unknown;
+};
+
+export type SubAgentConfigRequest = {
+    main_enable?: boolean;
+    remove_main_duplicate_tools?: boolean;
+    agents?: Array<{
+        [key: string]: unknown;
+    }>;
 };
 
 export type AttachmentId = string;
@@ -1144,98 +1125,6 @@ export type ListBotStatsResponses = {
 
 export type ListBotStatsResponse = ListBotStatsResponses[keyof ListBotStatsResponses];
 
-export type DeleteBotByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        bot_id: string;
-    };
-    url: '/api/v1/bots/by-id';
-};
-
-export type DeleteBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeleteBotByIdResponse = DeleteBotByIdResponses[keyof DeleteBotByIdResponses];
-
-export type GetBotByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        bot_id: string;
-    };
-    url: '/api/v1/bots/by-id';
-};
-
-export type GetBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetBotByIdResponse = GetBotByIdResponses[keyof GetBotByIdResponses];
-
-export type UpdateBotByIdData = {
-    body: {
-        bot_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/by-id';
-};
-
-export type UpdateBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdateBotByIdResponse = UpdateBotByIdResponses[keyof UpdateBotByIdResponses];
-
-export type SetBotEnabledByIdData = {
-    body: {
-        bot_id: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/enabled';
-};
-
-export type SetBotEnabledByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type SetBotEnabledByIdResponse = SetBotEnabledByIdResponses[keyof SetBotEnabledByIdResponses];
-
-export type TestBotByIdData = {
-    body: {
-        bot_id: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/test';
-};
-
-export type TestBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type TestBotByIdResponse = TestBotByIdResponses[keyof TestBotByIdResponses];
-
 export type DeleteBotData = {
     body?: never;
     path: {
@@ -1374,118 +1263,6 @@ export type CreateProviderSourceResponses = {
 
 export type CreateProviderSourceResponse = CreateProviderSourceResponses[keyof CreateProviderSourceResponses];
 
-export type DeleteProviderSourceByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-    };
-    url: '/api/v1/provider-sources/by-id';
-};
-
-export type DeleteProviderSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeleteProviderSourceByIdResponse = DeleteProviderSourceByIdResponses[keyof DeleteProviderSourceByIdResponses];
-
-export type GetProviderSourceByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-    };
-    url: '/api/v1/provider-sources/by-id';
-};
-
-export type GetProviderSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetProviderSourceByIdResponse = GetProviderSourceByIdResponses[keyof GetProviderSourceByIdResponses];
-
-export type UpsertProviderSourceByIdData = {
-    body: {
-        source_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/provider-sources/by-id';
-};
-
-export type UpsertProviderSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpsertProviderSourceByIdResponse = UpsertProviderSourceByIdResponses[keyof UpsertProviderSourceByIdResponses];
-
-export type ListProviderSourceModelsByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-        capability?: ProviderCapability;
-    };
-    url: '/api/v1/provider-sources/models';
-};
-
-export type ListProviderSourceModelsByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type ListProviderSourceModelsByIdResponse = ListProviderSourceModelsByIdResponses[keyof ListProviderSourceModelsByIdResponses];
-
-export type ListProvidersBySourceIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-        capability?: ProviderCapability;
-    };
-    url: '/api/v1/provider-sources/providers';
-};
-
-export type ListProvidersBySourceIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type ListProvidersBySourceIdResponse = ListProvidersBySourceIdResponses[keyof ListProvidersBySourceIdResponses];
-
-export type CreateProviderInSourceByIdData = {
-    body: {
-        source_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/provider-sources/providers';
-};
-
-export type CreateProviderInSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type CreateProviderInSourceByIdResponse = CreateProviderInSourceByIdResponses[keyof CreateProviderInSourceByIdResponses];
-
 export type DeleteProviderSourceData = {
     body?: never;
     path: {
@@ -1545,9 +1322,7 @@ export type ListProviderSourceModelsData = {
     path: {
         source_id: string;
     };
-    query?: {
-        capability?: ProviderCapability;
-    };
+    query?: never;
     url: '/api/v1/provider-sources/{source_id}/models';
 };
 
@@ -1566,7 +1341,7 @@ export type ListProvidersBySourceData = {
         source_id: string;
     };
     query?: {
-        capability?: ProviderCapability;
+        provider_type?: string;
     };
     url: '/api/v1/provider-sources/{source_id}/providers';
 };
@@ -1602,8 +1377,8 @@ export type ListProvidersData = {
     body?: never;
     path?: never;
     query?: {
-        capability?: ProviderCapability;
-        source_id?: string;
+        provider_type?: string;
+        provider_source_id?: string;
         enabled?: boolean;
     };
     url: '/api/v1/providers';
@@ -1634,120 +1409,8 @@ export type CreateProviderResponses = {
 
 export type CreateProviderResponse = CreateProviderResponses[keyof CreateProviderResponses];
 
-export type DeleteProviderByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        provider_id: string;
-    };
-    url: '/api/v1/providers/by-id';
-};
-
-export type DeleteProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeleteProviderByIdResponse = DeleteProviderByIdResponses[keyof DeleteProviderByIdResponses];
-
-export type GetProviderByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        provider_id: string;
-        merged?: boolean;
-    };
-    url: '/api/v1/providers/by-id';
-};
-
-export type GetProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetProviderByIdResponse = GetProviderByIdResponses[keyof GetProviderByIdResponses];
-
-export type UpdateProviderByIdData = {
-    body: {
-        provider_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/by-id';
-};
-
-export type UpdateProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdateProviderByIdResponse = UpdateProviderByIdResponses[keyof UpdateProviderByIdResponses];
-
-export type SetProviderEnabledByIdData = {
-    body: {
-        provider_id: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/enabled';
-};
-
-export type SetProviderEnabledByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type SetProviderEnabledByIdResponse = SetProviderEnabledByIdResponses[keyof SetProviderEnabledByIdResponses];
-
-export type TestProviderByIdData = {
-    body: {
-        provider_id: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/test';
-};
-
-export type TestProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type TestProviderByIdResponse = TestProviderByIdResponses[keyof TestProviderByIdResponses];
-
-export type GetProviderEmbeddingDimensionByIdData = {
-    body: {
-        provider_id: string;
-        provider_config?: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/embedding-dimension';
-};
-
-export type GetProviderEmbeddingDimensionByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetProviderEmbeddingDimensionByIdResponse = GetProviderEmbeddingDimensionByIdResponses[keyof GetProviderEmbeddingDimensionByIdResponses];
-
 export type DeleteProviderData = {
-    body?: DynamicConfig;
+    body?: ProviderEmbeddingDimensionRequest;
     path: {
         provider_id: string;
     };
@@ -2478,232 +2141,6 @@ export type ListPluginsResponses = {
 
 export type ListPluginsResponse = ListPluginsResponses[keyof ListPluginsResponses];
 
-export type UninstallPluginByIdData = {
-    body?: {
-        delete_config?: boolean;
-        delete_data?: boolean;
-        [key: string]: unknown;
-    };
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/by-id';
-};
-
-export type UninstallPluginByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UninstallPluginByIdResponse = UninstallPluginByIdResponses[keyof UninstallPluginByIdResponses];
-
-export type GetPluginByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/by-id';
-};
-
-export type GetPluginByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetPluginByIdResponse = GetPluginByIdResponses[keyof GetPluginByIdResponses];
-
-export type GetPluginConfigByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/config';
-};
-
-export type GetPluginConfigByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetPluginConfigByIdResponse = GetPluginConfigByIdResponses[keyof GetPluginConfigByIdResponses];
-
-export type UpdatePluginConfigByIdData = {
-    body: {
-        plugin_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/config';
-};
-
-export type UpdatePluginConfigByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdatePluginConfigByIdResponse = UpdatePluginConfigByIdResponses[keyof UpdatePluginConfigByIdResponses];
-
-export type GetPluginConfigSchemaByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/config/schema';
-};
-
-export type GetPluginConfigSchemaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetPluginConfigSchemaByIdResponse = GetPluginConfigSchemaByIdResponses[keyof GetPluginConfigSchemaByIdResponses];
-
-export type DeletePluginConfigFileByIdData = {
-    body: PluginConfigFileDeleteRequest;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/config-files';
-};
-
-export type DeletePluginConfigFileByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeletePluginConfigFileByIdResponse = DeletePluginConfigFileByIdResponses[keyof DeletePluginConfigFileByIdResponses];
-
-export type ListPluginConfigFilesByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-        config_key: string;
-    };
-    url: '/api/v1/plugins/config-files';
-};
-
-export type ListPluginConfigFilesByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type ListPluginConfigFilesByIdResponse = ListPluginConfigFilesByIdResponses[keyof ListPluginConfigFilesByIdResponses];
-
-export type UploadPluginConfigFilesByIdData = {
-    body: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query: {
-        plugin_id: string;
-        config_key: string;
-    };
-    url: '/api/v1/plugins/config-files';
-};
-
-export type UploadPluginConfigFilesByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UploadPluginConfigFilesByIdResponse = UploadPluginConfigFilesByIdResponses[keyof UploadPluginConfigFilesByIdResponses];
-
-export type GetPluginReadmeByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/readme';
-};
-
-export type GetPluginReadmeByIdResponses = {
-    /**
-     * Text response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetPluginReadmeByIdResponse = GetPluginReadmeByIdResponses[keyof GetPluginReadmeByIdResponses];
-
-export type GetPluginChangelogByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/changelog';
-};
-
-export type GetPluginChangelogByIdResponses = {
-    /**
-     * Text response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetPluginChangelogByIdResponse = GetPluginChangelogByIdResponses[keyof GetPluginChangelogByIdResponses];
-
-export type ReloadPluginByIdData = {
-    body: {
-        plugin_id: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/reload';
-};
-
-export type ReloadPluginByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type ReloadPluginByIdResponse = ReloadPluginByIdResponses[keyof ReloadPluginByIdResponses];
-
-export type SetPluginEnabledByIdData = {
-    body: {
-        plugin_id: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/enabled';
-};
-
-export type SetPluginEnabledByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type SetPluginEnabledByIdResponse = SetPluginEnabledByIdResponses[keyof SetPluginEnabledByIdResponses];
-
 export type UninstallPluginData = {
     body?: {
         delete_config?: boolean;
@@ -2990,38 +2427,6 @@ export type UpdatePluginsResponses = {
 
 export type UpdatePluginsResponse = UpdatePluginsResponses[keyof UpdatePluginsResponses];
 
-export type CheckPluginVersionSupportData = {
-    body: PluginVersionSupportRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/version-support/check';
-};
-
-export type CheckPluginVersionSupportResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type CheckPluginVersionSupportResponse = CheckPluginVersionSupportResponses[keyof CheckPluginVersionSupportResponses];
-
-export type ValidatePluginRepoData = {
-    body: PluginValidateRepoRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/validate/repo';
-};
-
-export type ValidatePluginRepoResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type ValidatePluginRepoResponse = ValidatePluginRepoResponses[keyof ValidatePluginRepoResponses];
-
 export type ListFailedPluginsData = {
     body?: never;
     path?: never;
@@ -3234,24 +2639,6 @@ export type DeletePluginSourceResponses = {
 
 export type DeletePluginSourceResponse = DeletePluginSourceResponses[keyof DeletePluginSourceResponses];
 
-export type DeletePluginSourceByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-    };
-    url: '/api/v1/plugin-sources/by-id';
-};
-
-export type DeletePluginSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeletePluginSourceByIdResponse = DeletePluginSourceByIdResponses[keyof DeletePluginSourceByIdResponses];
-
 export type ListCommandsData = {
     body?: never;
     path?: never;
@@ -3394,85 +2781,6 @@ export type CreateMcpServerResponses = {
 
 export type CreateMcpServerResponse = CreateMcpServerResponses[keyof CreateMcpServerResponses];
 
-export type DeleteMcpServerByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        server_name: string;
-    };
-    url: '/api/v1/mcp/servers/by-name';
-};
-
-export type DeleteMcpServerByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeleteMcpServerByNameResponse = DeleteMcpServerByNameResponses[keyof DeleteMcpServerByNameResponses];
-
-export type UpdateMcpServerByNameData = {
-    body: {
-        server_name: string;
-        config?: DynamicConfig;
-        enabled?: boolean;
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers/by-name';
-};
-
-export type UpdateMcpServerByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdateMcpServerByNameResponse = UpdateMcpServerByNameResponses[keyof UpdateMcpServerByNameResponses];
-
-export type SetMcpServerEnabledByNameData = {
-    body: {
-        server_name: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers/enabled';
-};
-
-export type SetMcpServerEnabledByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type SetMcpServerEnabledByNameResponse = SetMcpServerEnabledByNameResponses[keyof SetMcpServerEnabledByNameResponses];
-
-export type TestMcpServerByNameData = {
-    body: {
-        server_name: string;
-        mcp_server_config?: DynamicConfig;
-        config?: DynamicConfig;
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers/test';
-};
-
-export type TestMcpServerByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type TestMcpServerByNameResponse = TestMcpServerByNameResponses[keyof TestMcpServerByNameResponses];
-
 export type DeleteMcpServerData = {
     body?: never;
     path: {
@@ -3529,10 +2837,9 @@ export type SetMcpServerEnabledResponse = SetMcpServerEnabledResponses[keyof Set
 
 export type TestMcpServerData = {
     body?: {
-        mcp_server_config?: {
+        config?: {
             [key: string]: unknown;
         };
-        [key: string]: unknown;
     };
     path: {
         server_name: string;
@@ -3618,121 +2925,6 @@ export type UploadSkillsBatchResponses = {
 };
 
 export type UploadSkillsBatchResponse = UploadSkillsBatchResponses[keyof UploadSkillsBatchResponses];
-
-export type DeleteSkillByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-    };
-    url: '/api/v1/skills/by-name';
-};
-
-export type DeleteSkillByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeleteSkillByNameResponse = DeleteSkillByNameResponses[keyof DeleteSkillByNameResponses];
-
-export type UpdateSkillByNameData = {
-    body: {
-        skill_name: string;
-        enabled?: boolean;
-        active?: boolean;
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/by-name';
-};
-
-export type UpdateSkillByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdateSkillByNameResponse = UpdateSkillByNameResponses[keyof UpdateSkillByNameResponses];
-
-export type DownloadSkillByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-    };
-    url: '/api/v1/skills/archive';
-};
-
-export type DownloadSkillByNameResponses = {
-    /**
-     * Skill archive
-     */
-    200: Blob | File;
-};
-
-export type DownloadSkillByNameResponse = DownloadSkillByNameResponses[keyof DownloadSkillByNameResponses];
-
-export type ListSkillFilesByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-        path?: string;
-    };
-    url: '/api/v1/skills/files';
-};
-
-export type ListSkillFilesByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type ListSkillFilesByNameResponse = ListSkillFilesByNameResponses[keyof ListSkillFilesByNameResponses];
-
-export type GetSkillFileByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-        path: string;
-    };
-    url: '/api/v1/skills/file';
-};
-
-export type GetSkillFileByNameResponses = {
-    /**
-     * Text response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetSkillFileByNameResponse = GetSkillFileByNameResponses[keyof GetSkillFileByNameResponses];
-
-export type UpdateSkillFileByNameData = {
-    body: {
-        skill_name: string;
-        path: string;
-        content: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/file';
-};
-
-export type UpdateSkillFileByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdateSkillFileByNameResponse = UpdateSkillFileByNameResponses[keyof UpdateSkillFileByNameResponses];
 
 export type DeleteSkillData = {
     body?: never;
@@ -4357,61 +3549,6 @@ export type CreatePersonaResponses = {
 };
 
 export type CreatePersonaResponse = CreatePersonaResponses[keyof CreatePersonaResponses];
-
-export type DeletePersonaByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        persona_id: string;
-    };
-    url: '/api/v1/personas/by-id';
-};
-
-export type DeletePersonaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type DeletePersonaByIdResponse = DeletePersonaByIdResponses[keyof DeletePersonaByIdResponses];
-
-export type GetPersonaByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        persona_id: string;
-    };
-    url: '/api/v1/personas/by-id';
-};
-
-export type GetPersonaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type GetPersonaByIdResponse = GetPersonaByIdResponses[keyof GetPersonaByIdResponses];
-
-export type UpdatePersonaByIdData = {
-    body: {
-        persona_id: string;
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/personas/by-id';
-};
-
-export type UpdatePersonaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
-};
-
-export type UpdatePersonaByIdResponse = UpdatePersonaByIdResponses[keyof UpdatePersonaByIdResponses];
 
 export type DeletePersonaData = {
     body?: never;
@@ -5085,7 +4222,7 @@ export type GetStorageStatusResponses = {
 export type GetStorageStatusResponse = GetStorageStatusResponses[keyof GetStorageStatusResponses];
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
+    body?: StorageCleanupRequest;
     path?: never;
     query?: never;
     url: '/api/v1/stats/storage/cleanup';
@@ -5740,7 +4877,7 @@ export type GetSubagentConfigResponses = {
 export type GetSubagentConfigResponse = GetSubagentConfigResponses[keyof GetSubagentConfigResponses];
 
 export type UpdateSubagentConfigData = {
-    body: DynamicConfig;
+    body: SubAgentConfigRequest;
     path?: never;
     query?: never;
     url: '/api/v1/subagents/config';

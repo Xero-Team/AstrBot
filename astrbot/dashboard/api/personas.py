@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, Query, Request
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
-    PersonaByIdRequest,
     PersonaFolderRequest,
     PersonaMoveRequest,
     PersonaReorderRequest,
@@ -81,33 +80,6 @@ async def create_persona(
     service: PersonaService = Depends(get_service),
 ):
     return await _run(lambda: service.create_persona(_model_dict(payload)))
-
-
-@router.get("/personas/by-id")
-async def get_persona_by_id(
-    persona_id: str = Query(...),
-    _auth: AuthContext = Depends(require_persona_scope),
-    service: PersonaService = Depends(get_service),
-):
-    return await _run(lambda: service.get_persona_detail({"persona_id": persona_id}))
-
-
-@router.put("/personas/by-id")
-async def update_persona_by_id(
-    payload: PersonaByIdRequest,
-    _auth: AuthContext = Depends(require_persona_scope),
-    service: PersonaService = Depends(get_service),
-):
-    return await _run(lambda: service.update_persona(_model_dict(payload)))
-
-
-@router.delete("/personas/by-id")
-async def delete_persona_by_id(
-    persona_id: str = Query(...),
-    _auth: AuthContext = Depends(require_persona_scope),
-    service: PersonaService = Depends(get_service),
-):
-    return await _run(lambda: service.delete_persona({"persona_id": persona_id}))
 
 
 @router.post("/personas/move")

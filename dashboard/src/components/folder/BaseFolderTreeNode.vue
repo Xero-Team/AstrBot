@@ -5,7 +5,7 @@
       rounded="lg"
       :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
       :class="['folder-item', { 'drag-over': isDragOver }]"
-      @click.stop="$emit('folder-click', folder.folder_id)"
+      @click.stop="emit('folder-click', folder.folder_id)"
       @contextmenu.prevent="handleContextMenu"
       @dragover.prevent="handleDragOver"
       @dragleave="handleDragLeave"
@@ -46,121 +46,133 @@
           :search-query="searchQuery"
           :expanded-folder-ids="expandedFolderIds"
           :accept-drop-types="acceptDropTypes"
-          @folder-click="$emit('folder-click', $event)"
-          @folder-context-menu="$emit('folder-context-menu', $event)"
-          @item-dropped="$emit('item-dropped', $event)"
-          @toggle-expansion="$emit('toggle-expansion', $event)"
-          @set-expansion="$emit('set-expansion', $event)"
+          @folder-click="emit('folder-click', $event)"
+          @folder-context-menu="emit('folder-context-menu', $event)"
+          @item-dropped="emit('item-dropped', $event)"
+          @toggle-expansion="emit('toggle-expansion', $event)"
+          @set-expansion="emit('set-expansion', $event)"
         />
       </div>
     </v-expand-transition>
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import type { FolderTreeNode } from './types';
 
-export default defineComponent({
-  name: 'BaseFolderTreeNode',
-  props: {
-    folder: {
-      type: Object as PropType<FolderTreeNode>,
-      required: true,
-    },
-    depth: {
-      type: Number,
-      default: 0,
-    },
-    currentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    searchQuery: {
-      type: String,
-      default: '',
-    },
-    expandedFolderIds: {
-      type: Array as PropType<string[]>,
-      default: () => [],
-    },
-    acceptDropTypes: {
-      type: Array as PropType<string[]>,
-      default: () => [],
-    },
-  },
-  emits: [
-    'folder-click',
-    'folder-context-menu',
-    'item-dropped',
-    'toggle-expansion',
-    'set-expansion',
-  ],
-  data() {
-    return {
-      isDragOver: false,
-    };
-  },
-  computed: {
-    hasChildren(): boolean {
-      return this.folder.children && this.folder.children.length > 0;
-    },
-    isExpanded(): boolean {
-      return this.expandedFolderIds.includes(this.folder.folder_id);
-    },
-  },
-  watch: {
-    searchQuery: {
-      immediate: true,
-      handler(newQuery: string) {
-        // 搜索时自动展开匹配的节点
-        if (newQuery && this.hasChildren) {
-          this.$emit('set-expansion', {
-            folderId: this.folder.folder_id,
-            expanded: true,
-          });
-        }
-      },
-    },
-  },
-  methods: {
-    toggleExpand() {
-      this.$emit('toggle-expansion', this.folder.folder_id);
-    },
-    handleContextMenu(event: MouseEvent) {
-      this.$emit('folder-context-menu', { event, folder: this.folder });
-    },
-    handleDragOver(event: DragEvent) {
-      if (!event.dataTransfer) return;
-      event.dataTransfer.dropEffect = 'move';
-      this.isDragOver = true;
-    },
-    handleDragLeave() {
-      this.isDragOver = false;
-    },
-    handleDrop(event: DragEvent) {
-      this.isDragOver = false;
-      if (!event.dataTransfer) return;
+type DropPayload = {
+  id?: string;
+  item_id?: string;
+  persona_id?: string;
+  type?: string;
+};
 
-      try {
-        const data = JSON.parse(event.dataTransfer.getData('application/json'));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
-          this.$emit('item-dropped', {
-            item_id: data.id || data.persona_id || data.item_id,
-            item_type: data.type,
-            target_folder_id: this.folder.folder_id,
-            source_data: data,
-          });
-        }
-      } catch (e) {
-        console.error('Failed to parse drop data:', e);
-      }
-    },
+const props = withDefaults(
+  defineProps<{
+    folder: FolderTreeNode;
+    depth?: number;
+    currentFolderId?: string | null;
+    searchQuery?: string;
+    expandedFolderIds?: string[];
+    acceptDropTypes?: string[];
+  }>(),
+  {
+    depth: 0,
+    currentFolderId: null,
+    searchQuery: '',
+    expandedFolderIds: () => [],
+    acceptDropTypes: () => [],
   },
-});
+);
+
+const emit = defineEmits<{
+  'folder-click': [folderId: string];
+  'folder-context-menu': [
+    payload: { event: MouseEvent; folder: FolderTreeNode },
+  ];
+  'item-dropped': [
+    payload: {
+      item_id: string;
+      item_type: string;
+      target_folder_id: string;
+      source_data: DropPayload;
+    },
+  ];
+  'toggle-expansion': [folderId: string];
+  'set-expansion': [payload: { folderId: string; expanded: boolean }];
+}>();
+
+const isDragOver = ref(false);
+
+const hasChildren = computed(() => props.folder.children.length > 0);
+const isExpanded = computed(() =>
+  props.expandedFolderIds.includes(props.folder.folder_id),
+);
+
+watch(
+  () => props.searchQuery,
+  (newQuery) => {
+    if (newQuery && hasChildren.value) {
+      emit('set-expansion', {
+        folderId: props.folder.folder_id,
+        expanded: true,
+      });
+    }
+  },
+  { immediate: true },
+);
+
+function toggleExpand() {
+  emit('toggle-expansion', props.folder.folder_id);
+}
+
+function handleContextMenu(event: MouseEvent) {
+  emit('folder-context-menu', { event, folder: props.folder });
+}
+
+function handleDragOver(event: DragEvent) {
+  if (!event.dataTransfer) {
+    return;
+  }
+  event.dataTransfer.dropEffect = 'move';
+  isDragOver.value = true;
+}
+
+function handleDragLeave() {
+  isDragOver.value = false;
+}
+
+function handleDrop(event: DragEvent) {
+  isDragOver.value = false;
+  if (!event.dataTransfer) {
+    return;
+  }
+
+  try {
+    const data = JSON.parse(
+      event.dataTransfer.getData('application/json'),
+    ) as DropPayload;
+    const itemType = data.type;
+    const itemId = data.id ?? data.persona_id ?? data.item_id;
+    if (
+      !itemType ||
+      !itemId ||
+      (props.acceptDropTypes.length > 0 &&
+        !props.acceptDropTypes.includes(itemType))
+    ) {
+      return;
+    }
+    emit('item-dropped', {
+      item_id: itemId,
+      item_type: itemType,
+      target_folder_id: props.folder.folder_id,
+      source_data: data,
+    });
+  } catch (error) {
+    console.error('Failed to parse drop data:', error);
+  }
+}
 </script>
 
 <style scoped>

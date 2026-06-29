@@ -40,21 +40,12 @@
   </div>
 </template>
 
-<script>
-import { useCustomizerStore } from '@/stores/customizer';
+<script setup lang="ts">
 import { useModuleI18n } from '@/i18n/composables';
 
-export default {
-  name: 'AboutPage',
-  setup() {
-    const { tm } = useModuleI18n('features/about');
-    return { tm };
-  },
-  methods: {
-    useCustomizerStore,
-    open(url) {
-      window.open(url, '_blank');
-    },
-  },
-};
+const { tm } = useModuleI18n('features/about');
+
+function open(url: string): void {
+  window.open(url, '_blank');
+}
 </script>

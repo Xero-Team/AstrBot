@@ -8,84 +8,70 @@
   />
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
-import { mapActions } from 'pinia';
 import BaseCreateFolderDialog from '@/components/folder/BaseCreateFolderDialog.vue';
 import type { CreateFolderData } from '@/components/folder/types';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
-export default defineComponent({
-  name: 'CreateFolderDialog',
-  components: {
-    BaseCreateFolderDialog,
-  },
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false,
-    },
-    parentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-  },
-  emits: ['update:modelValue', 'created', 'error'],
-  setup() {
-    const { tm } = useModuleI18n('features/persona');
-    return { tm };
-  },
-  computed: {
-    showDialog: {
-      get(): boolean {
-        return this.modelValue;
-      },
-      set(value: boolean) {
-        this.$emit('update:modelValue', value);
-      },
-    },
-    labels() {
-      return {
-        title: this.tm('folder.createDialog.title'),
-        nameLabel: this.tm('folder.form.name'),
-        descriptionLabel: this.tm('folder.form.description'),
-        nameRequired: this.tm('folder.validation.nameRequired'),
-        cancelButton: this.tm('buttons.cancel'),
-        createButton: this.tm('folder.createDialog.createButton'),
-      };
-    },
-  },
-  methods: {
-    ...mapActions(usePersonaStore, ['createFolder']),
+type BaseCreateFolderDialogExposed = {
+  setLoading: (value: boolean) => void;
+};
 
-    getErrorMessage(error: unknown, fallback: string): string {
-      return error instanceof Error && error.message ? error.message : fallback;
-    },
-
-    async handleCreate(data: CreateFolderData) {
-      const baseDialog = this.$refs.baseDialog as InstanceType<
-        typeof BaseCreateFolderDialog
-      >;
-      baseDialog.setLoading(true);
-
-      try {
-        await this.createFolder({
-          name: data.name,
-          description: data.description,
-          parent_id: data.parent_id,
-        });
-        this.$emit('created', this.tm('folder.messages.createSuccess'));
-        this.showDialog = false;
-      } catch (error) {
-        this.$emit(
-          'error',
-          this.getErrorMessage(error, this.tm('folder.messages.createError')),
-        );
-      } finally {
-        baseDialog.setLoading(false);
-      }
-    },
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean;
+    parentFolderId?: string | null;
+  }>(),
+  {
+    modelValue: false,
+    parentFolderId: null,
   },
+);
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+  created: [message: string];
+  error: [message: string];
+}>();
+
+const { tm } = useModuleI18n('features/persona');
+const personaStore = usePersonaStore();
+const baseDialog = ref<BaseCreateFolderDialogExposed | null>(null);
+
+const showDialog = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => void emit('update:modelValue', value),
 });
+
+const labels = computed(() => ({
+  title: tm('folder.createDialog.title'),
+  nameLabel: tm('folder.form.name'),
+  descriptionLabel: tm('folder.form.description'),
+  nameRequired: tm('folder.validation.nameRequired'),
+  cancelButton: tm('buttons.cancel'),
+  createButton: tm('folder.createDialog.createButton'),
+}));
+
+async function handleCreate(data: CreateFolderData) {
+  baseDialog.value?.setLoading(true);
+  try {
+    await personaStore.createFolder({
+      name: data.name,
+      description: data.description,
+      parent_id: data.parent_id,
+    });
+    emit('created', tm('folder.messages.createSuccess'));
+    showDialog.value = false;
+  } catch (error) {
+    emit(
+      'error',
+      resolveErrorMessage(error, tm('folder.messages.createError')),
+    );
+  } finally {
+    baseDialog.value?.setLoading(false);
+  }
+}
 </script>

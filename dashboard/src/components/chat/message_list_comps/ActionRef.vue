@@ -1,12 +1,8 @@
 <template>
-  <div
-    v-if="refs && refs.used && refs.used.length > 0"
-    class="refs-container"
-    @click="handleClick"
-  >
+  <div v-if="usedRefs.length > 0" class="refs-container" @click="handleClick">
     <div class="refs-avatars">
       <div
-        v-for="(ref, refIdx) in refs.used.slice(0, 3)"
+        v-for="(ref, refIdx) in usedRefs.slice(0, 3)"
         :key="refIdx"
         class="ref-avatar"
         :style="{ zIndex: 3 - refIdx }"
@@ -15,12 +11,12 @@
           v-if="ref.favicon"
           :src="ref.favicon"
           class="ref-favicon"
-          @error="(e) => (e.target.style.display = 'none')"
+          @error="hideBrokenImage"
         />
         <span v-else class="ref-initial">{{ getRefInitial(ref.title) }}</span>
       </div>
-      <span v-if="refs.used.length > 3" class="refs-more">
-        +{{ refs.used.length - 3 }}
+      <span v-if="usedRefs.length > 3" class="refs-more">
+        +{{ usedRefs.length - 3 }}
       </span>
       <span class="refs-label">
         {{ tm('refs.sources') }}
@@ -29,35 +25,73 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
 import { useModuleI18n } from '@/i18n/composables';
+import { computed } from 'vue';
 
-export default {
-  name: 'ActionRef',
-  props: {
-    refs: {
-      type: Object,
-      default: null,
-    },
-  },
-  emits: ['open-refs'],
-  setup() {
-    const { tm } = useModuleI18n('features/chat');
-    return { tm };
-  },
-  methods: {
-    // Get first character of ref title for fallback display
-    getRefInitial(title) {
-      if (!title) return '?';
-      return title.charAt(0).toUpperCase();
-    },
+interface RefItem {
+  title?: unknown;
+  favicon?: unknown;
+  [key: string]: unknown;
+}
 
-    // Handle click to open refs sidebar
-    handleClick() {
-      this.$emit('open-refs', this.refs);
-    },
+interface RefCollection {
+  used?: RefItem[];
+  [key: string]: unknown;
+}
+
+interface DisplayRefItem {
+  title: string;
+  favicon?: string;
+}
+
+const props = withDefaults(
+  defineProps<{
+    refs?: unknown;
+  }>(),
+  {
+    refs: undefined,
   },
-};
+);
+
+const emit = defineEmits<{
+  'open-refs': [refs: RefCollection | null];
+}>();
+
+const { tm } = useModuleI18n('features/chat');
+
+const usedRefs = computed<DisplayRefItem[]>(() => {
+  if (
+    props.refs &&
+    typeof props.refs === 'object' &&
+    !Array.isArray(props.refs) &&
+    Array.isArray((props.refs as { used?: unknown }).used)
+  ) {
+    return (props.refs as { used: RefItem[] }).used.map((ref) => ({
+      title: typeof ref.title === 'string' ? ref.title : '',
+      favicon: typeof ref.favicon === 'string' ? ref.favicon : undefined,
+    }));
+  }
+  return [];
+});
+
+function getRefInitial(title?: unknown): string {
+  if (typeof title !== 'string' || !title) {
+    return '?';
+  }
+  return title.charAt(0).toUpperCase();
+}
+
+function hideBrokenImage(event: Event): void {
+  const target = event.target;
+  if (target instanceof HTMLImageElement) {
+    target.style.display = 'none';
+  }
+}
+
+function handleClick(): void {
+  emit('open-refs', (props.refs as RefCollection | null) ?? null);
+}
 </script>
 
 <style scoped>

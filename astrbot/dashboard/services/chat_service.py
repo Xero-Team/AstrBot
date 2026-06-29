@@ -9,6 +9,8 @@ from copy import deepcopy
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from starlette.datastructures import UploadFile
+
 from astrbot.core import logger, sp
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -28,6 +30,7 @@ from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
 )
+from astrbot.dashboard.upload_utils import save_upload_to_path
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 
@@ -539,12 +542,6 @@ class ChatService:
             return str(file_path), "image/jpeg"
         return str(file_path), None
 
-    async def resolve_webchat_file_from_dashboard_query(
-        self,
-        filename: str | None,
-    ) -> tuple[str, str | None]:
-        return await self.resolve_webchat_file(filename)
-
     async def resolve_attachment_file(
         self,
         attachment_id: str | None,
@@ -561,13 +558,7 @@ class ChatService:
             raise ChatServiceError("File access error")
         return str(file_path), attachment.mime_type
 
-    async def resolve_attachment_file_from_dashboard_query(
-        self,
-        attachment_id: str | None,
-    ) -> tuple[str, str | None]:
-        return await self.resolve_attachment_file(attachment_id)
-
-    async def save_uploaded_file(self, file) -> dict:
+    async def save_uploaded_file(self, file: UploadFile) -> dict:
         filename = sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
@@ -585,7 +576,7 @@ class ChatService:
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
-        await file.save(str(file_path))
+        await save_upload_to_path(file, file_path)
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
                 file_path.read_bytes(),
@@ -616,11 +607,6 @@ class ChatService:
             "filename": os.path.basename(attachment.path),
             "type": attach_type,
         }
-
-    async def save_uploaded_file_from_dashboard_files(self, files) -> dict:
-        if "file" not in files:
-            raise ChatServiceError("Missing key: file")
-        return await self.save_uploaded_file(files["file"])
 
     async def delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
         for thread_id in thread_ids:
@@ -996,17 +982,6 @@ class ChatService:
         stopped_count = active_event_registry.request_agent_stop_all(unified_msg_origin)
         return {"stopped_count": stopped_count}
 
-    async def stop_session_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        data = self._dashboard_payload(payload)
-        session_id = data.get("session_id")
-        if not session_id:
-            raise ChatServiceError("Missing key: session_id")
-        return await self.stop_session(username, session_id)
-
     async def delete_session_internal(self, session, username: str) -> None:
         session_id = session.session_id
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
@@ -1056,15 +1031,6 @@ class ChatService:
             raise ChatServiceError("Permission denied")
         await self.delete_session_internal(session, username)
 
-    async def delete_webchat_session_from_dashboard_query(
-        self,
-        username: str,
-        session_id: str | None,
-    ) -> None:
-        if not session_id:
-            raise ChatServiceError("Missing key: session_id")
-        await self.delete_webchat_session(username, session_id)
-
     async def batch_delete_sessions(
         self,
         username: str,
@@ -1104,18 +1070,6 @@ class ChatService:
             "failed_items": failed_items,
         }
 
-    async def batch_delete_sessions_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-        delete_session=None,
-    ) -> dict:
-        data = self._dashboard_payload(payload)
-        session_ids = data.get("session_ids")
-        if not session_ids or not isinstance(session_ids, list):
-            raise ChatServiceError("Missing or invalid key: session_ids")
-        return await self.batch_delete_sessions(username, session_ids, delete_session)
-
     async def delete_attachments(self, attachment_ids: list[str]) -> None:
         try:
             attachments = await self.db.get_attachments(attachment_ids)
@@ -1147,13 +1101,6 @@ class ChatService:
             "platform_id": session.platform_id,
         }
 
-    async def new_session_from_dashboard_query(
-        self,
-        username: str,
-        platform_id: str | None,
-    ) -> dict:
-        return await self.new_session(username, platform_id or "webchat")
-
     async def get_sessions(self, username: str, platform_id: str | None) -> list[dict]:
         sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
             creator=username,
@@ -1178,13 +1125,6 @@ class ChatService:
                 }
             )
         return sessions_data
-
-    async def get_sessions_from_dashboard_query(
-        self,
-        username: str,
-        platform_id: str | None,
-    ) -> list[dict]:
-        return await self.get_sessions(username, platform_id)
 
     async def get_session(self, username: str, session_id: str) -> dict:
         session = await self.db.get_platform_session_by_id(session_id)
@@ -1216,15 +1156,6 @@ class ChatService:
                 "emoji": project_info.emoji,
             }
         return response_data
-
-    async def get_session_from_dashboard_query(
-        self,
-        username: str,
-        session_id: str | None,
-    ) -> dict:
-        if not session_id:
-            raise ChatServiceError("Missing key: session_id")
-        return await self.get_session(username, session_id)
 
     async def create_thread(self, username: str, data: dict) -> dict:
         session_id = data.get("session_id")
@@ -1299,13 +1230,6 @@ class ChatService:
         )
         return serialize_thread(thread)
 
-    async def create_thread_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        return await self.create_thread(username, self._dashboard_payload(payload))
-
     async def get_thread(self, username: str, thread_id: str) -> dict:
         thread = await self.db.get_webchat_thread_by_id(thread_id)
         if not thread:
@@ -1324,15 +1248,6 @@ class ChatService:
             "history": [history.model_dump() for history in history_ls],
             "is_running": self.running_convs.get(thread_id, False),
         }
-
-    async def get_thread_from_dashboard_query(
-        self,
-        username: str,
-        thread_id: str | None,
-    ) -> dict:
-        if not thread_id:
-            raise ChatServiceError("Missing key: thread_id")
-        return await self.get_thread(username, thread_id)
 
     async def prepare_thread_chat_payload(self, username: str, data: dict) -> dict:
         thread_id = data.get("thread_id")
@@ -1355,16 +1270,6 @@ class ChatService:
             "_thread_selected_text": thread.selected_text,
         }
 
-    async def prepare_thread_chat_payload_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        return await self.prepare_thread_chat_payload(
-            username,
-            self._dashboard_payload(payload),
-        )
-
     async def delete_thread(self, username: str, thread_id: str) -> dict:
         thread = await self.db.get_webchat_thread_by_id(thread_id)
         if not thread:
@@ -1375,17 +1280,6 @@ class ChatService:
         await self.db.delete_webchat_thread(thread_id)
         await self.delete_threads_by_ids([thread_id], username)
         return {"thread_id": thread_id}
-
-    async def delete_thread_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        data = self._dashboard_payload(payload)
-        thread_id = data.get("thread_id")
-        if not thread_id:
-            raise ChatServiceError("Missing key: thread_id")
-        return await self.delete_thread(username, thread_id)
 
     async def update_message(self, username: str, data: dict) -> dict:
         session_id = data.get("session_id")
@@ -1479,13 +1373,6 @@ class ChatService:
             "needs_regenerate": True,
             "truncated_after_message": True,
         }
-
-    async def update_message_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        return await self.update_message(username, self._dashboard_payload(payload))
 
     async def prepare_regenerate_message_payload(
         self,
@@ -1593,16 +1480,6 @@ class ChatService:
             "_llm_checkpoint_id": new_checkpoint_id,
         }
 
-    async def prepare_regenerate_message_payload_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        return await self.prepare_regenerate_message_payload(
-            username,
-            self._dashboard_payload(payload),
-        )
-
     async def update_session_display_name(
         self,
         username: str,
@@ -1620,27 +1497,3 @@ class ChatService:
             display_name=display_name,
         )
         return {}
-
-    async def update_session_display_name_from_dashboard_payload(
-        self,
-        username: str,
-        payload: object,
-    ) -> dict:
-        data = self._dashboard_payload(payload)
-        session_id = data.get("session_id")
-        display_name = data.get("display_name")
-        if not session_id:
-            raise ChatServiceError("Missing key: session_id")
-        if display_name is None:
-            raise ChatServiceError("Missing key: display_name")
-        return await self.update_session_display_name(
-            username, session_id, display_name
-        )
-
-    @staticmethod
-    def _dashboard_payload(payload: object) -> dict:
-        if payload is None:
-            raise ChatServiceError("Missing JSON body")
-        if not isinstance(payload, dict):
-            raise ChatServiceError("Invalid JSON body: expected object")
-        return payload

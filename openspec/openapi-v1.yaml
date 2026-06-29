@@ -445,101 +445,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/bots/by-id:
-    get:
-      tags: [Bots]
-      summary: Get a bot configuration by query ID
-      operationId: getBotById
-      x-astrbot-scope: bot
-      parameters:
-        - name: bot_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    put:
-      tags: [Bots]
-      summary: Replace a bot configuration by body ID
-      operationId: updateBotById
-      x-astrbot-scope: bot
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [bot_id, config]
-              properties:
-                bot_id:
-                  type: string
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Bots]
-      summary: Delete a bot by query ID
-      operationId: deleteBotById
-      x-astrbot-scope: bot
-      parameters:
-        - name: bot_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/bots/enabled:
-    patch:
-      tags: [Bots]
-      summary: Enable or disable a bot by body ID
-      operationId: setBotEnabledById
-      x-astrbot-scope: bot
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [bot_id, enabled]
-              properties:
-                bot_id:
-                  type: string
-                enabled:
-                  type: boolean
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/bots/test:
-    post:
-      tags: [Bots]
-      summary: Test a bot registration or connection by body ID
-      operationId: testBotById
-      x-astrbot-scope: bot
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [bot_id]
-              properties:
-                bot_id:
-                  type: string
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/bots/{bot_id}:
     get:
       tags: [Bots]
@@ -642,118 +547,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/provider-sources/by-id:
-    get:
-      tags: [Provider Sources]
-      summary: Get a provider source by query ID
-      operationId: getProviderSourceById
-      x-astrbot-scope: provider
-      parameters:
-        - name: source_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    put:
-      tags: [Provider Sources]
-      summary: Update a provider source by body ID
-      operationId: upsertProviderSourceById
-      x-astrbot-scope: provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [source_id, config]
-              properties:
-                source_id:
-                  type: string
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Provider Sources]
-      summary: Delete a provider source by query ID
-      operationId: deleteProviderSourceById
-      x-astrbot-scope: provider
-      parameters:
-        - name: source_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/provider-sources/models:
-    get:
-      tags: [Provider Sources]
-      summary: List models available from a provider source by query ID
-      operationId: listProviderSourceModelsById
-      x-astrbot-scope: provider
-      parameters:
-        - name: source_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: capability
-          in: query
-          schema:
-            $ref: '#/components/schemas/ProviderCapability'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/provider-sources/providers:
-    get:
-      tags: [Providers]
-      summary: List providers under a provider source by query ID
-      operationId: listProvidersBySourceId
-      x-astrbot-scope: provider
-      parameters:
-        - name: source_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: capability
-          in: query
-          schema:
-            $ref: '#/components/schemas/ProviderCapability'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    post:
-      tags: [Providers]
-      summary: Create a provider under a provider source by body ID
-      operationId: createProviderInSourceById
-      x-astrbot-scope: provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [source_id, config]
-              properties:
-                source_id:
-                  type: string
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/provider-sources/{source_id}:
     get:
       tags: [Provider Sources]
@@ -800,10 +593,6 @@ paths:
       x-astrbot-scope: provider
       parameters:
         - $ref: '#/components/parameters/SourceId'
-        - name: capability
-          in: query
-          schema:
-            $ref: '#/components/schemas/ProviderCapability'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -816,10 +605,10 @@ paths:
       x-astrbot-scope: provider
       parameters:
         - $ref: '#/components/parameters/SourceId'
-        - name: capability
+        - name: provider_type
           in: query
           schema:
-            $ref: '#/components/schemas/ProviderCapability'
+            type: string
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -843,15 +632,15 @@ paths:
   /api/v1/providers:
     get:
       tags: [Providers]
-      summary: List providers by capability or source
+      summary: List providers by provider type or source
       operationId: listProviders
       x-astrbot-scope: provider
       parameters:
-        - name: capability
+        - name: provider_type
           in: query
           schema:
-            $ref: '#/components/schemas/ProviderCapability'
-        - name: source_id
+            type: string
+        - name: provider_source_id
           in: query
           schema:
             type: string
@@ -873,129 +662,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ProviderConfigRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/providers/by-id:
-    get:
-      tags: [Providers]
-      summary: Get a provider configuration by query ID
-      operationId: getProviderById
-      x-astrbot-scope: provider
-      parameters:
-        - name: provider_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: merged
-          in: query
-          schema:
-            type: boolean
-            default: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    put:
-      tags: [Providers]
-      summary: Replace a provider configuration by body ID
-      operationId: updateProviderById
-      x-astrbot-scope: provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [provider_id, config]
-              properties:
-                provider_id:
-                  type: string
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Providers]
-      summary: Delete a provider by query ID
-      operationId: deleteProviderById
-      x-astrbot-scope: provider
-      parameters:
-        - name: provider_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/providers/enabled:
-    patch:
-      tags: [Providers]
-      summary: Enable or disable a provider by body ID
-      operationId: setProviderEnabledById
-      x-astrbot-scope: provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [provider_id, enabled]
-              properties:
-                provider_id:
-                  type: string
-                enabled:
-                  type: boolean
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/providers/test:
-    post:
-      tags: [Providers]
-      summary: Test a provider by body ID
-      operationId: testProviderById
-      x-astrbot-scope: provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [provider_id]
-              properties:
-                provider_id:
-                  type: string
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/providers/embedding-dimension:
-    post:
-      tags: [Providers]
-      summary: Probe embedding dimension for a provider by body ID
-      operationId: getProviderEmbeddingDimensionById
-      x-astrbot-scope: provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [provider_id]
-              properties:
-                provider_id:
-                  type: string
-                provider_config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: false
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -1044,7 +710,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DynamicConfig'
+              $ref: '#/components/schemas/ProviderEmbeddingDimensionRequest'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -1683,244 +1349,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/plugins/by-id:
-    get:
-      tags: [Plugins]
-      summary: Get plugin details by query ID
-      operationId: getPluginById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Plugins]
-      summary: Uninstall a plugin by query ID
-      operationId: uninstallPluginById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                delete_config:
-                  type: boolean
-                delete_data:
-                  type: boolean
-              additionalProperties: true
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/config:
-    get:
-      tags: [Plugins]
-      summary: Get plugin configuration by query ID
-      operationId: getPluginConfigById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    put:
-      tags: [Plugins]
-      summary: Save plugin configuration by body ID
-      operationId: updatePluginConfigById
-      x-astrbot-scope: plugin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [plugin_id, config]
-              properties:
-                plugin_id:
-                  type: string
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/config/schema:
-    get:
-      tags: [Plugins]
-      summary: Get plugin configuration schema by query ID
-      operationId: getPluginConfigSchemaById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/config-files:
-    get:
-      tags: [Plugins]
-      summary: List uploaded files for a plugin file configuration item by query ID
-      operationId: listPluginConfigFilesById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: config_key
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    post:
-      tags: [Plugins]
-      summary: Upload files for a plugin file configuration item by query ID
-      operationId: uploadPluginConfigFilesById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: config_key
-          in: query
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Plugins]
-      summary: Delete a plugin file configuration upload by query ID
-      operationId: deletePluginConfigFileById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PluginConfigFileDeleteRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/readme:
-    get:
-      tags: [Plugins]
-      summary: Get plugin README content by query ID
-      operationId: getPluginReadmeById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Text'
-
-  /api/v1/plugins/changelog:
-    get:
-      tags: [Plugins]
-      summary: Get plugin CHANGELOG content by query ID
-      operationId: getPluginChangelogById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Text'
-
-  /api/v1/plugins/reload:
-    post:
-      tags: [Plugins]
-      summary: Reload a plugin by body ID
-      operationId: reloadPluginById
-      x-astrbot-scope: plugin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [plugin_id]
-              properties:
-                plugin_id:
-                  type: string
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/enabled:
-    patch:
-      tags: [Plugins]
-      summary: Enable or disable a plugin by body ID
-      operationId: setPluginEnabledById
-      x-astrbot-scope: plugin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [plugin_id, enabled]
-              properties:
-                plugin_id:
-                  type: string
-                enabled:
-                  type: boolean
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/plugins/{plugin_id}:
     get:
       tags: [Plugins]
@@ -2141,7 +1569,7 @@ paths:
   /api/v1/plugins/{plugin_id}/update:
     post:
       tags: [Plugins]
-      summary: Update or reinstall a plugin
+      summary: Update a plugin
       operationId: updatePlugin
       x-astrbot-scope: plugin
       parameters:
@@ -2168,38 +1596,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PluginBatchUpdateRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/version-support/check:
-    post:
-      tags: [Plugins]
-      summary: Check whether a plugin version constraint is supported
-      operationId: checkPluginVersionSupport
-      x-astrbot-scope: plugin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PluginVersionSupportRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/plugins/validate/repo:
-    post:
-      tags: [Plugins]
-      summary: Validate a GitHub plugin repository before installation
-      operationId: validatePluginRepo
-      x-astrbot-scope: plugin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PluginValidateRepoRequest'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -2397,22 +1793,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/plugin-sources/by-id:
-    delete:
-      tags: [Plugin Sources]
-      summary: Delete a plugin source by query ID
-      operationId: deletePluginSourceById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: source_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/commands:
     get:
       tags: [Commands]
@@ -2536,93 +1916,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/mcp/servers/by-name:
-    put:
-      tags: [MCP]
-      summary: Update an MCP server by body name
-      operationId: updateMcpServerByName
-      x-astrbot-scope: mcp
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [server_name]
-              properties:
-                server_name:
-                  type: string
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-                enabled:
-                  type: boolean
-              additionalProperties: true
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [MCP]
-      summary: Delete an MCP server by query name
-      operationId: deleteMcpServerByName
-      x-astrbot-scope: mcp
-      parameters:
-        - name: server_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/mcp/servers/enabled:
-    patch:
-      tags: [MCP]
-      summary: Enable or disable an MCP server by body name
-      operationId: setMcpServerEnabledByName
-      x-astrbot-scope: mcp
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [server_name, enabled]
-              properties:
-                server_name:
-                  type: string
-                enabled:
-                  type: boolean
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/mcp/servers/test:
-    post:
-      tags: [MCP]
-      summary: Test an MCP server connection by body name
-      operationId: testMcpServerByName
-      x-astrbot-scope: mcp
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [server_name]
-              properties:
-                server_name:
-                  type: string
-                mcp_server_config:
-                  $ref: '#/components/schemas/DynamicConfig'
-                config:
-                  $ref: '#/components/schemas/DynamicConfig'
-              additionalProperties: true
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/mcp/servers/{server_name}:
     put:
       tags: [MCP]
@@ -2684,10 +1977,10 @@ paths:
             schema:
               type: object
               properties:
-                mcp_server_config:
+                config:
                   type: object
                   additionalProperties: true
-              additionalProperties: true
+              additionalProperties: false
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -2764,134 +2057,10 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/skills/by-name:
-    patch:
-      tags: [Skills]
-      summary: Update skill metadata or enabled state by body name
-      operationId: updateSkillByName
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [skill_name]
-              properties:
-                skill_name:
-                  type: string
-                enabled:
-                  type: boolean
-                active:
-                  type: boolean
-              additionalProperties: true
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Skills]
-      summary: Delete a skill by query name
-      operationId: deleteSkillByName
-      x-astrbot-scope: skill
-      parameters:
-        - name: skill_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/skills/archive:
-    get:
-      tags: [Skills]
-      summary: Download a skill archive by query name
-      operationId: downloadSkillByName
-      x-astrbot-scope: skill
-      parameters:
-        - name: skill_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Skill archive
-          content:
-            application/zip:
-              schema:
-                type: string
-                format: binary
-
-  /api/v1/skills/files:
-    get:
-      tags: [Skills]
-      summary: List files in a skill by query name
-      operationId: listSkillFilesByName
-      x-astrbot-scope: skill
-      parameters:
-        - name: skill_name
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: path
-          in: query
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/skills/file:
-    get:
-      tags: [Skills]
-      summary: Get skill file content by query name and path
-      operationId: getSkillFileByName
-      x-astrbot-scope: skill
-      parameters:
-        - name: skill_name
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: path
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Text'
-    put:
-      tags: [Skills]
-      summary: Update skill file content by body name and path
-      operationId: updateSkillFileByName
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [skill_name, path, content]
-              properties:
-                skill_name:
-                  type: string
-                path:
-                  type: string
-                content:
-                  type: string
-              additionalProperties: false
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/skills/{skill_name}:
     patch:
       tags: [Skills]
-      summary: Update skill metadata or enabled state
+      summary: Update skill active state
       operationId: updateSkill
       x-astrbot-scope: skill
       parameters:
@@ -3407,55 +2576,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PersonaRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/personas/by-id:
-    get:
-      tags: [Personas]
-      summary: Get a persona by query ID
-      operationId: getPersonaById
-      x-astrbot-scope: persona
-      parameters:
-        - name: persona_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    put:
-      tags: [Personas]
-      summary: Update a persona by body ID
-      operationId: updatePersonaById
-      x-astrbot-scope: persona
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [persona_id]
-              properties:
-                persona_id:
-                  type: string
-              additionalProperties: true
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-    delete:
-      tags: [Personas]
-      summary: Delete a persona by query ID
-      operationId: deletePersonaById
-      x-astrbot-scope: persona
-      parameters:
-        - name: persona_id
-          in: query
-          required: true
-          schema:
-            type: string
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -4049,7 +3169,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DynamicConfig'
+              $ref: '#/components/schemas/StorageCleanupRequest'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -4585,7 +3705,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DynamicConfig'
+              $ref: '#/components/schemas/SubAgentConfigRequest'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -4881,16 +4001,6 @@ components:
       type: object
       additionalProperties: true
 
-    ProviderCapability:
-      type: string
-      enum:
-        - chat
-        - agent
-        - stt
-        - tts
-        - embedding
-        - rerank
-
     LoginRequest:
       type: object
       required: [username, password]
@@ -5033,18 +4143,8 @@ components:
 
     BotConfigRequest:
       type: object
-      required: [type, config]
+      required: [config]
       properties:
-        id:
-          type: string
-        name:
-          type: string
-        type:
-          type: string
-          description: Platform adapter type, such as aiocqhttp, telegram, lark.
-        enabled:
-          type: boolean
-          default: true
         config:
           $ref: '#/components/schemas/DynamicConfig'
       additionalProperties: false
@@ -5087,8 +4187,6 @@ components:
       type: object
       required: [config]
       properties:
-        id:
-          type: string
         config:
           $ref: '#/components/schemas/DynamicConfig'
       additionalProperties: false
@@ -5097,15 +4195,13 @@ components:
       type: object
       required: [config]
       properties:
-        id:
-          type: string
-        provider_source_id:
-          type: string
-        capability:
-          $ref: '#/components/schemas/ProviderCapability'
-        enabled:
-          type: boolean
-          default: true
+        config:
+          $ref: '#/components/schemas/DynamicConfig'
+      additionalProperties: false
+
+    ProviderEmbeddingDimensionRequest:
+      type: object
+      properties:
         config:
           $ref: '#/components/schemas/DynamicConfig'
       additionalProperties: false
@@ -5275,11 +4371,11 @@ components:
 
     PluginUpdateRequest:
       type: object
-      properties:
-        reinstall:
-          type: boolean
-          default: false
       additionalProperties: false
+      properties:
+        proxy:
+          type: string
+          nullable: true
 
     PluginSourceBindRequest:
       type: object
@@ -5295,28 +4391,16 @@ components:
 
     PluginBatchUpdateRequest:
       type: object
+      required: [names]
+      additionalProperties: false
       properties:
-        plugin_id:
-          type: string
-          description: When set, update this single plugin instead of a batch.
-        plugin_ids:
+        names:
           type: array
           items:
             type: string
-        reinstall:
-          type: boolean
-          default: false
-        update_all:
-          type: boolean
-          default: false
-      additionalProperties: true
-
-    PluginVersionSupportRequest:
-      type: object
-      properties:
-        astrbot_version:
+        proxy:
           type: string
-      additionalProperties: false
+          nullable: true
 
     PluginGithubInstallRequest:
       type: object
@@ -5325,8 +4409,6 @@ components:
         repository:
           type: string
           description: GitHub URL or owner/repository slug.
-        ref:
-          type: string
         download_url:
           type: string
           description: Optional downloadable ZIP URL to use instead of GitHub archive resolution.
@@ -5364,17 +4446,6 @@ components:
           type: string
           nullable: true
         market_plugin_id:
-          type: string
-      additionalProperties: false
-
-    PluginValidateRepoRequest:
-      type: object
-      properties:
-        repository:
-          type: string
-        url:
-          type: string
-        proxy:
           type: string
       additionalProperties: false
 
@@ -5428,7 +4499,7 @@ components:
       properties:
         name:
           type: string
-        enabled:
+        active:
           type: boolean
           default: true
         transport:
@@ -5470,13 +4541,10 @@ components:
 
     SkillPatchRequest:
       type: object
+      required: [active]
       properties:
-        enabled:
+        active:
           type: boolean
-        display_name:
-          type: string
-        description:
-          type: string
       additionalProperties: false
 
     NeoCandidateActionRequest:
@@ -5898,14 +4966,21 @@ components:
           type: string
       additionalProperties: false
 
+    StorageCleanupRequest:
+      type: object
+      properties:
+        target:
+          type: string
+          default: all
+      additionalProperties: false
+
     TraceSettingsRequest:
       type: object
+      required: [enabled]
       properties:
         enabled:
           type: boolean
-        level:
-          type: string
-      additionalProperties: true
+      additionalProperties: false
 
     T2iTemplateRequest:
       type: object
@@ -5924,3 +4999,17 @@ components:
         content:
           type: string
       additionalProperties: true
+
+    SubAgentConfigRequest:
+      type: object
+      properties:
+        main_enable:
+          type: boolean
+        remove_main_duplicate_tools:
+          type: boolean
+        agents:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: false

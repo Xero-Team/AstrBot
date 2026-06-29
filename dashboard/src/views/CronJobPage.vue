@@ -447,6 +447,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 const { tm } = useModuleI18n('features/cron');
 const theme = useTheme();
@@ -528,14 +529,6 @@ type PlatformStatsItem = {
     display_name?: string;
   };
 };
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as { response?: { data?: { message?: string } } };
-  return errorLike.response?.data?.message || fallback;
-}
 
 const jobs = ref<CronJobItem[]>([]);
 
@@ -935,7 +928,7 @@ async function loadJobs() {
       toast(res.data.message || tm('messages.loadFailed'), 'error');
     }
   } catch (e: unknown) {
-    toast(getErrorMessage(e, tm('messages.loadFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.loadFailed')), 'error');
   } finally {
     loading.value = false;
   }
@@ -974,7 +967,7 @@ async function toggleJob(job: CronJobItem) {
       await loadJobs();
     }
   } catch (e: unknown) {
-    toast(getErrorMessage(e, tm('messages.updateFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.updateFailed')), 'error');
     await loadJobs();
   }
 }
@@ -989,7 +982,7 @@ async function deleteJob(job: CronJobItem) {
       toast(res.data.message || tm('messages.deleteFailed'), 'error');
     }
   } catch (e: unknown) {
-    toast(getErrorMessage(e, tm('messages.deleteFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.deleteFailed')), 'error');
   }
 }
 
@@ -1006,7 +999,7 @@ async function runJobNow(job: CronJobItem) {
       toast(res.data.message || tm('messages.runFailed'), 'error');
     }
   } catch (e: unknown) {
-    toast(getErrorMessage(e, tm('messages.runFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.runFailed')), 'error');
   } finally {
     const next = new Set(runningJobIds.value);
     next.delete(jobId);
@@ -1386,7 +1379,7 @@ async function createJob() {
       toast(res.data.message || tm('messages.createFailed'), 'error');
     }
   } catch (e: unknown) {
-    toast(getErrorMessage(e, tm('messages.createFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.createFailed')), 'error');
   } finally {
     creating.value = false;
   }
@@ -1417,7 +1410,7 @@ async function updateJob() {
       toast(res.data.message || tm('messages.updateFailed'), 'error');
     }
   } catch (e: unknown) {
-    toast(getErrorMessage(e, tm('messages.updateFailed')), 'error');
+    toast(resolveErrorMessage(e, tm('messages.updateFailed')), 'error');
   } finally {
     creating.value = false;
   }

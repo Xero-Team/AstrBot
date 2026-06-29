@@ -51,14 +51,63 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
 import { botApi } from '@/api/v1';
-import { useModuleI18n } from '@/i18n/composables';
+import type { BotRegistrationRequest } from '@/api/generated/openapi-v1';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
+import { useModuleI18n } from '@/i18n/composables';
+import { resolveErrorMessage } from '@/utils/errorUtils';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 const FEISHU_DOMAIN = 'https://open.feishu.cn';
 
-const REGISTRATION_ACTIONS = {
+interface RegistrationAction {
+  icon: string;
+  titleKey: string;
+  scanTitleKey: string;
+  successKey: string;
+  statusKeyPrefix?: string;
+}
+
+interface PlatformConfig {
+  type?: string;
+  domain?: string;
+  app_id?: string;
+  app_secret?: string;
+  appid?: string;
+  secret?: string;
+  weixin_oc_token?: string;
+  weixin_oc_account_id?: string;
+  weixin_oc_base_url?: string;
+  client_id?: string;
+  client_secret?: string;
+  [key: string]: unknown;
+}
+
+interface RegistrationFlow {
+  status: string;
+  message?: string;
+  interval?: number;
+  verification_uri_complete?: string;
+  qrcode_img_content?: string;
+  qrcode?: string;
+  registration_code?: string;
+  task_id?: string;
+  bind_key?: string;
+  app_id?: string;
+  app_secret?: string;
+  appid?: string;
+  secret?: string;
+  domain?: string;
+  weixin_oc_token?: string;
+  weixin_oc_account_id?: string;
+  weixin_oc_base_url?: string;
+  client_id?: string;
+  client_secret?: string;
+  [key: string]: unknown;
+}
+
+const REGISTRATION_ACTIONS: Record<string, RegistrationAction> = {
   lark: {
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.lark.title',
@@ -94,285 +143,282 @@ const REGISTRATION_ACTIONS = {
   },
 };
 
-export default {
-  name: 'PlatformRegistrationAction',
-  components: { QrCodeViewer },
-  props: {
-    platformConfig: {
-      type: Object,
-      default: null,
-    },
-    active: {
-      type: Boolean,
-      default: true,
-    },
+const props = withDefaults(
+  defineProps<{
+    platformConfig?: PlatformConfig | null;
+    active?: boolean;
+  }>(),
+  {
+    platformConfig: null,
+    active: true,
   },
-  emits: ['success', 'error', 'created'],
-  setup() {
-    const { tm } = useModuleI18n('features/platform');
-    return { tm };
-  },
-  data() {
-    return {
-      flow: {
-        status: 'idle',
-      },
-      loading: false,
-      pollTimer: null,
+);
+
+const emit = defineEmits<{
+  (event: 'success', message: string): void;
+  (event: 'error', message: string): void;
+  (event: 'created', data: RegistrationFlow): void;
+}>();
+
+const { tm } = useModuleI18n('features/platform');
+
+const flow = ref<RegistrationFlow>({ status: 'idle' });
+const loading = ref(false);
+const pollTimer = ref<ReturnType<typeof window.setTimeout> | null>(null);
+
+const action = computed<RegistrationAction | null>(
+  () => REGISTRATION_ACTIONS[props.platformConfig?.type ?? ''] ?? null,
+);
+
+const selectedDomain = computed(
+  () => props.platformConfig?.domain || FEISHU_DOMAIN,
+);
+
+const qrValue = computed(
+  () =>
+    flow.value.verification_uri_complete ||
+    flow.value.qrcode_img_content ||
+    flow.value.qrcode ||
+    '',
+);
+
+function stopPolling(): void {
+  if (pollTimer.value !== null) {
+    clearTimeout(pollTimer.value);
+    pollTimer.value = null;
+  }
+}
+
+function resetFlow(): void {
+  stopPolling();
+  flow.value = { status: 'idle' };
+}
+
+function ensureStarted(): void {
+  if (!props.active || !action.value || flow.value.status !== 'idle') {
+    return;
+  }
+  void startAction();
+}
+
+function buildPayload(
+  actionName: 'start' | 'poll',
+  extra: Record<string, unknown> = {},
+): BotRegistrationRequest {
+  return {
+    action: actionName,
+    platform_config: {
+      ...props.platformConfig,
+      domain: selectedDomain.value,
+    },
+    ...extra,
+  };
+}
+
+async function startAction(): Promise<void> {
+  if (!action.value || loading.value || !props.platformConfig?.type) {
+    return;
+  }
+  stopPolling();
+  loading.value = true;
+  flow.value = { status: 'starting' };
+  try {
+    const res = await botApi.registration(
+      props.platformConfig.type,
+      buildPayload('start'),
+    );
+    if (res.data.status !== 'ok') {
+      throw new Error(res.data.message || tm('registrationAction.startFailed'));
+    }
+    flow.value = {
+      ...(res.data.data || {}),
+      status: res.data.data?.status || 'pending',
     };
-  },
-  computed: {
-    action() {
-      return REGISTRATION_ACTIONS[this.platformConfig?.type] || null;
-    },
-    selectedDomain() {
-      return this.platformConfig?.domain || FEISHU_DOMAIN;
-    },
-    qrValue() {
-      return (
-        this.flow.verification_uri_complete ||
-        this.flow.qrcode_img_content ||
-        this.flow.qrcode ||
-        ''
+    if (flow.value.registration_code && flow.value.status === 'pending') {
+      schedulePoll(flow.value.interval || 5);
+    }
+  } catch (error) {
+    const errorMessage = resolveErrorMessage(
+      error,
+      tm('registrationAction.startFailed'),
+    );
+    flow.value = {
+      status: 'error',
+      message: errorMessage,
+    };
+    emit('error', errorMessage);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function schedulePoll(intervalSeconds: number): void {
+  stopPolling();
+  const seconds = Math.max(Number(intervalSeconds || 3), 1);
+  pollTimer.value = window.setTimeout(() => {
+    void pollAction();
+  }, seconds * 1000);
+}
+
+async function pollAction(): Promise<void> {
+  if (
+    !action.value ||
+    !props.platformConfig?.type ||
+    !flow.value.registration_code
+  ) {
+    return;
+  }
+  const pollPayload: Record<string, unknown> = {
+    registration_code: flow.value.registration_code,
+  };
+  if (flow.value.task_id) {
+    pollPayload.task_id = flow.value.task_id;
+  }
+  if (flow.value.bind_key) {
+    pollPayload.bind_key = flow.value.bind_key;
+  }
+  try {
+    const res = await botApi.registration(
+      props.platformConfig.type,
+      buildPayload('poll', pollPayload),
+    );
+    if (res.data.status !== 'ok') {
+      throw new Error(res.data.message || tm('registrationAction.pollFailed'));
+    }
+    const data = (res.data.data || {}) as RegistrationFlow;
+    flow.value = {
+      ...flow.value,
+      ...data,
+      status: data.status || 'error',
+    };
+    if (flow.value.status === 'created') {
+      applyRegistrationResult(data);
+      stopPolling();
+      emit('created', data);
+      emit(
+        'success',
+        tm(action.value.successKey || 'registrationAction.created'),
       );
-    },
+      return;
+    }
+    if (flow.value.status === 'pending' || flow.value.status === 'slow_down') {
+      const nextInterval =
+        flow.value.status === 'slow_down'
+          ? Number(flow.value.interval || 5) + 5
+          : Number(flow.value.interval || 5);
+      flow.value.interval = nextInterval;
+      schedulePoll(nextInterval);
+      return;
+    }
+    stopPolling();
+  } catch (error) {
+    const errorMessage = resolveErrorMessage(
+      error,
+      tm('registrationAction.pollFailed'),
+    );
+    flow.value = {
+      ...flow.value,
+      status: 'error',
+      message: errorMessage,
+    };
+    emit('error', errorMessage);
+    stopPolling();
+  }
+}
+
+function applyRegistrationResult(data: RegistrationFlow): void {
+  if (!props.platformConfig) {
+    return;
+  }
+  const fields: Array<keyof RegistrationFlow> = [
+    'app_id',
+    'app_secret',
+    'appid',
+    'secret',
+    'domain',
+    'weixin_oc_token',
+    'weixin_oc_account_id',
+    'weixin_oc_base_url',
+    'client_id',
+    'client_secret',
+  ];
+  for (const field of fields) {
+    if (data[field]) {
+      props.platformConfig[field] = data[field];
+    }
+  }
+}
+
+function getStatusText(status: string): string {
+  const normalizedStatus = status || 'idle';
+  if (action.value?.statusKeyPrefix) {
+    const platformStatusKey = `${action.value.statusKeyPrefix}.${normalizedStatus}`;
+    const platformStatusText = tm(platformStatusKey);
+    if (platformStatusText && platformStatusText !== platformStatusKey) {
+      return platformStatusText;
+    }
+  }
+  return tm(`registrationAction.status.${normalizedStatus}`);
+}
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'created':
+      return 'success';
+    case 'error':
+    case 'denied':
+    case 'expired':
+      return 'error';
+    case 'starting':
+    case 'pending':
+    case 'slow_down':
+      return 'warning';
+    default:
+      return 'grey';
+  }
+}
+
+function getStatusIcon(status: string): string {
+  switch (status) {
+    case 'created':
+      return 'mdi-check-circle';
+    case 'error':
+    case 'denied':
+    case 'expired':
+      return 'mdi-alert-circle';
+    case 'starting':
+      return 'mdi-loading';
+    case 'pending':
+    case 'slow_down':
+      return 'mdi-timer-sand';
+    default:
+      return 'mdi-circle-outline';
+  }
+}
+
+watch(
+  () => props.active,
+  (active) => {
+    if (active) {
+      ensureStarted();
+    } else {
+      stopPolling();
+    }
   },
-  watch: {
-    active: {
-      immediate: true,
-      handler(active) {
-        if (active) {
-          this.ensureStarted();
-        } else {
-          this.stopPolling();
-        }
-      },
-    },
-    'platformConfig.type'() {
-      this.resetFlow();
-      this.ensureStarted();
-    },
+  { immediate: true },
+);
+
+watch(
+  () => props.platformConfig?.type,
+  () => {
+    resetFlow();
+    ensureStarted();
   },
-  beforeUnmount() {
-    this.stopPolling();
-  },
-  methods: {
-    resetFlow() {
-      this.stopPolling();
-      this.flow = { status: 'idle' };
-    },
-    ensureStarted() {
-      if (!this.active || !this.action || this.flow.status !== 'idle') {
-        return;
-      }
-      void this.startAction();
-    },
-    buildPayload(action, extra = {}) {
-      return {
-        action,
-        platform_config: {
-          ...this.platformConfig,
-          domain: this.selectedDomain,
-        },
-        ...extra,
-      };
-    },
-    async startAction() {
-      if (!this.action || this.loading) {
-        return;
-      }
-      this.stopPolling();
-      this.loading = true;
-      this.flow = { status: 'starting' };
-      try {
-        const res = await botApi.registration(
-          this.platformConfig.type,
-          this.buildPayload('start'),
-        );
-        if (res.data.status !== 'ok') {
-          throw new Error(
-            res.data.message || this.tm('registrationAction.startFailed'),
-          );
-        }
-        this.flow = {
-          ...res.data.data,
-          status: res.data.data?.status || 'pending',
-        };
-        if (this.flow.registration_code && this.flow.status === 'pending') {
-          this.schedulePoll(this.flow.interval || 5);
-        }
-      } catch (err) {
-        this.flow = {
-          status: 'error',
-          message:
-            err.response?.data?.message ||
-            err.message ||
-            this.tm('registrationAction.startFailed'),
-        };
-        this.$emit('error', this.flow.message);
-      } finally {
-        this.loading = false;
-      }
-    },
-    schedulePoll(intervalSeconds) {
-      this.stopPolling();
-      const seconds = Math.max(Number(intervalSeconds || 3), 1);
-      this.pollTimer = setTimeout(() => {
-        void this.pollAction();
-      }, seconds * 1000);
-    },
-    stopPolling() {
-      if (this.pollTimer) {
-        clearTimeout(this.pollTimer);
-        this.pollTimer = null;
-      }
-    },
-    async pollAction() {
-      if (!this.action || !this.flow.registration_code) {
-        return;
-      }
-      const pollPayload = {
-        registration_code: this.flow.registration_code,
-      };
-      if (this.flow.task_id) {
-        pollPayload.task_id = this.flow.task_id;
-      }
-      if (this.flow.bind_key) {
-        pollPayload.bind_key = this.flow.bind_key;
-      }
-      try {
-        const res = await botApi.registration(
-          this.platformConfig.type,
-          this.buildPayload('poll', pollPayload),
-        );
-        if (res.data.status !== 'ok') {
-          throw new Error(
-            res.data.message || this.tm('registrationAction.pollFailed'),
-          );
-        }
-        const data = res.data.data || {};
-        this.flow = {
-          ...this.flow,
-          ...data,
-          status: data.status || 'error',
-        };
-        if (this.flow.status === 'created') {
-          this.applyRegistrationResult(data);
-          this.stopPolling();
-          this.$emit('created', data);
-          this.$emit(
-            'success',
-            this.tm(this.action.successKey || 'registrationAction.created'),
-          );
-          return;
-        }
-        if (
-          this.flow.status === 'pending' ||
-          this.flow.status === 'slow_down'
-        ) {
-          const nextInterval =
-            this.flow.status === 'slow_down'
-              ? Number(this.flow.interval || 5) + 5
-              : Number(this.flow.interval || 5);
-          this.flow.interval = nextInterval;
-          this.schedulePoll(nextInterval);
-          return;
-        }
-        this.stopPolling();
-      } catch (err) {
-        this.flow = {
-          ...this.flow,
-          status: 'error',
-          message:
-            err.response?.data?.message ||
-            err.message ||
-            this.tm('registrationAction.pollFailed'),
-        };
-        this.$emit('error', this.flow.message);
-        this.stopPolling();
-      }
-    },
-    applyRegistrationResult(data) {
-      if (!this.platformConfig || !data) {
-        return;
-      }
-      if (data.app_id) {
-        this.platformConfig.app_id = data.app_id;
-      }
-      if (data.app_secret) {
-        this.platformConfig.app_secret = data.app_secret;
-      }
-      if (data.appid) {
-        this.platformConfig.appid = data.appid;
-      }
-      if (data.secret) {
-        this.platformConfig.secret = data.secret;
-      }
-      if (data.domain) {
-        this.platformConfig.domain = data.domain;
-      }
-      if (data.weixin_oc_token) {
-        this.platformConfig.weixin_oc_token = data.weixin_oc_token;
-      }
-      if (data.weixin_oc_account_id) {
-        this.platformConfig.weixin_oc_account_id = data.weixin_oc_account_id;
-      }
-      if (data.weixin_oc_base_url) {
-        this.platformConfig.weixin_oc_base_url = data.weixin_oc_base_url;
-      }
-      if (data.client_id) {
-        this.platformConfig.client_id = data.client_id;
-      }
-      if (data.client_secret) {
-        this.platformConfig.client_secret = data.client_secret;
-      }
-    },
-    getStatusText(status) {
-      const normalizedStatus = status || 'idle';
-      if (this.action?.statusKeyPrefix) {
-        const platformStatusKey = `${this.action.statusKeyPrefix}.${normalizedStatus}`;
-        const platformStatusText = this.tm(platformStatusKey);
-        if (platformStatusText && platformStatusText !== platformStatusKey) {
-          return platformStatusText;
-        }
-      }
-      return this.tm(`registrationAction.status.${normalizedStatus}`);
-    },
-    getStatusColor(status) {
-      switch (status) {
-        case 'created':
-          return 'success';
-        case 'error':
-        case 'denied':
-        case 'expired':
-          return 'error';
-        case 'starting':
-        case 'pending':
-        case 'slow_down':
-          return 'warning';
-        default:
-          return 'grey';
-      }
-    },
-    getStatusIcon(status) {
-      switch (status) {
-        case 'created':
-          return 'mdi-check-circle';
-        case 'error':
-        case 'denied':
-        case 'expired':
-          return 'mdi-alert-circle';
-        case 'starting':
-          return 'mdi-loading';
-        case 'pending':
-        case 'slow_down':
-          return 'mdi-timer-sand';
-        default:
-          return 'mdi-circle-outline';
-      }
-    },
-  },
-};
+);
+
+onBeforeUnmount(() => {
+  stopPolling();
+});
 </script>
 
 <style scoped>

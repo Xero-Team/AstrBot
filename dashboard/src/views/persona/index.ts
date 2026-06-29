@@ -10,14 +10,12 @@ export { default as PersonaManager } from './PersonaManager.vue';
 
 // 文件夹相关组件
 export { default as FolderTree } from './FolderTree.vue';
-export { default as FolderTreeNode } from './FolderTreeNode.vue';
 export { default as FolderBreadcrumb } from './FolderBreadcrumb.vue';
 export { default as FolderCard } from './FolderCard.vue';
 
 // 对话框组件
 export { default as CreateFolderDialog } from './CreateFolderDialog.vue';
 export { default as MoveToFolderDialog } from './MoveToFolderDialog.vue';
-export { default as MoveTargetNode } from './MoveTargetNode.vue';
 
 // Persona 相关组件
 export { default as PersonaCard } from './PersonaCard.vue';

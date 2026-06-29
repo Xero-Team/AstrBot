@@ -27,10 +27,7 @@ from astrbot.core.utils.io import (
     is_dashboard_dist_compatible,
     should_use_bundled_dashboard_dist,
 )
-from astrbot.dashboard.asgi_runtime import (
-    DashboardRequestState,
-    FastAPIAppAdapter,
-)
+from astrbot.dashboard.request_state import DashboardRequestState
 from astrbot.dashboard.responses import error
 
 from .api.app import create_dashboard_asgi_app
@@ -40,8 +37,6 @@ from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
         "/api/config/astrbot/update",
-        "/api/auth/totp/setup",
-        "/api/auth/login",
         "/api/v1/auth/totp/setup",
         "/api/v1/auth/login",
     }
@@ -112,9 +107,6 @@ class _RateLimiterRegistry:
 
 class _AddrWithPort(Protocol):
     port: int
-
-
-APP: FastAPIAppAdapter | None = None
 
 
 def _parse_env_bool(value: str | None, default: bool) -> bool:
@@ -221,14 +213,11 @@ class AstrBotDashboard:
             jwt_secret=self._jwt_secret,
             static_folder=self.data_path,
         )
-        self.app = FastAPIAppAdapter(self.asgi_app, static_folder=self.data_path)
-        self.asgi_app.state.dashboard_app_adapter = self.app
-        self.app._dashboard_server = self
-        global APP
-        APP = self.app
-        self.app.config["MAX_CONTENT_LENGTH"] = (
+        self.asgi_app.state.dashboard_server = self
+        self.asgi_app.state.dashboard_config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
+        self.app = self.asgi_app
 
         @self.asgi_app.middleware("http")
         async def dashboard_auth_middleware(request_, call_next):
@@ -249,22 +238,9 @@ class AstrBotDashboard:
             return rate_limit_response
         if path.startswith("/api/v1"):
             return None
-
-        allowed_exact_endpoints = {
-            "/api/auth/login",
-            "/api/auth/logout",
-            "/api/auth/setup-status",
-            "/api/auth/setup",
-            "/api/stat/versions",
-        }
-        allowed_endpoint_prefixes = [
-            "/api/v1/files/tokens",
-        ]
-        if path in allowed_exact_endpoints or any(
-            path.startswith(prefix) for prefix in allowed_endpoint_prefixes
-        ):
-            return None
         is_plugin_page_path = PluginPageAuth.is_protected_path(path)
+        if not is_plugin_page_path:
+            return None
         dashboard_token = self._extract_dashboard_jwt(current_request)
         asset_token = (
             PluginPageAuth.extract_asset_token(current_request.query_params)

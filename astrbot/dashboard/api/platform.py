@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from astrbot.dashboard.asgi_runtime import DashboardRequest
+from astrbot.core.platform.webhook_server import WebhookRequest
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import BotRegistrationRequest
@@ -59,7 +59,7 @@ async def verify_platform_webhook(
     service: PlatformService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.handle_webhook_callback(webhook_uuid, DashboardRequest(request))
+        lambda: service.handle_webhook_callback(webhook_uuid, WebhookRequest(request))
     )
 
 
@@ -70,5 +70,5 @@ async def receive_platform_webhook(
     service: PlatformService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.handle_webhook_callback(webhook_uuid, DashboardRequest(request))
+        lambda: service.handle_webhook_callback(webhook_uuid, WebhookRequest(request))
     )

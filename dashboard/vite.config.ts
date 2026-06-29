@@ -106,13 +106,13 @@ export default defineConfig(({ command }) => ({
       {
         find: /^shiki$/,
         replacement: fileURLToPath(
-          new URL('./src/utils/shikiLimitedBundle.js', import.meta.url),
+          new URL('./src/utils/shikiLimitedBundle.ts', import.meta.url),
         ),
       },
       {
         find: /^stream-monaco$/,
         replacement: fileURLToPath(
-          new URL('./src/utils/streamMonacoDisabled.js', import.meta.url),
+          new URL('./src/utils/streamMonacoDisabled.ts', import.meta.url),
         ),
       },
       {

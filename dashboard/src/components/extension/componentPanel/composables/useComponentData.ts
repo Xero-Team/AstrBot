@@ -3,6 +3,7 @@
  */
 import { ref, reactive } from 'vue';
 import { commandApi, toolApi } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import type {
   CommandItem,
   CommandSummary,
@@ -11,9 +12,6 @@ import type {
 } from '../types';
 
 export function useComponentData() {
-  const getErrorMessage = (error: unknown, fallback: string) =>
-    error instanceof Error && error.message ? error.message : fallback;
-
   const loading = ref(false);
   const commands = ref<CommandItem[]>([]);
   const tools = ref<ToolItem[]>([]);
@@ -54,7 +52,7 @@ export function useComponentData() {
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (err) {
-      toast(getErrorMessage(err, errorMessage), 'error');
+      toast(resolveErrorMessage(err, errorMessage), 'error');
     } finally {
       loading.value = false;
     }
@@ -70,7 +68,7 @@ export function useComponentData() {
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (err) {
-      toast(getErrorMessage(err, errorMessage), 'error');
+      toast(resolveErrorMessage(err, errorMessage), 'error');
     } finally {
       toolsLoading.value = false;
     }

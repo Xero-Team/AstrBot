@@ -91,8 +91,8 @@
               >
                 <FolderCard
                   :folder="folder"
-                  @click="navigateToFolder(folder.folder_id)"
-                  @open="navigateToFolder(folder.folder_id)"
+                  @click="personaStore.navigateToFolder(folder.folder_id)"
+                  @open="personaStore.navigateToFolder(folder.folder_id)"
                   @rename="openRenameFolderDialog(folder)"
                   @move="openMoveFolderDialog(folder)"
                   @delete="confirmDeleteFolder(folder)"
@@ -428,11 +428,12 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent } from 'vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
-import { mapState, mapActions } from 'pinia';
+import { resolveErrorMessage } from '@/utils/errorUtils';
+import { storeToRefs } from 'pinia';
 
 import FolderTree from './FolderTree.vue';
 import FolderBreadcrumb from './FolderBreadcrumb.vue';
@@ -447,327 +448,255 @@ import {
 } from '@/utils/confirmDialog';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
-
-interface Persona {
-  persona_id: string;
-  system_prompt: string;
-  custom_error_message?: string | null;
-  begin_dialogs?: string[] | null;
-  tools?: string[] | null;
-  skills?: string[] | null;
-  created_at?: string;
-  updated_at?: string;
-  folder_id?: string | null;
-}
+import type { Persona as StorePersona } from '@/stores/personaStore';
 
 type MoveDialogType = 'persona' | 'folder';
+type SnackbarType = 'success' | 'error';
 
-interface RenameFolderData {
-  folder: Folder | null;
-  name: string;
-}
+const { tm } = useModuleI18n('features/persona');
+const confirmDialog = useConfirmDialog();
+const personaStore = usePersonaStore();
+const {
+  folderTree,
+  currentFolderId,
+  currentFolders,
+  currentPersonas,
+  loading,
+} = storeToRefs(personaStore);
 
-interface PersonaManagerData {
-  showPersonaDialog: boolean;
-  showViewDialog: boolean;
-  editingPersona: Persona | null;
-  viewingPersona: Persona | null;
-  showCreateFolderDialog: boolean;
-  showRenameFolderDialog: boolean;
-  showDeleteFolderDialog: boolean;
-  renameFolderData: RenameFolderData;
-  deleteFolderData: Folder | null;
-  renameLoading: boolean;
-  deleteLoading: boolean;
-  showMoveDialog: boolean;
-  moveDialogType: MoveDialogType;
-  moveDialogItem: Persona | Folder | null;
-  showMessage: boolean;
-  message: string;
-  messageType: string;
-  showSkeleton: boolean;
-  skeletonTimer: ReturnType<typeof setTimeout> | null;
-}
+const showPersonaDialog = ref(false);
+const showViewDialog = ref(false);
+const editingPersona = ref<StorePersona | null>(null);
+const viewingPersona = ref<StorePersona | null>(null);
 
-export default defineComponent({
-  name: 'PersonaManager',
-  components: {
-    FolderTree,
-    FolderBreadcrumb,
-    FolderCard,
-    PersonaCard,
-    PersonaForm,
-    CreateFolderDialog,
-    MoveToFolderDialog,
-  },
-  setup() {
-    const { t } = useI18n();
-    const { tm } = useModuleI18n('features/persona');
-    const confirmDialog = useConfirmDialog();
-    return { t, tm, confirmDialog };
-  },
-  data(): PersonaManagerData {
-    return {
-      // Persona 相关
-      showPersonaDialog: false,
-      showViewDialog: false,
-      editingPersona: null as Persona | null,
-      viewingPersona: null as Persona | null,
-
-      // 文件夹相关
-      showCreateFolderDialog: false,
-      showRenameFolderDialog: false,
-      showDeleteFolderDialog: false,
-      renameFolderData: { folder: null as Folder | null, name: '' },
-      deleteFolderData: null as Folder | null,
-      renameLoading: false,
-      deleteLoading: false,
-
-      // 移动对话框
-      showMoveDialog: false,
-      moveDialogType: 'persona',
-      moveDialogItem: null as Persona | Folder | null,
-
-      // 消息提示
-      showMessage: false,
-      message: '',
-      messageType: 'success',
-
-      // 骨架屏延迟显示控制
-      showSkeleton: false,
-      skeletonTimer: null as ReturnType<typeof setTimeout> | null,
-    };
-  },
-  computed: {
-    ...mapState(usePersonaStore, [
-      'folderTree',
-      'currentFolderId',
-      'currentFolders',
-      'currentPersonas',
-      'loading',
-    ]),
-    currentFolderName(): string | null {
-      if (!this.currentFolderId) {
-        return null; // 根目录，PersonaForm 会使用 tm('form.rootFolder')
-      }
-      // 递归查找文件夹名称
-      const findName = (nodes: FolderTreeNode[], id: string): string | null => {
-        for (const node of nodes) {
-          if (node.folder_id === id) {
-            return node.name;
-          }
-          if (node.children && node.children.length > 0) {
-            const found = findName(node.children, id);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      return findName(this.folderTree, this.currentFolderId);
-    },
-  },
-  watch: {
-    // 监听 loading 状态变化，实现延迟显示骨架屏
-    loading: {
-      handler(newVal: boolean) {
-        if (newVal) {
-          // 加载开始时，延迟 150ms 后才显示骨架屏
-          // 如果加载在 150ms 内完成，则不显示骨架屏，避免闪烁
-          this.skeletonTimer = setTimeout(() => {
-            if (this.loading) {
-              this.showSkeleton = true;
-            }
-          }, 150);
-        } else {
-          // 加载结束，立即隐藏骨架屏并清除定时器
-          if (this.skeletonTimer) {
-            clearTimeout(this.skeletonTimer);
-            this.skeletonTimer = null;
-          }
-          this.showSkeleton = false;
-        }
-      },
-      immediate: true,
-    },
-  },
-  beforeUnmount() {
-    // 组件卸载时清除定时器
-    if (this.skeletonTimer) {
-      clearTimeout(this.skeletonTimer);
-    }
-  },
-  async mounted() {
-    await this.initialize();
-  },
-  methods: {
-    ...mapActions(usePersonaStore, [
-      'loadFolderTree',
-      'navigateToFolder',
-      'updateFolder',
-      'deleteFolder',
-      'deletePersona',
-      'refreshCurrentFolder',
-      'movePersonaToFolder',
-    ]),
-    getErrorMessage(error: unknown, fallback: string): string {
-      return error instanceof Error && error.message ? error.message : fallback;
-    },
-
-    async initialize() {
-      await Promise.all([this.loadFolderTree(), this.navigateToFolder(null)]);
-    },
-
-    // Persona 操作
-    openCreatePersonaDialog() {
-      this.editingPersona = null;
-      this.showPersonaDialog = true;
-    },
-
-    editPersona(persona: Persona) {
-      this.editingPersona = persona;
-      this.showPersonaDialog = true;
-    },
-
-    viewPersona(persona: Persona) {
-      this.viewingPersona = persona;
-      this.showViewDialog = true;
-    },
-
-    openEditFromViewDialog() {
-      if (!this.viewingPersona) return;
-      this.editingPersona = this.viewingPersona;
-      this.showViewDialog = false;
-      this.showPersonaDialog = true;
-    },
-
-    handlePersonaSaved(message: string) {
-      this.showSuccess(message);
-      void this.refreshCurrentFolder();
-    },
-
-    handlePersonaDeleted(message: string) {
-      this.showSuccess(message);
-      void this.refreshCurrentFolder();
-    },
-
-    async confirmDeletePersona(persona: Persona) {
-      if (
-        !(await askForConfirmationDialog(
-          this.tm('messages.deleteConfirm', { id: persona.persona_id }),
-          this.confirmDialog,
-        ))
-      ) {
-        return;
-      }
-
-      try {
-        await this.deletePersona(persona.persona_id);
-        this.showSuccess(this.tm('messages.deleteSuccess'));
-      } catch (error) {
-        this.showError(
-          this.getErrorMessage(error, this.tm('messages.deleteError')),
-        );
-      }
-    },
-
-    openMovePersonaDialog(persona: Persona) {
-      this.moveDialogType = 'persona';
-      this.moveDialogItem = persona;
-      this.showMoveDialog = true;
-    },
-
-    async handlePersonaDropped({
-      persona_id,
-      target_folder_id,
-    }: {
-      persona_id: string;
-      target_folder_id: string | null;
-    }) {
-      try {
-        await this.movePersonaToFolder(persona_id, target_folder_id);
-        this.showSuccess(this.tm('persona.messages.moveSuccess'));
-        // Navigate to the target folder
-        await this.navigateToFolder(target_folder_id);
-      } catch (error) {
-        this.showError(
-          this.getErrorMessage(error, this.tm('persona.messages.moveError')),
-        );
-      }
-    },
-
-    // 文件夹操作
-    openRenameFolderDialog(folder: Folder) {
-      this.renameFolderData = { folder, name: folder.name };
-      this.showRenameFolderDialog = true;
-    },
-
-    async submitRenameFolder() {
-      if (!this.renameFolderData.name || !this.renameFolderData.folder) return;
-
-      this.renameLoading = true;
-      try {
-        await this.updateFolder({
-          folder_id: this.renameFolderData.folder.folder_id,
-          name: this.renameFolderData.name,
-        });
-        this.showSuccess(this.tm('folder.messages.renameSuccess'));
-        this.showRenameFolderDialog = false;
-      } catch (error) {
-        this.showError(
-          this.getErrorMessage(error, this.tm('folder.messages.renameError')),
-        );
-      } finally {
-        this.renameLoading = false;
-      }
-    },
-
-    openMoveFolderDialog(folder: Folder) {
-      this.moveDialogType = 'folder';
-      this.moveDialogItem = folder;
-      this.showMoveDialog = true;
-    },
-
-    confirmDeleteFolder(folder: Folder) {
-      this.deleteFolderData = folder;
-      this.showDeleteFolderDialog = true;
-    },
-
-    async submitDeleteFolder() {
-      if (!this.deleteFolderData) return;
-
-      this.deleteLoading = true;
-      try {
-        await this.deleteFolder(this.deleteFolderData.folder_id);
-        this.showSuccess(this.tm('folder.messages.deleteSuccess'));
-        this.showDeleteFolderDialog = false;
-      } catch (error) {
-        this.showError(
-          this.getErrorMessage(error, this.tm('folder.messages.deleteError')),
-        );
-      } finally {
-        this.deleteLoading = false;
-      }
-    },
-
-    // 辅助方法
-    formatDate(dateString: string | undefined | null): string {
-      if (!dateString) return '';
-      return new Date(dateString).toLocaleString();
-    },
-
-    showSuccess(message: string) {
-      this.message = message;
-      this.messageType = 'success';
-      this.showMessage = true;
-    },
-
-    showError(message: string) {
-      this.message = message;
-      this.messageType = 'error';
-      this.showMessage = true;
-    },
-  },
+const showCreateFolderDialog = ref(false);
+const showRenameFolderDialog = ref(false);
+const showDeleteFolderDialog = ref(false);
+const renameFolderData = ref<{ folder: Folder | null; name: string }>({
+  folder: null,
+  name: '',
 });
+const deleteFolderData = ref<Folder | null>(null);
+const renameLoading = ref(false);
+const deleteLoading = ref(false);
+
+const showMoveDialog = ref(false);
+const moveDialogType = ref<MoveDialogType>('persona');
+const moveDialogItem = ref<StorePersona | Folder | null>(null);
+
+const showMessage = ref(false);
+const message = ref('');
+const messageType = ref<SnackbarType>('success');
+
+const showSkeleton = ref(false);
+const skeletonTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+
+const currentFolderName = computed(() => {
+  if (!currentFolderId.value) {
+    return null;
+  }
+
+  const findName = (nodes: FolderTreeNode[], id: string): string | null => {
+    for (const node of nodes) {
+      if (node.folder_id === id) {
+        return node.name;
+      }
+      if (node.children.length > 0) {
+        const found = findName(node.children, id);
+        if (found) {
+          return found;
+        }
+      }
+    }
+    return null;
+  };
+
+  return findName(folderTree.value, currentFolderId.value);
+});
+
+watch(
+  loading,
+  (newVal) => {
+    if (newVal) {
+      skeletonTimer.value = setTimeout(() => {
+        if (loading.value) {
+          showSkeleton.value = true;
+        }
+      }, 150);
+      return;
+    }
+
+    if (skeletonTimer.value) {
+      clearTimeout(skeletonTimer.value);
+      skeletonTimer.value = null;
+    }
+    showSkeleton.value = false;
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (skeletonTimer.value) {
+    clearTimeout(skeletonTimer.value);
+  }
+});
+
+onMounted(async () => {
+  await initialize();
+});
+
+async function initialize() {
+  await Promise.all([
+    personaStore.loadFolderTree(),
+    personaStore.navigateToFolder(null),
+  ]);
+}
+
+function openCreatePersonaDialog() {
+  editingPersona.value = null;
+  showPersonaDialog.value = true;
+}
+
+function editPersona(persona: StorePersona) {
+  editingPersona.value = persona;
+  showPersonaDialog.value = true;
+}
+
+function viewPersona(persona: StorePersona) {
+  viewingPersona.value = persona;
+  showViewDialog.value = true;
+}
+
+function openEditFromViewDialog() {
+  if (!viewingPersona.value) {
+    return;
+  }
+  editingPersona.value = viewingPersona.value;
+  showViewDialog.value = false;
+  showPersonaDialog.value = true;
+}
+
+function handlePersonaSaved(successMessage: string) {
+  showSuccess(successMessage);
+  void personaStore.refreshCurrentFolder();
+}
+
+function handlePersonaDeleted(successMessage: string) {
+  showSuccess(successMessage);
+  void personaStore.refreshCurrentFolder();
+}
+
+async function confirmDeletePersona(persona: StorePersona) {
+  if (
+    !(await askForConfirmationDialog(
+      tm('messages.deleteConfirm', { id: persona.persona_id }),
+      confirmDialog,
+    ))
+  ) {
+    return;
+  }
+
+  try {
+    await personaStore.deletePersona(persona.persona_id);
+    showSuccess(tm('messages.deleteSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.deleteError')));
+  }
+}
+
+function openMovePersonaDialog(persona: StorePersona) {
+  moveDialogType.value = 'persona';
+  moveDialogItem.value = persona;
+  showMoveDialog.value = true;
+}
+
+async function handlePersonaDropped({
+  persona_id,
+  target_folder_id,
+}: {
+  persona_id: string;
+  target_folder_id: string | null;
+}) {
+  try {
+    await personaStore.movePersonaToFolder(persona_id, target_folder_id);
+    showSuccess(tm('persona.messages.moveSuccess'));
+    await personaStore.navigateToFolder(target_folder_id);
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('persona.messages.moveError')));
+  }
+}
+
+function openRenameFolderDialog(folder: Folder) {
+  renameFolderData.value = { folder, name: folder.name };
+  showRenameFolderDialog.value = true;
+}
+
+async function submitRenameFolder() {
+  if (!renameFolderData.value.name || !renameFolderData.value.folder) {
+    return;
+  }
+
+  renameLoading.value = true;
+  try {
+    await personaStore.updateFolder({
+      folder_id: renameFolderData.value.folder.folder_id,
+      name: renameFolderData.value.name,
+    });
+    showSuccess(tm('folder.messages.renameSuccess'));
+    showRenameFolderDialog.value = false;
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('folder.messages.renameError')));
+  } finally {
+    renameLoading.value = false;
+  }
+}
+
+function openMoveFolderDialog(folder: Folder) {
+  moveDialogType.value = 'folder';
+  moveDialogItem.value = folder;
+  showMoveDialog.value = true;
+}
+
+function confirmDeleteFolder(folder: Folder) {
+  deleteFolderData.value = folder;
+  showDeleteFolderDialog.value = true;
+}
+
+async function submitDeleteFolder() {
+  if (!deleteFolderData.value) {
+    return;
+  }
+
+  deleteLoading.value = true;
+  try {
+    await personaStore.deleteFolder(deleteFolderData.value.folder_id);
+    showSuccess(tm('folder.messages.deleteSuccess'));
+    showDeleteFolderDialog.value = false;
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('folder.messages.deleteError')));
+  } finally {
+    deleteLoading.value = false;
+  }
+}
+
+function formatDate(dateString: string | undefined | null): string {
+  if (!dateString) {
+    return '';
+  }
+  return new Date(dateString).toLocaleString();
+}
+
+function showSuccess(successMessage: string) {
+  message.value = successMessage;
+  messageType.value = 'success';
+  showMessage.value = true;
+}
+
+function showError(errorMessage: string) {
+  message.value = errorMessage;
+  messageType.value = 'error';
+  showMessage.value = true;
+}
 </script>
 
 <style scoped>

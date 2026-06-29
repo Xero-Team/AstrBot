@@ -1,17 +1,10 @@
-// Some IMEs emit Enter right after compositionend; treat that same-keystroke
-// window as composition so selecting a candidate does not send the message.
 const RECENT_COMPOSITION_END_THRESHOLD_MS = 100;
 
-/**
- * @param {KeyboardEvent} event
- * @param {boolean} compositionActive
- * @param {number | null} lastCompositionEndAt
- */
 export function isComposingEnter(
-  event,
-  compositionActive,
-  lastCompositionEndAt = null,
-) {
+  event: KeyboardEvent,
+  compositionActive: boolean,
+  lastCompositionEndAt: number | null = null,
+): boolean {
   const hasCompositionKeyCodeFallback =
     typeof event.keyCode === 'number' && event.keyCode === 229;
   const isAfterRecentCompositionEnd =

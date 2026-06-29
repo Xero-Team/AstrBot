@@ -2,21 +2,42 @@ import { pinyin } from 'pinyin-pro';
 
 const HAN_IDEOGRAPH_RE = /\p{Unified_Ideograph}/u;
 
-export const normalizeStr = (s) => (s ?? '').toString().toLowerCase().trim();
+export interface SearchQuery {
+  norm: string;
+  loose: string;
+}
 
-const normalizeLooseFromNormalized = (normalized) =>
+export interface SearchablePlugin {
+  name?: string;
+  trimmedName?: string;
+  display_name?: string;
+  short_desc?: string;
+  desc?: string;
+  author?: unknown;
+  repo?: string;
+  version?: string;
+  astrbot_version?: string;
+  support_platforms?: string[];
+  tags?: string[];
+}
+
+export const normalizeStr = (s: unknown): string =>
+  (s ?? '').toString().toLowerCase().trim();
+
+const normalizeLooseFromNormalized = (normalized: string): string =>
   normalized.replace(/[\s_-]+/g, '').replace(/[()（）【】\[\]{}·•]+/g, '');
 
-export const normalizeLoose = (s) =>
+export const normalizeLoose = (s: unknown): string =>
   normalizeLooseFromNormalized(normalizeStr(s));
 
-const memoizeStringFn = (fn) => {
-  const cache = new Map();
+const memoizeStringFn = <T>(fn: (value: string) => T) => {
+  const cache = new Map<string, T>();
 
-  return (raw) => {
+  return (raw: unknown): T => {
     const key = (raw ?? '').toString();
-    if (cache.has(key)) {
-      return cache.get(key);
+    const cached = cache.get(key);
+    if (cached !== undefined) {
+      return cached;
     }
 
     const value = fn(key);
@@ -41,7 +62,7 @@ export const toInitials = memoizeStringFn((text) =>
     .replace(/\s+/g, ''),
 );
 
-export const buildSearchQuery = (raw) => {
+export const buildSearchQuery = (raw: unknown): SearchQuery | null => {
   const norm = getNormalizedText(raw);
   if (!norm) return null;
   return {
@@ -50,7 +71,10 @@ export const buildSearchQuery = (raw) => {
   };
 };
 
-export const matchesText = (value, query) => {
+export const matchesText = (
+  value: unknown,
+  query: SearchQuery | null | undefined,
+): boolean => {
   if (value === null || value === undefined || !query?.norm) return false;
   const text = String(value);
 
@@ -71,28 +95,31 @@ export const matchesText = (value, query) => {
   return false;
 };
 
-export const getPluginSearchFields = (plugin) => {
-  const supportPlatforms = Array.isArray(plugin?.support_platforms)
+export const getPluginSearchFields = (plugin: SearchablePlugin): unknown[] => {
+  const supportPlatforms = Array.isArray(plugin.support_platforms)
     ? plugin.support_platforms.join(' ')
     : '';
-  const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(' ') : '';
+  const tags = Array.isArray(plugin.tags) ? plugin.tags.join(' ') : '';
 
   return [
-    plugin?.name,
-    plugin?.trimmedName,
-    plugin?.display_name,
-    plugin?.short_desc,
-    plugin?.desc,
-    plugin?.author,
-    plugin?.repo,
-    plugin?.version,
-    plugin?.astrbot_version,
+    plugin.name,
+    plugin.trimmedName,
+    plugin.display_name,
+    plugin.short_desc,
+    plugin.desc,
+    plugin.author,
+    plugin.repo,
+    plugin.version,
+    plugin.astrbot_version,
     supportPlatforms,
     tags,
   ];
 };
 
-export const matchesPluginSearch = (plugin, query) => {
+export const matchesPluginSearch = (
+  plugin: SearchablePlugin,
+  query: SearchQuery | null,
+): boolean => {
   if (!query) return true;
 
   return getPluginSearchFields(plugin).some((candidate) =>

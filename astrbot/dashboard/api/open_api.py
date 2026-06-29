@@ -17,7 +17,6 @@ from astrbot.dashboard.services.open_api_service import (
 )
 
 from .auth import AuthContext, require_scope
-from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Open API"])
 
@@ -208,9 +207,16 @@ async def chat_sessions(
             return error(str(exc))
 
     try:
+        resolved_username, username_err = service.resolve_open_username(
+            request.query_params.get("username")
+        )
+        if username_err:
+            return error(username_err)
+        if not resolved_username:
+            return error("Invalid username")
         return ok(
-            await service.get_chat_sessions_from_dashboard_query(
-                username=request.query_params.get("username"),
+            await service.get_chat_sessions(
+                username=resolved_username,
                 page=request.query_params.get("page", 1),
                 page_size=request.query_params.get("page_size", 20),
                 platform_id=request.query_params.get("platform_id"),
@@ -240,7 +246,7 @@ async def upload_open_api_file(
     chat_service: ChatService = Depends(get_chat_service),
 ):
     try:
-        return ok(await chat_service.save_uploaded_file(UploadFileAdapter(file)))
+        return ok(await chat_service.save_uploaded_file(file))
     except ChatServiceError as exc:
         return error(str(exc))
 

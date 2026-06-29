@@ -1,7 +1,6 @@
-from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, UploadFile
 
 from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -18,7 +17,6 @@ from astrbot.dashboard.services.knowledge_base_service import (
 )
 
 from .auth import AuthContext, require_scope
-from .multipart import multipart_parts
 
 router = APIRouter(tags=["Knowledge Bases"])
 
@@ -29,14 +27,6 @@ def get_service(request: Request) -> KnowledgeBaseService:
 
 async def require_kb_scope(request: Request) -> AuthContext:
     return await require_scope(request, "kb")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def _to_int(value: Any, default: int) -> int:
@@ -66,16 +56,6 @@ async def _run(operation, *, prefix: str):
     except Exception as exc:
         logger.error("%s: %s", prefix, exc, exc_info=True)
         return error(f"{prefix}: {exc!s}")
-
-
-async def _run_json(
-    request: Request,
-    operation: Callable[[dict[str, Any]], Any],
-    *,
-    prefix: str,
-):
-    body = await _json_or_empty(request)
-    return await _run(lambda: operation(body), prefix=prefix)
 
 
 @router.get("/knowledge-bases")
@@ -188,7 +168,19 @@ async def upload_knowledge_base_document(
     service: KnowledgeBaseService = Depends(get_service),
 ):
     async def _operation():
-        form_data, files = await multipart_parts(request, extra_form={"kb_id": kb_id})
+        form = await request.form()
+        form_data = {
+            key: value
+            for key, value in form.multi_items()
+            if not isinstance(value, UploadFile)
+        }
+        form_data.setdefault("kb_id", kb_id)
+        files = [
+            value
+            for key, value in form.multi_items()
+            if isinstance(value, UploadFile)
+            and (key == "file" or key.startswith("file") or key == "files[]")
+        ]
         return await service.upload_document(
             content_type=request.headers.get("content-type"),
             form_data=form_data,

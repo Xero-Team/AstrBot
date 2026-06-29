@@ -3,7 +3,7 @@
     <!-- 搜索框 -->
     <v-text-field
       v-model="searchQuery"
-      :placeholder="labels.searchPlaceholder"
+      :placeholder="mergedLabels.searchPlaceholder"
       prepend-inner-icon="mdi-magnify"
       variant="outlined"
       density="compact"
@@ -26,7 +26,7 @@
         <template #prepend>
           <v-icon>mdi-home</v-icon>
         </template>
-        <v-list-item-title>{{ labels.rootFolder }}</v-list-item-title>
+        <v-list-item-title>{{ mergedLabels.rootFolder }}</v-list-item-title>
       </v-list-item>
 
       <!-- 文件夹树 -->
@@ -42,9 +42,9 @@
           :accept-drop-types="acceptDropTypes"
           @folder-click="handleFolderClick"
           @folder-context-menu="handleContextMenu"
-          @item-dropped="$emit('item-dropped', $event)"
-          @toggle-expansion="$emit('toggle-expansion', $event)"
-          @set-expansion="$emit('set-expansion', $event)"
+          @item-dropped="emit('item-dropped', $event)"
+          @toggle-expansion="emit('toggle-expansion', $event)"
+          @set-expansion="emit('set-expansion', $event)"
         />
       </template>
 
@@ -59,7 +59,7 @@
         class="text-center pa-4 text-medium-emphasis"
       >
         <v-icon size="32" class="mb-2">mdi-folder-outline</v-icon>
-        <div class="text-body-2">{{ labels.noFolders }}</div>
+        <div class="text-body-2">{{ mergedLabels.noFolders }}</div>
       </div>
     </v-list>
 
@@ -79,7 +79,7 @@
             mergedLabels.contextMenu.open
           }}</v-list-item-title>
         </v-list-item>
-        <v-list-item @click="$emit('rename-folder', contextMenu.folder)">
+        <v-list-item @click="renameFolder">
           <template #prepend>
             <v-icon size="small">mdi-pencil</v-icon>
           </template>
@@ -87,7 +87,7 @@
             mergedLabels.contextMenu.rename
           }}</v-list-item-title>
         </v-list-item>
-        <v-list-item @click="$emit('move-folder', contextMenu.folder)">
+        <v-list-item @click="moveFolder">
           <template #prepend>
             <v-icon size="small">mdi-folder-move</v-icon>
           </template>
@@ -96,10 +96,7 @@
           }}</v-list-item-title>
         </v-list-item>
         <v-divider class="my-1" />
-        <v-list-item
-          class="text-error"
-          @click="$emit('delete-folder', contextMenu.folder)"
-        >
+        <v-list-item class="text-error" @click="deleteFolder">
           <template #prepend>
             <v-icon size="small" color="error">mdi-delete</v-icon>
           </template>
@@ -112,8 +109,8 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, reactive, ref } from 'vue';
 import type { Folder, FolderTreeNode, ContextMenuEvent } from './types';
 import BaseFolderTreeNode from './BaseFolderTreeNode.vue';
 
@@ -141,149 +138,170 @@ const defaultLabels: DefaultLabels = {
   },
 };
 
-export default defineComponent({
-  name: 'BaseFolderTree',
-  components: {
-    BaseFolderTreeNode,
+type DropPayload = {
+  id?: string;
+  item_id?: string;
+  persona_id?: string;
+  type?: string;
+};
+
+const props = withDefaults(
+  defineProps<{
+    folderTree: FolderTreeNode[];
+    currentFolderId?: string | null;
+    expandedFolderIds?: string[];
+    treeLoading?: boolean;
+    acceptDropTypes?: string[];
+    labels?: Partial<DefaultLabels>;
+  }>(),
+  {
+    currentFolderId: null,
+    expandedFolderIds: () => [],
+    treeLoading: false,
+    acceptDropTypes: () => [],
+    labels: () => ({}),
   },
-  props: {
-    folderTree: {
-      type: Array as PropType<FolderTreeNode[]>,
-      required: true,
-    },
-    currentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    expandedFolderIds: {
-      type: Array as PropType<string[]>,
-      default: () => [],
-    },
-    treeLoading: {
-      type: Boolean,
-      default: false,
-    },
-    acceptDropTypes: {
-      type: Array as PropType<string[]>,
-      default: () => [],
-    },
-    labels: {
-      type: Object as PropType<Partial<DefaultLabels>>,
-      default: () => ({}),
-    },
-  },
-  emits: [
-    'folder-click',
-    'rename-folder',
-    'move-folder',
-    'delete-folder',
-    'item-dropped',
-    'toggle-expansion',
-    'set-expansion',
-  ],
-  data() {
-    return {
-      searchQuery: '',
-      isRootDragOver: false,
-      contextMenu: {
-        show: false,
-        target: null as [number, number] | null,
-        folder: null as Folder | null,
-      },
-    };
-  },
-  computed: {
-    mergedLabels(): DefaultLabels {
-      return {
-        ...defaultLabels,
-        ...this.labels,
-        contextMenu: {
-          ...defaultLabels.contextMenu,
-          ...(this.labels?.contextMenu || {}),
-        },
-      };
-    },
-    contextMenuTarget(): [number, number] | undefined {
-      return this.contextMenu.target ?? undefined;
-    },
-    filteredFolderTree(): FolderTreeNode[] {
-      if (!this.searchQuery) {
-        return this.folderTree;
-      }
-      const query = this.searchQuery.toLowerCase();
-      return this.filterTreeBySearch(this.folderTree, query);
-    },
-  },
-  methods: {
-    filterTreeBySearch(
-      nodes: FolderTreeNode[],
-      query: string,
-    ): FolderTreeNode[] {
-      return nodes
-        .filter((node) => {
-          const matches = node.name.toLowerCase().includes(query);
-          const childMatches = this.filterTreeBySearch(
-            node.children || [],
-            query,
-          );
-          return matches || childMatches.length > 0;
-        })
-        .map((node) => ({
-          ...node,
-          children: this.filterTreeBySearch(node.children || [], query),
-        }));
-    },
+);
 
-    handleFolderClick(folderId: string | null) {
-      this.$emit('folder-click', folderId);
+const emit = defineEmits<{
+  'folder-click': [folderId: string | null];
+  'rename-folder': [folder: Folder];
+  'move-folder': [folder: Folder];
+  'delete-folder': [folder: Folder];
+  'item-dropped': [
+    payload: {
+      item_id: string;
+      item_type: string;
+      target_folder_id: string | null;
+      source_data: DropPayload;
     },
+  ];
+  'toggle-expansion': [folderId: string];
+  'set-expansion': [payload: { folderId: string; expanded: boolean }];
+}>();
 
-    handleRootDragOver(event: DragEvent) {
-      if (!event.dataTransfer) return;
-      event.dataTransfer.dropEffect = 'move';
-      this.isRootDragOver = true;
-    },
-
-    handleRootDragLeave() {
-      this.isRootDragOver = false;
-    },
-
-    handleRootDrop(event: DragEvent) {
-      this.isRootDragOver = false;
-      if (!event.dataTransfer) return;
-
-      try {
-        const data = JSON.parse(event.dataTransfer.getData('application/json'));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
-          this.$emit('item-dropped', {
-            item_id: data.id || data.persona_id || data.item_id,
-            item_type: data.type,
-            target_folder_id: null,
-            source_data: data,
-          });
-        }
-      } catch (e) {
-        console.error('Failed to parse drop data:', e);
-      }
-    },
-
-    handleContextMenu(eventData: ContextMenuEvent) {
-      const { event, folder } = eventData;
-      this.contextMenu.target = [event.clientX, event.clientY];
-      this.contextMenu.folder = folder;
-      this.contextMenu.show = true;
-    },
-
-    openFolder() {
-      if (this.contextMenu.folder) {
-        this.$emit('folder-click', this.contextMenu.folder.folder_id);
-      }
-    },
-  },
+const searchQuery = ref('');
+const isRootDragOver = ref(false);
+const contextMenu = reactive<{
+  show: boolean;
+  target: [number, number] | null;
+  folder: Folder | null;
+}>({
+  show: false,
+  target: null,
+  folder: null,
 });
+
+const mergedLabels = computed<DefaultLabels>(() => ({
+  ...defaultLabels,
+  ...props.labels,
+  contextMenu: {
+    ...defaultLabels.contextMenu,
+    ...(props.labels?.contextMenu ?? {}),
+  },
+}));
+
+const contextMenuTarget = computed(() => contextMenu.target ?? undefined);
+
+const filteredFolderTree = computed(() => {
+  if (!searchQuery.value) {
+    return props.folderTree;
+  }
+  return filterTreeBySearch(props.folderTree, searchQuery.value.toLowerCase());
+});
+
+function filterTreeBySearch(
+  nodes: FolderTreeNode[],
+  query: string,
+): FolderTreeNode[] {
+  return nodes
+    .filter((node) => {
+      const matches = node.name.toLowerCase().includes(query);
+      const childMatches = filterTreeBySearch(node.children, query);
+      return matches || childMatches.length > 0;
+    })
+    .map((node) => ({
+      ...node,
+      children: filterTreeBySearch(node.children, query),
+    }));
+}
+
+function handleFolderClick(folderId: string | null) {
+  emit('folder-click', folderId);
+}
+
+function handleRootDragOver(event: DragEvent) {
+  if (!event.dataTransfer) {
+    return;
+  }
+  event.dataTransfer.dropEffect = 'move';
+  isRootDragOver.value = true;
+}
+
+function handleRootDragLeave() {
+  isRootDragOver.value = false;
+}
+
+function handleRootDrop(event: DragEvent) {
+  isRootDragOver.value = false;
+  if (!event.dataTransfer) {
+    return;
+  }
+
+  try {
+    const data = JSON.parse(
+      event.dataTransfer.getData('application/json'),
+    ) as DropPayload;
+    const itemType = data.type;
+    const itemId = data.id ?? data.persona_id ?? data.item_id;
+    if (
+      !itemType ||
+      !itemId ||
+      (props.acceptDropTypes.length > 0 &&
+        !props.acceptDropTypes.includes(itemType))
+    ) {
+      return;
+    }
+    emit('item-dropped', {
+      item_id: itemId,
+      item_type: itemType,
+      target_folder_id: null,
+      source_data: data,
+    });
+  } catch (error) {
+    console.error('Failed to parse drop data:', error);
+  }
+}
+
+function handleContextMenu(eventData: ContextMenuEvent) {
+  contextMenu.target = [eventData.event.clientX, eventData.event.clientY];
+  contextMenu.folder = eventData.folder;
+  contextMenu.show = true;
+}
+
+function openFolder() {
+  if (contextMenu.folder) {
+    emit('folder-click', contextMenu.folder.folder_id);
+  }
+}
+
+function renameFolder() {
+  if (contextMenu.folder) {
+    emit('rename-folder', contextMenu.folder);
+  }
+}
+
+function moveFolder() {
+  if (contextMenu.folder) {
+    emit('move-folder', contextMenu.folder);
+  }
+}
+
+function deleteFolder() {
+  if (contextMenu.folder) {
+    emit('delete-folder', contextMenu.folder);
+  }
+}
 </script>
 
 <style scoped>

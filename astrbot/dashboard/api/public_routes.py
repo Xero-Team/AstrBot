@@ -7,21 +7,11 @@ from urllib.parse import quote, urlencode, urlsplit
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, Response
 
 from astrbot.core.star.star import StarMetadata
 from astrbot.dashboard.responses import ok
-from astrbot.dashboard.schemas import LoginRequest
-from astrbot.dashboard.services.auth_service import AuthService
 from astrbot.dashboard.services.plugin_service import PluginService
-from astrbot.dashboard.services.stat_service import StatService
-
-from .auth import (
-    _clear_dashboard_jwt_cookie,
-    _login,
-    get_auth_service,
-)
-from .stats import get_service as get_stat_service
 
 router = APIRouter(include_in_schema=False)
 
@@ -275,37 +265,6 @@ def _plugin_page_headers() -> dict[str, str]:
         "X-Frame-Options": "SAMEORIGIN",
         "Content-Security-Policy": "frame-ancestors 'self'",
     }
-
-
-@router.post("/api/auth/login")
-async def login_alias(
-    request: Request,
-    payload: LoginRequest,
-    service: AuthService = Depends(get_auth_service),
-):
-    return await _login(request, payload, service)
-
-
-@router.post("/api/auth/logout")
-async def logout_alias(request: Request):
-    response = JSONResponse(
-        {"status": "ok", "message": "已退出登录", "data": {}},
-        status_code=200,
-    )
-    _clear_dashboard_jwt_cookie(request, response)
-    return response
-
-
-@router.get("/api/stat/versions")
-async def public_versions_alias(
-    request: Request,
-    service: StatService = Depends(get_stat_service),
-):
-    return ok(
-        await service.get_public_versions(
-            getattr(request.app.state, "dashboard_static_folder", None)
-        )
-    )
 
 
 @router.get("/api/plugin/page/entry")

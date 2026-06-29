@@ -1,10 +1,24 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class OpenModel(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+
+def _reject_legacy_mcp_request_fields(
+    value: Any,
+    *,
+    forbidden: tuple[str, ...],
+) -> Any:
+    if not isinstance(value, dict):
+        return value
+    legacy_fields = [key for key in forbidden if key in value]
+    if legacy_fields:
+        fields = ", ".join(sorted(legacy_fields))
+        raise ValueError(f"Legacy MCP request fields are not supported: {fields}")
+    return value
 
 
 class ConfigProfileCreateRequest(BaseModel):
@@ -158,15 +172,18 @@ class CommandPermissionRequest(BaseModel):
     permission: str
 
 
-class SubAgentConfigRequest(OpenModel):
+class SubAgentConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     main_enable: bool | None = None
-    enable: bool | None = None
     remove_main_duplicate_tools: bool | None = None
     agents: list[dict[str, Any]] | None = None
 
 
 class TraceSettingsRequest(BaseModel):
-    trace_enable: bool | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
 
 
 class StorageCleanupRequest(BaseModel):
@@ -245,18 +262,16 @@ class ToolPermissionRequest(BaseModel):
 
 class McpServerRequest(OpenModel):
     name: str | None = None
-    oldName: str | None = None
     active: bool | None = None
-    enabled: bool | None = None
     config: dict[str, Any] | None = None
-    mcpServers: dict[str, Any] | None = None
 
-
-class McpServerByNameRequest(OpenModel):
-    server_name: str
-    config: dict[str, Any] | None = None
-    mcp_server_config: dict[str, Any] | None = None
-    enabled: bool | None = None
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_fields(cls, value: Any) -> Any:
+        return _reject_legacy_mcp_request_fields(
+            value,
+            forbidden=("enabled", "mcpServers", "mcp_server_config", "oldName"),
+        )
 
 
 class ModelScopeSyncRequest(BaseModel):
@@ -283,10 +298,6 @@ class PersonaRequest(OpenModel):
     sort_order: int | None = None
 
 
-class PersonaByIdRequest(OpenModel):
-    persona_id: str
-
-
 class PersonaMoveRequest(BaseModel):
     persona_id: str
     folder_id: str | None = None
@@ -310,26 +321,10 @@ class PersonaFolderRequest(OpenModel):
     sort_order: int | None = None
 
 
-class SkillUpdateRequest(OpenModel):
-    enabled: bool | None = None
-    active: bool | None = None
+class SkillUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    def active_value(self) -> bool:
-        if self.enabled is not None:
-            return self.enabled
-        if self.active is not None:
-            return self.active
-        return True
-
-
-class SkillByNameUpdateRequest(SkillUpdateRequest):
-    skill_name: str
-
-
-class SkillFileUpdateRequest(OpenModel):
-    skill_name: str
-    path: str
-    content: str = ""
+    active: bool
 
 
 class SkillNeoRequest(OpenModel):
@@ -366,36 +361,10 @@ class ConversationExportRequest(BaseModel):
     conversations: list[ConversationRef]
 
 
-class BotConfigRequest(OpenModel):
-    bot_id: str | None = None
-    id: str | None = None
-    name: str | None = None
-    type: str | None = None
-    enabled: bool | None = None
-    enable: bool | None = None
-    config: dict[str, Any] | None = None
+class BotConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    def to_dashboard_config(self, *, fallback_id: str | None = None) -> dict[str, Any]:
-        config = dict(
-            self.config
-            or self.model_dump(
-                exclude={"bot_id", "config", "enabled"},
-                exclude_none=True,
-            )
-        )
-        if fallback_id and "id" not in config:
-            config["id"] = fallback_id
-        if self.type and "type" not in config:
-            config["type"] = self.type
-        if self.id and "id" not in config:
-            config["id"] = self.id
-        if self.enabled is not None:
-            config["enable"] = self.enabled
-        elif self.enable is not None:
-            config["enable"] = self.enable
-        elif "enable" not in config:
-            config["enable"] = True
-        return config
+    config: dict[str, Any]
 
 
 class BotRegistrationRequest(OpenModel):
@@ -405,106 +374,44 @@ class BotRegistrationRequest(OpenModel):
     device_code: str | None = None
 
 
-class ProviderSourceRequest(OpenModel):
-    source_id: str | None = None
-    id: str | None = None
+class ProviderSourceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    config: dict[str, Any]
+
+
+class ProviderConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    config: dict[str, Any]
+
+
+class ProviderEmbeddingDimensionRequest(OpenModel):
     config: dict[str, Any] | None = None
 
-    def to_dashboard_config(self, *, fallback_id: str | None = None) -> dict[str, Any]:
-        config = dict(
-            self.config
-            or self.model_dump(exclude={"source_id", "config"}, exclude_none=True)
-        )
-        if not config.get("id"):
-            # 不覆盖已有 id；self.id（显式指定）优先于 fallback_id（旧值兜底）
-            if fallback := (self.id or fallback_id):
-                config["id"] = fallback
-        return config
 
+class PluginGithubInstallRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-class ProviderConfigRequest(OpenModel):
-    provider_id: str | None = None
-    source_id: str | None = None
-    id: str | None = None
-    provider_source_id: str | None = None
-    provider_config: dict[str, Any] | None = None
-    capability: str | None = None
-    enabled: bool | None = None
-    enable: bool | None = None
-    config: dict[str, Any] | None = None
-
-    def to_dashboard_config(
-        self,
-        *,
-        fallback_id: str | None = None,
-        source_id: str | None = None,
-    ) -> dict[str, Any]:
-        config = dict(
-            self.config
-            or self.model_dump(
-                exclude={
-                    "provider_id",
-                    "source_id",
-                    "provider_config",
-                    "config",
-                    "capability",
-                    "enabled",
-                },
-                exclude_none=True,
-            )
-        )
-        if fallback_id and "id" not in config:
-            config["id"] = fallback_id
-        if self.id and "id" not in config:
-            config["id"] = self.id
-        if source_id:
-            config["provider_source_id"] = source_id
-        elif self.provider_source_id and "provider_source_id" not in config:
-            config["provider_source_id"] = self.provider_source_id
-        if self.enabled is not None:
-            config["enable"] = self.enabled
-        elif self.enable is not None:
-            config["enable"] = self.enable
-        elif "enable" not in config:
-            config["enable"] = True
-        if self.capability and "provider_type" not in config:
-            capability_map = {
-                "chat": "chat_completion",
-                "agent": "agent_runner",
-                "stt": "speech_to_text",
-                "tts": "text_to_speech",
-                "embedding": "embedding",
-                "rerank": "rerank",
-            }
-            config["provider_type"] = capability_map.get(
-                self.capability, self.capability
-            )
-        return config
-
-
-class ProviderListQuery(BaseModel):
-    capability: str | None = None
-    source_id: str | None = None
-    enabled: bool | None = None
-
-
-class PluginVersionSupportRequest(OpenModel):
-    astrbot_version: str | None = None
-    plugin_ids: list[str] | None = None
-
-
-class PluginInstallRequest(OpenModel):
-    repository: str | None = None
-    url: str | None = None
+    repository: str
     download_url: str | None = None
     proxy: str | None = None
     ignore_version_check: bool | None = None
+    install_method: str | None = None
+    registry_url: str | None = None
+    market_plugin_id: str | None = None
 
 
-class PluginValidateRepoRequest(OpenModel):
-    repository: str | None = None
-    url: str | None = None
+class PluginUrlInstallRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    download_url: str | None = None
     proxy: str | None = None
+    ignore_version_check: bool | None = None
+    install_method: str | None = None
+    registry_url: str | None = None
+    market_plugin_id: str | None = None
 
 
 class PluginSourceBindRequest(OpenModel):
@@ -513,26 +420,17 @@ class PluginSourceBindRequest(OpenModel):
     market_plugin_id: str | None = None
 
 
-class PluginUpdateRequest(OpenModel):
-    plugin_id: str | None = None
-    plugin_ids: list[str] | None = None
-    name: str | None = None
-    names: list[str] | None = None
+class PluginUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     proxy: str | None = None
-    download_url: str | None = None
-    download_urls: dict[str, str] | None = None
 
 
-class PluginByIdRequest(OpenModel):
-    plugin_id: str
+class PluginBatchUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-
-class PluginEnabledRequest(PluginByIdRequest):
-    enabled: bool
-
-
-class PluginConfigUpdateRequest(PluginByIdRequest):
-    config: dict[str, Any] | None = None
+    names: list[str]
+    proxy: str | None = None
 
 
 class PluginConfigPayload(OpenModel):

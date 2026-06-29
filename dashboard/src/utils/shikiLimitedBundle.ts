@@ -51,11 +51,11 @@ const THEME_BY_NAME = {
   'github-light': githubLight,
   'vitesse-dark': vitesseDark,
   'vitesse-light': vitesseLight,
-};
+} as const;
 
-const BUILT_IN_LANGUAGES = ['text', 'plaintext', 'plain'];
+const BUILT_IN_LANGUAGES = ['text', 'plaintext', 'plain'] as const;
 
-export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
+export const LIMITED_SHIKI_LANGUAGE_ALIASES: Record<string, string> = {
   bat: 'powershell',
   cjs: 'javascript',
   console: 'bash',
@@ -83,7 +83,7 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
   zsh: 'bash',
 };
 
-export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
+export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set<string>([
   ...BUILT_IN_LANGUAGES,
   ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [
     language.name,
@@ -91,19 +91,32 @@ export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
   ]),
 ]);
 
-function getThemeName(theme) {
-  return typeof theme === 'string' ? theme : theme?.name;
+type ResolvedTheme = (typeof THEME_BY_NAME)[keyof typeof THEME_BY_NAME];
+type ThemeReference =
+  keyof typeof THEME_BY_NAME | ResolvedTheme | null | undefined;
+
+type Highlighter = Awaited<ReturnType<typeof createHighlighterCore>>;
+type NormalizableCodeOptions = { lang?: unknown; [key: string]: unknown };
+type CreateHighlighterOptions = Omit<
+  Parameters<typeof createHighlighterCore>[0],
+  'themes' | 'langs'
+> & {
+  themes?: ThemeReference[];
+};
+
+function getThemeName(theme: ResolvedTheme | null) {
+  return theme?.name;
 }
 
-function resolveTheme(theme) {
+function resolveTheme(theme: ThemeReference): ResolvedTheme | null {
   if (!theme) return null;
   if (typeof theme !== 'string') return theme;
   return THEME_BY_NAME[theme] || null;
 }
 
-function uniqueThemes(themes) {
-  const seen = new Set();
-  const result = [];
+function uniqueThemes(themes: ThemeReference[]): ResolvedTheme[] {
+  const seen = new Set<string>();
+  const result: ResolvedTheme[] = [];
 
   for (const theme of themes) {
     const resolved = resolveTheme(theme);
@@ -116,7 +129,7 @@ function uniqueThemes(themes) {
   return result;
 }
 
-export function normalizeLimitedShikiLanguage(language) {
+export function normalizeLimitedShikiLanguage(language: unknown): string {
   const normalized = String(language || 'text')
     .trim()
     .split(/\s+/, 1)[0]
@@ -132,15 +145,16 @@ export function normalizeLimitedShikiLanguage(language) {
     : 'text';
 }
 
-function normalizeCodeOptions(options) {
-  if (!options || typeof options !== 'object') return options;
+function normalizeCodeOptions<T extends NormalizableCodeOptions>(
+  options: T,
+): T {
   return {
     ...options,
     lang: normalizeLimitedShikiLanguage(options.lang),
   };
 }
 
-function wrapLimitedHighlighter(highlighter) {
+function wrapLimitedHighlighter(highlighter: Highlighter) {
   const codeToHtml = highlighter.codeToHtml.bind(highlighter);
   const codeToTokens = highlighter.codeToTokens.bind(highlighter);
   const codeToHast = highlighter.codeToHast.bind(highlighter);
@@ -151,16 +165,31 @@ function wrapLimitedHighlighter(highlighter) {
 
   return {
     ...highlighter,
-    codeToHast(code, options) {
-      return codeToHast(code, normalizeCodeOptions(options));
+    codeToHast(code: string, options: NormalizableCodeOptions) {
+      return codeToHast(
+        code,
+        normalizeCodeOptions(options) as unknown as Parameters<
+          typeof codeToHast
+        >[1],
+      );
     },
-    codeToHtml(code, options) {
-      return codeToHtml(code, normalizeCodeOptions(options));
+    codeToHtml(code: string, options: NormalizableCodeOptions) {
+      return codeToHtml(
+        code,
+        normalizeCodeOptions(options) as unknown as Parameters<
+          typeof codeToHtml
+        >[1],
+      );
     },
-    codeToTokens(code, options) {
-      return codeToTokens(code, normalizeCodeOptions(options));
+    codeToTokens(code: string, options: NormalizableCodeOptions) {
+      return codeToTokens(
+        code,
+        normalizeCodeOptions(options) as unknown as Parameters<
+          typeof codeToTokens
+        >[1],
+      );
     },
-    getLanguage(language) {
+    getLanguage(language: unknown) {
       return getLanguage(normalizeLimitedShikiLanguage(language));
     },
     getLoadedLanguages() {
@@ -172,18 +201,24 @@ function wrapLimitedHighlighter(highlighter) {
     loadLanguageSync() {
       return undefined;
     },
-    async loadTheme(...themes) {
+    async loadTheme(...themes: ThemeReference[][]) {
       const resolved = uniqueThemes(themes.flat());
-      if (resolved.length && loadTheme) await loadTheme(...resolved);
+      if (resolved.length && loadTheme) {
+        await loadTheme(...resolved);
+      }
     },
-    loadThemeSync(...themes) {
+    loadThemeSync(...themes: ThemeReference[][]) {
       const resolved = uniqueThemes(themes.flat());
-      if (resolved.length && loadThemeSync) loadThemeSync(...resolved);
+      if (resolved.length && loadThemeSync) {
+        loadThemeSync(...resolved);
+      }
     },
   };
 }
 
-export async function createHighlighter(options = {}) {
+export async function createHighlighter(
+  options: Partial<CreateHighlighterOptions> = {},
+) {
   const themes = uniqueThemes([
     ...(Array.isArray(options.themes) ? options.themes : []),
     ...Object.values(THEME_BY_NAME),

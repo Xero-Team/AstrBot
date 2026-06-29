@@ -276,6 +276,7 @@ import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
 import 'markstream-vue/index.css';
@@ -314,25 +315,12 @@ interface ProviderEntry {
   id?: string;
   enable?: boolean;
   provider_type?: string;
-  provider_source_id?: string;
-  type?: string;
   [key: string]: unknown;
 }
 
 interface ProviderTemplatePayload {
   providers?: ProviderEntry[];
   provider_sources?: ProviderSourceEntry[];
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as {
-    response?: { data?: { message?: string } };
-    message?: string;
-  };
-  return errorLike.response?.data?.message || errorLike.message || fallback;
 }
 
 const { tm } = useModuleI18n('features/welcome');
@@ -473,27 +461,9 @@ async function fetchDefaultConfig(): Promise<DefaultConfigPayload> {
 
 function getChatProvidersFromTemplatePayload(payload: ProviderTemplatePayload) {
   const providers = payload?.providers || [];
-  const sources = payload?.provider_sources || [];
-  const sourceMap = new Map<string, string>();
-  sources.forEach((source) => {
-    if (
-      typeof source.id === 'string' &&
-      typeof source.provider_type === 'string'
-    ) {
-      sourceMap.set(source.id, source.provider_type);
-    }
-  });
-
-  return providers.filter((provider) => {
-    if (provider.provider_type) {
-      return provider.provider_type === 'chat_completion';
-    }
-    if (provider.provider_source_id) {
-      const type = sourceMap.get(provider.provider_source_id);
-      if (type === 'chat_completion') return true;
-    }
-    return String(provider.type || '').includes('chat_completion');
-  });
+  return providers.filter(
+    (provider) => provider.provider_type === 'chat_completion',
+  );
 }
 
 async function fetchChatProviders() {
@@ -593,7 +563,9 @@ async function saveComputerAccessRuntime() {
       ),
     );
   } catch (err: unknown) {
-    showError(getErrorMessage(err, tm('onboard.computerAccessUpdateFailed')));
+    showError(
+      resolveErrorMessage(err, tm('onboard.computerAccessUpdateFailed')),
+    );
   } finally {
     savingComputerAccess.value = false;
   }
@@ -650,7 +622,7 @@ async function openPlatformDialog() {
     ).length;
     showAddPlatformDialog.value = true;
   } catch (err: unknown) {
-    showError(getErrorMessage(err, tm('onboard.platformLoadFailed')));
+    showError(resolveErrorMessage(err, tm('onboard.platformLoadFailed')));
   } finally {
     loadingPlatformDialog.value = false;
   }
@@ -662,7 +634,7 @@ async function openProviderDialog() {
     providerCountBeforeOpen.value = providers.length;
     showProviderDialog.value = true;
   } catch (err: unknown) {
-    showError(getErrorMessage(err, tm('onboard.providerLoadFailed')));
+    showError(resolveErrorMessage(err, tm('onboard.providerLoadFailed')));
   }
 }
 
@@ -675,7 +647,7 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
       platformStepState.value = 'completed';
     }
   } catch (err: unknown) {
-    showError(getErrorMessage(err, tm('onboard.platformLoadFailed')));
+    showError(resolveErrorMessage(err, tm('onboard.platformLoadFailed')));
   }
 });
 
@@ -688,7 +660,7 @@ watch(showProviderDialog, async (visible, wasVisible) => {
       await syncDefaultConfigProviderIfNeeded();
     }
   } catch (err: unknown) {
-    showError(getErrorMessage(err, tm('onboard.providerUpdateFailed')));
+    showError(resolveErrorMessage(err, tm('onboard.providerUpdateFailed')));
   }
 });
 

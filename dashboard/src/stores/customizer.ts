@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia';
-import config, { type ThemeMode, resolveUiTheme } from '@/config';
+import config, {
+  getInitialSystemPrefersDark,
+  type ThemeMode,
+  resolveUiTheme,
+} from '@/config';
 
 const DARK_THEMES: ReadonlySet<string> = new Set(['PurpleThemeDark']);
 
@@ -9,14 +13,22 @@ export const useCustomizerStore = defineStore('customizer', {
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
     fontTheme: 'Noto Sans SC',
-    uiTheme: config.uiTheme,
     themeMode: config.themeMode,
+    systemPrefersDark: getInitialSystemPrefersDark(),
     inputBg: config.inputBg,
     chatSidebarOpen: false, // chat mode mobile sidebar state
   }),
 
   getters: {
-    isDark: (state) => (state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false),
+    uiTheme: (state) => {
+      if (state.themeMode !== 'system') {
+        return resolveUiTheme(state.themeMode);
+      }
+      return state.systemPrefersDark ? 'PurpleThemeDark' : 'PurpleTheme';
+    },
+    isDark(): boolean {
+      return DARK_THEMES.has(this.uiTheme);
+    },
   },
 
   actions: {
@@ -30,20 +42,13 @@ export const useCustomizerStore = defineStore('customizer', {
       this.fontTheme = payload;
     },
 
-    SET_UI_THEME(payload: string) {
-      this.uiTheme = payload;
-      localStorage.setItem('uiTheme', payload);
-      const mode: ThemeMode = payload === 'PurpleThemeDark' ? 'dark' : 'light';
+    SET_THEME_MODE(mode: ThemeMode) {
       this.themeMode = mode;
       localStorage.setItem('themeMode', mode);
     },
 
-    SET_THEME_MODE(mode: ThemeMode) {
-      this.themeMode = mode;
-      localStorage.setItem('themeMode', mode);
-      const uiTheme = resolveUiTheme(mode);
-      this.uiTheme = uiTheme;
-      localStorage.setItem('uiTheme', uiTheme);
+    SET_SYSTEM_PREFERS_DARK(prefersDark: boolean) {
+      this.systemPrefersDark = prefersDark;
     },
 
     TOGGLE_CHAT_SIDEBAR() {

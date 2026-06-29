@@ -5,6 +5,7 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
 } from '@/utils/confirmDialog';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import { normalizeTextInput } from '@/utils/inputValue';
 
 type GenericObject = Record<string, unknown>;
@@ -39,7 +40,6 @@ interface ProviderItem extends GenericObject {
   model?: string;
   enable?: boolean;
   provider_type?: string;
-  type?: string;
   modalities?: string[];
   reasoning?: boolean;
   max_context_tokens?: number;
@@ -76,17 +76,6 @@ interface ConfigSchemaShape extends GenericObject {
     items?: ConfigSchemaProviderItems;
     config_template?: Record<string, ProviderSourceItem>;
   };
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as {
-    response?: { data?: { message?: string } };
-    message?: string;
-  };
-  return errorLike.response?.data?.message || errorLike.message || fallback;
 }
 
 export interface UseProviderSourcesOptions {
@@ -228,10 +217,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!providerSources.value) return [];
 
     return providerSources.value.filter(
-      (source) =>
-        source.provider_type === selectedProviderType.value ||
-        (source.type &&
-          isTypeMatchingProviderType(source.type, selectedProviderType.value)),
+      (source) => source.provider_type === selectedProviderType.value,
     );
   });
 
@@ -392,7 +378,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     return providers.value.filter(
-      (provider) => getProviderType(provider) === selectedProviderType.value,
+      (provider) => provider.provider_type === selectedProviderType.value,
     );
   });
 
@@ -443,14 +429,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   );
 
   // ===== Helper Functions =====
-  function isTypeMatchingProviderType(type?: string, providerType?: string) {
-    if (!type || !providerType) return false;
-    if (providerType === 'chat_completion') {
-      return type.includes('chat_completion');
-    }
-    return type.includes(providerType);
-  }
-
   function resolveSourceIcon(source: ProviderSourceItem | null | undefined) {
     if (!source) return '';
     return getProviderIcon(source.provider || '') || '';
@@ -491,39 +469,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (ctx >= 1_000_000) return `${Math.round(ctx / 1_000_000)}M`;
     if (ctx >= 1_000) return `${Math.round(ctx / 1_000)}K`;
     return `${ctx}`;
-  }
-
-  function getProviderType(provider: ProviderItem | null | undefined) {
-    if (!provider) return undefined;
-    if (provider.provider_type) {
-      return provider.provider_type;
-    }
-
-    const oldVersionProviderTypeMapping: Record<string, string> = {
-      openai_chat_completion: 'chat_completion',
-      anthropic_chat_completion: 'chat_completion',
-      googlegenai_chat_completion: 'chat_completion',
-      zhipu_chat_completion: 'chat_completion',
-      dify: 'agent_runner',
-      coze: 'agent_runner',
-      dashscope: 'chat_completion',
-      openai_whisper_api: 'speech_to_text',
-      mimo_stt_api: 'speech_to_text',
-      openai_whisper_selfhost: 'speech_to_text',
-      sensevoice_stt_selfhost: 'speech_to_text',
-      openai_tts_api: 'text_to_speech',
-      mimo_tts_api: 'text_to_speech',
-      edge_tts: 'text_to_speech',
-      gsvi_tts_api: 'text_to_speech',
-      fishaudio_tts_api: 'text_to_speech',
-      dashscope_tts: 'text_to_speech',
-      azure_tts: 'text_to_speech',
-      minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech',
-    };
-    return provider.type
-      ? oldVersionProviderTypeMapping[provider.type]
-      : undefined;
   }
 
   function selectProviderSource(source: ProviderSourceItem | null | undefined) {
@@ -662,7 +607,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       showMessage(tm('providerSources.deleteSuccess'));
     } catch (error: unknown) {
       showMessage(
-        getErrorMessage(error, tm('providerSources.deleteError')),
+        resolveErrorMessage(error, tm('providerSources.deleteError')),
         'error',
       );
     } finally {
@@ -721,7 +666,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return true;
     } catch (error: unknown) {
       showMessage(
-        getErrorMessage(error, tm('providerSources.saveError')),
+        resolveErrorMessage(error, tm('providerSources.saveError')),
         'error',
       );
       return false;
@@ -769,7 +714,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error: unknown) {
       modelMetadata.value = {};
-      showMessage(getErrorMessage(error, tm('models.fetchError')), 'error');
+      showMessage(resolveErrorMessage(error, tm('models.fetchError')), 'error');
     } finally {
       loadingModels.value = false;
     }
@@ -838,7 +783,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       );
     } catch (error: unknown) {
       showMessage(
-        getErrorMessage(error, tm('providerSources.saveError')),
+        resolveErrorMessage(error, tm('providerSources.saveError')),
         'error',
       );
     } finally {
@@ -865,7 +810,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       providers.value = providers.value.filter((p) => p.id !== provider.id);
       showMessage(tm('models.deleteSuccess'));
     } catch (error: unknown) {
-      showMessage(getErrorMessage(error, tm('models.deleteError')), 'error');
+      showMessage(
+        resolveErrorMessage(error, tm('models.deleteError')),
+        'error',
+      );
     } finally {
       await loadConfig();
     }
@@ -892,7 +840,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return true;
     } catch (error: unknown) {
       showMessage(
-        getErrorMessage(error, tm('providerSources.saveError')),
+        resolveErrorMessage(error, tm('providerSources.saveError')),
         'error',
       );
       return false;
@@ -923,7 +871,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         throw new Error(response.data.data.error || tm('models.testError'));
       }
     } catch (error: unknown) {
-      showMessage(getErrorMessage(error, tm('models.testError')), 'error');
+      showMessage(resolveErrorMessage(error, tm('models.testError')), 'error');
     } finally {
       testingProviders.value = testingProviders.value.filter(
         (id) => id !== providerId,
@@ -1004,7 +952,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     supportsToolCall,
     supportsReasoning,
     formatContextLimit,
-    getProviderType,
 
     // methods
     updateDefaultTab,

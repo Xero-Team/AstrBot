@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type ServerSentEventsResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AbortBackupUploadData, AbortBackupUploadResponses, AddChatProjectSessionData, AddChatProjectSessionResponses, BatchDeleteChatSessionsData, BatchDeleteChatSessionsResponses, BatchDeleteConversationsData, BatchDeleteConversationsResponses, BatchUpdateSessionProviderData, BatchUpdateSessionProviderResponses, BatchUpdateSessionServiceData, BatchUpdateSessionServiceResponses, BindPluginSourceData, BindPluginSourceResponses, CheckBackupData, CheckBackupResponses, CheckPluginVersionSupportData, CheckPluginVersionSupportResponses, CheckUpdateData, CheckUpdateResponses, CleanupStorageData, CleanupStorageResponses, CompleteBackupUploadData, CompleteBackupUploadResponses, CreateApiKeyData, CreateApiKeyResponses, CreateBackupData, CreateBackupResponses, CreateBotData, CreateBotResponses, CreateChatProjectData, CreateChatProjectResponses, CreateChatSessionData, CreateChatSessionResponses, CreateChatThreadData, CreateChatThreadResponses, CreateConfigProfileData, CreateConfigProfileResponses, CreateCronJobData, CreateCronJobResponses, CreateKnowledgeBaseData, CreateKnowledgeBaseResponses, CreateMcpServerData, CreateMcpServerResponses, CreatePersonaData, CreatePersonaFolderData, CreatePersonaFolderResponses, CreatePersonaResponses, CreatePluginSourceData, CreatePluginSourceResponses, CreateProviderData, CreateProviderInSourceByIdData, CreateProviderInSourceByIdResponses, CreateProviderInSourceData, CreateProviderInSourceResponses, CreateProviderResponses, CreateProviderSourceData, CreateProviderSourceResponses, CreateSessionGroupData, CreateSessionGroupResponses, CreateT2iTemplateData, CreateT2iTemplateResponses, DeleteApiKeyData, DeleteApiKeyResponses, DeleteAttachmentData, DeleteAttachmentResponses, DeleteBackupData, DeleteBackupResponses, DeleteBotByIdData, DeleteBotByIdResponses, DeleteBotData, DeleteBotResponses, DeleteChatProjectData, DeleteChatProjectResponses, DeleteChatSessionData, DeleteChatSessionResponses, DeleteChatThreadData, DeleteChatThreadResponses, DeleteConfigProfileData, DeleteConfigProfileResponses, DeleteConfigRouteData, DeleteConfigRouteResponses, DeleteConversationData, DeleteConversationResponses, DeleteCronJobData, DeleteCronJobResponses, DeleteKnowledgeBaseData, DeleteKnowledgeBaseResponses, DeleteKnowledgeChunkData, DeleteKnowledgeChunkResponses, DeleteKnowledgeDocumentData, DeleteKnowledgeDocumentResponses, DeleteMcpServerByNameData, DeleteMcpServerByNameResponses, DeleteMcpServerData, DeleteMcpServerResponses, DeleteNeoSkillCandidateData, DeleteNeoSkillCandidateResponses, DeleteNeoSkillReleaseData, DeleteNeoSkillReleaseResponses, DeletePersonaByIdData, DeletePersonaByIdResponses, DeletePersonaData, DeletePersonaFolderData, DeletePersonaFolderResponses, DeletePersonaResponses, DeletePluginConfigFileByIdData, DeletePluginConfigFileByIdResponses, DeletePluginConfigFileData, DeletePluginConfigFileResponses, DeletePluginSourceByIdData, DeletePluginSourceByIdResponses, DeletePluginSourceData, DeletePluginSourceResponses, DeleteProviderByIdData, DeleteProviderByIdResponses, DeleteProviderData, DeleteProviderResponses, DeleteProviderSourceByIdData, DeleteProviderSourceByIdResponses, DeleteProviderSourceData, DeleteProviderSourceResponses, DeleteSessionGroupData, DeleteSessionGroupResponses, DeleteSessionRulesData, DeleteSessionRulesResponses, DeleteSkillByNameData, DeleteSkillByNameResponses, DeleteSkillData, DeleteSkillResponses, DeleteT2iTemplateData, DeleteT2iTemplateResponses, DownloadAttachmentData, DownloadAttachmentResponses, DownloadBackupData, DownloadBackupResponses, DownloadOpenApiFileData, DownloadOpenApiFileResponses, DownloadSkillByNameData, DownloadSkillByNameResponses, DownloadSkillData, DownloadSkillResponses, EvaluateNeoSkillCandidateData, EvaluateNeoSkillCandidateResponses, ExportConversationsData, ExportConversationsResponses, GetActiveT2iTemplateData, GetActiveT2iTemplateResponses, GetAttachmentData, GetAttachmentResponses, GetAuthSetupStatusData, GetAuthSetupStatusResponses, GetBackupProgressData, GetBackupProgressResponses, GetBotByIdData, GetBotByIdResponses, GetBotData, GetBotResponses, GetChangelogData, GetChangelogErrors, GetChangelogResponses, GetChatProjectData, GetChatProjectResponses, GetChatSessionData, GetChatSessionResponses, GetChatThreadData, GetChatThreadResponses, GetConfigProfileData, GetConfigProfileResponses, GetConfigProfileSchemaData, GetConfigProfileSchemaResponses, GetConversationData, GetConversationResponses, GetFileByNameData, GetFileByNameResponses, GetFirstNoticeData, GetFirstNoticeResponses, GetKnowledgeBaseData, GetKnowledgeBaseResponses, GetKnowledgeBaseStatsData, GetKnowledgeBaseStatsResponses, GetKnowledgeDocumentData, GetKnowledgeDocumentResponses, GetKnowledgeTaskData, GetKnowledgeTaskResponses, GetLogHistoryData, GetLogHistoryResponses, GetNeoSkillPayloadData, GetNeoSkillPayloadResponses, GetPersonaByIdData, GetPersonaByIdResponses, GetPersonaData, GetPersonaResponses, GetPersonaTreeData, GetPersonaTreeResponses, GetPluginByIdData, GetPluginByIdResponses, GetPluginChangelogByIdData, GetPluginChangelogByIdResponses, GetPluginChangelogData, GetPluginChangelogResponses, GetPluginConfigByIdData, GetPluginConfigByIdResponses, GetPluginConfigData, GetPluginConfigResponses, GetPluginConfigSchemaByIdData, GetPluginConfigSchemaByIdResponses, GetPluginConfigSchemaData, GetPluginConfigSchemaResponses, GetPluginData, GetPluginReadmeByIdData, GetPluginReadmeByIdResponses, GetPluginReadmeData, GetPluginReadmeResponses, GetPluginResponses, GetProviderByIdData, GetProviderByIdResponses, GetProviderData, GetProviderEmbeddingDimensionByIdData, GetProviderEmbeddingDimensionByIdResponses, GetProviderEmbeddingDimensionData, GetProviderEmbeddingDimensionResponses, GetProviderResponses, GetProviderSchemaData, GetProviderSchemaResponses, GetProviderSourceByIdData, GetProviderSourceByIdResponses, GetProviderSourceData, GetProviderSourceResponses, GetProviderTokenStatsData, GetProviderTokenStatsResponses, GetPublicVersionsData, GetPublicVersionsResponses, GetSkillFileByNameData, GetSkillFileByNameResponses, GetSkillFileData, GetSkillFileResponses, GetStartTimeData, GetStartTimeResponses, GetStatsData, GetStatsResponses, GetStorageStatusData, GetStorageStatusResponses, GetSubagentConfigData, GetSubagentConfigResponses, GetSystemConfigData, GetSystemConfigResponses, GetSystemConfigRuntimeData, GetSystemConfigRuntimeResponses, GetSystemConfigSchemaData, GetSystemConfigSchemaResponses, GetT2iTemplateData, GetT2iTemplateResponses, GetTokenFileData, GetTokenFileResponses, GetTraceSettingsData, GetTraceSettingsResponses, GetUpdateProgressData, GetUpdateProgressResponses, GetVersionData, GetVersionResponses, ImportBackupData, ImportBackupResponses, ImportKnowledgeDocumentFromUrlData, ImportKnowledgeDocumentFromUrlResponses, ImportKnowledgeDocumentsData, ImportKnowledgeDocumentsResponses, InitBackupUploadData, InitBackupUploadResponses, InstallPipPackageData, InstallPipPackageResponses, InstallPluginFromGithubData, InstallPluginFromGithubResponses, InstallPluginFromUploadData, InstallPluginFromUploadResponses, InstallPluginFromUrlData, InstallPluginFromUrlResponses, ListActiveUmosData, ListActiveUmosResponses, ListApiKeysData, ListApiKeysResponses, ListBackupsData, ListBackupsResponses, ListBotsData, ListBotsResponses, ListBotStatsData, ListBotStatsResponses, ListBotTypesData, ListBotTypesResponses, ListChangelogVersionsData, ListChangelogVersionsResponses, ListChatConfigsData, ListChatConfigsResponses, ListChatProjectsData, ListChatProjectSessionsData, ListChatProjectSessionsResponses, ListChatProjectsResponses, ListChatSessionsData, ListChatSessionsResponses, ListCommandConflictsData, ListCommandConflictsResponses, ListCommandsData, ListCommandsResponses, ListConfigProfilesData, ListConfigProfilesResponses, ListConfigRoutesData, ListConfigRoutesResponses, ListConversationsData, ListConversationsResponses, ListCronJobsData, ListCronJobsResponses, ListFailedPluginsData, ListFailedPluginsResponses, ListImBotsData, ListImBotsResponses, ListKnowledgeBasesData, ListKnowledgeBasesResponses, ListKnowledgeChunksData, ListKnowledgeChunksResponses, ListKnowledgeDocumentsData, ListKnowledgeDocumentsResponses, ListMcpServersData, ListMcpServersResponses, ListNeoSkillCandidatesData, ListNeoSkillCandidatesResponses, ListNeoSkillReleasesData, ListNeoSkillReleasesResponses, ListPersonaFoldersData, ListPersonaFoldersResponses, ListPersonasData, ListPersonasResponses, ListPluginConfigFilesByIdData, ListPluginConfigFilesByIdResponses, ListPluginConfigFilesData, ListPluginConfigFilesResponses, ListPluginMarketCategoriesData, ListPluginMarketCategoriesResponses, ListPluginMarketData, ListPluginMarketResponses, ListPluginsData, ListPluginSourcesData, ListPluginSourcesResponses, ListPluginsResponses, ListProvidersBySourceData, ListProvidersBySourceIdData, ListProvidersBySourceIdResponses, ListProvidersBySourceResponses, ListProvidersData, ListProviderSourceModelsByIdData, ListProviderSourceModelsByIdResponses, ListProviderSourceModelsData, ListProviderSourceModelsResponses, ListProviderSourcesData, ListProviderSourcesResponses, ListProvidersResponses, ListReleasesData, ListReleasesResponses, ListSessionGroupsData, ListSessionGroupsResponses, ListSessionRulesData, ListSessionRulesResponses, ListSessionsData, ListSessionsResponses, ListSkillFilesByNameData, ListSkillFilesByNameResponses, ListSkillFilesData, ListSkillFilesResponses, ListSkillsData, ListSkillsResponses, ListSubagentAvailableToolsData, ListSubagentAvailableToolsResponses, ListT2iTemplatesData, ListT2iTemplatesResponses, ListToolsData, ListToolsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MovePersonaItemData, MovePersonaItemResponses, OpenChatWebSocketData, OpenLiveChatWebSocketData, OpenUnifiedChatWebSocketData, PromoteNeoSkillCandidateData, PromoteNeoSkillCandidateResponses, ReceivePlatformWebhookData, ReceivePlatformWebhookResponses, RecoverTotpData, RecoverTotpResponses, RegenerateChatMessageData, RegenerateChatMessageResponses, RegisterBotTypeData, RegisterBotTypeResponses, ReloadFailedPluginData, ReloadFailedPluginResponses, ReloadPluginByIdData, ReloadPluginByIdResponses, ReloadPluginData, ReloadPluginResponses, RemoveChatProjectSessionData, RemoveChatProjectSessionResponses, RenameBackupData, RenameBackupResponses, RenameConfigProfileData, RenameConfigProfileResponses, ReorderPersonaItemsData, ReorderPersonaItemsResponses, ReplaceConfigRoutesData, ReplaceConfigRoutesResponses, ReplaceConversationMessagesData, ReplaceConversationMessagesResponses, ReplacePluginSourcesData, ReplacePluginSourcesResponses, ResetDefaultT2iTemplateData, ResetDefaultT2iTemplateResponses, RestartCoreData, RestartCoreResponses, RetrieveKnowledgeBaseData, RetrieveKnowledgeBaseResponses, RevokeApiKeyData, RevokeApiKeyResponses, RollbackNeoSkillReleaseData, RollbackNeoSkillReleaseResponses, RunCronJobData, RunCronJobResponses, SendChatMessageData, SendChatMessageResponses, SendChatThreadMessageData, SendChatThreadMessageResponses, SendImMessageData, SendImMessageResponses, SetActiveT2iTemplateData, SetActiveT2iTemplateResponses, SetBotEnabledByIdData, SetBotEnabledByIdResponses, SetBotEnabledData, SetBotEnabledResponses, SetMcpServerEnabledByNameData, SetMcpServerEnabledByNameResponses, SetMcpServerEnabledData, SetMcpServerEnabledResponses, SetPluginEnabledByIdData, SetPluginEnabledByIdResponses, SetPluginEnabledData, SetPluginEnabledResponses, SetProviderEnabledByIdData, SetProviderEnabledByIdResponses, SetProviderEnabledData, SetProviderEnabledResponses, SetToolEnabledData, SetToolEnabledResponses, SetToolPermissionData, SetToolPermissionResponses, SetupAuthData, SetupAuthResponses, SetupTotpData, SetupTotpResponses, StopChatSessionData, StopChatSessionResponses, StreamLiveLogsData, StreamLiveLogsResponse, StreamLiveLogsResponses, SyncModelScopeMcpServersData, SyncModelScopeMcpServersResponses, SyncNeoSkillReleaseData, SyncNeoSkillReleaseResponses, TestBotByIdData, TestBotByIdResponses, TestBotData, TestBotResponses, TestGhproxyConnectionData, TestGhproxyConnectionResponses, TestMcpServerByNameData, TestMcpServerByNameResponses, TestMcpServerData, TestMcpServerResponses, TestProviderByIdData, TestProviderByIdResponses, TestProviderData, TestProviderResponses, UninstallFailedPluginData, UninstallFailedPluginResponses, UninstallPluginByIdData, UninstallPluginByIdResponses, UninstallPluginData, UninstallPluginResponses, UpdateAuthAccountData, UpdateAuthAccountResponses, UpdateBotByIdData, UpdateBotByIdResponses, UpdateBotData, UpdateBotResponses, UpdateChatMessageData, UpdateChatMessageResponses, UpdateChatProjectData, UpdateChatProjectResponses, UpdateChatSessionData, UpdateChatSessionResponses, UpdateCommandData, UpdateCommandResponses, UpdateConfigProfileContentData, UpdateConfigProfileContentResponses, UpdateConversationData, UpdateConversationResponses, UpdateCoreData, UpdateCoreResponses, UpdateCronJobData, UpdateCronJobResponses, UpdateDashboardData, UpdateDashboardResponses, UpdateKnowledgeBaseData, UpdateKnowledgeBaseResponses, UpdateMcpServerByNameData, UpdateMcpServerByNameResponses, UpdateMcpServerData, UpdateMcpServerResponses, UpdatePersonaByIdData, UpdatePersonaByIdResponses, UpdatePersonaData, UpdatePersonaFolderData, UpdatePersonaFolderResponses, UpdatePersonaResponses, UpdatePluginConfigByIdData, UpdatePluginConfigByIdResponses, UpdatePluginConfigData, UpdatePluginConfigResponses, UpdatePluginData, UpdatePluginResponses, UpdatePluginsData, UpdatePluginsResponses, UpdateProviderByIdData, UpdateProviderByIdResponses, UpdateProviderData, UpdateProviderResponses, UpdateSessionGroupData, UpdateSessionGroupResponses, UpdateSkillByNameData, UpdateSkillByNameResponses, UpdateSkillData, UpdateSkillFileByNameData, UpdateSkillFileByNameResponses, UpdateSkillFileData, UpdateSkillFileResponses, UpdateSkillResponses, UpdateSubagentConfigData, UpdateSubagentConfigResponses, UpdateSystemConfigData, UpdateSystemConfigResponses, UpdateT2iTemplateData, UpdateT2iTemplateResponses, UpdateTraceSettingsData, UpdateTraceSettingsResponses, UploadBackupChunkData, UploadBackupChunkResponses, UploadBackupData, UploadBackupResponses, UploadFileData, UploadFileResponses, UploadKnowledgeDocumentData, UploadKnowledgeDocumentResponses, UploadOpenApiFileData, UploadOpenApiFileResponses, UploadPluginConfigFilesByIdData, UploadPluginConfigFilesByIdResponses, UploadPluginConfigFilesData, UploadPluginConfigFilesResponses, UploadSkillData, UploadSkillResponses, UploadSkillsBatchData, UploadSkillsBatchResponses, UpsertConfigRouteData, UpsertConfigRouteResponses, UpsertProviderSourceByIdData, UpsertProviderSourceByIdResponses, UpsertProviderSourceData, UpsertProviderSourceResponses, UpsertSessionRuleData, UpsertSessionRuleResponses, ValidatePluginRepoData, ValidatePluginRepoResponses, VerifyPlatformWebhookData, VerifyPlatformWebhookResponses } from './types.gen';
+import type { AbortBackupUploadData, AbortBackupUploadResponses, AddChatProjectSessionData, AddChatProjectSessionResponses, BatchDeleteChatSessionsData, BatchDeleteChatSessionsResponses, BatchDeleteConversationsData, BatchDeleteConversationsResponses, BatchUpdateSessionProviderData, BatchUpdateSessionProviderResponses, BatchUpdateSessionServiceData, BatchUpdateSessionServiceResponses, BindPluginSourceData, BindPluginSourceResponses, CheckBackupData, CheckBackupResponses, CheckUpdateData, CheckUpdateResponses, CleanupStorageData, CleanupStorageResponses, CompleteBackupUploadData, CompleteBackupUploadResponses, CreateApiKeyData, CreateApiKeyResponses, CreateBackupData, CreateBackupResponses, CreateBotData, CreateBotResponses, CreateChatProjectData, CreateChatProjectResponses, CreateChatSessionData, CreateChatSessionResponses, CreateChatThreadData, CreateChatThreadResponses, CreateConfigProfileData, CreateConfigProfileResponses, CreateCronJobData, CreateCronJobResponses, CreateKnowledgeBaseData, CreateKnowledgeBaseResponses, CreateMcpServerData, CreateMcpServerResponses, CreatePersonaData, CreatePersonaFolderData, CreatePersonaFolderResponses, CreatePersonaResponses, CreatePluginSourceData, CreatePluginSourceResponses, CreateProviderData, CreateProviderInSourceData, CreateProviderInSourceResponses, CreateProviderResponses, CreateProviderSourceData, CreateProviderSourceResponses, CreateSessionGroupData, CreateSessionGroupResponses, CreateT2iTemplateData, CreateT2iTemplateResponses, DeleteApiKeyData, DeleteApiKeyResponses, DeleteAttachmentData, DeleteAttachmentResponses, DeleteBackupData, DeleteBackupResponses, DeleteBotData, DeleteBotResponses, DeleteChatProjectData, DeleteChatProjectResponses, DeleteChatSessionData, DeleteChatSessionResponses, DeleteChatThreadData, DeleteChatThreadResponses, DeleteConfigProfileData, DeleteConfigProfileResponses, DeleteConfigRouteData, DeleteConfigRouteResponses, DeleteConversationData, DeleteConversationResponses, DeleteCronJobData, DeleteCronJobResponses, DeleteKnowledgeBaseData, DeleteKnowledgeBaseResponses, DeleteKnowledgeChunkData, DeleteKnowledgeChunkResponses, DeleteKnowledgeDocumentData, DeleteKnowledgeDocumentResponses, DeleteMcpServerData, DeleteMcpServerResponses, DeleteNeoSkillCandidateData, DeleteNeoSkillCandidateResponses, DeleteNeoSkillReleaseData, DeleteNeoSkillReleaseResponses, DeletePersonaData, DeletePersonaFolderData, DeletePersonaFolderResponses, DeletePersonaResponses, DeletePluginConfigFileData, DeletePluginConfigFileResponses, DeletePluginSourceData, DeletePluginSourceResponses, DeleteProviderData, DeleteProviderResponses, DeleteProviderSourceData, DeleteProviderSourceResponses, DeleteSessionGroupData, DeleteSessionGroupResponses, DeleteSessionRulesData, DeleteSessionRulesResponses, DeleteSkillData, DeleteSkillResponses, DeleteT2iTemplateData, DeleteT2iTemplateResponses, DownloadAttachmentData, DownloadAttachmentResponses, DownloadBackupData, DownloadBackupResponses, DownloadOpenApiFileData, DownloadOpenApiFileResponses, DownloadSkillData, DownloadSkillResponses, EvaluateNeoSkillCandidateData, EvaluateNeoSkillCandidateResponses, ExportConversationsData, ExportConversationsResponses, GetActiveT2iTemplateData, GetActiveT2iTemplateResponses, GetAttachmentData, GetAttachmentResponses, GetAuthSetupStatusData, GetAuthSetupStatusResponses, GetBackupProgressData, GetBackupProgressResponses, GetBotData, GetBotResponses, GetChangelogData, GetChangelogErrors, GetChangelogResponses, GetChatProjectData, GetChatProjectResponses, GetChatSessionData, GetChatSessionResponses, GetChatThreadData, GetChatThreadResponses, GetConfigProfileData, GetConfigProfileResponses, GetConfigProfileSchemaData, GetConfigProfileSchemaResponses, GetConversationData, GetConversationResponses, GetFileByNameData, GetFileByNameResponses, GetFirstNoticeData, GetFirstNoticeResponses, GetKnowledgeBaseData, GetKnowledgeBaseResponses, GetKnowledgeBaseStatsData, GetKnowledgeBaseStatsResponses, GetKnowledgeDocumentData, GetKnowledgeDocumentResponses, GetKnowledgeTaskData, GetKnowledgeTaskResponses, GetLogHistoryData, GetLogHistoryResponses, GetNeoSkillPayloadData, GetNeoSkillPayloadResponses, GetPersonaData, GetPersonaResponses, GetPersonaTreeData, GetPersonaTreeResponses, GetPluginChangelogData, GetPluginChangelogResponses, GetPluginConfigData, GetPluginConfigResponses, GetPluginConfigSchemaData, GetPluginConfigSchemaResponses, GetPluginData, GetPluginReadmeData, GetPluginReadmeResponses, GetPluginResponses, GetProviderData, GetProviderEmbeddingDimensionData, GetProviderEmbeddingDimensionResponses, GetProviderResponses, GetProviderSchemaData, GetProviderSchemaResponses, GetProviderSourceData, GetProviderSourceResponses, GetProviderTokenStatsData, GetProviderTokenStatsResponses, GetPublicVersionsData, GetPublicVersionsResponses, GetSkillFileData, GetSkillFileResponses, GetStartTimeData, GetStartTimeResponses, GetStatsData, GetStatsResponses, GetStorageStatusData, GetStorageStatusResponses, GetSubagentConfigData, GetSubagentConfigResponses, GetSystemConfigData, GetSystemConfigResponses, GetSystemConfigRuntimeData, GetSystemConfigRuntimeResponses, GetSystemConfigSchemaData, GetSystemConfigSchemaResponses, GetT2iTemplateData, GetT2iTemplateResponses, GetTokenFileData, GetTokenFileResponses, GetTraceSettingsData, GetTraceSettingsResponses, GetUpdateProgressData, GetUpdateProgressResponses, GetVersionData, GetVersionResponses, ImportBackupData, ImportBackupResponses, ImportKnowledgeDocumentFromUrlData, ImportKnowledgeDocumentFromUrlResponses, ImportKnowledgeDocumentsData, ImportKnowledgeDocumentsResponses, InitBackupUploadData, InitBackupUploadResponses, InstallPipPackageData, InstallPipPackageResponses, InstallPluginFromGithubData, InstallPluginFromGithubResponses, InstallPluginFromUploadData, InstallPluginFromUploadResponses, InstallPluginFromUrlData, InstallPluginFromUrlResponses, ListActiveUmosData, ListActiveUmosResponses, ListApiKeysData, ListApiKeysResponses, ListBackupsData, ListBackupsResponses, ListBotsData, ListBotsResponses, ListBotStatsData, ListBotStatsResponses, ListBotTypesData, ListBotTypesResponses, ListChangelogVersionsData, ListChangelogVersionsResponses, ListChatConfigsData, ListChatConfigsResponses, ListChatProjectsData, ListChatProjectSessionsData, ListChatProjectSessionsResponses, ListChatProjectsResponses, ListChatSessionsData, ListChatSessionsResponses, ListCommandConflictsData, ListCommandConflictsResponses, ListCommandsData, ListCommandsResponses, ListConfigProfilesData, ListConfigProfilesResponses, ListConfigRoutesData, ListConfigRoutesResponses, ListConversationsData, ListConversationsResponses, ListCronJobsData, ListCronJobsResponses, ListFailedPluginsData, ListFailedPluginsResponses, ListImBotsData, ListImBotsResponses, ListKnowledgeBasesData, ListKnowledgeBasesResponses, ListKnowledgeChunksData, ListKnowledgeChunksResponses, ListKnowledgeDocumentsData, ListKnowledgeDocumentsResponses, ListMcpServersData, ListMcpServersResponses, ListNeoSkillCandidatesData, ListNeoSkillCandidatesResponses, ListNeoSkillReleasesData, ListNeoSkillReleasesResponses, ListPersonaFoldersData, ListPersonaFoldersResponses, ListPersonasData, ListPersonasResponses, ListPluginConfigFilesData, ListPluginConfigFilesResponses, ListPluginMarketCategoriesData, ListPluginMarketCategoriesResponses, ListPluginMarketData, ListPluginMarketResponses, ListPluginsData, ListPluginSourcesData, ListPluginSourcesResponses, ListPluginsResponses, ListProvidersBySourceData, ListProvidersBySourceResponses, ListProvidersData, ListProviderSourceModelsData, ListProviderSourceModelsResponses, ListProviderSourcesData, ListProviderSourcesResponses, ListProvidersResponses, ListReleasesData, ListReleasesResponses, ListSessionGroupsData, ListSessionGroupsResponses, ListSessionRulesData, ListSessionRulesResponses, ListSessionsData, ListSessionsResponses, ListSkillFilesData, ListSkillFilesResponses, ListSkillsData, ListSkillsResponses, ListSubagentAvailableToolsData, ListSubagentAvailableToolsResponses, ListT2iTemplatesData, ListT2iTemplatesResponses, ListToolsData, ListToolsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MovePersonaItemData, MovePersonaItemResponses, OpenChatWebSocketData, OpenLiveChatWebSocketData, OpenUnifiedChatWebSocketData, PromoteNeoSkillCandidateData, PromoteNeoSkillCandidateResponses, ReceivePlatformWebhookData, ReceivePlatformWebhookResponses, RecoverTotpData, RecoverTotpResponses, RegenerateChatMessageData, RegenerateChatMessageResponses, RegisterBotTypeData, RegisterBotTypeResponses, ReloadFailedPluginData, ReloadFailedPluginResponses, ReloadPluginData, ReloadPluginResponses, RemoveChatProjectSessionData, RemoveChatProjectSessionResponses, RenameBackupData, RenameBackupResponses, RenameConfigProfileData, RenameConfigProfileResponses, ReorderPersonaItemsData, ReorderPersonaItemsResponses, ReplaceConfigRoutesData, ReplaceConfigRoutesResponses, ReplaceConversationMessagesData, ReplaceConversationMessagesResponses, ReplacePluginSourcesData, ReplacePluginSourcesResponses, ResetDefaultT2iTemplateData, ResetDefaultT2iTemplateResponses, RestartCoreData, RestartCoreResponses, RetrieveKnowledgeBaseData, RetrieveKnowledgeBaseResponses, RevokeApiKeyData, RevokeApiKeyResponses, RollbackNeoSkillReleaseData, RollbackNeoSkillReleaseResponses, RunCronJobData, RunCronJobResponses, SendChatMessageData, SendChatMessageResponses, SendChatThreadMessageData, SendChatThreadMessageResponses, SendImMessageData, SendImMessageResponses, SetActiveT2iTemplateData, SetActiveT2iTemplateResponses, SetBotEnabledData, SetBotEnabledResponses, SetMcpServerEnabledData, SetMcpServerEnabledResponses, SetPluginEnabledData, SetPluginEnabledResponses, SetProviderEnabledData, SetProviderEnabledResponses, SetToolEnabledData, SetToolEnabledResponses, SetToolPermissionData, SetToolPermissionResponses, SetupAuthData, SetupAuthResponses, SetupTotpData, SetupTotpResponses, StopChatSessionData, StopChatSessionResponses, StreamLiveLogsData, StreamLiveLogsResponse, StreamLiveLogsResponses, SyncModelScopeMcpServersData, SyncModelScopeMcpServersResponses, SyncNeoSkillReleaseData, SyncNeoSkillReleaseResponses, TestBotData, TestBotResponses, TestGhproxyConnectionData, TestGhproxyConnectionResponses, TestMcpServerData, TestMcpServerResponses, TestProviderData, TestProviderResponses, UninstallFailedPluginData, UninstallFailedPluginResponses, UninstallPluginData, UninstallPluginResponses, UpdateAuthAccountData, UpdateAuthAccountResponses, UpdateBotData, UpdateBotResponses, UpdateChatMessageData, UpdateChatMessageResponses, UpdateChatProjectData, UpdateChatProjectResponses, UpdateChatSessionData, UpdateChatSessionResponses, UpdateCommandData, UpdateCommandResponses, UpdateConfigProfileContentData, UpdateConfigProfileContentResponses, UpdateConversationData, UpdateConversationResponses, UpdateCoreData, UpdateCoreResponses, UpdateCronJobData, UpdateCronJobResponses, UpdateDashboardData, UpdateDashboardResponses, UpdateKnowledgeBaseData, UpdateKnowledgeBaseResponses, UpdateMcpServerData, UpdateMcpServerResponses, UpdatePersonaData, UpdatePersonaFolderData, UpdatePersonaFolderResponses, UpdatePersonaResponses, UpdatePluginConfigData, UpdatePluginConfigResponses, UpdatePluginData, UpdatePluginResponses, UpdatePluginsData, UpdatePluginsResponses, UpdateProviderData, UpdateProviderResponses, UpdateSessionGroupData, UpdateSessionGroupResponses, UpdateSkillData, UpdateSkillFileData, UpdateSkillFileResponses, UpdateSkillResponses, UpdateSubagentConfigData, UpdateSubagentConfigResponses, UpdateSystemConfigData, UpdateSystemConfigResponses, UpdateT2iTemplateData, UpdateT2iTemplateResponses, UpdateTraceSettingsData, UpdateTraceSettingsResponses, UploadBackupChunkData, UploadBackupChunkResponses, UploadBackupData, UploadBackupResponses, UploadFileData, UploadFileResponses, UploadKnowledgeDocumentData, UploadKnowledgeDocumentResponses, UploadOpenApiFileData, UploadOpenApiFileResponses, UploadPluginConfigFilesData, UploadPluginConfigFilesResponses, UploadSkillData, UploadSkillResponses, UploadSkillsBatchData, UploadSkillsBatchResponses, UpsertConfigRouteData, UpsertConfigRouteResponses, UpsertProviderSourceData, UpsertProviderSourceResponses, UpsertSessionRuleData, UpsertSessionRuleResponses, VerifyPlatformWebhookData, VerifyPlatformWebhookResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -378,68 +378,6 @@ export const listBotStats = <ThrowOnError extends boolean = false>(options?: Opt
 });
 
 /**
- * Delete a bot by query ID
- */
-export const deleteBotById = <ThrowOnError extends boolean = false>(options: Options<DeleteBotByIdData, ThrowOnError>): RequestResult<DeleteBotByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteBotByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/bots/by-id',
-    ...options
-});
-
-/**
- * Get a bot configuration by query ID
- */
-export const getBotById = <ThrowOnError extends boolean = false>(options: Options<GetBotByIdData, ThrowOnError>): RequestResult<GetBotByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetBotByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/bots/by-id',
-    ...options
-});
-
-/**
- * Replace a bot configuration by body ID
- */
-export const updateBotById = <ThrowOnError extends boolean = false>(options: Options<UpdateBotByIdData, ThrowOnError>): RequestResult<UpdateBotByIdResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateBotByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/bots/by-id',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Enable or disable a bot by body ID
- */
-export const setBotEnabledById = <ThrowOnError extends boolean = false>(options: Options<SetBotEnabledByIdData, ThrowOnError>): RequestResult<SetBotEnabledByIdResponses, unknown, ThrowOnError> => (options.client ?? client).patch<SetBotEnabledByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/bots/enabled',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Test a bot registration or connection by body ID
- */
-export const testBotById = <ThrowOnError extends boolean = false>(options: Options<TestBotByIdData, ThrowOnError>): RequestResult<TestBotByIdResponses, unknown, ThrowOnError> => (options.client ?? client).post<TestBotByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/bots/test',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Delete a bot
  */
 export const deleteBot = <ThrowOnError extends boolean = false>(options: Options<DeleteBotData, ThrowOnError>): RequestResult<DeleteBotResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteBotResponses, unknown, ThrowOnError>({
@@ -532,74 +470,6 @@ export const createProviderSource = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Delete a provider source by query ID
- */
-export const deleteProviderSourceById = <ThrowOnError extends boolean = false>(options: Options<DeleteProviderSourceByIdData, ThrowOnError>): RequestResult<DeleteProviderSourceByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteProviderSourceByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/provider-sources/by-id',
-    ...options
-});
-
-/**
- * Get a provider source by query ID
- */
-export const getProviderSourceById = <ThrowOnError extends boolean = false>(options: Options<GetProviderSourceByIdData, ThrowOnError>): RequestResult<GetProviderSourceByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetProviderSourceByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/provider-sources/by-id',
-    ...options
-});
-
-/**
- * Update a provider source by body ID
- */
-export const upsertProviderSourceById = <ThrowOnError extends boolean = false>(options: Options<UpsertProviderSourceByIdData, ThrowOnError>): RequestResult<UpsertProviderSourceByIdResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpsertProviderSourceByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/provider-sources/by-id',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List models available from a provider source by query ID
- */
-export const listProviderSourceModelsById = <ThrowOnError extends boolean = false>(options: Options<ListProviderSourceModelsByIdData, ThrowOnError>): RequestResult<ListProviderSourceModelsByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListProviderSourceModelsByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/provider-sources/models',
-    ...options
-});
-
-/**
- * List providers under a provider source by query ID
- */
-export const listProvidersBySourceId = <ThrowOnError extends boolean = false>(options: Options<ListProvidersBySourceIdData, ThrowOnError>): RequestResult<ListProvidersBySourceIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListProvidersBySourceIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/provider-sources/providers',
-    ...options
-});
-
-/**
- * Create a provider under a provider source by body ID
- */
-export const createProviderInSourceById = <ThrowOnError extends boolean = false>(options: Options<CreateProviderInSourceByIdData, ThrowOnError>): RequestResult<CreateProviderInSourceByIdResponses, unknown, ThrowOnError> => (options.client ?? client).post<CreateProviderInSourceByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/provider-sources/providers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Delete a provider source and providers that reference it
  */
 export const deleteProviderSource = <ThrowOnError extends boolean = false>(options: Options<DeleteProviderSourceData, ThrowOnError>): RequestResult<DeleteProviderSourceResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteProviderSourceResponses, unknown, ThrowOnError>({
@@ -668,7 +538,7 @@ export const createProviderInSource = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * List providers by capability or source
+ * List providers by provider type or source
  */
 export const listProviders = <ThrowOnError extends boolean = false>(options?: Options<ListProvidersData, ThrowOnError>): RequestResult<ListProvidersResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListProvidersResponses, unknown, ThrowOnError>({
     responseType: 'json',
@@ -684,82 +554,6 @@ export const createProvider = <ThrowOnError extends boolean = false>(options: Op
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/providers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete a provider by query ID
- */
-export const deleteProviderById = <ThrowOnError extends boolean = false>(options: Options<DeleteProviderByIdData, ThrowOnError>): RequestResult<DeleteProviderByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteProviderByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/providers/by-id',
-    ...options
-});
-
-/**
- * Get a provider configuration by query ID
- */
-export const getProviderById = <ThrowOnError extends boolean = false>(options: Options<GetProviderByIdData, ThrowOnError>): RequestResult<GetProviderByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetProviderByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/providers/by-id',
-    ...options
-});
-
-/**
- * Replace a provider configuration by body ID
- */
-export const updateProviderById = <ThrowOnError extends boolean = false>(options: Options<UpdateProviderByIdData, ThrowOnError>): RequestResult<UpdateProviderByIdResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateProviderByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/providers/by-id',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Enable or disable a provider by body ID
- */
-export const setProviderEnabledById = <ThrowOnError extends boolean = false>(options: Options<SetProviderEnabledByIdData, ThrowOnError>): RequestResult<SetProviderEnabledByIdResponses, unknown, ThrowOnError> => (options.client ?? client).patch<SetProviderEnabledByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/providers/enabled',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Test a provider by body ID
- */
-export const testProviderById = <ThrowOnError extends boolean = false>(options: Options<TestProviderByIdData, ThrowOnError>): RequestResult<TestProviderByIdResponses, unknown, ThrowOnError> => (options.client ?? client).post<TestProviderByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/providers/test',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Probe embedding dimension for a provider by body ID
- */
-export const getProviderEmbeddingDimensionById = <ThrowOnError extends boolean = false>(options: Options<GetProviderEmbeddingDimensionByIdData, ThrowOnError>): RequestResult<GetProviderEmbeddingDimensionByIdResponses, unknown, ThrowOnError> => (options.client ?? client).post<GetProviderEmbeddingDimensionByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/providers/embedding-dimension',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -1259,151 +1053,6 @@ export const listPlugins = <ThrowOnError extends boolean = false>(options?: Opti
 });
 
 /**
- * Uninstall a plugin by query ID
- */
-export const uninstallPluginById = <ThrowOnError extends boolean = false>(options: Options<UninstallPluginByIdData, ThrowOnError>): RequestResult<UninstallPluginByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<UninstallPluginByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/by-id',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get plugin details by query ID
- */
-export const getPluginById = <ThrowOnError extends boolean = false>(options: Options<GetPluginByIdData, ThrowOnError>): RequestResult<GetPluginByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetPluginByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/by-id',
-    ...options
-});
-
-/**
- * Get plugin configuration by query ID
- */
-export const getPluginConfigById = <ThrowOnError extends boolean = false>(options: Options<GetPluginConfigByIdData, ThrowOnError>): RequestResult<GetPluginConfigByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetPluginConfigByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/config',
-    ...options
-});
-
-/**
- * Save plugin configuration by body ID
- */
-export const updatePluginConfigById = <ThrowOnError extends boolean = false>(options: Options<UpdatePluginConfigByIdData, ThrowOnError>): RequestResult<UpdatePluginConfigByIdResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdatePluginConfigByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/config',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get plugin configuration schema by query ID
- */
-export const getPluginConfigSchemaById = <ThrowOnError extends boolean = false>(options: Options<GetPluginConfigSchemaByIdData, ThrowOnError>): RequestResult<GetPluginConfigSchemaByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetPluginConfigSchemaByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/config/schema',
-    ...options
-});
-
-/**
- * Delete a plugin file configuration upload by query ID
- */
-export const deletePluginConfigFileById = <ThrowOnError extends boolean = false>(options: Options<DeletePluginConfigFileByIdData, ThrowOnError>): RequestResult<DeletePluginConfigFileByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeletePluginConfigFileByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/config-files',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List uploaded files for a plugin file configuration item by query ID
- */
-export const listPluginConfigFilesById = <ThrowOnError extends boolean = false>(options: Options<ListPluginConfigFilesByIdData, ThrowOnError>): RequestResult<ListPluginConfigFilesByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListPluginConfigFilesByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/config-files',
-    ...options
-});
-
-/**
- * Upload files for a plugin file configuration item by query ID
- */
-export const uploadPluginConfigFilesById = <ThrowOnError extends boolean = false>(options: Options<UploadPluginConfigFilesByIdData, ThrowOnError>): RequestResult<UploadPluginConfigFilesByIdResponses, unknown, ThrowOnError> => (options.client ?? client).post<UploadPluginConfigFilesByIdResponses, unknown, ThrowOnError>({
-    ...formDataBodySerializer,
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/config-files',
-    ...options,
-    headers: {
-        'Content-Type': null,
-        ...options.headers
-    }
-});
-
-/**
- * Get plugin README content by query ID
- */
-export const getPluginReadmeById = <ThrowOnError extends boolean = false>(options: Options<GetPluginReadmeByIdData, ThrowOnError>): RequestResult<GetPluginReadmeByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetPluginReadmeByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/readme',
-    ...options
-});
-
-/**
- * Get plugin CHANGELOG content by query ID
- */
-export const getPluginChangelogById = <ThrowOnError extends boolean = false>(options: Options<GetPluginChangelogByIdData, ThrowOnError>): RequestResult<GetPluginChangelogByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetPluginChangelogByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/changelog',
-    ...options
-});
-
-/**
- * Reload a plugin by body ID
- */
-export const reloadPluginById = <ThrowOnError extends boolean = false>(options: Options<ReloadPluginByIdData, ThrowOnError>): RequestResult<ReloadPluginByIdResponses, unknown, ThrowOnError> => (options.client ?? client).post<ReloadPluginByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/reload',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Enable or disable a plugin by body ID
- */
-export const setPluginEnabledById = <ThrowOnError extends boolean = false>(options: Options<SetPluginEnabledByIdData, ThrowOnError>): RequestResult<SetPluginEnabledByIdResponses, unknown, ThrowOnError> => (options.client ?? client).patch<SetPluginEnabledByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/enabled',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Uninstall a plugin
  */
 export const uninstallPlugin = <ThrowOnError extends boolean = false>(options: Options<UninstallPluginData, ThrowOnError>): RequestResult<UninstallPluginResponses, unknown, ThrowOnError> => (options.client ?? client).delete<UninstallPluginResponses, unknown, ThrowOnError>({
@@ -1563,7 +1212,7 @@ export const setPluginEnabled = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
- * Update or reinstall a plugin
+ * Update a plugin
  */
 export const updatePlugin = <ThrowOnError extends boolean = false>(options: Options<UpdatePluginData, ThrowOnError>): RequestResult<UpdatePluginResponses, unknown, ThrowOnError> => (options.client ?? client).post<UpdatePluginResponses, unknown, ThrowOnError>({
     responseType: 'json',
@@ -1583,34 +1232,6 @@ export const updatePlugins = <ThrowOnError extends boolean = false>(options: Opt
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/plugins/update',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Check whether a plugin version constraint is supported
- */
-export const checkPluginVersionSupport = <ThrowOnError extends boolean = false>(options: Options<CheckPluginVersionSupportData, ThrowOnError>): RequestResult<CheckPluginVersionSupportResponses, unknown, ThrowOnError> => (options.client ?? client).post<CheckPluginVersionSupportResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/version-support/check',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Validate a GitHub plugin repository before installation
- */
-export const validatePluginRepo = <ThrowOnError extends boolean = false>(options: Options<ValidatePluginRepoData, ThrowOnError>): RequestResult<ValidatePluginRepoResponses, unknown, ThrowOnError> => (options.client ?? client).post<ValidatePluginRepoResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugins/validate/repo',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -1764,16 +1385,6 @@ export const deletePluginSource = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Delete a plugin source by query ID
- */
-export const deletePluginSourceById = <ThrowOnError extends boolean = false>(options: Options<DeletePluginSourceByIdData, ThrowOnError>): RequestResult<DeletePluginSourceByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeletePluginSourceByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/plugin-sources/by-id',
-    ...options
-});
-
-/**
  * List plugin commands
  */
 export const listCommands = <ThrowOnError extends boolean = false>(options?: Options<ListCommandsData, ThrowOnError>): RequestResult<ListCommandsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListCommandsResponses, unknown, ThrowOnError>({
@@ -1862,58 +1473,6 @@ export const createMcpServer = <ThrowOnError extends boolean = false>(options: O
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/mcp/servers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete an MCP server by query name
- */
-export const deleteMcpServerByName = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerByNameData, ThrowOnError>): RequestResult<DeleteMcpServerByNameResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteMcpServerByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/mcp/servers/by-name',
-    ...options
-});
-
-/**
- * Update an MCP server by body name
- */
-export const updateMcpServerByName = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpServerByNameData, ThrowOnError>): RequestResult<UpdateMcpServerByNameResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateMcpServerByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/mcp/servers/by-name',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Enable or disable an MCP server by body name
- */
-export const setMcpServerEnabledByName = <ThrowOnError extends boolean = false>(options: Options<SetMcpServerEnabledByNameData, ThrowOnError>): RequestResult<SetMcpServerEnabledByNameResponses, unknown, ThrowOnError> => (options.client ?? client).patch<SetMcpServerEnabledByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/mcp/servers/enabled',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Test an MCP server connection by body name
- */
-export const testMcpServerByName = <ThrowOnError extends boolean = false>(options: Options<TestMcpServerByNameData, ThrowOnError>): RequestResult<TestMcpServerByNameResponses, unknown, ThrowOnError> => (options.client ?? client).post<TestMcpServerByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/mcp/servers/test',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -2028,74 +1587,6 @@ export const uploadSkillsBatch = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Delete a skill by query name
- */
-export const deleteSkillByName = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillByNameData, ThrowOnError>): RequestResult<DeleteSkillByNameResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteSkillByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/by-name',
-    ...options
-});
-
-/**
- * Update skill metadata or enabled state by body name
- */
-export const updateSkillByName = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillByNameData, ThrowOnError>): RequestResult<UpdateSkillByNameResponses, unknown, ThrowOnError> => (options.client ?? client).patch<UpdateSkillByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/by-name',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Download a skill archive by query name
- */
-export const downloadSkillByName = <ThrowOnError extends boolean = false>(options: Options<DownloadSkillByNameData, ThrowOnError>): RequestResult<DownloadSkillByNameResponses, unknown, ThrowOnError> => (options.client ?? client).get<DownloadSkillByNameResponses, unknown, ThrowOnError>({
-    responseType: 'blob',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/archive',
-    ...options
-});
-
-/**
- * List files in a skill by query name
- */
-export const listSkillFilesByName = <ThrowOnError extends boolean = false>(options: Options<ListSkillFilesByNameData, ThrowOnError>): RequestResult<ListSkillFilesByNameResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListSkillFilesByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/files',
-    ...options
-});
-
-/**
- * Get skill file content by query name and path
- */
-export const getSkillFileByName = <ThrowOnError extends boolean = false>(options: Options<GetSkillFileByNameData, ThrowOnError>): RequestResult<GetSkillFileByNameResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetSkillFileByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/file',
-    ...options
-});
-
-/**
- * Update skill file content by body name and path
- */
-export const updateSkillFileByName = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillFileByNameData, ThrowOnError>): RequestResult<UpdateSkillFileByNameResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdateSkillFileByNameResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/file',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Delete a skill
  */
 export const deleteSkill = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillData, ThrowOnError>): RequestResult<DeleteSkillResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeleteSkillResponses, unknown, ThrowOnError>({
@@ -2106,7 +1597,7 @@ export const deleteSkill = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * Update skill metadata or enabled state
+ * Update skill active state
  */
 export const updateSkill = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillData, ThrowOnError>): RequestResult<UpdateSkillResponses, unknown, ThrowOnError> => (options.client ?? client).patch<UpdateSkillResponses, unknown, ThrowOnError>({
     responseType: 'json',
@@ -2490,40 +1981,6 @@ export const createPersona = <ThrowOnError extends boolean = false>(options: Opt
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/personas',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete a persona by query ID
- */
-export const deletePersonaById = <ThrowOnError extends boolean = false>(options: Options<DeletePersonaByIdData, ThrowOnError>): RequestResult<DeletePersonaByIdResponses, unknown, ThrowOnError> => (options.client ?? client).delete<DeletePersonaByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/by-id',
-    ...options
-});
-
-/**
- * Get a persona by query ID
- */
-export const getPersonaById = <ThrowOnError extends boolean = false>(options: Options<GetPersonaByIdData, ThrowOnError>): RequestResult<GetPersonaByIdResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetPersonaByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/by-id',
-    ...options
-});
-
-/**
- * Update a persona by body ID
- */
-export const updatePersonaById = <ThrowOnError extends boolean = false>(options: Options<UpdatePersonaByIdData, ThrowOnError>): RequestResult<UpdatePersonaByIdResponses, unknown, ThrowOnError> => (options.client ?? client).put<UpdatePersonaByIdResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/by-id',
     ...options,
     headers: {
         'Content-Type': 'application/json',

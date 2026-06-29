@@ -10,7 +10,7 @@
         getItemTitle()
       }}</span>
       <v-tooltip location="top">
-        <template #activator="{ props }">
+        <template #activator="{ props: activatorProps }">
           <v-switch
             color="primary"
             hide-details
@@ -18,7 +18,7 @@
             :model-value="getItemEnabled()"
             :loading="loading"
             :disabled="loading || disableToggle"
-            v-bind="props"
+            v-bind="activatorProps"
             @update:model-value="toggleEnabled"
           ></v-switch>
         </template>
@@ -81,70 +81,58 @@
   </v-card>
 </template>
 
-<script>
+<script setup lang="ts">
 import { useI18n } from '@/i18n/composables';
 
-export default {
-  name: 'ItemCard',
-  props: {
-    item: {
-      type: Object,
-      required: true,
-    },
-    titleField: {
-      type: String,
-      default: 'id',
-    },
-    enabledField: {
-      type: String,
-      default: 'enable',
-    },
-    bglogo: {
-      type: String,
-      default: null,
-    },
-    loading: {
-      type: Boolean,
-      default: false,
-    },
-    showCopyButton: {
-      type: Boolean,
-      default: false,
-    },
-    showEditButton: {
-      type: Boolean,
-      default: true,
-    },
-    disableToggle: {
-      type: Boolean,
-      default: false,
-    },
-    disableDelete: {
-      type: Boolean,
-      default: false,
-    },
-    variant: {
-      type: String,
-      default: undefined,
-    },
-  },
-  emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
-  setup() {
-    const { t } = useI18n();
-    return { t };
-  },
-  methods: {
-    getItemTitle() {
-      return this.item[this.titleField];
-    },
-    getItemEnabled() {
-      return this.item[this.enabledField];
-    },
-    toggleEnabled() {
-      this.$emit('toggle-enabled', this.item);
-    },
-  },
-};
+type CardItem = Record<string, unknown>;
+type CardVariant =
+  'flat' | 'text' | 'plain' | 'outlined' | 'elevated' | 'tonal';
+
+interface ItemCardProps {
+  item: CardItem;
+  titleField?: string;
+  enabledField?: string;
+  bglogo?: string | null;
+  loading?: boolean;
+  showCopyButton?: boolean;
+  showEditButton?: boolean;
+  disableToggle?: boolean;
+  disableDelete?: boolean;
+  variant?: CardVariant | undefined;
+}
+
+const props = withDefaults(defineProps<ItemCardProps>(), {
+  titleField: 'id',
+  enabledField: 'enable',
+  bglogo: null,
+  loading: false,
+  showCopyButton: false,
+  showEditButton: true,
+  disableToggle: false,
+  disableDelete: false,
+  variant: undefined,
+});
+
+const emit = defineEmits<{
+  'toggle-enabled': [item: CardItem];
+  delete: [item: CardItem];
+  edit: [item: CardItem];
+  copy: [item: CardItem];
+}>();
+
+const { t } = useI18n();
+
+function getItemTitle(): string {
+  return String(props.item[props.titleField] ?? '');
+}
+
+function getItemEnabled(): boolean {
+  return Boolean(props.item[props.enabledField]);
+}
+
+function toggleEnabled(): void {
+  emit('toggle-enabled', props.item);
+}
 </script>
 
 <style scoped>

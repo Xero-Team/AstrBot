@@ -593,7 +593,7 @@
                 <v-list-item v-bind="props">
                   <template #title>
                     <UmoDisplay
-                      v-bind="getAvailableUmoDisplayProps(item.raw)"
+                      v-bind="getAvailableUmoDisplayProps(item)"
                       compact
                       :show-info="false"
                       :show-platform="false"
@@ -601,27 +601,27 @@
                   </template>
                   <template #append>
                     <v-chip
-                      v-if="getAvailableUmoInfo(item.raw).platform"
+                      v-if="getAvailableUmoInfo(item).platform"
                       size="x-small"
                       :color="
-                        getPlatformColor(getAvailableUmoInfo(item.raw).platform)
+                        getPlatformColor(getAvailableUmoInfo(item).platform)
                       "
                       class="umo-list-platform"
                     >
-                      {{ getAvailableUmoInfo(item.raw).platform }}
+                      {{ getAvailableUmoInfo(item).platform }}
                     </v-chip>
                   </template>
                 </v-list-item>
               </template>
               <template #selection="{ item }">
                 <v-chip
-                  v-if="item && getUmoSelectionText(item.raw)"
+                  v-if="item && getUmoSelectionText(item)"
                   size="small"
                   variant="tonal"
                   color="primary"
                   class="umo-selection-chip"
                 >
-                  {{ getUmoSelectionText(item.raw) }}
+                  {{ getUmoSelectionText(item) }}
                 </v-chip>
               </template>
             </v-autocomplete>
@@ -1054,1253 +1054,1677 @@
   </div>
 </template>
 
-<script>
-import { sessionApi } from '@/api/v1';
+<script setup lang="ts">
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
+import { sessionApi, type UmoInfoData } from '@/api/v1';
+import type {
+  BatchSessionProviderRequest,
+  BatchSessionServiceRequest,
+  DynamicConfig,
+  UmoListRequest,
+} from '@/api/generated/openapi-v1';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
 } from '@/utils/confirmDialog';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__';
 
-export default {
-  name: 'SessionManagementPage',
-  components: {
-    UmoDisplay,
+type SnackbarColor = 'success' | 'error';
+type GroupDialogMode = 'create' | 'edit';
+type ProviderRuleType = 'chat_completion' | 'speech_to_text' | 'text_to_speech';
+type ApiBatchScope = 'all' | 'group' | 'private' | 'custom_group';
+
+type RuleKey =
+  | 'session_service_config'
+  | 'session_plugin_config'
+  | 'kb_config'
+  | `provider_perf_${ProviderRuleType}`;
+
+type BatchScope = 'selected' | ApiBatchScope | `custom_group:${string}`;
+
+interface ProviderOption {
+  id: string;
+  name: string;
+  model?: string;
+}
+
+interface PersonaOption {
+  name: string;
+}
+
+interface PluginOption {
+  name: string;
+  display_name?: string;
+}
+
+interface KnowledgeBaseOption {
+  kb_id: string;
+  kb_name: string;
+  emoji?: string | null;
+}
+
+interface SessionServiceConfig {
+  session_enabled?: boolean;
+  llm_enabled?: boolean;
+  tts_enabled?: boolean;
+  custom_name?: string;
+  persona_id?: string | null;
+  [key: string]: unknown;
+}
+
+interface SessionPluginConfig {
+  enabled_plugins?: string[];
+  disabled_plugins?: string[];
+  [key: string]: unknown;
+}
+
+interface SessionKbConfig {
+  kb_ids?: string[];
+  top_k?: number;
+  enable_rerank?: boolean;
+  [key: string]: unknown;
+}
+
+interface SessionRuleSet {
+  session_service_config?: SessionServiceConfig;
+  session_plugin_config?: SessionPluginConfig;
+  kb_config?: SessionKbConfig;
+  provider_perf_chat_completion?: string;
+  provider_perf_speech_to_text?: string;
+  provider_perf_text_to_speech?: string;
+  [key: string]: unknown;
+}
+
+interface SessionRuleItem extends UmoInfoData {
+  umo: string;
+  rules: SessionRuleSet;
+}
+
+interface GroupItem {
+  id: string;
+  name: string;
+  umos: string[];
+  umo_count: number;
+}
+
+interface GroupEditorState {
+  id: string | null;
+  name: string;
+  umos: string[];
+}
+
+interface SelectOption<T> {
+  label: string;
+  value: T;
+  disabled?: boolean;
+}
+
+interface TableOptionsLike {
+  page?: number;
+  itemsPerPage?: number;
+}
+
+interface UmoDisplayInfo {
+  umo: string;
+  platform: string;
+  message_type: string;
+  session_id: string;
+  auto_name: string;
+  user_alias: string;
+  display_name: string;
+  rules?: SessionRuleSet;
+}
+
+interface DebouncedCallback {
+  (): void;
+  cancel: () => void;
+}
+
+const { tm } = useModuleI18n('features/session-management');
+const confirmDialog = useConfirmDialog();
+
+const loading = ref(false);
+const saving = ref(false);
+const deleting = ref(false);
+const loadingUmos = ref(false);
+const rulesList = ref<SessionRuleItem[]>([]);
+const searchQuery = ref('');
+
+const currentPage = ref(1);
+const itemsPerPage = ref(10);
+const totalItems = ref(0);
+
+const availablePersonas = ref<PersonaOption[]>([]);
+const availableChatProviders = ref<ProviderOption[]>([]);
+const availableSttProviders = ref<ProviderOption[]>([]);
+const availableTtsProviders = ref<ProviderOption[]>([]);
+const availablePlugins = ref<PluginOption[]>([]);
+const availableKbs = ref<KnowledgeBaseOption[]>([]);
+
+const addRuleDialog = ref(false);
+const availableUmos = ref<string[]>([]);
+const availableUmoInfoMap = ref<Record<string, UmoDisplayInfo>>({});
+const selectedNewUmo = ref<string | null>(null);
+
+const ruleDialog = ref(false);
+const selectedUmo = ref<SessionRuleItem | null>(null);
+const editingRules = ref<SessionRuleSet>({});
+
+const serviceConfig = reactive<
+  Required<
+    Pick<
+      SessionServiceConfig,
+      'session_enabled' | 'llm_enabled' | 'tts_enabled'
+    >
+  > & {
+    custom_name: string;
+    persona_id: string | null;
+  }
+>({
+  session_enabled: true,
+  llm_enabled: true,
+  tts_enabled: true,
+  custom_name: '',
+  persona_id: null,
+});
+
+const providerConfig = reactive<Record<ProviderRuleType, string>>({
+  chat_completion: FOLLOW_CONFIG_VALUE,
+  speech_to_text: FOLLOW_CONFIG_VALUE,
+  text_to_speech: FOLLOW_CONFIG_VALUE,
+});
+
+const pluginConfig = reactive<
+  Required<Pick<SessionPluginConfig, 'enabled_plugins' | 'disabled_plugins'>>
+>({
+  enabled_plugins: [],
+  disabled_plugins: [],
+});
+
+const kbConfig = reactive<
+  Required<Pick<SessionKbConfig, 'kb_ids' | 'top_k' | 'enable_rerank'>>
+>({
+  kb_ids: [],
+  top_k: 5,
+  enable_rerank: true,
+});
+
+const deleteDialog = ref(false);
+const deleteTarget = ref<SessionRuleItem | null>(null);
+
+const selectedItems = ref<SessionRuleItem[]>([]);
+const batchDeleteDialog = ref(false);
+
+const quickEditNameDialog = ref(false);
+const quickEditNameTarget = ref<SessionRuleItem | null>(null);
+const quickEditNameValue = ref('');
+
+const batchScope = ref<BatchScope>('selected');
+const batchLlmStatus = ref<boolean | null>(null);
+const batchTtsStatus = ref<boolean | null>(null);
+const batchChatProvider = ref<string | null>(null);
+const batchTtsProvider = ref<string | null>(null);
+const batchUpdating = ref(false);
+
+const groups = ref<GroupItem[]>([]);
+const groupsLoading = ref(false);
+const groupDialog = ref(false);
+const groupDialogMode = ref<GroupDialogMode>('create');
+const editingGroup = reactive<GroupEditorState>({
+  id: null,
+  name: '',
+  umos: [],
+});
+const groupMemberSearch = ref('');
+const groupSelectedSearch = ref('');
+
+const snackbar = ref(false);
+const snackbarText = ref('');
+const snackbarColor = ref<SnackbarColor>('success');
+
+const headers = computed(() => [
+  {
+    title: tm('table.headers.umoInfo'),
+    key: 'umo_info',
+    sortable: false,
+    minWidth: '300px',
   },
-  setup() {
-    const { t } = useI18n();
-    const { tm } = useModuleI18n('features/session-management');
-    const confirmDialog = useConfirmDialog();
-
-    return {
-      t,
-      tm,
-      confirmDialog,
-    };
+  {
+    title: tm('table.headers.rulesOverview'),
+    key: 'rules_overview',
+    sortable: false,
+    minWidth: '250px',
   },
-  data() {
-    return {
-      loading: false,
-      saving: false,
-      deleting: false,
-      loadingUmos: false,
-      rulesList: [],
-      searchQuery: '',
-
-      // 分页
-      currentPage: 1,
-      itemsPerPage: 10,
-      totalItems: 0,
-      searchTimeout: null,
-
-      // 可用选项
-      availablePersonas: [],
-      availableChatProviders: [],
-      availableSttProviders: [],
-      availableTtsProviders: [],
-      availablePlugins: [],
-      availableKbs: [],
-
-      // 添加规则
-      addRuleDialog: false,
-      availableUmos: [],
-      availableUmoInfoMap: {},
-      selectedNewUmo: null,
-
-      // 规则编辑
-      ruleDialog: false,
-      selectedUmo: null,
-      editingRules: {},
-
-      // 服务配置
-      serviceConfig: {
-        session_enabled: true,
-        llm_enabled: true,
-        tts_enabled: true,
-        custom_name: '',
-        persona_id: null,
-      },
-
-      // Provider 配置
-      providerConfig: {
-        chat_completion: FOLLOW_CONFIG_VALUE,
-        speech_to_text: FOLLOW_CONFIG_VALUE,
-        text_to_speech: FOLLOW_CONFIG_VALUE,
-      },
-
-      // 插件配置
-      pluginConfig: {
-        enabled_plugins: [],
-        disabled_plugins: [],
-      },
-
-      // 知识库配置
-      kbConfig: {
-        kb_ids: [],
-        top_k: 5,
-        enable_rerank: true,
-      },
-
-      // 删除确认
-      deleteDialog: false,
-      deleteTarget: null,
-
-      // 批量选择和删除
-      selectedItems: [],
-      batchDeleteDialog: false,
-
-      // 快速编辑备注名
-      quickEditNameDialog: false,
-      quickEditNameTarget: null,
-      quickEditNameValue: '',
-      // 批量操作
-      batchScope: 'selected',
-      batchGroupId: null,
-      batchLlmStatus: null,
-      batchTtsStatus: null,
-      batchChatProvider: null,
-      batchTtsProvider: null,
-      batchUpdating: false,
-
-      // 分组管理
-      groups: [],
-      groupsLoading: false,
-      groupDialog: false,
-      groupDialogMode: 'create',
-      editingGroup: {
-        id: null,
-        name: '',
-        umos: [],
-      },
-      groupMemberDialog: false,
-      groupMemberTarget: null,
-      groupMemberSearch: '',
-      groupSelectedSearch: '',
-
-      // 提示信息
-      snackbar: false,
-      snackbarText: '',
-      snackbarColor: 'success',
-    };
+  {
+    title: tm('table.headers.actions'),
+    key: 'actions',
+    sortable: false,
+    minWidth: '150px',
   },
+]);
 
-  computed: {
-    headers() {
-      return [
-        {
-          title: this.tm('table.headers.umoInfo'),
-          key: 'umo_info',
-          sortable: false,
-          minWidth: '300px',
-        },
-        {
-          title: this.tm('table.headers.rulesOverview'),
-          key: 'rules_overview',
-          sortable: false,
-          minWidth: '250px',
-        },
-        {
-          title: this.tm('table.headers.actions'),
-          key: 'actions',
-          sortable: false,
-          minWidth: '150px',
-        },
-      ];
-    },
+const filteredRulesList = computed(() => rulesList.value);
 
-    filteredRulesList() {
-      // 搜索已移至服务端，直接返回 rulesList
-      return this.rulesList;
-    },
+const personaOptions = computed<SelectOption<string | null>[]>(() => [
+  { label: tm('persona.none'), value: null },
+  ...availablePersonas.value.map((persona) => ({
+    label: persona.name,
+    value: persona.name,
+  })),
+]);
 
-    personaOptions() {
-      return [
-        { label: this.tm('persona.none'), value: null },
-        ...this.availablePersonas.map((p) => ({
-          label: p.name,
-          value: p.name,
-        })),
-      ];
-    },
+const chatProviderOptions = computed<SelectOption<string>[]>(() => [
+  { label: tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+  ...availableChatProviders.value.map((provider) => ({
+    label: `${provider.name} (${provider.model || ''})`,
+    value: provider.id,
+  })),
+]);
 
-    chatProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
-    },
+const sttProviderOptions = computed<SelectOption<string>[]>(() => [
+  { label: tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+  ...availableSttProviders.value.map((provider) => ({
+    label: `${provider.name} (${provider.model || ''})`,
+    value: provider.id,
+  })),
+]);
 
-    sttProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableSttProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
-    },
+const ttsProviderOptions = computed<SelectOption<string>[]>(() => [
+  { label: tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+  ...availableTtsProviders.value.map((provider) => ({
+    label: `${provider.name} (${provider.model || ''})`,
+    value: provider.id,
+  })),
+]);
 
-    ttsProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
-    },
+const batchChatProviderOptions = computed(() => chatProviderOptions.value);
 
-    batchChatProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
-    },
+const pluginOptions = computed<SelectOption<string>[]>(() =>
+  availablePlugins.value.map((plugin) => ({
+    label: plugin.display_name || plugin.name,
+    value: plugin.name,
+  })),
+);
 
-    batchTtsProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
-    },
+const kbOptions = computed<SelectOption<string>[]>(() =>
+  availableKbs.value.map((kb) => ({
+    label: `${kb.emoji || '📚'} ${kb.kb_name}`,
+    value: kb.kb_id,
+  })),
+);
 
-    pluginOptions() {
-      return this.availablePlugins.map((p) => ({
-        label: p.display_name || p.name,
-        value: p.name,
-      }));
-    },
+const batchScopeOptions = computed<SelectOption<string>[]>(() => {
+  const options: SelectOption<string>[] = [
+    { label: tm('batchOperations.scopeSelected'), value: 'selected' },
+    { label: tm('batchOperations.scopeAll'), value: 'all' },
+    { label: tm('batchOperations.scopeGroup'), value: 'group' },
+    { label: tm('batchOperations.scopePrivate'), value: 'private' },
+  ];
 
-    kbOptions() {
-      return this.availableKbs.map((kb) => ({
-        label: `${kb.emoji || '📚'} ${kb.kb_name}`,
-        value: kb.kb_id,
-      }));
-    },
-    batchScopeOptions() {
-      const options = [
-        { label: this.tm('batchOperations.scopeSelected'), value: 'selected' },
-        { label: this.tm('batchOperations.scopeAll'), value: 'all' },
-        { label: this.tm('batchOperations.scopeGroup'), value: 'group' },
-        { label: this.tm('batchOperations.scopePrivate'), value: 'private' },
-      ];
-      // 添加自定义分组选项
-      if (this.groups.length > 0) {
-        options.push({
-          label: this.tm('groups.customGroupDivider'),
-          value: '_divider',
-          disabled: true,
-        });
-        this.groups.forEach((g) => {
-          options.push({
-            label: this.tm('groups.customGroupOption', {
-              name: g.name,
-              count: g.umo_count,
-            }),
-            value: `custom_group:${g.id}`,
-          });
-        });
-      }
-      return options;
-    },
-
-    groupOptions() {
-      return this.groups.map((g) => ({
-        label: this.tm('groups.groupOption', {
-          name: g.name,
-          count: g.umo_count,
+  if (groups.value.length > 0) {
+    options.push({
+      label: tm('groups.customGroupDivider'),
+      value: '_divider',
+      disabled: true,
+    });
+    groups.value.forEach((group) => {
+      options.push({
+        label: tm('groups.customGroupOption', {
+          name: group.name,
+          count: group.umo_count,
         }),
-        value: g.id,
-      }));
-    },
-
-    statusOptions() {
-      return [
-        { label: this.tm('status.enabled'), value: true },
-        { label: this.tm('status.disabled'), value: false },
-      ];
-    },
-
-    canApplyBatch() {
-      const hasChanges =
-        this.batchLlmStatus !== null ||
-        this.batchTtsStatus !== null ||
-        this.batchChatProvider !== null ||
-        this.batchTtsProvider !== null;
-      if (this.batchScope === 'selected') {
-        return hasChanges && this.selectedItems.length > 0;
-      }
-      return hasChanges;
-    },
-
-    // 穿梭框：未选中的UMO列表
-    unselectedUmos() {
-      const selected = new Set(this.editingGroup.umos || []);
-      return this.availableUmos.filter((u) => !selected.has(u));
-    },
-
-    // 穿梭框：过滤后的未选中列表
-    filteredUnselectedUmos() {
-      if (!this.groupMemberSearch) return this.unselectedUmos;
-      const search = this.groupMemberSearch.toLowerCase();
-      return this.unselectedUmos.filter((u) =>
-        u.toLowerCase().includes(search),
-      );
-    },
-
-    // 穿梭框：过滤后的已选中列表
-    filteredSelectedUmos() {
-      if (!this.groupSelectedSearch) return this.editingGroup.umos || [];
-      const search = this.groupSelectedSearch.toLowerCase();
-      return (this.editingGroup.umos || []).filter((u) =>
-        u.toLowerCase().includes(search),
-      );
-    },
-  },
-
-  watch: {
-    searchQuery: {
-      handler() {
-        // 使用 debounce 延迟搜索
-        if (this.searchTimeout) {
-          clearTimeout(this.searchTimeout);
-        }
-        this.searchTimeout = setTimeout(() => {
-          this.onSearchChange();
-        }, 300);
-      },
-    },
-  },
-
-  mounted() {
-    this.loadData();
-    this.loadGroups();
-  },
-
-  beforeUnmount() {
-    if (this.searchTimeout) {
-      clearTimeout(this.searchTimeout);
-    }
-  },
-
-  methods: {
-    async loadData() {
-      this.loading = true;
-      try {
-        const response = await sessionApi.listRules({
-          page: this.currentPage,
-          page_size: this.itemsPerPage,
-          search: this.searchQuery || '',
-        });
-        if (response.data.status === 'ok') {
-          const data = response.data.data;
-          this.rulesList = data.rules;
-          this.mergeUmoInfos(data.rules);
-          this.totalItems = data.total;
-          this.availablePersonas = data.available_personas;
-          this.availableChatProviders = data.available_chat_providers;
-          this.availableSttProviders = data.available_stt_providers;
-          this.availableTtsProviders = data.available_tts_providers;
-          this.availablePlugins = data.available_plugins || [];
-          this.availableKbs = data.available_kbs || [];
-        } else {
-          this.showError(
-            response.data.message || this.tm('messages.loadError'),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.loadError'),
-        );
-      }
-      this.loading = false;
-    },
-
-    onTableOptionsUpdate(options) {
-      // 当分页参数变化时重新加载数据
-      this.currentPage = options.page;
-      this.itemsPerPage = options.itemsPerPage;
-      void this.loadData();
-    },
-
-    onSearchChange() {
-      // 搜索时重置到第一页
-      this.currentPage = 1;
-      void this.loadData();
-    },
-
-    async loadUmos() {
-      this.loadingUmos = true;
-      try {
-        const response = await sessionApi.activeUmos();
-        if (response.data.status === 'ok') {
-          this.mergeUmoInfos(response.data.data.umo_infos || []);
-          // 过滤掉已有规则的 umo
-          const existingUmos = new Set(this.rulesList.map((r) => r.umo));
-          this.availableUmos = response.data.data.umos.filter(
-            (umo) => !existingUmos.has(umo),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.loadError'),
-        );
-      }
-      this.loadingUmos = false;
-    },
-
-    async refreshData() {
-      await this.loadData();
-      this.showSuccess(this.tm('messages.refreshSuccess'));
-    },
-
-    hasProviderConfig(rules) {
-      return (
-        rules &&
-        (rules.provider_perf_chat_completion ||
-          rules.provider_perf_speech_to_text ||
-          rules.provider_perf_text_to_speech)
-      );
-    },
-
-    parseUmoInfo(umo) {
-      const parts = umo.split(':');
-      return {
-        umo,
-        platform: parts[0] || '',
-        message_type: parts[1] || '',
-        session_id: parts.slice(2).join(':') || umo,
-        auto_name: '',
-        user_alias: '',
-        display_name: umo,
-      };
-    },
-
-    mergeUmoInfos(infos = []) {
-      const next = { ...this.availableUmoInfoMap };
-      for (const info of infos) {
-        if (info?.umo) {
-          next[info.umo] = { ...(next[info.umo] || {}), ...info };
-        }
-      }
-      this.availableUmoInfoMap = next;
-    },
-
-    getAvailableUmoInfo(umo) {
-      return this.availableUmoInfoMap[umo] || this.parseUmoInfo(umo);
-    },
-
-    getAvailableUmoDisplayProps(umo) {
-      const info = this.getAvailableUmoInfo(umo);
-      return {
-        umo,
-        platform: info.platform,
-        messageType: info.message_type,
-        sessionId: info.session_id,
-        autoName: info.auto_name,
-        userAlias: info.user_alias,
-      };
-    },
-
-    getPlatformColor(platform) {
-      const colors = {
-        aiocqhttp: 'blue',
-        qq_official: 'purple',
-        telegram: 'light-blue',
-        discord: 'indigo',
-        webchat: 'orange',
-      };
-      return colors[platform] || 'grey';
-    },
-
-    getUmoDisplayText(value) {
-      const item =
-        typeof value === 'string' ? this.getAvailableUmoInfo(value) : value;
-      if (!item) return '';
-      const umo = item.umo || (typeof value === 'string' ? value : '');
-      const aliasName =
-        item.user_alias ||
-        item.rules?.session_service_config?.custom_name ||
-        '';
-      const autoName = item.auto_name || '';
-      let displayName = '';
-      if (aliasName && autoName && aliasName !== autoName) {
-        displayName = `${aliasName}（${autoName}）`;
-      } else {
-        displayName = aliasName || autoName;
-      }
-      if (displayName && umo) {
-        return `${displayName} (UMO: ${umo})`;
-      }
-      return displayName || (umo ? `UMO: ${umo}` : item.display_name || '');
-    },
-
-    getUmoSelectionText(value) {
-      const item =
-        typeof value === 'string' ? this.getAvailableUmoInfo(value) : value;
-      if (!item) return '';
-      const umo = item.umo || (typeof value === 'string' ? value : '');
-      const aliasName =
-        item.user_alias ||
-        item.rules?.session_service_config?.custom_name ||
-        '';
-      const autoName = item.auto_name || '';
-      if (aliasName && autoName && aliasName !== autoName) {
-        return `${aliasName}（${autoName}）`;
-      }
-      return aliasName || autoName || umo || item.display_name || '';
-    },
-
-    buildUmoItem(umo, rules = {}) {
-      return {
-        ...this.getAvailableUmoInfo(umo),
-        umo,
-        rules,
-      };
-    },
-
-    async openAddRuleDialog() {
-      this.addRuleDialog = true;
-      this.selectedNewUmo = null;
-      await this.loadUmos();
-    },
-
-    createNewRule() {
-      if (!this.selectedNewUmo) return;
-
-      // 创建一个新的规则项并打开编辑器
-      const newItem = this.buildUmoItem(this.selectedNewUmo);
-
-      this.addRuleDialog = false;
-      this.openRuleEditor(newItem);
-    },
-
-    openRuleEditor(item) {
-      this.selectedUmo = item;
-      this.editingRules = item.rules || {};
-
-      // 初始化服务配置
-      const svcConfig = this.editingRules.session_service_config || {};
-      this.serviceConfig = {
-        session_enabled: svcConfig.session_enabled !== false,
-        llm_enabled: svcConfig.llm_enabled !== false,
-        tts_enabled: svcConfig.tts_enabled !== false,
-        custom_name: svcConfig.custom_name || '',
-        persona_id: svcConfig.persona_id || null,
-      };
-
-      // 初始化 Provider 配置
-      this.providerConfig = {
-        chat_completion:
-          this.editingRules.provider_perf_chat_completion ||
-          FOLLOW_CONFIG_VALUE,
-        speech_to_text:
-          this.editingRules.provider_perf_speech_to_text || FOLLOW_CONFIG_VALUE,
-        text_to_speech:
-          this.editingRules.provider_perf_text_to_speech || FOLLOW_CONFIG_VALUE,
-      };
-
-      // 初始化插件配置
-      const pluginCfg = this.editingRules.session_plugin_config || {};
-      this.pluginConfig = {
-        enabled_plugins: pluginCfg.enabled_plugins || [],
-        disabled_plugins: pluginCfg.disabled_plugins || [],
-      };
-
-      // 初始化知识库配置
-      const kbCfg = this.editingRules.kb_config || {};
-      this.kbConfig = {
-        kb_ids: kbCfg.kb_ids || [],
-        top_k: kbCfg.top_k ?? 5,
-        enable_rerank: kbCfg.enable_rerank !== false,
-      };
-
-      this.ruleDialog = true;
-    },
-
-    closeRuleEditor() {
-      this.ruleDialog = false;
-      this.selectedUmo = null;
-      this.editingRules = {};
-    },
-
-    async saveServiceConfig() {
-      if (!this.selectedUmo) return;
-
-      this.saving = true;
-      try {
-        const config = { ...this.serviceConfig };
-        // 清理空值
-        if (!config.custom_name) delete config.custom_name;
-        if (config.persona_id === null) delete config.persona_id;
-
-        const response = await sessionApi.upsertRule({
-          umo: this.selectedUmo.umo,
-          rule_key: 'session_service_config',
-          rule_value: config,
-        });
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('messages.saveSuccess'));
-          this.editingRules.session_service_config = config;
-
-          // 更新或添加到列表
-          let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo);
-          if (item) {
-            item.rules = { ...item.rules, session_service_config: config };
-          } else {
-            // 新规则，添加到列表
-            this.rulesList.push(
-              this.buildUmoItem(this.selectedUmo.umo, {
-                session_service_config: config,
-              }),
-            );
-          }
-        } else {
-          this.showError(
-            response.data.message || this.tm('messages.saveError'),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.saveError'),
-        );
-      }
-      this.saving = false;
-    },
-
-    async saveProviderConfig() {
-      if (!this.selectedUmo) return;
-
-      this.saving = true;
-      try {
-        const updateTasks = [];
-        const deleteTasks = [];
-        const providerTypes = [
-          'chat_completion',
-          'speech_to_text',
-          'text_to_speech',
-        ];
-
-        for (const type of providerTypes) {
-          const value = this.providerConfig[type];
-          if (value && value !== FOLLOW_CONFIG_VALUE) {
-            // 有值时更新
-            updateTasks.push(
-              sessionApi.upsertRule({
-                umo: this.selectedUmo.umo,
-                rule_key: `provider_perf_${type}`,
-                rule_value: value,
-              }),
-            );
-          } else if (this.editingRules[`provider_perf_${type}`]) {
-            // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
-            deleteTasks.push(
-              sessionApi.deleteRules({
-                umo: this.selectedUmo.umo,
-                rule_key: `provider_perf_${type}`,
-              }),
-            );
-          }
-        }
-
-        const allTasks = [...updateTasks, ...deleteTasks];
-        if (allTasks.length > 0) {
-          await Promise.all(allTasks);
-          this.showSuccess(this.tm('messages.saveSuccess'));
-
-          // 更新或添加到列表
-          let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo);
-          if (!item) {
-            item = this.buildUmoItem(this.selectedUmo.umo);
-            this.rulesList.push(item);
-          }
-          for (const type of providerTypes) {
-            const val = this.providerConfig[type];
-            if (val && val !== FOLLOW_CONFIG_VALUE) {
-              item.rules[`provider_perf_${type}`] = val;
-              this.editingRules[`provider_perf_${type}`] = val;
-            } else {
-              // 删除本地数据
-              delete item.rules[`provider_perf_${type}`];
-              delete this.editingRules[`provider_perf_${type}`];
-            }
-          }
-        } else {
-          this.showSuccess(this.tm('messages.noChanges'));
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.saveError'),
-        );
-      }
-      this.saving = false;
-    },
-
-    async savePluginConfig() {
-      if (!this.selectedUmo) return;
-
-      this.saving = true;
-      try {
-        const config = {
-          enabled_plugins: this.pluginConfig.enabled_plugins,
-          disabled_plugins: this.pluginConfig.disabled_plugins,
-        };
-
-        // 如果两个列表都为空，删除配置
-        if (
-          config.enabled_plugins.length === 0 &&
-          config.disabled_plugins.length === 0
-        ) {
-          if (this.editingRules.session_plugin_config) {
-            await sessionApi.deleteRules({
-              umo: this.selectedUmo.umo,
-              rule_key: 'session_plugin_config',
-            });
-            delete this.editingRules.session_plugin_config;
-            let item = this.rulesList.find(
-              (u) => u.umo === this.selectedUmo.umo,
-            );
-            if (item) delete item.rules.session_plugin_config;
-          }
-          this.showSuccess(this.tm('messages.saveSuccess'));
-        } else {
-          const response = await sessionApi.upsertRule({
-            umo: this.selectedUmo.umo,
-            rule_key: 'session_plugin_config',
-            rule_value: config,
-          });
-
-          if (response.data.status === 'ok') {
-            this.showSuccess(this.tm('messages.saveSuccess'));
-            this.editingRules.session_plugin_config = config;
-
-            let item = this.rulesList.find(
-              (u) => u.umo === this.selectedUmo.umo,
-            );
-            if (item) {
-              item.rules.session_plugin_config = config;
-            } else {
-              this.rulesList.push(
-                this.buildUmoItem(this.selectedUmo.umo, {
-                  session_plugin_config: config,
-                }),
-              );
-            }
-          } else {
-            this.showError(
-              response.data.message || this.tm('messages.saveError'),
-            );
-          }
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.saveError'),
-        );
-      }
-      this.saving = false;
-    },
-
-    async saveKbConfig() {
-      if (!this.selectedUmo) return;
-
-      this.saving = true;
-      try {
-        const config = {
-          kb_ids: this.kbConfig.kb_ids,
-          top_k: this.kbConfig.top_k,
-          enable_rerank: this.kbConfig.enable_rerank,
-        };
-
-        // 如果 kb_ids 为空，删除配置
-        if (config.kb_ids.length === 0) {
-          if (this.editingRules.kb_config) {
-            await sessionApi.deleteRules({
-              umo: this.selectedUmo.umo,
-              rule_key: 'kb_config',
-            });
-            delete this.editingRules.kb_config;
-            let item = this.rulesList.find(
-              (u) => u.umo === this.selectedUmo.umo,
-            );
-            if (item) delete item.rules.kb_config;
-          }
-          this.showSuccess(this.tm('messages.saveSuccess'));
-        } else {
-          const response = await sessionApi.upsertRule({
-            umo: this.selectedUmo.umo,
-            rule_key: 'kb_config',
-            rule_value: config,
-          });
-
-          if (response.data.status === 'ok') {
-            this.showSuccess(this.tm('messages.saveSuccess'));
-            this.editingRules.kb_config = config;
-
-            let item = this.rulesList.find(
-              (u) => u.umo === this.selectedUmo.umo,
-            );
-            if (item) {
-              item.rules.kb_config = config;
-            } else {
-              this.rulesList.push(
-                this.buildUmoItem(this.selectedUmo.umo, {
-                  kb_config: config,
-                }),
-              );
-            }
-          } else {
-            this.showError(
-              response.data.message || this.tm('messages.saveError'),
-            );
-          }
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.saveError'),
-        );
-      }
-      this.saving = false;
-    },
-
-    confirmDeleteRules(item) {
-      this.deleteTarget = item;
-      this.deleteDialog = true;
-    },
-
-    async deleteAllRules() {
-      if (!this.deleteTarget) return;
-
-      this.deleting = true;
-      try {
-        const response = await sessionApi.deleteRules({
-          umo: this.deleteTarget.umo,
-        });
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('messages.deleteSuccess'));
-          // 从列表中移除
-          const index = this.rulesList.findIndex(
-            (u) => u.umo === this.deleteTarget.umo,
-          );
-          if (index > -1) {
-            this.rulesList.splice(index, 1);
-          }
-          this.deleteDialog = false;
-          this.deleteTarget = null;
-          // 重新加载数据以更新 totalItems
-          await this.loadData();
-        } else {
-          this.showError(
-            response.data.message || this.tm('messages.deleteError'),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.deleteError'),
-        );
-      }
-      this.deleting = false;
-    },
-
-    confirmBatchDelete() {
-      if (this.selectedItems.length === 0) return;
-      this.batchDeleteDialog = true;
-    },
-
-    async batchDeleteRules() {
-      if (this.selectedItems.length === 0) return;
-
-      this.deleting = true;
-      try {
-        const umos = this.selectedItems.map((item) => item.umo);
-        const response = await sessionApi.deleteRules({
-          umos,
-        });
-
-        if (response.data.status === 'ok') {
-          const data = response.data.data;
-          this.showSuccess(
-            data.message || this.tm('messages.batchDeleteSuccess'),
-          );
-          this.batchDeleteDialog = false;
-          this.selectedItems = [];
-          // 重新加载数据
-          await this.loadData();
-        } else {
-          this.showError(
-            response.data.message || this.tm('messages.batchDeleteError'),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.batchDeleteError'),
-        );
-      }
-      this.deleting = false;
-    },
-
-    showSuccess(message) {
-      this.snackbarText = message;
-      this.snackbarColor = 'success';
-      this.snackbar = true;
-    },
-
-    showError(message) {
-      this.snackbarText = message;
-      this.snackbarColor = 'error';
-      this.snackbar = true;
-    },
-
-    openQuickEditName(item) {
-      this.quickEditNameTarget = item;
-      this.quickEditNameValue =
-        item.rules?.session_service_config?.custom_name || '';
-      this.quickEditNameDialog = true;
-    },
-
-    async saveQuickEditName() {
-      if (!this.quickEditNameTarget) return;
-
-      this.saving = true;
-      try {
-        // 获取现有的 session_service_config 或创建新的
-        const existingConfig =
-          this.quickEditNameTarget.rules?.session_service_config || {};
-        const config = {
-          session_enabled: existingConfig.session_enabled !== false,
-          llm_enabled: existingConfig.llm_enabled !== false,
-          tts_enabled: existingConfig.tts_enabled !== false,
-          ...existingConfig,
-        };
-
-        // 更新 custom_name
-        if (this.quickEditNameValue) {
-          config.custom_name = this.quickEditNameValue;
-        } else {
-          delete config.custom_name;
-        }
-
-        const response = await sessionApi.upsertRule({
-          umo: this.quickEditNameTarget.umo,
-          rule_key: 'session_service_config',
-          rule_value: config,
-        });
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('messages.saveSuccess'));
-
-          // 更新或添加到列表
-          let item = this.rulesList.find(
-            (u) => u.umo === this.quickEditNameTarget.umo,
-          );
-          if (item) {
-            if (!item.rules) item.rules = {};
-            item.rules.session_service_config = config;
-          } else {
-            // 新规则，添加到列表
-            this.rulesList.push(
-              this.buildUmoItem(this.quickEditNameTarget.umo, {
-                session_service_config: config,
-              }),
-            );
-          }
-
-          this.quickEditNameDialog = false;
-          this.quickEditNameTarget = null;
-          this.quickEditNameValue = '';
-        } else {
-          this.showError(
-            response.data.message || this.tm('messages.saveError'),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.saveError'),
-        );
-      }
-      this.saving = false;
-    },
-
-    async applyBatchChanges() {
-      this.batchUpdating = true;
-      try {
-        let scope = this.batchScope;
-        let groupId = null;
-        let umos = [];
-
-        // 处理自定义分组
-        if (scope.startsWith('custom_group:')) {
-          groupId = scope.split(':')[1];
-          scope = 'custom_group';
-        }
-
-        if (scope === 'selected') {
-          umos = this.selectedItems.map((item) => item.umo);
-          if (umos.length === 0) {
-            this.showError(this.tm('messages.selectSessionsFirst'));
-            this.batchUpdating = false;
-            return;
-          }
-        }
-
-        const tasks = [];
-
-        if (this.batchLlmStatus !== null || this.batchTtsStatus !== null) {
-          const serviceData = { scope, umos, group_id: groupId };
-          if (this.batchLlmStatus !== null) {
-            serviceData.llm_enabled = this.batchLlmStatus;
-          }
-          if (this.batchTtsStatus !== null) {
-            serviceData.tts_enabled = this.batchTtsStatus;
-          }
-          tasks.push(sessionApi.batchUpdateService(serviceData));
-        }
-
-        if (this.batchChatProvider !== null) {
-          if (this.batchChatProvider === FOLLOW_CONFIG_VALUE) {
-            tasks.push(
-              sessionApi.deleteRules({
-                scope,
-                umos,
-                group_id: groupId,
-                rule_key: 'provider_perf_chat_completion',
-              }),
-            );
-          } else {
-            tasks.push(
-              sessionApi.batchUpdateProvider({
-                scope,
-                umos,
-                group_id: groupId,
-                provider_type: 'chat_completion',
-                provider_id: this.batchChatProvider,
-              }),
-            );
-          }
-        }
-
-        if (this.batchTtsProvider !== null) {
-          if (this.batchTtsProvider === FOLLOW_CONFIG_VALUE) {
-            tasks.push(
-              sessionApi.deleteRules({
-                scope,
-                umos,
-                group_id: groupId,
-                rule_key: 'provider_perf_text_to_speech',
-              }),
-            );
-          } else {
-            tasks.push(
-              sessionApi.batchUpdateProvider({
-                scope,
-                umos,
-                group_id: groupId,
-                provider_type: 'text_to_speech',
-                provider_id: this.batchTtsProvider,
-              }),
-            );
-          }
-        }
-
-        if (tasks.length === 0) {
-          this.showError(this.tm('messages.selectAtLeastOneConfig'));
-          this.batchUpdating = false;
-          return;
-        }
-
-        const results = await Promise.all(tasks);
-        const allOk = results.every((r) => r.data.status === 'ok');
-
-        if (allOk) {
-          this.showSuccess(this.tm('messages.batchUpdateSuccess'));
-          this.batchLlmStatus = null;
-          this.batchTtsStatus = null;
-          this.batchChatProvider = null;
-          this.batchTtsProvider = null;
-          await this.loadData();
-        } else {
-          this.showError(this.tm('messages.partialUpdateFailed'));
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.batchUpdateError'),
-        );
-      }
-      this.batchUpdating = false;
-    },
-
-    // ==================== 分组管理方法 ====================
-
-    async loadGroups() {
-      this.groupsLoading = true;
-      try {
-        const response = await sessionApi.listGroups();
-        if (response.data.status === 'ok') {
-          this.groups = response.data.data.groups || [];
-        }
-      } catch (error) {
-        console.error('加载分组失败:', error);
-      }
-      this.groupsLoading = false;
-    },
-
-    async loadAvailableUmos() {
-      if (this.availableUmos.length > 0) return;
-      this.loadingUmos = true;
-      try {
-        const response = await sessionApi.activeUmos();
-        if (response.data.status === 'ok') {
-          this.mergeUmoInfos(response.data.data.umo_infos || []);
-          this.availableUmos = response.data.data.umos || [];
-        }
-      } catch (error) {
-        console.error('加载会话列表失败:', error);
-      }
-      this.loadingUmos = false;
-    },
-
-    openCreateGroupDialog() {
-      this.groupDialogMode = 'create';
-      this.editingGroup = { id: null, name: '', umos: [] };
-      this.groupMemberSearch = '';
-      this.groupSelectedSearch = '';
-      this.groupDialog = true;
-    },
-
-    openEditGroupDialog(group) {
-      this.groupDialogMode = 'edit';
-      this.editingGroup = { ...group, umos: [...(group.umos || [])] };
-      this.groupMemberSearch = '';
-      this.groupSelectedSearch = '';
-      this.groupDialog = true;
-    },
-
-    // 穿梭框操作方法
-    addToGroup(umo) {
-      if (!this.editingGroup.umos.includes(umo)) {
-        this.editingGroup.umos.push(umo);
-      }
-    },
-
-    removeFromGroup(umo) {
-      const idx = this.editingGroup.umos.indexOf(umo);
-      if (idx > -1) {
-        this.editingGroup.umos.splice(idx, 1);
-      }
-    },
-
-    addAllToGroup() {
-      this.unselectedUmos.forEach((umo) => {
-        if (!this.editingGroup.umos.includes(umo)) {
-          this.editingGroup.umos.push(umo);
-        }
+        value: `custom_group:${group.id}`,
       });
-    },
+    });
+  }
 
-    removeAllFromGroup() {
-      this.editingGroup.umos = [];
-    },
+  return options;
+});
 
-    async saveGroup() {
-      if (!this.editingGroup.name.trim()) {
-        this.showError(this.tm('messages.groupNameRequired'));
-        return;
-      }
+const statusOptions = computed<SelectOption<boolean>[]>(() => [
+  { label: tm('status.enabled'), value: true },
+  { label: tm('status.disabled'), value: false },
+]);
 
-      try {
-        let response;
-        if (this.groupDialogMode === 'create') {
-          response = await sessionApi.createGroup({
-            name: this.editingGroup.name,
-            umos: this.editingGroup.umos,
-          });
-        } else {
-          response = await sessionApi.updateGroup(this.editingGroup.id, {
-            name: this.editingGroup.name,
-            umos: this.editingGroup.umos,
-          });
-        }
+const canApplyBatch = computed(() => {
+  const hasChanges =
+    batchLlmStatus.value !== null ||
+    batchTtsStatus.value !== null ||
+    batchChatProvider.value !== null ||
+    batchTtsProvider.value !== null;
 
-        if (response.data.status === 'ok') {
-          this.showSuccess(response.data.data.message);
-          this.groupDialog = false;
-          await this.loadGroups();
-        } else {
-          this.showError(response.data.message);
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.saveGroupError'),
+  if (batchScope.value === 'selected') {
+    return hasChanges && selectedItems.value.length > 0;
+  }
+
+  return hasChanges;
+});
+
+const unselectedUmos = computed(() => {
+  const selected = new Set(editingGroup.umos);
+  return availableUmos.value.filter((umo) => !selected.has(umo));
+});
+
+const filteredUnselectedUmos = computed(() => {
+  if (!groupMemberSearch.value) {
+    return unselectedUmos.value;
+  }
+
+  const search = groupMemberSearch.value.toLowerCase();
+  return unselectedUmos.value.filter((umo) =>
+    umo.toLowerCase().includes(search),
+  );
+});
+
+const filteredSelectedUmos = computed(() => {
+  if (!groupSelectedSearch.value) {
+    return editingGroup.umos;
+  }
+
+  const search = groupSelectedSearch.value.toLowerCase();
+  return editingGroup.umos.filter((umo) => umo.toLowerCase().includes(search));
+});
+
+const debouncedSearch = createDebouncedCallback(() => {
+  currentPage.value = 1;
+  void loadData();
+}, 300);
+
+watch(searchQuery, () => {
+  debouncedSearch();
+});
+
+onMounted(() => {
+  void loadData();
+  void loadGroups();
+});
+
+onBeforeUnmount(() => {
+  debouncedSearch.cancel();
+});
+
+function createDebouncedCallback(
+  callback: () => void,
+  delayMs: number,
+): DebouncedCallback {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = (() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+
+    timer = setTimeout(() => {
+      timer = null;
+      callback();
+    }, delayMs);
+  }) as DebouncedCallback;
+
+  debounced.cancel = () => {
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    timer = null;
+  };
+
+  return debounced;
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function normalizeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeProviderOption(raw: unknown): ProviderOption | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const id = normalizeString(source.id);
+  const name = normalizeString(source.name);
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    model: normalizeString(source.model) || undefined,
+  };
+}
+
+function normalizePersonaOption(raw: unknown): PersonaOption | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const name = normalizeString(source.name);
+  return name ? { name } : null;
+}
+
+function normalizePluginOption(raw: unknown): PluginOption | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const name = normalizeString(source.name);
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    display_name: normalizeString(source.display_name) || undefined,
+  };
+}
+
+function normalizeKnowledgeBaseOption(
+  raw: unknown,
+): KnowledgeBaseOption | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const kbId = normalizeString(source.kb_id);
+  const kbName = normalizeString(source.kb_name);
+  if (!kbId || !kbName) {
+    return null;
+  }
+
+  return {
+    kb_id: kbId,
+    kb_name: kbName,
+    emoji: normalizeString(source.emoji) || null,
+  };
+}
+
+function normalizeSessionServiceConfig(raw: unknown): SessionServiceConfig {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const source = raw as Record<string, unknown>;
+  return {
+    ...source,
+    session_enabled: normalizeBoolean(source.session_enabled, true),
+    llm_enabled: normalizeBoolean(source.llm_enabled, true),
+    tts_enabled: normalizeBoolean(source.tts_enabled, true),
+    custom_name: normalizeString(source.custom_name) || undefined,
+    persona_id: normalizeString(source.persona_id) || null,
+  };
+}
+
+function normalizeSessionPluginConfig(raw: unknown): SessionPluginConfig {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const source = raw as Record<string, unknown>;
+  return {
+    ...source,
+    enabled_plugins: normalizeStringArray(source.enabled_plugins),
+    disabled_plugins: normalizeStringArray(source.disabled_plugins),
+  };
+}
+
+function normalizeSessionKbConfig(raw: unknown): SessionKbConfig {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const source = raw as Record<string, unknown>;
+  return {
+    ...source,
+    kb_ids: normalizeStringArray(source.kb_ids),
+    top_k: normalizeNumber(source.top_k, 5),
+    enable_rerank: normalizeBoolean(source.enable_rerank, true),
+  };
+}
+
+function toRuleValue(
+  value: string | SessionServiceConfig | SessionPluginConfig | SessionKbConfig,
+): DynamicConfig {
+  return value as unknown as DynamicConfig;
+}
+
+function normalizeRuleSet(raw: unknown): SessionRuleSet {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const source = raw as Record<string, unknown>;
+  return {
+    ...source,
+    session_service_config: normalizeSessionServiceConfig(
+      source.session_service_config,
+    ),
+    session_plugin_config: normalizeSessionPluginConfig(
+      source.session_plugin_config,
+    ),
+    kb_config: normalizeSessionKbConfig(source.kb_config),
+    provider_perf_chat_completion:
+      normalizeString(source.provider_perf_chat_completion) || undefined,
+    provider_perf_speech_to_text:
+      normalizeString(source.provider_perf_speech_to_text) || undefined,
+    provider_perf_text_to_speech:
+      normalizeString(source.provider_perf_text_to_speech) || undefined,
+  };
+}
+
+function parseUmoInfo(umo: string): UmoDisplayInfo {
+  const parts = umo.split(':');
+  return {
+    umo,
+    platform: parts[0] || '',
+    message_type: parts[1] || '',
+    session_id: parts.slice(2).join(':') || umo,
+    auto_name: '',
+    user_alias: '',
+    display_name: umo,
+  };
+}
+
+function normalizeUmoInfo(
+  raw: unknown,
+  fallbackUmo = '',
+): UmoDisplayInfo | null {
+  if (!raw || typeof raw !== 'object') {
+    return fallbackUmo ? parseUmoInfo(fallbackUmo) : null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const umo = normalizeString(source.umo) || fallbackUmo;
+  if (!umo) {
+    return null;
+  }
+
+  return {
+    umo,
+    platform: normalizeString(source.platform),
+    message_type: normalizeString(source.message_type),
+    session_id:
+      normalizeString(source.session_id) || parseUmoInfo(umo).session_id,
+    auto_name: normalizeString(source.auto_name),
+    user_alias: normalizeString(source.user_alias),
+    display_name: normalizeString(source.display_name) || umo,
+    rules:
+      source.rules && typeof source.rules === 'object'
+        ? normalizeRuleSet(source.rules)
+        : undefined,
+  };
+}
+
+function normalizeRuleItem(raw: unknown): SessionRuleItem | null {
+  const info = normalizeUmoInfo(raw);
+  if (!info) {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  return {
+    ...info,
+    rules: normalizeRuleSet(source.rules),
+  };
+}
+
+function normalizeGroup(raw: unknown): GroupItem | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const id = normalizeString(source.id);
+  const name = normalizeString(source.name);
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    umos: normalizeStringArray(source.umos),
+    umo_count: normalizeNumber(source.umo_count, 0),
+  };
+}
+
+function mergeUmoInfos(infos: unknown) {
+  const next = { ...availableUmoInfoMap.value };
+  if (!Array.isArray(infos)) {
+    availableUmoInfoMap.value = next;
+    return;
+  }
+
+  infos.forEach((info) => {
+    const normalized = normalizeUmoInfo(info);
+    if (normalized?.umo) {
+      next[normalized.umo] = { ...(next[normalized.umo] || {}), ...normalized };
+    }
+  });
+
+  availableUmoInfoMap.value = next;
+}
+
+function normalizeUmoValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    return normalizeString((value as Record<string, unknown>).umo);
+  }
+  return '';
+}
+
+function getAvailableUmoInfo(value: unknown): UmoDisplayInfo {
+  const umo = normalizeUmoValue(value);
+  if (!umo) {
+    return parseUmoInfo('');
+  }
+
+  return availableUmoInfoMap.value[umo] || parseUmoInfo(umo);
+}
+
+function getAvailableUmoDisplayProps(value: unknown) {
+  const info = getAvailableUmoInfo(value);
+  return {
+    umo: info.umo,
+    platform: info.platform,
+    messageType: info.message_type,
+    sessionId: info.session_id,
+    autoName: info.auto_name,
+    userAlias: info.user_alias,
+  };
+}
+
+function hasProviderConfig(rules: SessionRuleSet | null | undefined): boolean {
+  return Boolean(
+    rules?.provider_perf_chat_completion ||
+    rules?.provider_perf_speech_to_text ||
+    rules?.provider_perf_text_to_speech,
+  );
+}
+
+function getPlatformColor(platform: string): string {
+  const colors: Record<string, string> = {
+    aiocqhttp: 'blue',
+    qq_official: 'purple',
+    telegram: 'light-blue',
+    discord: 'indigo',
+    webchat: 'orange',
+  };
+  return colors[platform] || 'grey';
+}
+
+function getProviderRule(
+  rules: SessionRuleSet,
+  type: ProviderRuleType,
+): string | undefined {
+  switch (type) {
+    case 'chat_completion':
+      return rules.provider_perf_chat_completion;
+    case 'speech_to_text':
+      return rules.provider_perf_speech_to_text;
+    case 'text_to_speech':
+      return rules.provider_perf_text_to_speech;
+  }
+}
+
+function setProviderRule(
+  rules: SessionRuleSet,
+  type: ProviderRuleType,
+  value: string,
+): void {
+  switch (type) {
+    case 'chat_completion':
+      rules.provider_perf_chat_completion = value;
+      return;
+    case 'speech_to_text':
+      rules.provider_perf_speech_to_text = value;
+      return;
+    case 'text_to_speech':
+      rules.provider_perf_text_to_speech = value;
+  }
+}
+
+function clearProviderRule(
+  rules: SessionRuleSet,
+  type: ProviderRuleType,
+): void {
+  switch (type) {
+    case 'chat_completion':
+      delete rules.provider_perf_chat_completion;
+      return;
+    case 'speech_to_text':
+      delete rules.provider_perf_speech_to_text;
+      return;
+    case 'text_to_speech':
+      delete rules.provider_perf_text_to_speech;
+  }
+}
+
+function buildBatchTargetPayload(
+  scope: BatchScope,
+  groupId: string | null,
+  umos: string[],
+): Partial<Pick<UmoListRequest, 'scope' | 'group_id' | 'umos'>> {
+  const payload: Partial<Pick<UmoListRequest, 'scope' | 'group_id' | 'umos'>> =
+    {};
+
+  if (
+    scope === 'all' ||
+    scope === 'group' ||
+    scope === 'private' ||
+    scope === 'custom_group'
+  ) {
+    payload.scope = scope;
+  }
+  if (groupId) {
+    payload.group_id = groupId;
+  }
+  if (umos.length > 0) {
+    payload.umos = umos;
+  }
+
+  return payload;
+}
+
+function getUmoDisplayText(value: unknown): string {
+  const item =
+    typeof value === 'string'
+      ? getAvailableUmoInfo(value)
+      : (value as UmoDisplayInfo | SessionRuleItem | null);
+  if (!item) {
+    return '';
+  }
+
+  const umo = item.umo || normalizeUmoValue(value);
+  const aliasName =
+    item.user_alias || item.rules?.session_service_config?.custom_name || '';
+  const autoName = item.auto_name || '';
+
+  let displayName = '';
+  if (aliasName && autoName && aliasName !== autoName) {
+    displayName = `${aliasName}（${autoName}）`;
+  } else {
+    displayName = aliasName || autoName;
+  }
+
+  if (displayName && umo) {
+    return `${displayName} (UMO: ${umo})`;
+  }
+
+  return displayName || (umo ? `UMO: ${umo}` : item.display_name || '');
+}
+
+function getUmoSelectionText(value: unknown): string {
+  const item =
+    typeof value === 'string'
+      ? getAvailableUmoInfo(value)
+      : (value as UmoDisplayInfo | SessionRuleItem | null);
+  if (!item) {
+    return '';
+  }
+
+  const umo = item.umo || normalizeUmoValue(value);
+  const aliasName =
+    item.user_alias || item.rules?.session_service_config?.custom_name || '';
+  const autoName = item.auto_name || '';
+
+  if (aliasName && autoName && aliasName !== autoName) {
+    return `${aliasName}（${autoName}）`;
+  }
+
+  return aliasName || autoName || umo || item.display_name || '';
+}
+
+function buildUmoItem(
+  umo: string,
+  rules: SessionRuleSet = {},
+): SessionRuleItem {
+  const info = getAvailableUmoInfo(umo);
+  return {
+    ...info,
+    umo,
+    rules,
+  };
+}
+
+function findRuleItem(umo: string): SessionRuleItem | undefined {
+  return rulesList.value.find((item) => item.umo === umo);
+}
+
+function ensureRuleItem(umo: string): SessionRuleItem {
+  const existing = findRuleItem(umo);
+  if (existing) {
+    return existing;
+  }
+
+  const next = buildUmoItem(umo);
+  rulesList.value.push(next);
+  return next;
+}
+
+function resetGroupEditor() {
+  editingGroup.id = null;
+  editingGroup.name = '';
+  editingGroup.umos = [];
+  groupMemberSearch.value = '';
+  groupSelectedSearch.value = '';
+}
+
+async function loadData() {
+  loading.value = true;
+  try {
+    const response = await sessionApi.listRules({
+      page: currentPage.value,
+      page_size: itemsPerPage.value,
+      search: searchQuery.value || '',
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.loadError'));
+      return;
+    }
+
+    const data = response.data.data;
+    const normalizedRules = Array.isArray(data.rules)
+      ? data.rules
+          .map((item) => normalizeRuleItem(item))
+          .filter((item): item is SessionRuleItem => item !== null)
+      : [];
+
+    rulesList.value = normalizedRules;
+    mergeUmoInfos(data.rules);
+    totalItems.value = normalizeNumber(data.total, 0);
+    availablePersonas.value = Array.isArray(data.available_personas)
+      ? data.available_personas
+          .map((item) => normalizePersonaOption(item))
+          .filter((item): item is PersonaOption => item !== null)
+      : [];
+    availableChatProviders.value = Array.isArray(data.available_chat_providers)
+      ? data.available_chat_providers
+          .map((item) => normalizeProviderOption(item))
+          .filter((item): item is ProviderOption => item !== null)
+      : [];
+    availableSttProviders.value = Array.isArray(data.available_stt_providers)
+      ? data.available_stt_providers
+          .map((item) => normalizeProviderOption(item))
+          .filter((item): item is ProviderOption => item !== null)
+      : [];
+    availableTtsProviders.value = Array.isArray(data.available_tts_providers)
+      ? data.available_tts_providers
+          .map((item) => normalizeProviderOption(item))
+          .filter((item): item is ProviderOption => item !== null)
+      : [];
+    availablePlugins.value = Array.isArray(data.available_plugins)
+      ? data.available_plugins
+          .map((item) => normalizePluginOption(item))
+          .filter((item): item is PluginOption => item !== null)
+      : [];
+    availableKbs.value = Array.isArray(data.available_kbs)
+      ? data.available_kbs
+          .map((item) => normalizeKnowledgeBaseOption(item))
+          .filter((item): item is KnowledgeBaseOption => item !== null)
+      : [];
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.loadError')));
+  } finally {
+    loading.value = false;
+  }
+}
+
+function onTableOptionsUpdate(options: TableOptionsLike) {
+  if (typeof options.page === 'number') {
+    currentPage.value = options.page;
+  }
+  if (typeof options.itemsPerPage === 'number') {
+    itemsPerPage.value = options.itemsPerPage;
+  }
+  void loadData();
+}
+
+async function loadUmos() {
+  loadingUmos.value = true;
+  try {
+    const response = await sessionApi.activeUmos();
+    if (response.data.status !== 'ok') {
+      return;
+    }
+
+    mergeUmoInfos(response.data.data.umo_infos);
+    const existingUmos = new Set(rulesList.value.map((item) => item.umo));
+    const allUmos = normalizeStringArray(response.data.data.umos);
+    availableUmos.value = allUmos.filter((umo) => !existingUmos.has(umo));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.loadError')));
+  } finally {
+    loadingUmos.value = false;
+  }
+}
+
+async function refreshData() {
+  await loadData();
+  showSuccess(tm('messages.refreshSuccess'));
+}
+
+async function openAddRuleDialog() {
+  addRuleDialog.value = true;
+  selectedNewUmo.value = null;
+  await loadUmos();
+}
+
+function createNewRule() {
+  if (!selectedNewUmo.value) {
+    return;
+  }
+
+  const newItem = buildUmoItem(selectedNewUmo.value);
+  addRuleDialog.value = false;
+  openRuleEditor(newItem);
+}
+
+function openRuleEditor(item: SessionRuleItem) {
+  selectedUmo.value = item;
+  editingRules.value = item.rules || {};
+
+  const svcConfig = editingRules.value.session_service_config || {};
+  serviceConfig.session_enabled = svcConfig.session_enabled !== false;
+  serviceConfig.llm_enabled = svcConfig.llm_enabled !== false;
+  serviceConfig.tts_enabled = svcConfig.tts_enabled !== false;
+  serviceConfig.custom_name = svcConfig.custom_name || '';
+  serviceConfig.persona_id = svcConfig.persona_id || null;
+
+  providerConfig.chat_completion =
+    editingRules.value.provider_perf_chat_completion || FOLLOW_CONFIG_VALUE;
+  providerConfig.speech_to_text =
+    editingRules.value.provider_perf_speech_to_text || FOLLOW_CONFIG_VALUE;
+  providerConfig.text_to_speech =
+    editingRules.value.provider_perf_text_to_speech || FOLLOW_CONFIG_VALUE;
+
+  const pluginRules = editingRules.value.session_plugin_config || {};
+  pluginConfig.enabled_plugins = pluginRules.enabled_plugins || [];
+  pluginConfig.disabled_plugins = pluginRules.disabled_plugins || [];
+
+  const kbRules = editingRules.value.kb_config || {};
+  kbConfig.kb_ids = kbRules.kb_ids || [];
+  kbConfig.top_k = kbRules.top_k ?? 5;
+  kbConfig.enable_rerank = kbRules.enable_rerank !== false;
+
+  ruleDialog.value = true;
+}
+
+function closeRuleEditor() {
+  ruleDialog.value = false;
+  selectedUmo.value = null;
+  editingRules.value = {};
+}
+
+async function saveServiceConfig() {
+  if (!selectedUmo.value) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const config: SessionServiceConfig = {
+      session_enabled: serviceConfig.session_enabled,
+      llm_enabled: serviceConfig.llm_enabled,
+      tts_enabled: serviceConfig.tts_enabled,
+    };
+    if (serviceConfig.custom_name) {
+      config.custom_name = serviceConfig.custom_name;
+    }
+    if (serviceConfig.persona_id !== null) {
+      config.persona_id = serviceConfig.persona_id;
+    }
+
+    const response = await sessionApi.upsertRule({
+      umo: selectedUmo.value.umo,
+      rule_key: 'session_service_config',
+      rule_value: config,
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.saveError'));
+      return;
+    }
+
+    editingRules.value.session_service_config = config;
+    const item = ensureRuleItem(selectedUmo.value.umo);
+    item.rules = { ...item.rules, session_service_config: config };
+    showSuccess(tm('messages.saveSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.saveError')));
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function saveProviderConfig() {
+  if (!selectedUmo.value) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const updateTasks: Promise<unknown>[] = [];
+    const deleteTasks: Promise<unknown>[] = [];
+    const providerTypes: ProviderRuleType[] = [
+      'chat_completion',
+      'speech_to_text',
+      'text_to_speech',
+    ];
+
+    providerTypes.forEach((type) => {
+      const value = providerConfig[type];
+      const ruleKey = `provider_perf_${type}` as RuleKey;
+
+      if (value && value !== FOLLOW_CONFIG_VALUE) {
+        updateTasks.push(
+          sessionApi.upsertRule({
+            umo: selectedUmo.value!.umo,
+            rule_key: ruleKey,
+            rule_value: toRuleValue(value),
+          }),
+        );
+      } else if (getProviderRule(editingRules.value, type)) {
+        deleteTasks.push(
+          sessionApi.deleteRules({
+            umo: selectedUmo.value!.umo,
+            rule_key: ruleKey,
+          }),
         );
       }
-    },
+    });
 
-    async deleteGroup(group) {
-      const message = this.tm('groups.deleteConfirm', { name: group.name });
-      if (!(await askForConfirmationDialog(message, this.confirmDialog)))
-        return;
+    const allTasks = [...updateTasks, ...deleteTasks];
+    if (allTasks.length === 0) {
+      showSuccess(tm('messages.noChanges'));
+      return;
+    }
 
-      try {
-        const response = await sessionApi.deleteGroup(group.id);
-        if (response.data.status === 'ok') {
-          this.showSuccess(response.data.data.message);
-          await this.loadGroups();
-        } else {
-          this.showError(response.data.message);
-        }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.deleteGroupError'),
-        );
+    await Promise.all(allTasks);
+    const item = ensureRuleItem(selectedUmo.value.umo);
+    providerTypes.forEach((type) => {
+      const value = providerConfig[type];
+      if (value && value !== FOLLOW_CONFIG_VALUE) {
+        setProviderRule(item.rules, type, value);
+        setProviderRule(editingRules.value, type, value);
+      } else {
+        clearProviderRule(item.rules, type);
+        clearProviderRule(editingRules.value, type);
       }
-    },
+    });
+    showSuccess(tm('messages.saveSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.saveError')));
+  } finally {
+    saving.value = false;
+  }
+}
 
-    openGroupMemberDialog(group) {
-      this.groupMemberTarget = { ...group };
-      this.groupMemberDialog = true;
-    },
+async function savePluginConfig() {
+  if (!selectedUmo.value) {
+    return;
+  }
 
-    async addSelectedToGroup(groupId) {
-      if (this.selectedItems.length === 0) {
-        this.showError(this.tm('messages.selectSessionsToAddFirst'));
-        return;
-      }
+  saving.value = true;
+  try {
+    const config = {
+      enabled_plugins: [...pluginConfig.enabled_plugins],
+      disabled_plugins: [...pluginConfig.disabled_plugins],
+    };
 
-      try {
-        const response = await sessionApi.updateGroup(groupId, {
-          add_umos: this.selectedItems.map((item) => item.umo),
+    if (
+      config.enabled_plugins.length === 0 &&
+      config.disabled_plugins.length === 0
+    ) {
+      if (editingRules.value.session_plugin_config) {
+        await sessionApi.deleteRules({
+          umo: selectedUmo.value.umo,
+          rule_key: 'session_plugin_config',
         });
-        if (response.data.status === 'ok') {
-          this.showSuccess(
-            this.tm('messages.addToGroupSuccess', {
-              count: this.selectedItems.length,
-            }),
-          );
-          await this.loadGroups();
-        } else {
-          this.showError(response.data.message);
+        delete editingRules.value.session_plugin_config;
+        const item = findRuleItem(selectedUmo.value.umo);
+        if (item) {
+          delete item.rules.session_plugin_config;
         }
-      } catch (error) {
-        this.showError(
-          error.response?.data?.message || this.tm('messages.addToGroupError'),
-        );
       }
-    },
-  },
-};
+      showSuccess(tm('messages.saveSuccess'));
+      return;
+    }
+
+    const response = await sessionApi.upsertRule({
+      umo: selectedUmo.value.umo,
+      rule_key: 'session_plugin_config',
+      rule_value: toRuleValue(config),
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.saveError'));
+      return;
+    }
+
+    editingRules.value.session_plugin_config = config;
+    const item = ensureRuleItem(selectedUmo.value.umo);
+    item.rules.session_plugin_config = config;
+    showSuccess(tm('messages.saveSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.saveError')));
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function saveKbConfig() {
+  if (!selectedUmo.value) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const config = {
+      kb_ids: [...kbConfig.kb_ids],
+      top_k: kbConfig.top_k,
+      enable_rerank: kbConfig.enable_rerank,
+    };
+
+    if (config.kb_ids.length === 0) {
+      if (editingRules.value.kb_config) {
+        await sessionApi.deleteRules({
+          umo: selectedUmo.value.umo,
+          rule_key: 'kb_config',
+        });
+        delete editingRules.value.kb_config;
+        const item = findRuleItem(selectedUmo.value.umo);
+        if (item) {
+          delete item.rules.kb_config;
+        }
+      }
+      showSuccess(tm('messages.saveSuccess'));
+      return;
+    }
+
+    const response = await sessionApi.upsertRule({
+      umo: selectedUmo.value.umo,
+      rule_key: 'kb_config',
+      rule_value: toRuleValue(config),
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.saveError'));
+      return;
+    }
+
+    editingRules.value.kb_config = config;
+    const item = ensureRuleItem(selectedUmo.value.umo);
+    item.rules.kb_config = config;
+    showSuccess(tm('messages.saveSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.saveError')));
+  } finally {
+    saving.value = false;
+  }
+}
+
+function confirmDeleteRules(item: SessionRuleItem) {
+  deleteTarget.value = item;
+  deleteDialog.value = true;
+}
+
+async function deleteAllRules() {
+  if (!deleteTarget.value) {
+    return;
+  }
+
+  deleting.value = true;
+  try {
+    const response = await sessionApi.deleteRules({
+      umo: deleteTarget.value.umo,
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.deleteError'));
+      return;
+    }
+
+    const index = rulesList.value.findIndex(
+      (item) => item.umo === deleteTarget.value!.umo,
+    );
+    if (index > -1) {
+      rulesList.value.splice(index, 1);
+    }
+
+    deleteDialog.value = false;
+    deleteTarget.value = null;
+    await loadData();
+    showSuccess(tm('messages.deleteSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.deleteError')));
+  } finally {
+    deleting.value = false;
+  }
+}
+
+function confirmBatchDelete() {
+  if (selectedItems.value.length === 0) {
+    return;
+  }
+  batchDeleteDialog.value = true;
+}
+
+async function batchDeleteRules() {
+  if (selectedItems.value.length === 0) {
+    return;
+  }
+
+  deleting.value = true;
+  try {
+    const response = await sessionApi.deleteRules({
+      umos: selectedItems.value.map((item) => item.umo),
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.batchDeleteError'));
+      return;
+    }
+
+    const data = response.data.data;
+    const message =
+      typeof data.message === 'string'
+        ? data.message
+        : tm('messages.batchDeleteSuccess');
+    batchDeleteDialog.value = false;
+    selectedItems.value = [];
+    await loadData();
+    showSuccess(message);
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.batchDeleteError')));
+  } finally {
+    deleting.value = false;
+  }
+}
+
+function showSuccess(message: string) {
+  snackbarText.value = message;
+  snackbarColor.value = 'success';
+  snackbar.value = true;
+}
+
+function showError(message: string) {
+  snackbarText.value = message;
+  snackbarColor.value = 'error';
+  snackbar.value = true;
+}
+
+function openQuickEditName(item: SessionRuleItem) {
+  quickEditNameTarget.value = item;
+  quickEditNameValue.value =
+    item.rules?.session_service_config?.custom_name || '';
+  quickEditNameDialog.value = true;
+}
+
+async function saveQuickEditName() {
+  if (!quickEditNameTarget.value) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const existingConfig =
+      quickEditNameTarget.value.rules?.session_service_config || {};
+    const config: SessionServiceConfig = {
+      ...existingConfig,
+      session_enabled: existingConfig.session_enabled !== false,
+      llm_enabled: existingConfig.llm_enabled !== false,
+      tts_enabled: existingConfig.tts_enabled !== false,
+    };
+
+    if (quickEditNameValue.value) {
+      config.custom_name = quickEditNameValue.value;
+    } else {
+      delete config.custom_name;
+    }
+
+    const response = await sessionApi.upsertRule({
+      umo: quickEditNameTarget.value.umo,
+      rule_key: 'session_service_config',
+      rule_value: config,
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.saveError'));
+      return;
+    }
+
+    const item = ensureRuleItem(quickEditNameTarget.value.umo);
+    item.rules.session_service_config = config;
+    quickEditNameDialog.value = false;
+    quickEditNameTarget.value = null;
+    quickEditNameValue.value = '';
+    showSuccess(tm('messages.saveSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.saveError')));
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function applyBatchChanges() {
+  batchUpdating.value = true;
+  try {
+    let scope = batchScope.value;
+    let groupId: string | null = null;
+    let umos: string[] = [];
+
+    if (scope.startsWith('custom_group:')) {
+      groupId = scope.split(':')[1] || null;
+      scope = 'custom_group';
+    }
+
+    if (scope === 'selected') {
+      umos = selectedItems.value.map((item) => item.umo);
+      if (umos.length === 0) {
+        showError(tm('messages.selectSessionsFirst'));
+        return;
+      }
+    }
+
+    const targetPayload = buildBatchTargetPayload(scope, groupId, umos);
+    const tasks: Promise<unknown>[] = [];
+
+    if (batchLlmStatus.value !== null || batchTtsStatus.value !== null) {
+      const serviceData: BatchSessionServiceRequest = { ...targetPayload };
+      if (batchLlmStatus.value !== null) {
+        serviceData.llm_enabled = batchLlmStatus.value;
+      }
+      if (batchTtsStatus.value !== null) {
+        serviceData.tts_enabled = batchTtsStatus.value;
+      }
+      tasks.push(sessionApi.batchUpdateService(serviceData));
+    }
+
+    if (batchChatProvider.value !== null) {
+      if (batchChatProvider.value === FOLLOW_CONFIG_VALUE) {
+        tasks.push(
+          sessionApi.deleteRules({
+            ...targetPayload,
+            rule_key: 'provider_perf_chat_completion',
+          }),
+        );
+      } else {
+        const providerData: BatchSessionProviderRequest = {
+          ...targetPayload,
+          provider_type: 'chat_completion',
+          provider_id: batchChatProvider.value,
+        };
+        tasks.push(sessionApi.batchUpdateProvider(providerData));
+      }
+    }
+
+    if (batchTtsProvider.value !== null) {
+      if (batchTtsProvider.value === FOLLOW_CONFIG_VALUE) {
+        tasks.push(
+          sessionApi.deleteRules({
+            ...targetPayload,
+            rule_key: 'provider_perf_text_to_speech',
+          }),
+        );
+      } else {
+        const providerData: BatchSessionProviderRequest = {
+          ...targetPayload,
+          provider_type: 'text_to_speech',
+          provider_id: batchTtsProvider.value,
+        };
+        tasks.push(sessionApi.batchUpdateProvider(providerData));
+      }
+    }
+
+    if (tasks.length === 0) {
+      showError(tm('messages.selectAtLeastOneConfig'));
+      return;
+    }
+
+    const results = await Promise.all(tasks);
+    const allOk = results.every((result) => {
+      if (!result || typeof result !== 'object') {
+        return false;
+      }
+
+      const responseData = (result as { data?: { status?: string } }).data;
+      return responseData?.status === 'ok';
+    });
+
+    if (!allOk) {
+      showError(tm('messages.partialUpdateFailed'));
+      return;
+    }
+
+    batchLlmStatus.value = null;
+    batchTtsStatus.value = null;
+    batchChatProvider.value = null;
+    batchTtsProvider.value = null;
+    await loadData();
+    showSuccess(tm('messages.batchUpdateSuccess'));
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.batchUpdateError')));
+  } finally {
+    batchUpdating.value = false;
+  }
+}
+
+async function loadGroups() {
+  groupsLoading.value = true;
+  try {
+    const response = await sessionApi.listGroups();
+    if (response.data.status !== 'ok') {
+      return;
+    }
+
+    const rawData = response.data.data;
+    const rawGroups: unknown[] =
+      rawData &&
+      typeof rawData === 'object' &&
+      'groups' in rawData &&
+      Array.isArray(rawData.groups)
+        ? rawData.groups
+        : [];
+
+    groups.value = rawGroups
+      .map((group) => normalizeGroup(group))
+      .filter((group): group is GroupItem => group !== null);
+  } catch (error) {
+    console.error('加载分组失败:', error);
+  } finally {
+    groupsLoading.value = false;
+  }
+}
+
+async function loadAvailableUmos() {
+  if (availableUmos.value.length > 0) {
+    return;
+  }
+
+  loadingUmos.value = true;
+  try {
+    const response = await sessionApi.activeUmos();
+    if (response.data.status !== 'ok') {
+      return;
+    }
+
+    mergeUmoInfos(response.data.data.umo_infos);
+    availableUmos.value = normalizeStringArray(response.data.data.umos);
+  } catch (error) {
+    console.error('加载会话列表失败:', error);
+  } finally {
+    loadingUmos.value = false;
+  }
+}
+
+function openCreateGroupDialog() {
+  groupDialogMode.value = 'create';
+  resetGroupEditor();
+  groupDialog.value = true;
+}
+
+function openEditGroupDialog(group: GroupItem) {
+  groupDialogMode.value = 'edit';
+  editingGroup.id = group.id;
+  editingGroup.name = group.name;
+  editingGroup.umos = [...group.umos];
+  groupMemberSearch.value = '';
+  groupSelectedSearch.value = '';
+  groupDialog.value = true;
+}
+
+function addToGroup(umo: string) {
+  if (!editingGroup.umos.includes(umo)) {
+    editingGroup.umos.push(umo);
+  }
+}
+
+function removeFromGroup(umo: string) {
+  const index = editingGroup.umos.indexOf(umo);
+  if (index > -1) {
+    editingGroup.umos.splice(index, 1);
+  }
+}
+
+function addAllToGroup() {
+  unselectedUmos.value.forEach((umo) => {
+    if (!editingGroup.umos.includes(umo)) {
+      editingGroup.umos.push(umo);
+    }
+  });
+}
+
+function removeAllFromGroup() {
+  editingGroup.umos = [];
+}
+
+async function saveGroup() {
+  if (!editingGroup.name.trim()) {
+    showError(tm('messages.groupNameRequired'));
+    return;
+  }
+
+  try {
+    const payload = {
+      name: editingGroup.name,
+      umos: editingGroup.umos,
+    };
+
+    const response =
+      groupDialogMode.value === 'create'
+        ? await sessionApi.createGroup(payload)
+        : await sessionApi.updateGroup(editingGroup.id || '', payload);
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.saveGroupError'));
+      return;
+    }
+
+    const data =
+      response.data.data && typeof response.data.data === 'object'
+        ? (response.data.data as Record<string, unknown>)
+        : {};
+    const message =
+      typeof data.message === 'string'
+        ? data.message
+        : tm('messages.saveSuccess');
+
+    groupDialog.value = false;
+    await loadGroups();
+    showSuccess(message);
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.saveGroupError')));
+  }
+}
+
+async function deleteGroup(group: GroupItem) {
+  const message = tm('groups.deleteConfirm', { name: group.name });
+  if (!(await askForConfirmationDialog(message, confirmDialog))) {
+    return;
+  }
+
+  try {
+    const response = await sessionApi.deleteGroup(group.id);
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.deleteGroupError'));
+      return;
+    }
+
+    const data =
+      response.data.data && typeof response.data.data === 'object'
+        ? (response.data.data as Record<string, unknown>)
+        : {};
+    const successMessage =
+      typeof data.message === 'string'
+        ? data.message
+        : tm('messages.deleteSuccess');
+
+    await loadGroups();
+    showSuccess(successMessage);
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.deleteGroupError')));
+  }
+}
+
+async function addSelectedToGroup(groupId: string) {
+  if (selectedItems.value.length === 0) {
+    showError(tm('messages.selectSessionsToAddFirst'));
+    return;
+  }
+
+  try {
+    const response = await sessionApi.updateGroup(groupId, {
+      add_umos: selectedItems.value.map((item) => item.umo),
+    });
+
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.addToGroupError'));
+      return;
+    }
+
+    await loadGroups();
+    showSuccess(
+      tm('messages.addToGroupSuccess', {
+        count: selectedItems.value.length,
+      }),
+    );
+  } catch (error) {
+    showError(resolveErrorMessage(error, tm('messages.addToGroupError')));
+  }
+}
 </script>
 
 <style scoped>

@@ -120,10 +120,7 @@ async def batch_delete_chat_sessions(
     service: ChatService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.batch_delete_sessions_from_dashboard_payload(
-            auth.username,
-            _model_dict(payload),
-        )
+        lambda: service.batch_delete_sessions(auth.username, payload.session_ids)
     )
 
 

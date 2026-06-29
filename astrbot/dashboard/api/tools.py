@@ -1,11 +1,10 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Request
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
-    McpServerByNameRequest,
     McpServerRequest,
     ModelScopeSyncRequest,
     ToolEnabledRequest,
@@ -30,15 +29,20 @@ async def require_mcp_scope(request: Request) -> AuthContext:
     return await require_scope(request, "mcp")
 
 
-def _required_text(value: object, name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ApiError(f"Missing key: {name}")
-    return text
-
-
-def _model_dict(payload: McpServerRequest | McpServerByNameRequest) -> dict[str, Any]:
+def _model_dict(payload: McpServerRequest) -> dict[str, Any]:
     return payload.model_dump(exclude_none=True)
+
+
+def _reject_legacy_server_config_fields(config: dict[str, Any]) -> dict[str, Any]:
+    legacy_fields = [
+        key
+        for key in ("enabled", "mcpServers", "mcp_server_config", "oldName")
+        if key in config
+    ]
+    if legacy_fields:
+        fields = ", ".join(sorted(legacy_fields))
+        raise ApiError(f"Legacy MCP config fields are not supported: {fields}")
+    return config
 
 
 def _normalize_server_config(body: dict[str, Any], id_key: str) -> dict[str, Any]:
@@ -49,11 +53,11 @@ def _normalize_server_config(body: dict[str, Any], id_key: str) -> dict[str, Any
         normalized = {
             key: value
             for key, value in body.items()
-            if key not in {id_key, "config", "enabled", "mcp_server_config"}
+            if key not in {id_key, "config", "enabled"}
         }
     if "enabled" in body and "active" not in normalized:
         normalized["active"] = body["enabled"]
-    return normalized
+    return _reject_legacy_server_config_fields(normalized)
 
 
 def _test_config_body(
@@ -61,9 +65,9 @@ def _test_config_body(
     server_name: str,
     body: dict[str, Any],
 ) -> dict[str, Any]:
-    config = body.get("mcp_server_config") or body.get("config")
+    config = body.get("config")
     if isinstance(config, dict):
-        return dict(config)
+        return _reject_legacy_server_config_fields(dict(config))
 
     stored_config = service.get_mcp_server_config(server_name)
     if stored_config is not None:
@@ -100,8 +104,6 @@ async def _toggle_tool(
 
 
 async def _create_mcp_server(body: dict[str, Any], service: ToolsService):
-    if "enabled" in body and "active" not in body:
-        body["active"] = body.pop("enabled")
     return await _run(
         lambda: service.add_mcp_server(body),
         result_as_message=True,
@@ -115,9 +117,8 @@ async def _update_mcp_server(
 ):
     config = _normalize_server_config(body, "server_name")
     config.setdefault("name", server_name)
-    config.setdefault("oldName", server_name)
     return await _run(
-        lambda: service.update_mcp_server(config),
+        lambda: service.update_mcp_server(server_name, config),
         result_as_message=True,
     )
 
@@ -136,9 +137,7 @@ async def _test_mcp_server(
 ):
     config = _test_config_body(service, server_name, body)
     return await _run(
-        lambda: service.test_mcp_connection(
-            {"name": server_name, "mcp_server_config": config}
-        ),
+        lambda: service.test_mcp_connection({"name": server_name, "config": config}),
         message="🎉 MCP server is available!",
     )
 
@@ -206,45 +205,6 @@ async def create_mcp_server(
     service: ToolsService = Depends(get_service),
 ):
     return await _create_mcp_server(_model_dict(payload), service)
-
-
-@router.put("/mcp/servers/by-name")
-async def update_mcp_server_by_name(
-    payload: McpServerByNameRequest,
-    _auth: AuthContext = Depends(require_mcp_scope),
-    service: ToolsService = Depends(get_service),
-):
-    body = _model_dict(payload)
-    return await _update_mcp_server(payload.server_name, body, service)
-
-
-@router.delete("/mcp/servers/by-name")
-async def delete_mcp_server_by_name(
-    server_name: str = Query(...),
-    _auth: AuthContext = Depends(require_mcp_scope),
-    service: ToolsService = Depends(get_service),
-):
-    return await _delete_mcp_server(server_name, service)
-
-
-@router.patch("/mcp/servers/enabled")
-async def set_mcp_server_enabled_by_name(
-    payload: McpServerByNameRequest,
-    _auth: AuthContext = Depends(require_mcp_scope),
-    service: ToolsService = Depends(get_service),
-):
-    body = _model_dict(payload)
-    return await _update_mcp_server(payload.server_name, body, service)
-
-
-@router.post("/mcp/servers/test")
-async def test_mcp_server_by_name(
-    payload: McpServerByNameRequest,
-    _auth: AuthContext = Depends(require_mcp_scope),
-    service: ToolsService = Depends(get_service),
-):
-    body = _model_dict(payload)
-    return await _test_mcp_server(payload.server_name, body, service)
 
 
 @router.patch("/mcp/servers/{server_name:path}/enabled")

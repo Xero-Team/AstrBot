@@ -414,6 +414,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail');
 const router = useRouter();
@@ -507,14 +508,6 @@ interface ProviderSettings {
 interface DashboardConfig {
   provider_settings?: ProviderSettings;
   [key: string]: unknown;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as { response?: { data?: { message?: string } } };
-  return errorLike.response?.data?.message || fallback;
 }
 
 const props = defineProps<{
@@ -831,7 +824,7 @@ const uploadFromUrl = async () => {
     }
   } catch (error: unknown) {
     console.error('Failed to upload from URL:', error);
-    const message = getErrorMessage(error, t('documents.uploadFailed'));
+    const message = resolveErrorMessage(error, t('documents.uploadFailed'));
     showSnackbar(message, 'error');
   } finally {
     uploading.value = false;

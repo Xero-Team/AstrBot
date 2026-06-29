@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
@@ -15,21 +16,20 @@ from astrbot.core.utils.auth_password import (
     hash_md5_dashboard_password,
 )
 from astrbot.dashboard.api import open_api as open_api_routes
-from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
+from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 async def _create_api_key(
-    app: FastAPIAppAdapter,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
     *,
     scopes: list[str],
     name_prefix: str = "openapi-test",
 ) -> tuple[str, str]:
-    test_client = app.test_client()
     create_res = await test_client.post(
         "/api/v1/api-keys",
         json={"name": f"{name_prefix}-{uuid.uuid4().hex[:8]}", "scopes": scopes},
@@ -81,7 +81,16 @@ async def core_lifecycle_td(tmp_path_factory):
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
     shutdown_event = asyncio.Event()
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
-    return server.app
+    return server.asgi_app
+
+
+@pytest_asyncio.fixture(scope="module")
+async def test_client(app: FastAPI):
+    client = DashboardTestClient(app)
+    try:
+        yield client
+    finally:
+        await client.aclose()
 
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
@@ -96,29 +105,33 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 @pytest_asyncio.fixture(scope="module")
 async def authenticated_header(
-    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+    app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle
 ):
-    test_client = app.test_client()
-    response = await test_client.post(
-        "/api/v1/auth/login",
-        json={
-            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": _resolve_dashboard_password(core_lifecycle_td),
-        },
-    )
-    data = await response.get_json()
-    token = data["data"]["token"]
+    test_client = DashboardTestClient(app)
+    try:
+        response = await test_client.post(
+            "/api/v1/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        data = await response.get_json()
+        token = data["data"]["token"]
+    finally:
+        await test_client.aclose()
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
 async def test_api_key_scope_and_revoke(
-    app: FastAPIAppAdapter, authenticated_header: dict
+    app: FastAPI,
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
 ):
-    test_client = app.test_client()
 
     raw_key, key_id = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["im"],
         name_prefix="im-scope-key",
@@ -175,12 +188,13 @@ async def test_api_key_scope_and_revoke(
 
 @pytest.mark.asyncio
 async def test_open_send_message_with_api_key(
-    app: FastAPIAppAdapter, authenticated_header: dict
+    app: FastAPI,
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
 ):
-    test_client = app.test_client()
 
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["im"],
         name_prefix="send-message-key",
@@ -201,14 +215,14 @@ async def test_open_send_message_with_api_key(
 
 @pytest.mark.asyncio
 async def test_open_chat_send_auto_session_id_and_username(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    test_client = app.test_client()
 
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["chat"],
         name_prefix="chat-send-key",
@@ -289,14 +303,14 @@ async def test_open_chat_send_auto_session_id_and_username(
 
 @pytest.mark.asyncio
 async def test_open_chat_sessions_pagination(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    test_client = app.test_client()
 
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["chat"],
         name_prefix="chat-scope-key",
@@ -354,13 +368,13 @@ async def test_open_chat_sessions_pagination(
 
 @pytest.mark.asyncio
 async def test_open_chat_configs_list(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
 ):
-    test_client = app.test_client()
 
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["config"],
         name_prefix="chat-config-key",
@@ -384,10 +398,10 @@ async def test_open_chat_configs_list(
 
 @pytest.mark.asyncio
 async def test_open_api_auth_validation_and_key_carriers(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
 ):
-    test_client = app.test_client()
 
     missing_key_res = await test_client.get("/api/v1/im/bots")
     assert missing_key_res.status_code == 401
@@ -405,7 +419,7 @@ async def test_open_api_auth_validation_and_key_carriers(
     assert invalid_key_data["message"] == "Invalid API key"
 
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["im"],
         name_prefix="auth-carrier-key",
@@ -428,14 +442,14 @@ async def test_open_api_auth_validation_and_key_carriers(
 
 @pytest.mark.asyncio
 async def test_open_chat_rejects_blank_username_and_uses_session_id(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    test_client = app.test_client()
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["chat"],
         name_prefix="chat-conversation-key",
@@ -489,13 +503,13 @@ async def test_open_chat_rejects_blank_username_and_uses_session_id(
 
 @pytest.mark.asyncio
 async def test_open_chat_send_config_resolution(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    test_client = app.test_client()
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["chat"],
         name_prefix="chat-config-resolution-key",
@@ -520,12 +534,12 @@ async def test_open_chat_send_config_resolution(
     update_route = AsyncMock()
     delete_route = AsyncMock()
     monkeypatch.setattr(
-        app._dashboard_server.core_lifecycle.umop_config_router,
+        app.state.dashboard_server.core_lifecycle.umop_config_router,
         "update_route",
         update_route,
     )
     monkeypatch.setattr(
-        app._dashboard_server.core_lifecycle.umop_config_router,
+        app.state.dashboard_server.core_lifecycle.umop_config_router,
         "delete_route",
         delete_route,
     )
@@ -628,13 +642,13 @@ async def test_open_chat_send_config_resolution(
 
 @pytest.mark.asyncio
 async def test_open_chat_sessions_input_validation_and_filtering(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    test_client = app.test_client()
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["chat"],
         name_prefix="chat-sessions-bounds-key",
@@ -705,11 +719,12 @@ async def test_open_chat_sessions_input_validation_and_filtering(
 
 @pytest.mark.asyncio
 async def test_open_send_message_error_paths(
-    app: FastAPIAppAdapter, authenticated_header: dict
+    app: FastAPI,
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
 ):
-    test_client = app.test_client()
     raw_key, _ = await _create_api_key(
-        app,
+        test_client,
         authenticated_header,
         scopes=["im"],
         name_prefix="im-errors-key",
@@ -762,10 +777,10 @@ async def test_open_send_message_error_paths(
 
 @pytest.mark.asyncio
 async def test_open_api_key_scope_normalization(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
 ):
-    test_client = app.test_client()
 
     config_res = await test_client.post(
         "/api/v1/api-keys",
@@ -792,10 +807,10 @@ async def test_open_api_key_scope_normalization(
 
 @pytest.mark.asyncio
 async def test_file_scope_is_available_for_developer_api_key(
-    app: FastAPIAppAdapter,
+    app: FastAPI,
+    test_client: DashboardTestClient,
     authenticated_header: dict,
 ):
-    test_client = app.test_client()
     create_res = await test_client.post(
         "/api/v1/api-keys",
         json={"name": "file-scope-key", "scopes": ["file"]},

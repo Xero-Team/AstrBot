@@ -2,14 +2,17 @@ from urllib.parse import unquote
 
 PLUGIN_PAGE_CONTENT_PREFIX = "/api/plugin/page/content/"
 PLUGIN_PAGE_BRIDGE_PATH = "/api/plugin/page/bridge-sdk.js"
+PLUGIN_PAGE_ENTRY_PATH = "/api/plugin/page/entry"
 PLUGIN_PAGE_TOKEN_TYPE = "plugin_page_asset"
 
 
 class PluginPageAuth:
     @staticmethod
     def is_protected_path(path: str) -> bool:
-        return path.startswith(PLUGIN_PAGE_CONTENT_PREFIX) or path.startswith(
-            PLUGIN_PAGE_BRIDGE_PATH
+        return (
+            path.startswith(PLUGIN_PAGE_CONTENT_PREFIX)
+            or path.startswith(PLUGIN_PAGE_BRIDGE_PATH)
+            or path.startswith(PLUGIN_PAGE_ENTRY_PATH)
         )
 
     @staticmethod

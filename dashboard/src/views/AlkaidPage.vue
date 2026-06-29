@@ -50,45 +50,39 @@
   </v-card>
 </template>
 
-<script>
+<script setup lang="ts">
+import { onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useModuleI18n } from '@/i18n/composables';
 
-export default {
-  name: 'AlkaidPage',
-  components: {},
-  setup() {
-    const { tm } = useModuleI18n('features/alkaid/index');
-    return { tm };
-  },
-  data() {
-    return {};
-  },
-  mounted() {
-    // 如果在根路径 /alkaid，默认跳转到知识库页面
-    if (this.$route.path === '/alkaid') {
-      this.navigateTo('knowledge-base');
-    }
-  },
-  methods: {
-    navigateTo(tab) {
-      try {
-        if (this.$router && typeof this.$router.push === 'function') {
-          this.$router.push(`/alkaid/${tab}`);
-        }
-      } catch (error) {
-        console.warn('Navigation error:', error);
-      }
-    },
-    isActive(tab) {
-      try {
-        return this.$route?.path.includes(`/alkaid/${tab}`);
-      } catch (error) {
-        console.warn('Route check error:', error);
-        return false;
-      }
-    },
-  },
-};
+type AlkaidTab = 'knowledge-base' | 'long-term-memory' | 'other';
+
+const { tm } = useModuleI18n('features/alkaid/index');
+const route = useRoute();
+const router = useRouter();
+
+function navigateTo(tab: AlkaidTab) {
+  try {
+    void router.push(`/alkaid/${tab}`);
+  } catch (error) {
+    console.warn('Navigation error:', error);
+  }
+}
+
+function isActive(tab: AlkaidTab) {
+  try {
+    return route.path.includes(`/alkaid/${tab}`);
+  } catch (error) {
+    console.warn('Route check error:', error);
+    return false;
+  }
+}
+
+onMounted(() => {
+  if (route.path === '/alkaid') {
+    navigateTo('knowledge-base');
+  }
+});
 </script>
 
 <style scoped>

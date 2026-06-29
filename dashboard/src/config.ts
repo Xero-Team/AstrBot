@@ -5,7 +5,6 @@ export type ConfigProps = {
   Customizer_drawer: boolean;
   mini_sidebar: boolean;
   fontTheme: string;
-  uiTheme: string;
   themeMode: ThemeMode;
   inputBg: boolean;
 };
@@ -14,16 +13,6 @@ function checkThemeMode(): ThemeMode {
   const mode = localStorage.getItem('themeMode') as ThemeMode | null;
   if (mode === 'light' || mode === 'dark' || mode === 'system') return mode;
 
-  const legacyTheme = localStorage.getItem('uiTheme');
-  if (legacyTheme === 'PurpleThemeDark') {
-    localStorage.setItem('themeMode', 'dark');
-    return 'dark';
-  }
-  if (legacyTheme === 'PurpleTheme') {
-    localStorage.setItem('themeMode', 'light');
-    return 'light';
-  }
-
   localStorage.setItem('themeMode', 'system');
   return 'system';
 }
@@ -31,23 +20,27 @@ function checkThemeMode(): ThemeMode {
 export function resolveUiTheme(mode: ThemeMode): string {
   if (mode === 'dark') return 'PurpleThemeDark';
   if (mode === 'light') return 'PurpleTheme';
+  return getSystemUiTheme();
+}
+
+export function getSystemUiTheme(): string {
   const prefersDark =
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-color-scheme: dark)').matches;
   return prefersDark ? 'PurpleThemeDark' : 'PurpleTheme';
 }
 
-const themeMode = checkThemeMode();
-const uiTheme = resolveUiTheme(themeMode);
+export function getInitialSystemPrefersDark(): boolean {
+  return getSystemUiTheme() === 'PurpleThemeDark';
+}
 
-localStorage.setItem('uiTheme', uiTheme);
+const themeMode = checkThemeMode();
 
 const config: ConfigProps = {
   Sidebar_drawer: true,
   Customizer_drawer: false,
   mini_sidebar: false,
   fontTheme: 'Roboto',
-  uiTheme,
   themeMode,
   inputBg: false,
 };

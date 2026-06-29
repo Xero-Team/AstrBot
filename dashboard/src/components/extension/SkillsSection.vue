@@ -759,1087 +759,1257 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
+import type { SkillItemData } from '@/api/v1';
 import { skillApi, systemConfigApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 
-const STATUS_WAITING = 'waiting';
-const STATUS_UPLOADING = 'uploading';
-const STATUS_SUCCESS = 'success';
-const STATUS_ERROR = 'error';
-const STATUS_SKIPPED = 'skipped';
-
-export default {
-  name: 'SkillsSection',
-  components: { OutlinedActionListItem, VueMonacoEditor },
-  setup() {
-    const { t } = useI18n();
-    const { tm } = useModuleI18n('features/extension');
-    const customizer = useCustomizerStore();
-
-    const mode = ref('local');
-    const skills = ref([]);
-    const loading = ref(false);
-    const runtime = ref('local');
-    const sandboxCache = reactive({ ready: false, count: 0, updated_at: null });
-    const uploading = ref(false);
-    const uploadDialog = ref(false);
-    const uploadInput = ref(null);
-    const uploadItems = ref([]);
-    const isUploadDragging = ref(false);
-    const itemLoading = reactive({});
-    const deleteDialog = ref(false);
-    const deleting = ref(false);
-    const skillToDelete = ref(null);
-    const snackbar = reactive({ show: false, message: '', color: 'success' });
-
-    const neoLoading = ref(false);
-    const neoCandidates = ref([]);
-    const neoReleases = ref([]);
-    const neoFilters = reactive({
-      skill_key: '',
-      status: '',
-      stage: '',
-    });
-    const candidatePromoteLoading = reactive({});
-    const payloadDialog = reactive({
-      show: false,
-      content: '',
-    });
-    const editorDialog = reactive({
-      show: false,
-      skillName: '',
-      currentDir: '',
-      entries: [],
-      filePath: '',
-      content: '',
-      fileEditable: false,
-      fileDirty: false,
-      loadingFiles: false,
-      loadingFile: false,
-      saving: false,
-      error: '',
-    });
-
-    const neoEnabled = ref(false);
-    const neoUnavailableMessage = ref('');
-    let nextUploadItemId = 0;
-
-    const candidateStatusItems = computed(() => [
-      { title: tm('skills.neoAll'), value: '' },
-      { title: 'draft', value: 'draft' },
-      { title: 'evaluating', value: 'evaluating' },
-      { title: 'promoted', value: 'promoted' },
-      { title: 'promoted_canary', value: 'promoted_canary' },
-      { title: 'promoted_stable', value: 'promoted_stable' },
-      { title: 'rejected', value: 'rejected' },
-      { title: 'rolled_back', value: 'rolled_back' },
-    ]);
-
-    const releaseStageItems = computed(() => [
-      { title: tm('skills.neoAll'), value: '' },
-      { title: 'canary', value: 'canary' },
-      { title: 'stable', value: 'stable' },
-    ]);
-
-    const activeReleaseCount = computed(
-      () => neoReleases.value.filter((item) => item?.is_active).length,
-    );
-    const editorLanguage = computed(() => {
-      const path = String(editorDialog.filePath || '').toLowerCase();
-      if (path.endsWith('.json')) return 'json';
-      if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml';
-      if (path.endsWith('.toml') || path.endsWith('.ini')) return 'ini';
-      if (path.endsWith('.py')) return 'python';
-      if (path.endsWith('.js')) return 'javascript';
-      if (path.endsWith('.ts')) return 'typescript';
-      if (path.endsWith('.html')) return 'html';
-      if (path.endsWith('.css')) return 'css';
-      if (path.endsWith('.sh')) return 'shell';
-      if (path.endsWith('.md') || path.endsWith('.txt')) return 'markdown';
-      return 'plaintext';
-    });
-    const editorTheme = computed(() =>
-      customizer.uiTheme === 'PurpleThemeDark' ? 'vs-dark' : 'vs-light',
-    );
-    const editorOptions = computed(() => ({
-      automaticLayout: true,
-      fontSize: 13,
-      lineNumbers: 'on',
-      minimap: { enabled: false },
-      readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
-      scrollBeyondLastLine: false,
-      tabSize: 2,
-      wordWrap: 'on',
-    }));
-    const uploadStateCounts = computed(() =>
-      uploadItems.value.reduce(
-        (counts, item) => {
-          counts.total += 1;
-          counts[item.status] += 1;
-          return counts;
-        },
-        {
-          total: 0,
-          [STATUS_WAITING]: 0,
-          [STATUS_UPLOADING]: 0,
-          [STATUS_SUCCESS]: 0,
-          [STATUS_ERROR]: 0,
-          [STATUS_SKIPPED]: 0,
-        },
-      ),
-    );
-    const hasUploadableItems = computed(() =>
-      uploadItems.value.some(
-        (item) =>
-          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
-      ),
-    );
-
-    const candidateHeaders = computed(() => [
-      { title: 'ID', key: 'id', width: '180px' },
-      { title: 'skill_key', key: 'skill_key' },
-      { title: 'status', key: 'status', width: '130px' },
-      { title: 'score', key: 'latest_score', width: '90px' },
-      {
-        title: tm('skills.actions'),
-        key: 'actions',
-        sortable: false,
-        width: '420px',
-      },
-    ]);
-
-    const releaseHeaders = computed(() => [
-      { title: 'ID', key: 'id', width: '180px' },
-      { title: 'skill_key', key: 'skill_key' },
-      { title: 'stage', key: 'stage', width: '100px' },
-      { title: 'version', key: 'version', width: '90px' },
-      { title: 'active', key: 'is_active', width: '110px' },
-      {
-        title: tm('skills.actions'),
-        key: 'actions',
-        sortable: false,
-        width: '220px',
-      },
-    ]);
-
-    const showMessage = (message, color = 'success') => {
-      snackbar.message = message;
-      snackbar.color = color;
-      snackbar.show = true;
-    };
-
-    const normalizeSkillsPayload = (res) => {
-      const payload = res?.data?.data || [];
-      if (Array.isArray(payload)) {
-        runtime.value = 'local';
-        sandboxCache.ready = false;
-        sandboxCache.count = 0;
-        sandboxCache.updated_at = null;
-        return payload;
-      }
-      runtime.value = payload.runtime || 'local';
-      const cache = payload.sandbox_cache || {};
-      sandboxCache.ready = Boolean(cache.ready);
-      sandboxCache.count = Number(cache.count || 0);
-      sandboxCache.updated_at = cache.updated_at || null;
-      return payload.skills || [];
-    };
-
-    const sourceTypeLabel = (sourceType, skill = null) => {
-      if (sourceType === 'plugin') {
-        return tm('skills.sourcePlugin', {
-          plugin: skill?.source_label || skill?.plugin_name || '',
-        });
-      }
-      if (sourceType === 'sandbox_only') return tm('skills.sourceSandboxOnly');
-      if (sourceType === 'both') return tm('skills.sourceBoth');
-      return tm('skills.sourceLocalOnly');
-    };
-
-    const sourceTypeColor = (sourceType) => {
-      if (sourceType === 'sandbox_only') return 'indigo';
-      if (sourceType === 'plugin') return 'secondary';
-      if (sourceType === 'both') return 'success';
-      return 'primary';
-    };
-
-    const isSandboxPresetSkill = (skill) =>
-      skill?.source_type === 'sandbox_only';
-    const isPluginProvidedSkill = (skill) => skill?.source_type === 'plugin';
-    const isReadOnlySourceSkill = (skill) =>
-      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
-
-    const normalizeNeoItemsPayload = (res) => {
-      const payload = res?.data?.data || [];
-      if (Array.isArray(payload)) return payload;
-      if (Array.isArray(payload.items)) return payload.items;
-      return [];
-    };
-
-    const formatFileSize = (size) => {
-      if (!Number.isFinite(size) || size <= 0) return '0 B';
-      if (size < 1024) return `${size} B`;
-      if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-    };
-
-    const normalizeUploadName = (name) =>
-      String(name || '')
-        .trim()
-        .toLowerCase();
-
-    const buildUploadItem = (file, status, validationMessage) => ({
-      id: `upload-${nextUploadItemId++}`,
-      file,
-      name: file.name,
-      size: file.size,
-      status,
-      validationMessage,
-      filenameKey: normalizeUploadName(file.name),
-    });
-
-    const uploadStatusLabel = (status) => {
-      if (status === STATUS_UPLOADING) return tm('skills.statusUploading');
-      if (status === STATUS_SUCCESS) return tm('skills.statusSuccess');
-      if (status === STATUS_ERROR) return tm('skills.statusError');
-      if (status === STATUS_SKIPPED) return tm('skills.statusSkipped');
-      return tm('skills.statusWaiting');
-    };
-
-    const statusChipClass = (status) =>
-      `skills-status-chip skills-status-chip--${status}`;
-
-    const resetUploadState = () => {
-      uploadItems.value = [];
-      isUploadDragging.value = false;
-      if (uploadInput.value) {
-        uploadInput.value.value = '';
-      }
-    };
-
-    const openUploadDialog = () => {
-      uploadDialog.value = true;
-    };
-
-    const closeUploadDialog = () => {
-      if (uploading.value) return;
-      uploadDialog.value = false;
-    };
-
-    const openUploadPicker = () => {
-      if (uploading.value) return;
-      uploadInput.value?.click();
-    };
-
-    const addUploadFiles = (filesToAdd) => {
-      const existingNames = new Set(
-        uploadItems.value.map((item) => item.filenameKey),
-      );
-      const nextItems = [];
-
-      for (const file of filesToAdd) {
-        if (!file?.name) continue;
-        const filenameKey = normalizeUploadName(file.name);
-
-        if (existingNames.has(filenameKey)) {
-          nextItems.push(
-            buildUploadItem(
-              file,
-              STATUS_SKIPPED,
-              tm('skills.validationDuplicate'),
-            ),
-          );
-          continue;
-        }
-
-        existingNames.add(filenameKey);
-        if (!/\.zip$/i.test(file.name)) {
-          nextItems.push(
-            buildUploadItem(
-              file,
-              STATUS_SKIPPED,
-              tm('skills.validationZipOnly'),
-            ),
-          );
-          continue;
-        }
-
-        nextItems.push(
-          buildUploadItem(file, STATUS_WAITING, tm('skills.validationReady')),
-        );
-      }
-
-      if (nextItems.length > 0) {
-        uploadItems.value = [...uploadItems.value, ...nextItems];
-      }
-    };
-
-    const handleUploadSelection = (event) => {
-      const selected = Array.from(event?.target?.files || []);
-      addUploadFiles(selected);
-      if (uploadInput.value) {
-        uploadInput.value.value = '';
-      }
-    };
-
-    const handleUploadDrop = (event) => {
-      isUploadDragging.value = false;
-      if (uploading.value) {
-        return;
-      }
-      addUploadFiles(Array.from(event?.dataTransfer?.files || []));
-    };
-
-    const removeUploadItem = (itemId) => {
-      uploadItems.value = uploadItems.value.filter(
-        (item) => item.id !== itemId,
-      );
-    };
-
-    const takeFirstMatch = (matchMap, filenameKey) => {
-      const matches = matchMap.get(filenameKey) || [];
-      const entry = matches.shift() || null;
-      if (matches.length === 0) {
-        matchMap.delete(filenameKey);
-      }
-      return entry;
-    };
-
-    const buildResultMap = (items = []) => {
-      const resultMap = new Map();
-      for (const item of items) {
-        const filenameKey = normalizeUploadName(item?.filename);
-        if (!filenameKey) continue;
-        if (!resultMap.has(filenameKey)) {
-          resultMap.set(filenameKey, []);
-        }
-        resultMap.get(filenameKey).push(item);
-      }
-      return resultMap;
-    };
-
-    const applyUploadResults = (attemptedItems, payload) => {
-      const succeededMap = buildResultMap(payload?.succeeded);
-      const failedMap = buildResultMap(payload?.failed);
-      const skippedMap = buildResultMap(payload?.skipped);
-
-      for (const item of attemptedItems) {
-        const successEntry = takeFirstMatch(succeededMap, item.filenameKey);
-        if (successEntry) {
-          item.status = STATUS_SUCCESS;
-          item.validationMessage = tm('skills.validationUploadedAs', {
-            name: successEntry.name || item.name,
-          });
-          continue;
-        }
-
-        const skippedEntry = takeFirstMatch(skippedMap, item.filenameKey);
-        if (skippedEntry) {
-          item.status = STATUS_SKIPPED;
-          item.validationMessage =
-            skippedEntry.error || tm('skills.validationDuplicate');
-          continue;
-        }
-
-        const failedEntry = takeFirstMatch(failedMap, item.filenameKey);
-        if (failedEntry) {
-          item.status = STATUS_ERROR;
-          item.validationMessage =
-            failedEntry.error || tm('skills.validationUploadFailed');
-          continue;
-        }
-
-        item.status = STATUS_ERROR;
-        item.validationMessage = tm('skills.validationNoResult');
-      }
-    };
-
-    const fetchSkills = async () => {
-      loading.value = true;
-      try {
-        const res = await skillApi.list();
-        skills.value = normalizeSkillsPayload(res);
-      } catch (_err) {
-        showMessage(tm('skills.loadFailed'), 'error');
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    const handleApiResponse = (
-      res,
-      successMessage,
-      failureMessageDefault,
-      onSuccess,
-    ) => {
-      if (res?.data?.status === 'ok') {
-        showMessage(successMessage, 'success');
-        if (onSuccess) onSuccess();
-      } else {
-        const msg = res?.data?.message || failureMessageDefault;
-        showMessage(msg, 'error');
-      }
-    };
-
-    const uploadSkillBatch = async () => {
-      const attemptedItems = uploadItems.value.filter(
-        (item) =>
-          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
-      );
-      if (attemptedItems.length === 0) return;
-
-      uploading.value = true;
-      for (const item of attemptedItems) {
-        item.status = STATUS_UPLOADING;
-        item.validationMessage = tm('skills.validationUploading');
-      }
-
-      try {
-        const res = await skillApi.uploadBatch(
-          attemptedItems.map((item) => item.file),
-        );
-
-        const payload = res?.data?.data || {};
-        applyUploadResults(attemptedItems, payload);
-
-        const succeededCount = Array.isArray(payload.succeeded)
-          ? payload.succeeded.length
-          : 0;
-        const failedCount = Array.isArray(payload.failed)
-          ? payload.failed.length
-          : 0;
-        let responseColor = 'success';
-        if (res?.data?.status === 'error') {
-          responseColor = 'error';
-        } else if (failedCount > 0) {
-          responseColor = 'warning';
-        }
-        showMessage(
-          res?.data?.message || tm('skills.uploadSuccess'),
-          responseColor,
-        );
-
-        if (succeededCount > 0) {
-          await fetchSkills();
-        }
-      } catch (_err) {
-        for (const item of attemptedItems) {
-          item.status = STATUS_ERROR;
-          item.validationMessage = tm('skills.validationUploadFailed');
-        }
-        showMessage(tm('skills.uploadFailed'), 'error');
-      } finally {
-        uploading.value = false;
-      }
-    };
-
-    const toggleSkill = async (skill) => {
-      if (isSandboxPresetSkill(skill)) {
-        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-        return;
-      }
-      const nextActive = !skill.active;
-      itemLoading[skill.name] = true;
-      try {
-        const res = await skillApi.setEnabled(skill.name, nextActive);
-        handleApiResponse(
-          res,
-          tm('skills.updateSuccess'),
-          tm('skills.updateFailed'),
-          () => {
-            skill.active = nextActive;
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.updateFailed'), 'error');
-      } finally {
-        itemLoading[skill.name] = false;
-      }
-    };
-
-    const confirmDelete = (skill) => {
-      if (isSandboxPresetSkill(skill)) {
-        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-        return;
-      }
-      if (isPluginProvidedSkill(skill)) {
-        showMessage(tm('skills.pluginReadonly'), 'warning');
-        return;
-      }
-      skillToDelete.value = skill;
-      deleteDialog.value = true;
-    };
-
-    const deleteSkill = async () => {
-      if (!skillToDelete.value) return;
-      deleting.value = true;
-      try {
-        const res = await skillApi.delete(skillToDelete.value.name);
-        handleApiResponse(
-          res,
-          tm('skills.deleteSuccess'),
-          tm('skills.deleteFailed'),
-          async () => {
-            deleteDialog.value = false;
-            await fetchSkills();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.deleteFailed'), 'error');
-      } finally {
-        deleting.value = false;
-      }
-    };
-
-    const downloadSkill = async (skill) => {
-      if (isSandboxPresetSkill(skill)) {
-        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-        return;
-      }
-      if (isPluginProvidedSkill(skill)) {
-        showMessage(tm('skills.pluginReadonly'), 'warning');
-        return;
-      }
-      itemLoading[skill.name] = true;
-      try {
-        const res = await skillApi.download(skill.name);
-        const blob = new Blob([res.data], { type: 'application/zip' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${skill.name}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        showMessage(tm('skills.downloadSuccess'), 'success');
-      } catch (_err) {
-        showMessage(tm('skills.downloadFailed'), 'error');
-      } finally {
-        itemLoading[skill.name] = false;
-      }
-    };
-
-    const resetEditorDialog = () => {
-      editorDialog.skillName = '';
-      editorDialog.currentDir = '';
-      editorDialog.entries = [];
-      editorDialog.filePath = '';
-      editorDialog.content = '';
-      editorDialog.fileEditable = false;
-      editorDialog.fileDirty = false;
-      editorDialog.loadingFiles = false;
-      editorDialog.loadingFile = false;
-      editorDialog.saving = false;
-      editorDialog.error = '';
-    };
-
-    const loadSkillDir = async (path = '') => {
-      if (!editorDialog.skillName) return [];
-      editorDialog.loadingFiles = true;
-      editorDialog.error = '';
-      try {
-        const res = await skillApi.listFiles(editorDialog.skillName, path);
-        if (res?.data?.status !== 'ok') {
-          editorDialog.error =
-            res?.data?.message || tm('skills.editorLoadFailed');
-          return [];
-        }
-        const payload = res.data.data || {};
-        editorDialog.currentDir = payload.path || '';
-        editorDialog.entries = Array.isArray(payload.entries)
-          ? payload.entries
-          : [];
-        return editorDialog.entries;
-      } catch (_err) {
-        editorDialog.error = tm('skills.editorLoadFailed');
-        return [];
-      } finally {
-        editorDialog.loadingFiles = false;
-      }
-    };
-
-    const loadSkillFile = async (path) => {
-      if (!editorDialog.skillName || !path) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm('skills.discardChanges'))
-      ) {
-        return;
-      }
-      editorDialog.loadingFile = true;
-      editorDialog.error = '';
-      try {
-        const res = await skillApi.getFile(editorDialog.skillName, path);
-        if (res?.data?.status !== 'ok') {
-          editorDialog.error =
-            res?.data?.message || tm('skills.editorLoadFailed');
-          return;
-        }
-        const payload = res.data.data || {};
-        editorDialog.filePath = payload.path || path;
-        editorDialog.content = payload.content || '';
-        editorDialog.fileEditable = payload.editable !== false;
-        await nextTick();
-        editorDialog.fileDirty = false;
-      } catch (_err) {
-        editorDialog.error = tm('skills.editorLoadFailed');
-      } finally {
-        editorDialog.loadingFile = false;
-      }
-    };
-
-    const openSkillEditor = async (skill) => {
-      if (isSandboxPresetSkill(skill)) {
-        showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-        return;
-      }
-      resetEditorDialog();
-      editorDialog.skillName = skill.name;
-      editorDialog.show = true;
-      const entries = await loadSkillDir('');
-      let skillMd = null;
-      for (const entry of entries) {
-        if (entry.path === 'SKILL.md') {
-          skillMd = entry;
-          break;
-        }
-      }
-      if (skillMd?.editable) {
-        await loadSkillFile(skillMd.path);
-      }
-    };
-
-    const closeSkillEditor = () => {
-      if (editorDialog.saving) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm('skills.discardChanges'))
-      ) {
-        return;
-      }
-      editorDialog.show = false;
-      resetEditorDialog();
-    };
-
-    const openSkillEntry = async (entry) => {
-      if (!entry) return;
-      if (entry.type === 'directory') {
-        if (
-          editorDialog.fileDirty &&
-          !window.confirm(tm('skills.discardChanges'))
-        ) {
-          return;
-        }
-        await loadSkillDir(entry.path);
-        return;
-      }
-      await loadSkillFile(entry.path);
-    };
-
-    const openParentSkillDir = async () => {
-      if (!editorDialog.currentDir) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm('skills.discardChanges'))
-      ) {
-        return;
-      }
-      const parts = editorDialog.currentDir.split('/').filter(Boolean);
-      parts.pop();
-      await loadSkillDir(parts.join('/'));
-    };
-
-    const saveSkillFile = async () => {
-      if (
-        !editorDialog.skillName ||
-        !editorDialog.filePath ||
-        !editorDialog.fileEditable
-      ) {
-        return;
-      }
-      editorDialog.saving = true;
-      editorDialog.error = '';
-      try {
-        const res = await skillApi.updateFile(
-          editorDialog.skillName,
-          editorDialog.filePath,
-          editorDialog.content,
-        );
-        if (res?.data?.status !== 'ok') {
-          editorDialog.error =
-            res?.data?.message || tm('skills.editorSaveFailed');
-          showMessage(editorDialog.error, 'error');
-          return;
-        }
-        editorDialog.fileDirty = false;
-        showMessage(tm('skills.editorSaveSuccess'), 'success');
-        await fetchSkills();
-      } catch (_err) {
-        editorDialog.error = tm('skills.editorSaveFailed');
-        showMessage(tm('skills.editorSaveFailed'), 'error');
-      } finally {
-        editorDialog.saving = false;
-      }
-    };
-
-    const fetchNeoCandidates = async () => {
-      const params = {
-        skill_key: neoFilters.skill_key || undefined,
-        status: neoFilters.status || undefined,
-      };
-      const res = await skillApi.neoCandidates(params);
-      neoCandidates.value = normalizeNeoItemsPayload(res);
-    };
-
-    const fetchNeoReleases = async () => {
-      const params = {
-        skill_key: neoFilters.skill_key || undefined,
-        stage: neoFilters.stage || undefined,
-      };
-      const res = await skillApi.neoReleases(params);
-      neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
-        if (!item || typeof item !== 'object') {
-          return item;
-        }
-        return {
-          ...item,
-          is_active: item.is_active ?? item.active ?? false,
-        };
-      });
-    };
-
-    const loadNeoAvailability = async () => {
-      try {
-        const res = await systemConfigApi.get();
-        const config = res?.data?.data?.config || {};
-        const providerSettings = config?.provider_settings || {};
-        const currentRuntime =
-          providerSettings?.computer_use_runtime || 'local';
-        const booter = providerSettings?.sandbox?.booter || '';
-        neoEnabled.value =
-          currentRuntime === 'sandbox' && booter === 'shipyard_neo';
-      } catch (_err) {
-        neoEnabled.value = false;
-      }
-
-      neoUnavailableMessage.value = tm('skills.neoRuntimeRequired');
-      if (!neoEnabled.value && mode.value === 'neo') {
-        mode.value = 'local';
-      }
-    };
-
-    const fetchNeoData = async () => {
-      neoLoading.value = true;
-      try {
-        await Promise.all([fetchNeoCandidates(), fetchNeoReleases()]);
-      } catch (_err) {
-        showMessage(tm('skills.neoLoadFailed'), 'error');
-      } finally {
-        neoLoading.value = false;
-      }
-    };
-
-    const evaluateCandidate = async (candidate, passed) => {
-      try {
-        const res = await skillApi.evaluateNeoCandidate({
-          candidate_id: candidate.id,
-          passed,
-          score: passed ? 1.0 : 0.0,
-          report: passed ? 'approved_from_webui' : 'rejected_from_webui',
-        });
-        handleApiResponse(
-          res,
-          tm('skills.neoEvaluateSuccess'),
-          tm('skills.neoEvaluateFailed'),
-          async () => {
-            await fetchNeoCandidates();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.neoEvaluateFailed'), 'error');
-      }
-    };
-
-    const candidatePromoteLoadingKey = (candidateId, stage) =>
-      `${candidateId}:${stage}`;
-    const isCandidatePromoteLoading = (candidateId, stage) =>
-      Boolean(
-        candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)],
-      );
-    const isCandidatePromoting = (candidateId) =>
-      isCandidatePromoteLoading(candidateId, 'canary') ||
-      isCandidatePromoteLoading(candidateId, 'stable');
-
-    const promoteCandidate = async (candidate, stage) => {
-      const candidateId = candidate?.id;
-      if (!candidateId) return;
-      const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
-      if (candidatePromoteLoading[loadingKey]) return;
-      candidatePromoteLoading[loadingKey] = true;
-      try {
-        const res = await skillApi.promoteNeoCandidate({
-          candidate_id: candidateId,
-          stage,
-          sync_to_local: true,
-        });
-        const ok = res?.data?.status === 'ok';
-        if (!ok) {
-          showMessage(
-            res?.data?.message || tm('skills.neoPromoteFailed'),
-            'error',
-          );
-        } else {
-          showMessage(tm('skills.neoPromoteSuccess'), 'success');
-        }
-        await fetchNeoData();
-        if (stage === 'stable') {
-          await fetchSkills();
-        }
-      } catch (_err) {
-        showMessage(tm('skills.neoPromoteFailed'), 'error');
-      } finally {
-        candidatePromoteLoading[loadingKey] = false;
-      }
-    };
-
-    const rollbackRelease = async (release) => {
-      try {
-        const res = await skillApi.rollbackNeoRelease({
-          release_id: release.id,
-        });
-        handleApiResponse(
-          res,
-          tm('skills.neoRollbackSuccess'),
-          tm('skills.neoRollbackFailed'),
-          async () => {
-            await fetchNeoData();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.neoRollbackFailed'), 'error');
-      }
-    };
-
-    const deactivateRelease = async (release) => {
-      try {
-        const res = await skillApi.rollbackNeoRelease({
-          release_id: release.id,
-        });
-        handleApiResponse(
-          res,
-          tm('skills.neoDeactivateSuccess'),
-          tm('skills.neoDeactivateFailed'),
-          async () => {
-            await fetchNeoData();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.neoDeactivateFailed'), 'error');
-      }
-    };
-
-    const handleReleaseLifecycleAction = async (release) => {
-      if (release?.is_active) {
-        await deactivateRelease(release);
-        return;
-      }
-      await rollbackRelease(release);
-    };
-
-    const syncRelease = async (release) => {
-      try {
-        const res = await skillApi.syncNeoRelease({
-          release_id: release.id,
-        });
-        handleApiResponse(
-          res,
-          tm('skills.neoSyncSuccess'),
-          tm('skills.neoSyncFailed'),
-          async () => {
-            await fetchSkills();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.neoSyncFailed'), 'error');
-      }
-    };
-
-    const viewPayload = async (payloadRef) => {
-      if (!payloadRef) return;
-      try {
-        const res = await skillApi.neoPayload(payloadRef);
-        if (res?.data?.status !== 'ok') {
-          showMessage(
-            res?.data?.message || tm('skills.neoPayloadFailed'),
-            'error',
-          );
-          return;
-        }
-        const payload = res?.data?.data || {};
-        payloadDialog.content = JSON.stringify(payload, null, 2);
-        payloadDialog.show = true;
-      } catch (_err) {
-        showMessage(tm('skills.neoPayloadFailed'), 'error');
-      }
-    };
-
-    const deleteCandidate = async (candidate) => {
-      try {
-        const res = await skillApi.deleteNeoCandidate({
-          candidate_id: candidate.id,
-          reason: 'deleted_from_webui',
-        });
-        handleApiResponse(
-          res,
-          tm('skills.neoDeleteSuccess'),
-          tm('skills.neoDeleteFailed'),
-          async () => {
-            await fetchNeoData();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.neoDeleteFailed'), 'error');
-      }
-    };
-
-    const deleteRelease = async (release) => {
-      try {
-        const res = await skillApi.deleteNeoRelease({
-          release_id: release.id,
-          reason: 'deleted_from_webui',
-        });
-        handleApiResponse(
-          res,
-          tm('skills.neoDeleteSuccess'),
-          tm('skills.neoDeleteFailed'),
-          async () => {
-            await fetchNeoData();
-          },
-        );
-      } catch (_err) {
-        showMessage(tm('skills.neoDeleteFailed'), 'error');
-      }
-    };
-
-    const refreshCurrentMode = async () => {
-      if (mode.value === 'neo') {
-        await loadNeoAvailability();
-        if (neoEnabled.value) {
-          await fetchNeoData();
-        } else {
-          showMessage(tm('skills.neoRuntimeRequired'), 'warning');
-        }
-      } else {
-        await fetchSkills();
-      }
-    };
-
-    watch(mode, async (nextMode) => {
-      if (nextMode === 'neo') {
-        await loadNeoAvailability();
-        if (neoEnabled.value) {
-          await fetchNeoData();
-        }
-      } else {
-        await fetchSkills();
-      }
-    });
-
-    watch(uploadDialog, (isOpen) => {
-      if (!isOpen && !uploading.value) {
-        resetUploadState();
-      }
-    });
-
-    onMounted(async () => {
-      await Promise.all([fetchSkills(), loadNeoAvailability()]);
-      if (neoEnabled.value) {
-        await fetchNeoData();
-      }
-    });
-
-    return {
-      t,
-      tm,
-      mode,
-      skills,
-      loading,
-      runtime,
-      sandboxCache,
-      uploadDialog,
-      uploadInput,
-      uploadItems,
-      uploadStateCounts,
-      hasUploadableItems,
-      isUploadDragging,
-      uploading,
-      itemLoading,
-      deleteDialog,
-      deleting,
-      snackbar,
-      neoEnabled,
-      neoUnavailableMessage,
-      neoLoading,
-      neoCandidates,
-      neoReleases,
-      neoFilters,
-      candidateStatusItems,
-      releaseStageItems,
-      activeReleaseCount,
-      candidateHeaders,
-      releaseHeaders,
-      payloadDialog,
-      editorDialog,
-      editorLanguage,
-      editorTheme,
-      editorOptions,
-      formatFileSize,
-      uploadStatusLabel,
-      statusChipClass,
-      openUploadDialog,
-      closeUploadDialog,
-      openUploadPicker,
-      handleUploadSelection,
-      handleUploadDrop,
-      removeUploadItem,
-      refreshCurrentMode,
-      fetchNeoData,
-      uploadSkillBatch,
-      downloadSkill,
-      openSkillEditor,
-      closeSkillEditor,
-      openSkillEntry,
-      openParentSkillDir,
-      saveSkillFile,
-      toggleSkill,
-      confirmDelete,
-      deleteSkill,
-      evaluateCandidate,
-      promoteCandidate,
-      isCandidatePromoteLoading,
-      isCandidatePromoting,
-      rollbackRelease,
-      deactivateRelease,
-      handleReleaseLifecycleAction,
-      syncRelease,
-      viewPayload,
-      deleteCandidate,
-      deleteRelease,
-      sourceTypeLabel,
-      sourceTypeColor,
-      isSandboxPresetSkill,
-      isPluginProvidedSkill,
-      isReadOnlySourceSkill,
-    };
+const STATUS_WAITING = 'waiting' as const;
+const STATUS_UPLOADING = 'uploading' as const;
+const STATUS_SUCCESS = 'success' as const;
+const STATUS_ERROR = 'error' as const;
+const STATUS_SKIPPED = 'skipped' as const;
+
+type SkillMode = 'local' | 'neo';
+type UploadStatus =
+  | typeof STATUS_WAITING
+  | typeof STATUS_UPLOADING
+  | typeof STATUS_SUCCESS
+  | typeof STATUS_ERROR
+  | typeof STATUS_SKIPPED;
+type SnackbarColor = 'success' | 'error' | 'warning';
+type ReleaseStage = 'canary' | 'stable';
+
+interface SkillItem extends SkillItemData {
+  name: string;
+  description: string;
+  path: string;
+  active: boolean;
+  source_type?: string;
+  source_label?: string;
+  plugin_name?: string;
+}
+
+interface SandboxCacheState {
+  ready: boolean;
+  count: number;
+  updated_at: string | null;
+}
+
+interface UploadItem {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  status: UploadStatus;
+  validationMessage: string;
+  filenameKey: string;
+}
+
+interface UploadResultEntry {
+  filename?: string;
+  name?: string;
+  error?: string;
+}
+
+interface NeoFilterState {
+  skill_key: string;
+  status: string;
+  stage: string;
+}
+
+interface NeoCandidate {
+  id: string;
+  skill_key?: string;
+  status?: string;
+  latest_score?: number | null;
+  payload_ref?: string;
+  [key: string]: unknown;
+}
+
+interface NeoRelease {
+  id: string;
+  skill_key?: string;
+  stage?: string;
+  version?: string | number;
+  is_active: boolean;
+  active?: boolean;
+  [key: string]: unknown;
+}
+
+interface SkillEntry {
+  type: string;
+  path: string;
+  name: string;
+  editable: boolean;
+  [key: string]: unknown;
+}
+
+interface PayloadDialogState {
+  show: boolean;
+  content: string;
+}
+
+interface EditorDialogState {
+  show: boolean;
+  skillName: string;
+  currentDir: string;
+  entries: SkillEntry[];
+  filePath: string;
+  content: string;
+  fileEditable: boolean;
+  fileDirty: boolean;
+  loadingFiles: boolean;
+  loadingFile: boolean;
+  saving: boolean;
+  error: string;
+}
+
+const { t } = useI18n();
+const { tm } = useModuleI18n('features/extension');
+const customizer = useCustomizerStore();
+
+const mode = ref<SkillMode>('local');
+const skills = ref<SkillItem[]>([]);
+const loading = ref(false);
+const runtime = ref('local');
+const sandboxCache = reactive<SandboxCacheState>({
+  ready: false,
+  count: 0,
+  updated_at: null,
+});
+const uploading = ref(false);
+const uploadDialog = ref(false);
+const uploadInput = ref<HTMLInputElement | null>(null);
+const uploadItems = ref<UploadItem[]>([]);
+const isUploadDragging = ref(false);
+const itemLoading = reactive<Record<string, boolean>>({});
+const deleteDialog = ref(false);
+const deleting = ref(false);
+const skillToDelete = ref<SkillItem | null>(null);
+const snackbar = reactive<{
+  show: boolean;
+  message: string;
+  color: SnackbarColor;
+}>({
+  show: false,
+  message: '',
+  color: 'success',
+});
+
+const neoLoading = ref(false);
+const neoCandidates = ref<NeoCandidate[]>([]);
+const neoReleases = ref<NeoRelease[]>([]);
+const neoFilters = reactive<NeoFilterState>({
+  skill_key: '',
+  status: '',
+  stage: '',
+});
+const candidatePromoteLoading = reactive<Record<string, boolean>>({});
+const payloadDialog = reactive<PayloadDialogState>({
+  show: false,
+  content: '',
+});
+const editorDialog = reactive<EditorDialogState>({
+  show: false,
+  skillName: '',
+  currentDir: '',
+  entries: [],
+  filePath: '',
+  content: '',
+  fileEditable: false,
+  fileDirty: false,
+  loadingFiles: false,
+  loadingFile: false,
+  saving: false,
+  error: '',
+});
+
+const neoEnabled = ref(false);
+const neoUnavailableMessage = ref('');
+let nextUploadItemId = 0;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getString(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+function getBoolean(value: unknown, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function getNumber(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeSkillItem(value: unknown): SkillItem | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const name = getString(record.name).trim();
+  if (!name) {
+    return null;
+  }
+
+  return {
+    ...record,
+    name,
+    description: getString(record.description),
+    path: getString(record.path),
+    active: getBoolean(record.active),
+    source_type: getString(record.source_type) || undefined,
+    source_label: getString(record.source_label) || undefined,
+    plugin_name: getString(record.plugin_name) || undefined,
+  };
+}
+
+function normalizeSkillEntry(value: unknown): SkillEntry | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const path = getString(record.path).trim();
+  const name = getString(record.name).trim();
+  const type = getString(record.type).trim();
+  if (!path || !name || !type) {
+    return null;
+  }
+
+  return {
+    ...record,
+    path,
+    name,
+    type,
+    editable: record.editable !== false,
+  };
+}
+
+function normalizeNeoCandidate(value: unknown): NeoCandidate | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = getString(record.id).trim();
+  if (!id) {
+    return null;
+  }
+
+  const latestScore =
+    typeof record.latest_score === 'number' &&
+    Number.isFinite(record.latest_score)
+      ? record.latest_score
+      : null;
+
+  return {
+    ...record,
+    id,
+    skill_key: getString(record.skill_key) || undefined,
+    status: getString(record.status) || undefined,
+    latest_score: latestScore,
+    payload_ref: getString(record.payload_ref) || undefined,
+  };
+}
+
+function normalizeNeoRelease(value: unknown): NeoRelease | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = getString(record.id).trim();
+  if (!id) {
+    return null;
+  }
+
+  return {
+    ...record,
+    id,
+    skill_key: getString(record.skill_key) || undefined,
+    stage: getString(record.stage) || undefined,
+    version:
+      typeof record.version === 'string' || typeof record.version === 'number'
+        ? record.version
+        : undefined,
+    active: typeof record.active === 'boolean' ? record.active : undefined,
+    is_active: getBoolean(record.is_active, getBoolean(record.active)),
+  };
+}
+
+const candidateStatusItems = computed(() => [
+  { title: tm('skills.neoAll'), value: '' },
+  { title: 'draft', value: 'draft' },
+  { title: 'evaluating', value: 'evaluating' },
+  { title: 'promoted', value: 'promoted' },
+  { title: 'promoted_canary', value: 'promoted_canary' },
+  { title: 'promoted_stable', value: 'promoted_stable' },
+  { title: 'rejected', value: 'rejected' },
+  { title: 'rolled_back', value: 'rolled_back' },
+]);
+
+const releaseStageItems = computed(() => [
+  { title: tm('skills.neoAll'), value: '' },
+  { title: 'canary', value: 'canary' },
+  { title: 'stable', value: 'stable' },
+]);
+
+const activeReleaseCount = computed(
+  () => neoReleases.value.filter((item) => item.is_active).length,
+);
+
+const editorLanguage = computed(() => {
+  const path = editorDialog.filePath.toLowerCase();
+  if (path.endsWith('.json')) return 'json';
+  if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml';
+  if (path.endsWith('.toml') || path.endsWith('.ini')) return 'ini';
+  if (path.endsWith('.py')) return 'python';
+  if (path.endsWith('.js')) return 'javascript';
+  if (path.endsWith('.ts')) return 'typescript';
+  if (path.endsWith('.html')) return 'html';
+  if (path.endsWith('.css')) return 'css';
+  if (path.endsWith('.sh')) return 'shell';
+  if (path.endsWith('.md') || path.endsWith('.txt')) return 'markdown';
+  return 'plaintext';
+});
+
+const editorTheme = computed(() =>
+  customizer.uiTheme === 'PurpleThemeDark' ? 'vs-dark' : 'vs-light',
+);
+
+const editorOptions = computed(() => ({
+  automaticLayout: true,
+  fontSize: 13,
+  lineNumbers: 'on',
+  minimap: { enabled: false },
+  readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
+  scrollBeyondLastLine: false,
+  tabSize: 2,
+  wordWrap: 'on',
+}));
+
+const uploadStateCounts = computed(() =>
+  uploadItems.value.reduce(
+    (counts, item) => {
+      counts.total += 1;
+      counts[item.status] += 1;
+      return counts;
+    },
+    {
+      total: 0,
+      [STATUS_WAITING]: 0,
+      [STATUS_UPLOADING]: 0,
+      [STATUS_SUCCESS]: 0,
+      [STATUS_ERROR]: 0,
+      [STATUS_SKIPPED]: 0,
+    },
+  ),
+);
+
+const hasUploadableItems = computed(() =>
+  uploadItems.value.some(
+    (item) => item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+  ),
+);
+
+const candidateHeaders = computed(() => [
+  { title: 'ID', key: 'id', width: '180px' },
+  { title: 'skill_key', key: 'skill_key' },
+  { title: 'status', key: 'status', width: '130px' },
+  { title: 'score', key: 'latest_score', width: '90px' },
+  {
+    title: tm('skills.actions'),
+    key: 'actions',
+    sortable: false,
+    width: '420px',
   },
-};
+]);
+
+const releaseHeaders = computed(() => [
+  { title: 'ID', key: 'id', width: '180px' },
+  { title: 'skill_key', key: 'skill_key' },
+  { title: 'stage', key: 'stage', width: '100px' },
+  { title: 'version', key: 'version', width: '90px' },
+  { title: 'active', key: 'is_active', width: '110px' },
+  {
+    title: tm('skills.actions'),
+    key: 'actions',
+    sortable: false,
+    width: '220px',
+  },
+]);
+
+function showMessage(message: string, color: SnackbarColor = 'success') {
+  snackbar.message = message;
+  snackbar.color = color;
+  snackbar.show = true;
+}
+
+function normalizeSkillsPayload(payload: unknown) {
+  if (Array.isArray(payload)) {
+    runtime.value = 'local';
+    sandboxCache.ready = false;
+    sandboxCache.count = 0;
+    sandboxCache.updated_at = null;
+    return payload
+      .map((skill) => normalizeSkillItem(skill))
+      .filter((skill): skill is SkillItem => skill !== null);
+  }
+
+  const record = asRecord(payload);
+  if (!record) {
+    runtime.value = 'local';
+    sandboxCache.ready = false;
+    sandboxCache.count = 0;
+    sandboxCache.updated_at = null;
+    return [];
+  }
+
+  runtime.value = getString(record.runtime) || 'local';
+  const cache = asRecord(record.sandbox_cache);
+  sandboxCache.ready = getBoolean(cache?.ready);
+  sandboxCache.count = getNumber(cache?.count);
+  sandboxCache.updated_at = getString(cache?.updated_at) || null;
+
+  const skillList = Array.isArray(record.skills) ? record.skills : [];
+  return skillList
+    .map((skill) => normalizeSkillItem(skill))
+    .filter((skill): skill is SkillItem => skill !== null);
+}
+
+function sourceTypeLabel(sourceType?: string, skill: SkillItem | null = null) {
+  if (sourceType === 'plugin') {
+    return tm('skills.sourcePlugin', {
+      plugin: skill?.source_label || skill?.plugin_name || '',
+    });
+  }
+  if (sourceType === 'sandbox_only') return tm('skills.sourceSandboxOnly');
+  if (sourceType === 'both') return tm('skills.sourceBoth');
+  return tm('skills.sourceLocalOnly');
+}
+
+function sourceTypeColor(sourceType?: string) {
+  if (sourceType === 'sandbox_only') return 'indigo';
+  if (sourceType === 'plugin') return 'secondary';
+  if (sourceType === 'both') return 'success';
+  return 'primary';
+}
+
+function isSandboxPresetSkill(skill: SkillItem) {
+  return skill.source_type === 'sandbox_only';
+}
+
+function isPluginProvidedSkill(skill: SkillItem) {
+  return skill.source_type === 'plugin';
+}
+
+function isReadOnlySourceSkill(skill: SkillItem) {
+  return isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+}
+
+function normalizeNeoItemsPayload(payload: unknown) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  const record = asRecord(payload);
+  if (!record || !Array.isArray(record.items)) {
+    return [];
+  }
+  return record.items;
+}
+
+function formatFileSize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return '0 B';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeUploadName(name: string) {
+  return String(name).trim().toLowerCase();
+}
+
+function buildUploadItem(
+  file: File,
+  status: UploadStatus,
+  validationMessage: string,
+): UploadItem {
+  return {
+    id: `upload-${nextUploadItemId++}`,
+    file,
+    name: file.name,
+    size: file.size,
+    status,
+    validationMessage,
+    filenameKey: normalizeUploadName(file.name),
+  };
+}
+
+function uploadStatusLabel(status: UploadStatus) {
+  if (status === STATUS_UPLOADING) return tm('skills.statusUploading');
+  if (status === STATUS_SUCCESS) return tm('skills.statusSuccess');
+  if (status === STATUS_ERROR) return tm('skills.statusError');
+  if (status === STATUS_SKIPPED) return tm('skills.statusSkipped');
+  return tm('skills.statusWaiting');
+}
+
+function statusChipClass(status: UploadStatus) {
+  return `skills-status-chip skills-status-chip--${status}`;
+}
+
+function resetUploadState() {
+  uploadItems.value = [];
+  isUploadDragging.value = false;
+  if (uploadInput.value) {
+    uploadInput.value.value = '';
+  }
+}
+
+function openUploadDialog() {
+  uploadDialog.value = true;
+}
+
+function closeUploadDialog() {
+  if (uploading.value) return;
+  uploadDialog.value = false;
+}
+
+function openUploadPicker() {
+  if (uploading.value) return;
+  uploadInput.value?.click();
+}
+
+function addUploadFiles(filesToAdd: File[]) {
+  const existingNames = new Set(
+    uploadItems.value.map((item) => item.filenameKey),
+  );
+  const nextItems: UploadItem[] = [];
+
+  for (const file of filesToAdd) {
+    if (!file.name) continue;
+    const filenameKey = normalizeUploadName(file.name);
+
+    if (existingNames.has(filenameKey)) {
+      nextItems.push(
+        buildUploadItem(file, STATUS_SKIPPED, tm('skills.validationDuplicate')),
+      );
+      continue;
+    }
+
+    existingNames.add(filenameKey);
+    if (!/\.zip$/i.test(file.name)) {
+      nextItems.push(
+        buildUploadItem(file, STATUS_SKIPPED, tm('skills.validationZipOnly')),
+      );
+      continue;
+    }
+
+    nextItems.push(
+      buildUploadItem(file, STATUS_WAITING, tm('skills.validationReady')),
+    );
+  }
+
+  if (nextItems.length > 0) {
+    uploadItems.value = [...uploadItems.value, ...nextItems];
+  }
+}
+
+function handleUploadSelection(event: Event) {
+  const input = event.target;
+  const selected =
+    input instanceof HTMLInputElement && input.files
+      ? Array.from(input.files)
+      : [];
+  addUploadFiles(selected);
+  if (uploadInput.value) {
+    uploadInput.value.value = '';
+  }
+}
+
+function handleUploadDrop(event: DragEvent) {
+  isUploadDragging.value = false;
+  if (uploading.value) {
+    return;
+  }
+  addUploadFiles(Array.from(event.dataTransfer?.files || []));
+}
+
+function removeUploadItem(itemId: string) {
+  uploadItems.value = uploadItems.value.filter((item) => item.id !== itemId);
+}
+
+function takeFirstMatch(
+  matchMap: Map<string, UploadResultEntry[]>,
+  filenameKey: string,
+) {
+  const matches = matchMap.get(filenameKey) || [];
+  const entry = matches.shift() || null;
+  if (matches.length === 0) {
+    matchMap.delete(filenameKey);
+  }
+  return entry;
+}
+
+function buildResultMap(items: unknown): Map<string, UploadResultEntry[]> {
+  const resultMap = new Map<string, UploadResultEntry[]>();
+  if (!Array.isArray(items)) {
+    return resultMap;
+  }
+
+  for (const item of items) {
+    const record = asRecord(item);
+    if (!record) {
+      continue;
+    }
+    const entry: UploadResultEntry = {
+      filename: getString(record.filename) || undefined,
+      name: getString(record.name) || undefined,
+      error: getString(record.error) || undefined,
+    };
+    const filenameKey = normalizeUploadName(entry.filename || '');
+    if (!filenameKey) continue;
+    if (!resultMap.has(filenameKey)) {
+      resultMap.set(filenameKey, []);
+    }
+    resultMap.get(filenameKey)?.push(entry);
+  }
+
+  return resultMap;
+}
+
+function applyUploadResults(attemptedItems: UploadItem[], payload: unknown) {
+  const payloadRecord = asRecord(payload);
+  const succeededMap = buildResultMap(payloadRecord?.succeeded);
+  const failedMap = buildResultMap(payloadRecord?.failed);
+  const skippedMap = buildResultMap(payloadRecord?.skipped);
+
+  for (const item of attemptedItems) {
+    const successEntry = takeFirstMatch(succeededMap, item.filenameKey);
+    if (successEntry) {
+      item.status = STATUS_SUCCESS;
+      item.validationMessage = tm('skills.validationUploadedAs', {
+        name: successEntry.name || item.name,
+      });
+      continue;
+    }
+
+    const skippedEntry = takeFirstMatch(skippedMap, item.filenameKey);
+    if (skippedEntry) {
+      item.status = STATUS_SKIPPED;
+      item.validationMessage =
+        skippedEntry.error || tm('skills.validationDuplicate');
+      continue;
+    }
+
+    const failedEntry = takeFirstMatch(failedMap, item.filenameKey);
+    if (failedEntry) {
+      item.status = STATUS_ERROR;
+      item.validationMessage =
+        failedEntry.error || tm('skills.validationUploadFailed');
+      continue;
+    }
+
+    item.status = STATUS_ERROR;
+    item.validationMessage = tm('skills.validationNoResult');
+  }
+}
+
+async function fetchSkills() {
+  loading.value = true;
+  try {
+    const res = await skillApi.list();
+    skills.value = normalizeSkillsPayload(res.data.data);
+  } catch {
+    showMessage(tm('skills.loadFailed'), 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
+function handleApiResponse(
+  res: { data?: { status?: string; message?: string | null } },
+  successMessage: string,
+  failureMessageDefault: string,
+  onSuccess?: () => void | Promise<void>,
+) {
+  if (res.data?.status === 'ok') {
+    showMessage(successMessage, 'success');
+    void onSuccess?.();
+  } else {
+    showMessage(res.data?.message || failureMessageDefault, 'error');
+  }
+}
+
+async function uploadSkillBatch() {
+  const attemptedItems = uploadItems.value.filter(
+    (item) => item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+  );
+  if (attemptedItems.length === 0) return;
+
+  uploading.value = true;
+  for (const item of attemptedItems) {
+    item.status = STATUS_UPLOADING;
+    item.validationMessage = tm('skills.validationUploading');
+  }
+
+  try {
+    const res = await skillApi.uploadBatch(
+      attemptedItems.map((item) => item.file),
+    );
+    applyUploadResults(attemptedItems, res.data.data);
+
+    const payload = asRecord(res.data.data);
+    const succeededCount = Array.isArray(payload?.succeeded)
+      ? payload.succeeded.length
+      : 0;
+    const failedCount = Array.isArray(payload?.failed)
+      ? payload.failed.length
+      : 0;
+
+    let responseColor: SnackbarColor = 'success';
+    if (res.data.status === 'error') {
+      responseColor = 'error';
+    } else if (failedCount > 0) {
+      responseColor = 'warning';
+    }
+
+    showMessage(res.data.message || tm('skills.uploadSuccess'), responseColor);
+
+    if (succeededCount > 0) {
+      await fetchSkills();
+    }
+  } catch {
+    for (const item of attemptedItems) {
+      item.status = STATUS_ERROR;
+      item.validationMessage = tm('skills.validationUploadFailed');
+    }
+    showMessage(tm('skills.uploadFailed'), 'error');
+  } finally {
+    uploading.value = false;
+  }
+}
+
+async function toggleSkill(skill: SkillItem) {
+  if (isSandboxPresetSkill(skill)) {
+    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
+    return;
+  }
+  const nextActive = !skill.active;
+  itemLoading[skill.name] = true;
+  try {
+    const res = await skillApi.setEnabled(skill.name, nextActive);
+    handleApiResponse(
+      res,
+      tm('skills.updateSuccess'),
+      tm('skills.updateFailed'),
+      () => {
+        skill.active = nextActive;
+      },
+    );
+  } catch {
+    showMessage(tm('skills.updateFailed'), 'error');
+  } finally {
+    itemLoading[skill.name] = false;
+  }
+}
+
+function confirmDelete(skill: SkillItem) {
+  if (isSandboxPresetSkill(skill)) {
+    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
+    return;
+  }
+  if (isPluginProvidedSkill(skill)) {
+    showMessage(tm('skills.pluginReadonly'), 'warning');
+    return;
+  }
+  skillToDelete.value = skill;
+  deleteDialog.value = true;
+}
+
+async function deleteSkill() {
+  if (!skillToDelete.value) return;
+  deleting.value = true;
+  try {
+    const res = await skillApi.delete(skillToDelete.value.name);
+    handleApiResponse(
+      res,
+      tm('skills.deleteSuccess'),
+      tm('skills.deleteFailed'),
+      async () => {
+        deleteDialog.value = false;
+        await fetchSkills();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.deleteFailed'), 'error');
+  } finally {
+    deleting.value = false;
+  }
+}
+
+async function downloadSkill(skill: SkillItem) {
+  if (isSandboxPresetSkill(skill)) {
+    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
+    return;
+  }
+  if (isPluginProvidedSkill(skill)) {
+    showMessage(tm('skills.pluginReadonly'), 'warning');
+    return;
+  }
+  itemLoading[skill.name] = true;
+  try {
+    const res = await skillApi.download(skill.name);
+    if (!(res.data instanceof Blob)) {
+      throw new Error('Skill download did not return a blob payload');
+    }
+    const blob = res.data;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${skill.name}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    showMessage(tm('skills.downloadSuccess'), 'success');
+  } catch {
+    showMessage(tm('skills.downloadFailed'), 'error');
+  } finally {
+    itemLoading[skill.name] = false;
+  }
+}
+
+function resetEditorDialog() {
+  editorDialog.skillName = '';
+  editorDialog.currentDir = '';
+  editorDialog.entries = [];
+  editorDialog.filePath = '';
+  editorDialog.content = '';
+  editorDialog.fileEditable = false;
+  editorDialog.fileDirty = false;
+  editorDialog.loadingFiles = false;
+  editorDialog.loadingFile = false;
+  editorDialog.saving = false;
+  editorDialog.error = '';
+}
+
+async function loadSkillDir(path = '') {
+  if (!editorDialog.skillName) return [];
+  editorDialog.loadingFiles = true;
+  editorDialog.error = '';
+  try {
+    const res = await skillApi.listFiles(editorDialog.skillName, path);
+    if (res.data.status !== 'ok') {
+      editorDialog.error = res.data.message || tm('skills.editorLoadFailed');
+      return [];
+    }
+    const payload = asRecord(res.data.data);
+    editorDialog.currentDir = getString(payload?.path);
+    editorDialog.entries = Array.isArray(payload?.entries)
+      ? payload.entries
+          .map((entry) => normalizeSkillEntry(entry))
+          .filter((entry): entry is SkillEntry => entry !== null)
+      : [];
+    return editorDialog.entries;
+  } catch {
+    editorDialog.error = tm('skills.editorLoadFailed');
+    return [];
+  } finally {
+    editorDialog.loadingFiles = false;
+  }
+}
+
+async function loadSkillFile(path: string) {
+  if (!editorDialog.skillName || !path) return;
+  if (editorDialog.fileDirty && !window.confirm(tm('skills.discardChanges'))) {
+    return;
+  }
+  editorDialog.loadingFile = true;
+  editorDialog.error = '';
+  try {
+    const res = await skillApi.getFile(editorDialog.skillName, path);
+    if (res.data.status !== 'ok') {
+      editorDialog.error = res.data.message || tm('skills.editorLoadFailed');
+      return;
+    }
+    const payload = asRecord(res.data.data);
+    editorDialog.filePath = getString(payload?.path) || path;
+    editorDialog.content = getString(payload?.content);
+    editorDialog.fileEditable = payload?.editable !== false;
+    await nextTick();
+    editorDialog.fileDirty = false;
+  } catch {
+    editorDialog.error = tm('skills.editorLoadFailed');
+  } finally {
+    editorDialog.loadingFile = false;
+  }
+}
+
+async function openSkillEditor(skill: SkillItem) {
+  if (isSandboxPresetSkill(skill)) {
+    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
+    return;
+  }
+  resetEditorDialog();
+  editorDialog.skillName = skill.name;
+  editorDialog.show = true;
+  const entries = await loadSkillDir('');
+  const skillMd = entries.find((entry) => entry.path === 'SKILL.md');
+  if (skillMd?.editable) {
+    await loadSkillFile(skillMd.path);
+  }
+}
+
+function closeSkillEditor() {
+  if (editorDialog.saving) return;
+  if (editorDialog.fileDirty && !window.confirm(tm('skills.discardChanges'))) {
+    return;
+  }
+  editorDialog.show = false;
+  resetEditorDialog();
+}
+
+async function openSkillEntry(entry: SkillEntry) {
+  if (entry.type === 'directory') {
+    if (
+      editorDialog.fileDirty &&
+      !window.confirm(tm('skills.discardChanges'))
+    ) {
+      return;
+    }
+    await loadSkillDir(entry.path);
+    return;
+  }
+  await loadSkillFile(entry.path);
+}
+
+async function openParentSkillDir() {
+  if (!editorDialog.currentDir) return;
+  if (editorDialog.fileDirty && !window.confirm(tm('skills.discardChanges'))) {
+    return;
+  }
+  const parts = editorDialog.currentDir.split('/').filter(Boolean);
+  parts.pop();
+  await loadSkillDir(parts.join('/'));
+}
+
+async function saveSkillFile() {
+  if (
+    !editorDialog.skillName ||
+    !editorDialog.filePath ||
+    !editorDialog.fileEditable
+  ) {
+    return;
+  }
+  editorDialog.saving = true;
+  editorDialog.error = '';
+  try {
+    const res = await skillApi.updateFile(
+      editorDialog.skillName,
+      editorDialog.filePath,
+      editorDialog.content,
+    );
+    if (res.data.status !== 'ok') {
+      editorDialog.error = res.data.message || tm('skills.editorSaveFailed');
+      showMessage(editorDialog.error, 'error');
+      return;
+    }
+    editorDialog.fileDirty = false;
+    showMessage(tm('skills.editorSaveSuccess'), 'success');
+    await fetchSkills();
+  } catch {
+    editorDialog.error = tm('skills.editorSaveFailed');
+    showMessage(tm('skills.editorSaveFailed'), 'error');
+  } finally {
+    editorDialog.saving = false;
+  }
+}
+
+async function fetchNeoCandidates() {
+  const params = {
+    skill_key: neoFilters.skill_key || undefined,
+    status: neoFilters.status || undefined,
+  };
+  const res = await skillApi.neoCandidates(params);
+  neoCandidates.value = normalizeNeoItemsPayload(res.data.data)
+    .map((item) => normalizeNeoCandidate(item))
+    .filter((item): item is NeoCandidate => item !== null);
+}
+
+async function fetchNeoReleases() {
+  const params = {
+    skill_key: neoFilters.skill_key || undefined,
+    stage: neoFilters.stage || undefined,
+  };
+  const res = await skillApi.neoReleases(params);
+  neoReleases.value = normalizeNeoItemsPayload(res.data.data)
+    .map((item) => normalizeNeoRelease(item))
+    .filter((item): item is NeoRelease => item !== null);
+}
+
+async function loadNeoAvailability() {
+  try {
+    const res = await systemConfigApi.get();
+    const data = asRecord(res.data.data);
+    const config = asRecord(data?.config);
+    const providerSettings = asRecord(config?.provider_settings);
+    const sandbox = asRecord(providerSettings?.sandbox);
+    const currentRuntime =
+      getString(providerSettings?.computer_use_runtime) || 'local';
+    const booter = getString(sandbox?.booter);
+    neoEnabled.value =
+      currentRuntime === 'sandbox' && booter === 'shipyard_neo';
+  } catch {
+    neoEnabled.value = false;
+  }
+
+  neoUnavailableMessage.value = tm('skills.neoRuntimeRequired');
+  if (!neoEnabled.value && mode.value === 'neo') {
+    mode.value = 'local';
+  }
+}
+
+async function fetchNeoData() {
+  neoLoading.value = true;
+  try {
+    await Promise.all([fetchNeoCandidates(), fetchNeoReleases()]);
+  } catch {
+    showMessage(tm('skills.neoLoadFailed'), 'error');
+  } finally {
+    neoLoading.value = false;
+  }
+}
+
+async function evaluateCandidate(candidate: NeoCandidate, passed: boolean) {
+  try {
+    const res = await skillApi.evaluateNeoCandidate({
+      candidate_id: candidate.id,
+      passed,
+      score: passed ? 1.0 : 0.0,
+      report: passed ? 'approved_from_webui' : 'rejected_from_webui',
+    });
+    handleApiResponse(
+      res,
+      tm('skills.neoEvaluateSuccess'),
+      tm('skills.neoEvaluateFailed'),
+      async () => {
+        await fetchNeoCandidates();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.neoEvaluateFailed'), 'error');
+  }
+}
+
+function candidatePromoteLoadingKey(candidateId: string, stage: ReleaseStage) {
+  return `${candidateId}:${stage}`;
+}
+
+function isCandidatePromoteLoading(candidateId: string, stage: ReleaseStage) {
+  return Boolean(
+    candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)],
+  );
+}
+
+function isCandidatePromoting(candidateId: string) {
+  return (
+    isCandidatePromoteLoading(candidateId, 'canary') ||
+    isCandidatePromoteLoading(candidateId, 'stable')
+  );
+}
+
+async function promoteCandidate(candidate: NeoCandidate, stage: ReleaseStage) {
+  const candidateId = candidate.id;
+  const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
+  if (candidatePromoteLoading[loadingKey]) return;
+  candidatePromoteLoading[loadingKey] = true;
+  try {
+    const res = await skillApi.promoteNeoCandidate({
+      candidate_id: candidateId,
+      stage,
+      sync_to_local: true,
+    });
+    const ok = res.data.status === 'ok';
+    if (!ok) {
+      showMessage(res.data.message || tm('skills.neoPromoteFailed'), 'error');
+    } else {
+      showMessage(tm('skills.neoPromoteSuccess'), 'success');
+    }
+    await fetchNeoData();
+    if (stage === 'stable') {
+      await fetchSkills();
+    }
+  } catch {
+    showMessage(tm('skills.neoPromoteFailed'), 'error');
+  } finally {
+    candidatePromoteLoading[loadingKey] = false;
+  }
+}
+
+async function rollbackRelease(release: NeoRelease) {
+  try {
+    const res = await skillApi.rollbackNeoRelease({
+      release_id: release.id,
+    });
+    handleApiResponse(
+      res,
+      tm('skills.neoRollbackSuccess'),
+      tm('skills.neoRollbackFailed'),
+      async () => {
+        await fetchNeoData();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.neoRollbackFailed'), 'error');
+  }
+}
+
+async function deactivateRelease(release: NeoRelease) {
+  try {
+    const res = await skillApi.rollbackNeoRelease({
+      release_id: release.id,
+    });
+    handleApiResponse(
+      res,
+      tm('skills.neoDeactivateSuccess'),
+      tm('skills.neoDeactivateFailed'),
+      async () => {
+        await fetchNeoData();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.neoDeactivateFailed'), 'error');
+  }
+}
+
+async function handleReleaseLifecycleAction(release: NeoRelease) {
+  if (release.is_active) {
+    await deactivateRelease(release);
+    return;
+  }
+  await rollbackRelease(release);
+}
+
+async function syncRelease(release: NeoRelease) {
+  try {
+    const res = await skillApi.syncNeoRelease({
+      release_id: release.id,
+    });
+    handleApiResponse(
+      res,
+      tm('skills.neoSyncSuccess'),
+      tm('skills.neoSyncFailed'),
+      async () => {
+        await fetchSkills();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.neoSyncFailed'), 'error');
+  }
+}
+
+async function viewPayload(payloadRef?: string) {
+  if (!payloadRef) return;
+  try {
+    const res = await skillApi.neoPayload(payloadRef);
+    if (res.data.status !== 'ok') {
+      showMessage(res.data.message || tm('skills.neoPayloadFailed'), 'error');
+      return;
+    }
+    const payload = res.data.data ?? {};
+    payloadDialog.content = JSON.stringify(payload, null, 2);
+    payloadDialog.show = true;
+  } catch {
+    showMessage(tm('skills.neoPayloadFailed'), 'error');
+  }
+}
+
+async function deleteCandidate(candidate: NeoCandidate) {
+  try {
+    const res = await skillApi.deleteNeoCandidate({
+      candidate_id: candidate.id,
+      reason: 'deleted_from_webui',
+    });
+    handleApiResponse(
+      res,
+      tm('skills.neoDeleteSuccess'),
+      tm('skills.neoDeleteFailed'),
+      async () => {
+        await fetchNeoData();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.neoDeleteFailed'), 'error');
+  }
+}
+
+async function deleteRelease(release: NeoRelease) {
+  try {
+    const res = await skillApi.deleteNeoRelease({
+      release_id: release.id,
+      reason: 'deleted_from_webui',
+    });
+    handleApiResponse(
+      res,
+      tm('skills.neoDeleteSuccess'),
+      tm('skills.neoDeleteFailed'),
+      async () => {
+        await fetchNeoData();
+      },
+    );
+  } catch {
+    showMessage(tm('skills.neoDeleteFailed'), 'error');
+  }
+}
+
+async function refreshCurrentMode() {
+  if (mode.value === 'neo') {
+    await loadNeoAvailability();
+    if (neoEnabled.value) {
+      await fetchNeoData();
+    } else {
+      showMessage(tm('skills.neoRuntimeRequired'), 'warning');
+    }
+  } else {
+    await fetchSkills();
+  }
+}
+
+watch(mode, async (nextMode) => {
+  if (nextMode === 'neo') {
+    await loadNeoAvailability();
+    if (neoEnabled.value) {
+      await fetchNeoData();
+    }
+  } else {
+    await fetchSkills();
+  }
+});
+
+watch(uploadDialog, (isOpen) => {
+  if (!isOpen && !uploading.value) {
+    resetUploadState();
+  }
+});
+
+onMounted(async () => {
+  await Promise.all([fetchSkills(), loadNeoAvailability()]);
+  if (neoEnabled.value) {
+    await fetchNeoData();
+  }
+});
 </script>
 
 <style scoped>

@@ -1,16 +1,21 @@
 import { useModuleI18n } from '@/i18n/composables';
 import { usePluginI18n } from '@/utils/pluginI18n';
 
-export function useConfigTextResolver(props = {}) {
+interface ConfigTextResolverProps {
+  pluginName?: string;
+  pluginI18n?: Record<string, unknown>;
+}
+
+export function useConfigTextResolver(props: ConfigTextResolverProps = {}) {
   const { tm, getRaw } = useModuleI18n('features/config-metadata');
   const { configText } = usePluginI18n();
 
-  const translateIfKey = (value) => {
+  const translateIfKey = (value: unknown) => {
     if (!value || typeof value !== 'string') return value;
     return getRaw(value) ? tm(value) : value;
   };
 
-  const hasPluginI18n = () => {
+  const hasPluginI18n = (): boolean => {
     return Boolean(
       props.pluginName &&
       props.pluginI18n &&
@@ -18,8 +23,8 @@ export function useConfigTextResolver(props = {}) {
     );
   };
 
-  const resolveConfigText = (path, attr, fallback) => {
-    const fallbackText = translateIfKey(fallback) || '';
+  const resolveConfigText = (path: string, attr: string, fallback: unknown) => {
+    const fallbackText = (translateIfKey(fallback) as string) || '';
     if (!hasPluginI18n()) {
       return fallbackText;
     }

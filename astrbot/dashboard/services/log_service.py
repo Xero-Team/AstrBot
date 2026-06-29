@@ -67,21 +67,15 @@ class LogService:
 
     def get_trace_settings(self) -> dict:
         try:
-            return {"trace_enable": self.config.get("trace_enable", True)}
+            return {"enabled": self.config.get("trace_enable", True)}
         except Exception as exc:
             logger.error(f"获取 Trace 设置失败: {exc}")
             raise LogServiceError(f"获取 Trace 设置失败: {exc}") from exc
 
-    def update_trace_settings(self, payload: dict | None) -> str:
+    def update_trace_settings(self, enabled: bool) -> str:
         try:
-            if payload is None:
-                raise LogServiceError("请求数据为空")
-
-            trace_enable = payload.get("trace_enable")
-            if trace_enable is not None:
-                self.config["trace_enable"] = bool(trace_enable)
-                self.config.save_config()
-
+            self.config["trace_enable"] = enabled
+            self.config.save_config()
             return "Trace 设置已更新"
         except LogServiceError:
             raise

@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from 'vue';
 import { providerApi } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface ProviderSourceRef {
   id?: string;
@@ -18,17 +19,6 @@ interface ProviderEditData {
   model?: string;
   provider_source_id?: string;
   [key: string]: unknown;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as {
-    message?: string;
-    response?: { data?: { message?: string } };
-  };
-  return errorLike.response?.data?.message || errorLike.message || fallback;
 }
 
 interface UseProviderModelConfigDialogOptions {
@@ -155,7 +145,7 @@ export function useProviderModelConfigDialog(
       await loadConfig();
     } catch (err) {
       showMessage(
-        getErrorMessage(err, tm('providerSources.saveError')),
+        resolveErrorMessage(err, tm('providerSources.saveError')),
         'error',
       );
     } finally {

@@ -7,7 +7,6 @@ from astrbot.dashboard.services.chat_service import ChatService, ChatServiceErro
 from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
 from .auth import AuthContext, require_scope
-from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Files"])
 
@@ -48,9 +47,7 @@ async def _run_file(operation, *, error_message: str = "File access error"):
 
 
 async def _upload_file(file: UploadFile, service: ChatService):
-    result = await _run_file(
-        lambda: service.save_uploaded_file(UploadFileAdapter(file))
-    )
+    result = await _run_file(lambda: service.save_uploaded_file(file))
     if isinstance(result, dict) and result.get("status") == "error":
         return result
     return ok(result)

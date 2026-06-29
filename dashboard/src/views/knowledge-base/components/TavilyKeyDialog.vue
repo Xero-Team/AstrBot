@@ -39,6 +39,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { configProfileApi } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface ProviderSettings {
   websearch_tavily_key?: string[];
@@ -49,14 +50,6 @@ interface ProviderSettings {
 interface DashboardConfig {
   provider_settings?: ProviderSettings;
   [key: string]: unknown;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as { response?: { data?: { message?: string } } };
-  return errorLike.response?.data?.message || fallback;
 }
 
 const props = defineProps<{
@@ -130,7 +123,7 @@ const saveKey = async () => {
         saveResponse.data.message || '保存失败，请检查 Key 是否正确';
     }
   } catch (error) {
-    errorMessage.value = getErrorMessage(error, '保存失败，发生未知错误');
+    errorMessage.value = resolveErrorMessage(error, '保存失败，发生未知错误');
   } finally {
     saving.value = false;
   }

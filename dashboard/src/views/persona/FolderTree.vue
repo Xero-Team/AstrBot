@@ -19,11 +19,11 @@
       }"
       @folder-click="handleFolderClick"
       @rename-folder="onRenameFolder"
-      @move-folder="$emit('move-folder', $event)"
+      @move-folder="emit('move-folder', $event)"
       @delete-folder="onDeleteFolder"
       @item-dropped="onItemDropped"
       @toggle-expansion="toggleFolderExpansion"
-      @set-expansion="setFolderExpansion"
+      @set-expansion="handleSetFolderExpansion"
     />
 
     <!-- 重命名对话框 -->
@@ -98,163 +98,126 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { reactive } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
-import { mapState, mapActions } from 'pinia';
+import { storeToRefs } from 'pinia';
 import BaseFolderTree from '@/components/folder/BaseFolderTree.vue';
-import type { FolderTreeNode as FolderTreeNodeType } from '@/components/folder/types';
+import type { DropEventData, Folder } from '@/components/folder/types';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
-export default defineComponent({
-  name: 'FolderTree',
-  components: {
-    BaseFolderTree,
-  },
-  emits: ['move-folder', 'error', 'success', 'persona-dropped'],
-  setup() {
-    const { tm } = useModuleI18n('features/persona');
-    return { tm };
-  },
-  data() {
-    return {
-      searchQuery: '',
-      isRootDragOver: false,
-      contextMenu: {
-        show: false,
-        target: null,
-        folder: null,
-      },
-      renameDialog: {
-        show: false,
-        folder: null as FolderTreeNodeType | null,
-        name: '',
-        loading: false,
-      },
-      deleteDialog: {
-        show: false,
-        folder: null as FolderTreeNodeType | null,
-        loading: false,
-      },
-    };
-  },
-  computed: {
-    ...mapState(usePersonaStore, [
-      'folderTree',
-      'currentFolderId',
-      'treeLoading',
-      'expandedFolderIds',
-    ]),
+const emit = defineEmits<{
+  'move-folder': [folder: Folder];
+  error: [message: string];
+  success: [message: string];
+  'persona-dropped': [
+    payload: { persona_id: string; target_folder_id: string | null },
+  ];
+}>();
 
-    filteredFolderTree(): FolderTreeNodeType[] {
-      if (!this.searchQuery) {
-        return this.folderTree;
-      }
-      const query = this.searchQuery.toLowerCase();
-      return this.filterTreeBySearch(this.folderTree, query);
-    },
-  },
-  methods: {
-    ...mapActions(usePersonaStore, [
-      'navigateToFolder',
-      'updateFolder',
-      'deleteFolder',
-      'toggleFolderExpansion',
-      'setFolderExpansion',
-    ]),
-    getErrorMessage(error: unknown, fallback: string): string {
-      return error instanceof Error && error.message ? error.message : fallback;
-    },
-    filterTreeBySearch(
-      nodes: FolderTreeNodeType[],
-      query: string,
-    ): FolderTreeNodeType[] {
-      return nodes
-        .filter((node) => {
-          const matches = node.name.toLowerCase().includes(query);
-          const childMatches = this.filterTreeBySearch(
-            node.children || [],
-            query,
-          );
-          return matches || childMatches.length > 0;
-        })
-        .map((node) => ({
-          ...node,
-          children: this.filterTreeBySearch(node.children || [], query),
-        }));
-    },
+const { tm } = useModuleI18n('features/persona');
+const personaStore = usePersonaStore();
+const { folderTree, currentFolderId, treeLoading, expandedFolderIds } =
+  storeToRefs(personaStore);
 
-    handleFolderClick(folderId: string | null) {
-      void this.navigateToFolder(folderId);
-    },
-
-    // rename event from BaseFolderTree
-    onRenameFolder(folder: FolderTreeNodeType) {
-      this.renameDialog.folder = folder;
-      this.renameDialog.name = folder.name;
-      this.renameDialog.show = true;
-    },
-
-    // delete event from BaseFolderTree
-    onDeleteFolder(folder: FolderTreeNodeType) {
-      this.deleteDialog.folder = folder;
-      this.deleteDialog.show = true;
-    },
-
-    onItemDropped(data: {
-      item_id: string;
-      item_type: string;
-      target_folder_id: string | null;
-      source_data?: unknown;
-    }) {
-      if (data.item_type === 'persona') {
-        this.$emit('persona-dropped', {
-          persona_id: data.item_id,
-          target_folder_id: data.target_folder_id,
-        });
-      }
-    },
-
-    async submitRename() {
-      if (!this.renameDialog.name || !this.renameDialog.folder) return;
-
-      this.renameDialog.loading = true;
-      try {
-        await this.updateFolder({
-          folder_id: this.renameDialog.folder.folder_id,
-          name: this.renameDialog.name,
-        });
-        this.$emit('success', this.tm('folder.messages.renameSuccess'));
-        this.renameDialog.show = false;
-      } catch (error) {
-        this.$emit(
-          'error',
-          this.getErrorMessage(error, this.tm('folder.messages.renameError')),
-        );
-      } finally {
-        this.renameDialog.loading = false;
-      }
-    },
-
-    async submitDelete() {
-      if (!this.deleteDialog.folder) return;
-
-      this.deleteDialog.loading = true;
-      try {
-        await this.deleteFolder(this.deleteDialog.folder.folder_id);
-        this.$emit('success', this.tm('folder.messages.deleteSuccess'));
-        this.deleteDialog.show = false;
-      } catch (error) {
-        this.$emit(
-          'error',
-          this.getErrorMessage(error, this.tm('folder.messages.deleteError')),
-        );
-      } finally {
-        this.deleteDialog.loading = false;
-      }
-    },
-  },
+const renameDialog = reactive<{
+  show: boolean;
+  folder: Folder | null;
+  name: string;
+  loading: boolean;
+}>({
+  show: false,
+  folder: null,
+  name: '',
+  loading: false,
 });
+
+const deleteDialog = reactive<{
+  show: boolean;
+  folder: Folder | null;
+  loading: boolean;
+}>({
+  show: false,
+  folder: null,
+  loading: false,
+});
+
+function handleFolderClick(folderId: string | null) {
+  void personaStore.navigateToFolder(folderId);
+}
+
+function onRenameFolder(folder: Folder) {
+  renameDialog.folder = folder;
+  renameDialog.name = folder.name;
+  renameDialog.show = true;
+}
+
+function onDeleteFolder(folder: Folder) {
+  deleteDialog.folder = folder;
+  deleteDialog.show = true;
+}
+
+function handleSetFolderExpansion(data: {
+  folderId: string;
+  expanded: boolean;
+}) {
+  personaStore.setFolderExpansion(data.folderId, data.expanded);
+}
+
+function onItemDropped(data: DropEventData) {
+  if (data.item_type === 'persona') {
+    emit('persona-dropped', {
+      persona_id: data.item_id,
+      target_folder_id: data.target_folder_id,
+    });
+  }
+}
+
+async function submitRename() {
+  if (!renameDialog.name || !renameDialog.folder) {
+    return;
+  }
+
+  renameDialog.loading = true;
+  try {
+    await personaStore.updateFolder({
+      folder_id: renameDialog.folder.folder_id,
+      name: renameDialog.name,
+    });
+    emit('success', tm('folder.messages.renameSuccess'));
+    renameDialog.show = false;
+  } catch (error) {
+    emit(
+      'error',
+      resolveErrorMessage(error, tm('folder.messages.renameError')),
+    );
+  } finally {
+    renameDialog.loading = false;
+  }
+}
+
+async function submitDelete() {
+  if (!deleteDialog.folder) {
+    return;
+  }
+
+  deleteDialog.loading = true;
+  try {
+    await personaStore.deleteFolder(deleteDialog.folder.folder_id);
+    emit('success', tm('folder.messages.deleteSuccess'));
+    deleteDialog.show = false;
+  } catch (error) {
+    emit(
+      'error',
+      resolveErrorMessage(error, tm('folder.messages.deleteError')),
+    );
+  } finally {
+    deleteDialog.loading = false;
+  }
+}
+
+const { toggleFolderExpansion } = personaStore;
 </script>
 
 <style scoped>
@@ -262,21 +225,5 @@ export default defineComponent({
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-
-.tree-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.root-item {
-  margin-bottom: 4px;
-  transition: all 0.2s ease;
-}
-
-.root-item.drag-over {
-  background-color: rgba(var(--v-theme-primary), 0.15);
-  border: 2px dashed rgb(var(--v-theme-primary));
-  border-radius: 8px;
 }
 </style>

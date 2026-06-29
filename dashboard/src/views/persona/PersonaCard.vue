@@ -6,30 +6,30 @@
     variant="outlined"
     elevation="0"
     draggable="true"
-    @click="$emit('view')"
+    @click="emit('view')"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >
     <v-card-title class="d-flex justify-space-between align-center">
       <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
       <v-menu offset-y>
-        <template #activator="{ props }">
+        <template #activator="{ props: activatorProps }">
           <v-btn
             icon="mdi-dots-vertical"
             variant="text"
             size="small"
-            v-bind="props"
+            v-bind="activatorProps"
             @click.stop
           />
         </template>
         <v-list density="compact">
-          <v-list-item @click.stop="$emit('edit')">
+          <v-list-item @click.stop="emit('edit')">
             <template #prepend>
               <v-icon size="small">mdi-pencil</v-icon>
             </template>
             <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click.stop="$emit('move')">
+          <v-list-item @click.stop="emit('move')">
             <template #prepend>
               <v-icon size="small">mdi-folder-move</v-icon>
             </template>
@@ -38,7 +38,7 @@
             }}</v-list-item-title>
           </v-list-item>
           <v-divider class="my-1" />
-          <v-list-item class="text-error" @click.stop="$emit('delete')">
+          <v-list-item class="text-error" @click.stop="emit('delete')">
             <template #prepend>
               <v-icon size="small" color="error">mdi-delete</v-icon>
             </template>
@@ -118,8 +118,8 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 
 interface Persona {
@@ -134,60 +134,61 @@ interface Persona {
   folder_id?: string | null;
 }
 
-export default defineComponent({
-  name: 'PersonaCard',
-  props: {
-    persona: {
-      type: Object as PropType<Persona>,
-      required: true,
-    },
-  },
-  emits: ['view', 'edit', 'move', 'delete'],
-  setup() {
-    const { tm } = useModuleI18n('features/persona');
-    return { tm };
-  },
-  data() {
-    return {
-      isDragging: false,
-    };
-  },
-  methods: {
-    handleDragStart(event: DragEvent) {
-      this.isDragging = true;
-      if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData(
-          'application/json',
-          JSON.stringify({
-            type: 'persona',
-            persona_id: this.persona.persona_id,
-            persona: this.persona,
-          }),
-        );
+const props = defineProps<{
+  persona: Persona;
+}>();
 
-        // Set custom drag image
-        const dragPreview = this.$refs.dragPreview as HTMLElement;
-        if (dragPreview) {
-          event.dataTransfer.setDragImage(dragPreview, 15, 15);
-        }
-      }
-    },
-    handleDragEnd() {
-      this.isDragging = false;
-    },
-    truncateText(text: string | undefined | null, maxLength: number): string {
-      if (!text) return '';
-      return text.length > maxLength
-        ? `${text.substring(0, maxLength)}...`
-        : text;
-    },
-    formatDate(dateString: string | undefined | null): string {
-      if (!dateString) return '';
-      return new Date(dateString).toLocaleString();
-    },
-  },
-});
+const emit = defineEmits<{
+  view: [];
+  edit: [];
+  move: [];
+  delete: [];
+}>();
+
+const { tm } = useModuleI18n('features/persona');
+const dragPreview = ref<HTMLElement | null>(null);
+const isDragging = ref(false);
+
+function handleDragStart(event: DragEvent) {
+  isDragging.value = true;
+  if (!event.dataTransfer) {
+    return;
+  }
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData(
+    'application/json',
+    JSON.stringify({
+      type: 'persona',
+      persona_id: props.persona.persona_id,
+      persona: props.persona,
+    }),
+  );
+
+  if (dragPreview.value) {
+    event.dataTransfer.setDragImage(dragPreview.value, 15, 15);
+  }
+}
+
+function handleDragEnd() {
+  isDragging.value = false;
+}
+
+function truncateText(
+  text: string | undefined | null,
+  maxLength: number,
+): string {
+  if (!text) {
+    return '';
+  }
+  return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+}
+
+function formatDate(dateString: string | undefined | null): string {
+  if (!dateString) {
+    return '';
+  }
+  return new Date(dateString).toLocaleString();
+}
 </script>
 
 <style scoped>

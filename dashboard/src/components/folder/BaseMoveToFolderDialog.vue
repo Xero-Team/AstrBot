@@ -3,11 +3,11 @@
     <v-card>
       <v-card-title>
         <v-icon class="mr-2">mdi-folder-move</v-icon>
-        {{ labels.title }}
+        {{ mergedLabels.title }}
       </v-card-title>
       <v-card-text>
         <p class="text-body-2 text-medium-emphasis mb-4">
-          {{ labels.description }}
+          {{ mergedLabels.description }}
         </p>
 
         <!-- 文件夹选择树 -->
@@ -23,7 +23,9 @@
               <template #prepend>
                 <v-icon>mdi-home</v-icon>
               </template>
-              <v-list-item-title>{{ labels.rootFolder }}</v-list-item-title>
+              <v-list-item-title>{{
+                mergedLabels.rootFolder
+              }}</v-list-item-title>
             </v-list-item>
 
             <!-- 文件夹树 -->
@@ -49,7 +51,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="closeDialog">
-          {{ labels.cancelButton }}
+          {{ mergedLabels.cancelButton }}
         </v-btn>
         <v-btn
           color="primary"
@@ -57,15 +59,15 @@
           :loading="loading"
           @click="submitMove"
         >
-          {{ labels.moveButton }}
+          {{ mergedLabels.moveButton }}
         </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import type { FolderTreeNode } from './types';
 import BaseMoveTargetNode from './BaseMoveTargetNode.vue';
 import { collectFolderAndChildrenIds } from './useFolderManager';
@@ -86,96 +88,81 @@ const defaultLabels: DefaultLabels = {
   moveButton: '移动',
 };
 
-export default defineComponent({
-  name: 'BaseMoveToFolderDialog',
-  components: {
-    BaseMoveTargetNode,
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean;
+    folderTree: FolderTreeNode[];
+    treeLoading?: boolean;
+    currentFolderId?: string | null;
+    itemCurrentFolderId?: string | null;
+    isMovingFolder?: boolean;
+    labels?: Partial<DefaultLabels>;
+  }>(),
+  {
+    modelValue: false,
+    treeLoading: false,
+    currentFolderId: null,
+    itemCurrentFolderId: null,
+    isMovingFolder: false,
+    labels: () => ({}),
   },
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false,
-    },
-    folderTree: {
-      type: Array as PropType<FolderTreeNode[]>,
-      required: true,
-    },
-    treeLoading: {
-      type: Boolean,
-      default: false,
-    },
-    // 当移动的是文件夹时，需要传入当前文件夹 ID 以禁用自身和子文件夹
-    currentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    // 项目当前所在的文件夹 ID（用于初始化选择）
-    itemCurrentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    // 是否是移动文件夹（如果是，需要禁用自身和子文件夹）
-    isMovingFolder: {
-      type: Boolean,
-      default: false,
-    },
-    labels: {
-      type: Object as PropType<Partial<DefaultLabels>>,
-      default: () => ({}),
-    },
-  },
-  emits: ['update:modelValue', 'move'],
-  data() {
-    return {
-      selectedFolderId: null as string | null,
-      loading: false,
-    };
-  },
-  computed: {
-    showDialog: {
-      get(): boolean {
-        return this.modelValue;
-      },
-      set(value: boolean) {
-        this.$emit('update:modelValue', value);
-      },
-    },
-    mergedLabels(): DefaultLabels {
-      return { ...defaultLabels, ...this.labels };
-    },
-    // 禁用的文件夹 ID（不能移动到自己或子文件夹）
-    disabledFolderIds(): string[] {
-      if (!this.isMovingFolder || !this.currentFolderId) return [];
-      return collectFolderAndChildrenIds(this.folderTree, this.currentFolderId);
-    },
-  },
-  watch: {
-    modelValue(newValue: boolean) {
-      if (newValue) {
-        // 初始化选中为当前所在文件夹
-        this.selectedFolderId = this.itemCurrentFolderId;
-      }
-    },
-  },
-  methods: {
-    selectFolder(folderId: string | null) {
-      // 检查是否禁用
-      if (folderId && this.disabledFolderIds.includes(folderId)) return;
-      this.selectedFolderId = folderId;
-    },
+);
 
-    closeDialog() {
-      this.showDialog = false;
-    },
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+  move: [folderId: string | null];
+}>();
 
-    submitMove() {
-      this.$emit('move', this.selectedFolderId);
-    },
+const selectedFolderId = ref<string | null>(null);
+const loading = ref(false);
 
-    setLoading(value: boolean) {
-      this.loading = value;
-    },
+const showDialog = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => void emit('update:modelValue', value),
+});
+
+const mergedLabels = computed<DefaultLabels>(() => ({
+  ...defaultLabels,
+  ...props.labels,
+}));
+
+const disabledFolderIds = computed(() => {
+  if (!props.isMovingFolder || !props.currentFolderId) {
+    return [];
+  }
+  return collectFolderAndChildrenIds(props.folderTree, props.currentFolderId);
+});
+
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (newValue) {
+      selectedFolderId.value = props.itemCurrentFolderId;
+    }
   },
+);
+
+function selectFolder(folderId: string | null) {
+  if (folderId && disabledFolderIds.value.includes(folderId)) {
+    return;
+  }
+  selectedFolderId.value = folderId;
+}
+
+function closeDialog() {
+  showDialog.value = false;
+}
+
+function submitMove() {
+  emit('move', selectedFolderId.value);
+}
+
+function setLoading(value: boolean) {
+  loading.value = value;
+}
+
+defineExpose({
+  setLoading,
 });
 </script>
 

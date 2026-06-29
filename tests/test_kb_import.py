@@ -1,8 +1,10 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -14,7 +16,6 @@ from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_md5_dashboard_password,
 )
-from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
 
@@ -84,10 +85,10 @@ async def core_lifecycle_td(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
-    """Creates a FastAPIAppAdapter app instance for testing."""
+    """Creates a dashboard ASGI app instance for testing."""
     shutdown_event = asyncio.Event()
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
-    return server.app
+    return server.asgi_app
 
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
@@ -102,31 +103,43 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 @pytest_asyncio.fixture(scope="module")
 async def authenticated_header(
-    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+    app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle
 ):
-    """Handles login and returns an authenticated header."""
-    test_client = app.test_client()
-    response = await test_client.post(
-        "/api/v1/auth/login",
-        json={
-            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": _resolve_dashboard_password(core_lifecycle_td),
-        },
-    )
-    data = await response.get_json()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+    data = response.json()
     assert data["status"] == "ok"
     token = data["data"]["token"]
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest_asyncio.fixture
+async def asgi_client(app: FastAPI):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        yield client
+
+
 @pytest.mark.asyncio
 async def test_import_documents(
-    app: FastAPIAppAdapter,
+    asgi_client: httpx.AsyncClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     """Tests the import documents functionality."""
-    test_client = app.test_client()
     kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = None
@@ -140,7 +153,7 @@ async def test_import_documents(
     }
 
     # Send request
-    response = await test_client.post(
+    response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb_id/documents/import",
         json=import_data,
         headers=authenticated_header,
@@ -148,7 +161,7 @@ async def test_import_documents(
 
     # Verify response
     assert response.status_code == 200
-    data = await response.get_json()
+    data = response.json()
     assert data["status"] == "ok"
     assert "task_id" in data["data"]
     assert data["data"]["doc_count"] == 2
@@ -158,11 +171,11 @@ async def test_import_documents(
     # Wait for background task to complete (mocked)
     # Since we mocked upload_document, it should be fast, but we might need to poll progress
     for _ in range(10):
-        progress_response = await test_client.get(
+        progress_response = await asgi_client.get(
             f"/api/v1/knowledge-bases/tasks/{task_id}",
             headers=authenticated_header,
         )
-        progress_data = await progress_response.get_json()
+        progress_data = progress_response.json()
         if progress_data["data"]["status"] == "completed":
             break
         await asyncio.sleep(0.1)
@@ -233,54 +246,52 @@ async def test_import_documents_returns_friendly_failure_message(
 
 @pytest.mark.asyncio
 async def test_import_documents_invalid_input(
-    app: FastAPIAppAdapter, authenticated_header: dict
+    asgi_client: httpx.AsyncClient, authenticated_header: dict
 ):
     """Tests import documents with invalid input."""
-    test_client = app.test_client()
-
     # Missing documents
-    response = await test_client.post(
+    response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb/documents/import",
         json={},
         headers=authenticated_header,
     )
-    data = await response.get_json()
+    data = response.json()
     assert data["status"] == "error"
     assert "缺少参数 documents" in data["message"]
 
     # Invalid document format
-    response = await test_client.post(
+    response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb/documents/import",
         json={
             "documents": [{"file_name": "test"}],  # Missing chunks
         },
         headers=authenticated_header,
     )
-    data = await response.get_json()
+    data = response.json()
     assert data["status"] == "error"
     assert "文档格式错误" in data["message"]
 
     # Invalid chunks type
-    response = await test_client.post(
+    response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb/documents/import",
         json={
             "documents": [{"file_name": "test", "chunks": "not-a-list"}],
         },
         headers=authenticated_header,
     )
-    data = await response.get_json()
+    data = response.json()
     assert data["status"] == "error"
     assert "chunks 必须是列表" in data["message"]
 
     # Invalid chunks content
-    response = await test_client.post(
+    response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb/documents/import",
         json={
             "documents": [{"file_name": "test", "chunks": ["valid", ""]}],
         },
         headers=authenticated_header,
     )
-    data = await response.get_json()
+    data = response.json()
     assert data["status"] == "error"
     assert "chunks 必须是非空字符串列表" in data["message"]
 
@@ -347,3 +358,4 @@ async def test_list_documents_total_comes_from_count_documents():
 
     assert result["total"] == 42
     kb_helper.count_documents.assert_awaited_once_with(search="foo")
+

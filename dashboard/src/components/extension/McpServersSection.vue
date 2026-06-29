@@ -389,405 +389,440 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import '@/utils/monacoLoader';
 import { mcpApi } from '@/api/v1';
+import type {
+  DynamicConfig,
+  McpServerConfig,
+} from '@/api/generated/openapi-v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
 } from '@/utils/confirmDialog';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
-export default {
-  name: 'McpServersSection',
-  components: {
-    VueMonacoEditor,
-    OutlinedActionListItem,
-  },
-  setup() {
-    const { t } = useI18n();
-    const { tm } = useModuleI18n('features/tooluse');
-    const confirmDialog = useConfirmDialog();
-    return { t, tm, confirmDialog };
-  },
-  data() {
-    return {
-      refreshInterval: null,
-      mcpServers: [],
-      showMcpServerDialog: false,
-      selectedMcpServerProvider: 'modelscope',
-      mcpServerProviderList: ['modelscope'],
-      mcpProviderToken: '',
-      showSyncMcpServerDialog: false,
-      addServerDialogMessage: '',
-      loading: false,
-      loadingGettingServers: false,
-      mcpServerUpdateLoaders: {},
-      isEditMode: false,
-      serverConfigJson: '',
-      jsonError: null,
-      currentServer: {
-        name: '',
-        active: true,
-        tools: [],
-      },
-      originalServerName: '',
-      save_message_snack: false,
-      save_message: '',
-      save_message_success: 'success',
-    };
-  },
-  computed: {
-    isServerFormValid() {
-      return Boolean(this.currentServer.name) && !this.jsonError;
-    },
-    getServerConfigSummary() {
-      return (server) => {
-        if (server.transport) {
-          return String(server.transport).trim();
-        }
-        if (server.command) {
-          return `${server.command} ${(server.args || []).join(' ')}`;
-        }
-        const configKeys = Object.keys(server).filter(
-          (key) => !['name', 'active', 'tools'].includes(key),
-        );
-        if (configKeys.length > 0) {
-          return this.tm('mcpServers.status.configSummary', {
-            keys: configKeys.join(', '),
-          });
-        }
-        return this.tm('mcpServers.status.noConfig');
-      };
-    },
-    getServerConfigIcon() {
-      return (server) => {
-        const transport = String(server.transport || '').toLowerCase();
-        if (transport === 'streamable_http') {
-          return 'mdi-web';
-        }
-        if (transport === 'sse') {
-          return 'mdi-broadcast';
-        }
-        if (server.command) {
-          return 'mdi-console-line';
-        }
-        return 'mdi-file-code-outline';
-      };
-    },
-  },
-  mounted() {
-    this.getServers();
-    this.refreshInterval = setInterval(() => {
-      // 轮询时间延长到30秒，减少服务器压力，同时保持数据相对新鲜
-      this.getServers();
-    }, 30000);
-  },
-  unmounted() {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
+type McpServerProvider = 'modelscope';
+type SnackbarColor = 'success' | 'error';
+
+interface McpServerItem extends McpServerConfig {
+  name: string;
+  active: boolean;
+  tools: string[];
+}
+
+interface McpServerDraft {
+  name: string;
+  active: boolean;
+}
+
+const { t } = useI18n();
+const { tm } = useModuleI18n('features/tooluse');
+const confirmDialog = useConfirmDialog();
+
+const mcpServers = ref<McpServerItem[]>([]);
+const showMcpServerDialog = ref(false);
+const selectedMcpServerProvider = ref<McpServerProvider>('modelscope');
+const mcpServerProviderList: McpServerProvider[] = ['modelscope'];
+const mcpProviderToken = ref('');
+const showSyncMcpServerDialog = ref(false);
+const addServerDialogMessage = ref('');
+const loading = ref(false);
+const mcpServerUpdateLoaders = reactive<Record<string, boolean>>({});
+const isEditMode = ref(false);
+const serverConfigJson = ref('');
+const jsonError = ref<string | null>(null);
+const currentServer = ref<McpServerDraft>(createEmptyServerDraft());
+const originalServerName = ref('');
+const save_message_snack = ref(false);
+const save_message = ref('');
+const save_message_success = ref<SnackbarColor>('success');
+
+const isServerFormValid = computed(
+  () => Boolean(currentServer.value.name.trim()) && !jsonError.value,
+);
+
+let refreshInterval: ReturnType<typeof window.setInterval> | null = null;
+
+function createEmptyServerDraft(): McpServerDraft {
+  return {
+    name: '',
+    active: true,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function normalizeMcpServer(value: unknown): McpServerItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  if (!name) {
+    return null;
+  }
+
+  return {
+    ...value,
+    name,
+    active: typeof value.active === 'boolean' ? value.active : true,
+    tools: normalizeStringArray(value.tools),
+  };
+}
+
+function parseServerConfigJson(): DynamicConfig | null {
+  const rawConfig = serverConfigJson.value.trim();
+  if (!rawConfig) {
+    jsonError.value = tm('dialogs.addServer.errors.configEmpty');
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawConfig);
+    if (!isRecord(parsed)) {
+      jsonError.value = tm('dialogs.addServer.errors.jsonFormat', {
+        error: 'Config must be a JSON object',
+      });
+      return null;
     }
-  },
-  methods: {
-    openurl(url) {
-      window.open(url, '_blank');
-    },
-    getServers() {
-      this.loadingGettingServers = true;
-      mcpApi
-        .list()
-        .then((response) => {
-          if (response.data.status === 'error') {
-            this.showError(
-              response.data.message ||
-                this.tm('messages.getServersError', { error: 'Unknown error' }),
-            );
-            return;
-          }
-          this.mcpServers = response.data.data || [];
-          this.mcpServers.forEach((server) => {
-            if (!this.mcpServerUpdateLoaders[server.name]) {
-              this.mcpServerUpdateLoaders[server.name] = false;
-            }
-          });
-        })
-        .catch((error) => {
-          this.showError(
-            this.tm('messages.getServersError', { error: error.message }),
-          );
-        })
-        .finally(() => {
-          this.loadingGettingServers = false;
-        });
-    },
-    validateJson() {
-      try {
-        if (!this.serverConfigJson.trim()) {
-          this.jsonError = this.tm('dialogs.addServer.errors.configEmpty');
-          return false;
-        }
-        JSON.parse(this.serverConfigJson);
-        this.jsonError = null;
-        return true;
-      } catch (e) {
-        this.jsonError = this.tm('dialogs.addServer.errors.jsonFormat', {
-          error: e.message,
-        });
-        return false;
-      }
-    },
-    setConfigTemplate(type = 'stdio') {
-      let template = {};
-      if (type === 'streamable_http') {
-        template = {
-          transport: 'streamable_http',
-          url: 'your mcp server url',
-          headers: {},
-          timeout: 5,
-          sse_read_timeout: 300,
-        };
-      } else if (type === 'sse') {
-        template = {
-          transport: 'sse',
-          url: 'your mcp server url',
-          headers: {},
-          timeout: 5,
-          sse_read_timeout: 300,
-        };
-      } else {
-        template = {
-          command: 'python',
-          args: ['-m', 'your_module'],
-        };
-      }
-      this.serverConfigJson = JSON.stringify(template, null, 2);
-    },
-    saveServer() {
-      if (!this.validateJson()) {
-        return;
-      }
-      this.loading = true;
-      try {
-        const configObj = JSON.parse(this.serverConfigJson);
-        const serverData = {
-          name: this.currentServer.name,
-          active: this.currentServer.active,
-          ...configObj,
-        };
-        if (this.isEditMode && this.originalServerName) {
-          serverData.oldName = this.originalServerName;
-        }
-        const request = this.isEditMode
-          ? mcpApi.update(
-              this.originalServerName || serverData.name,
-              serverData,
-            )
-          : mcpApi.create(serverData);
-        request
-          .then((response) => {
-            this.loading = false;
-            if (response.data.status === 'error') {
-              this.showError(
-                response.data.message ||
-                  this.tm('messages.saveError', { error: 'Unknown error' }),
-              );
-              return;
-            }
-            this.showMcpServerDialog = false;
-            this.addServerDialogMessage = '';
-            this.getServers();
-            this.showSuccess(
-              response.data.message || this.tm('messages.saveSuccess'),
-            );
-            this.resetForm();
-          })
-          .catch((error) => {
-            this.loading = false;
-            this.showError(
-              this.tm('messages.saveError', {
-                error: error.response?.data?.message || error.message,
-              }),
-            );
-          });
-      } catch (e) {
-        this.loading = false;
-        this.showError(
-          this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }),
-        );
-      }
-    },
-    async deleteServer(server) {
-      const serverName = server.name || server;
-      const message = this.tm('dialogs.confirmDelete', { name: serverName });
-      if (!(await askForConfirmationDialog(message, this.confirmDialog))) {
-        return;
-      }
 
-      mcpApi
-        .delete(serverName)
-        .then((response) => {
-          this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm('messages.deleteSuccess'),
-          );
-        })
-        .catch((error) => {
-          this.showError(
-            this.tm('messages.deleteError', {
-              error: error.response?.data?.message || error.message,
-            }),
-          );
-        });
-    },
-    editServer(server) {
-      const configCopy = { ...server };
-      delete configCopy.name;
-      delete configCopy.active;
-      delete configCopy.tools;
-      delete configCopy.errlogs;
-      this.currentServer = {
-        name: server.name,
-        active: server.active,
-        tools: server.tools || [],
-      };
-      this.originalServerName = server.name;
-      this.serverConfigJson = JSON.stringify(configCopy, null, 2);
-      this.isEditMode = true;
-      this.showMcpServerDialog = true;
-    },
-    updateServerStatus(server) {
-      this.mcpServerUpdateLoaders[server.name] = true;
-      server.active = !server.active;
-      mcpApi
-        .setEnabled(server.name, server.active)
-        .then((response) => {
-          this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm('messages.updateSuccess'),
-          );
-        })
-        .catch((error) => {
-          this.showError(
-            this.tm('messages.updateError', {
-              error: error.response?.data?.message || error.message,
-            }),
-          );
-          server.active = !server.active;
-        })
-        .finally(() => {
-          this.mcpServerUpdateLoaders[server.name] = false;
-        });
-    },
-    closeServerDialog() {
-      this.showMcpServerDialog = false;
-      this.addServerDialogMessage = '';
-      this.resetForm();
-    },
-    testServerConnection() {
-      if (!this.validateJson()) {
-        return;
+    jsonError.value = null;
+    return parsed;
+  } catch (error) {
+    jsonError.value = tm('dialogs.addServer.errors.jsonFormat', {
+      error: resolveErrorMessage(error, 'Invalid JSON'),
+    });
+    return null;
+  }
+}
+
+function validateJson() {
+  return parseServerConfigJson() !== null;
+}
+
+function setConfigTemplate(
+  type: NonNullable<McpServerConfig['transport']> = 'stdio',
+) {
+  let template: DynamicConfig;
+  if (type === 'streamable_http') {
+    template = {
+      transport: 'streamable_http',
+      url: 'your mcp server url',
+      headers: {},
+      timeout: 5,
+      sse_read_timeout: 300,
+    };
+  } else if (type === 'sse') {
+    template = {
+      transport: 'sse',
+      url: 'your mcp server url',
+      headers: {},
+      timeout: 5,
+      sse_read_timeout: 300,
+    };
+  } else {
+    template = {
+      command: 'python',
+      args: ['-m', 'your_module'],
+    };
+  }
+
+  serverConfigJson.value = JSON.stringify(template, null, 2);
+  jsonError.value = null;
+}
+
+function showMessage(message: string, color: SnackbarColor) {
+  save_message.value = message;
+  save_message_success.value = color;
+  save_message_snack.value = true;
+}
+
+function showSuccess(message: string) {
+  showMessage(message, 'success');
+}
+
+function showError(message: string) {
+  showMessage(message, 'error');
+}
+
+async function getServers() {
+  try {
+    const response = await mcpApi.list();
+    if (response.data.status === 'error') {
+      showError(
+        response.data.message ||
+          tm('messages.getServersError', { error: 'Unknown error' }),
+      );
+      return;
+    }
+
+    mcpServers.value = Array.isArray(response.data.data)
+      ? response.data.data
+          .map((server) => normalizeMcpServer(server))
+          .filter((server): server is McpServerItem => server !== null)
+      : [];
+
+    for (const server of mcpServers.value) {
+      if (!(server.name in mcpServerUpdateLoaders)) {
+        mcpServerUpdateLoaders[server.name] = false;
       }
-      this.loading = true;
-      let configObj;
-      try {
-        configObj = JSON.parse(this.serverConfigJson);
-      } catch (e) {
-        this.loading = false;
-        this.showError(
-          this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }),
-        );
-        return;
-      }
-      mcpApi
-        .test(this.currentServer.name || 'draft', configObj)
-        .then((response) => {
-          this.loading = false;
-          this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
-        })
-        .catch((error) => {
-          this.loading = false;
-          this.showError(
-            this.tm('messages.testError', {
-              error: error.response?.data?.message || error.message,
-            }),
-          );
-        });
-    },
-    resetForm() {
-      this.currentServer = {
-        name: '',
-        active: true,
-        tools: [],
-      };
-      this.serverConfigJson = '';
-      this.jsonError = null;
-      this.isEditMode = false;
-      this.originalServerName = '';
-    },
-    showSuccess(message) {
-      this.save_message = message;
-      this.save_message_success = 'success';
-      this.save_message_snack = true;
-    },
-    showError(message) {
-      this.save_message = message;
-      this.save_message_success = 'error';
-      this.save_message_snack = true;
-    },
-    async syncMcpServers() {
-      if (!this.selectedMcpServerProvider) {
-        this.showError(this.tm('syncProvider.status.selectProvider'));
-        return;
-      }
-      this.loading = true;
-      try {
-        const requestData = {
-          name: this.selectedMcpServerProvider,
-        };
-        if (this.selectedMcpServerProvider === 'modelscope') {
-          if (!this.mcpProviderToken.trim()) {
-            this.showError(this.tm('syncProvider.status.enterToken'));
-            this.loading = false;
-            return;
-          }
-          requestData.access_token = this.mcpProviderToken.trim();
-        }
-        const response = await mcpApi.syncModelScope({
-          access_token: requestData.access_token || '',
-        });
-        if (response.data.status === 'ok') {
-          this.showSuccess(
-            response.data.message ||
-              this.tm('syncProvider.messages.syncSuccess'),
-          );
-          this.showSyncMcpServerDialog = false;
-          this.mcpProviderToken = '';
-          this.getServers();
-        } else {
-          this.showError(
-            response.data.message ||
-              this.tm('syncProvider.messages.syncError', {
-                error: 'Unknown error',
-              }),
-          );
-        }
-      } catch (error) {
-        this.showError(
-          this.tm('syncProvider.messages.syncError', {
-            error:
-              error.response?.data?.message ||
-              error.message ||
-              '网络连接或访问令牌问题',
+    }
+  } catch (error) {
+    showError(
+      tm('messages.getServersError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+function getServerConfigSummary(server: McpServerItem) {
+  if (server.transport) {
+    return String(server.transport).trim();
+  }
+
+  if (server.command) {
+    const args = normalizeStringArray(server.args);
+    return `${server.command} ${args.join(' ')}`.trim();
+  }
+
+  const configKeys = Object.keys(server).filter(
+    (key) => !['name', 'active', 'tools'].includes(key),
+  );
+  if (configKeys.length > 0) {
+    return tm('mcpServers.status.configSummary', {
+      keys: configKeys.join(', '),
+    });
+  }
+
+  return tm('mcpServers.status.noConfig');
+}
+
+function getServerConfigIcon(server: McpServerItem) {
+  const transport = String(server.transport || '').toLowerCase();
+  if (transport === 'streamable_http') {
+    return 'mdi-web';
+  }
+  if (transport === 'sse') {
+    return 'mdi-broadcast';
+  }
+  if (server.command) {
+    return 'mdi-console-line';
+  }
+  return 'mdi-file-code-outline';
+}
+
+async function saveServer() {
+  const configObj = parseServerConfigJson();
+  if (!configObj) {
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const serverData: McpServerConfig = {
+      name: currentServer.value.name.trim(),
+      active: currentServer.value.active,
+      ...configObj,
+    };
+    const response = isEditMode.value
+      ? await mcpApi.update(
+          originalServerName.value || serverData.name,
+          serverData,
+        )
+      : await mcpApi.create(serverData);
+
+    if (response.data.status === 'error') {
+      showError(
+        response.data.message ||
+          tm('messages.saveError', { error: 'Unknown error' }),
+      );
+      return;
+    }
+
+    showMcpServerDialog.value = false;
+    addServerDialogMessage.value = '';
+    await getServers();
+    showSuccess(response.data.message || tm('messages.saveSuccess'));
+    resetForm();
+  } catch (error) {
+    showError(
+      tm('messages.saveError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function deleteServer(server: McpServerItem | string) {
+  const serverName = typeof server === 'string' ? server : server.name;
+  const message = tm('dialogs.confirmDelete', { name: serverName });
+  if (!(await askForConfirmationDialog(message, confirmDialog))) {
+    return;
+  }
+
+  try {
+    const response = await mcpApi.delete(serverName);
+    await getServers();
+    showSuccess(response.data.message || tm('messages.deleteSuccess'));
+  } catch (error) {
+    showError(
+      tm('messages.deleteError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+function editServer(server: McpServerItem) {
+  const {
+    name,
+    active,
+    tools: _tools,
+    errlogs: _errlogs,
+    ...configCopy
+  } = server as McpServerItem & { errlogs?: unknown };
+  currentServer.value = {
+    name,
+    active,
+  };
+  originalServerName.value = name;
+  serverConfigJson.value = JSON.stringify(configCopy, null, 2);
+  isEditMode.value = true;
+  showMcpServerDialog.value = true;
+}
+
+async function updateServerStatus(server: McpServerItem) {
+  const previousActive = server.active;
+  mcpServerUpdateLoaders[server.name] = true;
+  server.active = !previousActive;
+
+  try {
+    const response = await mcpApi.setEnabled(server.name, server.active);
+    await getServers();
+    showSuccess(response.data.message || tm('messages.updateSuccess'));
+  } catch (error) {
+    server.active = previousActive;
+    showError(
+      tm('messages.updateError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  } finally {
+    mcpServerUpdateLoaders[server.name] = false;
+  }
+}
+
+function resetForm() {
+  currentServer.value = createEmptyServerDraft();
+  serverConfigJson.value = '';
+  jsonError.value = null;
+  isEditMode.value = false;
+  originalServerName.value = '';
+}
+
+function closeServerDialog() {
+  showMcpServerDialog.value = false;
+  addServerDialogMessage.value = '';
+  resetForm();
+}
+
+async function testServerConnection() {
+  const configObj = parseServerConfigJson();
+  if (!configObj) {
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const response = await mcpApi.test(
+      currentServer.value.name.trim() || 'draft',
+      configObj,
+    );
+    const toolSummary = Array.isArray(response.data.data)
+      ? response.data.data.join(', ')
+      : String(response.data.data ?? '');
+    addServerDialogMessage.value = toolSummary
+      ? `${response.data.message} (tools: ${toolSummary})`
+      : String(response.data.message || '');
+  } catch (error) {
+    showError(
+      tm('messages.testError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function syncMcpServers() {
+  const accessToken = mcpProviderToken.value.trim();
+  if (!accessToken) {
+    showError(tm('syncProvider.status.enterToken'));
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const response = await mcpApi.syncModelScope({
+      access_token: accessToken,
+    });
+    if (response.data.status !== 'ok') {
+      showError(
+        response.data.message ||
+          tm('syncProvider.messages.syncError', {
+            error: 'Unknown error',
           }),
-        );
-      } finally {
-        this.loading = false;
-      }
-    },
-  },
-};
+      );
+      return;
+    }
+
+    showSuccess(
+      response.data.message || tm('syncProvider.messages.syncSuccess'),
+    );
+    showSyncMcpServerDialog.value = false;
+    mcpProviderToken.value = '';
+    await getServers();
+  } catch (error) {
+    showError(
+      tm('syncProvider.messages.syncError', {
+        error: resolveErrorMessage(error, '网络连接或访问令牌问题'),
+      }),
+    );
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  void getServers();
+  refreshInterval = window.setInterval(() => {
+    void getServers();
+  }, 30000);
+});
+
+onUnmounted(() => {
+  if (refreshInterval !== null) {
+    clearInterval(refreshInterval);
+  }
+});
 </script>
 
 <style scoped>

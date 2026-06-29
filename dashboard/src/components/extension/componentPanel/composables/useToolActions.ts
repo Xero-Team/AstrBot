@@ -3,6 +3,7 @@
  */
 import { ref, computed, type Ref } from 'vue';
 import { toolApi } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import { normalizeTextInput } from '@/utils/inputValue';
 import type { ToolItem, ToolSummary } from '../types';
 
@@ -10,17 +11,6 @@ export function useToolActions(
   tools: Ref<ToolItem[]>,
   toast: (message: string, color?: string) => void,
 ) {
-  const getErrorMessage = (error: unknown, fallback: string) => {
-    if (!error || typeof error !== 'object') {
-      return fallback;
-    }
-    const errorLike = error as {
-      message?: string;
-      response?: { data?: { message?: string } };
-    };
-    return errorLike.response?.data?.message || errorLike.message || fallback;
-  };
-
   const toolSearch = ref('');
   const showBuiltinTools = ref(true);
 
@@ -79,7 +69,7 @@ export function useToolActions(
       }
     } catch (error) {
       tool.active = previous;
-      toast(getErrorMessage(error, errorMessage), 'error');
+      toast(resolveErrorMessage(error, errorMessage), 'error');
     }
   };
 
@@ -107,7 +97,7 @@ export function useToolActions(
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (error) {
-      toast(getErrorMessage(error, errorMessage), 'error');
+      toast(resolveErrorMessage(error, errorMessage), 'error');
     }
   };
 

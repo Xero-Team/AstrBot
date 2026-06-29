@@ -50,7 +50,7 @@ def _get_trace_settings(service: LogService):
 
 def _update_trace_settings(payload: TraceSettingsRequest, service: LogService):
     try:
-        message = service.update_trace_settings(payload.model_dump(exclude_none=True))
+        message = service.update_trace_settings(payload.enabled)
         return ok(message=message)
     except LogServiceError as exc:
         _raise_log_error(exc)

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from starlette.datastructures import UploadFile
+
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.computer.computer_client import (
     _discover_bay_credentials,
@@ -15,6 +17,7 @@ from astrbot.core.computer.computer_client import (
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.dashboard.upload_utils import save_upload_to_path
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _SKILL_FILE_MAX_BYTES = 512 * 1024
@@ -98,23 +101,6 @@ class SkillsService:
             raise SkillsServiceError(
                 "You are not permitted to do this operation in demo mode"
             )
-
-    @staticmethod
-    async def _save_upload(file: Any, target_path: str) -> None:
-        if hasattr(file, "save"):
-            maybe_awaitable = file.save(target_path)
-            if hasattr(maybe_awaitable, "__await__"):
-                await maybe_awaitable
-            return
-
-        if hasattr(file, "read"):
-            data = file.read()
-            if hasattr(data, "__await__"):
-                data = await data
-            Path(target_path).write_bytes(data)
-            return
-
-        raise SkillsServiceError("Invalid upload file")
 
     def resolve_local_skill_dir(self, name: str) -> Path:
         skill_name = str(name or "").strip()
@@ -256,7 +242,7 @@ class SkillsService:
             "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
         }
 
-    async def upload_skill(self, file: Any | None) -> SkillsOperationResult:
+    async def upload_skill(self, file: UploadFile | None) -> SkillsOperationResult:
         self._ensure_mutation_allowed()
         temp_path = None
         if not file:
@@ -272,7 +258,7 @@ class SkillsService:
         temp_path = _next_available_temp_path(temp_dir, filename)
 
         try:
-            await self._save_upload(file, temp_path)
+            await save_upload_to_path(file, temp_path)
             try:
                 skill_name = skill_mgr.install_skill_from_zip(
                     temp_path,
@@ -301,7 +287,9 @@ class SkillsService:
                 except Exception:
                     logger.warning(f"Failed to remove temp skill file: {temp_path}")
 
-    async def batch_upload_skills(self, file_list: list[Any]) -> SkillsOperationResult:
+    async def batch_upload_skills(
+        self, file_list: list[UploadFile]
+    ) -> SkillsOperationResult:
         self._ensure_mutation_allowed()
 
         if not file_list:
@@ -329,7 +317,7 @@ class SkillsService:
                     continue
 
                 temp_path = _next_available_temp_path(temp_dir, filename)
-                await self._save_upload(file, temp_path)
+                await save_upload_to_path(file, temp_path)
 
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(
@@ -451,11 +439,6 @@ class SkillsService:
         )
         return SkillArchive(path=zip_path, filename=f"{skill_name}.zip")
 
-    def prepare_skill_archive_from_dashboard_query(
-        self, name: str | None
-    ) -> SkillArchive:
-        return self.prepare_skill_archive(name or "")
-
     def list_skill_files(self, name: str, relative_path: str | None = "") -> dict:
         skill_name = str(name or "").strip()
         readonly = SkillManager().is_plugin_skill(skill_name)
@@ -493,14 +476,6 @@ class SkillsService:
             "entries": entries,
         }
 
-    def list_skill_files_from_dashboard_query(
-        self,
-        *,
-        name: str | None,
-        relative_path: str | None,
-    ) -> dict:
-        return self.list_skill_files(name or "", relative_path or "")
-
     def get_skill_file(self, name: str, relative_path: str | None = "SKILL.md") -> dict:
         skill_name = str(name or "").strip()
         skill_dir = self.resolve_local_skill_dir(skill_name)
@@ -528,14 +503,6 @@ class SkillsService:
             "size": size,
             "editable": not SkillManager().is_plugin_skill(skill_name),
         }
-
-    def get_skill_file_from_dashboard_query(
-        self,
-        *,
-        name: str | None,
-        relative_path: str | None,
-    ) -> dict:
-        return self.get_skill_file(name or "", relative_path or "SKILL.md")
 
     async def update_skill_file(self, data: object) -> dict:
         self._ensure_mutation_allowed()
@@ -578,11 +545,13 @@ class SkillsService:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         name = payload.get("name")
-        active = payload.get("active", True)
+        active = payload.get("active")
         if not name:
             raise SkillsServiceError("Missing skill name")
-        SkillManager().set_skill_active(name, bool(active))
-        return {"name": name, "active": bool(active)}
+        if not isinstance(active, bool):
+            raise SkillsServiceError("Missing skill active state")
+        SkillManager().set_skill_active(name, active)
+        return {"name": name, "active": active}
 
     async def delete_skill(self, data: object) -> dict:
         self._ensure_mutation_allowed()
@@ -618,23 +587,6 @@ class SkillsService:
 
         return await self.with_neo_client(_do)
 
-    async def get_neo_candidates_from_dashboard_query(
-        self,
-        *,
-        status: str | None,
-        skill_key: str | None,
-        limit: str | None,
-        offset: str | None,
-    ) -> SkillsOperationResult:
-        return await self.get_neo_candidates(
-            self._dashboard_query(
-                status=status,
-                skill_key=skill_key,
-                limit=limit,
-                offset=offset,
-            )
-        )
-
     async def get_neo_releases(self, query: dict[str, Any]) -> SkillsOperationResult:
         logger.info("[Neo] GET /skills/neo/releases requested.")
         skill_key = query.get("skill_key")
@@ -658,25 +610,6 @@ class SkillsService:
 
         return await self.with_neo_client(_do)
 
-    async def get_neo_releases_from_dashboard_query(
-        self,
-        *,
-        skill_key: str | None,
-        stage: str | None,
-        active_only: str | None,
-        limit: str | None,
-        offset: str | None,
-    ) -> SkillsOperationResult:
-        return await self.get_neo_releases(
-            self._dashboard_query(
-                skill_key=skill_key,
-                stage=stage,
-                active_only=active_only,
-                limit=limit,
-                offset=offset,
-            )
-        )
-
     async def get_neo_payload(self, query: dict[str, Any]) -> SkillsOperationResult:
         logger.info("[Neo] GET /skills/neo/payload requested.")
         payload_ref = query.get("payload_ref", "")
@@ -689,14 +622,6 @@ class SkillsService:
             return payload
 
         return await self.with_neo_client(_do)
-
-    async def get_neo_payload_from_dashboard_query(
-        self,
-        payload_ref: str | None,
-    ) -> SkillsOperationResult:
-        return await self.get_neo_payload(
-            self._dashboard_query(payload_ref=payload_ref)
-        )
 
     async def evaluate_neo_candidate(
         self,

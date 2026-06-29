@@ -73,6 +73,8 @@ def create_dashboard_asgi_app(
     app.state.db = db
     app.state.jwt_secret = jwt_secret
     app.state.dashboard_static_folder = static_folder
+    app.state.dashboard_config = {}
+    app.state.dashboard_testing = False
     log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
     app.state.services = SimpleNamespace(
         config_profiles=ConfigProfileService(core_lifecycle, db),

@@ -27,14 +27,7 @@
 
         <v-window v-model="activeProviderTab" class="mt-4">
           <v-window-item
-            v-for="tabType in [
-              'chat_completion',
-              'agent_runner',
-              'speech_to_text',
-              'text_to_speech',
-              'embedding',
-              'rerank',
-            ]"
+            v-for="tabType in PROVIDER_WINDOW_TABS"
             :key="tabType"
             :value="tabType"
           >
@@ -60,13 +53,13 @@
                       <v-card-text
                         class="text-caption text-medium-emphasis provider-card-description"
                       >
-                        {{ getProviderDescription(template, name) }}
+                        {{ getTemplateDescription(template, name) }}
                       </v-card-text>
                     </div>
                     <div class="provider-card-logo">
                       <img
-                        v-if="getProviderIcon(template.provider)"
-                        :src="getProviderIcon(template.provider)"
+                        v-if="resolveProviderIcon(template.provider)"
+                        :src="resolveProviderIcon(template.provider)"
                         class="provider-logo-img"
                       />
                       <div v-else class="provider-logo-fallback">
@@ -98,11 +91,35 @@
   </v-dialog>
 </template>
 
-<script>
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { getProviderIcon, getProviderDescription } from '@/utils/providerUtils';
+import {
+  getProviderIcon,
+  getProviderDescription as describeProvider,
+} from '@/utils/providerUtils';
 
-const AVAILABLE_PROVIDER_TABS = [
+type ProviderTab =
+  | 'chat_completion'
+  | 'agent_runner'
+  | 'speech_to_text'
+  | 'text_to_speech'
+  | 'embedding'
+  | 'rerank';
+
+interface ProviderTemplate {
+  type?: string;
+  provider?: string;
+  provider_type?: ProviderTab;
+}
+
+interface ProviderTemplateMetadata {
+  provider?: {
+    config_template?: Record<string, ProviderTemplate>;
+  };
+}
+
+const AVAILABLE_PROVIDER_TABS: ProviderTab[] = [
   'agent_runner',
   'speech_to_text',
   'text_to_speech',
@@ -110,96 +127,108 @@ const AVAILABLE_PROVIDER_TABS = [
   'rerank',
 ];
 
-export default {
-  name: 'AddNewProvider',
-  props: {
-    show: {
-      type: Boolean,
-      default: false,
-    },
-    metadata: {
-      type: Object,
-      default: () => ({}),
-    },
-    currentProviderType: {
-      type: String,
-      default: 'agent_runner',
-    },
+const PROVIDER_WINDOW_TABS: ProviderTab[] = [
+  'chat_completion',
+  ...AVAILABLE_PROVIDER_TABS,
+];
+
+const props = withDefaults(
+  defineProps<{
+    show?: boolean;
+    metadata?: unknown;
+    currentProviderType?: ProviderTab;
+  }>(),
+  {
+    show: false,
+    metadata: () => ({}),
+    currentProviderType: 'agent_runner',
   },
-  emits: ['update:show', 'select-template'],
-  setup() {
-    const { tm } = useModuleI18n('features/provider');
-    return { tm };
+);
+
+const emit = defineEmits<{
+  'update:show': [value: boolean];
+  'select-template': [name: string];
+}>();
+
+const { tm } = useModuleI18n('features/provider');
+
+const activeProviderTab = ref<ProviderTab>('agent_runner');
+
+const showDialog = computed({
+  get: () => props.show,
+  set: (value: boolean) => void emit('update:show', value),
+});
+
+const normalizedMetadata = computed<ProviderTemplateMetadata>(() => {
+  if (!props.metadata || typeof props.metadata !== 'object') {
+    return {};
+  }
+  const provider = Reflect.get(props.metadata, 'provider');
+  if (!provider || typeof provider !== 'object') {
+    return {};
+  }
+  const configTemplate = Reflect.get(provider, 'config_template');
+  if (!configTemplate || typeof configTemplate !== 'object') {
+    return { provider: {} };
+  }
+  return {
+    provider: {
+      config_template: configTemplate as Record<string, ProviderTemplate>,
+    },
+  };
+});
+
+function syncActiveProviderTab() {
+  activeProviderTab.value = AVAILABLE_PROVIDER_TABS.includes(
+    props.currentProviderType,
+  )
+    ? props.currentProviderType
+    : 'agent_runner';
+}
+
+function closeDialog() {
+  showDialog.value = false;
+}
+
+function getTemplatesByType(type: ProviderTab) {
+  const templates = normalizedMetadata.value.provider?.config_template ?? {};
+  return Object.fromEntries(
+    Object.entries(templates).filter(
+      ([, template]) => template.provider_type === type,
+    ),
+  );
+}
+
+function resolveProviderIcon(provider?: string) {
+  return provider ? getProviderIcon(provider) : '';
+}
+
+function getTemplateDescription(template: ProviderTemplate, name: string) {
+  return describeProvider(template, name, tm);
+}
+
+function selectProviderTemplate(name: string) {
+  emit('select-template', name);
+  closeDialog();
+}
+
+watch(
+  () => props.show,
+  (value) => {
+    if (value) {
+      syncActiveProviderTab();
+    }
   },
-  data() {
-    return {
-      activeProviderTab: 'agent_runner',
-    };
+);
+
+watch(
+  () => props.currentProviderType,
+  () => {
+    if (showDialog.value) {
+      syncActiveProviderTab();
+    }
   },
-  computed: {
-    showDialog: {
-      get() {
-        return this.show;
-      },
-      set(value) {
-        this.$emit('update:show', value);
-      },
-    },
-  },
-  watch: {
-    show(value) {
-      if (value) {
-        this.syncActiveProviderTab();
-      }
-    },
-    currentProviderType() {
-      if (this.showDialog) {
-        this.syncActiveProviderTab();
-      }
-    },
-  },
-  methods: {
-    syncActiveProviderTab() {
-      this.activeProviderTab = AVAILABLE_PROVIDER_TABS.includes(
-        this.currentProviderType,
-      )
-        ? this.currentProviderType
-        : 'agent_runner';
-    },
-
-    closeDialog() {
-      this.showDialog = false;
-    },
-
-    // 按提供商类型获取模板列表
-    getTemplatesByType(type) {
-      const templates = this.metadata.provider.config_template || {};
-      const filtered = {};
-
-      for (const [name, template] of Object.entries(templates)) {
-        if (template.provider_type === type) {
-          filtered[name] = template;
-        }
-      }
-
-      return filtered;
-    },
-
-    // 从工具函数导入
-    getProviderIcon,
-
-    // 获取提供商简介
-    getProviderDescription(template, name) {
-      return getProviderDescription(template, name, this.tm);
-    },
-
-    // 选择提供商模板
-    selectProviderTemplate(name) {
-      this.$emit('select-template', name);
-      this.closeDialog();
-    },
-  },
-};
+);
 </script>
 
 <style scoped>

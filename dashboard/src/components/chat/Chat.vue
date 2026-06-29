@@ -1385,7 +1385,7 @@ async function stopCurrentSession() {
 }
 
 function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? 'PurpleTheme' : 'PurpleThemeDark');
+  customizer.SET_THEME_MODE(isDark.value ? 'light' : 'dark');
 }
 </script>
 

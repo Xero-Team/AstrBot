@@ -49,9 +49,7 @@
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
-                          :src="
-                            getPlatformIcon(platformTemplates[item.raw].type)
-                          "
+                          :src="getPlatformTemplateIcon(item)"
                           style="
                             width: 32px;
                             height: 32px;
@@ -110,7 +108,7 @@
                       </div>
                       <AstrBotConfig
                         :iterable="selectedPlatformConfig"
-                        :metadata="metadata['platform_group']?.metadata"
+                        :metadata="platformMetadata"
                         metadata-key="platform"
                       />
                     </div>
@@ -165,7 +163,7 @@
                       </div>
                       <AstrBotConfig
                         :iterable="selectedPlatformConfig"
-                        :metadata="metadata['platform_group']?.metadata"
+                        :metadata="platformMetadata"
                         metadata-key="platform"
                       />
                     </div>
@@ -220,7 +218,7 @@
                       </div>
                       <AstrBotConfig
                         :iterable="selectedPlatformConfig"
-                        :metadata="metadata['platform_group']?.metadata"
+                        :metadata="platformMetadata"
                         metadata-key="platform"
                       />
                     </div>
@@ -253,7 +251,7 @@
                     </div>
                     <AstrBotConfig
                       :iterable="selectedPlatformConfig"
-                      :metadata="metadata['platform_group']?.metadata"
+                      :metadata="platformMetadata"
                       metadata-key="platform"
                     />
                   </div>
@@ -275,7 +273,7 @@
                   <div class="mt-2">
                     <AstrBotConfig
                       :iterable="updatingPlatformConfig"
-                      :metadata="metadata['platform_group']?.metadata"
+                      :metadata="platformMetadata"
                       metadata-key="platform"
                     />
                   </div>
@@ -332,7 +330,7 @@
                 <v-radio-group
                   v-model="aBConfigRadioVal"
                   class="mt-2"
-                  hide-details="true"
+                  hide-details
                 >
                   <v-radio value="0">
                     <template #label>
@@ -389,22 +387,6 @@
                     </v-text-field>
                   </div>
                 </v-radio-group>
-
-                <!-- 现有配置文件预览区域 -->
-                <!-- <div v-if="aBConfigRadioVal === '0' && selectedAbConfId" class="mt-4">
-                  <div v-if="configPreviewLoading" class="d-flex justify-center py-4">
-                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                  </div>
-                  <div v-else-if="selectedConfigData && selectedConfigMetadata" class="config-preview-container">
-                    <h4 class="mb-3">配置文件预览</h4>
-                    <AstrBotCoreConfigWrapper :metadata="selectedConfigMetadata" :config_data="selectedConfigData"
-                      readonly="true" />
-                  </div>
-                  <div v-else class="text-center py-4 text-grey">
-                    <v-icon>mdi-information-outline</v-icon>
-                    <p class="mt-2">无法加载配置文件预览</p>
-                  </div>
-                </div> -->
 
                 <!-- 新配置文件编辑区域 -->
                 <div v-if="aBConfigRadioVal === '1'" class="mt-4">
@@ -511,12 +493,14 @@
                           "
                           @focus="loadKnownRouteUmos"
                         >
-                          <template #item="{ props, item: sourceItem }">
-                            <v-list-item v-bind="props">
+                          <template
+                            #item="{ props: sourceItemProps, item: sourceItem }"
+                          >
+                            <v-list-item v-bind="sourceItemProps">
                               <template #title>
                                 <UmoDisplay
                                   v-bind="
-                                    getKnownRouteUmoDisplayProps(sourceItem.raw)
+                                    getKnownRouteUmoDisplayProps(sourceItem)
                                   "
                                   compact
                                   :show-info="false"
@@ -528,16 +512,14 @@
                             <v-chip
                               v-if="
                                 sourceItem &&
-                                getKnownRouteUmoSelectionText(sourceItem.raw)
+                                getKnownRouteUmoSelectionText(sourceItem)
                               "
                               size="small"
                               variant="tonal"
                               color="primary"
                               class="umo-selection-chip"
                             >
-                              {{
-                                getKnownRouteUmoSelectionText(sourceItem.raw)
-                              }}
+                              {{ getKnownRouteUmoSelectionText(sourceItem) }}
                             </v-chip>
                           </template>
                         </v-autocomplete>
@@ -626,7 +608,7 @@
                     >
                   </template>
 
-                  <template #item.actions>
+                  <template #item.actions="{ index }">
                     <div v-if="isEditingRoutes" class="d-flex align-center">
                       <v-btn
                         icon
@@ -774,14 +756,14 @@
       <div class="config-drawer-content">
         <ConfigPage
           v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId"
+          :initial-config-id="configDrawerTargetId || 'default'"
         />
       </div>
     </v-card>
   </v-overlay>
 </template>
 
-<script>
+<script setup lang="ts">
 import {
   botApi,
   configProfileApi,
@@ -789,926 +771,928 @@ import {
   fileApi,
   sessionApi,
 } from '@/api/v1';
+import { computed, nextTick, reactive, ref, toRefs, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import {
-  getPlatformIcon,
-  getPlatformDescription,
+  getPlatformIcon as getBasePlatformIcon,
   getTutorialLink,
 } from '@/utils/platformUtils';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import ConfigPage from '@/views/ConfigPage.vue';
 import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 
-export default {
+defineOptions({
   name: 'AddNewPlatform',
-  components: {
-    AstrBotConfig,
-    AstrBotCoreConfigWrapper,
-    ConfigPage,
-    PlatformRegistrationAction,
-    UmoDisplay,
-  },
-  props: {
-    show: {
-      type: Boolean,
-      default: false,
-    },
-    metadata: {
-      type: Object,
-      default: () => ({}),
-    },
-    configData: {
-      type: Object,
-      default: () => ({}),
-    },
-    updatingMode: {
-      type: Boolean,
-      default: false,
-    },
-    updatingPlatformConfig: {
-      type: Object,
-      default: null,
-    },
-  },
-  emits: ['update:show', 'show-toast', 'refresh-config'],
-  setup() {
-    const { tm } = useModuleI18n('features/platform');
-    return { tm };
-  },
-  data() {
-    return {
-      selectedPlatformType: null,
-      selectedPlatformConfig: null,
-      larkCreationMode: '',
-      dingtalkCreationMode: '',
-      qqOfficialCreationMode: '',
-
-      aBConfigRadioVal: '0',
-      selectedAbConfId: 'default',
-      configInfoList: [],
-
-      // 选中的配置文件预览数据
-      selectedConfigData: null,
-      selectedConfigMetadata: null,
-      configPreviewLoading: false,
-
-      // 新配置文件相关数据
-      newConfigData: null,
-      newConfigMetadata: null,
-      newConfigLoading: false,
-
-      // 平台配置文件表格（已弃用，改用 platformRoutes）
-      platformConfigs: [],
-
-      // 平台路由表
-      platformRoutes: [],
-      isEditingRoutes: false, // 编辑模式开关
-      knownRouteUmos: [],
-      knownRouteUmoInfoMap: {},
-      loadingKnownRouteUmos: false,
-
-      // ID冲突确认对话框
-      showIdConflictDialog: false,
-      conflictId: '',
-      idConflictResolve: null,
-
-      // OneBot Empty Token Warning #2639
-      showOneBotEmptyTokenWarnDialog: false,
-      oneBotEmptyTokenWarningResolve: null,
-
-      loading: false,
-
-      showConfigSection: false,
-
-      // 配置抽屉
-      showConfigDrawer: false,
-      configDrawerTargetId: null,
-
-      // 保存更新前的平台 ID，防止用户修改 ID 后丢失原始定位
-      originalUpdatingPlatformId: null,
-    };
-  },
-  computed: {
-    showDialog: {
-      get() {
-        return this.show;
-      },
-      set(value) {
-        this.$emit('update:show', value);
-      },
-    },
-    platformTemplates() {
-      return (
-        this.metadata.platform_group?.metadata.platform?.config_template || {}
-      );
-    },
-    canSave() {
-      // 基本条件：必须选择平台类型
-      if (!this.selectedPlatformType) {
-        return false;
-      }
-
-      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
-        return false;
-      }
-
-      if (this.isLarkPlatform && !this.larkCreationMode) {
-        return false;
-      }
-
-      if (this.isLarkPlatform && this.larkCreationMode === 'scan') {
-        if (
-          !this.selectedPlatformConfig?.app_id ||
-          !this.selectedPlatformConfig?.app_secret
-        ) {
-          return false;
-        }
-      }
-
-      if (this.isDingtalkPlatform && !this.dingtalkCreationMode) {
-        return false;
-      }
-
-      if (this.isDingtalkPlatform && this.dingtalkCreationMode === 'scan') {
-        if (
-          !this.selectedPlatformConfig?.client_id ||
-          !this.selectedPlatformConfig?.client_secret
-        ) {
-          return false;
-        }
-      }
-
-      if (this.isQqOfficialPlatform && !this.qqOfficialCreationMode) {
-        return false;
-      }
-
-      if (this.isQqOfficialPlatform && this.qqOfficialCreationMode === 'scan') {
-        if (
-          !this.selectedPlatformConfig?.appid ||
-          !this.selectedPlatformConfig?.secret
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        this.isWeixinOcPlatform &&
-        !this.selectedPlatformConfig?.weixin_oc_token
-      ) {
-        return false;
-      }
-
-      // 如果是使用现有配置文件模式
-      if (this.aBConfigRadioVal === '0') {
-        return Boolean(this.selectedAbConfId);
-      }
-
-      // 如果是创建新配置文件模式
-      if (this.aBConfigRadioVal === '1') {
-        // 需要配置文件名称，且新配置数据已加载
-        return Boolean(this.selectedAbConfId && this.newConfigData);
-      }
-
-      return false;
-    },
-    configTableHeaders() {
-      return [
-        {
-          title: this.tm('createDialog.configTableHeaders.configId'),
-          key: 'name',
-          sortable: false,
-        },
-        {
-          title: this.tm('createDialog.configTableHeaders.scope'),
-          key: 'scope',
-          sortable: false,
-        },
-      ];
-    },
-    routeTableHeaders() {
-      return [
-        {
-          title: this.tm('createDialog.routeTableHeaders.source'),
-          key: 'source',
-          sortable: false,
-          width: '60%',
-        },
-        {
-          title: this.tm('createDialog.routeTableHeaders.config'),
-          key: 'configId',
-          sortable: false,
-          width: '20%',
-        },
-        {
-          title: this.tm('createDialog.routeTableHeaders.actions'),
-          key: 'actions',
-          sortable: false,
-          align: 'center',
-          width: '20%',
-        },
-      ];
-    },
-    messageTypeOptions() {
-      return [
-        { label: this.tm('createDialog.messageTypeOptions.all'), value: '*' },
-        {
-          label: this.tm('createDialog.messageTypeOptions.group'),
-          value: 'GroupMessage',
-        },
-        {
-          label: this.tm('createDialog.messageTypeOptions.friend'),
-          value: 'FriendMessage',
-        },
-      ];
-    },
-    routePlatformId() {
-      if (this.updatingMode) {
-        return (
-          this.updatingPlatformConfig?.id ||
-          this.originalUpdatingPlatformId ||
-          ''
-        );
-      }
-      return this.selectedPlatformConfig?.id || '';
-    },
-    filteredKnownRouteUmoItems() {
-      const platformId = this.routePlatformId;
-      return this.knownRouteUmos.filter((umo) => {
-        const parsed = this.parseUmop(umo);
-        return parsed?.platform === platformId;
-      });
-    },
-    isLarkPlatform() {
-      return this.selectedPlatformConfig?.type === 'lark';
-    },
-    isWeixinOcPlatform() {
-      return this.selectedPlatformConfig?.type === 'weixin_oc';
-    },
-    isDingtalkPlatform() {
-      return this.selectedPlatformConfig?.type === 'dingtalk';
-    },
-    isQqOfficialPlatform() {
-      return ['qq_official', 'qq_official_webhook'].includes(
-        this.selectedPlatformConfig?.type,
-      );
-    },
-  },
-  watch: {
-    selectedPlatformType(newType) {
-      if (newType && this.platformTemplates[newType]) {
-        this.selectedPlatformConfig = JSON.parse(
-          JSON.stringify(this.platformTemplates[newType]),
-        );
-        this.larkCreationMode = '';
-        this.dingtalkCreationMode = '';
-        this.qqOfficialCreationMode = '';
-      } else {
-        this.selectedPlatformConfig = null;
-        this.larkCreationMode = '';
-        this.dingtalkCreationMode = '';
-        this.qqOfficialCreationMode = '';
-      }
-    },
-    selectedAbConfId(newConfigId) {
-      // 当选择配置文件改变时，获取配置文件数据用于预览
-      if (!this.updatingMode && this.aBConfigRadioVal === '0' && newConfigId) {
-        this.getConfigForPreview(newConfigId);
-      } else {
-        this.selectedConfigData = null;
-        this.selectedConfigMetadata = null;
-      }
-    },
-    aBConfigRadioVal(newVal) {
-      // 当切换到创建新配置文件时，获取默认配置模板
-      if (newVal === '1') {
-        this.selectedConfigData = null;
-        this.selectedConfigMetadata = null;
-        this.selectedAbConfId = null;
-        this.getDefaultConfigTemplate();
-      } else if (newVal === '0') {
-        // 如果切换回使用现有配置文件但没有选择配置文件，重置为默认
-        this.newConfigData = null;
-        this.newConfigMetadata = null;
-        if (!this.selectedAbConfId) {
-          this.selectedAbConfId = 'default';
-        }
-      }
-    },
-    showIdConflictDialog(newValue) {
-      if (!newValue && this.idConflictResolve) {
-        this.idConflictResolve(false);
-        this.idConflictResolve = null;
-      }
-    },
-    showOneBotEmptyTokenWarnDialog(newValue) {
-      if (!newValue && this.oneBotEmptyTokenWarningResolve) {
-        this.oneBotEmptyTokenWarningResolve(true);
-        this.oneBotEmptyTokenWarningResolve = null;
-      }
-    },
-    // 监听更新模式变化，获取相关配置文件
-    updatingPlatformConfig: {
-      handler(newConfig) {
-        if (this.updatingMode && newConfig?.id) {
-          this.originalUpdatingPlatformId = newConfig.id;
-          this.getPlatformConfigs(newConfig.id);
-        }
-      },
-      immediate: true,
-    },
-    showConfigSection(newValue) {
-      if (newValue && !this.updatingMode && this.aBConfigRadioVal === '0') {
-        this.getConfigForPreview(this.selectedAbConfId);
-      }
-      if (newValue) {
-        this.$nextTick(() => {
-          this.scrollDialogToBottom();
-        });
-      }
-    },
-    // 监听编辑模式变化，自动展开配置文件部分
-    updatingMode: {
-      handler(newValue) {
-        if (newValue) {
-          this.showConfigSection = true;
-          // 编辑模式下默认不开启路由编辑模式，用户需要手动点击
-          this.isEditingRoutes = false;
-        }
-      },
-      immediate: true,
-    },
-  },
-  methods: {
-    getPlatformIcon(platformType) {
-      // Check for plugin-provided logo_token first
-      const template = this.platformTemplates?.[platformType];
-      if (template?.logo_token) {
-        return fileApi.tokenUrl(template.logo_token);
-      }
-      return getPlatformIcon(platformType);
-    },
-    getPlatformDescription,
-    resetForm() {
-      this.selectedPlatformType = null;
-      this.selectedPlatformConfig = null;
-      this.larkCreationMode = '';
-      this.dingtalkCreationMode = '';
-      this.qqOfficialCreationMode = '';
-
-      this.aBConfigRadioVal = '0';
-      this.selectedAbConfId = 'default';
-
-      // 重置配置预览数据
-      this.selectedConfigData = null;
-      this.selectedConfigMetadata = null;
-      this.configPreviewLoading = false;
-
-      // 重置新配置文件数据
-      this.newConfigData = null;
-      this.newConfigMetadata = null;
-      this.newConfigLoading = false;
-
-      this.showConfigSection = false;
-      this.isEditingRoutes = false; // 重置编辑模式
-      this.knownRouteUmos = [];
-      this.knownRouteUmoInfoMap = {};
-      this.loadingKnownRouteUmos = false;
-
-      this.showConfigDrawer = false;
-      this.configDrawerTargetId = null;
-
-      this.originalUpdatingPlatformId = null;
-    },
-    closeDialog() {
-      this.resetForm();
-
-      this.showDialog = false;
-    },
-    async getConfigInfoList() {
-      await configProfileApi.list().then((res) => {
-        this.configInfoList = res.data.data.info_list;
-      });
-    },
-
-    // 获取配置文件数据用于预览
-    async getConfigForPreview(configId) {
-      if (!configId) {
-        this.selectedConfigData = null;
-        this.selectedConfigMetadata = null;
-        return;
-      }
-
-      this.configPreviewLoading = true;
-      try {
-        const response = await configProfileApi.get(configId);
-
-        this.selectedConfigData = response.data.data.config;
-        this.selectedConfigMetadata = response.data.data.metadata;
-      } catch (error) {
-        console.error('获取配置文件预览数据失败:', error);
-        this.selectedConfigData = null;
-        this.selectedConfigMetadata = null;
-      } finally {
-        this.configPreviewLoading = false;
-      }
-    },
-
-    // 获取默认配置模板用于创建新配置文件
-    async getDefaultConfigTemplate() {
-      this.newConfigLoading = true;
-      try {
-        const response = await configProfileApi.schema();
-        this.newConfigData = response.data.data.config;
-        this.newConfigMetadata = response.data.data.metadata;
-      } catch (error) {
-        console.error('获取默认配置模板失败:', error);
-        this.newConfigData = null;
-        this.newConfigMetadata = null;
-      } finally {
-        this.newConfigLoading = false;
-      }
-    },
-    openTutorial() {
-      const tutorialUrl = getTutorialLink(this.selectedPlatformConfig.type);
-      window.open(tutorialUrl, '_blank');
-    },
-    openConfigDrawer(configId) {
-      const targetId = configId || 'default';
-
-      if (
-        configId &&
-        this.configInfoList.findIndex((c) => c.id === configId) === -1
-      ) {
-        this.showError(this.tm('messages.configNotFoundOpenConfig'));
-      }
-
-      this.configDrawerTargetId = targetId;
-      this.showConfigDrawer = true;
-    },
-    closeConfigDrawer() {
-      this.showConfigDrawer = false;
-    },
-    newPlatform() {
-      this.loading = true;
-      if (this.updatingMode) {
-        if (this.updatingPlatformConfig.type === 'aiocqhttp') {
-          const token = this.updatingPlatformConfig.ws_reverse_token;
-          if (!token || token.trim() === '') {
-            void this.showOneBotEmptyTokenWarning().then(
-              (continueWithWarning) => {
-                if (continueWithWarning) {
-                  void this.updatePlatform();
-                } else {
-                  this.loading = false;
-                }
-              },
-            );
-            return;
-          }
-        }
-        void this.updatePlatform();
-      } else {
-        void this.savePlatform();
-      }
-    },
-    async updatePlatform() {
-      const id =
-        this.originalUpdatingPlatformId || this.updatingPlatformConfig.id;
-      if (!id) {
-        this.loading = false;
-        this.showError(this.tm('messages.updateMissingPlatformId'));
-        return;
-      }
-
-      if (!this.isPlatformIdValid(id)) {
-        this.loading = false;
-        this.showError(this.tm('dialog.invalidPlatformId'));
-        return;
-      }
-
-      try {
-        // 更新平台配置
-        let resp = await botApi.update(id, this.updatingPlatformConfig);
-
-        if (resp.data.status === 'error') {
-          throw new Error(
-            resp.data.message || this.tm('messages.platformUpdateFailed'),
-          );
-        }
-
-        // 同时更新路由表
-        await this.saveRoutesInternal();
-
-        this.loading = false;
-        this.showDialog = false;
-        this.resetForm();
-        this.$emit('refresh-config');
-        this.showSuccess(this.tm('messages.updateSuccess'));
-      } catch (err) {
-        this.loading = false;
-        this.showError(err.response?.data?.message || err.message);
-      }
-    },
-    async savePlatform() {
-      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
-        this.loading = false;
-        this.showError(this.tm('dialog.invalidPlatformId'));
-        return;
-      }
-
-      // 检查 ID 是否已存在
-      const existingPlatform = this.configData.platform?.find(
-        (p) => p.id === this.selectedPlatformConfig.id,
-      );
-      if (existingPlatform || this.selectedPlatformConfig.id === 'webchat') {
-        const confirmed = await this.confirmIdConflict(
-          this.selectedPlatformConfig.id,
-        );
-        if (!confirmed) {
-          this.loading = false;
-          return; // 如果用户取消，则中止保存
-        }
-      }
-
-      // 检查 aiocqhttp 适配器的安全设置
-      if (this.selectedPlatformConfig.type === 'aiocqhttp') {
-        const token = this.selectedPlatformConfig.ws_reverse_token;
-        if (!token || token.trim() === '') {
-          const continueWithWarning = await this.showOneBotEmptyTokenWarning();
-          if (!continueWithWarning) {
-            return;
-          }
-        }
-      }
-
-      try {
-        // 先保存平台配置
-        const res = await botApi.create(this.selectedPlatformConfig);
-
-        // 平台保存成功后，处理配置文件
-        await this.handleConfigFile();
-
-        this.loading = false;
-        this.showDialog = false;
-        this.resetForm();
-        this.$emit('refresh-config');
-        this.showSuccess(
-          res.data.message || this.tm('messages.addSuccessWithConfig'),
-        );
-      } catch (err) {
-        this.loading = false;
-        this.showError(err.response?.data?.message || err.message);
-      }
-    },
-
-    async handleConfigFile() {
-      if (!this.selectedAbConfId) {
-        return;
-      }
-
-      const platformId = this.selectedPlatformConfig.id;
-      // 生成默认的UMOP：平台ID:*:*（表示该平台的所有消息类型和会话）
-      const newUmop = `${platformId}:*:*`;
-
-      let configId = null;
-
-      // 第一步：创建或获取配置文件ID
-      if (this.aBConfigRadioVal === '0') {
-        // 使用现有配置文件
-        configId = this.selectedAbConfId;
-      } else if (this.aBConfigRadioVal === '1') {
-        // 创建新配置文件
-        configId = await this.createNewConfigFile(this.selectedAbConfId);
-      }
-
-      if (!configId) {
-        throw new Error(this.tm('messages.configIdMissing'));
-      }
-
-      // 第二步：统一更新路由表
-      await this.updateRoutingTable(newUmop, configId);
-    },
-
-    async updateRoutingTable(umop, configId) {
-      try {
-        await configRouteApi.upsert(umop, { config_id: configId });
-
-        console.log(`成功更新路由表: ${umop} -> ${configId}`);
-      } catch (err) {
-        console.error('更新路由表失败:', err);
-        const errorMessage = err.response?.data?.message || err.message;
-        throw new Error(
-          this.tm('messages.routingUpdateFailed', { message: errorMessage }),
-        );
-      }
-    },
-
-    async createNewConfigFile(configName) {
-      try {
-        // 准备配置数据，如果是创建模式且有新配置数据，使用用户填写的配置
-        const configData =
-          this.aBConfigRadioVal === '1' && this.newConfigData
-            ? this.newConfigData
-            : undefined;
-
-        // 创建新的配置文件（不传入umop）
-        const createRes = await configProfileApi.create({
-          name: configName,
-          config: configData, // 传入用户配置的数据
-        });
-
-        const newConfigId = createRes.data.data.conf_id;
-        console.log(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
-
-        return newConfigId;
-      } catch (err) {
-        console.error('创建新配置文件失败:', err);
-        const errorMessage = err.response?.data?.message || err.message;
-        throw new Error(
-          this.tm('messages.createConfigFailed', { message: errorMessage }),
-        );
-      }
-    },
-
-    confirmIdConflict(id) {
-      this.conflictId = id;
-      this.showIdConflictDialog = true;
-      return new Promise((resolve) => {
-        this.idConflictResolve = resolve;
-      });
-    },
-
-    handleIdConflictConfirm(confirmed) {
-      if (this.idConflictResolve) {
-        this.idConflictResolve(confirmed);
-      }
-      this.showIdConflictDialog = false;
-    },
-
-    showOneBotEmptyTokenWarning() {
-      this.showOneBotEmptyTokenWarnDialog = true;
-      return new Promise((resolve) => {
-        this.oneBotEmptyTokenWarningResolve = resolve;
-      });
-    },
-
-    handleOneBotEmptyTokenWarningDismiss(continueWithWarning) {
-      this.showOneBotEmptyTokenWarnDialog = false;
-      if (this.oneBotEmptyTokenWarningResolve) {
-        this.oneBotEmptyTokenWarningResolve(continueWithWarning);
-        this.oneBotEmptyTokenWarningResolve = null;
-      }
-
-      if (!continueWithWarning) {
-        this.loading = false;
-      }
-    },
-
-    showSuccess(message) {
-      this.$emit('show-toast', { message, type: 'success' });
-    },
-
-    showError(message) {
-      this.$emit('show-toast', { message, type: 'error' });
-    },
-
-    buildRandomPlatformIdSuffix() {
-      const letters = 'abcdefghijklmnopqrstuvwxyz';
-      let suffix = '_';
-      for (let i = 0; i < 4; i += 1) {
-        suffix += letters[Math.floor(Math.random() * letters.length)];
-      }
-      return suffix;
-    },
-
-    sanitizePlatformIdPart(value) {
-      return String(value || '')
-        .trim()
-        .replace(/\s+/g, '')
-        .replace(/[!:]/g, '_');
-    },
-
-    handlePlatformRegistrationCreated(data) {
-      if (!this.selectedPlatformConfig || !data) {
-        return;
-      }
-      const currentId = String(this.selectedPlatformConfig.id || '').trim();
-      const platformType = this.selectedPlatformConfig.type;
-      if (!currentId) {
-        return;
-      }
-
-      let suffix = '';
-      const explicitSuffix = this.sanitizePlatformIdPart(
-        data.platform_id_suffix,
-      );
-      if (explicitSuffix) {
-        suffix =
-          explicitSuffix.startsWith('_') || explicitSuffix.startsWith('-')
-            ? explicitSuffix
-            : `_${explicitSuffix}`;
-      } else if (data.bot_name) {
-        const safeBotName = this.sanitizePlatformIdPart(data.bot_name);
-        if (safeBotName) {
-          suffix = `-${safeBotName}`;
-        }
-      } else if (platformType === 'weixin_oc' || platformType === 'dingtalk') {
-        suffix = this.buildRandomPlatformIdSuffix();
-      }
-
-      if (!suffix) {
-        return;
-      }
-
-      if (
-        (platformType === 'weixin_oc' || platformType === 'dingtalk') &&
-        /_[a-z]{4}$/.test(currentId)
-      ) {
-        return;
-      }
-
-      this.selectedPlatformConfig.id = currentId.endsWith(suffix)
-        ? currentId
-        : `${currentId}${suffix}`;
-    },
-
-    isPlatformIdValid(id) {
-      if (!id) {
-        return false;
-      }
-      return !/[!:\s]/.test(id);
-    },
-
-    // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
-    async getPlatformConfigs(platformId) {
-      if (!platformId) {
-        this.platformRoutes = [];
-        return;
-      }
-
-      try {
-        // 获取路由表 (UMOP -> conf_id)
-        const routesRes = await configRouteApi.list();
-        const routingTable = routesRes.data.data.routing;
-
-        // 过滤出属于该平台的路由，并保持顺序
-        const routes = [];
-        for (const [umop, confId] of Object.entries(routingTable)) {
-          const parsedUmop = this.parseUmop(umop);
-          if (this.isParsedUmopMatchPlatform(parsedUmop, platformId)) {
-            routes.push({
-              umop,
-              originalUmop: umop, // 保存原始 UMOP 用于更新时查找
-              sourceMode: 'manual',
-              sourceUmo: parsedUmop.sessionId === '*' ? '' : umop,
-              messageType: parsedUmop.messageType || '*',
-              sessionId: parsedUmop.sessionId || '*',
-              configId: confId,
-            });
-          }
-        }
-
-        this.platformRoutes = routes;
-
-        // 如果没有路由，添加一个默认的空路由供用户编辑
-        if (this.platformRoutes.length === 0) {
-          this.platformRoutes.push({
-            umop: null,
-            originalUmop: null,
-            sourceMode: 'manual',
-            sourceUmo: '',
-            messageType: '*',
-            sessionId: '*',
-            configId: 'default',
-          });
-        }
-      } catch (err) {
-        console.error('获取平台路由配置失败:', err);
-        this.platformRoutes = [];
-      }
-    },
-
-    async loadKnownRouteUmos() {
-      if (this.loadingKnownRouteUmos) {
-        return;
-      }
-
-      this.loadingKnownRouteUmos = true;
-      try {
-        const res = await sessionApi.activeUmos();
-        if (res.data.status === 'ok') {
-          const umos = Array.isArray(res.data.data?.umos)
-            ? res.data.data.umos
-            : [];
-          this.knownRouteUmos = Array.from(
-            new Set([...this.knownRouteUmos, ...umos]),
-          );
-          this.mergeKnownRouteUmoInfos(res.data.data?.umo_infos || []);
-        }
-      } catch (err) {
-        console.error('获取已有消息来源失败:', err);
-      } finally {
-        this.loadingKnownRouteUmos = false;
-      }
-    },
-
-    mergeKnownRouteUmoInfos(infos = []) {
-      const next = { ...this.knownRouteUmoInfoMap };
-      for (const info of infos) {
-        if (info?.umo) {
-          next[info.umo] = { ...(next[info.umo] || {}), ...info };
-        }
-      }
-      this.knownRouteUmoInfoMap = next;
-    },
-
-    getKnownRouteUmoInfo(umo) {
-      const parsed = this.parseUmop(umo);
-      return (
-        this.knownRouteUmoInfoMap[umo] || {
-          umo,
-          platform: parsed?.platform || '',
-          message_type: parsed?.messageType || '',
-          session_id: parsed?.sessionId || umo,
-          auto_name: '',
-          user_alias: '',
-          display_name: umo,
-        }
-      );
-    },
-
-    getKnownRouteUmoDisplayProps(umo) {
-      const info = this.getKnownRouteUmoInfo(umo);
-      const parsed = this.parseUmop(umo);
-      return {
-        umo,
-        platform: info.platform || parsed?.platform || '',
-        messageType: info.message_type || parsed?.messageType || '',
-        sessionId: info.session_id || parsed?.sessionId || '',
-        autoName: info.auto_name || '',
-        userAlias: info.user_alias || '',
+});
+
+type RecordValue = Record<string, unknown>;
+type CreationMode = '' | 'scan' | 'manual';
+type ConfigMode = '0' | '1';
+type RouteSourceMode = 'manual' | 'known';
+
+interface PlatformConfigItem extends RecordValue {
+  id?: string;
+  type?: string;
+  app_id?: string;
+  app_secret?: string;
+  client_id?: string;
+  client_secret?: string;
+  appid?: string;
+  secret?: string;
+  weixin_oc_token?: string;
+  ws_reverse_token?: string;
+  logo_token?: string;
+}
+
+interface PlatformMetadataState extends RecordValue {
+  platform_group?: {
+    metadata?: RecordValue & {
+      platform?: {
+        config_template?: Record<string, PlatformConfigItem>;
       };
-    },
+    };
+  };
+}
 
-    getKnownRouteUmoSelectionText(umo) {
-      if (!umo) return '';
-      const info = this.getKnownRouteUmoInfo(umo);
-      const parsed = this.parseUmop(umo);
-      const aliasName = info.user_alias || '';
-      const autoName = info.auto_name || '';
-      if (aliasName && autoName && aliasName !== autoName) {
-        return `${aliasName}（${autoName}）`;
-      }
-      return (
-        aliasName ||
-        autoName ||
-        (parsed
-          ? `${this.getMessageTypeLabel(parsed.messageType)}:${
-              parsed.sessionId
-            }`
-          : umo)
-      );
-    },
+interface PlatformConfigState extends RecordValue {
+  platform?: unknown[];
+}
 
-    getRouteSourceMode(route) {
-      return route.sourceMode || 'manual';
-    },
+interface ConfigInfo extends RecordValue {
+  id: string;
+  name: string;
+}
 
-    getRouteSourceModeLinkText(route) {
-      return this.getRouteSourceMode(route) === 'known'
-        ? this.tm('createDialog.routeSource.switchToManual')
-        : this.tm('createDialog.routeSource.switchToKnown');
-    },
+interface PlatformRoute {
+  umop: string | null;
+  originalUmop: string | null;
+  sourceMode: RouteSourceMode;
+  sourceUmo: string;
+  messageType: string;
+  sessionId: string;
+  configId: string;
+}
 
-    toggleRouteSourceMode(route) {
-      const nextMode =
-        this.getRouteSourceMode(route) === 'known' ? 'manual' : 'known';
-      route.sourceMode = nextMode;
-      if (nextMode === 'known') {
-        void this.loadKnownRouteUmos();
-      }
-    },
+interface ParsedUmop {
+  platform: string;
+  messageType: string;
+  sessionId: string;
+}
 
-    applyKnownRouteSource(route, umo) {
-      if (!umo) {
-        route.sourceUmo = '';
+interface KnownRouteUmoInfo extends RecordValue {
+  umo: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
+}
+
+interface RegistrationCreatedPayload extends RecordValue {
+  platform_id_suffix?: string;
+  bot_name?: string;
+}
+
+interface ToastPayload {
+  message: string;
+  type: 'success' | 'error';
+}
+
+interface ComponentState {
+  selectedPlatformType: string | null;
+  selectedPlatformConfig: PlatformConfigItem | null;
+  larkCreationMode: CreationMode;
+  dingtalkCreationMode: CreationMode;
+  qqOfficialCreationMode: CreationMode;
+  aBConfigRadioVal: ConfigMode;
+  selectedAbConfId: string | null;
+  configInfoList: ConfigInfo[];
+  newConfigData: RecordValue | null;
+  newConfigMetadata: RecordValue | null;
+  newConfigLoading: boolean;
+  platformRoutes: PlatformRoute[];
+  isEditingRoutes: boolean;
+  knownRouteUmos: string[];
+  knownRouteUmoInfoMap: Record<string, KnownRouteUmoInfo>;
+  loadingKnownRouteUmos: boolean;
+  showIdConflictDialog: boolean;
+  conflictId: string;
+  idConflictResolve: ((value: boolean) => void) | null;
+  showOneBotEmptyTokenWarnDialog: boolean;
+  oneBotEmptyTokenWarningResolve: ((value: boolean) => void) | null;
+  loading: boolean;
+  showConfigSection: boolean;
+  showConfigDrawer: boolean;
+  configDrawerTargetId: string | null;
+  originalUpdatingPlatformId: string | null;
+}
+
+interface Props {
+  show?: boolean;
+  metadata?: PlatformMetadataState;
+  configData?: PlatformConfigState;
+  updatingMode?: boolean;
+  updatingPlatformConfig?: PlatformConfigItem;
+}
+
+type DialogScrollTarget = HTMLElement | { $el?: HTMLElement | null } | null;
+
+const props = withDefaults(defineProps<Props>(), {
+  show: false,
+  metadata: () => ({}),
+  configData: () => ({}),
+  updatingMode: false,
+  updatingPlatformConfig: () => ({}),
+});
+
+const emit = defineEmits<{
+  'update:show': [value: boolean];
+  'show-toast': [payload: ToastPayload];
+  'refresh-config': [];
+}>();
+
+const { tm } = useModuleI18n('features/platform');
+const { metadata, configData, updatingMode, updatingPlatformConfig } =
+  toRefs(props);
+
+const state = reactive<ComponentState>({
+  selectedPlatformType: null,
+  selectedPlatformConfig: null,
+  larkCreationMode: '',
+  dingtalkCreationMode: '',
+  qqOfficialCreationMode: '',
+  aBConfigRadioVal: '0',
+  selectedAbConfId: 'default',
+  configInfoList: [],
+  newConfigData: null,
+  newConfigMetadata: null,
+  newConfigLoading: false,
+  platformRoutes: [],
+  isEditingRoutes: false,
+  knownRouteUmos: [],
+  knownRouteUmoInfoMap: {},
+  loadingKnownRouteUmos: false,
+  showIdConflictDialog: false,
+  conflictId: '',
+  idConflictResolve: null,
+  showOneBotEmptyTokenWarnDialog: false,
+  oneBotEmptyTokenWarningResolve: null,
+  loading: false,
+  showConfigSection: false,
+  showConfigDrawer: false,
+  configDrawerTargetId: null,
+  originalUpdatingPlatformId: null,
+});
+
+const {
+  selectedPlatformType,
+  selectedPlatformConfig,
+  larkCreationMode,
+  dingtalkCreationMode,
+  qqOfficialCreationMode,
+  aBConfigRadioVal,
+  selectedAbConfId,
+  configInfoList,
+  newConfigData,
+  newConfigMetadata,
+  newConfigLoading,
+  platformRoutes,
+  isEditingRoutes,
+  loadingKnownRouteUmos,
+  showIdConflictDialog,
+  conflictId,
+  showOneBotEmptyTokenWarnDialog,
+  loading,
+  showConfigSection,
+  showConfigDrawer,
+  configDrawerTargetId,
+} = toRefs(state);
+
+const dialogScrollContainer = ref<DialogScrollTarget>(null);
+
+const showDialog = computed({
+  get: () => props.show,
+  set: (value: boolean) => void emit('update:show', value),
+});
+
+const platformTemplates = computed<Record<string, PlatformConfigItem>>(() =>
+  normalizePlatformTemplates(
+    metadata.value.platform_group?.metadata?.platform?.config_template,
+  ),
+);
+
+const platformMetadata = computed<RecordValue>(
+  () => metadata.value.platform_group?.metadata ?? {},
+);
+
+const canSave = computed(() => {
+  if (
+    !state.selectedPlatformType ||
+    !isPlatformIdValid(state.selectedPlatformConfig?.id)
+  ) {
+    return false;
+  }
+
+  if (isLarkPlatform.value) {
+    if (!state.larkCreationMode) {
+      return false;
+    }
+    if (
+      state.larkCreationMode === 'scan' &&
+      (!state.selectedPlatformConfig?.app_id ||
+        !state.selectedPlatformConfig?.app_secret)
+    ) {
+      return false;
+    }
+  }
+
+  if (isDingtalkPlatform.value) {
+    if (!state.dingtalkCreationMode) {
+      return false;
+    }
+    if (
+      state.dingtalkCreationMode === 'scan' &&
+      (!state.selectedPlatformConfig?.client_id ||
+        !state.selectedPlatformConfig?.client_secret)
+    ) {
+      return false;
+    }
+  }
+
+  if (isQqOfficialPlatform.value) {
+    if (!state.qqOfficialCreationMode) {
+      return false;
+    }
+    if (
+      state.qqOfficialCreationMode === 'scan' &&
+      (!state.selectedPlatformConfig?.appid ||
+        !state.selectedPlatformConfig?.secret)
+    ) {
+      return false;
+    }
+  }
+
+  if (
+    isWeixinOcPlatform.value &&
+    !state.selectedPlatformConfig?.weixin_oc_token
+  ) {
+    return false;
+  }
+
+  if (state.aBConfigRadioVal === '0') {
+    return Boolean(state.selectedAbConfId);
+  }
+
+  if (state.aBConfigRadioVal === '1') {
+    return Boolean(state.selectedAbConfId && state.newConfigData);
+  }
+
+  return false;
+});
+
+const routeTableHeaders = computed(() => [
+  {
+    title: tm('createDialog.routeTableHeaders.source'),
+    key: 'source',
+    sortable: false,
+    width: '60%',
+  },
+  {
+    title: tm('createDialog.routeTableHeaders.config'),
+    key: 'configId',
+    sortable: false,
+    width: '20%',
+  },
+  {
+    title: tm('createDialog.routeTableHeaders.actions'),
+    key: 'actions',
+    sortable: false,
+    align: 'center' as const,
+    width: '20%',
+  },
+]);
+
+const messageTypeOptions = computed(() => [
+  { label: tm('createDialog.messageTypeOptions.all'), value: '*' },
+  {
+    label: tm('createDialog.messageTypeOptions.group'),
+    value: 'GroupMessage',
+  },
+  {
+    label: tm('createDialog.messageTypeOptions.friend'),
+    value: 'FriendMessage',
+  },
+]);
+
+const routePlatformId = computed(() => {
+  if (updatingMode.value) {
+    return (
+      getString(updatingPlatformConfig.value.id) ??
+      state.originalUpdatingPlatformId ??
+      ''
+    );
+  }
+  return getString(state.selectedPlatformConfig?.id) ?? '';
+});
+
+const filteredKnownRouteUmoItems = computed(() => {
+  const platformId = routePlatformId.value;
+  return state.knownRouteUmos.filter(
+    (umo) => parseUmop(umo)?.platform === platformId,
+  );
+});
+
+const isLarkPlatform = computed(
+  () => getString(state.selectedPlatformConfig?.type) === 'lark',
+);
+const isWeixinOcPlatform = computed(
+  () => getString(state.selectedPlatformConfig?.type) === 'weixin_oc',
+);
+const isDingtalkPlatform = computed(
+  () => getString(state.selectedPlatformConfig?.type) === 'dingtalk',
+);
+const isQqOfficialPlatform = computed(() =>
+  ['qq_official', 'qq_official_webhook'].includes(
+    getString(state.selectedPlatformConfig?.type) ?? '',
+  ),
+);
+
+watch(selectedPlatformType, (newType) => {
+  if (newType && platformTemplates.value[newType]) {
+    state.selectedPlatformConfig = deepClone(platformTemplates.value[newType]);
+  } else {
+    state.selectedPlatformConfig = null;
+  }
+  state.larkCreationMode = '';
+  state.dingtalkCreationMode = '';
+  state.qqOfficialCreationMode = '';
+});
+
+watch(aBConfigRadioVal, (newValue) => {
+  if (newValue === '1') {
+    state.selectedAbConfId = null;
+    void getDefaultConfigTemplate();
+    return;
+  }
+
+  state.newConfigData = null;
+  state.newConfigMetadata = null;
+  if (!state.selectedAbConfId) {
+    state.selectedAbConfId = 'default';
+  }
+});
+
+watch(showIdConflictDialog, (newValue) => {
+  if (!newValue && state.idConflictResolve) {
+    state.idConflictResolve(false);
+    state.idConflictResolve = null;
+  }
+});
+
+watch(showOneBotEmptyTokenWarnDialog, (newValue) => {
+  if (!newValue && state.oneBotEmptyTokenWarningResolve) {
+    state.oneBotEmptyTokenWarningResolve(true);
+    state.oneBotEmptyTokenWarningResolve = null;
+  }
+});
+
+watch(
+  updatingPlatformConfig,
+  (newConfig) => {
+    const platformId = getString(newConfig?.id);
+    if (updatingMode.value && platformId) {
+      state.originalUpdatingPlatformId = platformId;
+      void getPlatformConfigs(platformId);
+    }
+  },
+  { immediate: true },
+);
+
+watch(showConfigSection, async (newValue) => {
+  if (newValue) {
+    await nextTick();
+    scrollDialogToBottom();
+  }
+});
+
+watch(
+  updatingMode,
+  (newValue) => {
+    if (newValue) {
+      state.showConfigSection = true;
+      state.isEditingRoutes = false;
+    }
+  },
+  { immediate: true },
+);
+
+function asRecord(value: unknown): RecordValue | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as RecordValue;
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function normalizePlatformConfig(value: unknown): PlatformConfigItem {
+  const record = asRecord(value);
+  return record ? { ...record } : {};
+}
+
+function normalizePlatformTemplates(
+  value: unknown,
+): Record<string, PlatformConfigItem> {
+  const record = asRecord(value);
+  if (!record) {
+    return {};
+  }
+
+  const templates: Record<string, PlatformConfigItem> = {};
+  for (const [key, templateValue] of Object.entries(record)) {
+    templates[key] = normalizePlatformConfig(templateValue);
+  }
+  return templates;
+}
+
+function normalizePlatformConfigList(value: unknown): PlatformConfigItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => normalizePlatformConfig(item));
+}
+
+function normalizeConfigInfoList(value: unknown): ConfigInfo[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const infoList: ConfigInfo[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    const id = getString(record?.id);
+    const name = getString(record?.name);
+    if (record && id && name) {
+      infoList.push({ ...record, id, name });
+    }
+  }
+  return infoList;
+}
+
+function normalizeRoutingTable(value: unknown): Record<string, string> {
+  const record = asRecord(value);
+  if (!record) {
+    return {};
+  }
+
+  const routing: Record<string, string> = {};
+  for (const [umop, configId] of Object.entries(record)) {
+    const normalizedConfigId = getString(configId);
+    if (normalizedConfigId) {
+      routing[umop] = normalizedConfigId;
+    }
+  }
+  return routing;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function normalizeKnownRouteUmoInfos(value: unknown): KnownRouteUmoInfo[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const infos: KnownRouteUmoInfo[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    const umo = getString(record?.umo);
+    if (!record || !umo) {
+      continue;
+    }
+    infos.push({
+      ...record,
+      umo,
+      platform: getString(record.platform) ?? undefined,
+      message_type: getString(record.message_type) ?? undefined,
+      session_id: getString(record.session_id) ?? undefined,
+      auto_name: getString(record.auto_name) ?? undefined,
+      user_alias: getString(record.user_alias) ?? undefined,
+      display_name: getString(record.display_name) ?? undefined,
+    });
+  }
+  return infos;
+}
+
+function getPlatformIcon(platformType: string | undefined): string | undefined {
+  const normalizedType = getString(platformType);
+  if (!normalizedType) {
+    return undefined;
+  }
+
+  const template = platformTemplates.value[normalizedType];
+  const logoToken = getString(template?.logo_token);
+  if (logoToken) {
+    return fileApi.tokenUrl(logoToken);
+  }
+  return getBasePlatformIcon(normalizedType);
+}
+
+function getPlatformTemplateIcon(templateKey: string): string | undefined {
+  const template = platformTemplates.value[templateKey];
+  return getPlatformIcon(getString(template?.type) ?? templateKey);
+}
+
+function resetForm() {
+  state.selectedPlatformType = null;
+  state.selectedPlatformConfig = null;
+  state.larkCreationMode = '';
+  state.dingtalkCreationMode = '';
+  state.qqOfficialCreationMode = '';
+  state.aBConfigRadioVal = '0';
+  state.selectedAbConfId = 'default';
+  state.newConfigData = null;
+  state.newConfigMetadata = null;
+  state.newConfigLoading = false;
+  state.showConfigSection = false;
+  state.isEditingRoutes = false;
+  state.knownRouteUmos = [];
+  state.knownRouteUmoInfoMap = {};
+  state.loadingKnownRouteUmos = false;
+  state.showConfigDrawer = false;
+  state.configDrawerTargetId = null;
+  state.originalUpdatingPlatformId = null;
+}
+
+function closeDialog() {
+  resetForm();
+  showDialog.value = false;
+}
+
+async function getConfigInfoList() {
+  const res = await configProfileApi.list();
+  state.configInfoList = normalizeConfigInfoList(res.data.data.info_list);
+}
+
+async function getDefaultConfigTemplate() {
+  state.newConfigLoading = true;
+  try {
+    const response = await configProfileApi.schema();
+    state.newConfigData = asRecord(response.data.data.config);
+    state.newConfigMetadata = asRecord(response.data.data.metadata);
+  } catch (error) {
+    console.error('获取默认配置模板失败:', error);
+    state.newConfigData = null;
+    state.newConfigMetadata = null;
+  } finally {
+    state.newConfigLoading = false;
+  }
+}
+
+function openTutorial() {
+  const platformType = getString(state.selectedPlatformConfig?.type);
+  if (!platformType) {
+    return;
+  }
+  window.open(getTutorialLink(platformType), '_blank');
+}
+
+function openConfigDrawer(configId: string | null | undefined) {
+  const targetId = configId || 'default';
+  if (
+    configId &&
+    state.configInfoList.findIndex((config) => config.id === configId) === -1
+  ) {
+    showError(tm('messages.configNotFoundOpenConfig'));
+  }
+  state.configDrawerTargetId = targetId;
+  state.showConfigDrawer = true;
+}
+
+function closeConfigDrawer() {
+  state.showConfigDrawer = false;
+}
+
+async function newPlatform() {
+  state.loading = true;
+  if (updatingMode.value) {
+    const platformType = getString(updatingPlatformConfig.value.type);
+    const token = getString(
+      updatingPlatformConfig.value.ws_reverse_token,
+    )?.trim();
+    if (platformType === 'aiocqhttp' && !token) {
+      const continueWithWarning = await showOneBotEmptyTokenWarning();
+      if (!continueWithWarning) {
+        state.loading = false;
         return;
       }
+    }
+    await updatePlatform();
+    return;
+  }
 
-      const parsed = this.parseUmop(umo);
-      if (!parsed) {
+  await savePlatform();
+}
+
+async function updatePlatform() {
+  const platformId =
+    state.originalUpdatingPlatformId ??
+    getString(updatingPlatformConfig.value.id);
+  if (!platformId) {
+    state.loading = false;
+    showError(tm('messages.updateMissingPlatformId'));
+    return;
+  }
+
+  if (!isPlatformIdValid(platformId)) {
+    state.loading = false;
+    showError(tm('dialog.invalidPlatformId'));
+    return;
+  }
+
+  try {
+    const resp = await botApi.update(platformId, updatingPlatformConfig.value);
+    if (resp.data.status === 'error') {
+      throw new Error(resp.data.message || tm('messages.platformUpdateFailed'));
+    }
+
+    await saveRoutesInternal();
+    state.loading = false;
+    showDialog.value = false;
+    resetForm();
+    emit('refresh-config');
+    showSuccess(tm('messages.updateSuccess'));
+  } catch (error) {
+    state.loading = false;
+    showError(resolveErrorMessage(error, tm('messages.platformUpdateFailed')));
+  }
+}
+
+async function savePlatform() {
+  const platformConfig = state.selectedPlatformConfig;
+  const platformId = getString(platformConfig?.id);
+  const platformType = getString(platformConfig?.type);
+  if (!platformConfig || !platformId || !isPlatformIdValid(platformId)) {
+    state.loading = false;
+    showError(tm('dialog.invalidPlatformId'));
+    return;
+  }
+
+  const existingPlatform = normalizePlatformConfigList(
+    configData.value.platform,
+  ).find((platform) => platform.id === platformId);
+  if (existingPlatform || platformId === 'webchat') {
+    const confirmed = await confirmIdConflict(platformId);
+    if (!confirmed) {
+      state.loading = false;
+      return;
+    }
+  }
+
+  if (platformType === 'aiocqhttp') {
+    const token = getString(platformConfig.ws_reverse_token)?.trim();
+    if (!token) {
+      const continueWithWarning = await showOneBotEmptyTokenWarning();
+      if (!continueWithWarning) {
+        state.loading = false;
         return;
       }
-      route.sourceUmo = umo;
-      route.messageType = parsed.messageType || '*';
-      route.sessionId = parsed.sessionId || '*';
-    },
+    }
+  }
 
-    // 添加新路由
-    addNewRoute() {
-      this.platformRoutes.push({
+  try {
+    const res = await botApi.create(platformConfig);
+    await handleConfigFile();
+    state.loading = false;
+    showDialog.value = false;
+    resetForm();
+    emit('refresh-config');
+    showSuccess(res.data.message || tm('messages.addSuccessWithConfig'));
+  } catch (error) {
+    state.loading = false;
+    showError(resolveErrorMessage(error, tm('messages.addSuccessWithConfig')));
+  }
+}
+
+async function handleConfigFile() {
+  const platformId = getString(state.selectedPlatformConfig?.id);
+  if (!state.selectedAbConfId || !platformId) {
+    return;
+  }
+
+  let configId: string | null = null;
+  if (state.aBConfigRadioVal === '0') {
+    configId = state.selectedAbConfId;
+  } else if (state.aBConfigRadioVal === '1') {
+    configId = await createNewConfigFile(state.selectedAbConfId);
+  }
+
+  if (!configId) {
+    throw new Error(tm('messages.configIdMissing'));
+  }
+
+  await updateRoutingTable(`${platformId}:*:*`, configId);
+}
+
+async function updateRoutingTable(umop: string, configId: string) {
+  try {
+    await configRouteApi.upsert(umop, { config_id: configId });
+  } catch (error) {
+    console.error('更新路由表失败:', error);
+    throw new Error(
+      tm('messages.routingUpdateFailed', {
+        message: resolveErrorMessage(
+          error,
+          tm('messages.platformUpdateFailed'),
+        ),
+      }),
+    );
+  }
+}
+
+async function createNewConfigFile(configName: string) {
+  try {
+    const configPayload =
+      state.aBConfigRadioVal === '1' && state.newConfigData
+        ? state.newConfigData
+        : undefined;
+
+    const createRes = await configProfileApi.create({
+      name: configName,
+      config: configPayload,
+    });
+
+    const newConfigId = getString(createRes.data.data.conf_id);
+    if (!newConfigId) {
+      throw new Error(tm('messages.configIdMissing'));
+    }
+    return newConfigId;
+  } catch (error) {
+    console.error('创建新配置文件失败:', error);
+    throw new Error(
+      tm('messages.createConfigFailed', {
+        message: resolveErrorMessage(
+          error,
+          tm('messages.platformUpdateFailed'),
+        ),
+      }),
+    );
+  }
+}
+
+function confirmIdConflict(id: string): Promise<boolean> {
+  state.conflictId = id;
+  state.showIdConflictDialog = true;
+  return new Promise((resolve) => {
+    state.idConflictResolve = resolve;
+  });
+}
+
+function handleIdConflictConfirm(confirmed: boolean) {
+  if (state.idConflictResolve) {
+    state.idConflictResolve(confirmed);
+    state.idConflictResolve = null;
+  }
+  state.showIdConflictDialog = false;
+}
+
+function showOneBotEmptyTokenWarning(): Promise<boolean> {
+  state.showOneBotEmptyTokenWarnDialog = true;
+  return new Promise((resolve) => {
+    state.oneBotEmptyTokenWarningResolve = resolve;
+  });
+}
+
+function handleOneBotEmptyTokenWarningDismiss(continueWithWarning: boolean) {
+  state.showOneBotEmptyTokenWarnDialog = false;
+  if (state.oneBotEmptyTokenWarningResolve) {
+    state.oneBotEmptyTokenWarningResolve(continueWithWarning);
+    state.oneBotEmptyTokenWarningResolve = null;
+  }
+
+  if (!continueWithWarning) {
+    state.loading = false;
+  }
+}
+
+function showSuccess(message: string) {
+  emit('show-toast', { message, type: 'success' });
+}
+
+function showError(message: string) {
+  emit('show-toast', { message, type: 'error' });
+}
+
+function buildRandomPlatformIdSuffix(): string {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  let suffix = '_';
+  for (let i = 0; i < 4; i += 1) {
+    suffix += letters[Math.floor(Math.random() * letters.length)];
+  }
+  return suffix;
+}
+
+function sanitizePlatformIdPart(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[!:]/g, '_');
+}
+
+function handlePlatformRegistrationCreated(data: RegistrationCreatedPayload) {
+  if (!state.selectedPlatformConfig) {
+    return;
+  }
+
+  const currentId = String(state.selectedPlatformConfig.id || '').trim();
+  const platformType = getString(state.selectedPlatformConfig.type);
+  if (!currentId || !platformType) {
+    return;
+  }
+
+  let suffix = '';
+  const explicitSuffix = sanitizePlatformIdPart(data.platform_id_suffix);
+  if (explicitSuffix) {
+    suffix =
+      explicitSuffix.startsWith('_') || explicitSuffix.startsWith('-')
+        ? explicitSuffix
+        : `_${explicitSuffix}`;
+  } else if (data.bot_name) {
+    const safeBotName = sanitizePlatformIdPart(data.bot_name);
+    if (safeBotName) {
+      suffix = `-${safeBotName}`;
+    }
+  } else if (platformType === 'weixin_oc' || platformType === 'dingtalk') {
+    suffix = buildRandomPlatformIdSuffix();
+  }
+
+  if (!suffix) {
+    return;
+  }
+
+  if (
+    (platformType === 'weixin_oc' || platformType === 'dingtalk') &&
+    /_[a-z]{4}$/.test(currentId)
+  ) {
+    return;
+  }
+
+  state.selectedPlatformConfig.id = currentId.endsWith(suffix)
+    ? currentId
+    : `${currentId}${suffix}`;
+}
+
+function isPlatformIdValid(id: unknown): boolean {
+  const normalized = getString(id);
+  if (!normalized) {
+    return false;
+  }
+  return !/[!:\s]/.test(normalized);
+}
+
+async function getPlatformConfigs(platformId: string) {
+  if (!platformId) {
+    state.platformRoutes = [];
+    return;
+  }
+
+  try {
+    const routesRes = await configRouteApi.list();
+    const routingTable = normalizeRoutingTable(routesRes.data.data.routing);
+    const routes: PlatformRoute[] = [];
+
+    for (const [umop, configId] of Object.entries(routingTable)) {
+      const parsedUmop = parseUmop(umop);
+      if (isParsedUmopMatchPlatform(parsedUmop, platformId)) {
+        routes.push({
+          umop,
+          originalUmop: umop,
+          sourceMode: 'manual',
+          sourceUmo: parsedUmop?.sessionId === '*' ? '' : umop,
+          messageType: parsedUmop?.messageType || '*',
+          sessionId: parsedUmop?.sessionId || '*',
+          configId,
+        });
+      }
+    }
+
+    state.platformRoutes = routes;
+    if (state.platformRoutes.length === 0) {
+      state.platformRoutes.push({
         umop: null,
         originalUmop: null,
         sourceMode: 'manual',
@@ -1717,170 +1701,301 @@ export default {
         sessionId: '*',
         configId: 'default',
       });
-    },
+    }
+  } catch (error) {
+    console.error('获取平台路由配置失败:', error);
+    state.platformRoutes = [];
+  }
+}
 
-    // 删除路由
-    deleteRoute(index) {
-      this.platformRoutes.splice(index, 1);
-    },
+async function loadKnownRouteUmos() {
+  if (state.loadingKnownRouteUmos) {
+    return;
+  }
 
-    // 上移路由
-    moveRouteUp(index) {
-      if (index > 0) {
-        const temp = this.platformRoutes[index];
-        this.platformRoutes[index] = this.platformRoutes[index - 1];
-        this.platformRoutes[index - 1] = temp;
-        // 强制更新视图
-        this.platformRoutes = [...this.platformRoutes];
-      }
-    },
-
-    // 下移路由
-    moveRouteDown(index) {
-      if (index < this.platformRoutes.length - 1) {
-        const temp = this.platformRoutes[index];
-        this.platformRoutes[index] = this.platformRoutes[index + 1];
-        this.platformRoutes[index + 1] = temp;
-        // 强制更新视图
-        this.platformRoutes = [...this.platformRoutes];
-      }
-    },
-
-    // 内部保存路由表方法（不显示成功提示）
-    async saveRoutesInternal() {
-      const originalPlatformId =
-        this.originalUpdatingPlatformId || this.updatingPlatformConfig?.id;
-      const newPlatformId =
-        this.updatingPlatformConfig?.id || originalPlatformId;
-
-      if (!originalPlatformId && !newPlatformId) {
-        throw new Error(this.tm('messages.platformIdMissing'));
-      }
-
-      try {
-        // 获取完整的路由表
-        const routesRes = await configRouteApi.list();
-        const fullRoutingTable = routesRes.data.data.routing;
-
-        // 删除该平台的所有旧路由
-        for (const umop in fullRoutingTable) {
-          if (
-            (originalPlatformId &&
-              this.isUmopMatchPlatform(umop, originalPlatformId)) ||
-            (newPlatformId && this.isUmopMatchPlatform(umop, newPlatformId))
-          ) {
-            delete fullRoutingTable[umop];
-          }
-        }
-
-        // 添加新路由（按顺序）
-        for (const route of this.platformRoutes) {
-          const messageType =
-            route.messageType === '*' ? '*' : route.messageType;
-          const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
-          const platformIdForRoute = newPlatformId || originalPlatformId;
-          const newUmop = `${platformIdForRoute}:${messageType}:${sessionId}`;
-
-          if (route.configId) {
-            fullRoutingTable[newUmop] = route.configId;
-          }
-        }
-
-        // 使用 v1 replace 更新整个路由表
-        await configRouteApi.replace({
-          routing: fullRoutingTable,
-        });
-      } catch (err) {
-        console.error('保存路由表失败:', err);
-        const errorMessage = err.response?.data?.message || err.message;
-        throw new Error(
-          this.tm('messages.routingSaveFailed', { message: errorMessage }),
-        );
-      }
-    },
-
-    // 切换编辑模式
-    toggleEditMode() {
-      this.isEditingRoutes = !this.isEditingRoutes;
-    },
-    toggleConfigSection() {
-      this.showConfigSection = !this.showConfigSection;
-    },
-
-    // 根据配置文件ID获取名称
-    getConfigName(configId) {
-      const config = this.configInfoList.find((c) => c.id === configId);
-      return config ? config.name : configId;
-    },
-
-    isUmopMatchPlatform(umop, platformId) {
-      const parsedUmop = this.parseUmop(umop);
-      return this.isParsedUmopMatchPlatform(parsedUmop, platformId);
-    },
-
-    isParsedUmopMatchPlatform(parsedUmop, platformId) {
-      if (!parsedUmop) return false;
-      return (
-        parsedUmop.platform === platformId ||
-        parsedUmop.platform === '' ||
-        parsedUmop.platform === '*'
+  state.loadingKnownRouteUmos = true;
+  try {
+    const res = await sessionApi.activeUmos();
+    if (res.data.status === 'ok') {
+      const umos = normalizeStringArray(res.data.data?.umos);
+      state.knownRouteUmos = Array.from(
+        new Set([...state.knownRouteUmos, ...umos]),
       );
-    },
+      mergeKnownRouteUmoInfos(
+        normalizeKnownRouteUmoInfos(res.data.data?.umo_infos),
+      );
+    }
+  } catch (error) {
+    console.error('获取已有消息来源失败:', error);
+  } finally {
+    state.loadingKnownRouteUmos = false;
+  }
+}
 
-    parseUmop(umop) {
-      if (!umop) return null;
+function mergeKnownRouteUmoInfos(infos: KnownRouteUmoInfo[]) {
+  const next = { ...state.knownRouteUmoInfoMap };
+  for (const info of infos) {
+    next[info.umo] = { ...(next[info.umo] || {}), ...info };
+  }
+  state.knownRouteUmoInfoMap = next;
+}
 
-      const firstSeparatorIndex = umop.indexOf(':');
-      if (firstSeparatorIndex === -1) return null;
+function getKnownRouteUmoInfo(umo: string): KnownRouteUmoInfo {
+  const parsed = parseUmop(umo);
+  return (
+    state.knownRouteUmoInfoMap[umo] || {
+      umo,
+      platform: parsed?.platform || '',
+      message_type: parsed?.messageType || '',
+      session_id: parsed?.sessionId || umo,
+      auto_name: '',
+      user_alias: '',
+      display_name: umo,
+    }
+  );
+}
 
-      const secondSeparatorIndex = umop.indexOf(':', firstSeparatorIndex + 1);
-      if (secondSeparatorIndex === -1) return null;
+function getKnownRouteUmoDisplayProps(umo: string) {
+  const info = getKnownRouteUmoInfo(umo);
+  const parsed = parseUmop(umo);
+  return {
+    umo,
+    platform: info.platform || parsed?.platform || '',
+    messageType: info.message_type || parsed?.messageType || '',
+    sessionId: info.session_id || parsed?.sessionId || '',
+    autoName: info.auto_name || '',
+    userAlias: info.user_alias || '',
+  };
+}
 
-      return {
-        platform: umop.slice(0, firstSeparatorIndex),
-        messageType: umop.slice(firstSeparatorIndex + 1, secondSeparatorIndex),
-        sessionId: umop.slice(secondSeparatorIndex + 1),
-      };
-    },
+function getKnownRouteUmoSelectionText(umo: string): string {
+  if (!umo) {
+    return '';
+  }
 
-    // 获取消息类型标签
-    getMessageTypeLabel(messageType) {
-      const typeMap = {
-        '*': this.tm('createDialog.messageTypeLabels.all'),
-        '': this.tm('createDialog.messageTypeLabels.all'),
-        GroupMessage: this.tm('createDialog.messageTypeLabels.group'),
-        FriendMessage: this.tm('createDialog.messageTypeLabels.friend'),
-      };
-      return typeMap[messageType] || messageType;
-    },
+  const info = getKnownRouteUmoInfo(umo);
+  const parsed = parseUmop(umo);
+  const aliasName = info.user_alias || '';
+  const autoName = info.auto_name || '';
+  if (aliasName && autoName && aliasName !== autoName) {
+    return `${aliasName}（${autoName}）`;
+  }
+  return (
+    aliasName ||
+    autoName ||
+    (parsed
+      ? `${getMessageTypeLabel(parsed.messageType)}:${parsed.sessionId}`
+      : umo)
+  );
+}
 
-    toggleShowConfigSection() {
-      this.showConfigSection = false;
-      this.showConfigSection = true;
-    },
+function getRouteSourceMode(route: PlatformRoute): RouteSourceMode {
+  return route.sourceMode || 'manual';
+}
 
-    prepareData() {
-      void this.getConfigInfoList();
-      void this.getConfigForPreview(this.selectedAbConfId);
-      if (this.updatingMode && this.updatingPlatformConfig?.id) {
-        void this.getPlatformConfigs(this.updatingPlatformConfig.id);
+function getRouteSourceModeLinkText(route: PlatformRoute): string {
+  return getRouteSourceMode(route) === 'known'
+    ? tm('createDialog.routeSource.switchToManual')
+    : tm('createDialog.routeSource.switchToKnown');
+}
+
+function toggleRouteSourceMode(route: PlatformRoute) {
+  const nextMode: RouteSourceMode =
+    getRouteSourceMode(route) === 'known' ? 'manual' : 'known';
+  route.sourceMode = nextMode;
+  if (nextMode === 'known') {
+    void loadKnownRouteUmos();
+  }
+}
+
+function applyKnownRouteSource(route: PlatformRoute, umo: string | null) {
+  if (!umo) {
+    route.sourceUmo = '';
+    return;
+  }
+
+  const parsed = parseUmop(umo);
+  if (!parsed) {
+    return;
+  }
+  route.sourceUmo = umo;
+  route.messageType = parsed.messageType || '*';
+  route.sessionId = parsed.sessionId || '*';
+}
+
+function addNewRoute() {
+  state.platformRoutes.push({
+    umop: null,
+    originalUmop: null,
+    sourceMode: 'manual',
+    sourceUmo: '',
+    messageType: '*',
+    sessionId: '*',
+    configId: 'default',
+  });
+}
+
+function deleteRoute(index: number) {
+  state.platformRoutes.splice(index, 1);
+}
+
+function moveRouteUp(index: number) {
+  if (index > 0) {
+    const current = state.platformRoutes[index];
+    state.platformRoutes[index] = state.platformRoutes[index - 1];
+    state.platformRoutes[index - 1] = current;
+    state.platformRoutes = [...state.platformRoutes];
+  }
+}
+
+function moveRouteDown(index: number) {
+  if (index < state.platformRoutes.length - 1) {
+    const current = state.platformRoutes[index];
+    state.platformRoutes[index] = state.platformRoutes[index + 1];
+    state.platformRoutes[index + 1] = current;
+    state.platformRoutes = [...state.platformRoutes];
+  }
+}
+
+async function saveRoutesInternal() {
+  const originalPlatformId =
+    state.originalUpdatingPlatformId ??
+    getString(updatingPlatformConfig.value.id);
+  const newPlatformId =
+    getString(updatingPlatformConfig.value.id) ?? originalPlatformId;
+
+  if (!originalPlatformId && !newPlatformId) {
+    throw new Error(tm('messages.platformIdMissing'));
+  }
+
+  try {
+    const routesRes = await configRouteApi.list();
+    const fullRoutingTable = normalizeRoutingTable(routesRes.data.data.routing);
+
+    for (const umop of Object.keys(fullRoutingTable)) {
+      if (
+        (originalPlatformId && isUmopMatchPlatform(umop, originalPlatformId)) ||
+        (newPlatformId && isUmopMatchPlatform(umop, newPlatformId))
+      ) {
+        delete fullRoutingTable[umop];
       }
-    },
-    scrollDialogToBottom() {
-      const containerRef = this.$refs.dialogScrollContainer;
-      const el = containerRef?.$el || containerRef;
-      if (!el) {
-        return;
+    }
+
+    const platformIdForRoute = newPlatformId || originalPlatformId;
+    for (const route of state.platformRoutes) {
+      if (!route.configId || !platformIdForRoute) {
+        continue;
       }
-      const scrollOptions = { top: el.scrollHeight, behavior: 'smooth' };
-      if (typeof el.scrollTo === 'function') {
-        el.scrollTo(scrollOptions);
-      } else {
-        el.scrollTop = el.scrollHeight;
-      }
-    },
-  },
-};
+      const messageType = route.messageType === '*' ? '*' : route.messageType;
+      const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
+      fullRoutingTable[`${platformIdForRoute}:${messageType}:${sessionId}`] =
+        route.configId;
+    }
+
+    await configRouteApi.replace({
+      routing: fullRoutingTable,
+    });
+  } catch (error) {
+    console.error('保存路由表失败:', error);
+    throw new Error(
+      tm('messages.routingSaveFailed', {
+        message: resolveErrorMessage(
+          error,
+          tm('messages.platformUpdateFailed'),
+        ),
+      }),
+    );
+  }
+}
+
+function toggleEditMode() {
+  state.isEditingRoutes = !state.isEditingRoutes;
+}
+
+function toggleConfigSection() {
+  state.showConfigSection = !state.showConfigSection;
+}
+
+function getConfigName(configId: string): string {
+  const config = state.configInfoList.find((item) => item.id === configId);
+  return config ? config.name : configId;
+}
+
+function isUmopMatchPlatform(umop: string, platformId: string): boolean {
+  return isParsedUmopMatchPlatform(parseUmop(umop), platformId);
+}
+
+function isParsedUmopMatchPlatform(
+  parsedUmop: ParsedUmop | null,
+  platformId: string,
+): boolean {
+  if (!parsedUmop) {
+    return false;
+  }
+  return (
+    parsedUmop.platform === platformId ||
+    parsedUmop.platform === '' ||
+    parsedUmop.platform === '*'
+  );
+}
+
+function parseUmop(umop: string | null | undefined): ParsedUmop | null {
+  if (!umop) {
+    return null;
+  }
+
+  const firstSeparatorIndex = umop.indexOf(':');
+  if (firstSeparatorIndex === -1) {
+    return null;
+  }
+  const secondSeparatorIndex = umop.indexOf(':', firstSeparatorIndex + 1);
+  if (secondSeparatorIndex === -1) {
+    return null;
+  }
+
+  return {
+    platform: umop.slice(0, firstSeparatorIndex),
+    messageType: umop.slice(firstSeparatorIndex + 1, secondSeparatorIndex),
+    sessionId: umop.slice(secondSeparatorIndex + 1),
+  };
+}
+
+function getMessageTypeLabel(messageType: string): string {
+  const typeMap: Record<string, string> = {
+    '*': tm('createDialog.messageTypeLabels.all'),
+    '': tm('createDialog.messageTypeLabels.all'),
+    GroupMessage: tm('createDialog.messageTypeLabels.group'),
+    FriendMessage: tm('createDialog.messageTypeLabels.friend'),
+  };
+  return typeMap[messageType] || messageType;
+}
+
+function prepareData() {
+  void getConfigInfoList();
+  const platformId = getString(updatingPlatformConfig.value.id);
+  if (updatingMode.value && platformId) {
+    void getPlatformConfigs(platformId);
+  }
+}
+
+function scrollDialogToBottom() {
+  const container = dialogScrollContainer.value;
+  const element =
+    container && '$el' in container ? (container.$el ?? null) : container;
+  if (!(element instanceof HTMLElement)) {
+    return;
+  }
+
+  const scrollOptions = {
+    top: element.scrollHeight,
+    behavior: 'smooth' as const,
+  };
+  if (typeof element.scrollTo === 'function') {
+    element.scrollTo(scrollOptions);
+  } else {
+    element.scrollTop = element.scrollHeight;
+  }
+}
 </script>
 
 <style>

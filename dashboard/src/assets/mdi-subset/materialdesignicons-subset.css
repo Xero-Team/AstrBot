@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 271 icons */
+/* Auto-generated MDI subset – 269 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -876,10 +876,6 @@
   content: "\F045A";
 }
 
-.mdi-reply-outline::before {
-  content: "\F0F20";
-}
-
 .mdi-restart::before {
   content: "\F0709";
 }
@@ -962,10 +958,6 @@
 
 .mdi-star::before {
   content: "\F04CE";
-}
-
-.mdi-star-four-points-small::before {
-  content: "\F1C55";
 }
 
 .mdi-star-half-full::before {

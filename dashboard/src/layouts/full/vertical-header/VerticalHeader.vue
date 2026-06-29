@@ -20,11 +20,13 @@ import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
 import { authApi, statsApi, updatesApi } from '@/api/v1';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
+import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
 
 const LazyMarkdownRender = defineAsyncComponent(
   () => import('@/components/shared/LazyMarkdownRender.vue'),
 );
 const AboutPage = defineAsyncComponent(() => import('@/views/AboutPage.vue'));
+const getSelectedGitHubProxy = readSelectedGitHubProxy;
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
@@ -140,13 +142,6 @@ const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
     return bridge;
   }
   return null;
-};
-
-const getSelectedGitHubProxy = () => {
-  if (typeof window === 'undefined' || !window.localStorage) return '';
-  return localStorage.getItem('githubProxyRadioValue') === '1'
-    ? localStorage.getItem('selectedGitHubProxy') || ''
-    : '';
 };
 
 // Release Notes Modal

@@ -87,9 +87,9 @@
       <!-- 浮动按钮放在 transition 外部 -->
       <template v-if="(selectedConfigID || isSystemConfig) && fetched">
         <v-tooltip :text="tm('actions.save')" location="left">
-          <template #activator="{ props }">
+          <template #activator="{ props: tooltipProps }">
             <v-btn
-              v-bind="props"
+              v-bind="tooltipProps"
               icon="mdi-content-save"
               size="x-large"
               style="position: fixed; right: 52px; bottom: 52px"
@@ -101,9 +101,9 @@
         </v-tooltip>
 
         <v-tooltip :text="tm('codeEditor.title')" location="left">
-          <template #activator="{ props }">
+          <template #activator="{ props: tooltipProps }">
             <v-btn
-              v-bind="props"
+              v-bind="tooltipProps"
               icon="mdi-code-json"
               size="x-large"
               style="position: fixed; right: 52px; bottom: 124px"
@@ -118,9 +118,9 @@
         </v-tooltip>
 
         <v-tooltip v-if="!isSystemConfig" text="测试当前配置" location="left">
-          <template #activator="{ props }">
+          <template #activator="{ props: tooltipProps }">
             <v-btn
-              v-bind="props"
+              v-bind="tooltipProps"
               icon="mdi-chat-processing"
               size="x-large"
               style="position: fixed; right: 52px; bottom: 196px"
@@ -326,13 +326,22 @@
   <UnsavedChangesConfirmDialog ref="unsavedChangesDialog" />
 </template>
 
-<script>
-import { configProfileApi, systemConfigApi } from '@/api/v1';
+<script setup lang="ts">
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { configProfileApi, systemConfigApi, type OpenConfig } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
@@ -341,799 +350,795 @@ import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfi
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
 
-export default {
+defineOptions({
   name: 'ConfigPage',
-  components: {
-    AstrBotCoreConfigWrapper,
-    VueMonacoEditor,
-    StandaloneChat,
-    UnsavedChangesConfirmDialog,
-    DashboardTwoFactorDialog,
-  },
+});
 
-  // 检查未保存的更改
-  async beforeRouteLeave(to, from, next) {
-    if (this.hasUnsavedChanges) {
-      const confirmed = await this.$refs.unsavedChangesDialog?.open({
-        title: this.tm('unsavedChangesWarning.dialogTitle'),
-        message: this.tm('unsavedChangesWarning.leavePage'),
-        confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
-        cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
-        closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`,
-      });
-      // 关闭弹窗不跳转
-      if (confirmed === 'close') {
-        next(false);
-      } else if (confirmed) {
-        const result = await this.updateConfig();
-        if (this.isSystemConfig) {
-          next(false);
-        } else if (result?.success) {
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          next();
-        } else {
-          next(false);
-        }
-      } else {
-        this.hasUnsavedChanges = false;
-        next();
-      }
-    } else {
-      next();
+type ConfigType = 'normal' | 'system';
+type ConfigFormMode = 'create' | 'edit' | 'copy';
+type SnackbarColor = '' | 'success' | 'error' | 'warning';
+type UnsavedDialogResult = boolean | 'close';
+
+interface ConfigInfoItem {
+  id: string;
+  name: string;
+  umop?: unknown[];
+}
+
+interface ConfigFormData {
+  name: string;
+}
+
+interface ConfigPostData {
+  conf_id?: string;
+  config: OpenConfig;
+}
+
+interface SaveResult {
+  success: boolean;
+  requires2fa?: boolean;
+}
+
+interface UnsavedDialogOptions {
+  title: string;
+  message: string;
+  confirmHint: string;
+  cancelHint: string;
+  closeHint: string;
+}
+
+interface UnsavedChangesDialogExposed {
+  open(options: UnsavedDialogOptions): Promise<UnsavedDialogResult>;
+}
+
+const props = withDefaults(
+  defineProps<{
+    initialConfigId?: string | null;
+  }>(),
+  {
+    initialConfigId: null,
+  },
+);
+
+const route = useRoute();
+const router = useRouter();
+const { tm } = useModuleI18n('features/config');
+const { tm: tmMeta } = useModuleI18n('features/config-metadata');
+const confirmDialog = useConfirmDialog();
+
+const unsavedChangesDialog = ref<UnsavedChangesDialogExposed | null>(null);
+
+const codeEditorDialog = ref(false);
+const configManageDialog = ref(false);
+const showConfigForm = ref(false);
+const isEditingConfig = ref(false);
+const isCopyingConfig = ref(false);
+const config_data_has_changed = ref(false);
+const config_data_str = ref('');
+const config_data = ref<OpenConfig>({ config: {} });
+const fetched = ref(false);
+const metadata = ref<OpenConfig>({});
+const save_message_snack = ref(false);
+const save_message = ref('');
+const save_message_success = ref<SnackbarColor>('');
+const configContentKey = ref(0);
+const lastSavedConfigSnapshot = ref('');
+const configSave2faDialogVisible = ref(false);
+const configSave2faError = ref('');
+const configSave2faSaving = ref(false);
+const configSave2faRotationHint = ref('');
+const configSavePendingPostData = ref<ConfigPostData | null>(null);
+const configType = ref<ConfigType>('normal');
+const configSearchKeyword = ref('');
+const isSystemConfig = ref(false);
+const selectedConfigID = ref<string | null>(null);
+const currentConfigId = ref<string | null>(null);
+const configInfoList = ref<ConfigInfoItem[]>([]);
+const configFormData = ref<ConfigFormData>({ name: '' });
+const editingConfigId = ref<string | null>(null);
+const copySourceConfigId = ref('');
+const testChatDrawer = ref(false);
+const testConfigId = ref<string | null>(null);
+const syncingConfigString = ref(false);
+
+const messages = computed(() => ({
+  loadError: tm('messages.loadError'),
+  saveSuccess: tm('messages.saveSuccess'),
+  saveError: tm('messages.saveError'),
+  configApplied: tm('messages.configApplied'),
+  configApplyError: tm('messages.configApplyError'),
+}));
+
+const selectedConfigInfo = computed<ConfigInfoItem>(() => {
+  return (
+    configInfoList.value.find((info) => info.id === selectedConfigID.value) ?? {
+      id: '',
+      name: '',
+      umop: [],
     }
-  },
-  props: {
-    initialConfigId: {
-      type: String,
-      default: null,
-    },
-  },
-  setup() {
-    const { t } = useI18n();
-    const { tm } = useModuleI18n('features/config');
-    const { tm: tmMeta } = useModuleI18n('features/config-metadata');
-    const confirmDialog = useConfirmDialog();
+  );
+});
 
-    return {
-      t,
-      tm,
-      tmMeta,
-      confirmDialog,
-    };
-  },
-  data() {
-    return {
-      codeEditorDialog: false,
-      configManageDialog: false,
-      showConfigForm: false,
-      isEditingConfig: false,
-      isCopyingConfig: false,
-      config_data_has_changed: false,
-      config_data_str: '',
-      config_data: {
-        config: {},
-      },
-      fetched: false,
-      metadata: {},
-      save_message_snack: false,
-      save_message: '',
-      save_message_success: '',
-      configContentKey: 0,
-      lastSavedConfigSnapshot: '',
-      configSave2faDialogVisible: false,
-      configSave2faError: '',
-      configSave2faSaving: false,
-      configSave2faRotationHint: '',
-      configSavePendingPostData: null,
+const configFormTitle = computed(() => {
+  if (isEditingConfig.value) {
+    return tm('configManagement.editConfig');
+  }
+  if (isCopyingConfig.value) {
+    return tm('configManagement.copyConfig');
+  }
+  return tm('configManagement.newConfig');
+});
 
-      // 配置类型切换
-      configType: 'normal', // 'normal' 或 'system'
-      configSearchKeyword: '',
+const isConfigFormSaveDisabled = computed(() => {
+  const isNameEmpty = !normalizeConfigName(configFormData.value.name);
+  return isNameEmpty || (isCopyingConfig.value && !copySourceConfigId.value);
+});
 
-      // 系统配置开关
-      isSystemConfig: false,
+const configSelectItems = computed<ConfigInfoItem[]>(() => {
+  return [
+    ...configInfoList.value,
+    {
+      id: '_%manage%_',
+      name: tm('configManagement.manageConfigs'),
+      umop: [],
+    },
+  ];
+});
 
-      // 多配置文件管理
-      selectedConfigID: null, // 用于存储当前选中的配置项信息
-      currentConfigId: null, // 跟踪当前正在编辑的配置id
-      configInfoList: [],
-      configFormData: {
-        name: '',
-      },
-      editingConfigId: null,
-      copySourceConfigId: '',
+const hasUnsavedChanges = computed(() => {
+  if (!fetched.value) {
+    return false;
+  }
+  return getConfigSnapshot(config_data.value) !== lastSavedConfigSnapshot.value;
+});
 
-      // 测试聊天
-      testChatDrawer: false,
-      testConfigId: null,
+watch(config_data_str, () => {
+  if (!syncingConfigString.value) {
+    config_data_has_changed.value = true;
+  }
+});
 
-      // 未保存的更改状态
-      hasUnsavedChanges: false,
-      // 存储原始配置
-      originalConfigData: null,
-    };
-  },
-
-  computed: {
-    messages() {
-      return {
-        loadError: this.tm('messages.loadError'),
-        saveSuccess: this.tm('messages.saveSuccess'),
-        saveError: this.tm('messages.saveError'),
-        configApplied: this.tm('messages.configApplied'),
-        configApplyError: this.tm('messages.configApplyError'),
-      };
-    },
-    // 检查配置是否变化
-    configHasChanges() {
-      if (!this.originalConfigData || !this.config_data) return false;
-      return (
-        JSON.stringify(this.originalConfigData) !==
-        JSON.stringify(this.config_data)
-      );
-    },
-    configInfoNameList() {
-      return this.configInfoList.map((info) => info.name);
-    },
-    selectedConfigInfo() {
-      return (
-        this.configInfoList.find((info) => info.id === this.selectedConfigID) ||
-        {}
-      );
-    },
-    configFormTitle() {
-      if (this.isEditingConfig) {
-        return this.tm('configManagement.editConfig');
-      }
-      if (this.isCopyingConfig) {
-        return this.tm('configManagement.copyConfig');
-      }
-      return this.tm('configManagement.newConfig');
-    },
-    isConfigFormSaveDisabled() {
-      const isNameEmpty = !this.normalizeConfigName(this.configFormData.name);
-      return isNameEmpty || (this.isCopyingConfig && !this.copySourceConfigId);
-    },
-    configSelectItems() {
-      const items = [...this.configInfoList];
-      items.push({
-        id: '_%manage%_',
-        name: this.tm('configManagement.manageConfigs'),
-        umop: [],
-      });
-      return items;
-    },
-    hasUnsavedChanges() {
-      if (!this.fetched) {
-        return false;
-      }
-      return (
-        this.getConfigSnapshot(this.config_data) !==
-        this.lastSavedConfigSnapshot
-      );
-    },
-  },
-  watch: {
-    config_data_str(_val) {
-      this.config_data_has_changed = true;
-    },
-    config_data: {
-      deep: true,
-      handler() {
-        if (this.fetched) {
-          this.hasUnsavedChanges = this.configHasChanges;
-        }
-      },
-    },
-    async '$route.fullPath'(newVal) {
-      if (this.extractConfigTypeFromHash(newVal) === 'system') {
-        this.$router.replace('/settings#system-config');
-        return;
-      }
-      await this.syncConfigTypeFromHash(newVal);
-    },
-    initialConfigId(newVal) {
-      if (!newVal) {
-        return;
-      }
-      if (this.selectedConfigID !== newVal) {
-        this.getConfigInfoList(newVal);
-      }
-    },
-  },
-  mounted() {
-    const hashConfigType = this.extractConfigTypeFromHash(
-      this.$route?.fullPath || '',
-    );
-    if (hashConfigType === 'system') {
-      this.$router.replace('/settings#system-config');
+watch(
+  () => route.fullPath,
+  async (newVal) => {
+    if (extractConfigTypeFromHash(newVal) === 'system') {
+      await router.replace('/settings#system-config');
       return;
     }
-    this.configType = hashConfigType || 'normal';
-    this.isSystemConfig = this.configType === 'system';
-
-    const targetConfigId = this.initialConfigId || 'default';
-    this.getConfigInfoList(targetConfigId);
-    // 初始化配置类型状态
-    this.configType = this.isSystemConfig ? 'system' : 'normal';
-
-    // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
-    window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
-
-    // 保存初始配置
-    this.$watch(
-      'config_data',
-      (newVal) => {
-        if (!this.originalConfigData && newVal) {
-          this.originalConfigData = JSON.parse(JSON.stringify(newVal));
-        }
-      },
-      { immediate: false, deep: true },
-    );
+    await syncConfigTypeFromHash(newVal);
   },
+);
 
-  beforeUnmount() {
-    // 移除语言切换事件监听器
-    window.removeEventListener(
-      'astrbot-locale-changed',
-      this.handleLocaleChange,
-    );
+watch(
+  () => props.initialConfigId,
+  (newVal) => {
+    if (!newVal) {
+      return;
+    }
+    if (selectedConfigID.value !== newVal) {
+      void getConfigInfoList(newVal);
+    }
   },
-  methods: {
-    // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
-    handleLocaleChange() {
-      // 重新加载当前配置
-      if (this.isSystemConfig) {
-        this.getConfig();
-      } else if (this.selectedConfigID) {
-        this.getConfig(this.selectedConfigID);
-      }
-    },
-    onConfigSearchInput(value) {
-      this.configSearchKeyword = normalizeTextInput(value);
-    },
-    extractConfigTypeFromHash(hash) {
-      const rawHash = String(hash || '');
-      const lastHashIndex = rawHash.lastIndexOf('#');
-      if (lastHashIndex === -1) {
-        return null;
-      }
-      const cleanHash = rawHash.slice(lastHashIndex + 1);
-      return cleanHash === 'system' || cleanHash === 'normal'
-        ? cleanHash
-        : null;
-    },
-    async syncConfigTypeFromHash(hash) {
-      const configType = this.extractConfigTypeFromHash(hash);
-      if (!configType || configType === this.configType) {
-        return false;
-      }
+);
 
-      this.configType = configType;
-      await this.onConfigTypeToggle();
-      return true;
-    },
-    getConfigInfoList(abconf_id) {
-      // 获取配置列表
-      configProfileApi
-        .list()
-        .then((res) => {
-          this.configInfoList = res.data.data.info_list;
+onMounted(() => {
+  const hashConfigType = extractConfigTypeFromHash(route.fullPath || '');
+  if (hashConfigType === 'system') {
+    void router.replace('/settings#system-config');
+    return;
+  }
 
-          if (abconf_id) {
-            let matched = false;
-            for (let i = 0; i < this.configInfoList.length; i++) {
-              if (this.configInfoList[i].id === abconf_id) {
-                this.selectedConfigID = this.configInfoList[i].id;
-                this.currentConfigId = this.configInfoList[i].id;
-                this.getConfig(abconf_id);
-                matched = true;
-                break;
-              }
-            }
+  configType.value = 'normal';
+  isSystemConfig.value = false;
 
-            if (!matched && this.configInfoList.length) {
-              // 当找不到目标配置时，默认展示列表中的第一个配置
-              this.selectedConfigID = this.configInfoList[0].id;
-              this.currentConfigId = this.configInfoList[0].id;
-              this.getConfig(this.selectedConfigID);
-            }
-          }
-        })
-        .catch((_err) => {
-          this.save_message = this.messages.loadError;
-          this.save_message_snack = true;
-          this.save_message_success = 'error';
-        });
-    },
-    getConfig(abconf_id) {
-      this.fetched = false;
-      const request = this.isSystemConfig
-        ? systemConfigApi.get()
-        : configProfileApi.get(abconf_id || this.selectedConfigID);
+  void getConfigInfoList(props.initialConfigId ?? 'default');
+  window.addEventListener('astrbot-locale-changed', handleLocaleChange);
+});
 
-      request
-        .then((res) => {
-          this.config_data = res.data.data.config;
-          this.lastSavedConfigSnapshot = this.getConfigSnapshot(
-            this.config_data,
-          );
-          this.fetched = true;
-          this.metadata = res.data.data.metadata;
-          this.configContentKey += 1;
-          // 获取配置后更新
-          this.$nextTick(() => {
-            this.originalConfigData = JSON.parse(
-              JSON.stringify(this.config_data),
-            );
-            this.hasUnsavedChanges = false;
-            if (!this.isSystemConfig) {
-              this.currentConfigId = abconf_id || this.selectedConfigID;
-            }
-          });
-        })
-        .catch((_err) => {
-          this.save_message = this.messages.loadError;
-          this.save_message_snack = true;
-          this.save_message_success = 'error';
-        });
-    },
-    async updateConfig() {
-      if (!this.fetched) return;
+onBeforeUnmount(() => {
+  window.removeEventListener('astrbot-locale-changed', handleLocaleChange);
+});
 
-      const postData = {
-        config: JSON.parse(JSON.stringify(this.config_data)),
-      };
+onBeforeRouteLeave(async () => {
+  if (!hasUnsavedChanges.value) {
+    return true;
+  }
 
-      if (this.isSystemConfig) {
-        postData.conf_id = 'default';
-      } else {
-        postData.conf_id = this.selectedConfigID;
-      }
+  const confirmed = await openUnsavedChangesDialog(
+    tm('unsavedChangesWarning.leavePage'),
+  );
+  if (confirmed === 'close') {
+    return false;
+  }
+  if (!confirmed) {
+    return true;
+  }
 
-      return this.saveAstrbotConfig(postData);
-    },
-    async saveAstrbotConfig(postData, headers = {}, allow2faPrompt = true) {
-      try {
-        const confId = postData.conf_id || 'default';
-        const requestConfig = {
-          headers,
-          validateStatus: (status) =>
-            (status >= 200 && status < 300) || status === 401,
-        };
-        const res = this.isSystemConfig
-          ? await systemConfigApi.update(postData.config, requestConfig)
-          : await configProfileApi.update(
-              confId,
-              postData.config,
-              requestConfig,
-            );
+  const result = await updateConfig();
+  if (isSystemConfig.value) {
+    return false;
+  }
+  if (result?.success) {
+    await delay(800);
+    return true;
+  }
+  return false;
+});
 
-        if (res.status === 401 && res.data?.data?.totp_required) {
-          if (allow2faPrompt && !headers['X-2FA-Code']) {
-            this.configSavePendingPostData = JSON.parse(
-              JSON.stringify(postData),
-            );
-            this.configSave2faError = '';
-            this.configSave2faRotationHint =
-              this._getConfigSaveRotationHint(postData);
-            this.configSave2faDialogVisible = true;
-            return { success: false, requires2fa: true };
-          }
-          this.configSave2faError = this.tmMeta(
-            'system_group.system.dashboard.totp.configSaveError',
-          );
-          this.configSave2faDialogVisible = true;
-          return { success: false, requires2fa: true };
-        }
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
 
-        if (res.data.status === 'ok') {
-          this.configSavePendingPostData = null;
-          this.configSave2faDialogVisible = false;
-          this.configSave2faError = '';
-          this.lastSavedConfigSnapshot = this.getConfigSnapshot(
-            this.config_data,
-          );
-          this.save_message = res.data.message || this.messages.saveSuccess;
-          this.save_message_snack = true;
-          this.save_message_success = 'success';
-          this.onConfigSaved();
+function getString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
 
-          return { success: true };
-        }
+function normalizeConfigInfo(value: unknown): ConfigInfoItem | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const id = getString(record?.id);
+  const name = getString(record?.name);
+  if (!id || !name) {
+    return null;
+  }
+  return {
+    id,
+    name,
+    umop: Array.isArray(record.umop) ? record.umop : undefined,
+  };
+}
 
-        this.save_message = res.data.message || this.messages.saveError;
-        this.save_message_snack = true;
-        this.save_message_success = 'error';
-        return { success: false };
-      } catch (_err) {
-        this.save_message = this.messages.saveError;
-        this.save_message_snack = true;
-        this.save_message_success = 'error';
-        return { success: false };
-      }
-    },
-    async handleConfigSave2faConfirm(payload) {
-      if (!this.configSavePendingPostData || this.configSave2faSaving) {
-        return;
-      }
-      this.configSave2faSaving = true;
-      this.configSave2faError = '';
-      const headers = {
-        'X-2FA-Code': payload,
-      };
-      try {
-        await this.saveAstrbotConfig(
-          JSON.parse(JSON.stringify(this.configSavePendingPostData)),
-          headers,
-          false,
+function toOpenConfig(value: unknown): OpenConfig {
+  return asRecord(value) ?? {};
+}
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function extractErrorMessage(error: unknown): string | null {
+  const errorRecord = asRecord(error);
+  const response = asRecord(errorRecord?.response);
+  const data = asRecord(response?.data);
+  return getString(data?.message);
+}
+
+function showSnack(message: string, color: SnackbarColor) {
+  save_message.value = message;
+  save_message_success.value = color;
+  save_message_snack.value = true;
+}
+
+function createUnsavedChangesDialogOptions(
+  message: string,
+): UnsavedDialogOptions {
+  return {
+    title: tm('unsavedChangesWarning.dialogTitle'),
+    message,
+    confirmHint: `${tm('unsavedChangesWarning.options.saveAndSwitch')}:${tm('unsavedChangesWarning.options.confirm')}`,
+    cancelHint: `${tm('unsavedChangesWarning.options.discardAndSwitch')}:${tm('unsavedChangesWarning.options.cancel')}`,
+    closeHint: `${tm('unsavedChangesWarning.options.closeCard')}:"x"`,
+  };
+}
+
+async function openUnsavedChangesDialog(message: string) {
+  return (
+    (await unsavedChangesDialog.value?.open(
+      createUnsavedChangesDialogOptions(message),
+    )) ?? false
+  );
+}
+
+function normalizeConfigName(name: unknown) {
+  return typeof name === 'string' ? name.trim() : '';
+}
+
+function getConfigSnapshot(config: OpenConfig) {
+  return JSON.stringify(config ?? {});
+}
+
+function extractConfigTypeFromHash(hash: string): ConfigType | null {
+  const rawHash = String(hash || '');
+  const lastHashIndex = rawHash.lastIndexOf('#');
+  if (lastHashIndex === -1) {
+    return null;
+  }
+  const cleanHash = rawHash.slice(lastHashIndex + 1);
+  return cleanHash === 'system' || cleanHash === 'normal' ? cleanHash : null;
+}
+
+async function syncConfigTypeFromHash(hash: string) {
+  const nextConfigType = extractConfigTypeFromHash(hash);
+  if (!nextConfigType || nextConfigType === configType.value) {
+    return false;
+  }
+
+  configType.value = nextConfigType;
+  await onConfigTypeToggle();
+  return true;
+}
+
+function handleLocaleChange() {
+  if (isSystemConfig.value) {
+    void getConfig();
+  } else if (selectedConfigID.value) {
+    void getConfig(selectedConfigID.value);
+  }
+}
+
+function onConfigSearchInput(value: unknown) {
+  configSearchKeyword.value = normalizeTextInput(value);
+}
+
+async function getConfigInfoList(targetConfigId?: string | null) {
+  try {
+    const res = await configProfileApi.list();
+    const payload = asRecord(res.data.data);
+    const items = Array.isArray(payload?.info_list) ? payload.info_list : [];
+    configInfoList.value = items
+      .map(normalizeConfigInfo)
+      .filter((item): item is ConfigInfoItem => item !== null);
+
+    if (!targetConfigId) {
+      return;
+    }
+
+    const matchedItem = configInfoList.value.find(
+      (item) => item.id === targetConfigId,
+    );
+    const activeItem = matchedItem ?? configInfoList.value[0];
+    if (!activeItem) {
+      return;
+    }
+
+    selectedConfigID.value = activeItem.id;
+    currentConfigId.value = activeItem.id;
+    await getConfig(activeItem.id);
+  } catch {
+    showSnack(messages.value.loadError, 'error');
+  }
+}
+
+async function getConfig(targetConfigId?: string | null) {
+  fetched.value = false;
+
+  try {
+    const res = isSystemConfig.value
+      ? await systemConfigApi.get()
+      : await configProfileApi.get(
+          targetConfigId || selectedConfigID.value || '',
         );
-      } finally {
-        this.configSave2faSaving = false;
-      }
-    },
-    handleConfigSave2faCancel() {
-      if (this.lastSavedConfigSnapshot && this.config_data?.dashboard?.totp) {
-        try {
-          const savedConfig = JSON.parse(this.lastSavedConfigSnapshot);
-          const savedTotp = savedConfig?.dashboard?.totp;
-          if (savedTotp) {
-            this.config_data.dashboard.totp.enable = savedTotp.enable;
-            this.config_data.dashboard.totp.secret = savedTotp.secret;
-            this.config_data.dashboard.totp.recovery_code_hash =
-              savedTotp.recovery_code_hash;
-          }
-        } catch (_) {
-          // ignore parse errors
-        }
-      }
-      this.configSavePendingPostData = null;
-      this.configSave2faError = '';
-      this.configSave2faDialogVisible = false;
-    },
-    _getConfigSaveRotationHint(postData) {
-      const postedSecret = postData?.config?.dashboard?.totp?.secret;
-      if (
-        postedSecret &&
-        typeof postedSecret === 'string' &&
-        postedSecret.trim()
-      ) {
-        return this.tmMeta(
-          'system_group.system.dashboard.totp.configSaveRotationHint',
-        );
-      }
-      return '';
-    },
-    // 重置未保存状态
-    onConfigSaved() {
-      this.hasUnsavedChanges = false;
-      this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
-    },
+    const payload = asRecord(res.data.data);
+    config_data.value = toOpenConfig(payload?.config);
+    metadata.value = toOpenConfig(payload?.metadata);
+    lastSavedConfigSnapshot.value = getConfigSnapshot(config_data.value);
+    fetched.value = true;
+    configContentKey.value += 1;
 
-    configToString() {
-      this.config_data_str = JSON.stringify(this.config_data, null, 2);
-      this.config_data_has_changed = false;
-    },
-    applyStrConfig() {
-      try {
-        this.config_data = JSON.parse(this.config_data_str);
-        this.config_data_has_changed = false;
-        this.save_message_success = 'success';
-        this.save_message = this.messages.configApplied;
-        this.save_message_snack = true;
-      } catch (_error) {
-        this.save_message_success = 'error';
-        this.save_message = this.messages.configApplyError;
-        this.save_message_snack = true;
-      }
-    },
-    createNewConfig(configName) {
-      configProfileApi
-        .create({
-          name: configName,
-        })
-        .then((res) => {
-          if (res.data.status === 'ok') {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'success';
-            this.getConfigInfoList(res.data.data.conf_id);
-            this.cancelConfigForm();
-          } else {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'error';
-          }
-        })
-        .catch((err) => {
-          console.error(err);
-          this.save_message = this.tm('configManagement.createFailed');
-          this.save_message_snack = true;
-          this.save_message_success = 'error';
-        });
-    },
-    normalizeConfigName(name) {
-      return typeof name === 'string' ? name.trim() : '';
-    },
-    hasDuplicateConfigName(name, excludeId = null) {
-      const normalizedName = this.normalizeConfigName(name);
-      if (!normalizedName) {
-        return false;
-      }
-      return this.configInfoList.some((config) => {
-        if (!config?.name) {
-          return false;
-        }
-        if (excludeId && config.id === excludeId) {
-          return false;
-        }
-        return this.normalizeConfigName(config.name) === normalizedName;
-      });
-    },
-    async onConfigSelect(value) {
-      if (value === '_%manage%_') {
-        this.configManageDialog = true;
-        // 重置选择到之前的值
-        this.$nextTick(() => {
-          this.selectedConfigID = this.selectedConfigInfo.id || 'default';
-          this.getConfig(this.selectedConfigID);
-        });
-      } else if (this.hasUnsavedChanges) {
-        // 检查是否有未保存的更改
-        // 获取之前正在编辑的配置id
-        const prevConfigId = this.isSystemConfig
-          ? 'default'
-          : this.currentConfigId || this.selectedConfigID || 'default';
-        const message = this.tm('unsavedChangesWarning.switchConfig');
-        const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
-          title: this.tm('unsavedChangesWarning.dialogTitle'),
-          message,
-          confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
-          cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
-          closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`,
-        });
-        // 关闭弹窗不切换
-        if (saveAndSwitch === 'close') {
-          return;
-        }
-        if (saveAndSwitch) {
-          // 设置临时变量保存切换后的id
-          const currentSelectedId = this.selectedConfigID;
-          // 把id设置回切换前的用于保存上一次的配置，保存完后恢复id为切换后的
-          this.selectedConfigID = prevConfigId;
-          const result = await this.updateConfig();
-          this.selectedConfigID = currentSelectedId;
-          if (result?.success) {
-            this.selectedConfigID = value;
-            this.getConfig(value);
-          }
-        } else {
-          // 取消保存并切换配置
-          this.selectedConfigID = value;
-          this.getConfig(value);
-        }
-      } else {
-        // 无未保存更改直接切换
-        this.selectedConfigID = value;
-        this.getConfig(value);
-      }
-    },
-    setConfigFormState({
-      mode = 'create',
-      config = null,
-      visible = true,
-    } = {}) {
-      this.showConfigForm = visible;
-      this.isEditingConfig = mode === 'edit';
-      this.isCopyingConfig = mode === 'copy';
-      this.editingConfigId = this.isEditingConfig && config ? config.id : null;
-      this.copySourceConfigId = this.isCopyingConfig && config ? config.id : '';
+    await nextTick();
+    if (!isSystemConfig.value) {
+      currentConfigId.value = targetConfigId || selectedConfigID.value;
+    }
+  } catch {
+    showSnack(messages.value.loadError, 'error');
+  }
+}
 
-      let name = '';
-      if (this.isEditingConfig && config) {
-        name = config.name || '';
-      } else if (this.isCopyingConfig && config) {
-        name = `${config.name || ''}-copy`;
+async function updateConfig(): Promise<SaveResult | undefined> {
+  if (!fetched.value) {
+    return undefined;
+  }
+
+  const postData: ConfigPostData = {
+    config: deepClone(config_data.value),
+    conf_id: isSystemConfig.value
+      ? 'default'
+      : (selectedConfigID.value ?? undefined),
+  };
+  return saveAstrbotConfig(postData);
+}
+
+async function saveAstrbotConfig(
+  postData: ConfigPostData,
+  headers: Record<string, string> = {},
+  allow2faPrompt = true,
+): Promise<SaveResult> {
+  try {
+    const confId = postData.conf_id || 'default';
+    const requestConfig = {
+      headers,
+      validateStatus: (status: number) =>
+        (status >= 200 && status < 300) || status === 401,
+    };
+    const res = isSystemConfig.value
+      ? await systemConfigApi.update(postData.config, requestConfig)
+      : await configProfileApi.update(confId, postData.config, requestConfig);
+
+    const responseData = asRecord(res.data.data);
+    if (res.status === 401 && responseData?.totp_required === true) {
+      if (allow2faPrompt && !headers['X-2FA-Code']) {
+        configSavePendingPostData.value = deepClone(postData);
+        configSave2faError.value = '';
+        configSave2faRotationHint.value = getConfigSaveRotationHint(postData);
+        configSave2faDialogVisible.value = true;
+        return { success: false, requires2fa: true };
       }
-      this.configFormData = { name };
-    },
-    startCreateConfig() {
-      this.setConfigFormState({ mode: 'create' });
-    },
-    startEditConfig(config) {
-      this.setConfigFormState({ mode: 'edit', config });
-    },
-    startCopyConfig(config) {
-      this.setConfigFormState({ mode: 'copy', config });
-    },
-    cancelConfigForm() {
-      this.setConfigFormState({ visible: false });
-    },
-    saveConfigForm() {
-      const normalizedName = this.normalizeConfigName(this.configFormData.name);
-      if (!normalizedName) {
-        this.save_message = this.tm('configManagement.pleaseEnterName');
-        this.save_message_snack = true;
-        this.save_message_success = 'error';
-        return;
-      }
-      const excludeId = this.isEditingConfig ? this.editingConfigId : null;
-      if (this.hasDuplicateConfigName(normalizedName, excludeId)) {
-        this.save_message = this.tm('configManagement.nameExists');
-        this.save_message_snack = true;
-        this.save_message_success = 'error';
-        return;
-      }
-      this.configFormData.name = normalizedName;
-      if (this.isEditingConfig) {
-        this.updateConfigInfo(normalizedName);
-      } else if (this.isCopyingConfig) {
-        this.copyConfig(normalizedName);
-      } else {
-        this.createNewConfig(normalizedName);
-      }
-    },
-    copyConfig(configName) {
-      configProfileApi
-        .get(this.copySourceConfigId)
-        .then((res) => {
-          const sourceConfig = res.data?.data?.config;
-          if (!sourceConfig) {
-            this.save_message = this.tm('configManagement.copyFailed');
-            this.save_message_snack = true;
-            this.save_message_success = 'error';
-            return;
-          }
-          return configProfileApi.create({
-            name: configName,
-            config: sourceConfig,
-          });
-        })
-        .then((res) => {
-          if (!res) return;
-          if (res.data.status === 'ok') {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'success';
-            this.getConfigInfoList(res.data.data.conf_id);
-            this.cancelConfigForm();
-          } else {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'error';
-          }
-        })
-        .catch((err) => {
-          console.error(err);
-          this.save_message =
-            err?.response?.data?.message ||
-            this.tm('configManagement.copyFailed');
-          this.save_message_snack = true;
-          this.save_message_success = 'error';
-        });
-    },
-    async confirmDeleteConfig(config) {
-      const message = this.tm('configManagement.confirmDelete').replace(
-        '{name}',
-        config.name,
+
+      configSave2faError.value = tmMeta(
+        'system_group.system.dashboard.totp.configSaveError',
       );
-      if (await askForConfirmationDialog(message, this.confirmDialog)) {
-        this.deleteConfig(config.id);
-      }
-    },
-    deleteConfig(configId) {
-      configProfileApi
-        .delete(configId)
-        .then((res) => {
-          if (res.data.status === 'ok') {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'success';
-            this.cancelConfigForm();
-            // 删除成功后，更新配置列表
-            this.getConfigInfoList('default');
-          } else {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'error';
-          }
-        })
-        .catch((err) => {
-          console.error(err);
-          this.save_message = this.tm('configManagement.deleteFailed');
-          this.save_message_snack = true;
-          this.save_message_success = 'error';
-        });
-    },
-    updateConfigInfo(configName) {
-      configProfileApi
-        .rename(this.editingConfigId, configName)
-        .then((res) => {
-          if (res.data.status === 'ok') {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'success';
-            this.getConfigInfoList(this.editingConfigId);
-            this.cancelConfigForm();
-          } else {
-            this.save_message = res.data.message;
-            this.save_message_snack = true;
-            this.save_message_success = 'error';
-          }
-        })
-        .catch((err) => {
-          console.error(err);
-          this.save_message = this.tm('configManagement.updateFailed');
-          this.save_message_snack = true;
-          this.save_message_success = 'error';
-        });
-    },
-    async onConfigTypeToggle() {
-      // 检查是否有未保存的更改
-      if (this.hasUnsavedChanges) {
-        const message = this.tm('unsavedChangesWarning.leavePage');
-        const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
-          title: this.tm('unsavedChangesWarning.dialogTitle'),
-          message,
-          confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
-          cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
-          closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`,
-        });
-        // 关闭弹窗
-        if (saveAndSwitch === 'close') {
-          // 恢复路由
-          const originalHash = this.isSystemConfig ? '#system' : '#normal';
-          this.$router.replace(`/config${originalHash}`);
-          this.configType = this.isSystemConfig ? 'system' : 'normal';
-          return;
-        }
-        if (saveAndSwitch) {
-          await this.updateConfig();
-          // 系统配置保存后不跳转
-          if (this.isSystemConfig) {
-            this.$router.replace('/settings#system-config');
-            return;
-          }
-        }
-      }
-      this.isSystemConfig = this.configType === 'system';
-      this.fetched = false; // 重置加载状态
+      configSave2faDialogVisible.value = true;
+      return { success: false, requires2fa: true };
+    }
 
-      if (this.isSystemConfig) {
-        // 切换到系统配置
-        this.getConfig();
-      } else if (this.selectedConfigID) {
-        // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
-        this.getConfig(this.selectedConfigID);
-      } else {
-        this.getConfigInfoList('default');
-      }
-    },
-    onSystemConfigToggle() {
-      // 保持向后兼容性，更新 configType
-      this.configType = this.isSystemConfig ? 'system' : 'normal';
+    if (res.data.status === 'ok') {
+      configSavePendingPostData.value = null;
+      configSave2faDialogVisible.value = false;
+      configSave2faError.value = '';
+      lastSavedConfigSnapshot.value = getConfigSnapshot(config_data.value);
+      showSnack(res.data.message || messages.value.saveSuccess, 'success');
+      return { success: true };
+    }
 
-      void this.onConfigTypeToggle();
-    },
-    openTestChat() {
-      if (!this.selectedConfigID) {
-        this.save_message = '请先选择一个配置文件';
-        this.save_message_snack = true;
-        this.save_message_success = 'warning';
+    showSnack(res.data.message || messages.value.saveError, 'error');
+    return { success: false };
+  } catch {
+    showSnack(messages.value.saveError, 'error');
+    return { success: false };
+  }
+}
+
+async function handleConfigSave2faConfirm(payload: string) {
+  if (!configSavePendingPostData.value || configSave2faSaving.value) {
+    return;
+  }
+
+  configSave2faSaving.value = true;
+  configSave2faError.value = '';
+  try {
+    await saveAstrbotConfig(
+      deepClone(configSavePendingPostData.value),
+      { 'X-2FA-Code': payload },
+      false,
+    );
+  } finally {
+    configSave2faSaving.value = false;
+  }
+}
+
+function handleConfigSave2faCancel() {
+  try {
+    const savedConfig = JSON.parse(lastSavedConfigSnapshot.value) as unknown;
+    const savedDashboard = asRecord(asRecord(savedConfig)?.dashboard);
+    const savedTotp = asRecord(savedDashboard?.totp);
+    const currentDashboard = asRecord(config_data.value.dashboard);
+    const currentTotp = asRecord(currentDashboard?.totp);
+    if (savedTotp && currentTotp) {
+      currentTotp.enable = savedTotp.enable;
+      currentTotp.secret = savedTotp.secret;
+      currentTotp.recovery_code_hash = savedTotp.recovery_code_hash;
+    }
+  } catch {
+    // ignore parse errors
+  }
+
+  configSavePendingPostData.value = null;
+  configSave2faError.value = '';
+  configSave2faDialogVisible.value = false;
+}
+
+function getConfigSaveRotationHint(postData: ConfigPostData) {
+  const postedDashboard = asRecord(postData.config.dashboard);
+  const postedTotp = asRecord(postedDashboard?.totp);
+  const postedSecret = getString(postedTotp?.secret);
+  if (postedSecret?.trim()) {
+    return tmMeta('system_group.system.dashboard.totp.configSaveRotationHint');
+  }
+  return '';
+}
+
+function configToString() {
+  syncingConfigString.value = true;
+  config_data_str.value = JSON.stringify(config_data.value, null, 2);
+  config_data_has_changed.value = false;
+  void nextTick(() => {
+    syncingConfigString.value = false;
+  });
+}
+
+function applyStrConfig() {
+  try {
+    config_data.value = JSON.parse(config_data_str.value) as OpenConfig;
+    config_data_has_changed.value = false;
+    showSnack(messages.value.configApplied, 'success');
+  } catch {
+    showSnack(messages.value.configApplyError, 'error');
+  }
+}
+
+async function createNewConfig(configName: string) {
+  try {
+    const res = await configProfileApi.create({
+      name: configName,
+    });
+    if (res.data.status === 'ok') {
+      const payload = asRecord(res.data.data);
+      const confId = getString(payload?.conf_id);
+      showSnack(res.data.message || messages.value.saveSuccess, 'success');
+      await getConfigInfoList(confId || 'default');
+      cancelConfigForm();
+      return;
+    }
+
+    showSnack(res.data.message || tm('configManagement.createFailed'), 'error');
+  } catch {
+    showSnack(tm('configManagement.createFailed'), 'error');
+  }
+}
+
+function hasDuplicateConfigName(name: string, excludeId: string | null = null) {
+  const normalizedName = normalizeConfigName(name);
+  if (!normalizedName) {
+    return false;
+  }
+  return configInfoList.value.some((config) => {
+    if (!config.name) {
+      return false;
+    }
+    if (excludeId && config.id === excludeId) {
+      return false;
+    }
+    return normalizeConfigName(config.name) === normalizedName;
+  });
+}
+
+async function onConfigSelect(value: unknown) {
+  const nextConfigId = getString(value);
+  if (!nextConfigId) {
+    return;
+  }
+
+  if (nextConfigId === '_%manage%_') {
+    configManageDialog.value = true;
+    await nextTick();
+    selectedConfigID.value = selectedConfigInfo.value.id || 'default';
+    await getConfig(selectedConfigID.value);
+    return;
+  }
+
+  if (!hasUnsavedChanges.value) {
+    selectedConfigID.value = nextConfigId;
+    await getConfig(nextConfigId);
+    return;
+  }
+
+  const prevConfigId = isSystemConfig.value
+    ? 'default'
+    : currentConfigId.value || selectedConfigID.value || 'default';
+  const saveAndSwitch = await openUnsavedChangesDialog(
+    tm('unsavedChangesWarning.switchConfig'),
+  );
+  if (saveAndSwitch === 'close') {
+    return;
+  }
+  if (saveAndSwitch) {
+    const currentSelectedId = selectedConfigID.value;
+    selectedConfigID.value = prevConfigId;
+    const result = await updateConfig();
+    selectedConfigID.value = currentSelectedId;
+    if (result?.success) {
+      selectedConfigID.value = nextConfigId;
+      await getConfig(nextConfigId);
+    }
+    return;
+  }
+
+  selectedConfigID.value = nextConfigId;
+  await getConfig(nextConfigId);
+}
+
+function setConfigFormState(options?: {
+  mode?: ConfigFormMode;
+  config?: ConfigInfoItem | null;
+  visible?: boolean;
+}) {
+  const { mode = 'create', config = null, visible = true } = options ?? {};
+  showConfigForm.value = visible;
+  isEditingConfig.value = mode === 'edit';
+  isCopyingConfig.value = mode === 'copy';
+  editingConfigId.value = isEditingConfig.value && config ? config.id : null;
+  copySourceConfigId.value = isCopyingConfig.value && config ? config.id : '';
+
+  let name = '';
+  if (isEditingConfig.value && config) {
+    name = config.name || '';
+  } else if (isCopyingConfig.value && config) {
+    name = `${config.name || ''}-copy`;
+  }
+  configFormData.value = { name };
+}
+
+function startCreateConfig() {
+  setConfigFormState({ mode: 'create' });
+}
+
+function startEditConfig(config: ConfigInfoItem) {
+  setConfigFormState({ mode: 'edit', config });
+}
+
+function startCopyConfig(config: ConfigInfoItem) {
+  setConfigFormState({ mode: 'copy', config });
+}
+
+function cancelConfigForm() {
+  setConfigFormState({ visible: false });
+}
+
+function saveConfigForm() {
+  const normalizedName = normalizeConfigName(configFormData.value.name);
+  if (!normalizedName) {
+    showSnack(tm('configManagement.pleaseEnterName'), 'error');
+    return;
+  }
+
+  const excludeId = isEditingConfig.value ? editingConfigId.value : null;
+  if (hasDuplicateConfigName(normalizedName, excludeId)) {
+    showSnack(tm('configManagement.nameExists'), 'error');
+    return;
+  }
+
+  configFormData.value.name = normalizedName;
+  if (isEditingConfig.value) {
+    void updateConfigInfo(normalizedName);
+  } else if (isCopyingConfig.value) {
+    void copyConfig(normalizedName);
+  } else {
+    void createNewConfig(normalizedName);
+  }
+}
+
+async function copyConfig(configName: string) {
+  try {
+    const sourceRes = await configProfileApi.get(copySourceConfigId.value);
+    const sourcePayload = asRecord(sourceRes.data.data);
+    const sourceConfig = sourcePayload?.config;
+    if (!sourceConfig) {
+      showSnack(tm('configManagement.copyFailed'), 'error');
+      return;
+    }
+
+    const createRes = await configProfileApi.create({
+      name: configName,
+      config: toOpenConfig(sourceConfig),
+    });
+    if (createRes.data.status === 'ok') {
+      const createPayload = asRecord(createRes.data.data);
+      const confId = getString(createPayload?.conf_id);
+      showSnack(
+        createRes.data.message || messages.value.saveSuccess,
+        'success',
+      );
+      await getConfigInfoList(confId || 'default');
+      cancelConfigForm();
+      return;
+    }
+
+    showSnack(
+      createRes.data.message || tm('configManagement.copyFailed'),
+      'error',
+    );
+  } catch (error) {
+    showSnack(
+      extractErrorMessage(error) || tm('configManagement.copyFailed'),
+      'error',
+    );
+  }
+}
+
+async function confirmDeleteConfig(config: ConfigInfoItem) {
+  const message = tm('configManagement.confirmDelete').replace(
+    '{name}',
+    config.name,
+  );
+  if (await askForConfirmationDialog(message, confirmDialog)) {
+    await deleteConfig(config.id);
+  }
+}
+
+async function deleteConfig(configId: string) {
+  try {
+    const res = await configProfileApi.delete(configId);
+    if (res.data.status === 'ok') {
+      showSnack(res.data.message || messages.value.saveSuccess, 'success');
+      cancelConfigForm();
+      await getConfigInfoList('default');
+      return;
+    }
+
+    showSnack(res.data.message || tm('configManagement.deleteFailed'), 'error');
+  } catch {
+    showSnack(tm('configManagement.deleteFailed'), 'error');
+  }
+}
+
+async function updateConfigInfo(configName: string) {
+  if (!editingConfigId.value) {
+    return;
+  }
+
+  try {
+    const res = await configProfileApi.rename(
+      editingConfigId.value,
+      configName,
+    );
+    if (res.data.status === 'ok') {
+      showSnack(res.data.message || messages.value.saveSuccess, 'success');
+      await getConfigInfoList(editingConfigId.value);
+      cancelConfigForm();
+      return;
+    }
+
+    showSnack(res.data.message || tm('configManagement.updateFailed'), 'error');
+  } catch {
+    showSnack(tm('configManagement.updateFailed'), 'error');
+  }
+}
+
+async function onConfigTypeToggle() {
+  if (hasUnsavedChanges.value) {
+    const saveAndSwitch = await openUnsavedChangesDialog(
+      tm('unsavedChangesWarning.leavePage'),
+    );
+    if (saveAndSwitch === 'close') {
+      const originalHash = isSystemConfig.value ? '#system' : '#normal';
+      await router.replace(`/config${originalHash}`);
+      configType.value = isSystemConfig.value ? 'system' : 'normal';
+      return;
+    }
+    if (saveAndSwitch) {
+      await updateConfig();
+      if (isSystemConfig.value) {
+        await router.replace('/settings#system-config');
         return;
       }
-      this.testConfigId = this.selectedConfigID;
-      this.testChatDrawer = true;
-    },
-    closeTestChat() {
-      this.testChatDrawer = false;
-      this.testConfigId = null;
-    },
-    getConfigSnapshot(config) {
-      return JSON.stringify(config ?? {});
-    },
-  },
-};
+    }
+  }
+
+  isSystemConfig.value = configType.value === 'system';
+  fetched.value = false;
+  if (isSystemConfig.value) {
+    await getConfig();
+  } else if (selectedConfigID.value) {
+    await getConfig(selectedConfigID.value);
+  } else {
+    await getConfigInfoList('default');
+  }
+}
+
+function openTestChat() {
+  if (!selectedConfigID.value) {
+    showSnack('请先选择一个配置文件', 'warning');
+    return;
+  }
+  testConfigId.value = selectedConfigID.value;
+  testChatDrawer.value = true;
+}
+
+function closeTestChat() {
+  testChatDrawer.value = false;
+  testConfigId.value = null;
+}
 </script>
 
 <style>

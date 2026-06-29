@@ -7,64 +7,54 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
 import QRCode from 'qrcode';
+import { ref, watch } from 'vue';
 
-export default {
-  name: 'QrCodeViewer',
-  props: {
-    value: {
-      type: String,
-      default: '',
-    },
-    alt: {
-      type: String,
-      default: 'QR Code',
-    },
-    size: {
-      type: Number,
-      default: 260,
-    },
-    margin: {
-      type: Number,
-      default: 2,
-    },
-    emptyHint: {
-      type: String,
-      default: '暂无可用二维码',
-    },
+const props = withDefaults(
+  defineProps<{
+    value?: string;
+    alt?: string;
+    size?: number;
+    margin?: number;
+    emptyHint?: string;
+  }>(),
+  {
+    value: '',
+    alt: 'QR Code',
+    size: 260,
+    margin: 2,
+    emptyHint: '暂无可用二维码',
   },
-  data() {
-    return {
-      imageSrc: '',
-    };
-  },
-  watch: {
-    value: {
-      immediate: true,
-      handler: 'renderQRCode',
-    },
-  },
-  methods: {
-    async renderQRCode(rawValue) {
-      const value = String(rawValue || '').trim();
-      if (!value) {
-        this.imageSrc = '';
-        return;
-      }
+);
 
-      try {
-        this.imageSrc = await QRCode.toDataURL(value, {
-          margin: this.margin,
-          width: this.size,
-          errorCorrectionLevel: 'M',
-        });
-      } catch {
-        this.imageSrc = '';
-      }
-    },
+const imageSrc = ref('');
+
+async function renderQRCode(rawValue: string | undefined): Promise<void> {
+  const value = String(rawValue || '').trim();
+  if (!value) {
+    imageSrc.value = '';
+    return;
+  }
+
+  try {
+    imageSrc.value = await QRCode.toDataURL(value, {
+      margin: props.margin,
+      width: props.size,
+      errorCorrectionLevel: 'M',
+    });
+  } catch {
+    imageSrc.value = '';
+  }
+}
+
+watch(
+  () => props.value,
+  (value) => {
+    void renderQRCode(value);
   },
-};
+  { immediate: true },
+);
 </script>
 
 <style scoped>

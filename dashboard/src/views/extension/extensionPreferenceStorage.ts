@@ -1,11 +1,16 @@
 export const PINNED_EXTENSIONS_STORAGE_KEY = 'astrbot.pinnedExtensions';
 
-const getStorageForRead = (storageOverride) => {
+type ReadableStorage = Pick<Storage, 'getItem'>;
+type WritableStorage = Pick<Storage, 'setItem'>;
+
+function getStorageForRead(
+  storageOverride?: ReadableStorage | null,
+): ReadableStorage | null {
   if (storageOverride === null) {
     return null;
   }
   if (storageOverride !== undefined) {
-    return typeof storageOverride?.getItem === 'function'
+    return typeof storageOverride.getItem === 'function'
       ? storageOverride
       : null;
   }
@@ -18,14 +23,16 @@ const getStorageForRead = (storageOverride) => {
   } catch {
     return null;
   }
-};
+}
 
-const getStorageForWrite = (storageOverride) => {
+function getStorageForWrite(
+  storageOverride?: WritableStorage | null,
+): WritableStorage | null {
   if (storageOverride === null) {
     return null;
   }
   if (storageOverride !== undefined) {
-    return typeof storageOverride?.setItem === 'function'
+    return typeof storageOverride.setItem === 'function'
       ? storageOverride
       : null;
   }
@@ -38,16 +45,19 @@ const getStorageForWrite = (storageOverride) => {
   } catch {
     return null;
   }
-};
+}
 
-const normalizePinnedExtensions = (value) => {
+function normalizePinnedExtensions(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const seen = new Set();
+  const seen = new Set<string>();
   return value
-    .filter((item) => typeof item === 'string' && item.trim().length > 0)
+    .filter(
+      (item): item is string =>
+        typeof item === 'string' && item.trim().length > 0,
+    )
     .map((item) => item.trim())
     .filter((item) => {
       if (seen.has(item)) {
@@ -56,9 +66,11 @@ const normalizePinnedExtensions = (value) => {
       seen.add(item);
       return true;
     });
-};
+}
 
-export const readPinnedExtensions = (storage) => {
+export function readPinnedExtensions(
+  storage?: ReadableStorage | null,
+): string[] {
   const targetStorage = getStorageForRead(storage);
   if (!targetStorage) {
     return [];
@@ -70,9 +82,12 @@ export const readPinnedExtensions = (storage) => {
   } catch {
     return [];
   }
-};
+}
 
-export const writePinnedExtensions = (names, storage) => {
+export function writePinnedExtensions(
+  names: unknown,
+  storage?: WritableStorage | null,
+): void {
   const targetStorage = getStorageForWrite(storage);
   if (!targetStorage) {
     return;
@@ -86,4 +101,4 @@ export const writePinnedExtensions = (names, storage) => {
   } catch {
     // Ignore restricted storage environments.
   }
-};
+}

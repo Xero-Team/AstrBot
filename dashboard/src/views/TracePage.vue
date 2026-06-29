@@ -1,9 +1,11 @@
-<script setup>
+<script setup lang="ts">
 import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
 import { traceApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { computed, ref, onMounted } from 'vue';
 import { useTheme } from 'vuetify';
+
+defineOptions({ name: 'TracePage' });
 
 const { tm } = useModuleI18n('features/trace');
 const theme = useTheme();
@@ -17,7 +19,7 @@ const fetchTraceSettings = async () => {
   try {
     const res = await traceApi.getSettings();
     if (res.data?.status === 'ok') {
-      traceEnabled.value = res.data.data?.trace_enable ?? true;
+      traceEnabled.value = res.data.data?.enabled ?? true;
     }
   } catch (err) {
     console.error('Failed to fetch trace settings:', err);
@@ -28,7 +30,7 @@ const updateTraceSettings = async () => {
   loading.value = true;
   try {
     await traceApi.updateSettings({
-      trace_enable: traceEnabled.value,
+      enabled: traceEnabled.value,
     });
     // Refresh the TraceDisplayer component to reconnect SSE
     traceDisplayerKey.value += 1;
@@ -79,15 +81,6 @@ onMounted(() => {
     </v-container>
   </div>
 </template>
-
-<script>
-export default {
-  name: 'TracePage',
-  components: {
-    TraceDisplayer,
-  },
-};
-</script>
 
 <style scoped>
 @import '@/styles/dashboard-shell.css';

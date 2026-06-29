@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Any
 
 import aiofiles
+from starlette.datastructures import UploadFile
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
 
 
@@ -283,12 +285,6 @@ class KnowledgeBaseService:
 
         return {"items": kb_list, "page": page, "page_size": page_size, "total": total}
 
-    async def list_kbs_from_dashboard_query(self, *, page, page_size) -> dict[str, Any]:
-        return await self.list_kbs(
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 20),
-        )
-
     async def create_kb(self, data: object) -> tuple[dict[str, Any], str]:
         kb_manager = self.get_kb_manager()
         payload = self._payload(data)
@@ -356,9 +352,6 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
         return kb_helper.kb.model_dump()
-
-    async def get_kb_from_dashboard_query(self, kb_id: str | None) -> dict[str, Any]:
-        return await self.get_kb(kb_id)
 
     async def update_kb(self, data: object) -> tuple[dict[str, Any], str]:
         payload = self._payload(data)
@@ -431,12 +424,6 @@ class KnowledgeBaseService:
             "updated_at": kb.updated_at.isoformat(),
         }
 
-    async def get_kb_stats_from_dashboard_query(
-        self,
-        kb_id: str | None,
-    ) -> dict[str, Any]:
-        return await self.get_kb_stats(kb_id)
-
     async def list_documents(
         self,
         *,
@@ -472,27 +459,12 @@ class KnowledgeBaseService:
             "total": total,
         }
 
-    async def list_documents_from_dashboard_query(
-        self,
-        *,
-        kb_id: str | None,
-        page,
-        page_size,
-        search: str | None = None,
-    ) -> dict[str, Any]:
-        return await self.list_documents(
-            kb_id=kb_id,
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 100),
-            search=search,
-        )
-
     async def upload_document(
         self,
         *,
         content_type: str | None,
         form_data,
-        files,
+        files: list[UploadFile],
     ) -> dict[str, Any]:
         if content_type and "multipart/form-data" not in content_type:
             raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")
@@ -506,24 +478,20 @@ class KnowledgeBaseService:
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
 
-        file_list = []
-        for key in files.keys():
-            if key == "file" or key.startswith("file") or key == "files[]":
-                file_list.extend(files.getlist(key))
-        if not file_list:
+        if not files:
             raise KnowledgeBaseServiceError("缺少文件")
-        if len(file_list) > 10:
+        if len(files) > 10:
             raise KnowledgeBaseServiceError("最多只能上传10个文件")
 
         files_to_upload = []
-        for file in file_list:
+        for file in files:
             file_name = Path(str(file.filename or "document").replace("\\", "/")).name
             if file_name in {"", ".", ".."}:
                 file_name = "document"
             temp_file_path = (
                 Path(get_astrbot_temp_path()) / f"kb_upload_{uuid.uuid4()}_{file_name}"
             )
-            await file.save(temp_file_path)
+            await save_upload_to_path(file, temp_file_path)
             try:
                 async with aiofiles.open(temp_file_path, "rb") as file_obj:
                     file_content = await file_obj.read()
@@ -646,12 +614,6 @@ class KnowledgeBaseService:
             response_data["error"] = task_info["error"]
         return response_data
 
-    def get_upload_progress_from_dashboard_query(
-        self,
-        task_id: str | None,
-    ) -> dict[str, Any]:
-        return self.get_upload_progress(task_id)
-
     async def get_document(
         self,
         *,
@@ -669,14 +631,6 @@ class KnowledgeBaseService:
         if not doc:
             raise KnowledgeBaseServiceError("文档不存在")
         return doc.model_dump()
-
-    async def get_document_from_dashboard_query(
-        self,
-        *,
-        kb_id: str | None,
-        doc_id: str | None,
-    ) -> dict[str, Any]:
-        return await self.get_document(kb_id=kb_id, doc_id=doc_id)
 
     async def delete_document(self, data: object) -> tuple[None, str]:
         payload = self._payload(data)
@@ -736,21 +690,6 @@ class KnowledgeBaseService:
             "page_size": page_size,
             "total": await kb_helper.get_chunk_count_by_doc_id(doc_id),
         }
-
-    async def list_chunks_from_dashboard_query(
-        self,
-        *,
-        kb_id: str | None,
-        doc_id: str | None,
-        page,
-        page_size,
-    ) -> dict[str, Any]:
-        return await self.list_chunks(
-            kb_id=kb_id,
-            doc_id=doc_id,
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 100),
-        )
 
     async def retrieve(self, data: object) -> dict[str, Any]:
         payload = self._payload(data)
@@ -880,13 +819,6 @@ class KnowledgeBaseService:
             logger.error(f"后台上传URL任务 {task_id} 失败: {exc}")
             logger.error(traceback.format_exc())
             self.set_task_result(task_id, "failed", error=str(exc))
-
-    @staticmethod
-    def _to_int(value, default: int) -> int:
-        try:
-            return int(value)
-        except TypeError, ValueError:
-            return default
 
 
 __all__ = ["KnowledgeBaseService", "KnowledgeBaseServiceError"]

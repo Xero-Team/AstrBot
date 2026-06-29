@@ -4,7 +4,7 @@ import { normalizeTextInput } from '@/utils/inputValue';
 import {
   readPinnedExtensions,
   writePinnedExtensions,
-} from './extensionPreferenceStorage.mjs';
+} from './extensionPreferenceStorage';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({

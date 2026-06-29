@@ -514,13 +514,13 @@ class OpenApiService:
         self,
         *,
         username: str,
-        page_raw,
-        page_size_raw,
+        page,
+        page_size,
         platform_id: str | None,
     ) -> dict:
         try:
-            page = int(page_raw)
-            page_size = int(page_size_raw)
+            page = int(page)
+            page_size = int(page_size)
         except ValueError as exc:
             raise OpenApiServiceError("page and page_size must be integers") from exc
 
@@ -563,27 +563,6 @@ class OpenApiService:
             "page_size": page_size,
             "total": total,
         }
-
-    async def get_chat_sessions_from_dashboard_query(
-        self,
-        *,
-        username: str | None,
-        page,
-        page_size,
-        platform_id: str | None,
-    ) -> dict:
-        resolved_username, username_err = self.resolve_open_username(username)
-        if username_err:
-            raise OpenApiServiceError(username_err)
-        if not resolved_username:
-            raise OpenApiServiceError("Invalid username")
-
-        return await self.get_chat_sessions(
-            username=resolved_username,
-            page_raw=page,
-            page_size_raw=page_size,
-            platform_id=platform_id,
-        )
 
     def get_chat_configs(self) -> dict:
         return {"configs": self.get_chat_config_list()}

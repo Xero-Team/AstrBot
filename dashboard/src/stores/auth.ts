@@ -8,6 +8,7 @@ import {
   UPGRADE_RECOVERY_EVENT,
   UPGRADE_RECOVERY_TOKEN_KEY,
 } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface AuthSessionData {
   username: string;
@@ -23,37 +24,8 @@ interface SystemConfigPayload {
   };
 }
 
-interface ProviderSourceRecord {
-  id: string;
-  provider_type?: string;
-}
-
 interface ProviderRecord {
   provider_type?: string;
-  provider_source_id?: string;
-  type?: string;
-}
-
-function getErrorMessage(error: unknown, fallback?: unknown): string {
-  if (fallback instanceof Error) {
-    fallback = fallback.message;
-  } else {
-    fallback = String(fallback ?? '');
-  }
-
-  if (!error || typeof error !== 'object') {
-    return String(error ?? fallback);
-  }
-  const errorLike = error as {
-    message?: string;
-    response?: {
-      status?: number;
-      data?: { message?: string; data?: { totp_required?: boolean } };
-    };
-  };
-  return (
-    errorLike.response?.data?.message || errorLike.message || String(fallback)
-  );
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -169,7 +141,9 @@ export const useAuthStore = defineStore('auth', {
         ) {
           return 'totp_required';
         }
-        throw new Error(getErrorMessage(error, error));
+        const fallbackMessage =
+          error instanceof Error ? error.message : String(error ?? '');
+        throw new Error(resolveErrorMessage(error, fallbackMessage));
       }
     },
     async setup(
@@ -210,21 +184,8 @@ export const useAuthStore = defineStore('auth', {
         const providers = Array.isArray(providerRes.data.data?.providers)
           ? (providerRes.data.data.providers as ProviderRecord[])
           : [];
-        const sources = Array.isArray(providerRes.data.data?.provider_sources)
-          ? (providerRes.data.data
-              .provider_sources as unknown as ProviderSourceRecord[])
-          : [];
-        const sourceMap = new Map<string, string | undefined>();
-        sources.forEach((s) => sourceMap.set(s.id, s.provider_type));
-
         const hasProvider = providers.some((provider) => {
-          if (provider.provider_type)
-            return provider.provider_type === 'chat_completion';
-          if (provider.provider_source_id) {
-            const type = sourceMap.get(provider.provider_source_id);
-            if (type === 'chat_completion') return true;
-          }
-          return String(provider.type || '').includes('chat_completion');
+          return provider.provider_type === 'chat_completion';
         });
 
         return hasProvider;

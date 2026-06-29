@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 import certifi
-import yaml
+from starlette.datastructures import UploadFile
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -28,8 +28,8 @@ from astrbot.core.star.star_manager import (
     PluginManager,
     PluginVersionUnsupportedError,
 )
-from astrbot.core.star.updator import PLUGIN_METADATA_FILENAMES
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.dashboard.upload_utils import save_upload_to_path
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -38,8 +38,6 @@ PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
 PLUGIN_DEFAULT_REGISTRY_NAME = "Default"
 PLUGIN_UPDATE_DISABLED_MESSAGE = "该插件不是通过插件市场安装，无法检测或执行更新。"
 PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE = "请先选择插件安装源后再更新。"
-PLUGIN_REPO_VALIDATE_TIMEOUT_SECONDS = 15
-PLUGIN_METADATA_MAX_BYTES = 1024 * 1024
 PLUGIN_COMPONENT_TYPE_ORDER = {
     "page": 0,
     "skill": 1,
@@ -122,18 +120,6 @@ class PluginService:
         except Exception:
             logger.warning("Failed to sync plugin-provided skills to active sandboxes.")
 
-    async def check_plugin_version_support(self, data: object) -> dict:
-        payload = self._payload(data)
-        version_spec = payload.get("astrbot_version", "")
-        is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
-            version_spec
-        )
-        return {
-            "supported": is_valid,
-            "message": message,
-            "astrbot_version": version_spec,
-        }
-
     async def reload_failed_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
         payload = data if isinstance(data, dict) else {}
@@ -198,19 +184,6 @@ class PluginService:
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
 
-    async def list_plugins_from_dashboard_query(
-        self,
-        *,
-        plugin_name: str | None,
-        logo_token_resolver: LogoTokenResolver,
-        installed_at_resolver: InstalledAtResolver,
-    ) -> tuple[list[dict], str | None]:
-        return await self.list_plugins(
-            plugin_name=plugin_name,
-            logo_token_resolver=logo_token_resolver,
-            installed_at_resolver=installed_at_resolver,
-        )
-
     async def get_plugin_detail(
         self,
         *,
@@ -241,19 +214,6 @@ class PluginService:
             }
 
         raise PluginServiceError("插件不存在")
-
-    async def get_plugin_detail_from_dashboard_query(
-        self,
-        *,
-        plugin_name: str | None,
-        logo_token_resolver: LogoTokenResolver,
-        installed_at_resolver: InstalledAtResolver,
-    ) -> dict:
-        return await self.get_plugin_detail(
-            plugin_name=plugin_name,
-            logo_token_resolver=logo_token_resolver,
-            installed_at_resolver=installed_at_resolver,
-        )
 
     async def resolve_plugin_logo_url(
         self,
@@ -995,17 +955,6 @@ class PluginService:
 
         raise PluginServiceError("获取插件列表失败，且没有可用的缓存数据")
 
-    async def get_online_plugins_from_dashboard_query(
-        self,
-        *,
-        custom_registry: str | None,
-        force_refresh,
-    ) -> tuple[Any, str | None]:
-        return await self.get_online_plugins(
-            custom_registry=custom_registry,
-            force_refresh=self._to_bool(force_refresh),
-        )
-
     @staticmethod
     def build_registry_source(custom_url: str | None) -> RegistrySource:
         data_dir = get_astrbot_data_path()
@@ -1576,134 +1525,10 @@ class PluginService:
                 public_message="当前 AstrBot 版本不满足插件要求",
             ) from exc
 
-    async def validate_plugin_repo(self, data: object) -> tuple[dict[str, Any], str]:
-        """Validate whether a GitHub repository contains AstrBot plugin metadata.
-
-        Args:
-            data: Dashboard request payload containing repository or url.
-
-        Returns:
-            Plugin metadata fetched from the GitHub repository and a success message.
-
-        Raises:
-            PluginServiceError: If the repository is not a valid AstrBot plugin.
-        """
-        payload = self._payload(data)
-        repo_url = str(payload.get("url") or payload.get("repository") or "").strip()
-        if not repo_url:
-            raise PluginServiceError("缺少插件仓库地址")
-        if not repo_url.startswith(("http://", "https://")):
-            repo_url = f"https://github.com/{repo_url}"
-
-        proxy = str(payload.get("proxy") or "").strip().removesuffix("/")
-        try:
-            (
-                author,
-                repo,
-                branch,
-            ) = await self.plugin_manager.updator.resolve_github_source_branch(repo_url)
-        except ValueError as exc:
-            raise PluginServiceError(
-                "请输入有效的 GitHub 仓库地址。",
-                public_message="请输入有效的 GitHub 仓库地址。",
-            ) from exc
-
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        try:
-            async with aiohttp.ClientSession(
-                trust_env=True,
-                connector=connector,
-                timeout=aiohttp.ClientTimeout(
-                    total=PLUGIN_REPO_VALIDATE_TIMEOUT_SECONDS
-                ),
-            ) as session:
-                for filename in PLUGIN_METADATA_FILENAMES:
-                    raw_url = (
-                        f"https://raw.githubusercontent.com/"
-                        f"{author}/{repo}/{branch}/{filename}"
-                    )
-                    request_url = f"{proxy}/{raw_url}" if proxy else raw_url
-                    async with session.get(request_url) as response:
-                        if response.status != 200:
-                            continue
-
-                        content_length = response.headers.get("Content-Length")
-                        if content_length:
-                            try:
-                                if int(content_length) > PLUGIN_METADATA_MAX_BYTES:
-                                    raise PluginServiceError(
-                                        f"{filename} 超过 1MB。",
-                                        public_message=f"{filename} 超过 1MB。",
-                                    )
-                            except ValueError:
-                                pass
-
-                        metadata_bytes = await response.content.read(
-                            PLUGIN_METADATA_MAX_BYTES + 1
-                        )
-                        if len(metadata_bytes) > PLUGIN_METADATA_MAX_BYTES:
-                            raise PluginServiceError(
-                                f"{filename} 超过 1MB。",
-                                public_message=f"{filename} 超过 1MB。",
-                            )
-                        try:
-                            metadata_text = metadata_bytes.decode("utf-8")
-                        except UnicodeDecodeError as exc:
-                            raise PluginServiceError(
-                                f"{filename} 必须使用 UTF-8 编码。",
-                                public_message=f"{filename} 必须使用 UTF-8 编码。",
-                            ) from exc
-                        try:
-                            metadata = yaml.safe_load(metadata_text)
-                        except yaml.YAMLError as exc:
-                            raise PluginServiceError(
-                                f"{filename} 格式错误。",
-                                public_message=f"{filename} 格式错误。",
-                            ) from exc
-                        try:
-                            self.plugin_manager.updator.validate_plugin_metadata(
-                                metadata,
-                                filename,
-                            )
-                        except ValueError as exc:
-                            raise PluginServiceError(
-                                str(exc),
-                                public_message=f"插件校验失败：{exc!s}",
-                            ) from exc
-
-                        metadata = dict(metadata) if isinstance(metadata, dict) else {}
-                        if "desc" not in metadata and "description" in metadata:
-                            metadata["desc"] = metadata["description"]
-                        return {
-                            "valid": True,
-                            "metadata_entry": filename,
-                            "metadata_branch": branch,
-                            "name": str(metadata.get("name") or ""),
-                            "display_name": metadata.get("display_name"),
-                            "desc": str(metadata.get("desc") or ""),
-                            "version": str(metadata.get("version") or ""),
-                            "author": metadata.get("author"),
-                            "repo": str(metadata.get("repo") or repo_url),
-                        }, "插件校验通过。"
-
-            raise PluginServiceError(
-                "未在 GitHub 仓库根目录找到 metadata.yaml 或 metadata.yml。",
-                public_message="未在 GitHub 仓库根目录找到 metadata.yaml 或 metadata.yml。",
-            )
-        except Exception as exc:
-            if isinstance(exc, PluginServiceError):
-                raise
-            logger.warning("插件仓库校验失败 %s: %s", repo_url, exc)
-            raise PluginServiceError(
-                "插件校验失败",
-                public_message="插件校验失败，请查看服务端日志。",
-            ) from exc
-
     async def install_plugin_upload(
         self,
         *,
-        upload_file,
+        upload_file: UploadFile,
         ignore_version_check: bool,
     ) -> tuple[dict, str]:
         self._ensure_not_demo()
@@ -1713,7 +1538,7 @@ class PluginService:
             get_astrbot_temp_path(),
             f"plugin_upload_{os.path.basename(filename) or 'plugin.zip'}",
         )
-        await upload_file.save(file_path)
+        await save_upload_to_path(upload_file, file_path)
         try:
             plugin_info = await self.plugin_manager.install_plugin_from_file(
                 file_path,
@@ -1738,17 +1563,6 @@ class PluginService:
                 },
                 public_message="当前 AstrBot 版本不满足插件要求",
             ) from exc
-
-    async def install_plugin_upload_from_dashboard_form(
-        self,
-        *,
-        upload_file,
-        ignore_version_check,
-    ) -> tuple[dict, str]:
-        return await self.install_plugin_upload(
-            upload_file=upload_file,
-            ignore_version_check=self._to_bool(ignore_version_check),
-        )
 
     async def uninstall_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
@@ -1951,12 +1765,6 @@ class PluginService:
                 public_message="读取README文件失败",
             ) from exc
 
-    def get_plugin_readme_from_dashboard_query(
-        self,
-        plugin_name: str | None,
-    ) -> tuple[dict, str]:
-        return self.get_plugin_readme(plugin_name)
-
     def get_plugin_changelog(self, plugin_name: str | None) -> tuple[dict, str]:
         logger.debug(f"正在获取插件 {plugin_name} 的更新日志")
         if not plugin_name:
@@ -1983,12 +1791,6 @@ class PluginService:
 
         logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return {"content": None}, "该插件没有更新日志文件"
-
-    def get_plugin_changelog_from_dashboard_query(
-        self,
-        plugin_name: str | None,
-    ) -> tuple[dict, str]:
-        return self.get_plugin_changelog(plugin_name)
 
     @staticmethod
     async def get_custom_sources() -> list:
@@ -2044,16 +1846,6 @@ class PluginService:
         ]
         await sp.global_put("custom_plugin_sources", filtered)
         return filtered
-
-    @staticmethod
-    def _to_bool(value: object, default: bool = False) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(value)
 
 
 __all__ = [

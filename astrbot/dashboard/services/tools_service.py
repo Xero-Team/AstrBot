@@ -12,25 +12,6 @@ class ToolsServiceError(Exception):
     pass
 
 
-class EmptyMcpServersError(ValueError):
-    pass
-
-
-def extract_mcp_server_config(mcp_servers_value: object) -> dict:
-    if not isinstance(mcp_servers_value, dict):
-        raise ValueError("mcpServers must be a JSON object")
-    if not mcp_servers_value:
-        raise EmptyMcpServersError("mcpServers configuration cannot be empty")
-    key_0 = next(iter(mcp_servers_value))
-    extracted = mcp_servers_value[key_0]
-    if not isinstance(extracted, dict):
-        raise ValueError(
-            "Invalid mcpServers format. Ensure each key in mcpServers is a server name, "
-            "and each value is an object containing fields like command/url."
-        )
-    return extracted
-
-
 class ToolsService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
@@ -135,10 +116,9 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to add MCP server: {exc!s}") from exc
 
-    async def update_mcp_server(self, server_data: Any) -> str:
+    async def update_mcp_server(self, old_name: str, server_data: Any) -> str:
         try:
             name = server_data.get("name", "")
-            old_name = server_data.get("oldName") or name
 
             if not name:
                 raise ToolsServiceError("Server name cannot be empty")
@@ -215,27 +195,10 @@ class ToolsService:
 
     async def test_mcp_connection(self, server_data: Any) -> list:
         try:
-            config = server_data.get("mcp_server_config", None)
+            config = server_data.get("config", None)
 
             if not isinstance(config, dict) or not config:
                 raise ToolsServiceError("Invalid MCP server configuration")
-
-            if "mcpServers" in config:
-                mcp_servers = config["mcpServers"]
-                if isinstance(mcp_servers, dict) and len(mcp_servers) > 1:
-                    raise ToolsServiceError(
-                        "Only one MCP server configuration can be tested at a time"
-                    )
-                try:
-                    config = extract_mcp_server_config(mcp_servers)
-                except EmptyMcpServersError as exc:
-                    raise ToolsServiceError(
-                        "MCP server configuration cannot be empty"
-                    ) from exc
-                except ValueError as exc:
-                    raise ToolsServiceError(f"{exc!s}") from exc
-            elif not config:
-                raise ToolsServiceError("MCP server configuration cannot be empty")
 
             self._validate_server_config(config)
             return await self.tool_mgr.test_mcp_server_connection(config)
@@ -379,13 +342,7 @@ class ToolsService:
         for key, value in server_data.items():
             if key in ["name", "active", "tools", "errlogs"]:
                 continue
-            if key == "mcpServers":
-                try:
-                    server_config = extract_mcp_server_config(server_data["mcpServers"])
-                except ValueError as exc:
-                    raise ToolsServiceError(f"{exc!s}") from exc
-            else:
-                server_config[key] = value
+            server_config[key] = value
             has_valid_config = True
 
         return has_valid_config, server_config
@@ -400,15 +357,9 @@ class ToolsService:
         only_update_active = True
 
         for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs", "oldName"]:
+            if key in ["name", "active", "tools", "errlogs"]:
                 continue
-            if key == "mcpServers":
-                try:
-                    server_config = extract_mcp_server_config(server_data["mcpServers"])
-                except ValueError as exc:
-                    raise ToolsServiceError(f"{exc!s}") from exc
-            else:
-                server_config[key] = value
+            server_config[key] = value
             only_update_active = False
 
         if only_update_active and isinstance(old_config, dict):

@@ -17,24 +17,6 @@ def get_service(request: Request) -> BotConfigService:
     return request.app.state.services.bots
 
 
-def _required_text(value: object, name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"Missing key: {name}")
-    return text
-
-
-def _config_from_body(body: dict) -> dict:
-    config = body.get("config")
-    if isinstance(config, dict):
-        return config
-    return {
-        key: value
-        for key, value in body.items()
-        if key not in {"bot_id", "config", "enabled"}
-    }
-
-
 @router.get("/bot-types")
 async def list_bot_types(
     _auth: AuthContext = Depends(require_bot_scope),
@@ -59,7 +41,9 @@ async def create_bot(
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.create_bot(payload.to_dashboard_config())
+    config = dict(payload.config)
+    config.setdefault("enable", True)
+    await service.create_bot(config)
     return ok(message="新增平台配置成功~")
 
 
@@ -69,59 +53,6 @@ async def list_bot_stats(
     service: BotConfigService = Depends(get_service),
 ):
     return ok(service.get_bot_stats())
-
-
-@router.get("/bots/by-id")
-async def get_bot_by_id(
-    bot_id: str = Query(...),
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    return ok(service.get_bot(bot_id))
-
-
-@router.put("/bots/by-id")
-async def update_bot_by_id(
-    payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    bot_id = _required_text(payload.bot_id, "bot_id")
-    await service.update_bot(
-        bot_id,
-        payload.to_dashboard_config(fallback_id=bot_id),
-    )
-    return ok(message="更新平台配置成功~")
-
-
-@router.delete("/bots/by-id")
-async def delete_bot_by_id(
-    bot_id: str = Query(...),
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    await service.delete_bot(bot_id)
-    return ok(message="删除平台配置成功~")
-
-
-@router.patch("/bots/enabled")
-async def set_bot_enabled_by_id(
-    payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_bot_scope),
-    service: BotConfigService = Depends(get_service),
-):
-    bot_id = _required_text(payload.bot_id, "bot_id")
-    await service.set_bot_enabled(bot_id, bool(payload.enabled))
-    return ok(message="更新平台配置成功~")
-
-
-@router.post("/bots/test")
-async def test_bot_by_id(
-    payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_bot_scope),
-):
-    bot_id = _required_text(payload.bot_id, "bot_id")
-    return ok({"id": bot_id, "status": "unsupported"})
 
 
 @router.patch("/bots/{bot_id:path}/enabled")
@@ -159,7 +90,11 @@ async def update_bot(
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.update_bot(bot_id, payload.to_dashboard_config(fallback_id=bot_id))
+    config = dict(payload.config)
+    if "id" not in config:
+        config["id"] = bot_id
+    config.setdefault("enable", True)
+    await service.update_bot(bot_id, config)
     return ok(message="更新平台配置成功~")
 
 

@@ -4,8 +4,8 @@
     :class="{ 'drag-over': isDragOver }"
     rounded="lg"
     elevation="0"
-    @click="$emit('click')"
-    @contextmenu.prevent="$emit('contextmenu', $event)"
+    @click="emit('click')"
+    @contextmenu.prevent="emit('contextmenu', $event)"
     @dragover.prevent="handleDragOver"
     @dragleave="handleDragLeave"
     @drop.prevent="handleDrop"
@@ -24,36 +24,36 @@
         </div>
       </div>
       <v-menu offset-y>
-        <template #activator="{ props }">
+        <template #activator="{ props: activatorProps }">
           <v-btn
             icon="mdi-dots-vertical"
             variant="text"
             size="small"
-            v-bind="props"
+            v-bind="activatorProps"
             @click.stop
           />
         </template>
         <v-list density="compact">
-          <v-list-item @click.stop="$emit('open')">
+          <v-list-item @click.stop="emit('open')">
             <template #prepend>
               <v-icon size="small">mdi-folder-open</v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.open }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click.stop="$emit('rename')">
+          <v-list-item @click.stop="emit('rename')">
             <template #prepend>
               <v-icon size="small">mdi-pencil</v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.rename }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click.stop="$emit('move')">
+          <v-list-item @click.stop="emit('move')">
             <template #prepend>
               <v-icon size="small">mdi-folder-move</v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.moveTo }}</v-list-item-title>
           </v-list-item>
           <v-divider class="my-1" />
-          <v-list-item class="text-error" @click.stop="$emit('delete')">
+          <v-list-item class="text-error" @click.stop="emit('delete')">
             <template #prepend>
               <v-icon size="small" color="error">mdi-delete</v-icon>
             </template>
@@ -65,8 +65,8 @@
   </v-card>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
 import type { Folder } from './types';
 
 interface DefaultLabels {
@@ -83,73 +83,91 @@ const defaultLabels: DefaultLabels = {
   delete: '删除',
 };
 
-export default defineComponent({
-  name: 'BaseFolderCard',
-  props: {
-    folder: {
-      type: Object as PropType<Folder>,
-      required: true,
-    },
-    acceptDropTypes: {
-      type: Array as PropType<string[]>,
-      default: () => [],
-    },
-    labels: {
-      type: Object as PropType<Partial<DefaultLabels>>,
-      default: () => ({}),
-    },
-  },
-  emits: [
-    'click',
-    'contextmenu',
-    'open',
-    'rename',
-    'move',
-    'delete',
-    'item-dropped',
-  ],
-  data() {
-    return {
-      isDragOver: false,
-    };
-  },
-  computed: {
-    mergedLabels(): DefaultLabels {
-      return { ...defaultLabels, ...this.labels };
-    },
-  },
-  methods: {
-    handleDragOver(event: DragEvent) {
-      if (!event.dataTransfer) return;
-      event.dataTransfer.dropEffect = 'move';
-      this.isDragOver = true;
-    },
-    handleDragLeave() {
-      this.isDragOver = false;
-    },
-    handleDrop(event: DragEvent) {
-      this.isDragOver = false;
-      if (!event.dataTransfer) return;
+type DropPayload = {
+  id?: string;
+  item_id?: string;
+  persona_id?: string;
+  type?: string;
+};
 
-      try {
-        const data = JSON.parse(event.dataTransfer.getData('application/json'));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
-          this.$emit('item-dropped', {
-            item_id: data.id || data.persona_id || data.item_id,
-            item_type: data.type,
-            target_folder_id: this.folder.folder_id,
-            source_data: data,
-          });
-        }
-      } catch (e) {
-        console.error('Failed to parse drop data:', e);
-      }
-    },
+const props = withDefaults(
+  defineProps<{
+    folder: Folder;
+    acceptDropTypes?: string[];
+    labels?: Partial<DefaultLabels>;
+  }>(),
+  {
+    acceptDropTypes: () => [],
+    labels: () => ({}),
   },
-});
+);
+
+const emit = defineEmits<{
+  click: [];
+  contextmenu: [event: MouseEvent];
+  open: [];
+  rename: [];
+  move: [];
+  delete: [];
+  'item-dropped': [
+    payload: {
+      item_id: string;
+      item_type: string;
+      target_folder_id: string;
+      source_data: DropPayload;
+    },
+  ];
+}>();
+
+const isDragOver = ref(false);
+
+const mergedLabels = computed<DefaultLabels>(() => ({
+  ...defaultLabels,
+  ...props.labels,
+}));
+
+function handleDragOver(event: DragEvent) {
+  if (!event.dataTransfer) {
+    return;
+  }
+  event.dataTransfer.dropEffect = 'move';
+  isDragOver.value = true;
+}
+
+function handleDragLeave() {
+  isDragOver.value = false;
+}
+
+function handleDrop(event: DragEvent) {
+  isDragOver.value = false;
+  if (!event.dataTransfer) {
+    return;
+  }
+
+  try {
+    const data = JSON.parse(
+      event.dataTransfer.getData('application/json'),
+    ) as DropPayload;
+    const itemType = data.type;
+    const itemId = data.id ?? data.persona_id ?? data.item_id;
+    if (
+      !itemType ||
+      !itemId ||
+      (props.acceptDropTypes.length > 0 &&
+        !props.acceptDropTypes.includes(itemType))
+    ) {
+      return;
+    }
+    emit('item-dropped', {
+      item_id: itemId,
+      item_type: itemType,
+      target_folder_id: props.folder.folder_id,
+      source_data: data,
+    });
+  } catch (error) {
+    console.error('Failed to parse drop data:', error);
+  }
+}
 </script>
 
 <style scoped>

@@ -94,6 +94,7 @@ import {
   getStoredSelectedChatConfigId,
   setStoredSelectedChatConfigId,
 } from '@/utils/chatConfigBinding';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface ConfigInfo {
   id: string;
@@ -114,17 +115,6 @@ interface DashboardConfigProfile {
   provider_settings?: {
     agent_runner_type?: string;
   };
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== 'object') {
-    return fallback;
-  }
-  const errorLike = error as {
-    message?: string;
-    response?: { data?: { message?: string } };
-  };
-  return errorLike.response?.data?.message || errorLike.message || fallback;
 }
 
 const props = withDefaults(
@@ -303,7 +293,7 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('更新配置文件失败', error);
-    toast.error(getErrorMessage(error, '配置文件应用失败'));
+    toast.error(resolveErrorMessage(error, '配置文件应用失败'));
     return false;
   } finally {
     saving.value = false;

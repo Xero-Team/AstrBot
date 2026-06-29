@@ -3,7 +3,7 @@
     <v-card>
       <v-card-title>
         <v-icon class="mr-2">mdi-folder-plus</v-icon>
-        {{ labels.title }}
+        {{ mergedLabels.title }}
       </v-card-title>
       <v-card-text>
         <v-form
@@ -27,7 +27,7 @@
 
           <v-textarea
             v-model="formData.description"
-            :label="labels.descriptionLabel"
+            :label="mergedLabels.descriptionLabel"
             variant="outlined"
             rows="3"
             density="comfortable"
@@ -38,7 +38,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="closeDialog">
-          {{ labels.cancelButton }}
+          {{ mergedLabels.cancelButton }}
         </v-btn>
         <v-btn
           color="primary"
@@ -47,15 +47,15 @@
           :disabled="!formValid"
           @click="submitForm"
         >
-          {{ labels.createButton }}
+          {{ mergedLabels.createButton }}
         </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue';
 import type { CreateFolderData } from './types';
 
 interface FormController {
@@ -80,83 +80,79 @@ const defaultLabels: DefaultLabels = {
   createButton: '创建',
 };
 
-export default defineComponent({
-  name: 'BaseCreateFolderDialog',
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false,
-    },
-    parentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    labels: {
-      type: Object as PropType<Partial<DefaultLabels>>,
-      default: () => ({}),
-    },
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean;
+    parentFolderId?: string | null;
+    labels?: Partial<DefaultLabels>;
+  }>(),
+  {
+    modelValue: false,
+    parentFolderId: null,
+    labels: () => ({}),
   },
-  emits: ['update:modelValue', 'create'],
-  data() {
-    return {
-      formValid: false,
-      loading: false,
-      formData: {
-        name: '',
-        description: '',
-      },
-    };
+);
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+  create: [data: CreateFolderData];
+}>();
+
+const form = ref<FormController | null>(null);
+const formValid = ref(false);
+const loading = ref(false);
+const formData = reactive({
+  name: '',
+  description: '',
+});
+
+const showDialog = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => void emit('update:modelValue', value),
+});
+
+const mergedLabels = computed<DefaultLabels>(() => ({
+  ...defaultLabels,
+  ...props.labels,
+}));
+
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (newValue) {
+      resetForm();
+    }
   },
-  computed: {
-    showDialog: {
-      get(): boolean {
-        return this.modelValue;
-      },
-      set(value: boolean) {
-        this.$emit('update:modelValue', value);
-      },
-    },
-    mergedLabels(): DefaultLabels {
-      return { ...defaultLabels, ...this.labels };
-    },
-  },
-  watch: {
-    modelValue(newValue: boolean) {
-      if (newValue) {
-        this.resetForm();
-      }
-    },
-  },
-  methods: {
-    resetForm() {
-      this.formData = {
-        name: '',
-        description: '',
-      };
-      if (this.$refs.form) {
-        (this.$refs.form as FormController).resetValidation();
-      }
-    },
+);
 
-    closeDialog() {
-      this.showDialog = false;
-    },
+function resetForm() {
+  formData.name = '';
+  formData.description = '';
+  form.value?.resetValidation();
+}
 
-    async submitForm() {
-      if (!this.formValid) return;
+function closeDialog() {
+  showDialog.value = false;
+}
 
-      const data: CreateFolderData = {
-        name: this.formData.name,
-        description: this.formData.description || undefined,
-        parent_id: this.parentFolderId,
-      };
+function submitForm() {
+  if (!formValid.value) {
+    return;
+  }
 
-      this.$emit('create', data);
-    },
+  emit('create', {
+    name: formData.name,
+    description: formData.description || undefined,
+    parent_id: props.parentFolderId,
+  });
+}
 
-    setLoading(value: boolean) {
-      this.loading = value;
-    },
-  },
+function setLoading(value: boolean) {
+  loading.value = value;
+}
+
+defineExpose({
+  resetForm,
+  setLoading,
 });
 </script>

@@ -30,7 +30,7 @@
 
             <!-- 文件夹树 -->
             <template v-if="!treeLoading">
-              <MoveTargetNode
+              <BaseMoveTargetNode
                 v-for="folder in availableFolders"
                 :key="folder.folder_id"
                 :folder="folder"
@@ -66,14 +66,15 @@
   </v-dialog>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
-import { mapState, mapActions } from 'pinia';
-import MoveTargetNode from './MoveTargetNode.vue';
+import { storeToRefs } from 'pinia';
+import BaseMoveTargetNode from '@/components/folder/BaseMoveTargetNode.vue';
 import { collectFolderAndChildrenIds } from '@/components/folder/useFolderManager';
 import type { FolderTreeNode } from '@/components/folder/types';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface PersonaItem {
   persona_id: string;
@@ -86,130 +87,118 @@ interface FolderItem {
   parent_id?: string | null;
 }
 
-export default defineComponent({
-  name: 'MoveToFolderDialog',
-  components: {
-    MoveTargetNode,
+function isPersonaItem(item: PersonaItem | FolderItem): item is PersonaItem {
+  return 'persona_id' in item;
+}
+
+function isFolderItem(item: PersonaItem | FolderItem): item is FolderItem {
+  return 'name' in item;
+}
+
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean;
+    itemType: 'persona' | 'folder';
+    item?: PersonaItem | FolderItem | null;
+  }>(),
+  {
+    modelValue: false,
+    item: null,
   },
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false,
-    },
-    itemType: {
-      type: String as PropType<'persona' | 'folder'>,
-      required: true,
-    },
-    item: {
-      type: Object as PropType<PersonaItem | FolderItem | null>,
-      default: null,
-    },
-  },
-  emits: ['update:modelValue', 'moved', 'error'],
-  setup() {
-    const { tm } = useModuleI18n('features/persona');
-    return { tm };
-  },
-  data() {
-    return {
-      selectedFolderId: null as string | null,
-      loading: false,
-    };
-  },
-  computed: {
-    ...mapState(usePersonaStore, ['folderTree', 'treeLoading']),
+);
 
-    showDialog: {
-      get(): boolean {
-        return this.modelValue;
-      },
-      set(value: boolean) {
-        this.$emit('update:modelValue', value);
-      },
-    },
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+  moved: [message: string];
+  error: [message: string];
+}>();
 
-    itemName(): string {
-      if (!this.item) return '';
-      return this.itemType === 'persona'
-        ? (this.item as PersonaItem).persona_id
-        : (this.item as FolderItem).name;
-    },
+const { tm } = useModuleI18n('features/persona');
+const personaStore = usePersonaStore();
+const { folderTree, treeLoading } = storeToRefs(personaStore);
+const selectedFolderId = ref<string | null>(null);
+const loading = ref(false);
 
-    // 禁用的文件夹 ID（不能移动到自己或子文件夹）
-    disabledFolderIds(): string[] {
-      if (this.itemType !== 'folder' || !this.item) return [];
-      return collectFolderAndChildrenIds(
-        this.folderTree,
-        (this.item as FolderItem).folder_id,
-      );
-    },
-
-    // 过滤掉禁用的文件夹
-    availableFolders(): FolderTreeNode[] {
-      return this.folderTree;
-    },
-  },
-  watch: {
-    modelValue(newValue: boolean) {
-      if (newValue) {
-        // 初始化选中为当前所在文件夹
-        if (this.item) {
-          this.selectedFolderId =
-            this.itemType === 'persona'
-              ? ((this.item as PersonaItem).folder_id ?? null)
-              : ((this.item as FolderItem).parent_id ?? null);
-        }
-      }
-    },
-  },
-  methods: {
-    ...mapActions(usePersonaStore, [
-      'movePersonaToFolder',
-      'moveFolderToFolder',
-    ]),
-    getErrorMessage(error: unknown, fallback: string): string {
-      return error instanceof Error && error.message ? error.message : fallback;
-    },
-
-    selectFolder(folderId: string | null) {
-      // 检查是否禁用
-      if (folderId && this.disabledFolderIds.includes(folderId)) return;
-      this.selectedFolderId = folderId;
-    },
-
-    closeDialog() {
-      this.showDialog = false;
-    },
-
-    async submitMove() {
-      if (!this.item) return;
-
-      this.loading = true;
-      try {
-        if (this.itemType === 'persona') {
-          await this.movePersonaToFolder(
-            (this.item as PersonaItem).persona_id,
-            this.selectedFolderId,
-          );
-        } else {
-          await this.moveFolderToFolder(
-            (this.item as FolderItem).folder_id,
-            this.selectedFolderId,
-          );
-        }
-        this.$emit('moved', this.tm('moveDialog.success'));
-        this.closeDialog();
-      } catch (error) {
-        this.$emit(
-          'error',
-          this.getErrorMessage(error, this.tm('moveDialog.error')),
-        );
-      } finally {
-        this.loading = false;
-      }
-    },
-  },
+const showDialog = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => void emit('update:modelValue', value),
 });
+
+const itemName = computed(() => {
+  if (!props.item) {
+    return '';
+  }
+  if (props.itemType === 'persona' && isPersonaItem(props.item)) {
+    return props.item.persona_id;
+  }
+  return isFolderItem(props.item) ? props.item.name : '';
+});
+
+const disabledFolderIds = computed(() => {
+  if (props.itemType !== 'folder' || !props.item || !isFolderItem(props.item)) {
+    return [];
+  }
+  return collectFolderAndChildrenIds(folderTree.value, props.item.folder_id);
+});
+
+const availableFolders = computed<FolderTreeNode[]>(() => folderTree.value);
+
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (newValue && props.item) {
+      if (props.itemType === 'persona' && isPersonaItem(props.item)) {
+        selectedFolderId.value = props.item.folder_id ?? null;
+        return;
+      }
+      if (isFolderItem(props.item)) {
+        selectedFolderId.value = props.item.parent_id ?? null;
+        return;
+      }
+      selectedFolderId.value = null;
+    }
+  },
+);
+
+function selectFolder(folderId: string | null) {
+  if (folderId && disabledFolderIds.value.includes(folderId)) {
+    return;
+  }
+  selectedFolderId.value = folderId;
+}
+
+function closeDialog() {
+  showDialog.value = false;
+}
+
+async function submitMove() {
+  if (!props.item) {
+    return;
+  }
+
+  loading.value = true;
+  try {
+    if (props.itemType === 'persona' && isPersonaItem(props.item)) {
+      await personaStore.movePersonaToFolder(
+        props.item.persona_id,
+        selectedFolderId.value,
+      );
+    } else if (isFolderItem(props.item)) {
+      await personaStore.moveFolderToFolder(
+        props.item.folder_id,
+        selectedFolderId.value,
+      );
+    } else {
+      return;
+    }
+    emit('moved', tm('moveDialog.success'));
+    closeDialog();
+  } catch (error) {
+    emit('error', resolveErrorMessage(error, tm('moveDialog.error')));
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <style scoped>

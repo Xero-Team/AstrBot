@@ -24,59 +24,55 @@
   </v-breadcrumbs>
 </template>
 
-<script lang="ts">
-import { defineComponent, type PropType } from 'vue';
+<script setup lang="ts">
+import { computed } from 'vue';
 import type { BreadcrumbItem, FolderTreeNode } from './types';
 
-export default defineComponent({
-  name: 'BaseFolderBreadcrumb',
-  props: {
-    breadcrumbPath: {
-      type: Array as PropType<FolderTreeNode[]>,
-      required: true,
-    },
-    currentFolderId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    rootFolderName: {
-      type: String,
-      default: '根目录',
-    },
+const props = withDefaults(
+  defineProps<{
+    breadcrumbPath: FolderTreeNode[];
+    currentFolderId?: string | null;
+    rootFolderName?: string;
+  }>(),
+  {
+    currentFolderId: null,
+    rootFolderName: '根目录',
   },
-  emits: ['navigate'],
-  computed: {
-    computedItems(): BreadcrumbItem[] {
-      const items: BreadcrumbItem[] = [
-        {
-          title: this.rootFolderName,
-          folderId: null,
-          disabled: this.currentFolderId === null,
-          isRoot: true,
-        },
-      ];
+);
 
-      this.breadcrumbPath.forEach((folder, index) => {
-        items.push({
-          title: folder.name,
-          folderId: folder.folder_id,
-          disabled: index === this.breadcrumbPath.length - 1,
-          isRoot: false,
-        });
-      });
+const emit = defineEmits<{
+  navigate: [folderId: string | null];
+}>();
 
-      return items;
+const computedItems = computed<BreadcrumbItem[]>(() => {
+  const items: BreadcrumbItem[] = [
+    {
+      title: props.rootFolderName,
+      folderId: null,
+      disabled: props.currentFolderId === null,
+      isRoot: true,
     },
-  },
-  methods: {
-    toBreadcrumbItem(item: unknown): BreadcrumbItem {
-      return item as BreadcrumbItem;
-    },
-    handleClick(folderId: string | null) {
-      this.$emit('navigate', folderId);
-    },
-  },
+  ];
+
+  props.breadcrumbPath.forEach((folder, index) => {
+    items.push({
+      title: folder.name,
+      folderId: folder.folder_id,
+      disabled: index === props.breadcrumbPath.length - 1,
+      isRoot: false,
+    });
+  });
+
+  return items;
 });
+
+function toBreadcrumbItem(item: unknown): BreadcrumbItem {
+  return item as BreadcrumbItem;
+}
+
+function handleClick(folderId: string | null) {
+  emit('navigate', folderId);
+}
 </script>
 
 <style scoped>

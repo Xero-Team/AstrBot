@@ -1,14 +1,12 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
-    SkillByNameUpdateRequest,
-    SkillFileUpdateRequest,
     SkillNeoRequest,
     SkillUpdateRequest,
 )
@@ -20,7 +18,6 @@ from astrbot.dashboard.services.skills_service import (
 )
 
 from .auth import AuthContext, require_scope
-from .multipart import multipart_parts, single_upload
 
 router = APIRouter(tags=["Skills"])
 
@@ -31,21 +28,6 @@ def get_service(request: Request) -> SkillsService:
 
 async def require_skill_scope(request: Request) -> AuthContext:
     return await require_scope(request, "skill")
-
-
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _required_text(value: object, name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"Missing key: {name}")
-    return text
 
 
 def _model_dict(payload) -> dict[str, Any]:
@@ -103,106 +85,20 @@ async def list_skills(
 
 @router.post("/skills")
 async def upload_skill(
-    request: Request,
+    file: UploadFile = File(...),
     _auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
-    async def _operation():
-        return await service.upload_skill(await single_upload(request))
-
-    return await _run(_operation)
+    return await _run(lambda: service.upload_skill(file))
 
 
 @router.post("/skills/batch")
 async def upload_skills_batch(
-    request: Request,
+    files: list[UploadFile] = File(...),
     _auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
-    async def _operation():
-        _, files = await multipart_parts(request)
-        return await service.batch_upload_skills(files.getlist("files"))
-
-    return await _run(_operation)
-
-
-@router.patch("/skills/by-name")
-async def update_skill_by_name(
-    payload: SkillByNameUpdateRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
-    service: SkillsService = Depends(get_service),
-):
-    skill_name = _required_text(payload.skill_name, "skill_name")
-    return await _run(
-        lambda: service.update_skill(
-            {
-                "name": skill_name,
-                "active": payload.active_value(),
-            }
-        )
-    )
-
-
-@router.delete("/skills/by-name")
-async def delete_skill_by_name(
-    skill_name: str,
-    _auth: AuthContext = Depends(require_skill_scope),
-    service: SkillsService = Depends(get_service),
-):
-    return await _run(lambda: service.delete_skill({"name": skill_name}))
-
-
-@router.get("/skills/archive")
-async def download_skill_by_name(
-    skill_name: str,
-    _auth: AuthContext = Depends(require_skill_scope),
-    service: SkillsService = Depends(get_service),
-):
-    return await _download_skill(service, skill_name)
-
-
-@router.get("/skills/files")
-async def list_skill_files_by_name(
-    request: Request,
-    skill_name: str,
-    _auth: AuthContext = Depends(require_skill_scope),
-    service: SkillsService = Depends(get_service),
-):
-    return await _run(
-        lambda: service.list_skill_files(
-            skill_name,
-            request.query_params.get("path", ""),
-        )
-    )
-
-
-@router.get("/skills/file")
-async def get_skill_file_by_name(
-    skill_name: str,
-    path: str,
-    _auth: AuthContext = Depends(require_skill_scope),
-    service: SkillsService = Depends(get_service),
-):
-    return await _run(lambda: service.get_skill_file(skill_name, path))
-
-
-@router.put("/skills/file")
-async def update_skill_file_by_name(
-    payload: SkillFileUpdateRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
-    service: SkillsService = Depends(get_service),
-):
-    skill_name = _required_text(payload.skill_name, "skill_name")
-    path = _required_text(payload.path, "path")
-    return await _run(
-        lambda: service.update_skill_file(
-            {
-                "name": skill_name,
-                "path": path,
-                "content": payload.content,
-            }
-        )
-    )
+    return await _run(lambda: service.batch_upload_skills(files))
 
 
 @router.get("/skills/{skill_name:path}/archive")
@@ -266,7 +162,7 @@ async def update_skill(
         lambda: service.update_skill(
             {
                 "name": skill_name,
-                "active": payload.active_value(),
+                "active": payload.active,
             }
         )
     )

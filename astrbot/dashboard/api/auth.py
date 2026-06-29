@@ -189,13 +189,12 @@ def _auth_result_payload(result: AuthServiceResult) -> dict:
 
 
 def _use_secure_dashboard_jwt_cookie(request: Request) -> bool:
-    adapter = getattr(request.app.state, "dashboard_app_adapter", None)
-    adapter_config = getattr(adapter, "config", {}) if adapter is not None else {}
-    default_secure = not bool(getattr(adapter, "debug", False)) and not bool(
-        getattr(adapter, "testing", False)
+    dashboard_config = getattr(request.app.state, "dashboard_config", {})
+    default_secure = not bool(getattr(request.app.state, "debug", False)) and not bool(
+        getattr(request.app.state, "dashboard_testing", False)
     )
     return bool(
-        adapter_config.get(
+        dashboard_config.get(
             "DASHBOARD_JWT_COOKIE_SECURE",
             default_secure,
         )

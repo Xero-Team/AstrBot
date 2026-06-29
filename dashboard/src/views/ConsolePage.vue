@@ -1,10 +1,43 @@
-<script setup>
+<script setup lang="ts">
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { updatesApi } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import { useToast } from '@/utils/toast';
+import { ref, watch } from 'vue';
 
 const { tm } = useModuleI18n('features/console');
+const toast = useToast();
+const autoScrollEnabled = ref(
+  localStorage.getItem('console_auto_scroll') !== 'false',
+);
+const pipDialog = ref(false);
+const loading = ref(false);
+const pipInstallPayload = ref({
+  package: '',
+  mirror: '',
+});
+
+watch(autoScrollEnabled, (value) => {
+  localStorage.setItem('console_auto_scroll', String(value));
+});
+
+async function pipInstall(): Promise<void> {
+  loading.value = true;
+  try {
+    const res = await updatesApi.installPip(pipInstallPayload.value);
+    if (res.data.status === 'ok') {
+      toast.success(res.data.message || tm('pipInstall.installSuccess'));
+      pipDialog.value = false;
+      return;
+    }
+    toast.error(res.data.message || tm('pipInstall.installFailed'));
+  } catch (error) {
+    toast.error(resolveErrorMessage(error, tm('pipInstall.requestFailed')));
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -31,8 +64,8 @@ const { tm } = useModuleI18n('features/console');
           style="margin-right: 16px"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
-          <template #activator="{ props }">
-            <v-btn variant="plain" v-bind="props">{{
+          <template #activator="{ props: activatorProps }">
+            <v-btn variant="plain" v-bind="activatorProps">{{
               tm('pipInstall.button')
             }}</v-btn>
           </template>
@@ -68,66 +101,12 @@ const { tm } = useModuleI18n('features/console');
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" />
+    <ConsoleDisplayer
+      class="console-display"
+      :auto-scroll="autoScrollEnabled"
+    />
   </div>
 </template>
-<script>
-export default {
-  name: 'ConsolePage',
-  components: {
-    ConsoleDisplayer,
-  },
-  data() {
-    return {
-      autoScrollEnabled:
-        localStorage.getItem('console_auto_scroll') !== 'false',
-      pipDialog: false,
-      pipInstallPayload: {
-        package: '',
-        mirror: '',
-      },
-      loading: false,
-    };
-  },
-  watch: {
-    autoScrollEnabled(val) {
-      localStorage.setItem('console_auto_scroll', val);
-      if (this.$refs.consoleDisplayer) {
-        this.$refs.consoleDisplayer.autoScroll = val;
-      }
-    },
-  },
-  mounted() {
-    if (this.$refs.consoleDisplayer) {
-      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
-    }
-  },
-  methods: {
-    pipInstall() {
-      const toast = useToast();
-      this.loading = true;
-      updatesApi
-        .installPip(this.pipInstallPayload)
-        .then((res) => {
-          if (res.data.status === 'ok') {
-            toast.success(res.data.message || tm('pipInstall.installSuccess'));
-            this.pipDialog = false;
-          } else {
-            toast.error(res.data.message || tm('pipInstall.installFailed'));
-          }
-        })
-        .catch((err) => {
-          toast.error(
-            err.response?.data?.message || tm('pipInstall.requestFailed'),
-          );
-        })
-        .finally(() => {
-          this.loading = false;
-        });
-    },
-  },
-};
-</script>
 
 <style scoped>
 .console-page {

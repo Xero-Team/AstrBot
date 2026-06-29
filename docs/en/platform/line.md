@@ -2,8 +2,6 @@
 
 ## Supported Message Types
 
-> Version v4.17.0.
-
 | Message Type | Receive Support | Send Support | Notes |
 | ------------ | --------------- | ------------ | ----- |
 | Text         | Yes             | Yes          |       |

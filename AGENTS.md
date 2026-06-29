@@ -21,7 +21,7 @@ uv sync                 # install deps (use --group dev for quality/test tooling
 uv run main.py          # run AstrBot; WebUI/API on http://localhost:6185
 ```
 
-Default WebUI credentials are `astrbot`/`astrbot`. Runtime data (config, plugins, temp) lives under `data/`.
+On first startup, AstrBot generates a random WebUI password, prints it in startup logs, and uses the default username `astrbot` until you change it. Runtime data (config, plugins, temp) lives under `data/`.
 
 ### Dashboard (Vue 3 + Vite, managed by `pnpm`)
 

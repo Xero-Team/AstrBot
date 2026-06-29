@@ -4,8 +4,6 @@ AstrBot supports both WeCom Applications and WeCom Customer Service.
 
 ## Supported Basic Message Types
 
-> Version v4.15.0.
-
 | Message Type | Receive | Send | Notes |
 | ------------ | ------- | ---- | ----- |
 | Text         | Yes     | Yes  |       |
@@ -29,8 +27,7 @@ A configuration dialog will appear. Keep it open and continue with the steps bel
 
 > [!NOTE]
 >
-> 1. Requires AstrBot >= v3.5.7.
-> 2. This method works directly inside WeChat.
+> This method works directly inside WeChat.
 
 1. Open [WeCom Customer Service Console](https://kf.weixin.qq.com/) and sign in with WeCom QR login.
 2. Create a customer service account in `Customer Service Account`, then copy its **name** (not account ID) to AstrBot field `wechat_kf_account_name`.
@@ -59,7 +56,7 @@ Back in WeCom Customer Service callback settings, click `Complete`. If successfu
 7. In `Development Configuration`, get `Secret`, edit your WeCom adapter in AstrBot, set `secret`, then save again.
 
 > [!TIP]
-> Based on [#571](https://github.com/Soulter/AstrBot/issues/571), for newly registered enterprises, `corp_id` may take about 30 minutes to become valid.
+> For newly registered enterprises, `corp_id` may take some time to become valid.
 
 Then open AstrBot `Console`, you should see logs asking you to open a WeChat scan link.
 
@@ -78,7 +75,7 @@ Open: <https://work.weixin.qq.com/wework_admin/frame#apps>
 1. Click `My Company`, copy enterprise ID (`Corpid`), and fill AstrBot `corpid`.
 
 > [!TIP]
-> For newly registered enterprises, `corp_id` may take time to become valid. See [#571](https://github.com/Soulter/AstrBot/issues/571).
+> For newly registered enterprises, `corp_id` may take some time to become valid.
 
 ![image](https://files.astrbot.app/docs/source/images/wecom/image-5.png)
 

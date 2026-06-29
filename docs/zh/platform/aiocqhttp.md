@@ -68,16 +68,16 @@ AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服
 
 ## 通过 Docker Compose 部署
 
-1. 下载或复制 [astrbot.yml](https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml) 内容
-2. 将刚刚下载的文件重命名为 `astrbot.yml`
-3. 编辑 `astrbot.yml`，将 `# - "6199:6199"` 修改为 `- "6199:6199"`，移除开头的 `#`
-4. 在 `astrbot.yml` 文件所在目录执行:
+如果您希望直接使用当前仓库提供的一键联动方案，请优先使用仓库根目录的 `compose-with-napcat.yml`：
 
 ```bash
-NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose -f ./astrbot.yml up -d
+git clone https://github.com/BegoniaHe/AstrBot.git
+cd AstrBot
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose -f compose-with-napcat.yml up -d --build
 ```
 
-部署完毕之后，可以去 Napcat 的 WebUI（默认端口 6099）中新增 OneBot 连接实例：点击`网络配置->新建->WebSockets客户端`，在新弹出的窗口中：勾选`启用`，
-URL 填写 `ws://宿主机IP:端口/ws`。如 `ws://127.0.0.1:6199/ws`。如果采用上面的 Docker Compose 部署，可以填写 `ws://astrbot:6199/ws`（参考本文档的 Docker 脚本）。心跳间隔和重连间隔可以改为 `1000`(1 秒)。点击保存，然后去 AstrBot WebUI 的控制台中检查是否连接成功，出现 `aiocqhttp(OneBot v11) 适配器已连接` 日志即代表成功。
+部署完毕之后，可以去 NapCat 的 WebUI（默认端口 `6099`）中新增 OneBot 连接实例：点击 `网络配置 -> 新建 -> WebSockets 客户端`，勾选 `启用`，URL 填写 `ws://astrbot:6199/ws`。如果您不是使用上述联动 compose，而是分开部署，请再改成 `ws://宿主机IP:6199/ws`。
+
+心跳间隔和重连间隔可以改为 `1000`（1 秒）。点击保存，然后去 AstrBot WebUI 的控制台中检查是否连接成功，出现 `aiocqhttp(OneBot v11) 适配器已连接` 日志即代表成功。
 
 如果您对部署、网络配置不了解，请千万不要在公网暴露 Napcat 的端口。

@@ -37,7 +37,7 @@
 
 欢迎提交 Issue 或 Pull Request：
 
-- [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot)
+- [BegoniaHe/AstrBot](https://github.com/BegoniaHe/AstrBot)
 
 ## 成为 AstrBot 组织成员
 

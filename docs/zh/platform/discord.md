@@ -2,10 +2,9 @@
 
 ## 创建 AstrBot Discord 平台适配器
 
-进入机器人，点击新增适配器，找到 Discord 并点击进入 Discord 配置页。
+进入 AstrBot 管理面板左侧的 `机器人`，点击 `+ 创建机器人`，找到 Discord 并进入配置页。
 
-> 旧版本`机器人`为`消息平台`
-> ![点击创建机器人，选择discord类型](https://files.astrbot.app/docs/source/images/discord/image.png)
+![点击创建机器人，选择discord类型](https://files.astrbot.app/docs/source/images/discord/image.png)
 
 ![选项从上到下依次是 1.机器人名称 2. 启用 3. Bot token 4. Discord 代理地址 5. 是否自动将插件指令注册为 Discord 斜杠指令 6. discord_guild_id_for_debug 7.Discord 活动名称](https://files.astrbot.app/docs/source/images/discord/image-3.png)
 
@@ -63,4 +62,4 @@ Discord 支持预回应表情功能。启用后，机器人在处理消息时会
 
 - 如果卡在最后的步骤，机器人不在线请确定自己的服务器可以直接连接discord
 
-如果有疑问，请[提交 Issue](https://github.com/AstrBotDevs/AstrBot/issues)。
+如果有疑问，请[提交 Issue](https://github.com/BegoniaHe/AstrBot/issues)。

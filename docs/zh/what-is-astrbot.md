@@ -8,6 +8,8 @@ outline: deep
 
 AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack 等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
 
+本文档描述的是当前 fork 分支的真实行为。这个仓库会选择性同步上游，但一旦与上游存在差异，以当前仓库中的代码、配置、API 和部署文件为准。
+
 ## 文档概览
 
 本文档分为以下几个部分：
@@ -34,4 +36,4 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 ## 说明
 
 - AstrBot 是一个非盈利项目，由全世界热心开源贡献者维护，并受 [AGPL-v3](https://www.chinasona.org/gnu/agpl-3.0-cn.html) 开源许可证保护。如果您对 AstrBot 进行了修改并将其用于提供具有商业盈利性质的网络服务，您必须开源所做的修改。详细联系 [community@astrbot.app](mailto:community@astrbot.app)。
-- 使用此项目前，请务必阅读本项目的最终用户许可协议（EULA）：[最终用户许可协议](https://github.com/AstrBotDevs/AstrBot/blob/master/EULA.md)。如果您不同意该协议的任何条款，请勿使用本项目。
+- 使用此项目前，请务必阅读本项目的最终用户许可协议（EULA）：[最终用户许可协议](https://github.com/BegoniaHe/AstrBot/blob/master/EULA.md)。如果您不同意该协议的任何条款，请勿使用本项目。

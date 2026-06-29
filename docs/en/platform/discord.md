@@ -2,7 +2,7 @@
 
 ## Create AstrBot Discord Platform Adapter
 
-Navigate to the messaging platform, click to add a new adapter, find Discord and click to enter the Discord configuration page.
+Open AstrBot Dashboard, click `Bots` in the left sidebar, click `+ Create Bot`, then choose `Discord`.
 
 ![Click to create bot, select discord type](https://files.astrbot.app/docs/source/images/discord/image.png)
 
@@ -64,4 +64,4 @@ In the admin panel's "Configuration" page, find `Platform Specific -> Discord ->
 
 - If you're stuck at the final step and the bot is not online, please ensure your server can directly connect to Discord
 
-If you have any questions, please [submit an Issue](https://github.com/AstrBotDevs/AstrBot/issues).
+If you have any questions, please [submit an Issue](https://github.com/BegoniaHe/AstrBot/issues).

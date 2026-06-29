@@ -2,8 +2,6 @@
 
 ## Supported Basic Message Types
 
-> Version v4.15.0.
-
 | Message Type | Receive | Send | Notes |
 | ------------ | ------- | ---- | ----- |
 | Text         | Yes     | Yes  |       |
@@ -19,8 +17,6 @@ Proactive message push: Supported.
 DingTalk supports two setup methods: one-click QR creation in AstrBot, or manually creating an app in DingTalk Open Platform.
 
 ### Option 1: One-click QR Creation
-
-AstrBot version requirement: >= v4.25.0.
 
 Open AstrBot Dashboard -> `Bots` -> `+ Create Bot`, then select `DingTalk`.
 

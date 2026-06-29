@@ -8,6 +8,8 @@ outline: deep
 
 AstrBot is an open-source, all-in-one Agentic assistant for personal and group chats. It can be deployed across dozens of mainstream instant messaging platforms, such as QQ, Telegram, WeCom, Lark, DingTalk, and Slack. It also includes a lightweight built-in ChatUI (similar to OpenWebUI), providing reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you are building a personal AI companion, an intelligent customer service assistant, an automation bot, or an enterprise knowledge base, AstrBot helps you build AI applications directly inside your IM workflows.
 
+This documentation tracks the current fork branch. When this fork diverges from upstream, the behavior documented here follows this repository.
+
 ## Documentation Overview
 
 This documentation is divided into the following sections:
@@ -25,5 +27,5 @@ This documentation is divided into the following sections:
 
 ## Notice
 
-1. AstrBot is a non-profit project under the AstrBotDevs organization, maintained by open-source contributors worldwide, and protected by the [AGPL-v3](https://www.chinasona.org/gnu/agpl-3.0-cn.html) license. If you modify AstrBot and use it to provide commercial network services, you must open-source your modifications. For details, contact [community@astrbot.app](mailto:community@astrbot.app).
-2. Before using this project, please read the End User License Agreement (EULA): [End User License Agreement](https://github.com/AstrBotDevs/AstrBot/blob/master/EULA.md). If you do not agree to any terms of the agreement, do not use this project.
+1. AstrBot is a non-profit open-source project maintained by contributors worldwide and protected by the [AGPL-v3](https://www.chinasona.org/gnu/agpl-3.0-cn.html) license. If you modify AstrBot and use it to provide commercial network services, you must open-source your modifications. For details, contact [community@astrbot.app](mailto:community@astrbot.app).
+2. Before using this project, please read the End User License Agreement (EULA): [End User License Agreement](https://github.com/BegoniaHe/AstrBot/blob/master/EULA.md). If you do not agree to any terms of the agreement, do not use this project.

@@ -2,8 +2,6 @@
 
 ## Supported Message Types
 
-> Version v4.15.0.
-
 | Message Type | Receive Support | Send Support | Notes |
 | ------------ | --------------- | ------------ | ----- |
 | Text         | Yes             | Yes          |       |
@@ -23,8 +21,6 @@ The Lark client version must be >= 7.20. Lower versions only display the title a
 Lark supports two setup methods: one-click QR creation in AstrBot, or manually creating a custom enterprise app in the Lark Developer Console.
 
 ### Option 1: One-click QR Creation
-
-AstrBot version requirement: >= 4.25.0.
 
 Open the AstrBot management panel, click `Bots` in the left sidebar, click `+ Create Bot`, and select `lark`.
 

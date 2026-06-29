@@ -145,30 +145,11 @@ kubectl apply -f k8s/astrbot/02-deployment.yaml
 image: m.daocloud.io/docker.io/soulter/astrbot:latest
 ```
 
-### 启用 Docker 沙箱代码执行器
+### 沙盒运行环境
 
-如果您需要使用沙箱代码执行器，需要将 Docker 的 socket 文件挂载到 Pod 中。
+当前仓库提供的 Kubernetes 清单并没有内置独立的集群内沙盒运行时配置。
 
-编辑 `02-deployment.yaml` 文件，在 `spec.template.spec` 下添加 `volumes` 和 `volumeMounts`：
-
-1. **在 `astrbot` 容器的 `volumeMounts` 列表下添加以下内容：**
-
-   ```yaml
-   - name: docker-sock
-     mountPath: /var/run/docker.sock
-   ```
-
-2. **在 `spec.template.spec.volumes` 列表下添加以下内容：**
-
-   ```yaml
-   - name: docker-sock
-     hostPath:
-       path: /var/run/docker.sock
-       type: Socket
-   ```
-
-> [!WARNING]
-> 将 Docker socket 挂载到 Pod 中存在安全风险，请确保您了解其影响。
+如果您需要 Agent 沙盒 / Computer Use 能力，请改为参考当前的 [Agent 沙盒环境](/use/astrbot-agent-sandbox.md) 文档，并单独部署所选运行时；不要再沿用已移除的旧 Docker 代码执行器工作流。
 
 ## 查看日志
 

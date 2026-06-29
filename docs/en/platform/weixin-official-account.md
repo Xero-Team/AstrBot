@@ -1,6 +1,6 @@
 # Connect AstrBot to WeChat Official Account Platform
 
-AstrBot supports WeChat Official Account integration (version >= v3.5.8). After setup, you can chat with AstrBot directly in the WeChat Official Account chat interface.
+AstrBot supports WeChat Official Account integration. After setup, you can chat with AstrBot directly in the WeChat Official Account chat interface.
 
 ## Before You Start
 

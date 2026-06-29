@@ -9,49 +9,43 @@
 
 ::: details 只部署 AstrBot（通用方式）
 
-首先，需要 Clone AstrBot 仓库到本地：
+先克隆当前仓库：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot
+git clone https://github.com/BegoniaHe/AstrBot.git
 cd AstrBot
 ```
 
-然后，运行 Compose：
+然后直接使用仓库内置的 `compose.yml`：
 
 ```bash
-sudo docker compose up -d
+docker compose up -d
 ```
 
 > [!TIP]
 > 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。您可能需要修改 compose.yml 文件，将其中的 `image: soulter/astrbot:latest` 替换为 `image: m.daocloud.io/docker.io/soulter/astrbot:latest`。
 > :::
 
-::: details 带 Agent 沙盒环境的部署
-
-支持原生的 Python 代码执行、Shell 代码执行等功能。
-
-部署方式如下：
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot
-cd AstrBot
-docker compose up -d
-```
-
-配置和使用详见 [Agent 沙盒环境](/use/astrbot-agent-sandbox.md) 文档。
-:::
-
 ::: details 和 NapCat 一起部署
 
-如果您想对接 NapCat，使用这种方式可以同时部署 AstrBot 和 NapCat。
+当前仓库内置了 `compose-with-napcat.yml`，可一并拉起 AstrBot 和 NapCat。
+
+用法如下：
 
 ```bash
-mkdir astrbot
-cd astrbot
-wget https://raw.githubusercontent.com/NapNeko/NapCat-Docker/main/compose/astrbot.yml
-sudo docker compose -f astrbot.yml up -d
+git clone https://github.com/BegoniaHe/AstrBot.git
+cd AstrBot
+docker compose -f compose-with-napcat.yml up -d --build
 ```
 
+这个 compose 文件会把 AstrBot 和 NapCat 放到同一个内部 Docker 网络中，因此 NapCat 可以直接使用 `ws://astrbot:6199/ws` 连接 AstrBot，而不需要把反向 WebSocket 端口暴露到宿主机。
+
+启动后：
+
+1. 在 AstrBot WebUI 中新建 `OneBot v11` 机器人，反向 WebSocket 主机填 `0.0.0.0`，端口填 `6199`。
+2. 在 NapCat WebUI 中新建反向 WebSocket 客户端，URL 填 `ws://astrbot:6199/ws`。
+
+如果您需要沙盒运行环境，请参考 [Shipyard Neo 与 Agent 沙盒文档](/use/astrbot-agent-sandbox.md)。这个 fork 不再继续维护旧版 Shipyard 兼容路径的文档说明。
 :::
 
 ## 通过 Docker 部署
@@ -90,7 +84,7 @@ sudo docker logs -f astrbot
 
 如果一切顺利，你会看到 AstrBot 打印出的日志。
 
-如果没有报错，你会看到一条日志显示类似 `🌈 管理面板已启动，可访问` 并附带了几条链接。打开其中一个链接即可访问 AstrBot 管理面板。
+如果没有报错，AstrBot 会在容器日志中打印 WebUI 地址以及初始登录凭据。打开对应地址即可访问管理面板。
 
 > [!TIP]
 > 由于 Docker 隔离了网络环境，所以不能使用 `localhost` 访问管理面板。

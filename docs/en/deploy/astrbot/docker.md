@@ -9,36 +9,43 @@
 
 ::: details Deploy AstrBot Only (General Method)
 
-First, clone the AstrBot repository to your local machine:
+Clone this repository first:
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot
+git clone https://github.com/BegoniaHe/AstrBot.git
 cd AstrBot
 ```
 
-Then, run Compose:
+Then start the repository's built-in `compose.yml`:
 
 ```bash
-sudo docker compose up -d
+docker compose up -d
 ```
 
 > [!TIP]
 > If your network environment is in mainland China, the above command will not pull properly. You may need to modify the compose.yml file and replace `image: soulter/astrbot:latest` with `image: m.daocloud.io/docker.io/soulter/astrbot:latest`.
 > :::
 
-::: details Deploy with Agent Sandbox Environment
+::: details Deploy AstrBot and NapCat Together
 
-Supports native Python code execution, Shell code execution, and other features.
+This repository also ships `compose-with-napcat.yml` for a combined AstrBot + NapCat setup.
 
-Deployment method:
+Usage:
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot
+git clone https://github.com/BegoniaHe/AstrBot.git
 cd AstrBot
-docker compose up -d
+docker compose -f compose-with-napcat.yml up -d --build
 ```
 
-For configuration and usage details, see the [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox.md) documentation.
+This compose file keeps AstrBot and NapCat on the same internal Docker network, so NapCat can connect to AstrBot through `ws://astrbot:6199/ws` without exposing the reverse WebSocket port to the host.
+
+After the containers are up:
+
+1. In AstrBot WebUI, create a `OneBot v11` bot with reverse WebSocket host `0.0.0.0` and port `6199`.
+2. In NapCat WebUI, add a reverse WebSocket client pointing to `ws://astrbot:6199/ws`.
+
+If you need the sandbox runtime, use the [Shipyard Neo guide](/en/use/astrbot-agent-sandbox.md). This fork no longer documents the legacy Shipyard compatibility path.
 :::
 
 ## Deploy with Docker
@@ -76,7 +83,7 @@ sudo docker logs -f astrbot
 
 If everything goes well, you will see logs printed by AstrBot.
 
-If there are no errors, you will see a log message similar to `🌈 Dashboard started, accessible at` with several links. Open one of the links to access the AstrBot dashboard.
+If there are no errors, AstrBot will print the WebUI URL and the initial credentials in the container logs. Open the WebUI URL to access AstrBot.
 
 > [!TIP]
 > Since Docker isolates the network environment, you cannot use `localhost` to access the dashboard.

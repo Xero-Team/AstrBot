@@ -25,10 +25,12 @@ For macOS users, if you see "damaged and can't be opened", it is caused by macOS
 
 We still recommend the One-Click Launcher above because it is simpler, more automated, and better for most users.
 
+This legacy installer is maintained as an external upstream tool. It is not part of this fork, and this fork does not guarantee that the script's built-in download target matches the current `BegoniaHe/AstrBot` branch. If you need behavior that matches this repository exactly, use the `uv`, Docker, or source deployment guides instead.
+
 The legacy installer is a `PowerShell` script, very small (<20KB). It requires `PowerShell` (usually built in on `Windows 10` and newer).
 
 > [!WARNING]
-> `Python 3.12` or later must be installed, and environment variables must be configured.
+> `Python 3.14` or later must be installed, and environment variables must be configured.
 
 > [!TIP]
 > If deployment fails, try Docker deployment or manual deployment instead.
@@ -58,7 +60,7 @@ Drag `launcher_astrbot_en.bat` into the PowerShell window and press Enter.
 
 If Python is not detected, the script exits with a prompt.
 
-The script checks whether an `AstrBot` folder exists. If not, it downloads the latest AstrBot source from [GitHub](https://github.com/AstrBotDevs/AstrBot/releases/latest), installs dependencies, and runs it automatically.
+The script checks whether an `AstrBot` folder exists. If not, it downloads the source configured by that external installer, installs dependencies, and runs it automatically.
 
 ## Done
 
@@ -68,9 +70,8 @@ Without errors, you should see a log like `🌈 Management panel started, access
 
 > [!TIP]
 > First-time logins use the random password generated on startup and printed to logs. Use that password (and the username shown in the logs, usually `astrbot`) to log in, then change it immediately.
->
-> If WebUI returns 404:
-> Download `dist.zip` from [release](https://github.com/AstrBotDevs/AstrBot/releases), extract it into `AstrBot/data`, then restart the computer if needed.
+
+> If WebUI assets are missing or outdated, reinstall through the current launcher release or switch to the repository deployment guides in this fork. This documentation does not maintain a separate `dist.zip` workflow for the legacy installer.
 
 Then deploy at least one messaging platform adapter to start using AstrBot in IM apps.
 

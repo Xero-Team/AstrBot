@@ -1,7 +1,5 @@
 # Connect Personal WeChat
 
-> Introduced in v4.22.0.
-
 AstrBot supports connecting a personal WeChat account through the `Personal WeChat` adapter. This adapter is implemented on top of Tencent's official `openclaw-weixin` interface, uses QR-code login plus long polling, and does not require a Webhook callback URL.
 
 > [!NOTE]

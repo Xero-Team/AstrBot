@@ -13,7 +13,7 @@ hero:
       link: /what-is-astrbot
     - theme: alt
       text: GitHub 仓库
-      link: https://github.com/AstrBotDevs/AstrBot
+      link: https://github.com/BegoniaHe/AstrBot
 
 features:
   - icon: ✨

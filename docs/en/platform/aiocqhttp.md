@@ -42,3 +42,21 @@ Notes:
 
 Go to AstrBot WebUI `Console`. If a blue log appears saying `aiocqhttp(OneBot v11) adapter connected.`, the connection is successful.
 If after a few seconds you see `aiocqhttp adapter has been closed`, it means the connection timed out (failed). Please double-check your configuration.
+
+## Appendix: Deploy NapCat with Docker Compose
+
+If you want a repo-managed AstrBot + NapCat setup, use the `compose-with-napcat.yml` file shipped at this repository root:
+
+```bash
+git clone https://github.com/BegoniaHe/AstrBot.git
+cd AstrBot
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose -f compose-with-napcat.yml up -d --build
+```
+
+After the containers are up, create a WebSocket client in NapCat WebUI and point it to:
+
+```text
+ws://astrbot:6199/ws
+```
+
+If AstrBot and NapCat are deployed separately, use `ws://<host-ip>:6199/ws` instead.

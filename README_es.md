@@ -2,30 +2,20 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">简体中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
+<a href="./README_zh.md">简体中文</a> ｜
+<a href="./README.md">English</a> ｜
+<a href="./README_zh-TW.md">繁體中文</a> ｜
+<a href="./README_ja.md">日本語</a> ｜
+<a href="./README_fr.md">Français</a> ｜
+<a href="./README_ru.md">Русский</a>
 
 <br>
 
 <div>
-<a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-<a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-</div>
-
-<br>
-
-<div>
-<img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
-<img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
-<a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
+<img src="https://img.shields.io/github/v/release/BegoniaHe/AstrBot?color=76bad9" href="https://github.com/BegoniaHe/AstrBot/releases/latest">
+<img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="python">
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
 <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%20plugins&label=Marketplace&cacheSeconds=3600">
-<img src="https://gitcode.com/Soulter/AstrBot/star/badge.svg" href="https://gitcode.com/Soulter/AstrBot">
 </div>
 
 <br>
@@ -33,12 +23,14 @@
 <a href="https://astrbot.app/">Documentación</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Hoja de ruta</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Registro de incidencias</a> ｜
+<a href="https://github.com/BegoniaHe/AstrBot/issues">Registro de incidencias</a> ｜
 <a href="mailto:community@astrbot.app">Soporte por correo</a>
 
 </div>
 
 AstrBot es una plataforma de chatbot Agent todo en uno de código abierto que se integra con las principales aplicaciones de mensajería instantánea. Proporciona una infraestructura de IA conversacional confiable y escalable para individuos, desarrolladores y equipos. Ya sea que estés construyendo un compañero de IA personal, un servicio de atención al cliente inteligente, un asistente de automatización o una base de conocimiento empresarial, AstrBot te permite crear rápidamente aplicaciones de IA listas para producción dentro de los flujos de trabajo de tu plataforma de mensajería instantánea.
+
+Este repositorio es un fork modernizado de AstrBot. El código, los comandos, los archivos de despliegue y los límites de compatibilidad documentados aquí describen solo esta rama: Python 3.14+, `uv` para el backend, `corepack pnpm` para el dashboard y sin capas de compatibilidad heredadas.
 
 ![screenshot_1 5x_postspark_2026-02-27_22-37-45](https://github.com/user-attachments/assets/f17cdb90-52d7-4773-be2e-ff64b566af6b)
 
@@ -78,13 +70,13 @@ AstrBot es una plataforma de chatbot Agent todo en uno de código abierto que se
 Para los usuarios que quieran experimentar AstrBot rápidamente, estén familiarizados con el uso de la línea de comandos y puedan instalar un entorno `uv` por su cuenta, recomendamos el método de despliegue en un clic con `uv` ⚡️:
 
 ```bash
-uv tool install astrbot --python 3.12
+uv tool install astrbot --python 3.14
 astrbot init # Ejecuta este comando solo la primera vez para inicializar el entorno
 astrbot run
 ```
 
 > Requiere tener [uv](https://docs.astral.sh/uv/) instalado.
-> AstrBot requiere Python 3.12 o superior. La opción `--python 3.12` asegura que `uv` cree el entorno de la herramienta con Python 3.12.
+> AstrBot requiere Python 3.14 o superior. La opción `--python 3.14` asegura que `uv` cree el entorno de la herramienta con Python 3.14.
 
 > [!NOTE]
 > Para usuarios de macOS: debido a las comprobaciones de seguridad de macOS, la primera ejecución del comando `astrbot` puede tardar más (aproximadamente 10-20s).
@@ -92,7 +84,7 @@ astrbot run
 Actualizar `astrbot`:
 
 ```bash
-uv tool upgrade astrbot --python 3.12
+uv tool upgrade astrbot --python 3.14
 ```
 
 > [!WARNING]
@@ -120,13 +112,7 @@ Visita [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) para de
 
 Para usuarios de escritorio que también desean un despliegue rápido y uso aislado de múltiples instancias, recomendamos AstrBot Launcher.
 
-Visita [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) para descargar e instalar.
-
-### Desplegar en Replit
-
-El despliegue en Replit es mantenido por la comunidad y es adecuado para demostraciones en línea y pruebas ligeras.
-
-[![Ejecutar en Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
+Visita [AstrBot Launcher](https://github.com/AstrBotDevs/astrbot-launcher) para descargar e instalar.
 
 ### AUR
 
@@ -224,7 +210,7 @@ Puedes contribuir revisando issues o ayudando con la revisión de pull requests.
 AstrBot usa `ruff` para el formateo y linting de código.
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot
+git clone https://github.com/BegoniaHe/AstrBot.git
 pip install pre-commit
 pre-commit install
 ```
@@ -258,8 +244,8 @@ pre-commit install
 
 Un agradecimiento especial a todos los contribuidores y desarrolladores de plugins por sus contribuciones a AstrBot ❤️
 
-<a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+<a href="https://github.com/BegoniaHe/AstrBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=BegoniaHe/AstrBot&max=300&columns=15" />
 </a>
 
 Además, el nacimiento de este proyecto no habría sido posible sin la ayuda de los siguientes proyectos de código abierto:

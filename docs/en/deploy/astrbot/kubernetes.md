@@ -145,30 +145,11 @@ If you have difficulty pulling the `soulter/astrbot:latest` or `mlikiowa/napcat-
 image: m.daocloud.io/docker.io/soulter/astrbot:latest
 ```
 
-### Enable Docker Sandbox Code Executor
+### Sandbox Runtime
 
-If you need to use the sandbox code executor, you need to mount the Docker socket file into the Pod.
+This repository's Kubernetes manifests do not ship a dedicated in-cluster sandbox runtime configuration.
 
-Edit the `02-deployment.yaml` file and add `volumes` and `volumeMounts` under `spec.template.spec`:
-
-1. **Add the following to the `volumeMounts` list of the `astrbot` container:**
-
-   ```yaml
-   - name: docker-sock
-     mountPath: /var/run/docker.sock
-   ```
-
-2. **Add the following to the `spec.template.spec.volumes` list:**
-
-   ```yaml
-   - name: docker-sock
-     hostPath:
-       path: /var/run/docker.sock
-       type: Socket
-   ```
-
-> [!WARNING]
-> Mounting the Docker socket into a Pod poses a security risk. Please ensure you understand the implications.
+If you need Agent sandbox / computer-use capabilities, follow the current [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox.md) guide and deploy the chosen runtime separately. Do not rely on the removed legacy Docker code-interpreter workflow.
 
 ## View Logs
 

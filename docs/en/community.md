@@ -12,7 +12,7 @@ This documentation may not cover all features comprehensively. If you have any q
 
 Welcome to submit Issues or Pull Requests:
 
-- [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot)
+- [BegoniaHe/AstrBot](https://github.com/BegoniaHe/AstrBot)
 
 ### Tencent QQ Groups
 

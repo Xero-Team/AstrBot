@@ -53,10 +53,6 @@ The configuration is now complete. If you're using Socket mode, simply click the
 
 If you're using Webhook mode, please keep `Unified Webhook Mode (unified_webhook_mode)` enabled.
 
-> [!TIP]
-> Before v4.8.0, there is no `Unified Webhook Mode`. You need to fill in the following configuration items:
-> Slack Webhook Host, Slack Webhook Port, and Slack Webhook Path
-
 ## Enable Event Subscriptions
 
 After successfully creating the platform adapter, return to the Slack settings. In the Event Subscriptions page on the left sidebar, click Enable Events to enable event reception.
@@ -90,4 +86,4 @@ After enabling, under Subscribe to bot events below, click Add Bot User Event an
 
 Enter the Slack workspace you just added, navigate to the channel where you want to use the bot, then @ mention the app you just created. Click the Add button in the message subsequently sent by Slackbot to add it to the workspace. Then, @ mention the app and type `/help`. If it responds successfully, the test is successful.
 
-If you have any questions, please [submit an Issue](https://github.com/AstrBotDevs/AstrBot/issues).
+If you have any questions, please [submit an Issue](https://github.com/BegoniaHe/AstrBot/issues).

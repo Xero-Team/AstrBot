@@ -2,28 +2,18 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_es.md">Español</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
+<a href="./README.md">English</a> ｜
+<a href="./README_zh-TW.md">繁體中文</a> ｜
+<a href="./README_ja.md">日本語</a> ｜
+<a href="./README_fr.md">Français</a> ｜
+<a href="./README_es.md">Español</a> ｜
+<a href="./README_ru.md">Русский</a>
 
 <div>
-<a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-<a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-</div>
-
-<br>
-
-<div>
-<img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
-<img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
-<a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
+<img src="https://img.shields.io/github/v/release/BegoniaHe/AstrBot?color=76bad9" href="https://github.com/BegoniaHe/AstrBot/releases/latest">
+<img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="python">
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
 <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600">
-<img src="https://gitcode.com/Soulter/AstrBot/star/badge.svg" href="https://gitcode.com/Soulter/AstrBot">
 </div>
 
 <br>
@@ -32,12 +22,14 @@
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">博客</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a> ｜
+<a href="https://github.com/BegoniaHe/AstrBot/issues">问题提交</a> ｜
 <a href="mailto:community@astrbot.app">Email</a>
 
 </div>
 
 AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack 等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
+
+这个仓库是 AstrBot 的现代化 fork。这里记录的命令、部署文件和兼容性边界均以当前分支为准：Python 3.14+、后端使用 `uv`、前端使用 `corepack pnpm`，并且不再为旧兼容路径背书。
 
 ![landingpage](https://github.com/user-attachments/assets/45fc5699-cddf-4e21-af35-13040706f6c0)
 
@@ -77,13 +69,13 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 对于想快速体验 AstrBot、且熟悉命令行并能够自行安装 `uv` 环境的用户，我们推荐使用 `uv` 一键部署方式 ⚡️。
 
 ```bash
-uv tool install astrbot --python 3.12
+uv tool install astrbot --python 3.14
 astrbot init # 仅首次执行此命令以初始化环境
 astrbot run
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
-> AstrBot 需要 Python 3.12 或更高版本。`--python 3.12` 会确保 `uv` 使用 Python 3.12 创建 tool 环境。
+> AstrBot 需要 Python 3.14 或更高版本。`--python 3.14` 会确保 `uv` 使用 Python 3.14 创建 tool 环境。
 
 > [!NOTE]
 > 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
@@ -91,7 +83,7 @@ astrbot run
 更新 `astrbot`：
 
 ```bash
-uv tool upgrade astrbot --python 3.12
+uv tool upgrade astrbot --python 3.14
 ```
 
 > [!WARNING]
@@ -101,7 +93,21 @@ uv tool upgrade astrbot --python 3.12
 
 对于熟悉容器、希望获得更稳定且更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
 
-请参考官方文档 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
+请优先使用当前仓库自带的 Compose 文件：
+
+```bash
+git clone https://github.com/BegoniaHe/AstrBot.git
+cd AstrBot
+docker compose up -d
+```
+
+如果希望一并拉起 AstrBot 和 NapCat：
+
+```bash
+docker compose -f compose-with-napcat.yml up -d --build
+```
+
+更多细节请参考 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
 ### 在 雨云 上部署
 
@@ -119,13 +125,7 @@ uv tool upgrade astrbot --python 3.12
 
 同样在桌面端，希望快速部署并实现环境隔离多开的用户，我们推荐使用 AstrBot Launcher。
 
-前往 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 下载并安装。
-
-### 在 Replit 上部署
-
-Replit 部署由社区维护，适合在线演示和轻量试用场景。
-
-[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
+前往 [AstrBot Launcher](https://github.com/AstrBotDevs/astrbot-launcher) 下载并安装。
 
 ### AUR
 
@@ -218,7 +218,7 @@ yay -S astrbot-git
 AstrBot 使用 `ruff` 进行代码格式化和检查。
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot
+git clone https://github.com/BegoniaHe/AstrBot.git
 pip install pre-commit
 pre-commit install
 ```
@@ -252,8 +252,8 @@ pre-commit install
 
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
 
-<a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
+<a href="https://github.com/BegoniaHe/AstrBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=BegoniaHe/AstrBot&max=300&columns=15" />
 </a>
 
 此外，本项目的诞生离不开以下开源项目的帮助：

@@ -2,8 +2,6 @@
 
 ## Supported Message Types
 
-> Version v4.19.2
-
 | Message Type | Receive | Send | Remarks                                            |
 | ------------ | ------- | ---- | -------------------------------------------------- |
 | Text         | Yes     | Yes  | Supports official [kmarkdown] syntax               |

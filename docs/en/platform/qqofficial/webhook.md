@@ -8,8 +8,6 @@
 
 ## Supported Basic Message Types
 
-> Version v4.19.6.
-
 | Message Type | Receive | Send | Notes |
 | ------------ | ------- | ---- | ----- |
 | Text         | Yes     | Yes  |       |

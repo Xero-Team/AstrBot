@@ -3,16 +3,16 @@
 > [!WARNING]
 > 你正在直接通过源码来部署本项目，该教程需要您具有一定的技术基础。
 >
-> 以下教程默认您的设备上已经安装 Python，并且版本 `>=3.12`
+> 以下教程默认您的设备上已经安装 Python，并且版本为 `3.14+`
 
 ## 下载/克隆仓库
 
 如果你的电脑上安装了 `git`，你可以通过以下命令来下载源码：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot
+git clone https://github.com/BegoniaHe/AstrBot.git
 # 上面的代码默认会拉取最新的提交的源码，如果你需要拉取最新稳定发行版本的源码，可以使用以下命令：
-# git clone --depth=1 --branch $(git ls-remote --tags --sort='-v:refname' https://github.com/AstrBotDevs/AstrBot.git | head -n1 | awk -F/ '{print $3}') https://github.com/AstrBotDevs/AstrBot.git
+# git clone --depth=1 --branch $(git ls-remote --tags --sort='-v:refname' https://github.com/BegoniaHe/AstrBot.git | head -n1 | awk -F/ '{print $3}') https://github.com/BegoniaHe/AstrBot.git
 cd AstrBot
 ```
 
@@ -35,7 +35,7 @@ uv sync
 uv run main.py
 ```
 
-如果您安装了一些插件，建议后续启动附上 `--no-sync` 参数，以避免插件依赖库被重复安装。我们正在努力解决这个问题，敬请期待。
+如果环境已经同步完成，后续只想快速重启，可使用：
 
 ```bash
 uv run --no-sync main.py
@@ -51,10 +51,8 @@ uv run --no-sync main.py
 > ![image](https://files.astrbot.app/docs/source/images/cli/image-1.png)
 
 ```bash
-python3 -m venv ./venv
+python -m venv .venv
 ```
-
-> 也可能是 `python` 而不是 `python3`
 
 以上步骤会创建一个虚拟环境并激活（以免打乱您设备本地的 Python 环境）。
 
@@ -63,7 +61,7 @@ python3 -m venv ./venv
 Mac/Linux/WSL 执行：
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 python -m pip install -r requirements.txt -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
 python main.py
 ```
@@ -71,7 +69,7 @@ python main.py
 Windows 执行:
 
 ```bash
-venv\Scripts\activate
+.venv\Scripts\activate
 python -m pip install -r requirements.txt -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
 python main.py
 ```
@@ -82,7 +80,7 @@ python main.py
 
 如果一切顺利，你会看到 AstrBot 打印出的日志。
 
-如果没有报错，你会看到一条日志显示类似 `🌈 管理面板已启动，可访问` 并附带了几条链接。打开其中一个链接即可访问 AstrBot 管理面板。链接是 `http://localhost:6185`。
+如果没有报错，AstrBot 会在启动日志中打印 WebUI 地址和初始登录凭据。默认情况下，WebUI 地址是 `http://localhost:6185`。
 
 > [!TIP]
 > 如果你正在服务器上部署 AstrBot，需要将 `localhost` 替换为你的服务器 IP 地址。

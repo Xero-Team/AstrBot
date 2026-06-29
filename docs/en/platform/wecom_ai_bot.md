@@ -2,8 +2,6 @@
 
 WeCom AI Bot is an official AI-friendly bot platform by WeCom. It can be used directly in one-on-one chats and internal group chats, and supports streaming responses.
 
-AstrBot supports this platform since v4.3.5.
-
 ## Supported Basic Message Types
 
 | Message Type | Receive | Send | Notes                                               |
@@ -30,7 +28,7 @@ Proactive message push: Supported, but requires a message push Webhook URL.
 
 ## Configure AstrBot
 
-1. Open AstrBot Dashboard, click `Messaging Platforms`, then click `+ Add Adapter`, choose `WeCom AI Bot`.
+1. Open AstrBot Dashboard, click `Bots`, then click `+ Create Bot`, and choose `WeCom AI Bot`.
 
 ![Add Adapter](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-2.png)
 

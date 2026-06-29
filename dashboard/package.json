@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "node scripts/subset-mdi-font.mjs && vite --host",
     "build:t2i-shiki-runtime": "node scripts/build-t2i-shiki-runtime.mjs",
-    "build": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build",
-    "build-stage": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build --base=/vue/free/stage/",
-    "build-prod": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build --base=/vue/free/",
+    "build": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build && node scripts/write-dashboard-version.mjs",
+    "build-stage": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build --base=/vue/free/stage/ && node scripts/write-dashboard-version.mjs",
+    "build-prod": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build --base=/vue/free/ && node scripts/write-dashboard-version.mjs",
     "preview": "vite preview --port 5050",
     "test": "vitest run --config vitest.config.ts",
     "test:smoke": "vitest run --config vitest.config.ts",

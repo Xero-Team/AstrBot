@@ -198,6 +198,29 @@ async def test_check_dashboard_files_not_exists(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_check_dashboard_files_uses_bundled_dist_without_download(tmp_path):
+    """Tests that bundled dashboard assets are used when data/dist is absent."""
+    from main import VERSION
+
+    data_dir = tmp_path / "data"
+    bundled_dist = tmp_path / "bundled-dist"
+    (bundled_dist / "assets").mkdir(parents=True)
+    (bundled_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
+    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+
+    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
+        with mock.patch(
+            "main.get_bundled_dashboard_dist_path",
+            return_value=bundled_dist,
+        ):
+            with mock.patch("main.download_dashboard") as mock_download:
+                result = await check_dashboard_files()
+
+    assert result == str(bundled_dist)
+    mock_download.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_check_dashboard_files_exists_and_version_match(tmp_path):
     """Tests that dashboard is not downloaded when it exists and version matches."""
     from main import VERSION

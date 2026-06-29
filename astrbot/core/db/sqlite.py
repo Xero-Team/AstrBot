@@ -103,19 +103,15 @@ class SQLiteDatabase(BaseDatabase):
             return count if count is not None else 0
 
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
-        """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        """Get platform statistic rows within the specified offset in seconds."""
         async with self.get_db() as session:
             session: AsyncSession
             now = datetime.now()
             start_time = now - timedelta(seconds=offset_sec)
             result = await session.execute(
-                text("""
-                SELECT * FROM platform_stats
-                WHERE timestamp >= :start_time
-                GROUP BY platform_id
-                ORDER BY timestamp DESC
-                """),
-                {"start_time": start_time},
+                select(PlatformStat)
+                .where(col(PlatformStat.timestamp) >= start_time)
+                .order_by(col(PlatformStat.timestamp).asc()),
             )
             return list(result.scalars().all())
 

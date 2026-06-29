@@ -192,34 +192,40 @@ class StatService:
             now = int(time.time())
             start_time = now - offset_sec
             message_time_based_stats = []
-            platform_stats = sorted(
-                stat,
-                key=lambda item: int(
-                    self._ensure_aware_utc(item.timestamp).timestamp()
-                ),
-            )
+            platform_stats: list[tuple[Any, int]] = []
+            for item in stat:
+                if not hasattr(item, "platform_id") or not hasattr(item, "count"):
+                    logger.warning("Skipping invalid platform stat row: %r", item)
+                    continue
+                try:
+                    timestamp = int(
+                        self._coerce_platform_stat_timestamp(
+                            getattr(item, "timestamp", None)
+                        ).timestamp()
+                    )
+                except (TypeError, ValueError) as exc:
+                    logger.warning(
+                        "Skipping platform stat row with invalid timestamp %r: %s",
+                        getattr(item, "timestamp", None),
+                        exc,
+                    )
+                    continue
+                platform_stats.append((item, timestamp))
+
+            platform_stats.sort(key=lambda entry: entry[1])
 
             idx = 0
             for bucket_end in range(start_time, now, 3600):
                 cnt = 0
-                while (
-                    idx < len(platform_stats)
-                    and int(
-                        self._ensure_aware_utc(
-                            platform_stats[idx].timestamp
-                        ).timestamp()
-                    )
-                    < bucket_end
-                ):
-                    cnt += platform_stats[idx].count
+                while idx < len(platform_stats) and platform_stats[idx][1] < bucket_end:
+                    cnt += platform_stats[idx][0].count
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
 
             grouped_platform = []
             grouped_counts: dict[str, int] = defaultdict(int)
             grouped_timestamps: dict[str, int] = {}
-            for item in platform_stats:
-                timestamp = int(self._ensure_aware_utc(item.timestamp).timestamp())
+            for item, timestamp in platform_stats:
                 grouped_counts[item.platform_id] += item.count
                 grouped_timestamps[item.platform_id] = max(
                     grouped_timestamps.get(item.platform_id, 0),
@@ -252,7 +258,7 @@ class StatService:
             running_time = self.get_running_time_components(
                 int(time.time()) - self.core_lifecycle.start_time,
             )
-            message_count = sum(item.count for item in platform_stats)
+            message_count = sum(item.count for item, _timestamp in platform_stats)
 
             stat_dict.update(
                 {
@@ -283,6 +289,32 @@ class StatService:
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+    @classmethod
+    def _coerce_platform_stat_timestamp(cls, value: Any) -> datetime:
+        if isinstance(value, datetime):
+            return cls._ensure_aware_utc(value)
+
+        if isinstance(value, int | float):
+            timestamp = float(value)
+            if timestamp > 10_000_000_000:
+                timestamp /= 1000
+            return datetime.fromtimestamp(timestamp, UTC)
+
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError("timestamp is empty")
+            try:
+                numeric_timestamp = float(normalized)
+            except ValueError:
+                iso_timestamp = normalized.replace("Z", "+00:00")
+                return cls._ensure_aware_utc(datetime.fromisoformat(iso_timestamp))
+            if numeric_timestamp > 10_000_000_000:
+                numeric_timestamp /= 1000
+            return datetime.fromtimestamp(numeric_timestamp, UTC)
+
+        raise TypeError(f"Unsupported timestamp type: {type(value).__name__}")
 
     async def get_provider_token_stats(self, days: int) -> dict:
         try:

@@ -44,12 +44,12 @@ from astrbot.dashboard.password_state import (
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_service import PluginService
-from tests.helpers.dashboard_test_adapter import DashboardTestClient
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
     create_mock_updater_update,
 )
+from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
@@ -1648,10 +1648,8 @@ async def test_plugin_page_entry_requires_dashboard_auth(
 ):
     test_client = DashboardTestClient(app)
     response = await test_client.get(
-        (
-            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
-            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
-        )
+        f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+        f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
     )
     assert response.status_code == 401
     data = await response.get_json()
@@ -2005,14 +2003,29 @@ async def test_logout_clears_cookie_for_plugin_page(
 
 
 @pytest.mark.asyncio
-async def test_get_stat(app: FastAPI, authenticated_header: dict):
+async def test_get_stat(
+    app: FastAPI,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
     test_client = DashboardTestClient(app)
     response = await test_client.get("/api/v1/stats")
     assert response.status_code == 401
+    await core_lifecycle_td.db.insert_platform_stats(
+        "test-platform",
+        "test",
+        count=3,
+        timestamp=datetime(2026, 6, 30, 1, 0, 0),
+    )
     response = await test_client.get("/api/v1/stats", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok" and "platform" in data["data"]
+    assert data["data"]["message_count"] >= 3
+    assert any(
+        item["name"] == "test-platform" and item["count"] >= 3
+        for item in data["data"]["platform"]
+    )
 
 
 @pytest.mark.asyncio

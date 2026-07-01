@@ -5,8 +5,7 @@
 AstrBot One-Click Launcher supports Windows, macOS, and Linux.
 
 0. Open [AstrBotDevs/astrbot-launcher](https://github.com/AstrBotDevs/astrbot-launcher)
-1. **Optional but recommended**: give this project a [**Star ⭐**](https://github.com/AstrBotDevs/astrbot-launcher). Your support helps maintainers keep improving it.
-2. Find **Releases** on the right, open the latest release, then download the installer for your system from **Assets**.
+1. Find **Releases** on the right, open the latest release, then download the installer for your system from **Assets**.
 
 For example:
 

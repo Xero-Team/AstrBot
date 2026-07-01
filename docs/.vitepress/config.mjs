@@ -44,28 +44,11 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "包管理器部署", link: "/astrbot/package" },
-              { text: "雨云一键云部署", link: "/astrbot/rainyun" },
               { text: "桌面客户端部署", link: "/astrbot/desktop" },
               { text: "启动器一键部署", link: "/astrbot/launcher" },
               { text: "Docker 部署", link: "/astrbot/docker" },
               { text: "Kubernetes 部署", link: "/astrbot/kubernetes" },
-              { text: "宝塔面板部署", link: "/astrbot/btpanel" },
-              { text: "1Panel 部署", link: "/astrbot/1panel" },
               { text: "手动部署", link: "/astrbot/cli" },
-              {
-                text: "其他部署方式",
-                link: "/astrbot/other-deployments",
-                collapsed: true,
-                items: [
-                  { text: "CasaOS 部署", link: "/astrbot/casaos" },
-                  { text: "优云智算 GPU 部署", link: "/astrbot/compshare" },
-                  { text: "社区提供的部署方式", link: "/astrbot/community-deployment" },
-                ],
-              },
-              {
-                text: "支持我们",
-                link: "/when-deployed",
-              },
             ],
           },
           {
@@ -240,7 +223,6 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "开源之夏 2025", link: "/ospp-2025" },
-              { text: "桐谷霁屿 x AstrBot 插件奖励活动", link: "/tonggujiyu-astrbot-plugin-reward-program" },
             ],
           },
         ],
@@ -262,13 +244,7 @@ export default defineConfig({
         logo: '/logo_prod.png',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
-        ],
-        footer: {
-          message: 'Deployed on&nbsp' +
-            '<a href="https://www.rainyun.com/NjY3OTQ5_" class="deployment-link" style="display: inline-flex; align-items: center;">' +
-            '<img src="https://www.rainyun.com/img/logo.d193755d.png" width="50" alt="Rainyun Logo">' +
-            '</a>',
-        }
+        ]
       }
     },
     en: {
@@ -300,23 +276,7 @@ export default defineConfig({
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
-              { text: "BT Panel", link: "/astrbot/btpanel" },
-              { text: "1Panel", link: "/astrbot/1panel" },
               { text: "Manual", link: "/astrbot/cli" },
-              {
-                text: "Other Deployments",
-                link: "/astrbot/other-deployments",
-                collapsed: true,
-                items: [
-                  { text: "CasaOS", link: "/astrbot/casaos" },
-                  { text: "Compshare GPU", link: "/astrbot/compshare" },
-                  { text: "Community-provided Deployment", link: "/astrbot/community-deployment" },
-                ],
-              },
-              {
-                text: "Support Us",
-                link: "/when-deployed",
-              },
             ],
           },
           {
@@ -510,13 +470,7 @@ export default defineConfig({
         logo: '/logo_prod.png',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
-        ],
-        footer: {
-          message: 'Deployed on&nbsp' +
-            '<a href="https://www.rainyun.com/NjY3OTQ5_" class="deployment-link" style="display: inline-flex; align-items: center;">' +
-            '<img src="https://www.rainyun.com/img/logo.d193755d.png" width="50" alt="Rainyun Logo">' +
-            '</a>',
-        }
+        ]
       }
     },
   },

@@ -1,7 +1,7 @@
 # 接入 Matrix
 
 > [!TIP]
-> 该平台适配器由社区([stevessr](https://github.com/stevessr)) 维护。如果您觉得有帮助，请支持开发者，给该仓库点一个 Star。❤️
+> 该平台适配器由社区([stevessr](https://github.com/stevessr)) 维护。
 
 ## 部署 Matrix 服务器
 

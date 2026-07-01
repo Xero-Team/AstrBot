@@ -5,8 +5,8 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 89ec07a92bf3b6d5a39cd305761961b28a92524d
-  synced_at_utc: 2026-06-28T07:09:16.4008537Z
-  sync_method: merge
+  commit: 41f8960302e7256cd5cc82d8fba4a9e41b8f4f6a
+  synced_at_utc: 2026-07-01T01:00:08Z
+  sync_method: cherry-pick
   source_pr: null
-  note: Merged upstream/master into the fork and resolved conflicts with the fork's no-legacy policy.
+  note: Cherry-picked #8448 (local plugin install) and #9088 (file_read_tool directory error) from upstream/master; skipped the upstream 4.26.3 version-bump commit and bumped the fork to 4.26.3 directly. Conflicts resolved per the fork's no-legacy, Python 3.14-only policy.

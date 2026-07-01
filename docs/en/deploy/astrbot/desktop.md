@@ -1,35 +1,17 @@
-# Deploy with AstrBot Desktop Client
+# Desktop Deployment (Unsupported in This Fork)
 
-`AstrBot-desktop` is designed for quick local deployment of AstrBot on your personal computer, supporting Windows, macOS, and Linux.
+This fork does not publish desktop installers and does not maintain compatibility with `AstrBot-desktop`.
 
-It is a separate companion project, not a subdirectory or release artifact of this fork repository.
+If you are using this repository, do not treat the desktop client as a supported deployment path.
 
-Among the various deployment options, the desktop client is best suited for personal local use. It is not recommended for long-term server operation or production environments. For production deployments, consider [Docker](/en/deploy/astrbot/docker) or [Kubernetes](/en/deploy/astrbot/kubernetes) instead.
+## Use These Instead
 
-Compared to command-line or container-based solutions, the desktop client offers an out-of-the-box experience, ideal for users who want to get started without dealing with environment setup.
+- [Docker](/en/deploy/astrbot/docker)
+- [Manual Deployment](/en/deploy/astrbot/cli)
+- [Kubernetes](/en/deploy/astrbot/kubernetes)
 
-Repository: [AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)
+## Why
 
-## Who Is It For
-
-- Users who want quick local deployment with a graphical interface.
-- Beginners who don't want to manually manage Docker / Python environments.
-- Personal devices that stay online, primarily for individual or small team daily use.
-
-## Key Features
-
-- Multi-platform installers, ready to use after download.
-- GUI-based configuration, lowering the barrier for first-time deployment.
-- Suitable as a locally resident client.
-
-## Download and Install
-
-1. Open [AstrBot-desktop Releases](https://github.com/AstrBotDevs/AstrBot-desktop/releases).
-2. Download the installer for your operating system (e.g. `.exe`, `.dmg`, `.rpm`, `.deb`).
-3. Launch the desktop client after installation and follow the setup wizard to complete initialization.
-
-## Difference from Launcher Deployment
-
-- Desktop client: focuses on an out-of-the-box GUI experience.
-- Launcher deployment: focuses on automated script-based startup, suitable for users who prefer a traditional deployment workflow.
-- See [Launcher Deployment](/en/deploy/astrbot/launcher).
+- The desktop client is not a release artifact of this fork.
+- This fork does not guarantee sync between its codebase and external desktop-shell projects.
+- When something breaks, the desktop path adds extra compatibility variables that this documentation does not want to preserve.

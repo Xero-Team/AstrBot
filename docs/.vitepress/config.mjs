@@ -44,8 +44,6 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "包管理器部署", link: "/astrbot/package" },
-              { text: "桌面客户端部署", link: "/astrbot/desktop" },
-              { text: "启动器一键部署", link: "/astrbot/launcher" },
               { text: "Docker 部署", link: "/astrbot/docker" },
               { text: "Kubernetes 部署", link: "/astrbot/kubernetes" },
               { text: "手动部署", link: "/astrbot/cli" },
@@ -109,16 +107,11 @@ export default defineConfig({
             base: "/providers",
             items: [
               {
-                text: "✨ 接入模型服务",
+                text: "模型提供商",
                 link: "/start",
                 collapsed: true,
                 items: [
-                  { text: "NewAPI", link: "/newapi" },
-                  { text: "AIHubMix", link: "/aihubmix" },
-                  { text: "PPIO 派欧云", link: "/ppio" },
-                  { text: "硅基流动", link: "/siliconflow" },
-                  { text: "小马算力", link: "/tokenpony" },
-                  { text: "302.AI", link: "/302ai" },
+                  { text: "服务提供商配置", link: "/llm" },
                   { text: "Ollama", link: "/provider-ollama" },
                   { text: "LMStudio", link: "/provider-lmstudio" },
                 ]
@@ -272,8 +265,6 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
-              { text: "Desktop Client", link: "/astrbot/desktop" },
-              { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
               { text: "Manual", link: "/astrbot/cli" },
@@ -339,16 +330,11 @@ export default defineConfig({
             collapsed: false,
             items: [
               {
-                text: "✨ Model Providers",
+                text: "Model Providers",
                 link: "/start",
                 collapsed: true,
                 items: [
-                  { text: "NewAPI", link: "/newapi" },
-                  { text: "AIHubMix", link: "/aihubmix" },
-                  { text: "PPIO Cloud", link: "/ppio" },
-                  { text: "SiliconFlow", link: "/siliconflow" },
-                  { text: "TokenPony", link: "/tokenpony" },
-                  { text: "302.AI", link: "/302ai" },
+                  { text: "Provider Configuration", link: "/llm" },
                   { text: "Ollama", link: "/provider-ollama" },
                   { text: "LMStudio", link: "/provider-lmstudio" },
                 ],

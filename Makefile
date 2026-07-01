@@ -1,9 +1,14 @@
 .PHONY: worktree worktree-add worktree-rm pr-test-neo pr-test-full pr-test-full-fast \
-	build build-backend build-dashboard run run-backend run-dashboard \
+	build build-all build-backend build-dashboard run run-backend run-dashboard \
 	stop stop-backend stop-dashboard clean status quality quality-report \
-	check format \
-	check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker \
-	format-py format-web format-data format-md format-toml format-shell format-ps
+	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-radon-cc quality-radon-mi \
+	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
+	check check-all format format-all \
+	check-py check-py-all check-py-format check-py-lint \
+	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier \
+	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
+	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker \
+	format-py format-web format-data format-md format-toml format-yaml format-shell format-ps
 
 WORKTREE_DIR ?= ../astrbot_worktree
 BRANCH ?= $(word 2,$(MAKECMDGOALS))
@@ -17,6 +22,20 @@ PNPM := corepack pnpm
 NPX := npm exec --yes --
 QUALITY_TYPE_TARGETS := astrbot/api astrbot/cli astrbot/core/backup astrbot/core/config astrbot/core/knowledge_base astrbot/core/skills astrbot/utils
 QUALITY_SECURITY_TARGETS := astrbot/api astrbot/cli astrbot/core/backup astrbot/core/knowledge_base astrbot/core/skills astrbot/utils
+CHECK_TARGETS := check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker
+FORMAT_TARGETS := format-py format-web format-data format-md format-toml format-yaml format-shell format-ps
+QUALITY_TARGETS := quality-pyright quality-bandit quality-audit quality-radon-cc quality-radon-mi
+QUALITY_REPORT_TARGETS := quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi
+CHECK_PY_TARGETS := check-py-format check-py-lint
+CHECK_WEB_TARGETS := check-web-build check-web-eslint check-web-smoke check-web-prettier
+CHECK_MD_TARGETS := check-md-prettier check-md-markdownlint
+CHECK_TOML_TARGETS := check-toml-format check-toml-lint
+CHECK_YAML_TARGETS := check-yaml-prettier check-yaml-lint
+CHECK_SHELL_TARGETS := check-shell-shfmt check-shell-shellcheck
+PARALLEL_JOBS ?= $(if $(NUMBER_OF_PROCESSORS),$(NUMBER_OF_PROCESSORS),4)
+HAS_JOBSERVER := $(findstring --jobserver-auth=,$(MAKEFLAGS))
+HAS_JOBS_FLAG := $(findstring -j,$(MAKEFLAGS))
+PARALLEL_SUBMAKE_FLAGS := $(if $(strip $(HAS_JOBSERVER) $(HAS_JOBS_FLAG)),,-j$(PARALLEL_JOBS)) --output-sync=target --no-print-directory
 
 worktree:
 	@echo "Usage:"
@@ -49,7 +68,10 @@ pr-test-full:
 pr-test-full-fast:
 	@$(PS) scripts/pr_test_env.ps1 -Profile full -SkipSync -NoDashboard
 
-build: build-backend build-dashboard
+build:
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) build-all
+
+build-all: build-backend build-dashboard
 
 build-backend:
 	uv sync
@@ -58,7 +80,10 @@ build-dashboard:
 	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --no-frozen-lockfile
 	cd $(DASHBOARD_DIR) && $(PNPM) build
 
-run: build run-backend run-dashboard status
+run: build
+	@$(MAKE) --no-print-directory run-backend
+	@$(MAKE) --no-print-directory run-dashboard
+	@$(MAKE) --no-print-directory status
 
 run-backend:
 	@$(PS) scripts/make_dev.ps1 run-backend
@@ -81,19 +106,48 @@ clean: stop
 	@$(PS) scripts/make_dev.ps1 clean
 
 quality:
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) quality-all
+
+quality-all: $(QUALITY_TARGETS)
+	@echo "==> focused quality checks passed"
+
+quality-sync:
 	uv sync --group dev
+
+quality-pyright: quality-sync
 	uv run pyright --project pyrightconfig.quality.json
+
+quality-bandit: quality-sync
 	PYTHONIOENCODING=utf-8 uv run bandit -r $(QUALITY_SECURITY_TARGETS) -c pyproject.toml
+
+quality-audit: quality-sync
 	uv run pip-audit
+
+quality-radon-cc: quality-sync
 	uv run radon cc $(QUALITY_TYPE_TARGETS) -s -n C
+
+quality-radon-mi: quality-sync
 	uv run radon mi $(QUALITY_TYPE_TARGETS) -s
 
 quality-report:
-	uv sync --group dev
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) quality-report-all
+
+quality-report-all: $(QUALITY_REPORT_TARGETS)
+	@echo "==> full quality report generated"
+
+quality-report-pyright: quality-sync
 	uv run pyright
+
+quality-report-bandit: quality-sync
 	PYTHONIOENCODING=utf-8 uv run bandit -lll -iii -r astrbot -c pyproject.toml
+
+quality-report-audit: quality-sync
 	uv run pip-audit
+
+quality-report-radon-cc: quality-sync
 	uv run radon cc astrbot -s -n C
+
+quality-report-radon-mi: quality-sync
 	uv run radon mi astrbot -s
 
 # Swallow extra args (branch/base) so make doesn't treat them as targets
@@ -112,15 +166,29 @@ quality-report:
 # binaries: run if present, skipped with a notice otherwise (CI installs them).
 # ---------------------------------------------------------------------------
 
-check: check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker
+check:
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-all
+
+check-all: $(CHECK_TARGETS)
 	@echo "==> all checks passed"
 
-format: format-py format-toml format-data format-md format-web format-shell format-ps
+format:
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) format-all
+
+format-all: $(FORMAT_TARGETS)
 	@echo "==> formatting complete; run 'make check' to verify"
 
 check-py:
-	@echo "==> [py] ruff format --check + ruff check"
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-py-all
+
+check-py-all: $(CHECK_PY_TARGETS)
+
+check-py-format:
+	@echo "==> [py] ruff format --check"
 	uv run ruff format --check .
+
+check-py-lint:
+	@echo "==> [py] ruff check"
 	uv run ruff check .
 
 format-py:
@@ -129,11 +197,24 @@ format-py:
 	uv run ruff check --fix .
 
 check-web:
-	@echo "==> [web] typecheck + eslint + smoke tests + build + prettier"
-	cd $(DASHBOARD_DIR) && $(PNPM) run typecheck
-	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --concurrency=auto --max-warnings=0
-	cd $(DASHBOARD_DIR) && $(PNPM) run test:smoke
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-web-all
+
+check-web-all: $(CHECK_WEB_TARGETS)
+
+check-web-build:
+	@echo "==> [web] build"
 	cd $(DASHBOARD_DIR) && $(PNPM) build
+
+check-web-eslint:
+	@echo "==> [web] eslint"
+	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --concurrency=auto --max-warnings=0
+
+check-web-smoke:
+	@echo "==> [web] smoke tests"
+	cd $(DASHBOARD_DIR) && $(PNPM) run test:smoke
+
+check-web-prettier:
+	@echo "==> [web] prettier --check"
 	$(NPX) prettier --check "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
 
 format-web:
@@ -142,22 +223,30 @@ format-web:
 	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --concurrency=auto --fix
 
 check-data:
-	@echo "==> [data] prettier --check json/css/scss/html"
+	@echo "==> [data] prettier --check json/html"
 	@$(PS) scripts/run_tracked_node_tool.ps1 -Tool prettier \
-		-Patterns '*.json','*.jsonc','*.css','*.scss','*.html' \
+		-Patterns '*.json','*.jsonc','*.html' \
 		-ToolArgs '--check;--log-level;warn'
 
 format-data:
-	@echo "==> [data] prettier --write json/css/scss/html"
+	@echo "==> [data] prettier --write json/html"
 	@$(PS) scripts/run_tracked_node_tool.ps1 -Tool prettier \
-		-Patterns '*.json','*.jsonc','*.css','*.scss','*.html' \
+		-Patterns '*.json','*.jsonc','*.html' \
 		-ToolArgs '--write;--log-level;warn'
 
 check-md:
-	@echo "==> [md] prettier --check + markdownlint-cli2"
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-md-all
+
+check-md-all: $(CHECK_MD_TARGETS)
+
+check-md-prettier:
+	@echo "==> [md] prettier --check"
 	@$(PS) scripts/run_tracked_node_tool.ps1 -Tool prettier \
 		-Patterns '*.md' \
 		-ToolArgs '--check;--log-level;warn'
+
+check-md-markdownlint:
+	@echo "==> [md] markdownlint-cli2"
 	@$(PS) scripts/run_tracked_node_tool.ps1 -Tool markdownlint-cli2 \
 		-Patterns '*.md' \
 		-ToolArgs '--no-globs'
@@ -172,9 +261,19 @@ format-md:
 		-ToolArgs '--fix;--no-globs'
 
 check-toml:
-	@echo "==> [toml] taplo fmt --check + lint"
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-toml-all
+
+check-toml-all: $(CHECK_TOML_TARGETS)
+
+check-toml-format:
+	@echo "==> [toml] taplo fmt --check"
 	@for f in $$(git ls-files '*.toml'); do \
 		$(NPX) @taplo/cli fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
+	done
+
+check-toml-lint:
+	@echo "==> [toml] taplo lint"
+	@for f in $$(git ls-files '*.toml'); do \
 		$(NPX) @taplo/cli lint - < "$$f" || exit 1; \
 	done
 
@@ -186,10 +285,18 @@ format-toml:
 	done
 
 check-yaml:
-	@echo "==> [yaml] prettier --check + yamllint"
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-yaml-all
+
+check-yaml-all: $(CHECK_YAML_TARGETS)
+
+check-yaml-prettier:
+	@echo "==> [yaml] prettier --check"
 	@$(PS) scripts/run_tracked_node_tool.ps1 -Tool prettier \
 		-Patterns '*.yml','*.yaml' \
 		-ToolArgs '--check;--log-level;warn'
+
+check-yaml-lint:
+	@echo "==> [yaml] yamllint"
 	uv run yamllint --strict .
 
 format-yaml:
@@ -199,10 +306,17 @@ format-yaml:
 		-ToolArgs '--write;--log-level;warn'
 
 check-shell:
+	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-shell-all
+
+check-shell-all: $(CHECK_SHELL_TARGETS)
+
+check-shell-shfmt:
 	@if command -v shfmt >/dev/null 2>&1; then \
 		echo "==> [shell] shfmt -d"; \
 		shfmt -d -i 2 -ci $$(git ls-files '*.sh'); \
 	else echo "==> [shell] shfmt not found, skipping (CI enforces)"; fi
+
+check-shell-shellcheck:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "==> [shell] shellcheck"; \
 		shellcheck -S style $$(git ls-files '*.sh'); \

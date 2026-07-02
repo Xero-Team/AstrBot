@@ -48,6 +48,7 @@ from astrbot.core.utils.io import (  # noqa: E402
     download_dashboard,
     get_bundled_dashboard_dist_path,
     get_dashboard_dist_version,
+    get_repo_dashboard_dist_path,
     is_dashboard_dist_compatible,
     is_dashboard_version_compatible,
     remove_dir,
@@ -112,7 +113,15 @@ async def check_dashboard_files(webui_dir: str | None = None):
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     data_dist_path = Path(get_astrbot_data_path()) / "dist"
+    repo_dist = get_repo_dashboard_dist_path()
     bundled_dist = get_bundled_dashboard_dist_path()
+
+    if is_dashboard_dist_compatible(repo_dist, VERSION):
+        logger.info(
+            "Using source-tree WebUI %s.", get_dashboard_dist_version(repo_dist)
+        )
+        return str(repo_dist)
+
     if data_dist_path.exists():
         v = get_dashboard_dist_version(data_dist_path)
         if is_dashboard_dist_compatible(data_dist_path, VERSION):
@@ -173,9 +182,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
         return str(data_dist_path)
 
     if is_dashboard_dist_compatible(bundled_dist, VERSION):
-        logger.info(
-            "Using bundled WebUI v%s.", get_dashboard_dist_version(bundled_dist)
-        )
+        logger.info("Using bundled WebUI %s.", get_dashboard_dist_version(bundled_dist))
         return str(bundled_dist)
 
     logger.info(

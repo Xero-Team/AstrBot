@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+
+def sync_dashboard_dist(
+    *,
+    repo_root: Path | None = None,
+    src: Path | None = None,
+    dst: Path | None = None,
+) -> tuple[Path, Path]:
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    if src is None:
+        src = repo_root / "dashboard" / "dist"
+    if dst is None:
+        dst = repo_root / "data" / "dist"
+
+    src = src.resolve()
+    dst = dst.resolve()
+
+    if not src.is_dir():
+        raise FileNotFoundError(f"Dashboard dist not found: {src}")
+
+    if dst.exists():
+        shutil.rmtree(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dst)
+    return src, dst
+
+
+if __name__ == "__main__":
+    copied_src, copied_dst = sync_dashboard_dist()
+    print(f"Synced dashboard dist: {copied_src} -> {copied_dst}")

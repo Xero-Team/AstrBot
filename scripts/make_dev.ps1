@@ -31,6 +31,37 @@ function Remove-IfExists {
     }
 }
 
+function Remove-FilesByPattern {
+    param(
+        [string]$Root,
+        [string]$Pattern
+    )
+
+    if (-not (Test-Path -LiteralPath $Root)) {
+        return
+    }
+
+    Get-ChildItem -LiteralPath $Root -Recurse -Force -File -Filter $Pattern -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+function Remove-DirectoriesByName {
+    param(
+        [string]$Root,
+        [string[]]$Names
+    )
+
+    if (-not (Test-Path -LiteralPath $Root)) {
+        return
+    }
+
+    Get-ChildItem -LiteralPath $Root -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $Names -contains $_.Name } |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+}
+
 function New-EmptyFile {
     param([string]$Path)
 
@@ -38,7 +69,20 @@ function New-EmptyFile {
     if ($parent -and -not (Test-Path $parent)) {
         New-Item -ItemType Directory -Path $parent | Out-Null
     }
-    Set-Content -Path $Path -Value "" -NoNewline
+
+    $attempts = 50
+    for ($index = 0; $index -lt $attempts; $index++) {
+        try {
+            Set-Content -Path $Path -Value "" -NoNewline
+            return
+        }
+        catch [System.IO.IOException] {
+            if ($index -eq ($attempts - 1)) {
+                throw
+            }
+            Start-Sleep -Milliseconds 100
+        }
+    }
 }
 
 function Invoke-TaskKill {
@@ -229,16 +273,39 @@ switch ($Action) {
         Write-Host "Dashboard: $(Split-Path -Leaf $dashboardPidFile) -> $(if ($dashboardOk) { 'up' } else { 'down' })"
     }
     "clean" {
+        $rootCleanPaths = @(
+            $runDir,
+            $backendLog,
+            $backendErrLog,
+            $dashboardLog,
+            $dashboardErrLog,
+            $dashboardDist,
+            $dashboardViteCache,
+            (Join-Path $repoRoot ".tmp"),
+            (Join-Path $repoRoot ".pytest_cache"),
+            (Join-Path $repoRoot ".ruff_cache"),
+            (Join-Path $repoRoot ".mypy_cache"),
+            (Join-Path $repoRoot "htmlcov"),
+            (Join-Path $repoRoot ".coverage"),
+            (Join-Path $repoRoot "build"),
+            (Join-Path $repoRoot "dist"),
+            (Join-Path $repoRoot "data/dist"),
+            (Join-Path $repoRoot "logs"),
+            (Join-Path $repoRoot "temp")
+        )
+
         Stop-FromPidFile -PidFile $dashboardPidFile
         Stop-FromPidFile -PidFile $backendPidFile
         Stop-ByPort -Port 3000
         Stop-ByPort -Port 6185
-        Remove-IfExists $runDir
-        Remove-IfExists $backendLog
-        Remove-IfExists $backendErrLog
-        Remove-IfExists $dashboardLog
-        Remove-IfExists $dashboardErrLog
-        Remove-IfExists $dashboardDist
-        Remove-IfExists $dashboardViteCache
+
+        foreach ($path in $rootCleanPaths) {
+            Remove-IfExists $path
+        }
+
+        Remove-FilesByPattern -Root $repoRoot -Pattern "*.log"
+        Remove-FilesByPattern -Root $repoRoot -Pattern "*.pyc"
+        Remove-FilesByPattern -Root $repoRoot -Pattern "*.pyo"
+        Remove-DirectoriesByName -Root $repoRoot -Names @("__pycache__")
     }
 }

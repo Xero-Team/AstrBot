@@ -283,6 +283,10 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
         lambda: bundled_dist,
     )
     monkeypatch.setattr(
+        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        lambda: tmp_path / "repo-dist",
+    )
+    monkeypatch.setattr(
         "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
         lambda *_args, **_kwargs: True,
     )
@@ -291,6 +295,42 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
 
     assert server.data_path == str(bundled_dist)
+
+
+def test_dashboard_prefers_repo_dist_when_data_dist_matches(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    from astrbot.core.config.default import VERSION
+
+    data_dir = tmp_path / "data"
+    user_dist = data_dir / "dist"
+    repo_dist = tmp_path / "repo-dist"
+    (user_dist / "assets").mkdir(parents=True)
+    (repo_dist / "assets").mkdir(parents=True)
+    (user_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
+    (user_dist / "index.html").write_text("user", encoding="utf-8")
+    (repo_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
+    (repo_dist / "index.html").write_text("repo", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        lambda: repo_dist,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        lambda: tmp_path / "bundled-dist",
+    )
+
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    assert server.data_path == str(repo_dist)
 
 
 def test_dashboard_ignores_mismatched_data_dist_without_bundled(
@@ -312,6 +352,10 @@ def test_dashboard_ignores_mismatched_data_dist_without_bundled(
     monkeypatch.setattr(
         "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
         lambda: bundled_dist,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        lambda: tmp_path / "repo-dist",
     )
 
     shutdown_event = asyncio.Event()
@@ -338,6 +382,10 @@ def test_dashboard_ignores_incomplete_mismatched_data_dist_without_bundled(
     monkeypatch.setattr(
         "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
         lambda: bundled_dist,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        lambda: tmp_path / "repo-dist",
     )
 
     shutdown_event = asyncio.Event()
@@ -375,9 +423,7 @@ async def _restore_dashboard_password_state(
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(
-    app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle
-):
+async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = DashboardTestClient(app)
     response = await test_client.post(
@@ -481,9 +527,7 @@ async def test_auth_login_does_not_require_test_adapter_wrapper(
         response = await client.post(
             "/api/v1/auth/login",
             json={
-                "username": core_lifecycle_td.astrbot_config["dashboard"][
-                    "username"
-                ],
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
             },
         )
@@ -1725,6 +1769,17 @@ async def test_plugin_page_content_supports_cookie_auth(
 
 
 @pytest.mark.asyncio
+async def test_dashboard_static_routes_disable_cache(app: FastAPI, tmp_path: Path):
+    (tmp_path / "index.html").write_text("<html>dashboard</html>", encoding="utf-8")
+    app.state.dashboard_static_folder = str(tmp_path)
+    test_client = DashboardTestClient(app)
+    response = await test_client.get("/platforms")
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.asyncio
 async def test_plugin_page_content_issues_scoped_asset_token(
     app: FastAPI,
     authenticated_header: dict,
@@ -2015,7 +2070,7 @@ async def test_get_stat(
         "test-platform",
         "test",
         count=3,
-        timestamp=datetime(2026, 6, 30, 1, 0, 0),
+        timestamp=datetime.now(),
     )
     response = await test_client.get("/api/v1/stats", headers=authenticated_header)
     assert response.status_code == 200
@@ -2634,6 +2689,7 @@ async def test_check_update(
     async def mock_check_update(*args, **kwargs):
         """Mock the updater returning no release."""
         return None
+
     async def mock_get_dashboard_version(*args, **kwargs):
         """Mock the dashboard version call."""
         from astrbot.core.config.default import VERSION

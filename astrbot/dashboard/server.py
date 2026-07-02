@@ -24,6 +24,7 @@ from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
     get_dashboard_dist_version,
     get_local_ip_addresses,
+    get_repo_dashboard_dist_path,
     is_dashboard_dist_compatible,
     should_use_bundled_dashboard_dist,
 )
@@ -176,15 +177,20 @@ class AstrBotDashboard:
 
         # Path priority:
         # 1. Explicit webui_dir argument
-        # 2. data/dist/ when it matches the core version
-        # 3. astrbot/dashboard/dist/ when it matches the core version
+        # 2. dashboard/dist/ from the source tree when it matches the core version
+        # 3. data/dist/ when it matches the core version
+        # 4. astrbot/dashboard/dist/ when it matches the core version
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
             user_dist = os.path.join(get_astrbot_data_path(), "dist")
+            repo_dist = get_repo_dashboard_dist_path()
             bundled_dist = get_bundled_dashboard_dist_path()
             user_version = get_dashboard_dist_version(user_dist)
-            if os.path.exists(user_dist) and is_dashboard_dist_compatible(
+            if is_dashboard_dist_compatible(repo_dist, VERSION):
+                self.data_path = str(repo_dist)
+                logger.info("Using source-tree dashboard dist: %s", self.data_path)
+            elif os.path.exists(user_dist) and is_dashboard_dist_compatible(
                 user_dist,
                 VERSION,
             ):

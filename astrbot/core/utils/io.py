@@ -401,6 +401,12 @@ def get_bundled_dashboard_dist_path() -> Path:
     return Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
 
 
+def get_repo_dashboard_dist_path() -> Path:
+    """Return the source-tree dashboard dist path for local development."""
+
+    return Path(get_astrbot_path()) / "dashboard" / "dist"
+
+
 def _normalize_dashboard_version(version: str) -> str:
     version = version.strip()
     if version[:1].lower() == "v":
@@ -499,6 +505,10 @@ async def get_dashboard_version():
     """
 
     from astrbot.core.config.default import VERSION
+
+    repo_dist = get_repo_dashboard_dist_path()
+    if is_dashboard_dist_compatible(repo_dist, VERSION):
+        return get_dashboard_dist_version(repo_dist)
 
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")

@@ -1,5 +1,8 @@
 # Connect OneBot v11 Protocol Implementations
 
+> [!TIP]
+> If you are using AstrBot's built-in standalone `napcat` platform, see [NapCat](/en/platform/napcat) first.
+
 OneBot is a standardized bot application interface designed to unify bot development across different chat platforms, so developers can write business logic once and use it on multiple platforms.
 
 AstrBot supports all client implementations that implement OneBot v11 reverse WebSocket (AstrBot acts as the server).
@@ -25,7 +28,7 @@ Fill in the form:
 - Enable (`enable`): check it.
 - Reverse WebSocket host: fill your machine IP, usually `0.0.0.0`.
 - Reverse WebSocket port: choose any port, default is `6199`.
-- Reverse WebSocket token: fill this only when NapCat network configuration has a token set.
+- Reverse WebSocket token: fill this only when the implementation-side network configuration has a token set.
 
 Click `Save`.
 

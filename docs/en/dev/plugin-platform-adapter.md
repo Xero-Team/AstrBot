@@ -8,6 +8,34 @@ AstrBot supports integrating platform adapters in plugin form, allowing you to c
 
 We will use a platform called `FakePlatform` as an example.
 
+## Built-in NapCat Note
+
+The built-in `napcat` adapter is not fully handwritten. It is split into two layers:
+
+- `astrbot/core/platform/sources/napcat/generated/ob11_events.py` is generated from NapCat event type definitions.
+- `astrbot/core/platform/sources/napcat/forward_ws_client.py`, `napcat_platform_adapter.py`, and `message_event.py` stay handwritten as AstrBot-specific runtime glue for message conversion, platform actions, and error handling.
+
+When you need to refresh the NapCat schema, do not edit files under `generated/` manually. Run this from the repository root instead:
+
+```bash
+make napcat-codegen
+```
+
+After regeneration, validate the handwritten runtime wrappers and generated artifacts with:
+
+```bash
+make napcat-test
+make napcat-check
+```
+
+This task performs the full pipeline:
+
+- Generate JSON Schema for `OB11AllEvent` from the NapCat type definitions.
+- Normalize the schema and regenerate Pydantic v2 models.
+- Run Ruff fix and format on generated Python output so the artifacts can pass `make check` directly.
+- `make napcat-test` runs the NapCat-focused unit suite only.
+- `make napcat-check` runs both code generation and the NapCat-focused unit suite in one command.
+
 First, add `fake_platform_adapter.py` and `fake_platform_event.py` to your plugin directory. The former handles the platform adapter implementation, while the latter defines the platform event.
 
 ## Platform Adapter

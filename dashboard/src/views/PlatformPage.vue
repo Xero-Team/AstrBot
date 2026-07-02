@@ -115,6 +115,36 @@
                     {{ tm('viewWebhook') }}
                   </v-chip>
                 </div>
+                <div
+                  v-if="getSupportedActions(platform).length > 0"
+                  class="platform-actions"
+                >
+                  <div class="platform-actions__label">
+                    {{ tm('capabilities.supportedActions') }}
+                  </div>
+                  <div class="platform-actions__chips">
+                    <v-chip
+                      v-for="action in getSupportedActions(platform)"
+                      :key="action"
+                      size="x-small"
+                      variant="outlined"
+                      color="secondary"
+                    >
+                      {{ getSupportedActionLabel(action) }}
+                    </v-chip>
+                  </div>
+                  <div class="platform-actions__toolbar">
+                    <v-btn
+                      size="small"
+                      variant="tonal"
+                      color="secondary"
+                      prepend-icon="mdi-lightning-bolt-outline"
+                      @click.stop="openQuickActionDialog(platform)"
+                    >
+                      {{ tm('quickActions.trigger') }}
+                    </v-btn>
+                  </div>
+                </div>
               </template>
             </item-card>
           </v-col>
@@ -235,6 +265,14 @@
       </v-card>
     </v-dialog>
 
+    <PlatformQuickActionsDialog
+      v-model="showQuickActionDialog"
+      :platform-id="currentQuickActionPlatformId"
+      :supported-actions="currentQuickActionSupportedActions"
+      @show-toast="showToast"
+      @action-complete="getPlatformStats"
+    />
+
     <!-- 错误详情对话框 -->
     <v-dialog v-model="showErrorDialog" max-width="700" scrollable>
       <v-card class="platform-error-dialog__card">
@@ -308,9 +346,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { botApi, fileApi, systemConfigApi } from '@/api/v1';
+import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
+import PlatformQuickActionsDialog from '@/components/platform/PlatformQuickActionsDialog.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
-import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import { useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
 import { getPlatformIcon as getBasePlatformIcon } from '@/utils/platformUtils';
@@ -354,6 +393,10 @@ interface PlatformQrPayload extends Record<string, unknown> {
   qr_status?: string;
 }
 
+interface PlatformStatMeta extends Record<string, unknown> {
+  supported_actions?: string[];
+}
+
 interface PlatformStat extends Record<string, unknown> {
   id?: string;
   status?: PlatformStatus;
@@ -361,6 +404,7 @@ interface PlatformStat extends Record<string, unknown> {
   last_error?: PlatformRuntimeError;
   unified_webhook?: boolean;
   weixin_oc?: PlatformQrPayload;
+  meta?: PlatformStatMeta;
 }
 
 interface ShowToastPayload {
@@ -385,11 +429,15 @@ const showConsole = ref(
 const showWebhookDialog = ref(false);
 const currentWebhookUuid = ref('');
 const platformStats = ref<Record<string, PlatformStat>>({});
+const platformTypeCapabilities = ref<Record<string, string[]>>({});
 const statsRefreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
 const showErrorDialog = ref(false);
 const currentErrorPlatform = ref<PlatformStat | null>(null);
 const showQrDialog = ref(false);
 const currentQrPlatformId = ref('');
+const showQuickActionDialog = ref(false);
+const currentQuickActionPlatformId = ref('');
+const currentQuickActionSupportedActions = ref<string[]>([]);
 
 const messages = computed(() => ({
   updateSuccess: tm('messages.updateSuccess'),
@@ -410,6 +458,7 @@ watch(showConsole, (newValue) => {
 
 onMounted(() => {
   void getConfig();
+  void getPlatformTypes();
   void getPlatformStats();
   statsRefreshInterval.value = setInterval(() => {
     void getPlatformStats();
@@ -443,6 +492,13 @@ function getNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -474,6 +530,7 @@ function normalizePlatformStat(value: unknown): PlatformStat | null {
 
   const lastErrorRecord = asRecord(record.last_error);
   const weixinOcRecord = asRecord(record.weixin_oc);
+  const metaRecord = asRecord(record.meta);
   return {
     ...record,
     id,
@@ -498,6 +555,16 @@ function normalizePlatformStat(value: unknown): PlatformStat | null {
             getString(weixinOcRecord.qrcode_img_content) ?? undefined,
           qrcode: getString(weixinOcRecord.qrcode) ?? undefined,
           qr_status: getString(weixinOcRecord.qr_status) ?? undefined,
+        }
+      : undefined,
+    meta: metaRecord
+      ? {
+          ...metaRecord,
+          supported_actions: Array.isArray(metaRecord.supported_actions)
+            ? metaRecord.supported_actions.filter(
+                (item): item is string => typeof item === 'string',
+              )
+            : [],
         }
       : undefined,
   };
@@ -594,6 +661,39 @@ async function getPlatformStats() {
   }
 }
 
+async function getPlatformTypes() {
+  try {
+    const res = await botApi.types();
+    if (res.data.status !== 'ok') {
+      return;
+    }
+
+    const payload = asRecord(res.data.data);
+    const botTypes = Array.isArray(payload?.bot_types) ? payload.bot_types : [];
+    const capabilities: Record<string, string[]> = {};
+
+    for (const item of botTypes) {
+      const record = asRecord(item);
+      if (!record) {
+        continue;
+      }
+      const supportedActions = normalizeStringArray(record.supported_actions);
+      const typeKey = getString(record.type);
+      const idKey = getString(record.id);
+      if (typeKey) {
+        capabilities[typeKey] = supportedActions;
+      }
+      if (idKey && !capabilities[idKey]) {
+        capabilities[idKey] = supportedActions;
+      }
+    }
+
+    platformTypeCapabilities.value = capabilities;
+  } catch (error) {
+    console.warn('获取平台能力信息失败:', error);
+  }
+}
+
 function getPlatformStat(platformId: string) {
   return platformStats.value[platformId] ?? null;
 }
@@ -653,6 +753,30 @@ function getPlatformStatus(
 function getPlatformErrorCount(platform: PlatformConfigItem): number {
   const platformId = getPlatformId(platform);
   return platformId ? (getPlatformStat(platformId)?.error_count ?? 0) : 0;
+}
+
+function getSupportedActions(platform: PlatformConfigItem): string[] {
+  const platformId = getPlatformId(platform);
+  const runtimeActions = platformId
+    ? (getPlatformStat(platformId)?.meta?.supported_actions ?? [])
+    : [];
+  if (runtimeActions.length > 0) {
+    return runtimeActions;
+  }
+
+  const typeKey = getString(platform.type);
+  if (typeKey && platformTypeCapabilities.value[typeKey]) {
+    return platformTypeCapabilities.value[typeKey];
+  }
+  if (platformId && platformTypeCapabilities.value[platformId]) {
+    return platformTypeCapabilities.value[platformId];
+  }
+  return [];
+}
+
+function getSupportedActionLabel(action: string): string {
+  const translated = tm(`capabilities.actions.${action}`);
+  return translated.startsWith('[MISSING:') ? action : translated;
 }
 
 function shouldShowPlatformStatus(platform: PlatformConfigItem): boolean {
@@ -874,6 +998,16 @@ async function platformStatusChange(platform: PlatformConfigItem) {
   }
 }
 
+function openQuickActionDialog(platform: PlatformConfigItem) {
+  const platformId = getPlatformId(platform);
+  if (!platformId) {
+    return;
+  }
+  currentQuickActionPlatformId.value = platformId;
+  currentQuickActionSupportedActions.value = getSupportedActions(platform);
+  showQuickActionDialog.value = true;
+}
+
 function showToast({ message, type }: ShowToastPayload) {
   if (type === 'success') {
     showSuccess(message);
@@ -1004,9 +1138,65 @@ function formatRuntimeErrorTimestamp(
   margin-top: 4px;
 }
 
+.platform-actions {
+  margin-top: 8px;
+}
+
+.platform-actions__label {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+.platform-actions__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.platform-actions__toolbar {
+  margin-top: 8px;
+}
+
 .platform-qr-status {
   font-size: 13px;
   margin-bottom: 10px;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.quick-actions__intro,
+.quick-actions__platform,
+.quick-actions__result-label {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.quick-actions__categories-label,
+.quick-actions__result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quick-actions__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quick-actions__result-box {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow-y: auto;
 }
 </style>

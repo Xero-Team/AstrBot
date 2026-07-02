@@ -513,6 +513,24 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/bots/{bot_id}/actions:
+    post:
+      tags: [Bots]
+      summary: Invoke a supported bot platform action
+      operationId: invokeBotAction
+      x-astrbot-scope: bot
+      parameters:
+        - $ref: '#/components/parameters/BotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BotActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/providers/schema:
     get:
       tags: [Providers]
@@ -4146,6 +4164,16 @@ components:
       required: [config]
       properties:
         config:
+          $ref: '#/components/schemas/DynamicConfig'
+      additionalProperties: false
+
+    BotActionRequest:
+      type: object
+      required: [action_name]
+      properties:
+        action_name:
+          type: string
+        payload:
           $ref: '#/components/schemas/DynamicConfig'
       additionalProperties: false
 

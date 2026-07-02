@@ -69,6 +69,42 @@ class PlatformService:
             logger.error(f"获取平台统计信息失败: {exc}", exc_info=True)
             raise PlatformServiceError(f"获取统计信息失败: {exc}", 500) from exc
 
+    async def invoke_platform_action(
+        self,
+        platform_id: str,
+        action_name: str,
+        payload: dict | None = None,
+    ) -> dict:
+        normalized_action = str(action_name).strip()
+        if not normalized_action:
+            raise PlatformServiceError("Missing action_name", 400)
+        if payload is not None and not isinstance(payload, dict):
+            raise PlatformServiceError("Payload must be an object", 400)
+
+        try:
+            return await self.platform_manager.invoke_action(
+                platform_id,
+                normalized_action,
+                **(payload or {}),
+            )
+        except LookupError as exc:
+            raise PlatformServiceError(str(exc), 404) from exc
+        except NotImplementedError as exc:
+            raise PlatformServiceError(str(exc), 400) from exc
+        except ValueError as exc:
+            raise PlatformServiceError(str(exc), 400) from exc
+        except TypeError as exc:
+            raise PlatformServiceError(f"Invalid action payload: {exc}", 400) from exc
+        except Exception as exc:
+            logger.error(
+                "执行平台动作失败: platform_id=%s action=%s error=%s",
+                platform_id,
+                normalized_action,
+                exc,
+                exc_info=True,
+            )
+            raise PlatformServiceError("平台动作执行失败", 500) from exc
+
     async def handle_platform_registration(
         self,
         platform_type: str,

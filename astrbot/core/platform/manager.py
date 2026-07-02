@@ -194,6 +194,10 @@ class PlatformManager:
                     from .sources.mattermost.mattermost_adapter import (
                         MattermostPlatformAdapter,  # noqa: F401
                     )
+                case "napcat":
+                    from .sources.napcat.napcat_platform_adapter import (
+                        NapCatPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
@@ -305,6 +309,39 @@ class PlatformManager:
 
     def get_insts(self):
         return self.platform_insts
+
+    def get_inst_by_id(self, platform_id: str) -> Platform | None:
+        info = self._inst_map.get(platform_id)
+        if info:
+            inst = info.get("inst")
+            if isinstance(inst, Platform):
+                return inst
+
+        for inst in self.platform_insts:
+            if inst.meta().id == platform_id or inst.config.get("id") == platform_id:
+                return inst
+        return None
+
+    async def invoke_action(
+        self,
+        platform_id: str,
+        action_name: str,
+        **kwargs,
+    ) -> dict[str, object]:
+        inst = self.get_inst_by_id(platform_id)
+        if inst is None:
+            raise LookupError(f"Platform adapter not found: {platform_id}")
+        if not inst.supports_action(action_name):
+            raise NotImplementedError(
+                f"Platform {platform_id} does not support action `{action_name}`"
+            )
+
+        method = getattr(inst, action_name, None)
+        if method is None or not callable(method):
+            raise NotImplementedError(
+                f"Platform {platform_id} action handler missing: `{action_name}`"
+            )
+        return await method(**kwargs)
 
     def get_all_stats(self) -> dict:
         """获取所有平台的统计信息

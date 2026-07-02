@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import importlib
 import inspect
 import os
 import traceback
@@ -39,6 +40,25 @@ PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "recovery_code_hash"),
 )
 MAX_FILE_BYTES = 500 * 1024 * 1024
+
+
+def _ensure_dashboard_platform_metadata_loaded() -> None:
+    """Load platform adapters whose config metadata must be visible in the dashboard.
+
+    Built-in platform templates in `CONFIG_METADATA_2` cover legacy adapters, but
+    newer adapters such as NapCat rely on registration-time metadata injection.
+    The dashboard can be opened before such adapters are enabled, so their modules
+    may never have been imported through `PlatformManager.load_platform()`.
+    """
+    if any(platform.name == "napcat" for platform in platform_registry):
+        return
+
+    try:
+        importlib.import_module(
+            "astrbot.core.platform.sources.napcat.napcat_platform_adapter"
+        )
+    except Exception as exc:
+        logger.warning("Failed to load NapCat platform metadata for dashboard: %s", exc)
 
 
 def try_cast(value: Any, type_: str):
@@ -594,6 +614,7 @@ class ConfigDisplayService:
         return self.get_plugin_config(plugin_name)
 
     async def get_astrbot_config(self) -> dict:
+        _ensure_dashboard_platform_metadata_loaded()
         metadata = copy.deepcopy(CONFIG_METADATA_2)
         platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
             {
@@ -971,8 +992,10 @@ class BotConfigService:
         self.config = core_lifecycle.astrbot_config
 
     def list_bot_types(self) -> dict:
+        _ensure_dashboard_platform_metadata_loaded()
         bot_types = []
         for platform in platform_registry:
+            platform_cls = platform_cls_map.get(platform.name)
             bot_types.append(
                 {
                     "type": platform.name,
@@ -983,6 +1006,11 @@ class BotConfigService:
                     "schema": copy.deepcopy(platform.config_metadata or {}),
                     "support_streaming_message": platform.support_streaming_message,
                     "support_proactive_message": platform.support_proactive_message,
+                    "supported_actions": (
+                        platform_cls.declared_supported_actions()
+                        if platform_cls is not None
+                        else []
+                    ),
                 }
             )
         return {"bot_types": bot_types}

@@ -16,6 +16,7 @@ from ..stage import Stage, register_stage
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "napcat": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "dingtalk": lambda e: e.get_sender_id(),
     "qq_official": lambda e: e.get_sender_id(),
@@ -79,7 +80,13 @@ class WakingCheckStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None]:
         # apply unique session
-        if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
+        onebot_post_type = event.get_extra("onebot_post_type")
+        should_keep_group_session = onebot_post_type in {"notice", "request"}
+        if (
+            self.unique_session
+            and event.message_obj.type == MessageType.GROUP_MESSAGE
+            and not should_keep_group_session
+        ):
             sid = build_unique_session_id(event)
             if sid:
                 event.session_id = sid
@@ -102,6 +109,7 @@ class WakingCheckStage(Stage):
         # 检查 wake
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()
+        skip_private_wake = bool(event.get_extra("skip_private_wake", False))
         is_wake = False
         for wake_prefix in wake_prefixes:
             if event.message_str.startswith(wake_prefix):
@@ -138,7 +146,11 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat() and not self.friend_message_needs_wake_prefix:
+            if (
+                event.is_private_chat()
+                and not skip_private_wake
+                and not self.friend_message_needs_wake_prefix
+            ):
                 is_wake = True
                 event.is_wake = True
                 event.is_at_or_wake_command = True

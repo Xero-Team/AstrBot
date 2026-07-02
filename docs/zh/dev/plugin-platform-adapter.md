@@ -8,6 +8,34 @@ AstrBot 支持以插件的形式接入平台适配器，你可以自行接入 As
 
 我们以一个平台 `FakePlatform` 为例展开讲解。
 
+## 内置 NapCat 说明
+
+仓库内置的 `napcat` 适配器不是纯手写实现，而是分成两层：
+
+- `astrbot/core/platform/sources/napcat/generated/ob11_events.py` 由 NapCat 的事件类型定义自动生成。
+- `astrbot/core/platform/sources/napcat/forward_ws_client.py`、`napcat_platform_adapter.py`、`message_event.py` 等文件保留为手写运行时封装，用来适配 AstrBot 的消息模型、平台动作和错误处理。
+
+如果需要更新 NapCat 的 schema，不要手改 `generated/` 下的文件，直接在仓库根目录执行：
+
+```bash
+make napcat-codegen
+```
+
+生成之后，可以用下面两个命令验证手写运行时封装和生成产物：
+
+```bash
+make napcat-test
+make napcat-check
+```
+
+这个任务会完成以下步骤：
+
+- 从 NapCat 类型定义生成 `OB11AllEvent` 的 JSON Schema。
+- 归一化 schema 后重新生成 Pydantic v2 模型。
+- 对生成的 Python 文件自动执行仓库内的 Ruff 修复和格式化，保证产物可以直接通过 `make check`。
+- `make napcat-test` 只运行 NapCat 相关的单元测试。
+- `make napcat-check` 会串联执行代码生成和 NapCat 定向测试。
+
 首先，在插件目录下新增 `fake_platform_adapter.py` 和 `fake_platform_event.py` 文件。前者主要是平台适配器的实现，后者是平台事件的定义。
 
 ## 平台适配器

@@ -367,6 +367,13 @@ class BotConfigRequest(BaseModel):
     config: dict[str, Any]
 
 
+class BotActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_name: str
+    payload: dict[str, Any] | None = None
+
+
 class BotRegistrationRequest(OpenModel):
     action: Literal["start", "poll"] | str | None = None
     platform_config: dict[str, Any] | None = None

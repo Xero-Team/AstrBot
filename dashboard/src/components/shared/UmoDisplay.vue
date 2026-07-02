@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { getPlatformColor } from '@/utils/platformUtils';
 
 const props = withDefaults(
   defineProps<{
@@ -96,14 +97,6 @@ defineEmits<{
   edit: [];
 }>();
 
-const PLATFORM_COLORS: Record<string, string> = {
-  aiocqhttp: 'blue',
-  qq_official: 'purple',
-  telegram: 'light-blue',
-  discord: 'indigo',
-  webchat: 'orange',
-};
-
 const umoParts = computed(() => props.umo.split(':'));
 const resolvedPlatform = computed(
   () => props.platform || umoParts.value[0] || '',
@@ -123,9 +116,7 @@ const displayNameTitle = computed(() =>
     ? `${displayName.value} / UMO: ${props.umo}`
     : props.umo,
 );
-const platformColor = computed(
-  () => PLATFORM_COLORS[resolvedPlatform.value] || 'grey',
-);
+const platformColor = computed(() => getPlatformColor(resolvedPlatform.value));
 </script>
 
 <style scoped>

@@ -26,6 +26,7 @@ rules:
     max-spaces-inside: 1
 
 ignore: |
+  .tmp/
   .venv*/
   node_modules/
   dashboard/node_modules/

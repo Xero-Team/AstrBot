@@ -40,7 +40,8 @@
     },
     "securityWarning": {
       "title": "安全提醒",
-      "aiocqhttpTokenMissing": "为了增强连接安全性，强烈建议您设置 ws_reverse_token。未设置 Token 可能导致安全风险。",
+      "aiocqhttpTokenMissing": "为了增强连接安全性，强烈建议您为反向 WebSocket 设置 ws_reverse_token。未设置 Token 可能导致安全风险。",
+      "napcatTokenMissing": "为了增强连接安全性，强烈建议您为 NapCat 正向 WebSocket 设置 token。未设置 Token 可能导致安全风险。",
       "learnMore": "了解更多"
     },
     "invalidPlatformId": "平台 ID 不能包含 ':' 或 '!'。"
@@ -129,12 +130,94 @@
     "unknown": "未知",
     "errors": "个错误"
   },
+  "capabilities": {
+    "supportedActions": "支持的主动动作",
+    "actions": {
+      "set_group_admin": "设管理员",
+      "set_group_ban": "群禁言",
+      "set_group_card": "改群名片",
+      "kick_group_member": "踢单人",
+      "kick_group_members": "批量踢人",
+      "leave_group": "退群/解散",
+      "set_group_whole_ban": "全员禁言",
+      "set_essence_message": "设精华",
+      "delete_essence_message": "取消精华",
+      "send_group_notice": "发群公告",
+      "send_like": "点赞",
+      "send_poke": "戳一戳"
+    }
+  },
   "platformQr": {
     "title": "二维码登录",
     "show": "查看二维码",
     "status": "二维码状态",
     "waiting": "等待二维码",
     "close": "关闭"
+  },
+  "quickActions": {
+    "trigger": "快捷动作",
+    "title": "平台快捷动作",
+    "description": "直接对当前平台实例执行主动管理动作。这里不会保存任何模板，每次都是一次性的平台动作调用。",
+    "platformId": "平台 ID",
+    "categoryLabel": "动作分组",
+    "selectAction": "选择动作",
+    "run": "执行动作",
+    "running": "执行中",
+    "close": "关闭",
+    "noAction": "当前平台没有可执行的主动动作。",
+    "result": "执行结果",
+    "copyResult": "复制结果",
+    "copyResultSuccess": "执行结果已复制到剪贴板",
+    "copyResultFailed": "复制执行结果失败",
+    "success": "平台动作执行成功",
+    "failed": "平台动作执行失败",
+    "validation": {
+      "number": "请输入合法数字"
+    },
+    "categories": {
+      "all": "全部",
+      "social": "社交动作",
+      "group_management": "群管理",
+      "announcement": "公告消息",
+      "message": "消息管理"
+    },
+    "summary": {
+      "status": "状态",
+      "retcode": "返回码",
+      "message": "说明"
+    },
+    "help": {
+      "send_poke": "填写 user_id 后即可执行。group_id 留空时会按私聊戳一戳发送；填写 group_id 时会走群戳一戳。",
+      "send_like": "times 默认 1，可按需调整点赞次数。",
+      "send_group_notice": "最常用的是 group_id 和 content。image、pinned 等字段按需填写。",
+      "kick_group_members": "user_ids 支持逗号或换行分隔，提交时会自动转换为数组。",
+      "delete_essence_message": "通常只填 message_id 即可。只有在平台侧需要时再补充 msg_seq、msg_random、group_id。"
+    },
+    "fields": {
+      "group_id": "群号",
+      "group_idHintOptional": "可选。留空时仅对支持从上下文推断的动作有效。",
+      "user_id": "用户 ID",
+      "user_ids": "用户 ID 列表",
+      "user_idsHint": "支持逗号或换行分隔多个用户 ID。",
+      "target_id": "目标 ID",
+      "target_idHintOptional": "可选。部分平台会使用该字段作为被戳对象。",
+      "message_id": "消息 ID",
+      "messageIdHintOptional": "可选。若平台支持从上下文推断，可留空。",
+      "card": "群名片",
+      "content": "公告内容",
+      "image": "图片 URL",
+      "imageHintOptional": "可选。用于群公告附图。",
+      "duration": "时长(秒)",
+      "times": "次数",
+      "enable": "启用",
+      "reject_add_request": "拒绝再次加群",
+      "is_dismiss": "解散群聊",
+      "pinned": "置顶标记",
+      "msg_seq": "消息序号",
+      "msgSeqHintOptional": "可选。仅在 message_id 不适用时填写。",
+      "msg_random": "消息随机值",
+      "msgRandomHintOptional": "可选。仅在 message_id 不适用时填写。"
+    }
   },
   "registrationAction": {
     "lark": {

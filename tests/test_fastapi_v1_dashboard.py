@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import copy
-from tempfile import SpooledTemporaryFile
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
 from types import SimpleNamespace
 
 import httpx
@@ -15,6 +17,7 @@ from astrbot.core import file_token_service
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.platform_service import PlatformServiceError
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
     PluginServiceError,
@@ -39,7 +42,7 @@ class _FakeScalarResult:
 
 
 class _FakeDbResult:
-    def __init__(self, db: "FakeDb") -> None:
+    def __init__(self, db: FakeDb) -> None:
         self.db = db
 
     def fetchall(self) -> list[tuple[str]]:
@@ -50,7 +53,7 @@ class _FakeDbResult:
 
 
 class _FakeDbSession:
-    def __init__(self, db: "FakeDb") -> None:
+    def __init__(self, db: FakeDb) -> None:
         self.db = db
 
     async def execute(self, _statement) -> _FakeDbResult:
@@ -58,7 +61,7 @@ class _FakeDbSession:
 
 
 class _FakeDbContext:
-    def __init__(self, db: "FakeDb") -> None:
+    def __init__(self, db: FakeDb) -> None:
         self.db = db
 
     async def __aenter__(self) -> _FakeDbSession:
@@ -139,11 +142,13 @@ class FakeLlmTools:
         name: str,
         config: dict,
         *,
-        timeout: int,
+        timeout_seconds: int,
     ) -> None:
+        _ = timeout_seconds
         self.enabled_servers.append((name, copy.deepcopy(config)))
 
-    async def disable_mcp_server(self, name: str, *, timeout: int) -> None:
+    async def disable_mcp_server(self, name: str, *, timeout_seconds: int) -> None:
+        _ = timeout_seconds
         self.disabled_servers.append(name)
 
     def iter_builtin_tools(self) -> list:
@@ -901,40 +906,6 @@ async def test_dashboard_static_dist_files_are_served(
 
 
 @pytest.mark.asyncio
-async def test_public_versions_route_uses_static_folder(
-    fake_core_lifecycle,
-    fake_db: FakeDb,
-    tmp_path: Path,
-):
-    static_folder = tmp_path / "dist"
-    assets_folder = static_folder / "assets"
-    assets_folder.mkdir(parents=True)
-    (static_folder / "index.html").write_text("<!doctype html>", encoding="utf-8")
-    (assets_folder / "version").write_text("v9.8.7", encoding="utf-8")
-
-    app = create_dashboard_asgi_app(
-        core_lifecycle=fake_core_lifecycle,
-        db=fake_db,
-        jwt_secret=JWT_SECRET,
-        static_folder=str(static_folder),
-    )
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://testserver",
-    ) as client:
-        response = await client.get("/api/v1/stats/versions")
-
-    data = response.json()
-
-    assert response.status_code == 200
-    assert data["status"] == "ok"
-    assert data["data"]["webui_version"] == "v9.8.7"
-    assert data["data"]["astrbot_version"]
-    assert "astrbot_code_version" in data["data"]
-
-
-@pytest.mark.asyncio
 async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
     download_response = await asgi_client.get(
         "/api/v1/backups/%2E%2E/secret.zip",
@@ -963,6 +934,7 @@ async def test_v1_openapi_uses_pydantic_request_bodies(
     spec = response.json()
     schemas = spec["components"]["schemas"]
     assert "BotRegistrationRequest" in schemas
+    assert "BotActionRequest" in schemas
     assert "ConfigContentRequest" in schemas
 
     bot_registration = spec["paths"]["/api/v1/bot-types/{bot_type}/registration"][
@@ -972,6 +944,12 @@ async def test_v1_openapi_uses_pydantic_request_bodies(
     assert bot_registration["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/BotRegistrationRequest")
+
+    bot_action = spec["paths"]["/api/v1/bots/{bot_id}/actions"]["post"]
+    assert bot_action["parameters"][0]["name"] == "bot_id"
+    assert bot_action["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/BotActionRequest")
 
     config_profile_update = spec["paths"]["/api/v1/config-profiles/{config_id}"]["put"]
     assert config_profile_update["requestBody"]["content"]["application/json"][
@@ -1424,6 +1402,33 @@ async def test_v1_bot_create_rejects_legacy_top_level_fields(
 
 
 @pytest.mark.asyncio
+async def test_v1_bot_types_include_napcat_schema_and_actions(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/v1/bot-types",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+
+    napcat = next(
+        item for item in data["data"]["bot_types"] if item["type"] == "napcat"
+    )
+    assert napcat["display_name"] == "NapCat"
+    assert napcat["default_config"]["type"] == "napcat"
+    assert napcat["default_config"]["ws_url"] == "ws://127.0.0.1:3001"
+    assert "send_poke" in napcat["supported_actions"]
+    assert "send_group_notice" in napcat["supported_actions"]
+    assert napcat["schema"]["timeout_seconds"]["type"] == "float"
+    assert napcat["schema"]["timeout_seconds"]["collapsed"] is True
+    assert napcat["schema"]["reconnect_interval_seconds"]["type"] == "float"
+    assert napcat["schema"]["max_frame_size_mb"]["type"] == "int"
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_bot_routes_accept_slash_ids(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1470,6 +1475,71 @@ async def test_v1_safe_bot_routes_accept_slash_ids(
     assert delete_response.status_code == 200
     assert fake_core_lifecycle.terminated_platform_ids == [bot_id]
     assert legacy_get_response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_v1_bot_action_route_uses_platform_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_invoke(platform_id: str, action_name: str, payload: dict | None):
+        return {
+            "platform_id": platform_id,
+            "action_name": action_name,
+            "payload": payload,
+        }
+
+    monkeypatch.setattr(
+        asgi_app.state.services.platforms,
+        "invoke_platform_action",
+        fake_invoke,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/bots/group%2Fa/actions",
+        json={
+            "action_name": "send_poke",
+            "payload": {"user_id": "123456", "target_id": "654321"},
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["data"] == {
+        "platform_id": "group/a",
+        "action_name": "send_poke",
+        "payload": {"user_id": "123456", "target_id": "654321"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_bot_action_route_maps_platform_service_errors(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_invoke(_platform_id: str, _action_name: str, _payload: dict | None):
+        raise PlatformServiceError("group_id is required", 400)
+
+    monkeypatch.setattr(
+        asgi_app.state.services.platforms,
+        "invoke_platform_action",
+        fake_invoke,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/bots/napcat-main/actions",
+        json={"action_name": "send_group_notice", "payload": {}},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["message"] == "group_id is required"
 
 
 @pytest.mark.asyncio

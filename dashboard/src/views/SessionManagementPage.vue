@@ -1073,6 +1073,7 @@ import type {
 } from '@/api/generated/openapi-v1';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { getPlatformColor as resolvePlatformColor } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
@@ -1775,14 +1776,7 @@ function hasProviderConfig(rules: SessionRuleSet | null | undefined): boolean {
 }
 
 function getPlatformColor(platform: string): string {
-  const colors: Record<string, string> = {
-    aiocqhttp: 'blue',
-    qq_official: 'purple',
-    telegram: 'light-blue',
-    discord: 'indigo',
-    webchat: 'orange',
-  };
-  return colors[platform] || 'grey';
+  return resolvePlatformColor(platform);
 }
 
 function getProviderRule(

@@ -29,7 +29,7 @@ import uuid
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -47,6 +47,8 @@ class ComponentType(StrEnum):
 
     # IM-specific Segment Types
     Face = "Face"  # Emoji segment for Tencent QQ platform
+    MFace = "MFace"  # NapCat market-face emoji segment
+    Anonymous = "Anonymous"  # NapCat/OneBot anonymous segment
     At = "At"  # mention a user in IM apps
     Node = "Node"  # a node in a forwarded message
     Nodes = "Nodes"  # a forwarded message consisting of multiple nodes
@@ -59,12 +61,19 @@ class ComponentType(StrEnum):
     Share = "Share"
     Contact = "Contact"  # TODO
     Location = "Location"  # TODO
+    Markdown = "Markdown"
+    MiniApp = "MiniApp"
+    OnlineFile = "OnlineFile"
     Music = "Music"
+    FlashTransfer = "FlashTransfer"
     Json = "Json"
+    Xml = "Xml"
     Unknown = "Unknown"
 
 
 class BaseMessageComponent(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: ComponentType
 
     def __init__(self, **kwargs) -> None:
@@ -94,7 +103,7 @@ class BaseMessageComponent(BaseModel):
         for k, v in self.__dict__.items():
             if k == "type" or v is None:
                 continue
-            if k == "_type":
+            if k == "sub_type":
                 k = "type"
             data[k] = v
         return {"type": self.type.lower(), "data": data}
@@ -124,6 +133,45 @@ class Face(BaseMessageComponent):
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
+
+
+class Anonymous(BaseMessageComponent):
+    type: ComponentType = ComponentType.Anonymous
+    ignore: int | None = None
+
+    def __init__(self, *, ignore: int | None = None, **_) -> None:
+        super().__init__(ignore=ignore, **_)
+
+    def toDict(self) -> dict:
+        data: dict[str, int] = {}
+        if self.ignore is not None:
+            data["ignore"] = int(self.ignore)
+        return {"type": "anonymous", "data": data}
+
+
+class MFace(BaseMessageComponent):
+    type: ComponentType = ComponentType.MFace
+    emoji_package_id: int | float
+    emoji_id: str
+    key: str
+    summary: str
+
+    def __init__(
+        self,
+        *,
+        emoji_package_id: int | float,
+        emoji_id: str,
+        key: str,
+        summary: str,
+        **_,
+    ) -> None:
+        super().__init__(
+            emoji_package_id=emoji_package_id,
+            emoji_id=emoji_id,
+            key=key,
+            summary=summary,
+            **_,
+        )
 
 
 class Record(BaseMessageComponent):
@@ -457,7 +505,7 @@ class Share(BaseMessageComponent):
 
 class Contact(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Contact
-    _type: str  # type 字段冲突
+    sub_type: str = Field(alias="_type")
     id: int | None = 0
 
     def __init__(self, **_) -> None:
@@ -475,9 +523,65 @@ class Location(BaseMessageComponent):  # TODO
         super().__init__(**_)
 
 
+class Markdown(BaseMessageComponent):
+    type: ComponentType = ComponentType.Markdown
+    content: str
+
+    def __init__(self, content: str, **_) -> None:
+        super().__init__(content=content, **_)
+
+
+class MiniApp(BaseMessageComponent):
+    type: ComponentType = ComponentType.MiniApp
+    data: str
+
+    def __init__(self, data: str, **_) -> None:
+        super().__init__(data=data, **_)
+
+
+class OnlineFile(BaseMessageComponent):
+    type: ComponentType = ComponentType.OnlineFile
+    msg_id: str
+    element_id: str
+    file_name: str
+    file_size: str
+    is_dir: bool
+
+    def __init__(
+        self,
+        *,
+        msg_id: str,
+        element_id: str,
+        file_name: str,
+        file_size: str,
+        is_dir: bool,
+        **_,
+    ) -> None:
+        super().__init__(
+            msg_id=msg_id,
+            element_id=element_id,
+            file_name=file_name,
+            file_size=file_size,
+            is_dir=is_dir,
+            **_,
+        )
+
+    def toDict(self) -> dict:
+        return {
+            "type": "onlinefile",
+            "data": {
+                "msgId": self.msg_id,
+                "elementId": self.element_id,
+                "fileName": self.file_name,
+                "fileSize": self.file_size,
+                "isDir": self.is_dir,
+            },
+        }
+
+
 class Music(BaseMessageComponent):
     type: ComponentType = ComponentType.Music
-    _type: str
+    sub_type: str = Field(alias="_type")
     id: int | None = 0
     url: str | None = ""
     audio: str | None = ""
@@ -495,7 +599,7 @@ class Music(BaseMessageComponent):
 class Image(BaseMessageComponent):
     type: ComponentType = ComponentType.Image
     file: str | None = ""
-    _type: str | None = ""
+    sub_type: str | None = Field(default="", alias="_type")
     url: str | None = ""
     # 额外
     path: str | None = ""
@@ -607,7 +711,7 @@ class Reply(BaseMessageComponent):
 
 class Poke(BaseMessageComponent):
     type: ComponentType = ComponentType.Poke
-    _type: str | int = "126"
+    poke_type: str | int = Field(default="126", alias="_type")
     id: int | str | None = 0
 
     def __init__(
@@ -615,10 +719,10 @@ class Poke(BaseMessageComponent):
     ) -> None:
         if poke_type in (None, "", "poke", "Poke"):
             poke_type = "126"
-        super().__init__(id=id, _type=str(poke_type), **_)
+        super().__init__(id=id, poke_type=str(poke_type), **_)
 
     def toDict(self):
-        data = {"type": str(self._type or "126")}
+        data = {"type": str(self.poke_type or "126")}
         if self.id is not None:
             target_id = str(self.id).strip()
             if target_id and target_id != "0":
@@ -638,7 +742,7 @@ class Node(BaseMessageComponent):
     """群合并转发消息"""
 
     type: ComponentType = ComponentType.Node
-    id: int | None = 0  # 忽略
+    id: int | str | None = 0  # existing-message node id, ignored for custom node sends
     name: str | None = ""  # qq昵称
     uin: str | None = "0"  # qq号
     content: list[BaseMessageComponent] = []
@@ -722,6 +826,30 @@ class Json(BaseMessageComponent):
         if isinstance(data, str):
             data = json.loads(data)
         super().__init__(data=data, **_)
+
+
+class Xml(BaseMessageComponent):
+    type: ComponentType = ComponentType.Xml
+    data: str
+
+    def __init__(self, data: str, **_) -> None:
+        super().__init__(data=data, **_)
+
+
+class FlashTransfer(BaseMessageComponent):
+    type: ComponentType = ComponentType.FlashTransfer
+    file_set_id: str
+
+    def __init__(self, *, file_set_id: str, **_) -> None:
+        super().__init__(file_set_id=file_set_id, **_)
+
+    def toDict(self) -> dict:
+        return {
+            "type": "flashtransfer",
+            "data": {
+                "fileSetId": self.file_set_id,
+            },
+        }
 
 
 class Unknown(BaseMessageComponent):
@@ -907,6 +1035,8 @@ ComponentTypes = {
     "file": File,
     # IM-specific Message Segments
     "face": Face,
+    "mface": MFace,
+    "anonymous": Anonymous,
     "at": At,
     "rps": RPS,
     "dice": Dice,
@@ -914,6 +1044,9 @@ ComponentTypes = {
     "share": Share,
     "contact": Contact,
     "location": Location,
+    "markdown": Markdown,
+    "miniapp": MiniApp,
+    "onlinefile": OnlineFile,
     "music": Music,
     "reply": Reply,
     "poke": Poke,
@@ -921,5 +1054,7 @@ ComponentTypes = {
     "node": Node,
     "nodes": Nodes,
     "json": Json,
+    "xml": Xml,
+    "flashtransfer": FlashTransfer,
     "unknown": Unknown,
 }

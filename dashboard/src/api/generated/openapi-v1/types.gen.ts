@@ -89,6 +89,11 @@ export type BotConfigRequest = {
     config: DynamicConfig;
 };
 
+export type BotActionRequest = {
+    action_name: string;
+    payload?: DynamicConfig;
+};
+
 export type BotRegistrationRequest = {
     action: 'start' | 'poll';
     platform_config?: DynamicConfig;
@@ -1214,6 +1219,24 @@ export type TestBotResponses = {
 };
 
 export type TestBotResponse = TestBotResponses[keyof TestBotResponses];
+
+export type InvokeBotActionData = {
+    body: BotActionRequest;
+    path: {
+        bot_id: string;
+    };
+    query?: never;
+    url: '/api/v1/bots/{bot_id}/actions';
+};
+
+export type InvokeBotActionResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type InvokeBotActionResponse = InvokeBotActionResponses[keyof InvokeBotActionResponses];
 
 export type GetProviderSchemaData = {
     body?: never;

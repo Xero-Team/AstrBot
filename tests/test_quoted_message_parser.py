@@ -40,6 +40,64 @@ class _FailIfCalledAPI:
         )
 
 
+class _NapCatClient:
+    def __init__(
+        self,
+        message_payloads: dict[str, object] | None = None,
+        forward_payloads: dict[str, dict] | None = None,
+        image_payloads: dict[tuple[str, str], dict] | None = None,
+    ):
+        self._message_payloads = message_payloads or {}
+        self._forward_payloads = forward_payloads or {}
+        self._image_payloads = image_payloads or {}
+
+    async def get_message(self, message_id: str | int):
+        key = str(message_id)
+        if key not in self._message_payloads:
+            raise RuntimeError(f"no mock get_message payload for {key}")
+        payload = self._message_payloads[key]
+        return SimpleNamespace(
+            message_id=int(key) if key.isdigit() else 0,
+            sender_id=123456,
+            sender_nickname="tester",
+            time=1720000000,
+            message_str="",
+            raw_message="",
+            message_payload=payload,
+            extra={"sender": {"user_id": 123456, "nickname": "tester"}},
+        )
+
+    async def get_forward_message(self, forward_id: str | int):
+        key = str(forward_id)
+        if key not in self._forward_payloads:
+            raise RuntimeError(f"no mock get_forward_message payload for {key}")
+        return self._forward_payloads[key]
+
+    async def get_image(self, *, file: str | None = None, file_id: str | None = None):
+        key = ("file_id" if file_id is not None else "file", file_id or file or "")
+        if key not in self._image_payloads:
+            raise RuntimeError(f"no mock get_image payload for {key}")
+        return self._image_payloads[key]
+
+    async def get_file(self, *, file: str | None = None, file_id: str | None = None):
+        key = ("file_id" if file_id is not None else "file", file_id or file or "")
+        if key not in self._image_payloads:
+            raise RuntimeError(f"no mock get_file payload for {key}")
+        return self._image_payloads[key]
+
+    async def get_group_file_url(self, *, group_id, file_id: str):
+        key = ("group_file_url", f"{group_id}:{file_id}")
+        if key not in self._image_payloads:
+            raise RuntimeError(f"no mock get_group_file_url payload for {key}")
+        return self._image_payloads[key]
+
+    async def get_private_file_url(self, *, file_id: str):
+        key = ("private_file_url", file_id)
+        if key not in self._image_payloads:
+            raise RuntimeError(f"no mock get_private_file_url payload for {key}")
+        return self._image_payloads[key]
+
+
 def _make_event(
     reply: Reply,
     responses: dict[tuple[str, str], dict] | None = None,
@@ -52,6 +110,26 @@ def _make_event(
     return SimpleNamespace(
         message_obj=SimpleNamespace(message=[reply]),
         bot=SimpleNamespace(api=_DummyAPI(responses, param_responses)),
+        get_group_id=lambda: "",
+    )
+
+
+def _make_napcat_event(
+    reply: Reply,
+    *,
+    message_payloads: dict[str, object] | None = None,
+    forward_payloads: dict[str, dict] | None = None,
+    image_payloads: dict[tuple[str, str], dict] | None = None,
+):
+    return SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        adapter=SimpleNamespace(
+            client=_NapCatClient(
+                message_payloads=message_payloads,
+                forward_payloads=forward_payloads,
+                image_payloads=image_payloads,
+            )
+        ),
         get_group_id=lambda: "",
     )
 
@@ -514,3 +592,67 @@ async def test_extract_quoted_message_nested_forward_id_is_resolved():
 
     images = await extract_quoted_message_images(event)
     assert images == [nested_image]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_supports_napcat_client_fallback():
+    reply = Reply(id="500", chain=[Plain(text="[Forward Message]")], message_str="")
+    event = _make_napcat_event(
+        reply,
+        message_payloads={
+            "500": [
+                {"type": "text", "data": {"text": "parent"}},
+                {"type": "forward", "data": {"id": "fwd_napcat"}},
+            ]
+        },
+        forward_payloads={
+            "fwd_napcat": {
+                "status": "ok",
+                "retcode": 0,
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Alice"},
+                            "message": [{"type": "text", "data": {"text": "hello"}}],
+                        },
+                        {
+                            "sender": {"nickname": "Bob"},
+                            "message": [
+                                {"type": "image", "data": {"url": "https://img/x.jpg"}},
+                                {"type": "text", "data": {"text": "world"}},
+                            ],
+                        },
+                    ]
+                },
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "parent" in text
+    assert "Alice: hello" in text
+    assert "Bob: [Image]world" in text
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_images_supports_napcat_client_fallback():
+    reply = Reply(id="600", chain=None, message_str="")
+    event = _make_napcat_event(
+        reply,
+        message_payloads={
+            "600": [
+                {"type": "image", "data": {"file": "abc123.jpg"}},
+            ]
+        },
+        image_payloads={
+            ("file", "abc123.jpg"): {
+                "status": "ok",
+                "retcode": 0,
+                "data": {"url": "https://img.example.com/napcat-resolved.jpg"},
+            }
+        },
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == ["https://img.example.com/napcat-resolved.jpg"]

@@ -9,6 +9,7 @@ import type {
   BackupUploadInitRequest,
   BackupUploadRequest,
   BackupUploadSessionRequest,
+  BotActionRequest,
   BotConfigRequest,
   BotRegistrationRequest,
   ChatMessagePatchRequest,
@@ -804,6 +805,14 @@ export const botApi = {
   setEnabled(botId: string, payload: EnabledPatch) {
     return typed<OpenConfig>(
       openApiV1.setBotEnabled({
+        path: { bot_id: botId },
+        body: payload,
+      }),
+    );
+  },
+  invokeAction(botId: string, payload: BotActionRequest) {
+    return typed<OpenConfig>(
+      openApiV1.invokeBotAction({
         path: { bot_id: botId },
         body: payload,
       }),

@@ -30,7 +30,7 @@ docker compose -f compose-with-napcat.yml logs -f astrbot
 
 ## 同时启动 AstrBot 和 NapCat
 
-如果你还需要 OneBot v11 + NapCat，一并拉起整套 Compose：
+如果你还需要 AstrBot + NapCat，一并拉起整套 Compose：
 
 ```bash
 docker compose -f compose-with-napcat.yml up -d --build
@@ -57,10 +57,11 @@ docker compose -f compose-with-napcat.yml up -d --build
 
 容器启动后：
 
-1. 在 AstrBot WebUI 中新建 `OneBot v11` 机器人，反向 WebSocket 主机填 `0.0.0.0`，端口填 `6199`。
-2. 在 NapCat WebUI 中新建反向 WebSocket 客户端，URL 填 `ws://astrbot:6199/ws`。
+1. 在 AstrBot WebUI 中新建 `NapCat` 机器人。
+2. 将 `ws_url` 填为 `ws://napcat:3001`。
+3. 如果 NapCat 配置了 WebSocket 鉴权 token，在 AstrBot 里填入同一个 `token`。
 
-由于两个容器在同一个内部网络中，NapCat 不需要通过宿主机地址回连 AstrBot。
+由于两个容器在同一个内部网络中，AstrBot 可以直接连到 NapCat 的正向 WebSocket，不需要额外的回连链路。
 
 ## 不推荐的旧路径
 

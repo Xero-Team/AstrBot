@@ -74,18 +74,15 @@ Since AstrBot and NapCat are in the same Pod, they can communicate directly via 
 
 1. **Add a message platform in AstrBot:**
    - Go to the AstrBot WebUI, select `Platform` -> `Add`.
-   - **Select Message Platform Category**: `aiocqhttp`
+   - **Select Message Platform Category**: `napcat`
    - **Bot Name**: `napcat` (or custom)
-   - **Reverse Websocket Host**: `0.0.0.0`
-   - **Reverse Websocket Port**: `6199`
+   - **NapCat WebSocket URL**: `ws://localhost:3001`
+   - **NapCat Token**: fill this only if NapCat enables WebSocket auth
    - Save the configuration.
 
-2. **Configure Websocket Client in NapCat:**
-   - Go to the NapCat WebUI, select `Settings` -> `Reverse WS` -> `Add`.
-   - **Enable**: On
-   - **URL**: `ws://localhost:6199/ws`
-   - **Message Format**: `Array`
-   - Save the configuration.
+2. **Make sure NapCat OneBot v11 forward WebSocket is enabled:**
+   - The default example uses `ws://localhost:3001`
+   - If a token is configured there, AstrBot must use the same token
 
 ---
 

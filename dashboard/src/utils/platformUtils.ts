@@ -3,6 +3,8 @@ const PLATFORM_ICON_URLS: Record<string, string> = {
     '@/assets/images/platform_logos/onebot.png',
     import.meta.url,
   ).href,
+  napcat: new URL('@/assets/images/platform_logos/napcat.png', import.meta.url)
+    .href,
   qq_official: new URL('@/assets/images/platform_logos/qq.png', import.meta.url)
     .href,
   qq_official_webhook: new URL(
@@ -64,6 +66,7 @@ const TUTORIAL_LINKS: Record<string, string> = {
     'https://docs.astrbot.app/platform/qqofficial/webhook.html',
   qq_official: 'https://docs.astrbot.app/platform/qqofficial/websockets.html',
   aiocqhttp: 'https://docs.astrbot.app/platform/aiocqhttp.html',
+  napcat: 'https://docs.astrbot.app/platform/napcat.html',
   wecom: 'https://docs.astrbot.app/platform/wecom.html',
   weixin_oc: 'https://docs.astrbot.app/platform/weixin_oc.html',
   wecom_ai_bot: 'https://docs.astrbot.app/platform/wecom_ai_bot.html',
@@ -84,6 +87,7 @@ const TUTORIAL_LINKS: Record<string, string> = {
 
 const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   aiocqhttp: 'aiocqhttp (OneBot v11)',
+  napcat: 'napcat (NapCat WebSocket)',
   qq_official: 'qq_official (QQ 官方机器人平台)',
   weixin_official_account: 'weixin_official_account (微信公众号)',
   wecom: 'wecom (企业微信应用)',
@@ -99,6 +103,15 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   satori: 'satori (Satori)',
   line: 'line (LINE)',
   matrix: 'matrix (Matrix)',
+};
+
+const PLATFORM_COLORS: Record<string, string> = {
+  aiocqhttp: 'blue',
+  napcat: 'blue',
+  qq_official: 'purple',
+  telegram: 'light-blue',
+  discord: 'indigo',
+  webchat: 'orange',
 };
 
 interface PlatformTemplate {
@@ -128,4 +141,8 @@ export function getPlatformDescription(
 
 export function getPlatformDisplayName(platformId: string): string {
   return PLATFORM_DISPLAY_NAMES[platformId] || platformId;
+}
+
+export function getPlatformColor(platformId: string): string {
+  return PLATFORM_COLORS[platformId] || 'grey';
 }

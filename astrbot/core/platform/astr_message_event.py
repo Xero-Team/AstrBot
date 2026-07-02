@@ -12,14 +12,33 @@ from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
+    RPS,
+    Anonymous,
     At,
     AtAll,
     BaseMessageComponent,
+    Contact,
     Face,
+    File,
+    FlashTransfer,
     Forward,
     Image,
+    Json,
+    Location,
+    Markdown,
+    MFace,
+    MiniApp,
+    Node,
+    Nodes,
+    OnlineFile,
     Plain,
+    Poke,
+    Record,
     Reply,
+    Shake,
+    Share,
+    Video,
+    Xml,
 )
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
@@ -132,6 +151,17 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.platform_meta.id
 
+    def get_supported_platform_actions(self) -> list[str]:
+        """Get proactive platform actions declared by the current adapter."""
+        actions = getattr(self.platform_meta, "supported_actions", None)
+        if not isinstance(actions, list):
+            return []
+        return [action for action in actions if isinstance(action, str)]
+
+    def supports_platform_action(self, action_name: str) -> bool:
+        """Whether the current event platform declares a proactive action."""
+        return action_name in self.get_supported_platform_actions()
+
     def get_message_str(self) -> str:
         """获取消息字符串。"""
         return self.message_str
@@ -148,13 +178,49 @@ class AstrMessageEvent(abc.ABC):
                 parts.append("[图片]")
             elif isinstance(i, Face):
                 parts.append(f"[表情:{i.id}]")
+            elif isinstance(i, MFace):
+                parts.append(f"[商城表情:{i.summary}]")
             elif isinstance(i, At):
                 parts.append(f"[At:{i.qq}]")
             elif isinstance(i, AtAll):
                 parts.append("[At:全体成员]")
+            elif isinstance(i, Record):
+                parts.append("[语音]")
+            elif isinstance(i, Video):
+                parts.append("[视频]")
+            elif isinstance(i, File):
+                parts.append(f"[文件:{i.name or 'file'}]")
+            elif isinstance(i, OnlineFile):
+                parts.append(f"[在线文件:{i.file_name}]")
+            elif isinstance(i, FlashTransfer):
+                parts.append("[闪传]")
+            elif isinstance(i, Poke):
+                parts.append("[戳一戳]")
+            elif isinstance(i, Share):
+                parts.append(f"[分享:{i.title}]")
+            elif isinstance(i, Contact):
+                parts.append(f"[联系人:{i.sub_type}]")
+            elif isinstance(i, Location):
+                parts.append("[位置]")
+            elif isinstance(i, Json):
+                parts.append("[Json]")
+            elif isinstance(i, Xml):
+                parts.append("[Xml]")
+            elif isinstance(i, Markdown):
+                parts.append("[Markdown]")
+            elif isinstance(i, MiniApp):
+                parts.append("[小程序]")
+            elif isinstance(i, Anonymous):
+                parts.append("[匿名]")
+            elif isinstance(i, RPS):
+                parts.append("[猜拳]")
+            elif isinstance(i, Shake):
+                parts.append("[窗口抖动]")
             elif isinstance(i, Forward):
                 # 转发消息
                 parts.append("[转发消息]")
+            elif isinstance(i, Node | Nodes):
+                parts.append("[转发节点]")
             elif isinstance(i, Reply):
                 # 引用回复
                 if i.message_str:

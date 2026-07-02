@@ -40,7 +40,8 @@
     },
     "securityWarning": {
       "title": "Security Warning",
-      "aiocqhttpTokenMissing": "To enhance connection security, it is strongly recommended to set ws_reverse_token. Not setting a token may lead to security risks.",
+      "aiocqhttpTokenMissing": "To secure reverse WebSocket connections, it is strongly recommended to set ws_reverse_token. Leaving it empty may introduce security risks.",
+      "napcatTokenMissing": "To secure the NapCat forward WebSocket connection, it is strongly recommended to set token. Leaving it empty may introduce security risks.",
       "learnMore": "Learn More"
     },
     "invalidPlatformId": "Platform ID cannot contain ':' or '!'."
@@ -129,12 +130,94 @@
     "unknown": "Unknown",
     "errors": "error(s)"
   },
+  "capabilities": {
+    "supportedActions": "Supported proactive actions",
+    "actions": {
+      "set_group_admin": "Set admin",
+      "set_group_ban": "Mute member",
+      "set_group_card": "Edit card",
+      "kick_group_member": "Kick member",
+      "kick_group_members": "Batch kick",
+      "leave_group": "Leave/dismiss",
+      "set_group_whole_ban": "Mute all",
+      "set_essence_message": "Set essence",
+      "delete_essence_message": "Unset essence",
+      "send_group_notice": "Group notice",
+      "send_like": "Send like",
+      "send_poke": "Send poke"
+    }
+  },
   "platformQr": {
     "title": "QR Login",
     "show": "Show QR",
     "status": "QR Status",
     "waiting": "Waiting for QR",
     "close": "Close"
+  },
+  "quickActions": {
+    "trigger": "Quick Actions",
+    "title": "Platform Quick Actions",
+    "description": "Run proactive management actions against this platform instance directly. Nothing here is saved as a template; each submission is a one-off platform action call.",
+    "platformId": "Platform ID",
+    "categoryLabel": "Action group",
+    "selectAction": "Select action",
+    "run": "Run action",
+    "running": "Running",
+    "close": "Close",
+    "noAction": "This platform does not expose any proactive actions.",
+    "result": "Result",
+    "copyResult": "Copy result",
+    "copyResultSuccess": "Action result copied to clipboard",
+    "copyResultFailed": "Failed to copy action result",
+    "success": "Platform action completed",
+    "failed": "Platform action failed",
+    "validation": {
+      "number": "enter a valid number"
+    },
+    "categories": {
+      "all": "All",
+      "social": "Social",
+      "group_management": "Group management",
+      "announcement": "Announcements",
+      "message": "Message management"
+    },
+    "summary": {
+      "status": "Status",
+      "retcode": "Retcode",
+      "message": "Message"
+    },
+    "help": {
+      "send_poke": "Provide user_id to run the action. Leave group_id empty for a private poke; set group_id for a group poke.",
+      "send_like": "times defaults to 1 and can be increased as needed.",
+      "send_group_notice": "Most cases only need group_id and content. Fill image, pinned, and other fields only when needed.",
+      "kick_group_members": "user_ids accepts comma-separated or newline-separated values and will be converted into an array automatically.",
+      "delete_essence_message": "Usually message_id is enough. Only fill msg_seq, msg_random, or group_id when your platform flow specifically requires them."
+    },
+    "fields": {
+      "group_id": "Group ID",
+      "group_idHintOptional": "Optional. Leaving it empty only works for actions that can infer it from context.",
+      "user_id": "User ID",
+      "user_ids": "User ID list",
+      "user_idsHint": "Use commas or new lines to separate multiple user IDs.",
+      "target_id": "Target ID",
+      "target_idHintOptional": "Optional. Some platforms use this as the poke target.",
+      "message_id": "Message ID",
+      "messageIdHintOptional": "Optional. Leave empty when the platform can infer it from context.",
+      "card": "Group card",
+      "content": "Notice content",
+      "image": "Image URL",
+      "imageHintOptional": "Optional. Used for group notice images.",
+      "duration": "Duration (seconds)",
+      "times": "Times",
+      "enable": "Enable",
+      "reject_add_request": "Reject future join requests",
+      "is_dismiss": "Dismiss group",
+      "pinned": "Pinned flag",
+      "msg_seq": "Message sequence",
+      "msgSeqHintOptional": "Optional. Use only when message_id is not suitable.",
+      "msg_random": "Message random",
+      "msgRandomHintOptional": "Optional. Use only when message_id is not suitable."
+    }
   },
   "registrationAction": {
     "lark": {

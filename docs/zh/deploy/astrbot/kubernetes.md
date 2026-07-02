@@ -74,18 +74,15 @@ kubectl apply -f k8s/astrbot_with_napcat/02-deployment.yaml
 
 1. **在 AstrBot 中添加消息平台：**
    - 进入 AstrBot WebUI，选择 `机器人` -> `添加`。
-   - **选择消息平台类别**: `aiocqhttp`
+   - **选择消息平台类别**: `napcat`
    - **机器人名称**: `napcat` (或自定义)
-   - **反向 Websocket 主机**: `0.0.0.0`
-   - **反向 Websocket 端口**: `6199`
+   - **NapCat WebSocket 地址**: `ws://localhost:3001`
+   - **NapCat Token**: 仅在 NapCat WebSocket 开启鉴权时填写
    - 保存配置。
 
-2. **在 NapCat 中配置 Websocket Client：**
-   - 进入 NapCat WebUI，选择 `设置` -> `反向WS` -> `添加`。
-   - **启用**: 开启
-   - **URL**: `ws://localhost:6199/ws`
-   - **消息格式**: `Array`
-   - 保存配置。
+2. **在 NapCat 中确认 OneBot v11 正向 WebSocket 服务已开启：**
+   - 默认示例可直接使用 `ws://localhost:3001`
+   - 如果配置了鉴权 token，AstrBot 侧要填写同一个值
 
 ---
 

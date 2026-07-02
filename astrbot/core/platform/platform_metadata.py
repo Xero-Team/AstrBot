@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -21,6 +21,8 @@ class PlatformMetadata:
     """平台是否支持真实流式传输"""
     support_proactive_message: bool = True
     """平台是否支持主动消息推送（非用户触发）"""
+    supported_actions: list[str] = field(default_factory=list)
+    """平台支持的主动动作名称列表，如 send_poke、send_group_notice"""
 
     module_path: str | None = None
     """注册该适配器的模块路径，用于插件热重载时清理"""

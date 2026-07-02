@@ -1,6 +1,6 @@
 .PHONY: worktree worktree-add worktree-rm pr-test-neo pr-test-full pr-test-full-fast \
 	build build-all build-backend build-dashboard run run-backend run-dashboard \
-	stop stop-backend stop-dashboard clean status docs quality quality-report \
+	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
 	check check-all format format-all \
@@ -18,6 +18,10 @@ BASE ?= master
 RUN_DIR ?= .make
 DASHBOARD_DIR ?= dashboard
 DOCS_DIR ?= docs
+NAPCAT_SCHEMA_OUTPUT_DIR ?= .tmp/napcat-schema
+NAPCAT_NORMALIZED_SCHEMA_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11-all-event.normalized.schema.json
+NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
+NAPCAT_MODELS_SOURCE_PATH ?= astrbot/core/platform/sources/napcat/generated/ob11_events.py
 PS := powershell -NoProfile -ExecutionPolicy Bypass -File
 PNPM := corepack pnpm
 NPX := npm exec --yes --
@@ -69,8 +73,7 @@ pr-test-full:
 pr-test-full-fast:
 	@$(PS) scripts/pr_test_env.ps1 -Profile full -SkipSync -NoDashboard
 
-build:
-	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) build-all
+build: build-all
 
 build-all: build-backend build-dashboard
 
@@ -80,6 +83,7 @@ build-backend:
 build-dashboard:
 	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --no-frozen-lockfile
 	cd $(DASHBOARD_DIR) && $(PNPM) build
+	uv run python scripts/sync_dashboard_dist.py
 
 run: build
 	@$(MAKE) --no-print-directory run-backend
@@ -109,6 +113,34 @@ clean: stop
 docs:
 	cd $(DOCS_DIR) && $(PNPM) install
 	cd $(DOCS_DIR) && $(PNPM) run docs:dev
+
+napcat-schema-ob11-event:
+	@$(PS) scripts/napcat/generate_ob11_event_schema.ps1 -OutputDir $(NAPCAT_SCHEMA_OUTPUT_DIR)
+
+napcat-schema-ob11-event-normalized: napcat-schema-ob11-event
+	@$(PS) scripts/napcat/normalize_ob11_event_schema.ps1 \
+		-SchemaPath $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11-all-event.schema.json \
+		-OutputPath $(NAPCAT_NORMALIZED_SCHEMA_PATH)
+
+napcat-models-ob11-event: napcat-schema-ob11-event-normalized
+	@$(PS) scripts/napcat/generate_ob11_event_models.ps1 \
+		-SchemaPath $(NAPCAT_NORMALIZED_SCHEMA_PATH) \
+		-OutputPath $(NAPCAT_MODELS_OUTPUT_PATH)
+
+napcat-models-ob11-event-src: napcat-schema-ob11-event-normalized
+	@$(PS) scripts/napcat/generate_ob11_event_models.ps1 \
+		-SchemaPath $(NAPCAT_NORMALIZED_SCHEMA_PATH) \
+		-OutputPath $(NAPCAT_MODELS_SOURCE_PATH)
+
+napcat-codegen: napcat-models-ob11-event-src
+
+napcat-test:
+	uv run pytest \
+		tests/unit/test_napcat_adapter.py \
+		tests/unit/test_napcat_codegen_scripts.py \
+		tests/unit/test_napcat_codegen_powershell.py
+
+napcat-check: napcat-codegen napcat-test
 
 quality:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) quality-all
@@ -346,6 +378,8 @@ check-docker:
 		echo "==> [docker] hadolint"; \
 		hadolint --config .hadolint.yaml Dockerfile; \
 	elif command -v docker >/dev/null 2>&1; then \
-		echo "==> [docker] hadolint (via docker)"; \
-		MSYS_NO_PATHCONV=1 docker run --rm -i -v "$$(pwd)/.hadolint.yaml:/config.yaml" hadolint/hadolint hadolint --config //config.yaml - < Dockerfile; \
+		if docker info >/dev/null 2>&1; then \
+			echo "==> [docker] hadolint (via docker)"; \
+			MSYS_NO_PATHCONV=1 docker run --rm -i -v "$$(pwd)/.hadolint.yaml:/config.yaml" hadolint/hadolint hadolint --config //config.yaml - < Dockerfile; \
+		else echo "==> [docker] docker daemon unavailable, skipping (CI enforces)"; fi; \
 	else echo "==> [docker] hadolint/docker not found, skipping (CI enforces)"; fi

@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Depends, Query, Request
 
-from astrbot.dashboard.responses import ok
-from astrbot.dashboard.schemas import BotConfigRequest, EnabledPatch
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import BotActionRequest, BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
+from astrbot.dashboard.services.platform_service import (
+    PlatformService,
+    PlatformServiceError,
+)
 
 from .auth import AuthContext, require_scope
 
@@ -15,6 +19,14 @@ async def require_bot_scope(request: Request) -> AuthContext:
 
 def get_service(request: Request) -> BotConfigService:
     return request.app.state.services.bots
+
+
+def get_platform_service(request: Request) -> PlatformService:
+    return request.app.state.services.platforms
+
+
+def _raise_platform_error(exc: PlatformServiceError) -> None:
+    raise ApiError(str(exc), status_code=exc.status_code) from exc
 
 
 @router.get("/bot-types")
@@ -72,6 +84,24 @@ async def test_bot(
     _auth: AuthContext = Depends(require_bot_scope),
 ):
     return ok({"id": bot_id, "status": "unsupported"})
+
+
+@router.post("/bots/{bot_id:path}/actions")
+async def invoke_bot_action(
+    bot_id: str,
+    payload: BotActionRequest,
+    _auth: AuthContext = Depends(require_bot_scope),
+    platform_service: PlatformService = Depends(get_platform_service),
+):
+    try:
+        result = await platform_service.invoke_platform_action(
+            bot_id,
+            payload.action_name,
+            payload.payload,
+        )
+    except PlatformServiceError as exc:
+        _raise_platform_error(exc)
+    return ok(result)
 
 
 @router.get("/bots/{bot_id:path}")

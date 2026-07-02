@@ -16,6 +16,21 @@ from .astrbot_message import AstrBotMessage
 from .message_session import MessageSession
 from .platform_metadata import PlatformMetadata
 
+PLATFORM_ACTION_METHOD_NAMES = (
+    "set_group_admin",
+    "set_group_ban",
+    "set_group_card",
+    "kick_group_member",
+    "kick_group_members",
+    "leave_group",
+    "set_group_whole_ban",
+    "set_essence_message",
+    "delete_essence_message",
+    "send_group_notice",
+    "send_like",
+    "send_poke",
+)
+
 
 class PlatformStatus(Enum):
     """平台运行状态"""
@@ -36,6 +51,19 @@ class PlatformError:
 
 
 class Platform(abc.ABC):
+    @classmethod
+    def declared_supported_actions(cls) -> list[str]:
+        """Return proactive platform actions implemented by the adapter class."""
+        supported: list[str] = []
+        for action_name in PLATFORM_ACTION_METHOD_NAMES:
+            platform_method = getattr(Platform, action_name, None)
+            adapter_method = getattr(cls, action_name, None)
+            if platform_method is None or adapter_method is None:
+                continue
+            if adapter_method is not platform_method:
+                supported.append(action_name)
+        return supported
+
     def __init__(self, config: dict, event_queue: Queue) -> None:
         super().__init__()
         # 平台配置
@@ -99,6 +127,7 @@ class Platform(abc.ABC):
             "description": meta.description,
             "support_streaming_message": meta.support_streaming_message,
             "support_proactive_message": meta.support_proactive_message,
+            "supported_actions": self.supported_actions(),
         }
         return {
             "id": meta.id or self.config.get("id"),
@@ -144,6 +173,14 @@ class Platform(abc.ABC):
             Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
         )
 
+    def supported_actions(self) -> list[str]:
+        """Return platform-specific proactive actions supported by this adapter."""
+        return type(self).declared_supported_actions()
+
+    def supports_action(self, action_name: str) -> bool:
+        """Whether this adapter overrides a named proactive platform action."""
+        return action_name in type(self).declared_supported_actions()
+
     def commit_event(self, event: AstrMessageEvent) -> None:
         """提交一个事件到事件队列。"""
         self._event_queue.put_nowait(event)
@@ -166,6 +203,120 @@ class Platform(abc.ABC):
 
     def get_client(self) -> object:
         """获取平台的客户端对象。"""
+
+    def _unsupported_action(self, action_name: str) -> NotImplementedError:
+        return NotImplementedError(
+            f"平台 {self.meta().name} 不支持动作 `{action_name}`"
+        )
+
+    async def set_group_admin(
+        self,
+        *,
+        group_id: str | int,
+        user_id: str | int,
+        enable: bool = True,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("set_group_admin")
+
+    async def set_group_ban(
+        self,
+        *,
+        group_id: str | int,
+        user_id: str | int,
+        duration: int | float = 0,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("set_group_ban")
+
+    async def set_group_card(
+        self,
+        *,
+        group_id: str | int,
+        user_id: str | int,
+        card: str | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("set_group_card")
+
+    async def kick_group_member(
+        self,
+        *,
+        group_id: str | int,
+        user_id: str | int,
+        reject_add_request: bool | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("kick_group_member")
+
+    async def kick_group_members(
+        self,
+        *,
+        group_id: str | int,
+        user_ids: list[str | int],
+        reject_add_request: bool | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("kick_group_members")
+
+    async def leave_group(
+        self,
+        *,
+        group_id: str | int,
+        is_dismiss: bool | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("leave_group")
+
+    async def set_group_whole_ban(
+        self,
+        *,
+        group_id: str | int,
+        enable: bool = True,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("set_group_whole_ban")
+
+    async def set_essence_message(
+        self,
+        *,
+        message_id: str | int | float,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("set_essence_message")
+
+    async def delete_essence_message(
+        self,
+        *,
+        message_id: str | int | float | None = None,
+        msg_seq: str | None = None,
+        msg_random: str | None = None,
+        group_id: str | int | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("delete_essence_message")
+
+    async def send_group_notice(
+        self,
+        *,
+        group_id: str | int,
+        content: str,
+        pinned: int | float | None = None,
+        type_: int | float | None = None,
+        confirm_required: int | float | None = None,
+        is_show_edit_card: int | float | None = None,
+        tip_window_type: int | float | None = None,
+        image: str | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("send_group_notice")
+
+    async def send_like(
+        self,
+        *,
+        user_id: str | int,
+        times: int | float = 1,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("send_like")
+
+    async def send_poke(
+        self,
+        *,
+        user_id: str | int,
+        group_id: str | int | None = None,
+        target_id: str | int | None = None,
+    ) -> dict[str, object]:
+        raise self._unsupported_action("send_poke")
 
     async def webhook_callback(self, request: Any) -> Any:
         """统一 Webhook 回调入口。

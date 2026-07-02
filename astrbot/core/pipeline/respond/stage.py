@@ -23,6 +23,8 @@ class RespondStage(Stage):
             comp.text and comp.text.strip(),
         ),  # 纯文本消息需要strip
         Comp.Face: lambda comp: comp.id is not None,  # QQ表情
+        Comp.MFace: lambda comp: bool(comp.emoji_id and comp.key and comp.summary),
+        Comp.Anonymous: lambda _: True,
         Comp.Record: lambda comp: bool(comp.file),  # 语音
         Comp.Video: lambda comp: bool(comp.file),  # 视频
         Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
@@ -33,16 +35,23 @@ class RespondStage(Stage):
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
         Comp.Json: lambda comp: bool(comp.data),  # Json 卡片
+        Comp.Xml: lambda comp: bool(comp.data),  # Xml 卡片
         Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
+        Comp.Markdown: lambda comp: bool(comp.content),
+        Comp.MiniApp: lambda comp: bool(comp.data),
+        Comp.OnlineFile: lambda comp: bool(
+            comp.msg_id and comp.element_id and comp.file_name
+        ),
         Comp.Music: lambda comp: (
-            (comp.id and comp._type and comp._type != "custom")
-            or (comp._type == "custom" and comp.url and comp.audio and comp.title)
+            (comp.id and comp.sub_type and comp.sub_type != "custom")
+            or (comp.sub_type == "custom" and comp.url and comp.audio and comp.title)
         ),  # 音乐分享
+        Comp.FlashTransfer: lambda comp: bool(comp.file_set_id),
         Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
         Comp.Location: lambda comp: bool(
             comp.lat is not None and comp.lon is not None
         ),  # 位置
-        Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
+        Comp.Contact: lambda comp: bool(comp.sub_type and comp.id),  # 推荐好友 or 群
         Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
         Comp.Dice: lambda _: True,  # 掷骰子魔法表情
         Comp.RPS: lambda _: True,  # 猜拳魔法表情
@@ -126,6 +135,13 @@ class RespondStage(Stage):
 
         # 如果所有组件都为空
         return True
+
+    async def _stop_typing_before_send(self, event: AstrMessageEvent) -> None:
+        """Best-effort stop_typing right before the actual reply send."""
+        try:
+            await event.stop_typing()
+        except Exception:
+            logger.warning("stop_typing failed before send", exc_info=True)
 
     def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
         """检查是否需要分段回复"""
@@ -220,6 +236,7 @@ class RespondStage(Stage):
                 == "realtime_segmenting"
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
+            await self._stop_typing_before_send(event)
             await event.send_streaming(result.async_stream, realtime_segmenting)
             return
         if len(result.chain) > 0:
@@ -268,6 +285,7 @@ class RespondStage(Stage):
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
                     try:
+                        await self._stop_typing_before_send(event)
                         if comp.type in need_separately:
                             await event.send(result.derive([comp]))
                         else:
@@ -296,6 +314,7 @@ class RespondStage(Stage):
                 for comp in sep_comps:
                     chain = result.derive([comp])
                     try:
+                        await self._stop_typing_before_send(event)
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
@@ -305,6 +324,7 @@ class RespondStage(Stage):
                 chain = result.derive(result.chain)
                 if result.chain and len(result.chain) > 0:
                     try:
+                        await self._stop_typing_before_send(event)
                         await event.send(chain)
                     except Exception as e:
                         logger.error(

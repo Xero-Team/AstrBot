@@ -30,7 +30,7 @@ docker compose -f compose-with-napcat.yml logs -f astrbot
 
 ## Start AstrBot and NapCat Together
 
-If you also need OneBot v11 + NapCat, start the full compose stack:
+If you also need AstrBot + NapCat, start the full compose stack:
 
 ```bash
 docker compose -f compose-with-napcat.yml up -d --build
@@ -57,10 +57,11 @@ Default persistent directories:
 
 After the containers are up:
 
-1. In AstrBot WebUI, create a `OneBot v11` bot with reverse WebSocket host `0.0.0.0` and port `6199`.
-2. In NapCat WebUI, create a reverse WebSocket client with URL `ws://astrbot:6199/ws`.
+1. In AstrBot WebUI, create a `NapCat` bot and set `ws_url` to `ws://napcat:3001`.
+2. If NapCat requires WebSocket authentication, set the same `token` in AstrBot.
+3. Keep both containers on the same internal network so AstrBot can dial NapCat directly.
 
-Because both containers share the same internal network, NapCat does not need to call back through the host address.
+Because both containers share the same internal network, AstrBot does not need a separate callback path anymore.
 
 ## Old Paths That Are Not Recommended
 

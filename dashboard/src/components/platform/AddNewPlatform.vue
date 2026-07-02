@@ -703,13 +703,11 @@
         {{ tm('dialog.securityWarning.title') }}
       </v-card-title>
       <v-card-text class="py-4">
-        <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
+        <p>{{ tm(oneBotTokenWarningMessageKey) }}</p>
         <span
-          ><a
-            href="https://docs.astrbot.app/platform/aiocqhttp.html"
-            target="_blank"
-            >{{ tm('dialog.securityWarning.learnMore') }}</a
-          ></span
+          ><a :href="oneBotTokenWarningTutorialLink" target="_blank">{{
+            tm('dialog.securityWarning.learnMore')
+          }}</a></span
         >
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
@@ -884,6 +882,7 @@ interface ComponentState {
   conflictId: string;
   idConflictResolve: ((value: boolean) => void) | null;
   showOneBotEmptyTokenWarnDialog: boolean;
+  oneBotTokenWarningPlatformType: string | null;
   oneBotEmptyTokenWarningResolve: ((value: boolean) => void) | null;
   loading: boolean;
   showConfigSection: boolean;
@@ -941,6 +940,7 @@ const state = reactive<ComponentState>({
   conflictId: '',
   idConflictResolve: null,
   showOneBotEmptyTokenWarnDialog: false,
+  oneBotTokenWarningPlatformType: null,
   oneBotEmptyTokenWarningResolve: null,
   loading: false,
   showConfigSection: false,
@@ -974,6 +974,7 @@ const {
 } = toRefs(state);
 
 const dialogScrollContainer = ref<DialogScrollTarget>(null);
+const ONEBOT_TOKEN_WARNING_PLATFORM_TYPES = new Set(['aiocqhttp', 'napcat']);
 
 const showDialog = computed({
   get: () => props.show,
@@ -1054,6 +1055,15 @@ const canSave = computed(() => {
 
   return false;
 });
+
+const oneBotTokenWarningTutorialLink = computed(() =>
+  getTutorialLink(state.oneBotTokenWarningPlatformType ?? 'aiocqhttp'),
+);
+const oneBotTokenWarningMessageKey = computed(() =>
+  state.oneBotTokenWarningPlatformType === 'napcat'
+    ? 'dialog.securityWarning.napcatTokenMissing'
+    : 'dialog.securityWarning.aiocqhttpTokenMissing',
+);
 
 const routeTableHeaders = computed(() => [
   {
@@ -1392,11 +1402,14 @@ async function newPlatform() {
   state.loading = true;
   if (updatingMode.value) {
     const platformType = getString(updatingPlatformConfig.value.type);
-    const token = getString(
-      updatingPlatformConfig.value.ws_reverse_token,
-    )?.trim();
-    if (platformType === 'aiocqhttp' && !token) {
-      const continueWithWarning = await showOneBotEmptyTokenWarning();
+    const token = getOneBotSecurityToken(updatingPlatformConfig.value)?.trim();
+    if (
+      platformType &&
+      ONEBOT_TOKEN_WARNING_PLATFORM_TYPES.has(platformType) &&
+      !token
+    ) {
+      const continueWithWarning =
+        await showOneBotEmptyTokenWarning(platformType);
       if (!continueWithWarning) {
         state.loading = false;
         return;
@@ -1464,10 +1477,11 @@ async function savePlatform() {
     }
   }
 
-  if (platformType === 'aiocqhttp') {
-    const token = getString(platformConfig.ws_reverse_token)?.trim();
+  if (platformType && ONEBOT_TOKEN_WARNING_PLATFORM_TYPES.has(platformType)) {
+    const token = getOneBotSecurityToken(platformConfig)?.trim();
     if (!token) {
-      const continueWithWarning = await showOneBotEmptyTokenWarning();
+      const continueWithWarning =
+        await showOneBotEmptyTokenWarning(platformType);
       if (!continueWithWarning) {
         state.loading = false;
         return;
@@ -1571,7 +1585,8 @@ function handleIdConflictConfirm(confirmed: boolean) {
   state.showIdConflictDialog = false;
 }
 
-function showOneBotEmptyTokenWarning(): Promise<boolean> {
+function showOneBotEmptyTokenWarning(platformType: string): Promise<boolean> {
+  state.oneBotTokenWarningPlatformType = platformType;
   state.showOneBotEmptyTokenWarnDialog = true;
   return new Promise((resolve) => {
     state.oneBotEmptyTokenWarningResolve = resolve;
@@ -1584,6 +1599,7 @@ function handleOneBotEmptyTokenWarningDismiss(continueWithWarning: boolean) {
     state.oneBotEmptyTokenWarningResolve(continueWithWarning);
     state.oneBotEmptyTokenWarningResolve = null;
   }
+  state.oneBotTokenWarningPlatformType = null;
 
   if (!continueWithWarning) {
     state.loading = false;
@@ -1596,6 +1612,19 @@ function showSuccess(message: string) {
 
 function showError(message: string) {
   emit('show-toast', { message, type: 'error' });
+}
+
+function getOneBotSecurityToken(
+  platformConfig: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!platformConfig) {
+    return undefined;
+  }
+  const platformType = getString(platformConfig.type);
+  if (platformType === 'napcat') {
+    return getString(platformConfig.token) ?? undefined;
+  }
+  return getString(platformConfig.ws_reverse_token) ?? undefined;
 }
 
 function buildRandomPlatformIdSuffix(): string {

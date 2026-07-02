@@ -1,5 +1,8 @@
 # 接入 OneBot v11 协议实现
 
+> [!TIP]
+> 如果你接入的是 AstrBot 内置的独立 `napcat` 平台，请优先查看 [NapCat](/platform/napcat)。
+
 OneBot 是一个**聊天机器人应用接口标准**，旨在统一不同聊天平台上的机器人应用开发接口。
 
 AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服务器端）的机器人协议端。
@@ -27,7 +30,7 @@ AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服
 - 启用(enable): 勾选。
 - 反向 WebSocket 主机地址：请填写你的机器的 IP 地址，一般情况下请直接填写 `0.0.0.0`
 - 反向 WebSocket 端口：填写一个端口，默认为 `6199`。
-- 反向 Websocket Token：只有当 NapCat 网络配置中配置了 token 才需填写。
+- 反向 Websocket Token：只有当协议实现端的网络配置中配置了 token 才需填写。
 
 点击 `保存`。
 

@@ -446,6 +446,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useTheme } from 'vuetify';
 import { botApi, cronApi, sessionApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
+import { getPlatformColor as resolvePlatformColor } from '@/utils/platformUtils';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
@@ -843,14 +844,7 @@ function getUmoDisplayProps(umo: string) {
 }
 
 function getPlatformColor(platform = '') {
-  const colors: Record<string, string> = {
-    aiocqhttp: 'blue',
-    qq_official: 'purple',
-    telegram: 'light-blue',
-    discord: 'indigo',
-    webchat: 'orange',
-  };
-  return colors[platform] || 'grey';
+  return resolvePlatformColor(platform);
 }
 
 function getUmoSelectionText(value?: string | null): string {

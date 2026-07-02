@@ -1,0 +1,180 @@
+[CmdletBinding()]
+param(
+    [string]$NapCatRepoUrl = "https://github.com/NapNeko/NapCatQQ",
+    [string]$CloneDir = "",
+    [string]$OutputDir = "",
+    [string]$TypeName = "OB11AllEvent",
+    [switch]$ForceClone
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+
+function Get-RepoRoot {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    return (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+}
+
+function Require-Command {
+    param([string]$Name)
+
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Required command not found: $Name"
+    }
+}
+
+function Ensure-Directory {
+    param([string]$Path)
+
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+}
+
+function Get-RelativePath {
+    param(
+        [string]$BasePath,
+        [string]$TargetPath
+    )
+
+    $baseUri = [System.Uri]((Resolve-Path -LiteralPath $BasePath).Path + [System.IO.Path]::DirectorySeparatorChar)
+    $targetUri = [System.Uri](Resolve-Path -LiteralPath $TargetPath).Path
+    return $baseUri.MakeRelativeUri($targetUri).ToString()
+}
+
+function Convert-PathForTsConfig {
+    param([string]$Path)
+
+    return $Path.Replace("\", "/")
+}
+
+function Write-MinimalTsConfig {
+    param(
+        [string]$ConfigPath,
+        [string]$EventFile,
+        [string]$SegmentFile
+    )
+
+    $configDir = Split-Path -Parent $ConfigPath
+    $eventRelative = Convert-PathForTsConfig (Get-RelativePath -BasePath $configDir -TargetPath $EventFile)
+    $segmentRelative = Convert-PathForTsConfig (Get-RelativePath -BasePath $configDir -TargetPath $SegmentFile)
+
+    $config = [ordered]@{
+        compilerOptions = [ordered]@{
+            target = "ES2020"
+            module = "ESNext"
+            moduleResolution = "bundler"
+            strict = $true
+            skipLibCheck = $true
+            allowImportingTsExtensions = $true
+            resolveJsonModule = $true
+            isolatedModules = $true
+            noEmit = $true
+        }
+        files = @(
+            $eventRelative,
+            $segmentRelative
+        )
+    }
+
+    $json = $config | ConvertTo-Json -Depth 8
+    Set-Content -LiteralPath $ConfigPath -Value $json -Encoding UTF8
+}
+
+function Ensure-NapCatRepo {
+    param(
+        [string]$RepoUrl,
+        [string]$Path,
+        [bool]$ResetClone
+    )
+
+    if ($ResetClone -and (Test-Path -LiteralPath $Path)) {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
+
+    if (Test-Path -LiteralPath $Path) {
+        Write-Host "Reusing NapCat repository at $Path"
+        return
+    }
+
+    Ensure-Directory -Path (Split-Path -Parent $Path)
+    git clone --depth 1 --filter=blob:none $RepoUrl $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "git clone failed: $RepoUrl"
+    }
+}
+
+Require-Command -Name "git"
+Require-Command -Name "pnpm"
+
+$repoRoot = Get-RepoRoot
+if ([string]::IsNullOrWhiteSpace($CloneDir)) {
+    $CloneDir = Join-Path $repoRoot ".tmp\NapCatQQ"
+}
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+    $OutputDir = Join-Path $repoRoot ".tmp\napcat-schema"
+}
+
+$cloneDir = [System.IO.Path]::GetFullPath($CloneDir)
+$outputDir = [System.IO.Path]::GetFullPath($OutputDir)
+
+if ([string]::IsNullOrWhiteSpace($TypeName)) {
+    throw "TypeName must not be empty."
+}
+
+Ensure-NapCatRepo -RepoUrl $NapCatRepoUrl -Path $cloneDir -ResetClone:$ForceClone.IsPresent
+Ensure-Directory -Path $outputDir
+
+$eventFile = Join-Path $cloneDir "packages\napcat-webui-frontend\src\types\onebot\event.ts"
+$segmentFile = Join-Path $cloneDir "packages\napcat-webui-frontend\src\types\onebot\segment.ts"
+
+if (-not (Test-Path -LiteralPath $eventFile)) {
+    throw "NapCat event type file not found: $eventFile"
+}
+if (-not (Test-Path -LiteralPath $segmentFile)) {
+    throw "NapCat segment type file not found: $segmentFile"
+}
+
+$schemaTestDir = Join-Path $outputDir "ob11-schema-test"
+Ensure-Directory -Path $schemaTestDir
+$tsconfigPath = Join-Path $schemaTestDir "tsconfig.json"
+Write-MinimalTsConfig -ConfigPath $tsconfigPath -EventFile $eventFile -SegmentFile $segmentFile
+
+$schemaPath = Join-Path $outputDir "ob11-all-event.schema.json"
+if ($schemaPath -eq $tsconfigPath) {
+    throw "Schema output path must not collide with the generated tsconfig path."
+}
+
+$env:PNPM_HOME = Join-Path $repoRoot ".tmp\pnpm-home"
+$env:PNPM_STORE_DIR = Join-Path $repoRoot ".tmp\pnpm-store"
+$env:XDG_CACHE_HOME = Join-Path $repoRoot ".tmp\xdg-cache"
+Ensure-Directory -Path $env:PNPM_HOME
+Ensure-Directory -Path $env:PNPM_STORE_DIR
+Ensure-Directory -Path $env:XDG_CACHE_HOME
+
+& pnpm dlx typescript-json-schema `
+    $tsconfigPath `
+    $TypeName `
+    --noExtraProps `
+    --required `
+    --topRef `
+    --out $schemaPath
+if ($LASTEXITCODE -ne 0) {
+    throw "typescript-json-schema generation failed for $TypeName"
+}
+
+if (-not (Test-Path -LiteralPath $schemaPath)) {
+    throw "Schema file was not created: $schemaPath"
+}
+
+try {
+    $rawJson = [System.IO.File]::ReadAllText($schemaPath, [System.Text.Encoding]::UTF8)
+    $null = $rawJson | ConvertFrom-Json
+}
+catch {
+    throw "Generated schema is not valid JSON: $schemaPath"
+}
+
+Write-Host "Generated schema:"
+Write-Host "  $schemaPath"
+Write-Host "Generated tsconfig:"
+Write-Host "  $tsconfigPath"

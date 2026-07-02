@@ -1,3 +1,5 @@
+import datetime
+
 from sqlalchemy import case, func, select
 from sqlmodel import col
 
@@ -11,6 +13,8 @@ from astrbot.core.agent.runners.deerflow.constants import (
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.db.po import ProviderStat
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
@@ -309,3 +313,258 @@ class ConversationCommands:
         )
 
         message.set_result(MessageEventResult().message(ret))
+
+    async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
+        """Show conversation history."""
+        size_per_page = 6
+        umo = message.unified_msg_origin
+        conv_mgr = self.context.conversation_manager
+        current_cid = await conv_mgr.get_curr_conversation_id(umo)
+
+        if not current_cid:
+            current_cid = await conv_mgr.new_conversation(
+                umo,
+                message.get_platform_id(),
+            )
+
+        contexts, total_pages = await conv_mgr.get_human_readable_context(
+            umo,
+            current_cid,
+            page,
+            size_per_page,
+        )
+
+        parts: list[str] = []
+        for context in contexts:
+            if len(context) > 150:
+                context = context[:150] + "..."
+            parts.append(f"{context}\n")
+
+        history = "".join(parts)
+        ret = (
+            "Conversation history:\n"
+            f"{history or 'No history yet.'}\n\n"
+            f"Page {page} / {total_pages}\n"
+            "*Use /history <page> to jump to another page."
+        )
+        message.set_result(MessageEventResult().message(ret).use_t2i(False))
+
+    async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
+        """Show conversation list."""
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            message.set_result(
+                MessageEventResult().message(
+                    f"Conversation listing is not supported for {THIRD_PARTY_AGENT_RUNNER_STR}.",
+                ),
+            )
+            return
+
+        size_per_page = 6
+        conversations_all = await self.context.conversation_manager.get_conversations(
+            message.unified_msg_origin,
+        )
+        total_pages = max(
+            1, (len(conversations_all) + size_per_page - 1) // size_per_page
+        )
+        page = max(1, min(page, total_pages))
+        start_idx = (page - 1) * size_per_page
+        end_idx = start_idx + size_per_page
+        conversations_paged = conversations_all[start_idx:end_idx]
+
+        titles = {
+            conv.cid: (conv.title if conv.title else "New conversation")
+            for conv in conversations_all
+        }
+        provider_settings = cfg.get("provider_settings", {})
+        platform_name = message.get_platform_name()
+
+        parts = ["Conversations:\n---\n"]
+        global_index = start_idx + 1
+        for conv in conversations_paged:
+            (
+                persona_id,
+                _,
+                force_applied_persona_id,
+                _,
+            ) = await self.context.persona_manager.resolve_selected_persona(
+                umo=message.unified_msg_origin,
+                conversation_persona_id=conv.persona_id,
+                platform_name=platform_name,
+                provider_settings=provider_settings,
+            )
+            if persona_id == "[%None]":
+                persona_name = "none"
+            elif persona_id:
+                persona_name = persona_id
+            else:
+                persona_name = "none"
+
+            if force_applied_persona_id:
+                persona_name = f"{persona_name} (session rule)"
+
+            title = titles.get(conv.cid, "New conversation")
+            updated_at = datetime.datetime.fromtimestamp(conv.updated_at).strftime(
+                "%m-%d %H:%M"
+            )
+            parts.append(
+                f"{global_index}. {title} ({conv.cid[:4]})\n"
+                f"  Persona: {persona_name}\n"
+                f"  Updated: {updated_at}\n"
+            )
+            global_index += 1
+
+        parts.append("---\n")
+        ret = "".join(parts)
+        current_cid = await self.context.conversation_manager.get_curr_conversation_id(
+            message.unified_msg_origin,
+        )
+        if current_cid:
+            ret += (
+                f"\nCurrent conversation: {titles.get(current_cid, 'New conversation')} "
+                f"({current_cid[:4]})"
+            )
+        else:
+            ret += "\nCurrent conversation: none"
+
+        unique_session = cfg["platform_settings"]["unique_session"]
+        ret += (
+            "\nSession isolation: user"
+            if unique_session
+            else "\nSession isolation: group"
+        )
+        ret += f"\nPage {page} / {total_pages}"
+        ret += "\n*Use /ls <page> to jump to another page."
+        message.set_result(MessageEventResult().message(ret).use_t2i(False))
+
+    async def groupnew_conv(self, message: AstrMessageEvent, sid: str = "") -> None:
+        """Create a new conversation for a target group session."""
+        if not sid:
+            message.set_result(
+                MessageEventResult().message("Usage: /groupnew <group_id>."),
+            )
+            return
+
+        session = str(
+            MessageSession(
+                platform_name=message.get_platform_id(),
+                message_type=MessageType.GROUP_MESSAGE,
+                session_id=str(sid),
+            ),
+        )
+        current_persona = await self._get_current_persona_id(session)
+        cid = await self.context.conversation_manager.new_conversation(
+            session,
+            message.get_platform_id(),
+            persona_id=current_persona,
+        )
+        message.set_result(
+            MessageEventResult().message(
+                f"✅ Group session {session} switched to a new conversation: {cid[:4]}.",
+            ),
+        )
+
+    async def switch_conv(
+        self,
+        message: AstrMessageEvent,
+        index: int | None = None,
+    ) -> None:
+        """Switch to a conversation listed by /ls."""
+        if not isinstance(index, int):
+            message.set_result(
+                MessageEventResult().message(
+                    "Usage: /switch <index>. Use /ls to inspect conversation indexes.",
+                ),
+            )
+            return
+
+        conversations = await self.context.conversation_manager.get_conversations(
+            message.unified_msg_origin,
+        )
+        if index < 1 or index > len(conversations):
+            message.set_result(
+                MessageEventResult().message(
+                    "❌ Invalid conversation index. Use /ls to inspect available conversations.",
+                ),
+            )
+            return
+
+        conversation = conversations[index - 1]
+        await self.context.conversation_manager.switch_conversation(
+            message.unified_msg_origin,
+            conversation.cid,
+        )
+        title = conversation.title or "New conversation"
+        message.set_result(
+            MessageEventResult().message(
+                f"✅ Switched to conversation: {title} ({conversation.cid[:4]}).",
+            ),
+        )
+
+    async def rename_conv(self, message: AstrMessageEvent) -> None:
+        """Rename the current conversation."""
+        new_name = message.message_str.partition(" ")[2].strip()
+        if not new_name:
+            message.set_result(
+                MessageEventResult().message("Usage: /rename <new title>."),
+            )
+            return
+
+        await self.context.conversation_manager.update_conversation_title(
+            message.unified_msg_origin,
+            new_name,
+        )
+        message.set_result(
+            MessageEventResult().message("✅ Conversation renamed successfully."),
+        )
+
+    async def del_conv(self, message: AstrMessageEvent) -> None:
+        """Delete the current conversation."""
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
+        is_unique_session = cfg["platform_settings"]["unique_session"]
+
+        if message.get_group_id() and not is_unique_session and message.role != "admin":
+            message.set_result(
+                MessageEventResult().message(
+                    f"Deleting the current group conversation requires admin permission. Sender {message.get_sender_id()} is not an admin.",
+                ),
+            )
+            return
+
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(umo, exclude=message)
+            await _clear_third_party_agent_runner_state(
+                self.context,
+                umo,
+                agent_runner_type,
+            )
+            message.set_result(
+                MessageEventResult().message("✅ Conversation state cleared."),
+            )
+            return
+
+        current_cid = await self.context.conversation_manager.get_curr_conversation_id(
+            umo,
+        )
+        if not current_cid:
+            message.set_result(
+                MessageEventResult().message(
+                    "There is no active conversation. Use /new to create one or /switch to enter another conversation.",
+                ),
+            )
+            return
+
+        active_event_registry.stop_all(umo, exclude=message)
+        await self.context.conversation_manager.delete_conversation(
+            umo,
+            current_cid,
+        )
+        message.set_extra("_clean_group_context_session", True)
+        message.set_result(
+            MessageEventResult().message(
+                "✅ Deleted the current conversation. Use /new to create one or /switch to enter another conversation.",
+            ),
+        )

@@ -140,13 +140,7 @@ AstrBot 的指令通过插件机制注册。为了保持主程序轻量，当前
 
 ## 内置指令扩展
 
-除上述基础指令外，其他原本随主程序提供的内置指令已经迁移到独立插件：
-
-- [builtin_commands_extension](https://github.com/AstrBotDevs/builtin_commands_extension)
-
-可直接在插件市场搜索安装。
-
-该插件提供插件管理、Provider 管理、模型切换、Persona 管理、对话列表管理等扩展指令，例如：
+此外，AstrBot 现在内置提供以下扩展管理指令：
 
 - `/plugin`：查看、启用、停用或安装插件。
 - `/op`、`/deop`：添加或移除管理员。
@@ -159,9 +153,7 @@ AstrBot 的指令通过插件机制注册。为了保持主程序轻量，当前
 - `/rename`：重命名当前对话。
 - `/del`：删除当前对话。
 - `/persona`：查看或切换 Persona。
-- `/llm`：开启或关闭 LLM 聊天功能。
-
-如果你需要这些扩展指令，请安装或启用 `builtin_commands_extension` 插件。
+- `/llm`：开启或关闭当前会话的 LLM 聊天功能。
 
 ## 权限说明
 

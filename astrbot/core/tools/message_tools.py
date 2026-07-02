@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shlex
@@ -337,6 +338,79 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return f"Message sent to session {target_session}"
 
 
+@builtin_tool
+@dataclass
+class SendPokeToUserTool(FunctionTool[AstrAgentContext]):
+    name: str = "send_poke_to_user"
+    description: str = (
+        "Send a poke/nudge to the current chat user on platforms that support it. "
+        "Use sparingly for lightweight interaction. "
+        "By default it pokes the current sender; specifying another user requires admin permission."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional target user ID. Leave empty to poke the current sender."
+                    ),
+                },
+                "times": {
+                    "type": "integer",
+                    "description": "How many pokes to send. Clamped to 1-3.",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 3,
+                },
+            },
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        event = context.context.event
+        if not event.supports_platform_action("send_poke"):
+            return "error: current platform does not support send_poke."
+
+        send_poke = getattr(event, "send_poke", None)
+        if not callable(send_poke):
+            return "error: current event does not expose send_poke."
+
+        sender_id = event.get_sender_id().strip()
+        user_id = str(kwargs.get("user_id", "")).strip() or sender_id
+        if not user_id:
+            return "error: user_id is required for send_poke_to_user."
+
+        if user_id != sender_id:
+            if permission_error := check_admin_permission(
+                context,
+                "Send a poke to another user",
+            ):
+                return permission_error
+
+        self_id = event.get_self_id().strip()
+        if self_id and user_id == self_id:
+            return "error: cannot poke the bot itself."
+
+        times = kwargs.get("times", 1)
+        try:
+            normalized_times = int(times)
+        except TypeError, ValueError:
+            return "error: times must be an integer."
+        normalized_times = max(1, min(normalized_times, 3))
+
+        for attempt in range(normalized_times):
+            await send_poke(user_id=user_id)
+            if attempt + 1 < normalized_times:
+                await asyncio.sleep(0.4)
+
+        return f"Poked user {user_id} {normalized_times} time(s)."
+
+
 __all__ = [
+    "SendPokeToUserTool",
     "SendMessageToUserTool",
 ]

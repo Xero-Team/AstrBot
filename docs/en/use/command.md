@@ -146,11 +146,7 @@ This command requires admin permission.
 
 ## Built-in Commands Extension
 
-Other commands that were previously shipped with the core have been moved to a separate plugin:
-
-- [builtin_commands_extension](https://github.com/AstrBotDevs/builtin_commands_extension)
-
-This plugin provides extended commands for plugin management, Provider management, model switching, Persona management, and conversation management. Examples include:
+AstrBot also ships the following built-in extended management commands:
 
 - `/plugin`: View, enable, disable, or install plugins.
 - `/op`, `/deop`: Add or remove admins.
@@ -163,9 +159,7 @@ This plugin provides extended commands for plugin management, Provider managemen
 - `/rename`: Rename the current conversation.
 - `/del`: Delete the current conversation.
 - `/persona`: View or switch Persona.
-- `/llm`: Enable or disable LLM chat.
-
-Install or enable the `builtin_commands_extension` plugin if you need these extended commands.
+- `/llm`: Enable or disable LLM chat for the current session.
 
 ## Permission Notes
 

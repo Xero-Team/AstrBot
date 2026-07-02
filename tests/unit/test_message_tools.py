@@ -6,9 +6,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.message.message_event_result import (
+    MessageEventResult,
+    ResultContentType,
+)
 from astrbot.core.pipeline.respond.stage import RespondStage
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.message_tools import SendMessageToUserTool, SendPokeToUserTool
 
 
 def _make_context(
@@ -30,6 +33,9 @@ def _make_context(
         role=role,
         _has_send_oper=False,
         get_sender_id=lambda: "user-1",
+        get_self_id=lambda: "bot-1",
+        supports_platform_action=lambda action_name: action_name == "send_poke",
+        send_poke=AsyncMock(),
     )
     event.set_extra = lambda key, value: extras.__setitem__(key, value)
     event.get_extra = lambda key, default=None: extras.get(key, default)
@@ -50,7 +56,10 @@ class _DummyRespondEvent:
             "_send_message_to_user_current_session_plain_texts": sent_plain_texts,
         }
         self._result = MessageEventResult().message(result_text)
-        self.send = AsyncMock()
+        self._call_order: list[str] = []
+        self.send = AsyncMock(side_effect=self._record_send)
+        self.send_streaming = AsyncMock(side_effect=self._record_send_streaming)
+        self.stop_typing = AsyncMock(side_effect=self._record_stop_typing)
         self.plugins_name = []
 
     def get_result(self):
@@ -92,6 +101,18 @@ class _DummyRespondEvent:
     def clear_result(self) -> None:
         """Clear the current message result."""
         self._result = None
+
+    async def _record_send(self, *_args, **_kwargs) -> None:
+        """Record send ordering for assertions."""
+        self._call_order.append("send")
+
+    async def _record_send_streaming(self, *_args, **_kwargs) -> None:
+        """Record streaming-send ordering for assertions."""
+        self._call_order.append("send_streaming")
+
+    async def _record_stop_typing(self, *_args, **_kwargs) -> None:
+        """Record stop_typing ordering for assertions."""
+        self._call_order.append("stop_typing")
 
 
 def _make_respond_stage() -> RespondStage:
@@ -155,6 +176,62 @@ async def test_send_message_defaults_to_current_session():
 
 
 @pytest.mark.asyncio
+async def test_send_poke_defaults_to_current_sender():
+    tool = SendPokeToUserTool()
+    ctx = _make_context()
+
+    result = await tool.call(ctx)
+
+    assert result == "Poked user user-1 1 time(s)."
+    ctx.context.event.send_poke.assert_awaited_once_with(user_id="user-1")
+
+
+@pytest.mark.asyncio
+async def test_send_poke_clamps_times_and_reuses_current_sender():
+    tool = SendPokeToUserTool()
+    ctx = _make_context()
+
+    result = await tool.call(ctx, times=9)
+
+    assert result == "Poked user user-1 3 time(s)."
+    assert ctx.context.event.send_poke.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_send_poke_requires_admin_for_other_user():
+    tool = SendPokeToUserTool()
+    ctx = _make_context(role="member", require_admin=True)
+
+    result = await tool.call(ctx, user_id="user-2")
+
+    assert "Permission denied" in result
+    ctx.context.event.send_poke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_poke_rejects_self_target():
+    tool = SendPokeToUserTool()
+    ctx = _make_context()
+
+    result = await tool.call(ctx, user_id="bot-1")
+
+    assert result == "error: cannot poke the bot itself."
+    ctx.context.event.send_poke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_poke_requires_platform_support():
+    tool = SendPokeToUserTool()
+    ctx = _make_context()
+    ctx.context.event.supports_platform_action = lambda _name: False
+
+    result = await tool.call(ctx)
+
+    assert result == "error: current platform does not support send_poke."
+    ctx.context.event.send_poke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_send_message_other_session_does_not_record_current_text():
     """Messages sent to another session do not affect current-session dedupe."""
     tool = SendMessageToUserTool()
@@ -203,6 +280,30 @@ async def test_respond_stage_sends_different_text_after_send_message_to_user():
     assert result is None
     event.send.assert_awaited_once()
     assert event.get_result() is None
+    assert event._call_order == ["stop_typing", "send"]
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_stops_typing_before_streaming_send():
+    """RespondStage stops typing before handing off streaming output."""
+    stage = _make_respond_stage()
+    event = _DummyRespondEvent(result_text="", sent_plain_texts=[])
+
+    async def _stream():
+        if False:
+            yield None
+
+    event._result = MessageEventResult(
+        result_content_type=ResultContentType.STREAMING_RESULT,
+        async_stream=_stream(),
+    )
+
+    result = await stage.process(event)
+
+    assert result is None
+    event.send.assert_not_awaited()
+    event.send_streaming.assert_awaited_once()
+    assert event._call_order == ["stop_typing", "send_streaming"]
 
 
 @pytest.mark.asyncio

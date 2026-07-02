@@ -140,7 +140,10 @@ async def download_image_by_url(
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return path
-    except aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError:
+    except (
+        aiohttp.ClientConnectorSSLError,
+        aiohttp.ClientConnectorCertificateError,
+    ):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
@@ -178,6 +181,101 @@ async def _emit_download_progress(progress_callback, payload: dict) -> None:
         await result
 
 
+class DownloadFileHTTPError(RuntimeError):
+    """Raised when a file download returns an unsuccessful HTTP status."""
+
+
+def _raise_for_download_status(resp, url: str) -> None:
+    if resp.status == 200:
+        return
+    logger.error(
+        "Failed to download file from %s. HTTP status code: %s",
+        _safe_url_for_log(url),
+        resp.status,
+    )
+    raise DownloadFileHTTPError(
+        "Failed to download file from "
+        f"{_safe_url_for_log(url)}. HTTP status code: {resp.status}"
+    )
+
+
+async def _download_response_to_file(
+    resp,
+    file_obj,
+    url: str,
+    show_progress: bool,
+    progress_callback,
+    show_downloading_label: bool = True,
+) -> None:
+    """Write a successful download response to a local file.
+
+    Args:
+        resp: aiohttp response object to read from.
+        file_obj: Open writable binary file object.
+        url: Source URL used for progress events and sanitized errors.
+        show_progress: Whether to print progress to stdout.
+        progress_callback: Optional callback for progress payloads.
+        show_downloading_label: Whether to use the standard download heading.
+
+    """
+
+    total_size = int(resp.headers.get("content-length", 0))
+    downloaded_size = 0
+    start_time = time.time()
+    if show_progress:
+        if show_downloading_label:
+            print(
+                f"Downloading: {_safe_url_for_log(url)} | "
+                f"Size: {total_size / 1024:.2f} KB"
+            )
+        else:
+            print(f"Size: {total_size / 1024:.2f} KB | URL: {_safe_url_for_log(url)}")
+    await _emit_download_progress(
+        progress_callback,
+        {
+            "url": url,
+            "downloaded": 0,
+            "total": total_size,
+            "percent": 0,
+            "speed": 0,
+        },
+    )
+    while True:
+        chunk = await resp.content.read(8192)
+        if not chunk:
+            break
+        file_obj.write(chunk)
+        downloaded_size += len(chunk)
+        elapsed_time = time.time() - start_time if time.time() - start_time > 0 else 1
+        speed = downloaded_size / 1024 / elapsed_time  # KB/s
+        percent = downloaded_size / total_size if total_size > 0 else 0
+        await _emit_download_progress(
+            progress_callback,
+            {
+                "url": url,
+                "downloaded": downloaded_size,
+                "total": total_size,
+                "percent": percent,
+                "speed": speed,
+            },
+        )
+        if show_progress:
+            print(
+                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
+                end="",
+            )
+    await _emit_download_progress(
+        progress_callback,
+        {
+            "url": url,
+            "downloaded": downloaded_size,
+            "total": total_size,
+            "percent": 1,
+            "speed": 0,
+        },
+    )
+
+
 async def download_file(
     url: str,
     path: str,
@@ -212,70 +310,19 @@ async def download_file(
                 url,
                 timeout=aiohttp.ClientTimeout(total=1800),
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        "Failed to download file from %s. HTTP status code: %s",
-                        _safe_url_for_log(url),
-                        resp.status,
-                    )
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
-                if show_progress:
-                    print(
-                        f"Downloading: {_safe_url_for_log(url)} | "
-                        f"Size: {total_size / 1024:.2f} KB"
-                    )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": 0,
-                        "total": total_size,
-                        "percent": 0,
-                        "speed": 0,
-                    },
-                )
+                _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        elapsed_time = (
-                            time.time() - start_time
-                            if time.time() - start_time > 0
-                            else 1
-                        )
-                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                        percent = downloaded_size / total_size if total_size > 0 else 0
-                        await _emit_download_progress(
-                            progress_callback,
-                            {
-                                "url": url,
-                                "downloaded": downloaded_size,
-                                "total": total_size,
-                                "percent": percent,
-                                "speed": speed,
-                            },
-                        )
-                        if show_progress:
-                            print(
-                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                                end="",
-                            )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": downloaded_size,
-                        "total": total_size,
-                        "percent": 1,
-                        "speed": 0,
-                    },
-                )
-    except aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError:
+                    await _download_response_to_file(
+                        resp,
+                        f,
+                        url,
+                        show_progress,
+                        progress_callback,
+                    )
+    except (
+        aiohttp.ClientConnectorSSLError,
+        aiohttp.ClientConnectorCertificateError,
+    ):
         if not allow_insecure_ssl_fallback:
             raise
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
@@ -298,63 +345,16 @@ async def download_file(
                 ssl=ssl_context,
                 timeout=aiohttp.ClientTimeout(total=120),
             ) as resp:
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
-                if show_progress:
-                    print(
-                        f"Size: {total_size / 1024:.2f} KB | "
-                        f"URL: {_safe_url_for_log(url)}"
-                    )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": 0,
-                        "total": total_size,
-                        "percent": 0,
-                        "speed": 0,
-                    },
-                )
+                _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        elapsed_time = (
-                            time.time() - start_time
-                            if time.time() - start_time > 0
-                            else 1
-                        )
-                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                        percent = downloaded_size / total_size if total_size > 0 else 0
-                        await _emit_download_progress(
-                            progress_callback,
-                            {
-                                "url": url,
-                                "downloaded": downloaded_size,
-                                "total": total_size,
-                                "percent": percent,
-                                "speed": speed,
-                            },
-                        )
-                        if show_progress:
-                            print(
-                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                                end="",
-                            )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": downloaded_size,
-                        "total": total_size,
-                        "percent": 1,
-                        "speed": 0,
-                    },
-                )
+                    await _download_response_to_file(
+                        resp,
+                        f,
+                        url,
+                        show_progress,
+                        progress_callback,
+                        show_downloading_label=False,
+                    )
     if show_progress:
         print()
 
@@ -444,7 +444,7 @@ def is_dashboard_version_compatible(
             )
             == 0
         )
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
 
 
@@ -492,7 +492,7 @@ def should_use_bundled_dashboard_dist(
         return True
     try:
         return not is_dashboard_version_compatible(user_version, current_version)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
 
 

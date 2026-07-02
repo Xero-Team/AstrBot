@@ -13,7 +13,7 @@ $ProgressPreference = "SilentlyContinue"
 
 function Get-RepoRoot {
     $scriptDir = Split-Path -Parent $PSCommandPath
-    return (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($scriptDir, "..", ".."))
 }
 
 function Require-Command {
@@ -108,10 +108,10 @@ Require-Command -Name "pnpm"
 
 $repoRoot = Get-RepoRoot
 if ([string]::IsNullOrWhiteSpace($CloneDir)) {
-    $CloneDir = Join-Path $repoRoot ".tmp\NapCatQQ"
+    $CloneDir = [System.IO.Path]::Combine($repoRoot, ".tmp", "NapCatQQ")
 }
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
-    $OutputDir = Join-Path $repoRoot ".tmp\napcat-schema"
+    $OutputDir = [System.IO.Path]::Combine($repoRoot, ".tmp", "napcat-schema")
 }
 
 $cloneDir = [System.IO.Path]::GetFullPath($CloneDir)
@@ -124,8 +124,24 @@ if ([string]::IsNullOrWhiteSpace($TypeName)) {
 Ensure-NapCatRepo -RepoUrl $NapCatRepoUrl -Path $cloneDir -ResetClone:$ForceClone.IsPresent
 Ensure-Directory -Path $outputDir
 
-$eventFile = Join-Path $cloneDir "packages\napcat-webui-frontend\src\types\onebot\event.ts"
-$segmentFile = Join-Path $cloneDir "packages\napcat-webui-frontend\src\types\onebot\segment.ts"
+$eventFile = [System.IO.Path]::Combine(
+    $cloneDir,
+    "packages",
+    "napcat-webui-frontend",
+    "src",
+    "types",
+    "onebot",
+    "event.ts"
+)
+$segmentFile = [System.IO.Path]::Combine(
+    $cloneDir,
+    "packages",
+    "napcat-webui-frontend",
+    "src",
+    "types",
+    "onebot",
+    "segment.ts"
+)
 
 if (-not (Test-Path -LiteralPath $eventFile)) {
     throw "NapCat event type file not found: $eventFile"
@@ -144,9 +160,9 @@ if ($schemaPath -eq $tsconfigPath) {
     throw "Schema output path must not collide with the generated tsconfig path."
 }
 
-$env:PNPM_HOME = Join-Path $repoRoot ".tmp\pnpm-home"
-$env:PNPM_STORE_DIR = Join-Path $repoRoot ".tmp\pnpm-store"
-$env:XDG_CACHE_HOME = Join-Path $repoRoot ".tmp\xdg-cache"
+$env:PNPM_HOME = [System.IO.Path]::Combine($repoRoot, ".tmp", "pnpm-home")
+$env:PNPM_STORE_DIR = [System.IO.Path]::Combine($repoRoot, ".tmp", "pnpm-store")
+$env:XDG_CACHE_HOME = [System.IO.Path]::Combine($repoRoot, ".tmp", "xdg-cache")
 Ensure-Directory -Path $env:PNPM_HOME
 Ensure-Directory -Path $env:PNPM_STORE_DIR
 Ensure-Directory -Path $env:XDG_CACHE_HOME

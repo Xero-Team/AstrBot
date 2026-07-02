@@ -10,7 +10,7 @@ $ProgressPreference = "SilentlyContinue"
 
 function Get-RepoRoot {
     $scriptDir = Split-Path -Parent $PSCommandPath
-    return (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($scriptDir, "..", ".."))
 }
 
 function Test-CommandAvailable {
@@ -34,10 +34,10 @@ Test-CommandAvailable -Name "uv"
 
 $repoRoot = Get-RepoRoot
 if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
-    $SchemaPath = Join-Path $repoRoot ".tmp\napcat-schema\ob11-all-event.schema.json"
+    $SchemaPath = [System.IO.Path]::Combine($repoRoot, ".tmp", "napcat-schema", "ob11-all-event.schema.json")
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $repoRoot ".tmp\napcat-schema\ob11-all-event.normalized.schema.json"
+    $OutputPath = [System.IO.Path]::Combine($repoRoot, ".tmp", "napcat-schema", "ob11-all-event.normalized.schema.json")
 }
 
 $SchemaPath = [System.IO.Path]::GetFullPath($SchemaPath)
@@ -49,7 +49,7 @@ if (-not (Test-Path -LiteralPath $SchemaPath)) {
 
 New-DirectoryIfMissing -Path (Split-Path -Parent $OutputPath)
 
-& uv run python (Join-Path $repoRoot "scripts\napcat\normalize_ob11_event_schema.py") `
+& uv run python ([System.IO.Path]::Combine($repoRoot, "scripts", "napcat", "normalize_ob11_event_schema.py")) `
     --input $SchemaPath `
     --output $OutputPath
 if ($LASTEXITCODE -ne 0) {

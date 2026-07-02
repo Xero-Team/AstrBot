@@ -10,7 +10,7 @@ $ProgressPreference = "SilentlyContinue"
 
 function Get-RepoRoot {
     $scriptDir = Split-Path -Parent $PSCommandPath
-    return (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($scriptDir, "..", ".."))
 }
 
 function Require-Command {
@@ -32,10 +32,10 @@ Require-Command -Name "uvx"
 
 $repoRoot = Get-RepoRoot
 if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
-    $SchemaPath = Join-Path $repoRoot ".tmp\napcat-schema\ob11-all-event.normalized.schema.json"
+    $SchemaPath = [System.IO.Path]::Combine($repoRoot, ".tmp", "napcat-schema", "ob11-all-event.normalized.schema.json")
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $repoRoot ".tmp\napcat-schema\ob11_event_models.py"
+    $OutputPath = [System.IO.Path]::Combine($repoRoot, ".tmp", "napcat-schema", "ob11_event_models.py")
 }
 
 $SchemaPath = [System.IO.Path]::GetFullPath($SchemaPath)

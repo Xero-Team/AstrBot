@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
+POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 
 def _run_powershell_script(

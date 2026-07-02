@@ -86,6 +86,17 @@
                       v-if="larkCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="larkCreationMode === 'scan'"
@@ -138,6 +149,17 @@
                       v-if="dingtalkCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="dingtalkCreationMode === 'scan'"
@@ -193,6 +215,17 @@
                       v-if="qqOfficialCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="qqOfficialCreationMode === 'scan'"
@@ -227,8 +260,19 @@
 
                   <div
                     v-else-if="isWeixinOcPlatform"
-                    class="weixin-oc-registration-inline mt-4"
+                    class="registration-inline mt-4"
                   >
+                    <v-text-field
+                      :model-value="selectedPlatformConfig.id || ''"
+                      :label="tm('registrationAction.platformIdLabel')"
+                      :error="Boolean(scanPlatformIdError)"
+                      :error-messages="scanPlatformIdError"
+                      variant="outlined"
+                      density="compact"
+                      hide-details="auto"
+                      class="registration-platform-id-field"
+                      @update:model-value="setScanPlatformId"
+                    />
                     <PlatformRegistrationAction
                       :platform-config="selectedPlatformConfig"
                       :active="isWeixinOcPlatform"
@@ -884,6 +928,7 @@ interface ComponentState {
   showOneBotEmptyTokenWarnDialog: boolean;
   oneBotTokenWarningPlatformType: string | null;
   oneBotEmptyTokenWarningResolve: ((value: boolean) => void) | null;
+  scanPlatformIdCustomized: boolean;
   loading: boolean;
   showConfigSection: boolean;
   showConfigDrawer: boolean;
@@ -942,6 +987,7 @@ const state = reactive<ComponentState>({
   showOneBotEmptyTokenWarnDialog: false,
   oneBotTokenWarningPlatformType: null,
   oneBotEmptyTokenWarningResolve: null,
+  scanPlatformIdCustomized: false,
   loading: false,
   showConfigSection: false,
   showConfigDrawer: false,
@@ -1131,6 +1177,16 @@ const isQqOfficialPlatform = computed(() =>
     getString(state.selectedPlatformConfig?.type) ?? '',
   ),
 );
+const scanPlatformIdError = computed(() => {
+  const platformId = String(state.selectedPlatformConfig?.id || '');
+  if (!platformId) {
+    return tm('registrationAction.platformIdRequired');
+  }
+  if (!isPlatformIdValid(platformId)) {
+    return tm('registrationAction.platformIdInvalid');
+  }
+  return '';
+});
 
 watch(selectedPlatformType, (newType) => {
   if (newType && platformTemplates.value[newType]) {
@@ -1141,6 +1197,7 @@ watch(selectedPlatformType, (newType) => {
   state.larkCreationMode = '';
   state.dingtalkCreationMode = '';
   state.qqOfficialCreationMode = '';
+  state.scanPlatformIdCustomized = false;
 });
 
 watch(aBConfigRadioVal, (newValue) => {
@@ -1334,6 +1391,7 @@ function resetForm() {
   state.larkCreationMode = '';
   state.dingtalkCreationMode = '';
   state.qqOfficialCreationMode = '';
+  state.scanPlatformIdCustomized = false;
   state.aBConfigRadioVal = '0';
   state.selectedAbConfId = 'default';
   state.newConfigData = null;
@@ -1614,6 +1672,14 @@ function showError(message: string) {
   emit('show-toast', { message, type: 'error' });
 }
 
+function setScanPlatformId(value: string | null) {
+  if (!state.selectedPlatformConfig) {
+    return;
+  }
+  state.scanPlatformIdCustomized = true;
+  state.selectedPlatformConfig.id = String(value || '');
+}
+
 function getOneBotSecurityToken(
   platformConfig: Record<string, unknown> | undefined,
 ): string | undefined {
@@ -1645,6 +1711,9 @@ function sanitizePlatformIdPart(value: unknown): string {
 
 function handlePlatformRegistrationCreated(data: RegistrationCreatedPayload) {
   if (!state.selectedPlatformConfig) {
+    return;
+  }
+  if (state.scanPlatformIdCustomized) {
     return;
   }
 
@@ -2131,9 +2200,15 @@ function scrollDialogToBottom() {
 
 .registration-inline {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
   width: 320px;
+  gap: 8px;
+}
+
+.registration-platform-id-field {
+  width: 300px;
 }
 
 @media (max-width: 600px) {

@@ -22,7 +22,7 @@ NAPCAT_SCHEMA_OUTPUT_DIR ?= .tmp/napcat-schema
 NAPCAT_NORMALIZED_SCHEMA_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11-all-event.normalized.schema.json
 NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
 NAPCAT_MODELS_SOURCE_PATH ?= astrbot/core/platform/sources/napcat/generated/ob11_events.py
-PS := powershell -NoProfile -ExecutionPolicy Bypass -File
+PS ?= pwsh -NoProfile -NonInteractive -File
 PNPM := corepack pnpm
 NPX := npm exec --yes --
 QUALITY_TYPE_TARGETS := astrbot/api astrbot/cli astrbot/core/backup astrbot/core/config astrbot/core/knowledge_base astrbot/core/skills astrbot/utils
@@ -65,13 +65,13 @@ endif
 	fi
 
 pr-test-neo:
-	@$(PS) scripts/pr_test_env.ps1 -Profile neo
+	@$(PS) scripts/pr_test_env.ps1 -TestProfile neo
 
 pr-test-full:
-	@$(PS) scripts/pr_test_env.ps1 -Profile full
+	@$(PS) scripts/pr_test_env.ps1 -TestProfile full
 
 pr-test-full-fast:
-	@$(PS) scripts/pr_test_env.ps1 -Profile full -SkipSync -NoDashboard
+	@$(PS) scripts/pr_test_env.ps1 -TestProfile full -SkipSync -NoDashboard
 
 build: build-all
 

@@ -83,14 +83,19 @@ function Run-SmokeTest {
     $smokeErrLog = Join-Path ([System.IO.Path]::GetTempPath()) ("astrbot-smoke-{0}.err.log" -f [guid]::NewGuid())
 
     Write-Host "==> Starting smoke test on http://localhost:6185"
-    $process = Start-Process `
-        -FilePath "uv" `
-        -ArgumentList @("run", "main.py") `
-        -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $smokeLog `
-        -RedirectStandardError $smokeErrLog `
-        -WindowStyle Hidden `
-        -PassThru
+    $startProcessParams = @{
+        FilePath               = "uv"
+        ArgumentList           = @("run", "main.py")
+        WorkingDirectory       = $repoRoot
+        RedirectStandardOutput = $smokeLog
+        RedirectStandardError  = $smokeErrLog
+        PassThru               = $true
+    }
+    if ($IsWindows) {
+        $startProcessParams.WindowStyle = "Hidden"
+    }
+
+    $process = Start-Process @startProcessParams
 
     try {
         for ($attempt = 0; $attempt -lt 60; $attempt++) {

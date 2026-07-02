@@ -24,6 +24,20 @@ function Ensure-RunDir {
     }
 }
 
+function Get-ApplicationCommandPath {
+    param([string[]]$Names)
+
+    foreach ($name in $Names) {
+        $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($command) {
+            return $command.Source
+        }
+    }
+
+    return $null
+}
+
 function Remove-IfExists {
     param([string]$Path)
     if (Test-Path $Path) {
@@ -88,6 +102,10 @@ function New-EmptyFile {
 function Invoke-TaskKill {
     param([int]$TargetPid)
 
+    if (-not $IsWindows) {
+        throw "taskkill is only available on Windows."
+    }
+
     $taskkill = Start-Process `
         -FilePath "taskkill.exe" `
         -ArgumentList @("/PID", $TargetPid, "/T", "/F") `
@@ -106,6 +124,58 @@ function Invoke-TaskKill {
     throw "taskkill failed for PID $TargetPid with exit code $($taskkill.ExitCode)"
 }
 
+function Get-PosixProcessGroupId {
+    param([int]$TargetPid)
+
+    $psCommand = Get-ApplicationCommandPath -Names @("ps")
+    if (-not $psCommand) {
+        return $null
+    }
+
+    $groupId = & $psCommand "-o" "pgid=" "-p" $TargetPid 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $groupId) {
+        return $null
+    }
+
+    $groupText = ($groupId | Select-Object -First 1).Trim()
+    if ($groupText -match "^\d+$") {
+        return [int]$groupText
+    }
+
+    return $null
+}
+
+function Stop-PosixProcess {
+    param([int]$TargetPid)
+
+    $process = Get-Process -Id $TargetPid -ErrorAction SilentlyContinue
+    if (-not $process) {
+        return
+    }
+
+    $killCommand = Get-ApplicationCommandPath -Names @("kill")
+    $processGroupId = Get-PosixProcessGroupId -TargetPid $TargetPid
+    if ($killCommand -and $processGroupId -eq $TargetPid) {
+        & $killCommand "-s" "TERM" "--" "-$TargetPid" 2>$null
+        for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            Start-Sleep -Milliseconds 200
+            if (-not (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue)) {
+                return
+            }
+        }
+
+        & $killCommand "-s" "KILL" "--" "-$TargetPid" 2>$null
+        Start-Sleep -Milliseconds 200
+    }
+    else {
+        Stop-Process -Id $TargetPid -Force -ErrorAction SilentlyContinue
+    }
+
+    if (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) {
+        throw "Failed to stop PID $TargetPid"
+    }
+}
+
 function Stop-FromPidFile {
     param([string]$PidFile)
     if (-not (Test-Path $PidFile)) {
@@ -113,12 +183,18 @@ function Stop-FromPidFile {
     }
 
     $pidValue = Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pidValue) {
+    if ($pidValue -and $pidValue -match "^\d+$") {
+        $targetPid = [int]$pidValue
         try {
-            Invoke-TaskKill -Pid ([int]$pidValue)
+            if ($IsWindows) {
+                Invoke-TaskKill -TargetPid $targetPid
+            }
+            else {
+                Stop-PosixProcess -TargetPid $targetPid
+            }
         }
         catch {
-            if (Get-Process -Id ([int]$pidValue) -ErrorAction SilentlyContinue) {
+            if (Get-Process -Id $targetPid -ErrorAction SilentlyContinue) {
                 throw
             }
         }
@@ -130,16 +206,48 @@ function Stop-ByPort {
     param([int]$Port)
 
     $pids = @()
-    try {
-        $pids += Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop |
-            Select-Object -ExpandProperty OwningProcess -Unique
+    if ($IsWindows) {
+        try {
+            $pids += Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop |
+                Select-Object -ExpandProperty OwningProcess -Unique
+        }
+        catch {
+            $netstatLines = netstat -ano -p tcp | Select-String ":$Port "
+            foreach ($line in $netstatLines) {
+                $parts = ($line.Line -split "\s+") | Where-Object { $_ }
+                if ($parts.Length -ge 5 -and $parts[3] -eq "LISTENING") {
+                    $pids += $parts[4]
+                }
+            }
+        }
     }
-    catch {
-        $netstatLines = netstat -ano -p tcp | Select-String ":$Port "
-        foreach ($line in $netstatLines) {
-            $parts = ($line.Line -split "\s+") | Where-Object { $_ }
-            if ($parts.Length -ge 5 -and $parts[3] -eq "LISTENING") {
-                $pids += $parts[4]
+    else {
+        $lsofCommand = Get-ApplicationCommandPath -Names @("lsof")
+        if ($lsofCommand) {
+            $pids += & $lsofCommand "-tiTCP:$Port" "-sTCP:LISTEN" 2>$null
+        }
+
+        if (-not $pids) {
+            $ssCommand = Get-ApplicationCommandPath -Names @("ss")
+            if ($ssCommand) {
+                $ssLines = & $ssCommand "-ltnp" 2>$null
+                foreach ($line in $ssLines) {
+                    if ($line -match "[:\.]$Port\s" -and $line -match "pid=(\d+)") {
+                        $pids += $matches[1]
+                    }
+                }
+            }
+        }
+
+        if (-not $pids) {
+            $netstatCommand = Get-ApplicationCommandPath -Names @("netstat")
+            if ($netstatCommand) {
+                $netstatLines = & $netstatCommand "-ltnp" 2>$null
+                foreach ($line in $netstatLines) {
+                    if ($line -match "[:\.]$Port\s" -and $line -match "\s(\d+)/") {
+                        $pids += $matches[1]
+                    }
+                }
             }
         }
     }
@@ -147,10 +255,20 @@ function Stop-ByPort {
     $pids = $pids | Where-Object { $_ } | Select-Object -Unique
     foreach ($procId in $pids) {
         try {
-            Stop-Process -Id $procId -Force -ErrorAction Stop
+            if ($IsWindows) {
+                Stop-Process -Id $procId -Force -ErrorAction Stop
+            }
+            else {
+                Stop-PosixProcess -TargetPid ([int]$procId)
+            }
         }
         catch {
-            Invoke-TaskKill -Pid ([int]$procId)
+            if ($IsWindows) {
+                Invoke-TaskKill -TargetPid ([int]$procId)
+            }
+            elseif (Get-Process -Id ([int]$procId) -ErrorAction SilentlyContinue) {
+                throw
+            }
         }
     }
 }
@@ -159,7 +277,8 @@ function Start-ManagedProcess {
     param(
         [string]$PidFile,
         [string]$WorkingDirectory,
-        [string]$Command,
+        [string]$FilePath,
+        [string[]]$ArgumentList = @(),
         [string]$StdoutPath,
         [string]$StderrPath,
         [int]$WarmupSeconds
@@ -172,14 +291,30 @@ function Start-ManagedProcess {
     New-EmptyFile -Path $StdoutPath
     New-EmptyFile -Path $StderrPath
 
-    $proc = Start-Process `
-        -FilePath "powershell" `
-        -ArgumentList @("-NoProfile", "-Command", $Command) `
-        -WorkingDirectory $WorkingDirectory `
-        -RedirectStandardOutput $StdoutPath `
-        -RedirectStandardError $StderrPath `
-        -WindowStyle Hidden `
-        -PassThru
+    $resolvedFilePath = $FilePath
+    $resolvedArgumentList = $ArgumentList
+
+    if (-not $IsWindows) {
+        $setsidCommand = Get-ApplicationCommandPath -Names @("setsid")
+        if ($setsidCommand) {
+            $resolvedFilePath = $setsidCommand
+            $resolvedArgumentList = @($FilePath) + $ArgumentList
+        }
+    }
+
+    $startProcessParams = @{
+        FilePath               = $resolvedFilePath
+        ArgumentList           = $resolvedArgumentList
+        WorkingDirectory       = $WorkingDirectory
+        RedirectStandardOutput = $StdoutPath
+        RedirectStandardError  = $StderrPath
+        PassThru               = $true
+    }
+    if ($IsWindows) {
+        $startProcessParams.WindowStyle = "Hidden"
+    }
+
+    $proc = Start-Process @startProcessParams
 
     Set-Content -Path $PidFile -Value $proc.Id
     Start-Sleep -Seconds $WarmupSeconds
@@ -240,7 +375,8 @@ switch ($Action) {
         Start-ManagedProcess `
             -PidFile $backendPidFile `
             -WorkingDirectory $repoRoot `
-            -Command "Set-Location '$repoRoot'; uv run main.py" `
+            -FilePath "uv" `
+            -ArgumentList @("run", "main.py") `
             -StdoutPath $backendLog `
             -StderrPath $backendErrLog `
             -WarmupSeconds 6
@@ -250,7 +386,8 @@ switch ($Action) {
         Start-ManagedProcess `
             -PidFile $dashboardPidFile `
             -WorkingDirectory $dashboardDir `
-            -Command "Set-Location '$dashboardDir'; corepack pnpm dev" `
+            -FilePath "corepack" `
+            -ArgumentList @("pnpm", "dev") `
             -StdoutPath $dashboardLog `
             -StderrPath $dashboardErrLog `
             -WarmupSeconds 8

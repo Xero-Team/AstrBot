@@ -2,7 +2,7 @@ import asyncio
 import re
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import botpy
 import botpy.message
@@ -10,15 +10,20 @@ import pytest
 from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.qqofficial import qqofficial_message_event
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
@@ -283,6 +288,437 @@ async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id(
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
     assert adapter._session_last_message_id["group-1"] == "sent-1"
+
+
+@pytest.mark.asyncio
+async def test_append_attachments_normalizes_schema_less_urls_and_skips_empty_attachments():
+    msg = []
+
+    await QQOfficialPlatformAdapter._append_attachments(
+        msg,
+        [
+            SimpleNamespace(
+                content_type="image/png",
+                url="cdn.example/image.png",
+                filename="image.png",
+            ),
+            SimpleNamespace(
+                content_type="",
+                url="cdn.example/archive.bin",
+                filename="archive.bin",
+            ),
+            SimpleNamespace(content_type="image/png", url="", filename="ignored.png"),
+        ],
+    )
+
+    assert len(msg) == 2
+    assert isinstance(msg[0], Image)
+    assert msg[0].file == "https://cdn.example/image.png"
+    assert isinstance(msg[1], File)
+    assert msg[1].name == "archive.bin"
+    assert msg[1].file_ == "https://cdn.example/archive.bin"
+
+
+@pytest.mark.asyncio
+async def test_append_attachments_falls_back_to_remote_record_when_audio_prepare_fails(
+    monkeypatch,
+):
+    async def fail_prepare(url: str, filename: str):
+        raise RuntimeError(f"failed to prepare {filename}: {url}")
+
+    monkeypatch.setattr(
+        QQOfficialPlatformAdapter,
+        "_prepare_audio_attachment",
+        fail_prepare,
+    )
+
+    msg = []
+    await QQOfficialPlatformAdapter._append_attachments(
+        msg,
+        [
+            SimpleNamespace(
+                content_type="audio/ogg",
+                url="cdn.example/voice.ogg",
+                filename="voice.ogg",
+            )
+        ],
+    )
+
+    assert len(msg) == 1
+    assert isinstance(msg[0], Record)
+    assert msg[0].file == "https://cdn.example/voice.ogg"
+
+
+def test_parse_face_message_decodes_ext_text_and_falls_back_on_invalid_payload():
+    encoded = "eyJ0ZXh0IjoiW+a7oeWktOmXruWPt10ifQ=="
+
+    assert (
+        QQOfficialPlatformAdapter._parse_face_message(
+            f'before <faceType=4,faceId="",ext="{encoded}"> after'
+        )
+        == "before [表情:[满头问号]] after"
+    )
+    assert (
+        QQOfficialPlatformAdapter._parse_face_message(
+            '<faceType=4,faceId="",ext="not-base64">'
+        )
+        == "[表情]"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ws_channel_send_by_session_without_cached_msg_id_skips_send():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["channel-1"] = "channel"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "channel-1"),
+        MessageChain(chain=[Plain("channel proactive hello")]),
+    )
+
+    adapter.client.api.post_group_message.assert_not_called()
+    adapter.client.api.post_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_with_markdown_fallback_retries_streaming_newline_fix(monkeypatch):
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    payloads: list[dict] = []
+
+    async def flaky_send(payload: dict):
+        payloads.append(dict(payload))
+        if len(payloads) == 1:
+            raise RuntimeError(QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR)
+        return payload
+
+    monkeypatch.setattr(qqofficial_message_event, "_QQOFFICIAL_SEND_API_ERRORS", (RuntimeError,))
+    monkeypatch.setattr(qqofficial_message_event.botpy.errors, "ServerError", RuntimeError)
+
+    result = await event._send_with_markdown_fallback(
+        send_func=flaky_send,
+        payload={"markdown": {"content": "hello"}, "content": "hello"},
+        plain_text="hello",
+        stream={"state": 10},
+    )
+
+    assert result["content"] == "hello\n"
+    assert payloads[1]["content"] == "hello\n"
+    assert payloads[1]["markdown"]["content"] == "hello\n"
+
+
+@pytest.mark.asyncio
+async def test_send_with_markdown_fallback_downgrades_to_plain_content(monkeypatch):
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    payloads: list[dict] = []
+
+    async def flaky_send(payload: dict):
+        payloads.append(dict(payload))
+        if len(payloads) == 1:
+            raise RuntimeError(QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR)
+        return payload
+
+    monkeypatch.setattr(qqofficial_message_event, "_QQOFFICIAL_SEND_API_ERRORS", (RuntimeError,))
+    monkeypatch.setattr(qqofficial_message_event.botpy.errors, "ServerError", RuntimeError)
+
+    result = await event._send_with_markdown_fallback(
+        send_func=flaky_send,
+        payload={"markdown": {"content": "hello"}, "msg_type": 2},
+        plain_text="hello",
+    )
+
+    assert result["content"] == "hello"
+    assert "markdown" not in payloads[1]
+    assert payloads[1]["msg_type"] == 0
+
+
+@pytest.mark.asyncio
+async def test_post_c2c_message_drops_none_msg_id_and_stream_id():
+    request = AsyncMock(return_value=None)
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.bot = SimpleNamespace(api=SimpleNamespace(_http=SimpleNamespace(request=request)))
+
+    result = await event.post_c2c_message(
+        openid="friend-1",
+        content="hello",
+        msg_id=None,
+        stream={"state": 1, "id": None, "index": 0},
+    )
+
+    assert result is None
+    sent_json = request.await_args.kwargs["json"]
+    assert "msg_id" not in sent_json
+    assert sent_json["stream"] == {"state": 1, "index": 0}
+
+
+@pytest.mark.asyncio
+async def test_split_message_chain_by_media_separates_each_additional_media_component():
+    chunks = QQOfficialMessageEvent._split_message_chain_by_media(
+        MessageChain(
+            chain=[
+                Plain("before "),
+                Image.fromURL("https://example.com/1.png"),
+                Plain("middle "),
+                File(name="doc.txt", url="https://example.com/doc.txt"),
+                Plain("after"),
+            ]
+        )
+    )
+
+    assert len(chunks) == 2
+    assert [component.text for component in chunks[0].chain if isinstance(component, Plain)] == [
+        "before ",
+        "middle ",
+    ]
+    assert isinstance(chunks[0].chain[1], Image)
+    assert [component.text for component in chunks[1].chain if isinstance(component, Plain)] == [
+        "after"
+    ]
+    assert isinstance(chunks[1].chain[0], File)
+
+
+@pytest.mark.asyncio
+async def test_post_send_splits_send_buffer_and_clears_it_after_last_chunk():
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.send_buffer = MessageChain(
+        chain=[
+            Plain("before "),
+            Image.fromURL("https://example.com/1.png"),
+            Plain("middle "),
+            File(name="doc.txt", url="https://example.com/doc.txt"),
+            Plain("after"),
+        ]
+    )
+    sent_calls = []
+
+    async def fake_post_send_one(message_chain, stream):
+        sent_calls.append((message_chain, stream))
+        return f"ret-{len(sent_calls)}"
+
+    event._post_send_one = fake_post_send_one
+
+    result = await event._post_send(stream={"state": 1})
+
+    assert result == "ret-2"
+    assert len(sent_calls) == 2
+    assert sent_calls[0][1] is None
+    assert sent_calls[1][1] is None
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_post_send_one_c2c_stream_downgrades_rich_media_to_non_stream(monkeypatch):
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    message_obj = SimpleNamespace(
+        raw_message=source,
+        message_id="msg-1",
+        self_id="bot-1",
+        session_id="user-1",
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = message_obj
+    event.send_buffer = MessageChain([Plain("hello"), Image.fromURL("https://img/1.png")])
+    event.track_temporary_local_file = MagicMock()
+    event.upload_group_and_c2c_image = AsyncMock(return_value={"file_uuid": "file-1"})
+    event.upload_group_and_c2c_media = AsyncMock()
+    event.post_c2c_message = AsyncMock(return_value={"id": "sent-1"})
+
+    async def fake_parse(_message):
+        return ("hello", "base64://img", None, None, None, None, None)
+
+    monkeypatch.setattr(QQOfficialMessageEvent, "_parse_to_qqofficial", fake_parse)
+    with patch.object(
+        AstrMessageEvent,
+        "send",
+        AsyncMock(return_value=None),
+    ) as parent_send:
+        await event._post_send_one(event.send_buffer, stream={"state": 1, "id": None})
+
+    event.post_c2c_message.assert_awaited_once()
+    assert "stream" not in event.post_c2c_message.await_args.kwargs
+    assert event.post_c2c_message.await_args.kwargs["media"] == {"file_uuid": "file-1"}
+    parent_send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_c2c_break_ends_previous_segment_and_resets_state():
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    sent_streams: list[dict | None] = []
+    times = iter([0.0, 0.2])
+
+    async def fake_post_send(stream=None):
+        sent_streams.append(dict(stream) if stream else None)
+        return {"id": f"resp-{len(sent_streams)}"}
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    loop = asyncio.get_running_loop()
+    original_time = loop.time
+    loop.time = lambda: next(times, 2.0)
+
+    async def generator():
+        yield MessageChain([Plain("first")])
+        yield MessageChain(type="break")
+        yield MessageChain([Plain("second")])
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+    loop.time = original_time
+
+    assert sent_streams == [
+        {"state": 10, "id": None, "index": 0, "reset": False},
+        {"state": 10, "id": None, "index": 0, "reset": False},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_c2c_throttled_updates_reuse_returned_message_id(monkeypatch):
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    stream_calls: list[dict | None] = []
+
+    async def fake_post_send(stream=None):
+        stream_calls.append(dict(stream) if stream else None)
+        return {"id": "stream-msg"}
+
+    times = iter([0.0, 2.0, 2.0])
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: next(times, 9.0))
+
+    async def generator():
+        yield MessageChain([Plain("hello ")])
+        yield MessageChain([Plain("world")])
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    assert stream_calls == [
+        {"state": 1, "id": None, "index": 0, "reset": False},
+        {"state": 10, "id": "stream-msg", "index": 1, "reset": False},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_non_c2c_batches_and_posts_once_at_end():
+    source = botpy.message.GroupMessage(
+        None,
+        "evt-2",
+        {
+            "id": "msg-2",
+            "group_openid": "group-1",
+            "author": {"member_openid": "member-1"},
+            "content": "hello",
+        },
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    async def fake_post_send():
+        buffered = event.send_buffer
+        event.send_buffer = None
+        return buffered
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+
+    async def generator():
+        yield MessageChain([Plain("hello ")])
+        yield MessageChain([Plain("world")])
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    event._post_send.assert_awaited_once_with()
+    buffered_chain = event._post_send.await_args_list[0]
+    assert buffered_chain.args == ()
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_clears_buffer_when_post_send_raises():
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    event._post_send = AsyncMock(side_effect=RuntimeError("network down"))
+
+    async def generator():
+        yield MessageChain([Plain("hello")])
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        result = await event.send_streaming(generator())
+
+    assert result is None
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_extracts_at_video_and_first_file_source():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(
+            chain=[
+                At(qq="user-1"),
+                Plain(" hello"),
+                Video(file="https://example.com/video.mp4"),
+                File(name="doc.txt", url="https://example.com/doc.txt"),
+                File(name="ignored.txt", url="https://example.com/ignored.txt"),
+            ]
+        )
+    )
+
+    assert parsed[0] == "<@user-1> hello"
+    assert parsed[4] == "https://example.com/video.mp4"
+    assert parsed[5] == "https://example.com/doc.txt"
+    assert parsed[6] == "doc.txt"
 
 
 def test_qqofficial_ws_is_not_excluded_from_segmented_reply():

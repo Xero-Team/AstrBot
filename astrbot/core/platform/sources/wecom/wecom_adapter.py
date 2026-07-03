@@ -45,6 +45,7 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
     if not disposition:
         return None
 
+    fallback_filename: str | None = None
     for part in disposition.split(";"):
         token = part.strip()
         token_lower = token.lower()
@@ -57,9 +58,9 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
         if token_lower.startswith("filename="):
             value = token.split("=", 1)[1].strip().strip('"')
             filename = Path(value.replace("\\", "/")).name
-            return filename or None
+            fallback_filename = filename or None
 
-    return None
+    return fallback_filename
 
 
 class WecomServer:

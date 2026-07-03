@@ -487,10 +487,14 @@ class TelegramPlatformAdapter(Platform):
         message.message_str = ""
         message.message = []
 
-        if update.message.reply_to_message and not (
-            update.message.is_topic_message
-            and update.message.message_thread_id
-            == update.message.reply_to_message.message_id
+        if (
+            get_reply
+            and update.message.reply_to_message
+            and not (
+                update.message.is_topic_message
+                and update.message.message_thread_id
+                == update.message.reply_to_message.message_id
+            )
         ):
             # 获取回复消息
             reply_update = Update(
@@ -516,6 +520,22 @@ class TelegramPlatformAdapter(Platform):
         if update.message.text:
             # 处理文本消息
             plain_text = update.message.text
+            raw_text = plain_text
+
+            if update.message.entities:
+                for entity in update.message.entities:
+                    if entity.type == "mention":
+                        name = raw_text[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
+                        # 如果mention是当前bot则移除；否则保留
+                        if name.lower() == context.bot.username.lower():
+                            plain_text = (
+                                plain_text[: entity.offset]
+                                + plain_text[entity.offset + entity.length :]
+                            )
+
             if (
                 message.type == MessageType.GROUP_MESSAGE
                 and update.message
@@ -523,8 +543,7 @@ class TelegramPlatformAdapter(Platform):
                 and update.message.reply_to_message.from_user
                 and update.message.reply_to_message.from_user.id == context.bot.id
             ):
-                plain_text2 = f"/@{context.bot.username} " + plain_text
-                plain_text = plain_text2
+                plain_text = f"/@{context.bot.username} " + plain_text
 
             # 群聊场景命令特殊处理
             if plain_text.startswith("/"):
@@ -535,20 +554,6 @@ class TelegramPlatformAdapter(Platform):
                         plain_text = command + (
                             f" {command_parts[1]}" if len(command_parts) > 1 else ""
                         )
-
-            if update.message.entities:
-                for entity in update.message.entities:
-                    if entity.type == "mention":
-                        name = plain_text[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
-                        # 如果mention是当前bot则移除；否则保留
-                        if name.lower() == context.bot.username.lower():
-                            plain_text = (
-                                plain_text[: entity.offset]
-                                + plain_text[entity.offset + entity.length :]
-                            )
 
             if plain_text:
                 message.message.append(Comp.Plain(plain_text))

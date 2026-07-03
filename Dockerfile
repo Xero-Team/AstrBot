@@ -308,7 +308,7 @@ RUN curl https://mise.run | sh \
     && mise --version
 
 RUN export PATH="$HOME/.local/bin:$PATH" \
-    && curl -fsSL https://claude.ai/install.sh | bash \
+    && curl -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash \
     && test -x "$HOME/.local/bin/claude" \
     && ln -sf "$HOME/.local/bin/claude" /usr/local/bin/claude \
     && claude --version

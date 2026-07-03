@@ -36,6 +36,7 @@ from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.llm_metadata import update_llm_metadata
+from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
 
 from . import astrbot_config, html_renderer
@@ -59,6 +60,7 @@ class AstrBotCoreLifecycle:
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
         self._default_chat_provider_warning_emitted = False
+        self._background_tasks: set[asyncio.Task] = set()
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -262,7 +264,11 @@ class AstrBotCoreLifecycle:
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
 
-        asyncio.create_task(update_llm_metadata())
+        create_tracked_task(
+            self._background_tasks,
+            update_llm_metadata(),
+            name="update_llm_metadata",
+        )
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -338,7 +344,11 @@ class AstrBotCoreLifecycle:
                     f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler()
-            except BaseException:
+            except asyncio.CancelledError:
+                raise
+            except KeyboardInterrupt, SystemExit:
+                raise
+            except Exception:
                 logger.error(traceback.format_exc())
 
         # 同时运行curr_tasks中的所有任务
@@ -348,6 +358,9 @@ class AstrBotCoreLifecycle:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
         if self.temp_dir_cleaner:
             await self.temp_dir_cleaner.stop()
+
+        if hasattr(self, "event_bus"):
+            await self.event_bus.shutdown()
 
         # 请求停止所有正在运行的异步任务
         for task in self.curr_tasks:
@@ -378,6 +391,8 @@ class AstrBotCoreLifecycle:
                 pass
             except Exception as e:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+
+        await cancel_tracked_tasks(self._background_tasks)
 
         # 释放数据库引擎连接池
         try:

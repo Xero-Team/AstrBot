@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import traceback
 import typing as T
@@ -97,7 +98,11 @@ async def call_event_hook(
                 f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
             )
             await handler.handler(event, *args, **kwargs)
-        except BaseException:
+        except asyncio.CancelledError:
+            raise
+        except KeyboardInterrupt, SystemExit:
+            raise
+        except Exception:
             logger.error(traceback.format_exc())
 
         if event.is_stopped():

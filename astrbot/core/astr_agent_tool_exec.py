@@ -49,9 +49,12 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.task_utils import create_tracked_task
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    _background_tasks: set[asyncio.Task] = set()
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -171,7 +174,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            asyncio.create_task(_run_in_background())
+            create_tracked_task(
+                cls._background_tasks,
+                _run_in_background(),
+                name=f"background_tool:{tool.name}",
+            )
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -403,7 +410,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_run_handoff_in_background())
+        create_tracked_task(
+            cls._background_tasks,
+            _run_handoff_in_background(),
+            name=f"background_handoff:{tool.name}",
+        )
 
         text_content = mcp.types.TextContent(
             type="text",

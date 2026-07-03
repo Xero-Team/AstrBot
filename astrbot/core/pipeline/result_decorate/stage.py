@@ -1,3 +1,4 @@
+import asyncio
 import random
 import re
 import time
@@ -33,7 +34,7 @@ class ResultDecorateStage(Stage):
         try:
             self.t2i_word_threshold = int(self.t2i_word_threshold)
             self.t2i_word_threshold = max(self.t2i_word_threshold, 50)
-        except BaseException:
+        except Exception:
             self.t2i_word_threshold = 150
         self.t2i_strategy = ctx.astrbot_config["t2i_strategy"]
         self.t2i_use_network = self.t2i_strategy == "remote"
@@ -175,7 +176,11 @@ class ResultDecorateStage(Stage):
                     logger.debug(
                         f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。",
                     )
-            except BaseException:
+            except asyncio.CancelledError:
+                raise
+            except KeyboardInterrupt, SystemExit:
+                raise
+            except Exception:
                 logger.error(traceback.format_exc())
 
             if event.is_stopped():
@@ -365,7 +370,11 @@ class ResultDecorateStage(Stage):
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
                         )
-                    except BaseException:
+                    except asyncio.CancelledError:
+                        raise
+                    except KeyboardInterrupt, SystemExit:
+                        raise
+                    except Exception:
                         logger.error("文本转图片失败，使用文本发送。")
                         return
                     if time.time() - render_start > 3:

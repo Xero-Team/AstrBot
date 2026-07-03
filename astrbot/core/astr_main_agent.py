@@ -112,6 +112,7 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.task_utils import create_tracked_task
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
 WEEKDAY_NAMES = (
@@ -123,6 +124,7 @@ WEEKDAY_NAMES = (
     "Saturday",
     "Sunday",
 )
+_MAIN_AGENT_BACKGROUND_TASKS: set[asyncio.Task] = set()
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {
         "web_search_baidu",
@@ -1571,7 +1573,11 @@ async def build_main_agent(
             )
 
     if event.get_platform_name() == "webchat":
-        asyncio.create_task(_handle_webchat(event, req, provider))
+        create_tracked_task(
+            _MAIN_AGENT_BACKGROUND_TASKS,
+            _handle_webchat(event, req, provider),
+            name="handle_webchat",
+        )
 
     if req.func_tool and req.func_tool.tools:
         tool_prompt = (

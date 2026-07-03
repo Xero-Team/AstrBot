@@ -27,6 +27,7 @@ class RateLimitStage(Stage):
         # 限流参数
         self.rate_limit_count: int = 0
         self.rate_limit_time: timedelta = timedelta(0)
+        self.max_sessions: int = 10000
 
     async def initialize(self, ctx: PipelineContext) -> None:
         """初始化限流器，根据配置设置限流参数。"""
@@ -39,6 +40,15 @@ class RateLimitStage(Stage):
         self.rl_strategy = ctx.astrbot_config["platform_settings"]["rate_limit"][
             "strategy"
         ]  # stall or discard
+        self.max_sessions = max(
+            int(
+                ctx.astrbot_config["platform_settings"]["rate_limit"].get(
+                    "max_sessions",
+                    10000,
+                )
+            ),
+            1,
+        )
 
     async def process(
         self,
@@ -62,6 +72,7 @@ class RateLimitStage(Stage):
             while True:
                 timestamps = self.event_timestamps[session_id]
                 self._remove_expired_timestamps(timestamps, now)
+                self._prune_idle_sessions(now)
 
                 if self.rate_limit_count <= 0:
                     break
@@ -83,6 +94,43 @@ class RateLimitStage(Stage):
                             f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到限额于 {stall_duration:.2f} 秒后重置。",
                         )
                         return event.stop_event()
+
+    def _prune_idle_sessions(self, now: datetime) -> None:
+        if len(self.event_timestamps) <= self.max_sessions:
+            empty_sessions = [
+                session_id
+                for session_id, timestamps in self.event_timestamps.items()
+                if not timestamps
+            ]
+            for session_id in empty_sessions:
+                self.event_timestamps.pop(session_id, None)
+                self.locks.pop(session_id, None)
+            return
+
+        idle_sessions = [
+            session_id
+            for session_id, timestamps in self.event_timestamps.items()
+            if not timestamps
+        ]
+        for session_id in idle_sessions:
+            self.event_timestamps.pop(session_id, None)
+            self.locks.pop(session_id, None)
+            if len(self.event_timestamps) <= self.max_sessions:
+                return
+
+        sessions_by_last_seen = sorted(
+            (
+                (timestamps[-1], session_id)
+                for session_id, timestamps in self.event_timestamps.items()
+                if timestamps
+            ),
+        )
+        while len(self.event_timestamps) > self.max_sessions and sessions_by_last_seen:
+            _, session_id = sessions_by_last_seen.pop(0)
+            timestamps = self.event_timestamps.get(session_id)
+            if timestamps and now - timestamps[-1] > self.rate_limit_time:
+                self.event_timestamps.pop(session_id, None)
+                self.locks.pop(session_id, None)
 
     def _remove_expired_timestamps(
         self,

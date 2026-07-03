@@ -28,6 +28,7 @@ class EventBus:
         event_queue: Queue,
         pipeline_scheduler_mapping: dict[str, PipelineScheduler],
         astrbot_config_mgr: AstrBotConfigManager,
+        max_concurrency: int = 128,
     ) -> None:
         self.event_queue = event_queue  # 事件队列
         # abconf uuid -> scheduler
@@ -35,23 +36,42 @@ class EventBus:
         self.astrbot_config_mgr = astrbot_config_mgr
         # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
         self._pending_tasks: set[asyncio.Task] = set()
+        self._semaphore = asyncio.Semaphore(max(1, max_concurrency))
 
     async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
-            conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            conf_id = conf_info["id"]
-            conf_name = conf_info.get("name") or conf_id
-            self._print_event(event, conf_name)
-            scheduler = self.pipeline_scheduler_mapping.get(conf_id)
-            if not scheduler:
-                logger.error(
-                    f"PipelineScheduler not found for id: {conf_id}, event ignored."
+            try:
+                conf_info = self.astrbot_config_mgr.get_conf_info(
+                    event.unified_msg_origin
                 )
-                continue
-            task = asyncio.create_task(scheduler.execute(event))
-            self._pending_tasks.add(task)
-            task.add_done_callback(self._on_task_done)
+                conf_id = conf_info["id"]
+                conf_name = conf_info.get("name") or conf_id
+                self._print_event(event, conf_name)
+                scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+                if not scheduler:
+                    logger.error(
+                        f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                    )
+                    continue
+                task = asyncio.create_task(
+                    self._execute_with_limit(scheduler, event),
+                    name=f"pipeline:{conf_id}",
+                )
+                self._pending_tasks.add(task)
+                task.add_done_callback(self._on_task_done)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.error("事件总线分发异常", exc_info=True)
+
+    async def _execute_with_limit(
+        self,
+        scheduler: PipelineScheduler,
+        event: AstrMessageEvent,
+    ) -> None:
+        async with self._semaphore:
+            await scheduler.execute(event)
 
     def _on_task_done(self, task: asyncio.Task) -> None:
         """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
@@ -61,6 +81,15 @@ class EventBus:
         exc = task.exception()
         if exc is not None:
             logger.error("pipeline 任务执行异常", exc_info=exc)
+
+    async def shutdown(self) -> None:
+        """Cancel and await in-flight pipeline tasks."""
+        tasks = list(self._pending_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._pending_tasks.clear()
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息

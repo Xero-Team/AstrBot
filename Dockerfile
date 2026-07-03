@@ -316,10 +316,10 @@ RUN curl https://mise.run | sh \
 
 RUN claude --version
 
-RUN export PATH="$HOME/.local/bin:$PATH" \
-    && CODEX_NON_INTERACTIVE=1 curl -fsSL https://chatgpt.com/codex/install.sh | sh \
-    && test -x "$HOME/.local/bin/codex" \
-    && ln -sf "$HOME/.local/bin/codex" /usr/local/bin/codex \
+RUN npm install -g @openai/codex --no-fund --no-audit \
+    && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
+    && test -x "${current_node_dir}/bin/codex" \
+    && ln -sf "${current_node_dir}/bin/codex" /usr/local/bin/codex \
     && codex --version
 
 RUN cp -a /tmp/docker-local/. /root/

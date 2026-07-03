@@ -26,7 +26,7 @@ ENV UV_INSTALL_DIR=/usr/local/bin \
     DEBIAN_FRONTEND=noninteractive \
     APT_LISTCHANGES_FRONTEND=none
 
-COPY pyproject.toml uv.lock .python-version package.json package-lock.json ./
+COPY pyproject.toml requirements.txt .python-version ./
 COPY dashboard/package.json dashboard/pnpm-lock.yaml /AstrBot/dashboard/
 COPY docs/package.json docs/pnpm-lock.yaml /AstrBot/docs/
 COPY .docker-local /tmp/docker-local
@@ -271,19 +271,25 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/root/.cache,sharing=locked \
     curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv --version \
-    && echo "3.14" > .python-version \
-    && uv export --format requirements.txt --output-file requirements.txt --frozen \
-    && cp requirements.txt /tmp/astrbot-requirements.txt
+    && echo "3.14" > .python-version
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install -r requirements.txt --no-cache-dir --system \
     && uv pip install socksio pilk --no-cache-dir --system
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --group dev --frozen --no-install-project
-
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm ci --no-fund --no-audit --prefer-offline
+    uv pip install \
+        bandit[toml] \
+        commitizen \
+        pip-audit \
+        pyright \
+        pytest \
+        pytest-asyncio \
+        pytest-cov \
+        radon \
+        ruff \
+        yamllint \
+        --no-cache-dir --system
 
 WORKDIR /AstrBot/dashboard
 RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
@@ -296,11 +302,6 @@ RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
 WORKDIR /AstrBot
 
 COPY . /AstrBot/
-
-RUN cp /tmp/astrbot-requirements.txt /AstrBot/requirements.txt
-
-RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --group dev --frozen
 
 RUN curl https://mise.run | sh \
     && ln -sf /root/.local/bin/mise /usr/local/bin/mise \

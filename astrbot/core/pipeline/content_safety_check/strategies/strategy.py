@@ -26,9 +26,9 @@ class StrategySelector:
                 ),
             )
 
-    def check(self, content: str) -> tuple[bool, str]:
+    async def check(self, content: str) -> tuple[bool, str]:
         for strategy in self.enabled_strategies:
-            ok, info = strategy.check(content)
+            ok, info = await strategy.check(content)
             if not ok:
                 return False, info
         return True, ""

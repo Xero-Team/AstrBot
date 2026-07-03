@@ -27,7 +27,7 @@ class ContentSafetyCheckStage(Stage):
     ) -> AsyncGenerator[None]:
         """检查内容安全"""
         text = check_text if check_text else event.get_message_str()
-        ok, info = self.strategy_selector.check(text)
+        ok, info = await self.strategy_selector.check(text)
         if not ok:
             if event.is_at_or_wake_command:
                 event.set_result(

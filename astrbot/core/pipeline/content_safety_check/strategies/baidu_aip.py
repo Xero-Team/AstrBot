@@ -1,5 +1,6 @@
 """使用此功能应该先 pip install baidu-aip"""
 
+import asyncio
 from typing import Any, cast
 
 from aip import AipContentCensor
@@ -14,7 +15,7 @@ class BaiduAipStrategy(ContentSafetyStrategy):
         self.secret_key = sk
         self.client = AipContentCensor(self.app_id, self.api_key, self.secret_key)
 
-    def check(self, content: str) -> tuple[bool, str]:
+    def _check_sync(self, content: str) -> tuple[bool, str]:
         res = self.client.textCensorUserDefined(content)
         if "conclusionType" not in res:
             return False, ""
@@ -30,3 +31,6 @@ class BaiduAipStrategy(ContentSafetyStrategy):
         parts.append("\n判断结果：" + res["conclusion"])
         info = "".join(parts)
         return False, info
+
+    async def check(self, content: str) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._check_sync, content)

@@ -24,3 +24,5 @@ tests/
 .ruff_cache/
 .astrbot
 astrbot.lock
+!.docker-local/
+!.docker-local/**

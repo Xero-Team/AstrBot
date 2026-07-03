@@ -2,8 +2,6 @@
 FROM python:3.14-slim
 WORKDIR /AstrBot
 
-COPY . /AstrBot/
-
 # Enable pipefail so failures in install pipes abort the build.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -20,8 +18,18 @@ ENV UV_INSTALL_DIR=/usr/local/bin \
     PLAYWRIGHT_VERSION=1.61.0 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     TYPST_VERSION=0.15.0 \
+    YQ_VERSION=4.47.2 \
+    QUARTO_VERSION=1.9.38 \
+    PNPM_STORE_DIR=/pnpm/store \
+    UV_CACHE_DIR=/root/.cache/uv \
+    NPM_CONFIG_CACHE=/root/.npm \
     DEBIAN_FRONTEND=noninteractive \
     APT_LISTCHANGES_FRONTEND=none
+
+COPY pyproject.toml uv.lock .python-version package.json package-lock.json ./
+COPY dashboard/package.json dashboard/pnpm-lock.yaml /AstrBot/dashboard/
+COPY docs/package.json docs/pnpm-lock.yaml /AstrBot/docs/
+COPY .docker-local /tmp/docker-local
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -86,8 +94,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ghostscript \
         gh \
         git \
+        git-lfs \
         iproute2 \
         iputils-ping \
+        imagemagick \
         jq \
         less \
         libavcodec-extra \
@@ -114,6 +124,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         openssh-client \
         pandoc \
         pkg-config \
+        poppler-utils \
         procps \
         psmisc \
         python3-dev \
@@ -122,6 +133,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         shellcheck \
         sqlite3 \
         strace \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
         texlive-fonts-recommended \
         texlive-lang-chinese \
         texlive-latex-extra \
@@ -131,6 +145,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         tree \
         unzip \
         vim-common \
+        wget \
         xxd \
         zip \
         zlib1g-dev \
@@ -139,6 +154,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && ln -sf /usr/bin/batcat /usr/local/bin/bat \
     && fc-cache -f \
+    && git lfs install --system \
     && docker --version \
     && docker compose version \
     && rm -f /etc/apt/apt.conf.d/99astrbot
@@ -162,7 +178,9 @@ RUN touch "${BASH_ENV}" \
     && npm --version \
     && corepack --version
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable \
     && cargo --version \
     && arch="$(dpkg --print-architecture)" \
@@ -206,6 +224,18 @@ RUN arch="$(dpkg --print-architecture)" \
 
 RUN arch="$(dpkg --print-architecture)" \
     && case "${arch}" in \
+        amd64) yq_arch="amd64" ;; \
+        arm64) yq_arch="arm64" ;; \
+        *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL \
+        "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yq_arch}" \
+        -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq \
+    && yq --version
+
+RUN arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
         amd64) typst_arch="x86_64-unknown-linux-musl" ;; \
         arm64) typst_arch="aarch64-unknown-linux-musl" ;; \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
@@ -221,17 +251,78 @@ RUN arch="$(dpkg --print-architecture)" \
     && rm -rf "${tmpdir}" \
     && typst --version
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
+        amd64) quarto_arch="amd64" ;; \
+        arm64) quarto_arch="arm64" ;; \
+        *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && tmpdir="$(mktemp -d)" \
+    && curl -fsSL \
+        "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${quarto_arch}.deb" \
+        -o "${tmpdir}/quarto.deb" \
+    && apt-get update \
+    && eatmydata apt-get install -y --no-install-recommends "${tmpdir}/quarto.deb" \
+    && rm -rf "${tmpdir}" \
+    && quarto --version
+
+RUN --mount=type=cache,target=/root/.cache,sharing=locked \
+    curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv --version \
     && echo "3.14" > .python-version \
-    && uv lock \
     && uv export --format requirements.txt --output-file requirements.txt --frozen \
-    && uv pip install -r requirements.txt --no-cache-dir --system \
-    && uv pip install socksio pilk --no-cache-dir --system \
-    && uv sync --group dev --frozen
+    && cp requirements.txt /tmp/astrbot-requirements.txt
+
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv pip install -r requirements.txt --no-cache-dir --system \
+    && uv pip install socksio pilk --no-cache-dir --system
+
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --group dev --frozen --no-install-project
+
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --no-fund --no-audit --prefer-offline
+
+WORKDIR /AstrBot/dashboard
+RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
+    pnpm fetch
+
+WORKDIR /AstrBot/docs
+RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
+    pnpm fetch
+
+WORKDIR /AstrBot
+
+COPY . /AstrBot/
+
+RUN cp /tmp/astrbot-requirements.txt /AstrBot/requirements.txt
+
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --group dev --frozen
+
+RUN curl https://mise.run | sh \
+    && ln -sf /root/.local/bin/mise /usr/local/bin/mise \
+    && mise --version
+
+RUN export PATH="$HOME/.local/bin:$PATH" \
+    && curl -fsSL https://claude.ai/install.sh | bash \
+    && test -x "$HOME/.local/bin/claude" \
+    && ln -sf "$HOME/.local/bin/claude" /usr/local/bin/claude \
+    && claude --version
+
+RUN export PATH="$HOME/.local/bin:$PATH" \
+    && CODEX_NON_INTERACTIVE=1 curl -fsSL https://chatgpt.com/codex/install.sh | sh \
+    && test -x "$HOME/.local/bin/codex" \
+    && ln -sf "$HOME/.local/bin/codex" /usr/local/bin/codex \
+    && codex --version
+
+RUN cp -a /tmp/docker-local/. /root/
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install "playwright==${PLAYWRIGHT_VERSION}" --no-cache-dir --system \
     && PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node \
        PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 \
@@ -254,18 +345,17 @@ RUN arch="$(dpkg --print-architecture)" \
     && pwsh -NoLogo -NoProfile -Command "Set-PSRepository PSGallery -InstallationPolicy Trusted; Install-Module PSScriptAnalyzer -Scope AllUsers -Force -SkipPublisherCheck" \
     && pwsh -NoLogo -NoProfile -Command "Get-Module -ListAvailable PSScriptAnalyzer | Select-Object -First 1 Name, Version"
 
-RUN npm install --no-fund --no-audit
-
 WORKDIR /AstrBot/dashboard
-RUN pnpm install --frozen-lockfile \
+RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile --offline --prefer-offline \
     && pnpm build \
     && rm -rf /AstrBot/astrbot/dashboard/dist \
     && mkdir -p /AstrBot/astrbot/dashboard \
     && cp -r dist /AstrBot/astrbot/dashboard/
 
 WORKDIR /AstrBot/docs
-RUN rm -rf /AstrBot/docs/node_modules \
-    && CI=true pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
+    CI=true pnpm install --frozen-lockfile --offline --prefer-offline
 
 WORKDIR /AstrBot
 
@@ -278,6 +368,10 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
 fi
 alias fd='fdfind'
 alias bat='batcat'
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
+fi
+export PATH="$HOME/.local/bin:$PATH"
 if [ -S /var/run/docker.sock ]; then
   export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 fi

@@ -68,6 +68,8 @@ venv/
 /.kilocode/
 /.worktrees/
 /.tmp/
+/.docker-local/*
+!/.docker-local/.gitkeep
 
 # Optional local notes and overrides
 /IFLOW.md

@@ -293,11 +293,11 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 
 WORKDIR /AstrBot/dashboard
 RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
-    pnpm fetch
+    pnpm fetch --trust-lockfile
 
 WORKDIR /AstrBot/docs
 RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
-    pnpm fetch
+    pnpm fetch --trust-lockfile
 
 WORKDIR /AstrBot
 
@@ -348,7 +348,7 @@ RUN arch="$(dpkg --print-architecture)" \
 
 WORKDIR /AstrBot/dashboard
 RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
-    pnpm install --frozen-lockfile --offline --prefer-offline \
+    pnpm install --frozen-lockfile --offline --prefer-offline --trust-lockfile \
     && pnpm build \
     && rm -rf /AstrBot/astrbot/dashboard/dist \
     && mkdir -p /AstrBot/astrbot/dashboard \
@@ -356,7 +356,7 @@ RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
 
 WORKDIR /AstrBot/docs
 RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
-    CI=true pnpm install --frozen-lockfile --offline --prefer-offline
+    CI=true pnpm install --frozen-lockfile --offline --prefer-offline --trust-lockfile
 
 WORKDIR /AstrBot
 

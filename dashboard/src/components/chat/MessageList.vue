@@ -31,7 +31,7 @@
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
           >
             <div v-if="messageContent(msg).isLoading" class="loading-message">
-              <span>{{ tm('message.loading') }}</span>
+              <span>{{ tm("message.loading") }}</span>
             </div>
 
             <template v-else>
@@ -71,7 +71,7 @@
                       v-else-if="part.type === 'plain' && isUserMessage(msg)"
                       class="plain-content"
                     >
-                      {{ part.text || '' }}
+                      {{ part.text || "" }}
                     </div>
 
                     <MarkdownMessagePart
@@ -89,10 +89,7 @@
                       type="button"
                       @click="openImage(partUrl(part))"
                     >
-                      <img
-                        :src="partUrl(part)"
-                        :alt="part.filename || 'image'"
-                      />
+                      <img :src="partUrl(part)" :alt="part.filename || 'image'" />
                     </button>
 
                     <audio
@@ -109,16 +106,37 @@
                       :src="partUrl(part)"
                     />
 
-                    <div v-else-if="part.type === 'file'" class="file-part">
-                      <v-icon size="20">mdi-file-document-outline</v-icon>
-                      <span>{{ part.filename || 'file' }}</span>
+                    <div
+                      v-else-if="part.type === 'file'"
+                      class="file-part"
+                      :style="{
+                        '--attachment-color': attachmentPresentation(part).color,
+                      }"
+                    >
+                      <v-icon
+                        class="file-part-icon"
+                        :icon="attachmentPresentation(part).icon"
+                        size="24"
+                      />
+                      <div class="file-part-meta">
+                        <span class="file-part-name">
+                          {{ attachmentName(part) }}
+                        </span>
+                        <span class="file-part-kind">
+                          {{ attachmentPresentation(part).label }}
+                        </span>
+                      </div>
                       <v-btn
+                        class="file-part-action"
                         icon="mdi-download"
                         size="x-small"
                         variant="text"
                         :loading="
                           downloadingFiles.has(
-                            part.attachment_id || part.filename || '',
+                            part.attachment_id ||
+                              part.stored_filename ||
+                              part.filename ||
+                              '',
                           )
                         "
                         @click="downloadPart(part)"
@@ -139,7 +157,7 @@
                         >
                           <template #label>
                             <v-icon size="16">mdi-code-json</v-icon>
-                            <span>{{ tool.name || 'python' }}</span>
+                            <span>{{ tool.name || "python" }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
                             </span>
@@ -193,19 +211,19 @@
                   v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
                   class="stats-row"
                 >
-                  <span>{{ tm('stats.cachedTokens') }}</span>
+                  <span>{{ tm("stats.cachedTokens") }}</span>
                   <strong>{{
                     cachedInputTokens(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm('stats.inputTokens') }}</span>
+                  <span>{{ tm("stats.inputTokens") }}</span>
                   <strong>{{
                     inputTokens(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm('stats.outputTokens') }}</span>
+                  <span>{{ tm("stats.outputTokens") }}</span>
                   <strong>{{
                     outputTokens(messageContent(msg).agentStats)
                   }}</strong>
@@ -214,13 +232,13 @@
                   v-if="agentTtft(messageContent(msg).agentStats)"
                   class="stats-row"
                 >
-                  <span>{{ tm('stats.ttft') }}</span>
+                  <span>{{ tm("stats.ttft") }}</span>
                   <strong>{{
                     agentTtft(messageContent(msg).agentStats)
                   }}</strong>
                 </div>
                 <div class="stats-row">
-                  <span>{{ tm('stats.duration') }}</span>
+                  <span>{{ tm("stats.duration") }}</span>
                   <strong>{{
                     agentDuration(messageContent(msg).agentStats)
                   }}</strong>
@@ -257,32 +275,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from 'vue';
-import axios from 'axios';
-import { fileApi } from '@/api/v1';
-import { setCustomComponents } from 'markstream-vue';
-import 'markstream-vue/index.css';
-import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
-import MarkdownMessagePart from '@/components/chat/message_list_comps/MarkdownMessagePart.vue';
-import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
-import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
-import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
-import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
-import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
-import ActionRef from '@/components/chat/message_list_comps/ActionRef.vue';
-import ThemeAwareMarkdownCodeBlock from '@/components/shared/ThemeAwareMarkdownCodeBlock.vue';
+import { computed, nextTick, reactive, ref } from "vue";
+import axios from "axios";
+import { fileApi } from "@/api/v1";
+import { setCustomComponents } from "markstream-vue";
+import "markstream-vue/index.css";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
+import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
+import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
-} from '@/composables/useMessages';
+} from "@/composables/useMessages";
 import type {
   ChatContent,
   ChatRecord,
   MessagePart,
-} from '@/composables/useMessages';
-import { useModuleI18n } from '@/i18n/composables';
-import { copyToClipboard } from '@/utils/clipboard';
+} from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -298,50 +320,27 @@ const props = withDefaults(
   },
 );
 
-setCustomComponents('chat-message', {
+setCustomComponents("chat-message", {
   ref: RefNode,
   code_block: ThemeAwareMarkdownCodeBlock,
 });
 
-const { tm } = useModuleI18n('features/chat');
-const customMarkdownTags = ['ref'];
+const { tm } = useModuleI18n("features/chat");
+const customMarkdownTags = ["ref"];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
-const imagePreview = reactive({ visible: false, url: '' });
+const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
-
-interface MessageRefItem {
-  index?: unknown;
-  title: string;
-  url?: string;
-  snippet?: unknown;
-  favicon?: unknown;
-}
-
-interface AgentStatsLike {
-  token_usage?: {
-    input_other?: unknown;
-    output?: unknown;
-    input_cached?: unknown;
-  };
-  duration?: unknown;
-  total_duration?: unknown;
-  start_time?: unknown;
-  end_time?: unknown;
-  time_to_first_token?: unknown;
-  ttft?: unknown;
-  first_token_latency?: unknown;
-}
+const selectedRefs = ref<Record<string, unknown> | null>(null);
 
 const messages = computed(() => props.messages || []);
 
 function isUserMessage(message: ChatRecord) {
-  return messageContent(message).type === 'user';
+  return messageContent(message).type === "user";
 }
 
 function messageContent(message: ChatRecord): ChatContent {
-  return message.content || { type: 'bot', message: [] };
+  return message.content || { type: "bot", message: [] };
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
@@ -352,10 +351,14 @@ function isMessageStreaming(messageIndex: number) {
   return props.isStreaming && messageIndex === messages.value.length - 1;
 }
 
+function hasNonReasoningContent(message: ChatRecord) {
+  return renderBlocks(message).some((block) => block.kind === "content");
+}
+
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
   if (isUserMessage(message)) {
     const parts = messageParts(message);
-    return parts.length ? [{ kind: 'content', parts }] : [];
+    return parts.length ? [{ kind: "content", parts }] : [];
   }
   return buildMessageBlocks(messageContent(message));
 }
@@ -363,7 +366,7 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
   return renderBlocks(message)
     .slice(blockIndex + 1)
-    .some((block) => block.kind === 'content');
+    .some((block) => block.kind === "content");
 }
 
 function partUrl(part: MessagePart) {
@@ -372,14 +375,15 @@ function partUrl(part: MessagePart) {
   if (part.attachment_id) {
     return fileApi.contentUrl(part.attachment_id);
   }
-  if (part.filename) {
-    return fileApi.byNameUrl(part.filename);
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) {
+    return fileApi.byNameUrl(lookupFilename);
   }
-  return '';
+  return "";
 }
 
 function formatJson(value: unknown) {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const parsed = parseJsonSafe(value);
     if (parsed !== value) return JSON.stringify(parsed, null, 2);
     return value;
@@ -387,7 +391,7 @@ function formatJson(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    return String(value ?? '');
+    return String(value ?? "");
   }
 }
 
@@ -396,15 +400,15 @@ function replyPreview(messageId?: string | number, fallback?: string) {
   const found = messages.value.find(
     (message) => String(message.id) === String(messageId),
   );
-  const text = found ? plainTextFromMessage(found) : '';
-  return text ? truncate(text, 80) : tm('reply.replyTo');
+  const text = found ? plainTextFromMessage(found) : "";
+  return text ? truncate(text, 80) : tm("reply.replyTo");
 }
 
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
-    .filter((part) => part.type === 'plain' && part.text)
+    .filter((part) => part.type === "plain" && part.text)
     .map((part) => part.text)
-    .join('\n');
+    .join("\n");
 }
 
 function truncate(value: string, max: number) {
@@ -417,9 +421,9 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  void nextTick(() => {
-    const rows = messageListRoot.value?.querySelectorAll('.message-row');
-    rows?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  nextTick(() => {
+    const rows = messageListRoot.value?.querySelectorAll(".message-row");
+    rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 }
 
@@ -438,12 +442,11 @@ function resolvedMessageRefs(message: ChatRecord) {
 function normalizeRefs(refs: unknown) {
   if (!refs) return { used: [] as Array<Record<string, unknown>> };
   const refsValue = refs as { used?: unknown };
-  let used: unknown[] = [];
-  if (Array.isArray(refsValue.used)) {
-    used = refsValue.used;
-  } else if (Array.isArray(refs)) {
-    used = refs;
-  }
+  const used = Array.isArray(refsValue.used)
+    ? refsValue.used
+    : Array.isArray(refs)
+    ? refs
+    : [];
 
   return {
     used: normalizeRefItems(used),
@@ -452,24 +455,19 @@ function normalizeRefs(refs: unknown) {
 
 function normalizeRefItems(items: unknown[]) {
   return items
-    .map((item) => {
-      const refItem = item as Partial<MessageRefItem>;
-      return {
-        index: refItem.index,
-        title: refItem.title || refItem.url || tm('refs.title'),
-        url: refItem.url,
-        snippet: refItem.snippet,
-        favicon: refItem.favicon,
-      };
-    })
+    .map((item: any) => ({
+      index: item?.index,
+      title: item?.title || item?.url || tm("refs.title"),
+      url: item?.url,
+      snippet: item?.snippet,
+      favicon: item?.favicon,
+    }))
     .filter((item) => item.url);
 }
 
 function openRefsSidebar(refs: unknown) {
   selectedRefs.value =
-    refs && typeof refs === 'object'
-      ? (refs as Record<string, unknown>)
-      : undefined;
+    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
@@ -480,24 +478,24 @@ function normalizeToolCall(tool: Record<string, unknown>) {
   );
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === 'object') {
+  if (normalized.result && typeof normalized.result === "object") {
     normalized.result = JSON.stringify(normalized.result, null, 2);
   }
   return normalized;
 }
 
 function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || '').toLowerCase();
-  return name.includes('python') || name.includes('ipython');
+  const name = String(tool.name || "").toLowerCase();
+  return name.includes("python") || name.includes("ipython");
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm('toolStatus.done');
-  return tm('toolStatus.running');
+  if (tool.finished_ts) return tm("toolStatus.done");
+  return tm("toolStatus.running");
 }
 
 function parseJsonSafe(value: unknown) {
-  if (typeof value !== 'string') return value;
+  if (typeof value !== "string") return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -512,15 +510,15 @@ async function copyMessage(message: ChatRecord) {
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || '';
+  const key = part.attachment_id || part.stored_filename || part.filename || "";
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
-    const response = await axios.get(partUrl(part), { responseType: 'blob' });
+    const response = await axios.get(partUrl(part), { responseType: "blob" });
     const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement('a');
+    const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = part.filename || 'file';
+    anchor.download = part.filename || "file";
     anchor.click();
     URL.revokeObjectURL(url);
   } finally {
@@ -538,61 +536,54 @@ function openImage(url: string) {
 
 function closeImage() {
   imagePreview.visible = false;
-  imagePreview.url = '';
+  imagePreview.url = "";
 }
 
 function formatTime(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function inputTokens(stats: AgentStatsLike | unknown) {
-  const usage = (stats as AgentStatsLike | undefined)?.token_usage || {};
-  return Number(usage.input_other) || 0;
+function inputTokens(stats: any) {
+  const usage = stats?.token_usage || {};
+  return usage.input_other || 0;
 }
 
-function outputTokens(stats: AgentStatsLike | unknown) {
-  return (
-    Number((stats as AgentStatsLike | undefined)?.token_usage?.output) || 0
-  );
+function outputTokens(stats: any) {
+  return stats?.token_usage?.output || 0;
 }
 
-function cachedInputTokens(stats: AgentStatsLike | unknown) {
-  return (
-    Number((stats as AgentStatsLike | undefined)?.token_usage?.input_cached) ||
-    0
-  );
+function cachedInputTokens(stats: any) {
+  return stats?.token_usage?.input_cached || 0;
 }
 
-function agentDuration(stats: AgentStatsLike | unknown) {
+function agentDuration(stats: any) {
   const directDuration = readPositiveNumber(stats, [
-    'duration',
-    'total_duration',
+    "duration",
+    "total_duration",
   ]);
   if (directDuration !== null) return formatDuration(directDuration);
 
-  const startTime = readPositiveNumber(stats, ['start_time']);
-  const endTime = readPositiveNumber(stats, ['end_time']);
-  if (startTime === null || endTime === null || endTime < startTime) return '-';
+  const startTime = readPositiveNumber(stats, ["start_time"]);
+  const endTime = readPositiveNumber(stats, ["end_time"]);
+  if (startTime === null || endTime === null || endTime < startTime) return "-";
   return formatDuration(endTime - startTime);
 }
 
-function agentTtft(stats: AgentStatsLike | unknown) {
+function agentTtft(stats: any) {
   const ttft = readPositiveNumber(stats, [
-    'time_to_first_token',
-    'ttft',
-    'first_token_latency',
+    "time_to_first_token",
+    "ttft",
+    "first_token_latency",
   ]);
-  if (ttft === null) return '';
+  if (ttft === null) return "";
   return formatDuration(ttft);
 }
 
-function readPositiveNumber(source: AgentStatsLike | unknown, keys: string[]) {
+function readPositiveNumber(source: any, keys: string[]) {
   for (const key of keys) {
-    const value = Number(
-      (source as Record<string, unknown> | undefined)?.[key],
-    );
+    const value = Number(source?.[key]);
     if (Number.isFinite(value) && value > 0) return value;
   }
   return null;
@@ -747,21 +738,61 @@ function formatDuration(seconds: number) {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--chat-border);
+  padding: 9px 8px 9px 10px;
+  border: 0;
   border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
 }
 
-.file-part span {
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
   min-width: 0;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.file-part-action {
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.72;
+}
+
+.file-part:hover .file-part-action {
+  opacity: 1;
 }
 
 .tool-call-block {

@@ -8,14 +8,18 @@
   >
     <div
       class="input-container"
+      :class="{
+        'is-multiline': inputIsMultiline,
+        'has-attachments': hasStagedAttachments,
+      }"
       :style="{
-        width: '85%',
-        maxWidth: '900px',
+        width: 'var(--chat-content-width, 76%)',
+        maxWidth: 'var(--chat-content-max-width, 760px)',
         margin: '0 auto',
         border: isDark ? 'none' : '1px solid #e0e0e0',
         borderRadius: '24px',
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        backgroundColor: isDark ? '#2d2d2d' : 'transparent',
+        backgroundColor: isDark ? '#2d2d2d' : '#fff',
         position: 'relative',
         transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
@@ -25,31 +29,31 @@
         <div v-if="isDragging" class="drop-overlay">
           <div class="drop-overlay-content">
             <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-            <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
+            <span class="drop-text">{{ tm("input.dropToUpload") }}</span>
           </div>
         </div>
       </transition>
       <!-- 引用预览区 -->
       <transition name="slideReply" @after-leave="handleReplyAfterLeave">
-        <div v-if="props.replyTo && !isReplyClosing" class="reply-preview">
+        <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
           <div class="reply-content">
             <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
             "<span class="reply-text">{{ props.replyTo.selectedText }}</span
             >"
           </div>
           <v-btn
+            @click="handleClearReply"
             class="remove-reply-btn"
             icon="mdi-close"
             size="x-small"
             color="grey"
             variant="text"
-            @click="handleClearReply"
           />
         </div>
       </transition>
 
       <transition name="attachments">
-        <div v-if="hasStagedAttachments" class="attachments-preview">
+        <div class="attachments-preview" v-if="hasStagedAttachments">
           <div
             v-for="(img, index) in stagedImagesUrl"
             :key="'img-' + index"
@@ -57,12 +61,12 @@
           >
             <img :src="img" class="preview-image" alt="attachment preview" />
             <v-btn
+              @click="$emit('removeImage', index)"
               class="remove-attachment-btn"
               icon="mdi-close"
               size="x-small"
               color="error"
               variant="tonal"
-              @click="$emit('removeImage', index)"
             />
           </div>
 
@@ -70,14 +74,14 @@
             <div class="attachment-icon attachment-icon--audio">
               <v-icon icon="mdi-microphone" size="24"></v-icon>
             </div>
-            <span class="attachment-name">{{ tm('voice.recording') }}</span>
+            <span class="attachment-name">{{ tm("voice.recording") }}</span>
             <v-btn
+              @click="$emit('removeAudio')"
               class="remove-attachment-btn"
               icon="mdi-close"
               size="x-small"
               color="error"
               variant="tonal"
-              @click="$emit('removeAudio')"
             />
           </div>
 
@@ -88,7 +92,7 @@
           >
             <div
               class="attachment-icon"
-              :style="{ color: filePresentation(file).color }"
+              :style="{ '--attachment-color': filePresentation(file).color }"
             >
               <v-icon :icon="filePresentation(file).icon" size="24"></v-icon>
               <span class="attachment-ext">{{
@@ -97,12 +101,12 @@
             </div>
             <span class="attachment-name">{{ file.original_name }}</span>
             <v-btn
+              @click="$emit('removeFile', index)"
               class="remove-attachment-btn"
               icon="mdi-close"
               size="x-small"
               color="error"
               variant="tonal"
-              @click="$emit('removeFile', index)"
             />
           </div>
         </div>
@@ -116,65 +120,16 @@
         @select="handleCommandSelect"
         @update-selected-index="selectedCommandIndex = $event"
       />
-      <textarea
-        ref="inputField"
-        v-model="localPrompt"
-        :disabled="disabled"
-        placeholder="Ask AstrBot..."
-        class="chat-textarea"
-        autocomplete="off"
-        autocorrect="off"
-        @keydown="handleKeyDown"
-        autocapitalize="sentences"
-        @input="handleInput"
-        spellcheck="false"
-        @compositionstart="handleCompositionStart"
-        style="
-          width: 100%;
-          resize: none;
-          outline: none;
-          border: 1px solid var(--v-theme-border);
-          border-radius: 12px;
-          padding: 12px 18px;
-          min-height: 34px;
-          max-height: 200px;
-          overflow-y: auto;
-          font-family: inherit;
-          font-size: 16px;
-          background-color: var(--v-theme-surface);
-          transition: height 0.16s ease;
-        "
-        @compositionend="handleCompositionEnd"
-        @compositioncancel="handleCompositionEnd"
-        @blur="handleBlur"
-      ></textarea>
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 6px 14px;
-        "
-      >
-        <div
-          style="
-            display: flex;
-            justify-content: flex-start;
-            margin-top: 4px;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-            flex: 1;
-            overflow: hidden;
-          "
-        >
+
+      <div class="composer-row">
+        <div class="input-left-actions">
           <!-- Settings Menu -->
           <StyledMenu
             offset="8"
             location="top start"
             :close-on-content-click="false"
           >
-            <template #activator="{ props: activatorProps }">
+            <template v-slot:activator="{ props: activatorProps }">
               <v-btn
                 v-bind="activatorProps"
                 icon="mdi-plus"
@@ -189,11 +144,11 @@
               rounded="md"
               @click="triggerImageInput"
             >
-              <template #prepend>
+              <template v-slot:prepend>
                 <v-icon icon="mdi-file-upload" size="small"></v-icon>
               </template>
               <v-list-item-title>
-                {{ tm('input.upload') }}
+                {{ tm("input.upload") }}
               </v-list-item-title>
             </v-list-item>
 
@@ -212,40 +167,73 @@
               rounded="md"
               @click="$emit('toggleStreaming')"
             >
-              <template #prepend>
+              <template v-slot:prepend>
                 <v-icon icon="mdi-lightning-bolt" size="small"></v-icon>
               </template>
               <v-list-item-title>
                 {{
                   enableStreaming
-                    ? tm('streaming.enabled')
-                    : tm('streaming.disabled')
+                    ? tm("streaming.enabled")
+                    : tm("streaming.disabled")
                 }}
               </v-list-item-title>
             </v-list-item>
           </StyledMenu>
 
-          <!-- Provider/Model Selector Menu -->
-          <ProviderModelMenu
-            v-if="showProviderSelector"
-            ref="providerModelMenuRef"
-          />
         </div>
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 8px;
-            align-items: center;
-            flex-shrink: 0;
-          "
-        >
+        <div class="input-field-shell">
           <input
-            ref="imageInputRef"
+            v-if="!inputIsMultiline"
+            ref="inputField"
+            v-model="localPrompt"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            @compositionstart="handleCompositionStart"
+            @compositionend="handleCompositionEnd"
+            @compositioncancel="handleCompositionEnd"
+            @blur="handleBlur"
+            @paste="handlePaste"
+            :disabled="disabled"
+            :placeholder="tm('input.placeholder')"
+            class="chat-text-input"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="sentences"
+            spellcheck="false"
+            type="text"
+          />
+          <textarea
+            v-else
+            ref="inputField"
+            v-model="localPrompt"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            @compositionstart="handleCompositionStart"
+            @compositionend="handleCompositionEnd"
+            @compositioncancel="handleCompositionEnd"
+            @blur="handleBlur"
+            @paste="handlePaste"
+            :disabled="disabled"
+            :placeholder="tm('input.placeholder')"
+            class="chat-textarea"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="sentences"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="input-right-actions">
+          <input
             type="file"
+            ref="imageInputRef"
+            @change="handleFileSelect"
             style="display: none"
             multiple
-            @change="handleFileSelect"
+          />
+          <!-- Provider/Model Selector Menu -->
+          <ProviderModelMenu
+            v-if="props.showProviderSelector && providerSelectorAvailable"
+            ref="providerModelMenuRef"
           />
           <v-progress-circular
             v-if="disabled && !mobile"
@@ -266,10 +254,10 @@
                         </v-tooltip>
                     </v-btn> -->
           <v-btn
+            @click="handleRecordClick"
             icon
             variant="text"
             class="record-btn input-icon-btn"
-            @click="handleRecordClick"
           >
             <v-icon
               :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
@@ -278,29 +266,29 @@
             ></v-icon>
             <v-tooltip activator="parent" location="top">
               {{
-                isRecording ? tm('voice.speaking') : tm('voice.startRecording')
+                isRecording ? tm("voice.speaking") : tm("voice.startRecording")
               }}
             </v-tooltip>
           </v-btn>
           <v-btn
-            v-if="isRunning && !canSend"
             icon
+            v-if="isRunning && !canSend"
+            @click="$emit('stop')"
             variant="tonal"
             class="send-btn input-action-btn"
-            @click="$emit('stop')"
           >
             <v-icon icon="mdi-stop" variant="text" plain></v-icon>
             <v-tooltip activator="parent" location="top">
-              {{ tm('input.stopGenerating') }}
+              {{ tm("input.stopGenerating") }}
             </v-tooltip>
           </v-btn>
           <v-btn
             v-else
+            @click="$emit('send')"
             icon="mdi-arrow-up"
             variant="tonal"
             :disabled="!canSend"
             class="send-btn input-action-btn"
-            @click="$emit('send')"
           />
         </div>
       </div>
@@ -316,19 +304,20 @@ import {
   nextTick,
   onMounted,
   onBeforeUnmount,
-} from 'vue';
-import { useDisplay } from 'vuetify';
-import { useModuleI18n } from '@/i18n/composables';
-import { useCustomizerStore } from '@/stores/customizer';
-import { isComposingEnter } from '@/utils/imeInput';
-import { commandApi } from '@/api/v1';
-import type { CommandItem } from '@/components/extension/componentPanel/types';
-import ConfigSelector from './ConfigSelector.vue';
-import ProviderModelMenu from './ProviderModelMenu.vue';
-import StyledMenu from '@/components/shared/StyledMenu.vue';
-import CommandSuggestion from './CommandSuggestion.vue';
-import type { Session } from '@/composables/useSessions';
-import type { SuggestionCommand } from './CommandSuggestion.vue';
+} from "vue";
+import { useDisplay } from "vuetify";
+import { useModuleI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
+import { isComposingEnter } from "@/utils/imeInput";
+import { commandApi } from "@/api/v1";
+import type { CommandItem } from "@/components/extension/componentPanel/types";
+import ConfigSelector from "./ConfigSelector.vue";
+import ProviderModelMenu from "./ProviderModelMenu.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import CommandSuggestion from "./CommandSuggestion.vue";
+import { attachmentPresentation } from "./attachmentPresentation";
+import type { Session } from "@/composables/useSessions";
+import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -356,7 +345,8 @@ interface Props {
   currentSession?: Session | null;
   configId?: string | null;
   replyTo?: ReplyInfo | null;
-  sendShortcut?: 'enter' | 'shift_enter';
+  sendShortcut?: "enter" | "shift_enter";
+  showProviderSelector?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -365,11 +355,12 @@ const props = withDefaults(defineProps<Props>(), {
   configId: null,
   stagedFiles: () => [],
   replyTo: null,
-  sendShortcut: 'shift_enter',
+  sendShortcut: "shift_enter",
+  showProviderSelector: true,
 });
 
 const emit = defineEmits<{
-  'update:prompt': [value: string];
+  "update:prompt": [value: string];
   send: [];
   stop: [];
   toggleStreaming: [];
@@ -384,20 +375,21 @@ const emit = defineEmits<{
   openLiveMode: [];
 }>();
 
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 const isDark = computed(
-  () => useCustomizerStore().uiTheme === 'PurpleThemeDark',
+  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
 );
 
-const inputField = ref<HTMLTextAreaElement | null>(null);
+const inputField = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
   null,
 );
-const showProviderSelector = ref(true);
+const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
 const isComposing = ref(false);
+const inputIsMultiline = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
 
@@ -406,8 +398,8 @@ const allCommands = ref<CommandItem[]>([]);
 const showCommandSuggestion = ref(false);
 const selectedCommandIndex = ref(0);
 const commandSuggestionLoading = ref(false);
-const wakePrefixes = ref<string[]>(['/']);
-const currentConfigId = ref((props.configId as string) || 'default');
+const wakePrefixes = ref<string[]>(["/"]);
+const currentConfigId = ref((props.configId as string) || "default");
 
 /** 检查文本是否以任意一个唤醒词前缀开头 */
 function hasWakePrefix(text: string): boolean {
@@ -435,11 +427,11 @@ const enabledCommands = computed(() => {
   const result: SuggestionCommand[] = [];
   const seen = new Set<string>();
   // 使用第一个唤醒词前缀作为指令的展示前缀
-  const displayPrefix = wakePrefixes.value[0] || '/';
+  const displayPrefix = wakePrefixes.value[0] || "/";
 
   function addCommand(cmd: CommandItem) {
     if (!cmd.enabled) return;
-    if (cmd.type === 'group') {
+    if (cmd.type === "group") {
       // 指令组本身不加入，但其子指令加入
       cmd.sub_commands?.forEach(addCommand);
       return;
@@ -502,10 +494,8 @@ const filteredCommands = computed(() => {
 
   for (const cmd of enabledCommands.value) {
     const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(
-      cmd.plugin_display_name || '',
-    );
-    const descriptionText = normalizeCommandSearchText(cmd.description || '');
+    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
+    const descriptionText = normalizeCommandSearchText(cmd.description || "");
     const matchesCommand = commandText.includes(query);
     const matchesMetadata =
       pluginText.includes(query) || descriptionText.includes(query);
@@ -531,21 +521,21 @@ const localPrompt = computed({
     // DOM state mid-composition, which interferes with IME insertion at
     // non-terminal cursor positions (alternating character loss).
     // The final value is synced manually in handleCompositionEnd.
-    if (!isComposing.value) emit('update:prompt', value);
+    if (!isComposing.value) emit("update:prompt", value);
   },
 });
 
 const sessionPlatformId = computed(
-  () => props.currentSession?.platform_id || 'webchat',
+  () => props.currentSession?.platform_id || "webchat",
 );
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
   return (
-    props.prompt.trim() ||
+    (props.prompt && props.prompt.trim()) ||
     props.stagedImagesUrl.length > 0 ||
     props.stagedAudioUrl ||
-    props.stagedFiles?.length > 0
+    (props.stagedFiles && props.stagedFiles.length > 0)
   );
 });
 
@@ -553,66 +543,12 @@ const hasStagedAttachments = computed(() => {
   return (
     props.stagedImagesUrl.length > 0 ||
     props.stagedAudioUrl ||
-    props.stagedFiles?.length > 0
+    (props.stagedFiles && props.stagedFiles.length > 0)
   );
 });
 
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
-  pdf: { color: '#d32f2f', icon: 'mdi-file-pdf-box', label: 'PDF' },
-  txt: { color: '#1976d2', icon: 'mdi-file-document-outline', label: 'TXT' },
-  md: { color: '#1976d2', icon: 'mdi-language-markdown-outline', label: 'MD' },
-  markdown: {
-    color: '#1976d2',
-    icon: 'mdi-language-markdown-outline',
-    label: 'MD',
-  },
-  doc: { color: '#2b579a', icon: 'mdi-file-word-box', label: 'DOC' },
-  docx: { color: '#2b579a', icon: 'mdi-file-word-box', label: 'DOCX' },
-  xls: { color: '#217346', icon: 'mdi-file-excel-box', label: 'XLS' },
-  xlsx: { color: '#217346', icon: 'mdi-file-excel-box', label: 'XLSX' },
-  csv: { color: '#217346', icon: 'mdi-file-delimited-outline', label: 'CSV' },
-  ppt: { color: '#d24726', icon: 'mdi-file-powerpoint-box', label: 'PPT' },
-  pptx: { color: '#d24726', icon: 'mdi-file-powerpoint-box', label: 'PPTX' },
-  zip: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'ZIP' },
-  rar: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'RAR' },
-  '7z': { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: '7Z' },
-  tar: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'TAR' },
-  gz: { color: '#7b5e00', icon: 'mdi-folder-zip-outline', label: 'GZ' },
-  json: { color: '#6a1b9a', icon: 'mdi-code-json', label: 'JSON' },
-  yaml: { color: '#6a1b9a', icon: 'mdi-code-braces', label: 'YAML' },
-  yml: { color: '#6a1b9a', icon: 'mdi-code-braces', label: 'YML' },
-  js: { color: '#b8860b', icon: 'mdi-language-javascript', label: 'JS' },
-  ts: { color: '#3178c6', icon: 'mdi-language-typescript', label: 'TS' },
-  html: { color: '#e34c26', icon: 'mdi-language-html5', label: 'HTML' },
-  css: { color: '#264de4', icon: 'mdi-language-css3', label: 'CSS' },
-  py: { color: '#3776ab', icon: 'mdi-language-python', label: 'PY' },
-  java: { color: '#b07219', icon: 'mdi-language-java', label: 'JAVA' },
-  mp3: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'MP3' },
-  wav: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'WAV' },
-  flac: { color: '#00897b', icon: 'mdi-file-music-outline', label: 'FLAC' },
-  mp4: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'MP4' },
-  mov: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'MOV' },
-  webm: { color: '#5e35b1', icon: 'mdi-file-video-outline', label: 'WEBM' },
-};
-
-function fileExtension(file: StagedFileInfo) {
-  const name = file.original_name || file.filename || '';
-  const extension = name.split('.').pop()?.toLowerCase() || '';
-  return extension === name.toLowerCase() ? '' : extension;
-}
-
 function filePresentation(file: StagedFileInfo) {
-  const extension = fileExtension(file);
-  return (
-    fileTypeStyles[extension] || {
-      color: '#607d8b',
-      icon: 'mdi-file-document-outline',
-      label: extension ? extension.slice(0, 4).toUpperCase() : 'FILE',
-    }
-  );
+  return attachmentPresentation(file);
 }
 
 // Ctrl+B 长按录音相关
@@ -627,7 +563,7 @@ function handleClearReply() {
 
 // 动画完成后发送clearReply事件
 function handleReplyAfterLeave() {
-  emit('clearReply');
+  emit("clearReply");
   isReplyClosing.value = false;
 }
 
@@ -637,31 +573,85 @@ const { mobile } = useDisplay();
 function autoResize() {
   const el = inputField.value;
   if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  if (!(el instanceof HTMLTextAreaElement)) {
+    const shouldExpand =
+      localPrompt.value.includes("\n") ||
+      (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 4);
+    if (shouldExpand) {
+      const cursor = el.selectionStart ?? localPrompt.value.length;
+      inputIsMultiline.value = true;
+      nextTick(() => {
+        inputField.value?.focus();
+        inputField.value?.setSelectionRange(cursor, cursor);
+        autoResize();
+      });
+    }
+    return;
+  }
+  const isMobileViewport =
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 768px)").matches;
+  const viewportHeight =
+    typeof window !== "undefined" ? window.innerHeight : 900;
+  const minHeight = isMobileViewport ? 56 : 52;
+  const maxHeight = isMobileViewport
+    ? Math.min(220, Math.round(viewportHeight * 0.42))
+    : Math.min(420, Math.round(viewportHeight * 0.48));
+  if (!localPrompt.value) {
+    inputIsMultiline.value = false;
+    el.style.height = minHeight + "px";
+    return;
+  }
+  el.style.height = "auto";
+  const measuredHeight = el.scrollHeight;
+  const shouldUseMultiline =
+    localPrompt.value.includes("\n") || measuredHeight > minHeight + 8;
+  if (inputIsMultiline.value !== shouldUseMultiline) {
+    const cursor = el.selectionStart ?? localPrompt.value.length;
+    inputIsMultiline.value = shouldUseMultiline;
+    nextTick(() => {
+      inputField.value?.focus();
+      inputField.value?.setSelectionRange(cursor, cursor);
+      autoResize();
+    });
+    return;
+  }
+  el.style.height = shouldUseMultiline
+    ? Math.min(Math.max(measuredHeight, minHeight), maxHeight) + "px"
+    : minHeight + "px";
 }
 
-watch(localPrompt, () => {
-  void nextTick(autoResize);
+watch(
+  () => props.prompt,
+  (value) => {
+    if (!value) {
+      inputIsMultiline.value = false;
+    }
+    nextTick(autoResize);
+  },
+);
+
+watch(inputIsMultiline, () => {
+  nextTick(autoResize);
 });
 
 function handleKeyDown(e: KeyboardEvent) {
   // 命令提示激活时，拦截方向键和 Enter/Esc
   if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
-    if (e.key === 'ArrowDown') {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedCommandIndex.value =
         (selectedCommandIndex.value + 1) % filteredCommands.value.length;
       return;
     }
-    if (e.key === 'ArrowUp') {
+    if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedCommandIndex.value =
         (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
         filteredCommands.value.length;
       return;
     }
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       const cmd = filteredCommands.value[selectedCommandIndex.value];
       if (cmd) {
@@ -669,14 +659,14 @@ function handleKeyDown(e: KeyboardEvent) {
       }
       return;
     }
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       e.preventDefault();
       showCommandSuggestion.value = false;
       return;
     }
   }
 
-  const isEnter = e.key === 'Enter';
+  const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
     if (e.ctrlKey && e.keyCode === 66) {
@@ -686,7 +676,7 @@ function handleKeyDown(e: KeyboardEvent) {
       ctrlKeyDown.value = true;
       ctrlKeyTimer.value = window.setTimeout(() => {
         if (ctrlKeyDown.value && !props.isRecording) {
-          emit('startRecording');
+          emit("startRecording");
         }
       }, ctrlKeyLongPressThreshold);
     }
@@ -700,18 +690,34 @@ function handleKeyDown(e: KeyboardEvent) {
   const isSendHotkey =
     e.ctrlKey ||
     e.metaKey ||
-    (props.sendShortcut === 'enter' ? !e.shiftKey : e.shiftKey);
+    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
-    if (localPrompt.value.trim() === '/astr_live_dev') {
-      emit('openLiveMode');
-      localPrompt.value = '';
+    if (localPrompt.value.trim() === "/astr_live_dev") {
+      emit("openLiveMode");
+      localPrompt.value = "";
       return;
     }
     if (canSend.value) {
-      emit('send');
+      emit("send");
     }
+    return;
+  }
+
+  if (!inputIsMultiline.value) {
+    e.preventDefault();
+    const target = e.target as HTMLInputElement;
+    const start = target.selectionStart ?? localPrompt.value.length;
+    const end = target.selectionEnd ?? start;
+    localPrompt.value =
+      localPrompt.value.slice(0, start) + "\n" + localPrompt.value.slice(end);
+    inputIsMultiline.value = true;
+    nextTick(() => {
+      inputField.value?.focus();
+      inputField.value?.setSelectionRange(start + 1, start + 1);
+      autoResize();
+    });
   }
 }
 
@@ -737,9 +743,9 @@ function handleBlur() {
 
 /** 选择命令，填入输入框 */
 function handleCommandSelect(cmd: SuggestionCommand) {
-  localPrompt.value = `${cmd.effective_command} `;
+  localPrompt.value = cmd.effective_command + " ";
   showCommandSuggestion.value = false;
-  void nextTick(() => {
+  nextTick(() => {
     inputField.value?.focus();
     autoResize();
   });
@@ -751,10 +757,8 @@ async function fetchCommands() {
   commandSuggestionLoading.value = true;
   try {
     const cid = currentConfigId.value;
-    const res = await commandApi.list(
-      cid && cid !== 'default' ? cid : undefined,
-    );
-    if (res.data.status === 'ok') {
+    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
+    if (res.data.status === "ok") {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
       const prefixes: string[] = res.data.data.wake_prefix || [];
@@ -764,7 +768,7 @@ async function fetchCommands() {
     }
   } catch (err) {
     // 静默失败，不影响聊天功能
-    console.warn('Failed to fetch commands for suggestion:', err);
+    console.warn("Failed to fetch commands for suggestion:", err);
   } finally {
     commandSuggestionLoading.value = false;
   }
@@ -788,16 +792,16 @@ function handleCompositionEnd(e: CompositionEvent) {
   // where props.prompt is externally updated between now and nextTick.
   const endValue = inputField.value?.value;
 
-  void nextTick(() => {
+  nextTick(() => {
     const el = inputField.value;
     // Only sync if the DOM hasn't been changed externally in the meantime.
     if (el && el.value === endValue && el.value !== props.prompt) {
-      emit('update:prompt', el.value);
+      emit("update:prompt", el.value);
       // Re-evaluate command suggestions that were suppressed during IME
       // composition (handleInput checks isComposing). Only needed when
       // the value actually changed. Runs in a nested nextTick so
       // props.prompt reflects the emit above.
-      void nextTick(() => {
+      nextTick(() => {
         handleInput();
       });
     }
@@ -821,13 +825,31 @@ function handleKeyUp(e: KeyboardEvent) {
     }
 
     if (props.isRecording) {
-      emit('stopRecording');
+      emit("stopRecording");
     }
   }
 }
 
 function handlePaste(e: ClipboardEvent) {
-  emit('pasteImage', e);
+  const pastedText = e.clipboardData?.getData("text/plain") || "";
+  if (!inputIsMultiline.value && pastedText.includes("\n")) {
+    e.preventDefault();
+    const target = e.target as HTMLInputElement;
+    const start = target.selectionStart ?? localPrompt.value.length;
+    const end = target.selectionEnd ?? start;
+    localPrompt.value =
+      localPrompt.value.slice(0, start) +
+      pastedText +
+      localPrompt.value.slice(end);
+    inputIsMultiline.value = true;
+    nextTick(() => {
+      inputField.value?.focus();
+      const cursor = start + pastedText.length;
+      inputField.value?.setSelectionRange(cursor, cursor);
+      autoResize();
+    });
+  }
+  emit("pasteImage", e);
 }
 
 function handleDragOver(e: DragEvent) {
@@ -838,12 +860,12 @@ function handleDragOver(e: DragEvent) {
   }
 
   // 检查是否有文件
-  if (e.dataTransfer?.types.includes('Files')) {
+  if (e.dataTransfer?.types.includes("Files")) {
     isDragging.value = true;
   }
 }
 
-function handleDragLeave(_e: DragEvent) {
+function handleDragLeave(e: DragEvent) {
   // 使用 timeout 避免在子元素间移动时闪烁
   dragLeaveTimeout = window.setTimeout(() => {
     isDragging.value = false;
@@ -855,7 +877,7 @@ function handleDrop(e: DragEvent) {
 
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
-    emit('fileSelect', files);
+    emit("fileSelect", files);
   }
 }
 
@@ -867,16 +889,16 @@ function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement;
   const files = target.files;
   if (files) {
-    emit('fileSelect', files);
+    emit("fileSelect", files);
   }
-  target.value = '';
+  target.value = "";
 }
 
 function handleRecordClick() {
   if (props.isRecording) {
-    emit('stopRecording');
+    emit("stopRecording");
   } else {
-    emit('startRecording');
+    emit("startRecording");
   }
 }
 
@@ -884,18 +906,18 @@ function handleConfigChange(payload: {
   configId: string;
   agentRunnerType: string;
 }) {
-  const runnerType = (payload.agentRunnerType || '').toLowerCase();
-  const isInternal = runnerType === 'internal' || runnerType === 'local';
-  showProviderSelector.value = isInternal;
+  const runnerType = (payload.agentRunnerType || "").toLowerCase();
+  const isInternal = runnerType === "internal" || runnerType === "local";
+  providerSelectorAvailable.value = isInternal;
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
     currentConfigId.value = payload.configId;
-    void fetchCommands();
+    fetchCommands();
   }
 }
 
 function getCurrentSelection() {
-  if (!showProviderSelector.value) {
+  if (!props.showProviderSelector || !providerSelectorAvailable.value) {
     return null;
   }
   return providerModelMenuRef.value?.getCurrentSelection();
@@ -907,20 +929,15 @@ function focusInput() {
 }
 
 onMounted(() => {
-  if (inputField.value) {
-    inputField.value.addEventListener('paste', handlePaste);
-  }
-  document.addEventListener('keyup', handleKeyUp);
+  document.addEventListener("keyup", handleKeyUp);
   // 预加载指令列表
-  void fetchCommands();
+  fetchCommands();
+  nextTick(autoResize);
 });
 
 onBeforeUnmount(() => {
-  if (inputField.value) {
-    inputField.value.removeEventListener('paste', handlePaste);
-  }
   clearCompositionState();
-  document.removeEventListener('keyup', handleKeyUp);
+  document.removeEventListener("keyup", handleKeyUp);
 });
 
 defineExpose({
@@ -983,12 +1000,15 @@ defineExpose({
   width: 36px !important;
   height: 36px !important;
   min-width: 36px !important;
-  border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+  border: 0 !important;
+  border-color: transparent !important;
   background: transparent !important;
+  box-shadow: none !important;
 }
 
-.input-outline-control:hover {
-  border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
+.input-outline-control:hover,
+.input-outline-control:focus-visible {
+  border-color: transparent !important;
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
@@ -1002,12 +1022,13 @@ defineExpose({
 }
 
 .input-area.is-dark .input-outline-control {
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: transparent !important;
   background: transparent !important;
 }
 
-.input-area.is-dark .input-outline-control:hover {
-  border-color: rgba(255, 255, 255, 0.42) !important;
+.input-area.is-dark .input-outline-control:hover,
+.input-area.is-dark .input-outline-control:focus-visible {
+  border-color: transparent !important;
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
@@ -1023,6 +1044,178 @@ defineExpose({
 .input-area.is-dark .input-action-btn:disabled {
   background: rgba(var(--v-theme-on-surface), 0.14) !important;
   color: rgba(var(--v-theme-on-surface), 0.4) !important;
+}
+
+.input-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64px;
+  padding: 6px 12px 6px 14px !important;
+  border-color: #f0f0f0 !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08) !important;
+}
+
+.input-container.is-multiline {
+  justify-content: flex-start;
+  padding: 16px 20px 14px !important;
+  border-radius: 34px !important;
+}
+
+.input-container.has-attachments {
+  justify-content: flex-start;
+  min-height: 130px;
+  padding: 14px 18px 10px !important;
+  border-radius: 30px !important;
+}
+
+.input-area.is-dark .input-container {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: #2d2d2d !important;
+  box-shadow: none !important;
+}
+
+.reply-preview,
+.attachments-preview {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.composer-row {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "left field right";
+  align-items: center;
+  column-gap: 10px;
+}
+
+.input-container.is-multiline .composer-row {
+  grid-template-areas:
+    "field field field"
+    "left . right";
+  row-gap: 10px;
+  align-items: end;
+}
+
+.input-field-shell {
+  grid-area: field;
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.input-container.is-multiline .input-field-shell {
+  min-height: auto;
+  align-items: flex-start;
+}
+
+.chat-text-input,
+.chat-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 52px !important;
+  max-height: 72px !important;
+  margin: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 18px !important;
+}
+
+.chat-text-input {
+  height: 52px !important;
+  padding: 0 !important;
+  line-height: normal !important;
+  overflow: hidden;
+}
+
+.chat-textarea {
+  max-height: min(48vh, 420px) !important;
+  padding: 12px 0 !important;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+  line-height: 28px !important;
+  transition: height 0.16s ease;
+}
+
+.chat-text-input::placeholder,
+.chat-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  opacity: 1;
+}
+
+.input-left-actions {
+  grid-area: left;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  min-width: auto !important;
+  margin-top: 0 !important;
+  overflow: visible !important;
+}
+
+.input-right-actions {
+  grid-area: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-top: 0 !important;
+}
+
+.input-outline-control {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+}
+
+.input-icon-btn {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  margin-right: 0;
+}
+
+.input-right-actions :deep(.provider-chip) {
+  height: 40px !important;
+  min-height: 40px !important;
+  border-radius: 999px !important;
+}
+
+.input-area:not(.is-dark) .input-action-btn {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  background: #8fcfb4 !important;
+  color: #fff !important;
+}
+
+.input-area:not(.is-dark) .input-action-btn:hover {
+  background: #7fc4a8 !important;
+}
+
+.input-area:not(.is-dark) .input-action-btn:disabled {
+  background: #f2f5f3 !important;
+  color: rgba(0, 0, 0, 0.18) !important;
 }
 
 /* 拖拽上传遮罩 */
@@ -1166,27 +1359,42 @@ defineExpose({
   max-height: 72px;
 }
 
+.input-container.has-attachments .attachments-preview {
+  margin: 0 0 8px;
+  padding: 0;
+}
+
 .attachment-card {
+  --attachment-color: #607d8b;
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  width: 220px;
-  height: 64px;
+  width: 210px;
+  height: 54px;
   flex: 0 0 auto;
   min-width: 0;
-  padding: 8px 34px 8px 10px;
+  padding: 7px 32px 7px 10px;
   overflow: hidden;
   color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  border: 0;
+  border-radius: 8px;
+}
+
+.file-preview {
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 14%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 62%
+  );
 }
 
 .image-preview {
-  width: 64px;
-  flex-basis: 64px;
+  width: 54px;
+  flex-basis: 54px;
   padding: 0;
   background: rgba(var(--v-theme-on-surface), 0.06);
 }
@@ -1195,7 +1403,7 @@ defineExpose({
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 11px;
+  border-radius: 8px;
 }
 
 .attachment-icon {
@@ -1206,6 +1414,7 @@ defineExpose({
   gap: 1px;
   flex-shrink: 0;
   min-width: 34px;
+  color: var(--attachment-color);
 }
 
 .attachment-icon--audio {
@@ -1220,6 +1429,7 @@ defineExpose({
   font-size: 10px;
   font-weight: 700;
   line-height: 12px;
+  color: var(--attachment-color);
 }
 
 .attachment-name {
@@ -1228,7 +1438,7 @@ defineExpose({
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  line-height: 18px;
+  line-height: 17px;
 }
 
 .remove-attachment-btn {
@@ -1285,44 +1495,176 @@ defineExpose({
 
 @media (max-width: 768px) {
   .input-area {
-    padding: 0 !important;
+    padding: 8px 0 0 !important;
+    border-top: 0;
   }
 
   .input-container {
-    width: 100% !important;
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+    width: calc(100% - 20px) !important;
     max-width: 100% !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    min-height: 64px;
+    margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    padding: 6px 8px 6px 10px !important;
+    overflow: hidden;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
+    border-radius: 999px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .input-container.is-multiline {
+    justify-content: flex-start;
+    min-height: 128px;
+    padding: 10px !important;
+    border-radius: 26px !important;
+  }
+
+  .input-container.has-attachments {
+    justify-content: flex-start;
+    min-height: 124px;
+    padding: 10px !important;
+    border-radius: 26px !important;
+  }
+
+  .input-area.is-dark .input-container {
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    background: #2d2d2d !important;
+    box-shadow: none !important;
+  }
+
+  .composer-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "left field right";
+    min-height: 52px;
+    row-gap: 0;
+    column-gap: 8px;
+    align-items: center;
+  }
+
+  .input-container.is-multiline .composer-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "field field"
+      "left right";
+    min-height: auto;
+    row-gap: 4px;
+  }
+
+  .input-field-shell {
+    min-height: 52px;
+    align-items: center;
+  }
+
+  .input-container.is-multiline .input-field-shell {
+    min-height: 56px;
+    align-items: flex-start;
+  }
+
+  .input-left-actions,
+  .input-right-actions {
+    margin-top: 0 !important;
+    align-items: center !important;
+  }
+
+  .input-right-actions {
+    gap: 6px;
   }
 
   .input-outline-control {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border: 0 !important;
+    border-color: transparent !important;
+    border-radius: 50% !important;
   }
 
-  .input-area textarea,
+  .chat-text-input,
   .chat-textarea {
-    min-height: 28px !important;
-    max-height: 140px !important;
-    font-size: 16px !important;
-    line-height: 20px !important;
-    padding: 8px 14px 7px !important;
+    min-height: 52px !important;
+    max-height: 132px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 18px !important;
+  }
+
+  .chat-text-input {
+    height: 52px !important;
+    padding: 0 2px !important;
+    line-height: normal !important;
+    overflow: hidden;
+  }
+
+  .chat-textarea {
+    max-height: min(42vh, 220px) !important;
+    padding: 4px 10px 2px !important;
+    line-height: 24px !important;
+    overflow-y: auto;
+  }
+
+  .chat-text-input::placeholder,
+  .chat-textarea::placeholder {
+    color: rgba(var(--v-theme-on-surface), 0.56);
+    opacity: 1;
+  }
+
+  .input-icon-btn {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    margin-right: 0;
+  }
+
+  .input-action-btn {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    border-radius: 50% !important;
+  }
+
+  .input-action-btn:not(:disabled) {
+    background: rgb(var(--v-theme-on-surface)) !important;
+    color: rgb(var(--v-theme-surface)) !important;
+  }
+
+  .input-action-btn:disabled {
+    background: rgba(var(--v-theme-on-surface), 0.04) !important;
+    color: rgba(var(--v-theme-on-surface), 0.18) !important;
+  }
+
+  :deep(.provider-chip) {
+    height: 38px !important;
+    min-height: 38px !important;
+    border-radius: 999px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    background: transparent !important;
   }
 
   .attachments-preview {
-    margin: 8px 10px 0;
+    margin: 8px 16px 0;
     gap: 8px;
+  }
+
+  .input-container.has-attachments .attachments-preview {
+    margin: 0 0 8px;
   }
 
   .attachment-card {
     width: min(220px, calc(100vw - 28px));
-    height: 58px;
+    height: 54px;
   }
 
   .image-preview {
-    width: 58px;
-    flex-basis: 58px;
+    width: 54px;
+    flex-basis: 54px;
   }
 }
 </style>

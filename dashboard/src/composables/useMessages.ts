@@ -1,8 +1,8 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from 'vue';
-import { chatApi, fileApi } from '@/api/v1';
-import { fetchWithAuth } from '@/api/http';
+import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { chatApi, fileApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 
-export type TransportMode = 'sse' | 'websocket';
+export type TransportMode = "sse" | "websocket";
 
 export interface MessagePart {
   type: string;
@@ -14,6 +14,7 @@ export interface MessagePart {
   embedded_file?: { url?: string; filename?: string; attachment_id?: string };
   attachment_id?: string;
   filename?: string;
+  stored_filename?: string;
   tool_calls?: ToolCall[];
   [key: string]: unknown;
 }
@@ -29,16 +30,16 @@ export interface ToolCall {
 }
 
 export interface ChatContent {
-  type: 'user' | 'bot' | string;
+  type: "user" | "bot" | string;
   message: MessagePart[];
   reasoning?: string;
   isLoading?: boolean;
-  agentStats?: unknown;
-  refs?: unknown;
+  agentStats?: any;
+  refs?: any;
 }
 
 export interface MessageDisplayBlock {
-  kind: 'thinking' | 'content';
+  kind: "thinking" | "content";
   parts: MessagePart[];
 }
 
@@ -114,39 +115,6 @@ interface UseMessagesOptions {
   onStreamUpdate?: (sessionId: string) => void;
 }
 
-interface HistoryRecordLike {
-  content?: {
-    message?: unknown;
-    reasoning?: unknown;
-    type?: string;
-    agentStats?: unknown;
-    agent_stats?: unknown;
-    refs?: unknown;
-    isLoading?: boolean;
-  };
-  sender_id?: string;
-  [key: string]: unknown;
-}
-
-interface StreamPayloadLike {
-  ct?: string;
-  type?: string;
-  t?: string;
-  chain_type?: string;
-  data?: unknown;
-  streaming?: boolean;
-  [key: string]: unknown;
-}
-
-interface ToolCallLike {
-  id?: string;
-  result?: unknown;
-  ts?: number;
-  finished_ts?: number;
-  arguments?: unknown;
-  [key: string]: unknown;
-}
-
 export function useMessages(options: UseMessagesOptions) {
   const loadingMessages = ref(false);
   const sending = ref(false);
@@ -169,11 +137,7 @@ export function useMessages(options: UseMessagesOptions) {
   onBeforeUnmount(() => {
     cleanupConnections();
     for (const promise of attachmentBlobCache.values()) {
-      promise
-        .then((url) => {
-          URL.revokeObjectURL(url);
-        })
-        .catch(() => undefined);
+      promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
     }
     attachmentBlobCache.clear();
   });
@@ -183,17 +147,17 @@ export function useMessages(options: UseMessagesOptions) {
   }
 
   function isUserMessage(msg: ChatRecord) {
-    return messageContent(msg).type === 'user';
+    return messageContent(msg).type === "user";
   }
 
   function messageContent(msg: ChatRecord): ChatContent {
-    return msg.content || { type: 'bot', message: [] };
+    return msg.content || { type: "bot", message: [] };
   }
 
   function messageParts(msg: ChatRecord): MessagePart[] {
     const parts = messageContent(msg).message;
     if (Array.isArray(parts)) return parts;
-    if (typeof parts === 'string') return [{ type: 'plain', text: parts }];
+    if (typeof parts === "string") return [{ type: "plain", text: parts }];
     return [];
   }
 
@@ -211,20 +175,23 @@ export function useMessages(options: UseMessagesOptions) {
     if (part.embedded_url) return;
     let url: string;
     let cacheKey: string;
+    const storedFilename =
+      typeof part.stored_filename === "string" ? part.stored_filename : "";
+    const lookupFilename = storedFilename || part.filename || "";
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
       url = fileApi.contentUrl(part.attachment_id);
-    } else if (part.filename) {
-      cacheKey = `file:${part.filename}`;
-      url = '';
+    } else if (lookupFilename) {
+      cacheKey = `file:${lookupFilename}`;
+      url = "";
     } else {
       return;
     }
     let promise = attachmentBlobCache.get(cacheKey);
     if (!promise) {
-      if (part.filename) {
+      if (!part.attachment_id && lookupFilename) {
         promise = fileApi
-          .getByName(part.filename)
+          .getByName(lookupFilename)
           .then((resp) => URL.createObjectURL(resp.data));
       } else {
         promise = fetchWithAuth(url).then(async (resp) => {
@@ -238,19 +205,19 @@ export function useMessages(options: UseMessagesOptions) {
       part.embedded_url = await promise;
     } catch (e) {
       attachmentBlobCache.delete(cacheKey);
-      console.error('Failed to resolve media:', cacheKey, e);
+      console.error("Failed to resolve media:", cacheKey, e);
     }
   }
 
   async function resolveRecordMedia(records: ChatRecord[]) {
-    const mediaTypes = ['image', 'record', 'video'];
+    const mediaTypes = ["image", "record", "video"];
     const tasks: Promise<void>[] = [];
     for (const record of records) {
       for (const part of record.content?.message || []) {
         if (
           mediaTypes.includes(part.type) &&
           !part.embedded_url &&
-          (part.attachment_id || part.filename)
+          (part.attachment_id || part.stored_filename || part.filename)
         ) {
           tasks.push(resolvePartMedia(part));
         }
@@ -273,7 +240,7 @@ export function useMessages(options: UseMessagesOptions) {
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
       loadedSessions[sessionId] = true;
     } catch (error) {
-      console.error('Failed to load session messages:', error);
+      console.error("Failed to load session messages:", error);
       messagesBySession[sessionId] = messagesBySession[sessionId] || [];
     } finally {
       loadingMessages.value = false;
@@ -292,7 +259,7 @@ export function useMessages(options: UseMessagesOptions) {
       id: `local-user-${messageId}`,
       created_at: new Date().toISOString(),
       content: {
-        type: 'user',
+        type: "user",
         message: parts.map(stripUploadOnlyFields),
       },
     };
@@ -301,9 +268,9 @@ export function useMessages(options: UseMessagesOptions) {
       id: `local-bot-${messageId}`,
       created_at: new Date().toISOString(),
       content: {
-        type: 'bot',
+        type: "bot",
         message: [],
-        reasoning: '',
+        reasoning: "",
         isLoading: true,
       },
     };
@@ -323,14 +290,14 @@ export function useMessages(options: UseMessagesOptions) {
     parts,
     transport,
     enableStreaming = true,
-    selectedProvider = '',
-    selectedModel = '',
+    selectedProvider = "",
+    selectedModel = "",
     botRecord,
     userRecord,
     skipUserHistory = false,
     llmCheckpointId = null,
   }: SendMessageStreamOptions) {
-    if (transport === 'websocket') {
+    if (transport === "websocket") {
       startWebSocketStream(
         sessionId,
         messageId,
@@ -362,17 +329,13 @@ export function useMessages(options: UseMessagesOptions) {
     record: ChatRecord,
     editedText: string,
   ) {
-    if (!sessionId || record.id === null || record.id === undefined) {
-      return { needsRegenerate: false };
-    }
+    if (!sessionId || record.id == null) return { needsRegenerate: false };
     const content = cloneContentWithEditedText(record, editedText);
     const response = await chatApi.updateMessage(sessionId, record.id, {
       content: content as unknown as Record<string, unknown>,
     });
     const payload = response.data?.data || {};
-    const updated = payload.message
-      ? normalizeHistoryRecord(payload.message)
-      : null;
+    const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
     if (updated) {
       Object.assign(record, updated);
       await resolveRecordMedia([record]);
@@ -388,8 +351,7 @@ export function useMessages(options: UseMessagesOptions) {
 
   function truncateMessagesAfter(sessionId: string, record: ChatRecord) {
     const records = messagesBySession[sessionId];
-    if (!records?.length || record.id === null || record.id === undefined)
-      return;
+    if (!records?.length || record.id == null) return;
     const index = records.findIndex(
       (message) => String(message.id) === String(record.id),
     );
@@ -401,8 +363,8 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId,
     sourceRecord,
     enableStreaming = true,
-    selectedProvider = '',
-    selectedModel = '',
+    selectedProvider = "",
+    selectedModel = "",
   }: ContinueEditedMessageOptions) {
     if (!sessionId) return;
     const parts = messageParts(sourceRecord).map(stripUploadOnlyFields);
@@ -413,9 +375,9 @@ export function useMessages(options: UseMessagesOptions) {
       id: `local-edited-bot-${messageId}`,
       created_at: new Date().toISOString(),
       content: {
-        type: 'bot',
+        type: "bot",
         message: [],
-        reasoning: '',
+        reasoning: "",
         isLoading: true,
       },
     };
@@ -438,19 +400,18 @@ export function useMessages(options: UseMessagesOptions) {
   async function regenerateMessage(
     sessionId: string,
     botRecord: ChatRecord,
-    selectedProvider = '',
-    selectedModel = '',
+    selectedProvider = "",
+    selectedModel = "",
   ) {
-    if (!sessionId || botRecord.id === null || botRecord.id === undefined)
-      return;
+    if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
 
     botRecord.id = `local-regenerate-${Date.now()}`;
     botRecord.created_at = new Date().toISOString();
     botRecord.content = {
-      type: 'bot',
+      type: "bot",
       message: [],
-      reasoning: '',
+      reasoning: "",
       isLoading: true,
     };
 
@@ -458,32 +419,29 @@ export function useMessages(options: UseMessagesOptions) {
     activeConnections[sessionId] = {
       sessionId,
       messageId: String(botRecord.id),
-      transport: 'sse',
+      transport: "sse",
       abort,
     };
 
     try {
-      const response = await fetchWithAuth(
-        chatApi.regenerateMessageUrl(sessionId, targetMessageId),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            selected_provider: selectedProvider,
-            selected_model: selectedModel,
-          }),
-          signal: abort.signal,
+      const response = await fetchWithAuth(chatApi.regenerateMessageUrl(sessionId, targetMessageId), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          selected_provider: selectedProvider,
+          selected_model: selectedModel,
+        }),
+        signal: abort.signal,
+      });
       if (!response.ok || !response.body) {
         throw new Error(`Regenerate failed: ${response.status}`);
       }
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('text/event-stream')) {
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.message || 'Regenerate failed.');
+        throw new Error(payload?.message || "Regenerate failed.");
       }
       await readSseStream(response.body, (payload) => {
         processStreamPayload(botRecord, payload);
@@ -491,11 +449,8 @@ export function useMessages(options: UseMessagesOptions) {
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(
-          botRecord,
-          `\n\n${String((error as Error)?.message || error)}`,
-        );
-        console.error('Regenerate failed:', error);
+        appendPlain(botRecord, `\n\n${String((error as Error)?.message || error)}`);
+        console.error("Regenerate failed:", error);
       }
     } finally {
       delete activeConnections[sessionId];
@@ -521,19 +476,16 @@ export function useMessages(options: UseMessagesOptions) {
     });
   }
 
-  function normalizeHistoryRecord(record: HistoryRecordLike): ChatRecord {
+  function normalizeHistoryRecord(record: any): ChatRecord {
     const content = record.content || {};
     const normalizedMessage = normalizeMessageParts(
       content.message || [],
-      typeof content.reasoning === 'string' ? content.reasoning : '',
+      content.reasoning || "",
     );
     const normalizedContent: ChatContent = {
-      type: content.type || (record.sender_id === 'bot' ? 'bot' : 'user'),
+      type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractReasoningText(
-        normalizedMessage,
-        typeof content.reasoning === 'string' ? content.reasoning : '',
-      ),
+      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     };
@@ -553,8 +505,7 @@ export function useMessages(options: UseMessagesOptions) {
       threadsByMessage.set(key, list);
     }
     for (const record of records) {
-      const key =
-        record.id === null || record.id === undefined ? '' : String(record.id);
+      const key = record.id == null ? "" : String(record.id);
       record.threads = threadsByMessage.get(key) || [];
     }
   }
@@ -575,14 +526,14 @@ export function useMessages(options: UseMessagesOptions) {
     activeConnections[sessionId] = {
       sessionId,
       messageId,
-      transport: 'sse',
+      transport: "sse",
       abort,
     };
 
     fetchWithAuth(chatApi.sendStreamUrl(), {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         session_id: sessionId,
@@ -607,7 +558,7 @@ export function useMessages(options: UseMessagesOptions) {
       .catch((error) => {
         if (abort.signal.aborted) return;
         appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
-        console.error('SSE chat failed:', error);
+        console.error("SSE chat failed:", error);
       })
       .finally(async () => {
         delete activeConnections[sessionId];
@@ -630,7 +581,7 @@ export function useMessages(options: UseMessagesOptions) {
     activeConnections[sessionId] = {
       sessionId,
       messageId,
-      transport: 'websocket',
+      transport: "websocket",
       ws,
       botRecord,
       userRecord,
@@ -639,8 +590,8 @@ export function useMessages(options: UseMessagesOptions) {
     };
 
     sendWebSocketPayload(sessionId, messageId, {
-      ct: 'chat',
-      t: 'send',
+      ct: "chat",
+      t: "send",
       session_id: sessionId,
       message_id: messageId,
       message: parts.map(partToPayload),
@@ -660,7 +611,7 @@ export function useMessages(options: UseMessagesOptions) {
       return existing;
     }
 
-    const token = localStorage.getItem('token') || '';
+    const token = localStorage.getItem("token") || "";
     const ws = new WebSocket(chatApi.unifiedWebSocketUrl(token));
     chatWebSockets[sessionId] = ws;
 
@@ -669,9 +620,9 @@ export function useMessages(options: UseMessagesOptions) {
     };
     ws.onerror = () => {
       const connection = activeConnections[sessionId];
-      if (connection?.transport === 'websocket' && connection.botRecord) {
+      if (connection?.transport === "websocket" && connection.botRecord) {
         connection.errorShown = true;
-        appendPlain(connection.botRecord, '\n\nWebSocket connection failed.');
+        appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
       }
     };
     ws.onclose = async () => {
@@ -680,7 +631,7 @@ export function useMessages(options: UseMessagesOptions) {
       }
 
       const connection = activeConnections[sessionId];
-      if (connection?.transport !== 'websocket' || connection.ws !== ws) {
+      if (connection?.transport !== "websocket" || connection.ws !== ws) {
         return;
       }
       if (
@@ -689,7 +640,7 @@ export function useMessages(options: UseMessagesOptions) {
         !closingChatWebSockets.has(ws) &&
         connection.botRecord
       ) {
-        appendPlain(connection.botRecord, '\n\nWebSocket connection closed.');
+        appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
       }
       delete activeConnections[sessionId];
       await options.onSessionsChanged?.();
@@ -706,7 +657,7 @@ export function useMessages(options: UseMessagesOptions) {
     const send = () => {
       const connection = activeConnections[sessionId];
       if (
-        connection?.transport !== 'websocket' ||
+        connection?.transport !== "websocket" ||
         connection.messageId !== messageId ||
         connection.ws !== ws
       ) {
@@ -717,9 +668,9 @@ export function useMessages(options: UseMessagesOptions) {
       } catch (error) {
         connection.errorShown = true;
         if (connection.botRecord) {
-          appendPlain(connection.botRecord, '\n\nWebSocket connection failed.');
+          appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
         }
-        console.error('Failed to send WebSocket payload:', error);
+        console.error("Failed to send WebSocket payload:", error);
         void finishWebSocketStream(sessionId, messageId);
       }
     };
@@ -729,7 +680,7 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     if (ws.readyState === WebSocket.CONNECTING) {
-      ws.addEventListener('open', send, { once: true });
+      ws.addEventListener("open", send, { once: true });
       return;
     }
     void finishWebSocketStream(sessionId, messageId);
@@ -737,30 +688,26 @@ export function useMessages(options: UseMessagesOptions) {
 
   function handleWebSocketMessage(sessionId: string, event: MessageEvent) {
     const connection = activeConnections[sessionId];
-    if (connection?.transport !== 'websocket' || !connection.botRecord) {
+    if (connection?.transport !== "websocket" || !connection.botRecord) {
       return;
     }
 
     try {
       const payload = JSON.parse(event.data);
-      processStreamPayload(
-        connection.botRecord,
-        payload,
-        connection.userRecord,
-      );
+      processStreamPayload(connection.botRecord, payload, connection.userRecord);
       options.onStreamUpdate?.(sessionId);
-      if (payload.type === 'end' || payload.t === 'end') {
+      if (payload.type === "end" || payload.t === "end") {
         void finishWebSocketStream(sessionId, connection.messageId);
       }
     } catch (error) {
-      console.error('Failed to parse WebSocket payload:', error);
+      console.error("Failed to parse WebSocket payload:", error);
     }
   }
 
   async function finishWebSocketStream(sessionId: string, messageId: string) {
     const connection = activeConnections[sessionId];
     if (
-      connection?.transport !== 'websocket' ||
+      connection?.transport !== "websocket" ||
       connection.messageId !== messageId
     ) {
       return;
@@ -782,75 +729,49 @@ export function useMessages(options: UseMessagesOptions) {
 
   function processStreamPayload(
     botRecord: ChatRecord,
-    payload: StreamPayloadLike | unknown,
+    payload: any,
     userRecord?: ChatRecord,
   ) {
-    const normalizedPayload =
-      payload && typeof payload === 'object'
-        ? (payload as StreamPayloadLike)
-        : {};
     const normalized =
-      normalizedPayload.ct === 'chat'
-        ? {
-            ...normalizedPayload,
-            type: normalizedPayload.type || normalizedPayload.t,
-          }
-        : normalizedPayload;
+      payload?.ct === "chat"
+        ? { ...payload, type: payload.type || payload.t }
+        : payload;
     const msgType = normalized?.type || normalized?.t;
     const chainType = normalized?.chain_type;
-    const data = normalized?.data ?? '';
-    const dataRecord =
-      data && typeof data === 'object'
-        ? (data as Record<string, unknown>)
-        : undefined;
+    const data = normalized?.data ?? "";
 
-    if (msgType === 'session_id' || msgType === 'session_bound') return;
-    if (msgType === 'user_message_saved') {
+    if (msgType === "session_id" || msgType === "session_bound") return;
+    if (msgType === "user_message_saved") {
       if (userRecord) {
-        userRecord.id =
-          typeof dataRecord?.id === 'string' ||
-          typeof dataRecord?.id === 'number'
-            ? dataRecord.id
-            : userRecord.id;
-        userRecord.created_at =
-          typeof dataRecord?.created_at === 'string'
-            ? dataRecord.created_at
-            : userRecord.created_at;
+        userRecord.id = data?.id || userRecord.id;
+        userRecord.created_at = data?.created_at || userRecord.created_at;
         userRecord.llm_checkpoint_id =
-          (dataRecord?.llm_checkpoint_id as string | null | undefined) ||
-          userRecord.llm_checkpoint_id;
+          data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
       }
       return;
     }
-    if (msgType === 'message_saved') {
+    if (msgType === "message_saved") {
       markMessageStarted(botRecord);
-      botRecord.id =
-        typeof dataRecord?.id === 'string' || typeof dataRecord?.id === 'number'
-          ? dataRecord.id
-          : botRecord.id;
-      botRecord.created_at =
-        typeof dataRecord?.created_at === 'string'
-          ? dataRecord.created_at
-          : botRecord.created_at;
+      botRecord.id = data?.id || botRecord.id;
+      botRecord.created_at = data?.created_at || botRecord.created_at;
       botRecord.llm_checkpoint_id =
-        (dataRecord?.llm_checkpoint_id as string | null | undefined) ||
-        botRecord.llm_checkpoint_id;
-      if (dataRecord?.refs) {
-        messageContent(botRecord).refs = dataRecord.refs;
+        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+      if (data?.refs) {
+        messageContent(botRecord).refs = data.refs;
       }
       return;
     }
-    if (msgType === 'agent_stats' || chainType === 'agent_stats') {
+    if (msgType === "agent_stats" || chainType === "agent_stats") {
       markMessageStarted(botRecord);
       messageContent(botRecord).agentStats = data;
       return;
     }
-    if (msgType === 'error') {
+    if (msgType === "error") {
       markMessageStarted(botRecord);
       appendPlain(botRecord, `\n\n${String(data)}`);
       return;
     }
-    if (msgType === 'complete' || msgType === 'break') {
+    if (msgType === "complete" || msgType === "break") {
       markMessageStarted(botRecord);
       const finalText = payloadText(data);
       if (finalText && !hasPlainText(botRecord)) {
@@ -858,22 +779,22 @@ export function useMessages(options: UseMessagesOptions) {
       }
       return;
     }
-    if (msgType === 'end') {
+    if (msgType === "end") {
       markMessageStarted(botRecord);
       return;
     }
 
-    if (msgType === 'plain') {
+    if (msgType === "plain") {
       markMessageStarted(botRecord);
-      if (chainType === 'reasoning') {
+      if (chainType === "reasoning") {
         appendReasoningPart(botRecord, payloadText(data));
         return;
       }
-      if (chainType === 'tool_call') {
+      if (chainType === "tool_call") {
         upsertToolCall(botRecord, parseJsonSafe(data));
         return;
       }
-      if (chainType === 'tool_call_result') {
+      if (chainType === "tool_call_result") {
         finishToolCall(botRecord, parseJsonSafe(data));
         return;
       }
@@ -881,20 +802,25 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
 
-    if (
-      typeof msgType === 'string' &&
-      ['image', 'record', 'file', 'video'].includes(msgType)
-    ) {
+    if (["image", "record", "file", "video"].includes(msgType)) {
       markMessageStarted(botRecord);
-      const filename = String(data)
-        .replace('[IMAGE]', '')
-        .replace('[RECORD]', '')
-        .replace('[FILE]', '')
-        .replace('[VIDEO]', '')
-        .split('|', 1)[0];
+      const rawFilename = String(data)
+        .replace("[IMAGE]", "")
+        .replace("[RECORD]", "")
+        .replace("[FILE]", "")
+        .replace("[VIDEO]", "");
+      const separatorIndex = rawFilename.indexOf("|");
+      const storedFilename =
+        separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+      const displayFilename =
+        separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+      const filename = displayFilename || storedFilename;
       const mediaPart: MessagePart = { type: msgType, filename };
-      if (msgType !== 'file') {
-        void resolvePartMedia(mediaPart).then(() => {
+      if (storedFilename && storedFilename !== filename) {
+        mediaPart.stored_filename = storedFilename;
+      }
+      if (msgType !== "file") {
+        resolvePartMedia(mediaPart).then(() => {
           messageContent(botRecord).message.push(mediaPart);
         });
       } else {
@@ -930,20 +856,20 @@ function cloneContentWithEditedText(
   record: ChatRecord,
   editedText: string,
 ): ChatContent {
-  const content = record.content || { type: 'bot', message: [] };
+  const content = record.content || { type: "bot", message: [] };
   const message = Array.isArray(content.message)
     ? content.message.map((part) => ({ ...part }))
     : [];
   let replaced = false;
   for (const part of message) {
-    if (part.type === 'plain') {
+    if (part.type === "plain") {
       part.text = editedText;
       replaced = true;
       break;
     }
   }
   if (!replaced && editedText) {
-    message.push({ type: 'plain', text: editedText });
+    message.push({ type: "plain", text: editedText });
   }
   return {
     ...content,
@@ -958,11 +884,11 @@ function stripUploadOnlyFields(part: MessagePart): MessagePart {
 }
 
 function normalizeSessionProject(value: unknown): ChatSessionProject | null {
-  if (!value || typeof value !== 'object') return null;
+  if (!value || typeof value !== "object") return null;
   const project = value as Record<string, unknown>;
   if (
-    typeof project.project_id !== 'string' ||
-    typeof project.title !== 'string'
+    typeof project.project_id !== "string" ||
+    typeof project.title !== "string"
   ) {
     return null;
   }
@@ -970,41 +896,38 @@ function normalizeSessionProject(value: unknown): ChatSessionProject | null {
   return {
     project_id: project.project_id,
     title: project.title,
-    emoji: typeof project.emoji === 'string' ? project.emoji : undefined,
+    emoji: typeof project.emoji === "string" ? project.emoji : undefined,
   };
 }
 
 export function normalizeMessageParts(
   parts: unknown,
-  fallbackReasoning = '',
+  fallbackReasoning = "",
 ): MessagePart[] {
   const normalizedParts = normalizePartsInternal(parts);
-  if (
-    fallbackReasoning &&
-    !normalizedParts.some((part) => part.type === 'think')
-  ) {
-    normalizedParts.unshift({ type: 'think', think: fallbackReasoning });
+  if (fallbackReasoning && !normalizedParts.some((part) => part.type === "think")) {
+    normalizedParts.unshift({ type: "think", think: fallbackReasoning });
   }
   return normalizedParts;
 }
 
 export function extractReasoningText(
   parts: MessagePart[] | unknown,
-  fallbackReasoning = '',
+  fallbackReasoning = "",
 ) {
   const normalizedParts = Array.isArray(parts)
     ? parts
     : normalizeMessageParts(parts, fallbackReasoning);
   const text = normalizedParts
-    .filter((part) => part.type === 'think')
-    .map((part) => String(part.think || ''))
-    .join('');
+    .filter((part) => part.type === "think")
+    .map((part) => String(part.think || ""))
+    .join("");
   return text || fallbackReasoning;
 }
 
 export function reasoningActivityCounts(
   parts: MessagePart[] | unknown,
-  fallbackReasoning = '',
+  fallbackReasoning = "",
 ) {
   const normalizedParts = Array.isArray(parts)
     ? parts
@@ -1013,10 +936,10 @@ export function reasoningActivityCounts(
   let toolCount = 0;
 
   for (const part of normalizedParts) {
-    if (part.type === 'think' && String(part.think || '').trim()) {
+    if (part.type === "think" && String(part.think || "").trim()) {
       thinkCount += 1;
     }
-    if (part.type === 'tool_call' && Array.isArray(part.tool_calls)) {
+    if (part.type === "tool_call" && Array.isArray(part.tool_calls)) {
       toolCount += part.tool_calls.length;
     }
   }
@@ -1028,51 +951,49 @@ export function reasoningActivityTitle(
   counts: ReturnType<typeof reasoningActivityCounts>,
   tm: (key: string, params?: Record<string, string | number>) => string,
 ) {
-  return (
-    [
-      counts.thinkCount > 0
-        ? tm('reasoning.thinkSummary', { count: counts.thinkCount })
-        : '',
-      counts.toolCount > 0
-        ? tm('reasoning.toolSummary', { count: counts.toolCount })
-        : '',
-    ]
-      .filter(Boolean)
-      .join(tm('reasoning.summarySeparator')) || tm('reasoning.thinking')
-  );
+  return [
+    counts.thinkCount > 0
+      ? tm("reasoning.thinkSummary", { count: counts.thinkCount })
+      : "",
+    counts.toolCount > 0
+      ? tm("reasoning.toolSummary", { count: counts.toolCount })
+      : "",
+  ]
+    .filter(Boolean)
+    .join(tm("reasoning.summarySeparator")) || tm("reasoning.thinking");
 }
 
 export function thinkingParts(content: ChatContent): MessagePart[] {
   const firstThinkingBlock = messageBlocks(content).find(
-    (block) => block.kind === 'thinking',
+    (block) => block.kind === "thinking",
   );
   if (firstThinkingBlock) return firstThinkingBlock.parts;
 
-  const fallbackReasoning = String(content.reasoning || '');
-  return fallbackReasoning ? [{ type: 'think', think: fallbackReasoning }] : [];
+  const fallbackReasoning = String(content.reasoning || "");
+  return fallbackReasoning ? [{ type: "think", think: fallbackReasoning }] : [];
 }
 
 export function displayParts(content: ChatContent): MessagePart[] {
   return messageBlocks(content)
-    .filter((block) => block.kind === 'content')
+    .filter((block) => block.kind === "content")
     .flatMap((block) => block.parts);
 }
 
 export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
   const parts = Array.isArray(content.message)
     ? content.message
-    : normalizeMessageParts(content.message, content.reasoning || '');
+    : normalizeMessageParts(content.message, content.reasoning || "");
 
   const blocks: MessageDisplayBlock[] = [];
-  let currentKind: MessageDisplayBlock['kind'] | null = null;
+  let currentKind: MessageDisplayBlock["kind"] | null = null;
   let currentParts: MessagePart[] = [];
 
   for (const part of parts) {
     if (isEmptyPlainPart(part)) continue;
 
-    const nextKind: MessageDisplayBlock['kind'] = isThinkingPart(part)
-      ? 'thinking'
-      : 'content';
+    const nextKind: MessageDisplayBlock["kind"] = isThinkingPart(part)
+      ? "thinking"
+      : "content";
 
     if (currentKind !== nextKind) {
       if (currentKind && currentParts.length) {
@@ -1093,8 +1014,8 @@ export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
   if (!blocks.length && content.reasoning) {
     return [
       {
-        kind: 'thinking',
-        parts: [{ type: 'think', think: String(content.reasoning) }],
+        kind: "thinking",
+        parts: [{ type: "think", think: String(content.reasoning) }],
       },
     ];
   }
@@ -1103,12 +1024,12 @@ export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
 }
 
 function partToPayload(part: MessagePart) {
-  if (part.type === 'plain') return { type: 'plain', text: part.text || '' };
-  if (part.type === 'reply') {
+  if (part.type === "plain") return { type: "plain", text: part.text || "" };
+  if (part.type === "reply") {
     return {
-      type: 'reply',
+      type: "reply",
       message_id: part.message_id,
-      selected_text: part.selected_text || '',
+      selected_text: part.selected_text || "",
     };
   }
   return {
@@ -1120,76 +1041,76 @@ function partToPayload(part: MessagePart) {
 
 async function readSseStream(
   body: ReadableStream<Uint8Array>,
-  onPayload: (payload: unknown) => void,
+  onPayload: (payload: any) => void,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
 
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split('\n\n');
-    buffer = events.pop() || '';
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
 
     for (const event of events) {
       const data = event
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).trimStart())
-        .join('\n');
+        .join("\n");
       if (!data) continue;
       try {
         onPayload(JSON.parse(data));
       } catch (error) {
-        console.error('Failed to parse SSE payload:', error, data);
+        console.error("Failed to parse SSE payload:", error, data);
       }
     }
   }
 }
 
 function normalizePartsInternal(parts: unknown): MessagePart[] {
-  if (typeof parts === 'string') {
-    return parts ? [{ type: 'plain', text: parts }] : [];
+  if (typeof parts === "string") {
+    return parts ? [{ type: "plain", text: parts }] : [];
   }
   if (!Array.isArray(parts)) return [];
-  return parts.map((part) => {
-    if (!part || typeof part !== 'object') {
-      return { type: 'plain', text: String(part ?? '') };
+  return parts.map((part: any) => {
+    if (!part || typeof part !== "object") {
+      return { type: "plain", text: String(part ?? "") };
     }
-    const partValue = part as Record<string, unknown>;
-    if (partValue.type === 'reasoning') {
+    if (part.type === "reasoning") {
       return {
-        ...partValue,
-        type: 'think',
-        think: String(partValue.think ?? partValue.text ?? ''),
+        ...part,
+        type: "think",
+        think: String(part.think ?? part.text ?? ""),
       };
     }
-    return {
-      ...partValue,
-      type: typeof partValue.type === 'string' ? partValue.type : 'plain',
-    };
+    return { ...part };
   });
 }
 
 function isEmptyPlainPart(part: MessagePart) {
-  return part.type === 'plain' && !String(part.text || '');
+  return part.type === "plain" && !String(part.text || "");
 }
 
 function isThinkingPart(part: MessagePart) {
-  return part.type === 'think' || part.type === 'tool_call';
+  return part.type === "think" || part.type === "tool_call";
+}
+
+function firstNonEmptyPartIndex(parts: MessagePart[]) {
+  return parts.findIndex((part) => !isEmptyPlainPart(part));
 }
 
 export function appendPlain(record: ChatRecord, text: string, append = true) {
   markMessageStarted(record);
   const content = record.content;
   let last = content.message[content.message.length - 1];
-  if (last?.type !== 'plain') {
-    last = { type: 'plain', text: '' };
+  if (!last || last.type !== "plain") {
+    last = { type: "plain", text: "" };
     content.message.push(last);
   }
-  last.text = append ? `${last.text || ''}${text}` : text;
+  last.text = append ? `${last.text || ""}${text}` : text;
 }
 
 export function appendReasoningPart(record: ChatRecord, text: string) {
@@ -1197,63 +1118,51 @@ export function appendReasoningPart(record: ChatRecord, text: string) {
   if (!text) return;
   const content = record.content;
   const last = content.message[content.message.length - 1];
-  if (last?.type === 'think') {
-    last.think = `${String(last.think || '')}${text}`;
+  if (last?.type === "think") {
+    last.think = `${String(last.think || "")}${text}`;
   } else {
-    content.message.push({ type: 'think', think: text });
+    content.message.push({ type: "think", think: text });
   }
   content.reasoning = extractReasoningText(content.message);
 }
 
-export function upsertToolCall(
-  record: ChatRecord,
-  toolCall: ToolCallLike | unknown,
-) {
+export function upsertToolCall(record: ChatRecord, toolCall: any) {
   markMessageStarted(record);
-  if (!toolCall || typeof toolCall !== 'object') return;
-  const toolCallValue = toolCall as ToolCallLike;
-  const targetId = toolCallValue.id;
-  if (targetId !== null && targetId !== undefined) {
+  if (!toolCall || typeof toolCall !== "object") return;
+  const targetId = toolCall.id;
+  if (targetId != null) {
     for (const part of record.content.message) {
-      if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls))
-        continue;
+      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
       const matched = part.tool_calls.find((item) => item.id === targetId);
       if (matched) {
-        Object.assign(matched, toolCallValue);
+        Object.assign(matched, toolCall);
         return;
       }
     }
   }
-  record.content.message.push({
-    type: 'tool_call',
-    tool_calls: [{ ...toolCallValue }],
-  });
+  record.content.message.push({ type: "tool_call", tool_calls: [{ ...toolCall }] });
 }
 
-export function finishToolCall(
-  record: ChatRecord,
-  result: ToolCallLike | unknown,
-) {
+export function finishToolCall(record: ChatRecord, result: any) {
   markMessageStarted(record);
-  if (!result || typeof result !== 'object') return;
-  const resultValue = result as ToolCallLike;
-  const targetId = resultValue.id;
+  if (!result || typeof result !== "object") return;
+  const targetId = result.id;
   for (const part of record.content.message) {
-    if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) continue;
+    if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
-      tool.result = resultValue.result;
-      tool.finished_ts = resultValue.ts || Date.now() / 1000;
+      tool.result = result.result;
+      tool.finished_ts = result.ts || Date.now() / 1000;
       return;
     }
   }
   record.content.message.push({
-    type: 'tool_call',
+    type: "tool_call",
     tool_calls: [
       {
         id: targetId,
-        result: resultValue.result,
-        finished_ts: resultValue.ts || Date.now() / 1000,
+        result: result.result,
+        finished_ts: result.ts || Date.now() / 1000,
       },
     ],
   });
@@ -1266,24 +1175,24 @@ export function markMessageStarted(record: ChatRecord) {
 export function hasPlainText(record: ChatRecord) {
   return record.content.message.some(
     (part) =>
-      part.type === 'plain' && typeof part.text === 'string' && part.text,
+      part.type === "plain" && typeof part.text === "string" && part.text,
   );
 }
 
 export function payloadText(value: unknown) {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  if (typeof value === "object") {
     const payload = value as Record<string, unknown>;
-    if (typeof payload.text === 'string') return payload.text;
-    if (typeof payload.content === 'string') return payload.content;
-    if (typeof payload.message === 'string') return payload.message;
+    if (typeof payload.text === "string") return payload.text;
+    if (typeof payload.content === "string") return payload.content;
+    if (typeof payload.message === "string") return payload.message;
   }
   return String(value);
 }
 
 export function parseJsonSafe(value: unknown) {
-  if (typeof value !== 'string') return value;
+  if (typeof value !== "string") return value;
   try {
     return JSON.parse(value);
   } catch {

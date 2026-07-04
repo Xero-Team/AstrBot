@@ -402,13 +402,27 @@ class KnowledgeBaseService:
         if not current_kb:
             raise KnowledgeBaseServiceError("知识库不存在")
         current = current_kb.kb
-        current_values = vars(current)
-        update_data = {key: current_values.get(key) for key in update_keys}
-        update_data.update(provided_updates)
-
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
-            **update_data,
+            kb_name=provided_updates.get("kb_name", current.kb_name),
+            description=provided_updates.get("description", current.description),
+            emoji=provided_updates.get("emoji", current.emoji),
+            embedding_provider_id=provided_updates.get(
+                "embedding_provider_id",
+                current.embedding_provider_id,
+            ),
+            rerank_provider_id=provided_updates.get(
+                "rerank_provider_id",
+                current.rerank_provider_id,
+            ),
+            chunk_size=provided_updates.get("chunk_size", current.chunk_size),
+            chunk_overlap=provided_updates.get(
+                "chunk_overlap",
+                current.chunk_overlap,
+            ),
+            top_k_dense=provided_updates.get("top_k_dense", current.top_k_dense),
+            top_k_sparse=provided_updates.get("top_k_sparse", current.top_k_sparse),
+            top_m_final=provided_updates.get("top_m_final", current.top_m_final),
         )
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")

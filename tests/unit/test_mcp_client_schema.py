@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import socket
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -164,6 +165,19 @@ async def test_streamable_http_connection_uses_native_http_client_path(monkeypat
         mcp_client_module,
         "mcp",
         SimpleNamespace(ClientSession=fake_client_session),
+    )
+    monkeypatch.setattr(
+        mcp_client_module.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("93.184.216.34", 443),
+            )
+        ],
     )
 
     await client.connect_to_server(

@@ -24,6 +24,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.task_utils import create_tracked_task
 
 CHUNK_SIZE = 1024 * 1024
 UPLOAD_EXPIRE_SECONDS = 3600
@@ -72,6 +73,7 @@ class BackupService:
         self.backup_progress: dict[str, dict] = {}
         self.upload_sessions: dict[str, dict] = {}
         self._cleanup_task: asyncio.Task | None = None
+        self._background_tasks: set[asyncio.Task] = set()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -269,7 +271,11 @@ class BackupService:
     def export_backup(self) -> dict:
         task_id = str(uuid.uuid4())
         self._init_task(task_id, "export", "pending")
-        asyncio.create_task(self.background_export_task(task_id))
+        create_tracked_task(
+            self._background_tasks,
+            self.background_export_task(task_id),
+            name=f"backup-export:{task_id}",
+        )
         return {
             "task_id": task_id,
             "message": "export task created, processing in background",
@@ -523,7 +529,11 @@ class BackupService:
 
         task_id = str(uuid.uuid4())
         self._init_task(task_id, "import", "pending")
-        asyncio.create_task(self.background_import_task(task_id, zip_path))
+        create_tracked_task(
+            self._background_tasks,
+            self.background_import_task(task_id, zip_path),
+            name=f"backup-import:{task_id}",
+        )
 
         return {
             "task_id": task_id,

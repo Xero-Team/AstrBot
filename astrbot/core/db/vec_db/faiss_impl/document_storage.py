@@ -88,7 +88,7 @@ class DocumentStorage:
                         "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
                     ),
                 )
-            except BaseException:
+            except Exception:
                 pass
 
             await conn.execute(

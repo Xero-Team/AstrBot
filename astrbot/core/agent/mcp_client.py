@@ -4,6 +4,7 @@ import ipaddress
 import logging
 import os
 import re
+import socket
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
@@ -145,21 +146,55 @@ def _validate_remote_url(url: str) -> None:
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("MCP remote connection URL must include a hostname.")
-    try:
-        ip = ipaddress.ip_address(hostname)
-    except ValueError:
-        return
-    if (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    ):
+    if hostname.lower() in {"localhost", "localhost.localdomain"}:
         raise ValueError(
             "MCP remote connection URL cannot target private or local IP addresses."
         )
+
+    resolved_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    try:
+        resolved_ips.add(ipaddress.ip_address(hostname))
+    except ValueError:
+        try:
+            for result in socket.getaddrinfo(
+                hostname, parsed.port or 80, proto=socket.IPPROTO_TCP
+            ):
+                sockaddr = result[4]
+                if not sockaddr:
+                    continue
+                resolved_ips.add(ipaddress.ip_address(sockaddr[0]))
+        except socket.gaierror as exc:
+            raise ValueError(
+                f"MCP remote connection URL hostname could not be resolved: {hostname}"
+            ) from exc
+
+    for ip in resolved_ips:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                "MCP remote connection URL cannot target private or local IP addresses."
+            )
+
+
+def _create_mcp_http_client_without_redirects(
+    headers: dict[str, str] | None = None,
+    timeout: httpx.Timeout | None = None,
+    auth: httpx.Auth | None = None,
+) -> httpx.AsyncClient:
+    kwargs: dict[str, Any] = {"follow_redirects": False}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    if headers is not None:
+        kwargs["headers"] = headers
+    if auth is not None:
+        kwargs["auth"] = auth
+    return httpx.AsyncClient(**kwargs)
 
 
 def _normalize_stdio_command_name(command: str) -> str:
@@ -345,7 +380,13 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     },
                     json=test_payload,
                     timeout=aiohttp.ClientTimeout(total=timeout),
+                    allow_redirects=False,
                 ) as response:
+                    if 300 <= response.status < 400:
+                        return (
+                            False,
+                            "Redirect responses are not allowed for MCP endpoints",
+                        )
                     if response.status == 200:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
@@ -357,7 +398,13 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         "Accept": "application/json, text/event-stream",
                     },
                     timeout=aiohttp.ClientTimeout(total=timeout),
+                    allow_redirects=False,
                 ) as response:
+                    if 300 <= response.status < 400:
+                        return (
+                            False,
+                            "Redirect responses are not allowed for MCP endpoints",
+                        )
                     if response.status == 200:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
@@ -489,6 +536,7 @@ class MCPClient:
                     headers=cfg.get("headers", {}),
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                    httpx_client_factory=_create_mcp_http_client_without_redirects,
                 )
                 streams = await self.exit_stack.enter_async_context(
                     self._streams_context,

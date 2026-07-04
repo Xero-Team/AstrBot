@@ -16,6 +16,7 @@ def _make_service(*, kb_manager=None) -> KnowledgeBaseService:
     service.core_lifecycle = MagicMock(kb_manager=kb_manager or MagicMock())
     service.upload_progress = {}
     service.upload_tasks = {}
+    service._background_tasks = set()
     return service
 
 
@@ -279,14 +280,15 @@ async def test_import_documents_schedules_background_task(monkeypatch):
     async def fake_background_import_task(**kwargs):
         scheduled_calls.append(kwargs)
 
-    def fake_create_task(coro):
+    def fake_create_task(task_set, coro, *, name=None):
         task = asyncio.get_running_loop().create_task(coro)
+        task_set.add(task)
         scheduled_tasks.append(task)
         return task
 
     monkeypatch.setattr(service, "background_import_task", fake_background_import_task)
     monkeypatch.setattr(
-        "astrbot.dashboard.services.knowledge_base_service.asyncio.create_task",
+        "astrbot.dashboard.services.knowledge_base_service.create_tracked_task",
         fake_create_task,
     )
 
@@ -327,8 +329,9 @@ async def test_upload_document_from_url_schedules_background_task(monkeypatch):
     async def fake_background_upload_from_url_task(**kwargs):
         scheduled_calls.append(kwargs)
 
-    def fake_create_task(coro):
+    def fake_create_task(task_set, coro, *, name=None):
         task = asyncio.get_running_loop().create_task(coro)
+        task_set.add(task)
         scheduled_tasks.append(task)
         return task
 
@@ -338,7 +341,7 @@ async def test_upload_document_from_url_schedules_background_task(monkeypatch):
         fake_background_upload_from_url_task,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.knowledge_base_service.asyncio.create_task",
+        "astrbot.dashboard.services.knowledge_base_service.create_tracked_task",
         fake_create_task,
     )
 
@@ -864,8 +867,9 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
     async def fake_background_upload_task(**kwargs):
         scheduled_calls.append(kwargs)
 
-    def fake_create_task(coro):
+    def fake_create_task(task_set, coro, *, name=None):
         task = asyncio.get_running_loop().create_task(coro)
+        task_set.add(task)
         scheduled_tasks.append(task)
         return task
 
@@ -879,7 +883,7 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
     )
     monkeypatch.setattr(service, "background_upload_task", fake_background_upload_task)
     monkeypatch.setattr(
-        "astrbot.dashboard.services.knowledge_base_service.asyncio.create_task",
+        "astrbot.dashboard.services.knowledge_base_service.create_tracked_task",
         fake_create_task,
     )
 

@@ -11,6 +11,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.task_utils import create_tracked_task
 from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
 
@@ -24,6 +25,7 @@ class KnowledgeBaseService:
         self.core_lifecycle = core_lifecycle
         self.upload_progress: dict[str, dict[str, Any]] = {}
         self.upload_tasks: dict[str, dict[str, Any]] = {}
+        self._background_tasks: set[asyncio.Task] = set()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -31,6 +33,13 @@ class KnowledgeBaseService:
 
     def get_kb_manager(self):
         return self.core_lifecycle.kb_manager
+
+    def _get_background_tasks(self) -> set[asyncio.Task]:
+        task_set = getattr(self, "_background_tasks", None)
+        if task_set is None:
+            task_set = set()
+            self._background_tasks = task_set
+        return task_set
 
     def init_task(self, task_id: str, status: str = "pending") -> None:
         self.upload_tasks[task_id] = {
@@ -514,7 +523,8 @@ class KnowledgeBaseService:
 
         task_id = str(uuid.uuid4())
         self.init_task(task_id, status="pending")
-        asyncio.create_task(
+        create_tracked_task(
+            self._get_background_tasks(),
             self.background_upload_task(
                 task_id=task_id,
                 kb_helper=kb_helper,
@@ -525,6 +535,7 @@ class KnowledgeBaseService:
                 tasks_limit=tasks_limit,
                 max_retries=max_retries,
             ),
+            name=f"kb-upload:{task_id}",
         )
         return {
             "task_id": task_id,
@@ -578,7 +589,8 @@ class KnowledgeBaseService:
 
         task_id = str(uuid.uuid4())
         self.init_task(task_id, status="pending")
-        asyncio.create_task(
+        create_tracked_task(
+            self._get_background_tasks(),
             self.background_import_task(
                 task_id=task_id,
                 kb_helper=kb_helper,
@@ -587,6 +599,7 @@ class KnowledgeBaseService:
                 tasks_limit=tasks_limit,
                 max_retries=max_retries,
             ),
+            name=f"kb-import:{task_id}",
         )
         return {
             "task_id": task_id,
@@ -747,7 +760,8 @@ class KnowledgeBaseService:
 
         task_id = str(uuid.uuid4())
         self.init_task(task_id, status="pending")
-        asyncio.create_task(
+        create_tracked_task(
+            self._get_background_tasks(),
             self.background_upload_from_url_task(
                 task_id=task_id,
                 kb_helper=kb_helper,
@@ -760,6 +774,7 @@ class KnowledgeBaseService:
                 enable_cleaning=payload.get("enable_cleaning", False),
                 cleaning_provider_id=payload.get("cleaning_provider_id"),
             ),
+            name=f"kb-upload-url:{task_id}",
         )
         return {
             "task_id": task_id,

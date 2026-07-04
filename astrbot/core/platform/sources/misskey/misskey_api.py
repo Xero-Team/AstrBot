@@ -654,11 +654,19 @@ class MisskeyAPI:
 
         async with self.session.get(
             url,
-            timeout=aiohttp.ClientTimeout(total=15),
+            timeout=aiohttp.ClientTimeout(total=self.download_timeout),
             ssl=ssl_verify,
         ) as response:
             if response.status == 200:
-                return await response.read()
+                chunks = bytearray()
+                async for chunk in response.content.iter_chunked(self.chunk_size):
+                    chunks.extend(chunk)
+                    if (
+                        self.max_download_bytes is not None
+                        and len(chunks) > self.max_download_bytes
+                    ):
+                        raise APIError("Downloaded file exceeds configured size limit")
+                return bytes(chunks)
         return None
 
     async def _download_with_temp_session(
@@ -671,11 +679,39 @@ class MisskeyAPI:
         async with aiohttp.ClientSession(connector=connector) as temp_session:
             async with temp_session.get(
                 url,
-                timeout=aiohttp.ClientTimeout(total=15),
+                timeout=aiohttp.ClientTimeout(total=self.download_timeout),
             ) as response:
                 if response.status == 200:
-                    return await response.read()
+                    chunks = bytearray()
+                    async for chunk in response.content.iter_chunked(self.chunk_size):
+                        chunks.extend(chunk)
+                        if (
+                            self.max_download_bytes is not None
+                            and len(chunks) > self.max_download_bytes
+                        ):
+                            raise APIError(
+                                "Downloaded file exceeds configured size limit"
+                            )
+                    return bytes(chunks)
         return None
+
+    async def _download_file_bytes(self, url: str) -> bytes | None:
+        try:
+            return await self._download_with_existing_session(
+                url,
+                ssl_verify=True,
+            ) or await self._download_with_temp_session(url, ssl_verify=True)
+        except Exception as ssl_error:
+            if not self.allow_insecure_downloads:
+                raise ssl_error
+            logger.debug(
+                "[Misskey API] SSL 验证下载失败: %s，按配置重试不验证 SSL",
+                ssl_error,
+            )
+            return await self._download_with_existing_session(
+                url,
+                ssl_verify=False,
+            ) or await self._download_with_temp_session(url, ssl_verify=False)
 
     async def upload_and_find_file(
         self,
@@ -706,24 +742,7 @@ class MisskeyAPI:
             import os
             import tempfile
 
-            # SSL 验证下载，失败则重试不验证 SSL
-            tmp_bytes = None
-            try:
-                tmp_bytes = await self._download_with_existing_session(
-                    url,
-                    ssl_verify=True,
-                ) or await self._download_with_temp_session(url, ssl_verify=True)
-            except Exception as ssl_error:
-                logger.debug(
-                    f"[Misskey API] SSL 验证下载失败: {ssl_error}，重试不验证 SSL",
-                )
-                try:
-                    tmp_bytes = await self._download_with_existing_session(
-                        url,
-                        ssl_verify=False,
-                    ) or await self._download_with_temp_session(url, ssl_verify=False)
-                except Exception:
-                    pass
+            tmp_bytes = await self._download_file_bytes(url)
 
             if tmp_bytes:
                 with tempfile.NamedTemporaryFile(delete=False) as tmpf:

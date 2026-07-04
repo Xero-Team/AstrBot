@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import astrbot.core.pipeline.process_stage as process_stage_pkg
 import astrbot.core.pipeline.process_stage.method.agent_sub_stages as agent_sub_stages_pkg
 
 _original_process_stage_module = sys.modules.get(
@@ -17,8 +18,10 @@ _original_internal_module = sys.modules.get(
 _original_third_party_module = sys.modules.get(
     "astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party"
 )
+_had_stage_attr = hasattr(process_stage_pkg, "stage")
 _had_internal_attr = hasattr(agent_sub_stages_pkg, "internal")
 _had_third_party_attr = hasattr(agent_sub_stages_pkg, "third_party")
+_original_stage_attr = getattr(process_stage_pkg, "stage", None)
 _original_internal_attr = getattr(agent_sub_stages_pkg, "internal", None)
 _original_third_party_attr = getattr(agent_sub_stages_pkg, "third_party", None)
 
@@ -80,6 +83,10 @@ if _original_process_stage_module is not None:
     )
 else:
     sys.modules.pop("astrbot.core.pipeline.process_stage.stage", None)
+if _had_stage_attr:
+    process_stage_pkg.stage = _original_stage_attr
+else:
+    process_stage_pkg.__dict__.pop("stage", None)
 
 if _original_internal_module is not None:
     sys.modules[

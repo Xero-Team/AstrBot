@@ -13,7 +13,7 @@ os.environ.setdefault(
     tempfile.mkdtemp(prefix="astrbot-test-astr-agent-run-util-"),
 )
 
-from astrbot.core import astr_agent_run_util as util
+import astrbot.core.astr_agent_run_util as util
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -158,6 +158,12 @@ def test_merge_buffered_llm_chains_merges_then_clears_source_list():
     assert util._merge_buffered_llm_chains([]) is None
 
 
+def test_truncate_tool_result_respects_zero_and_small_limits():
+    assert util._truncate_tool_result("abcdef", limit=0) == ""
+    assert util._truncate_tool_result("abcdef", limit=2) == "ab"
+    assert util._truncate_tool_result("abcdef", limit=5) == "ab..."
+
+
 @pytest.mark.asyncio
 async def test_run_agent_buffers_llm_results_until_done():
     event = FakeEvent()
@@ -209,6 +215,23 @@ async def test_run_agent_flushes_buffer_when_user_aborts():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_marks_user_aborted_without_buffered_output():
+    event = FakeEvent()
+    runner = FakeRunner(
+        [_response("aborted")],
+        event=event,
+    )
+
+    outputs = [chain async for chain in util.run_agent(runner)]
+
+    assert outputs == []
+    assert event.get_extra("agent_user_aborted") is True
+    assert event.get_extra("agent_stop_requested") is False
+    assert event.result_history == []
+    assert event.clear_result_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_run_agent_sends_tool_result_status_after_recorded_tool_call():
     event = FakeEvent()
     runner = FakeRunner(
@@ -242,6 +265,51 @@ async def test_run_agent_sends_tool_result_status_after_recorded_tool_call():
     assert sent_chain.type == "tool_call"
     assert "search" in sent_chain.get_plain_text()
     assert "..." in sent_chain.get_plain_text()
+
+
+@pytest.mark.asyncio
+async def test_run_agent_tool_result_status_send_failure_reports_execution_error(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        util,
+        "extract_persona_custom_error_message_from_event",
+        lambda event: None,
+    )
+    event = FakeEvent()
+    event.send.side_effect = RuntimeError("tool result status failed")
+    runner = FakeRunner(
+        [
+            _response(
+                "tool_call",
+                MessageChain(chain=[Json(data={"id": "call-1", "name": "search"})]),
+            ),
+            _response(
+                "tool_call_result",
+                MessageChain(
+                    chain=[Json(data={"id": "call-1", "result": "final result"})],
+                ),
+            ),
+        ],
+        event=event,
+    )
+
+    outputs = [
+        chain
+        async for chain in util.run_agent(
+            runner,
+            show_tool_use=True,
+            show_tool_call_result=True,
+        )
+    ]
+
+    assert outputs == []
+    assert len(event.result_history) == 1
+    assert "tool result status failed" in event.result_history[0].get_plain_text()
+    runner.agent_hooks.on_agent_done.assert_awaited_once()
+    llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
+    assert llm_response.role == "err"
+    assert "RuntimeError" in llm_response.completion_text
 
 
 @pytest.mark.asyncio
@@ -298,6 +366,76 @@ async def test_run_agent_streaming_tool_call_yields_break_and_sends_status():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_streaming_tool_call_status_send_failure_yields_break_then_error(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        util,
+        "extract_persona_custom_error_message_from_event",
+        lambda event: None,
+    )
+    event = FakeEvent()
+    event.send.side_effect = RuntimeError("tool status failed")
+    runner = FakeRunner(
+        [
+            _response(
+                "tool_call",
+                MessageChain(chain=[Json(data={"id": "call-1", "name": "search"})]),
+            ),
+        ],
+        event=event,
+        streaming=True,
+    )
+
+    outputs = [
+        chain
+        async for chain in util.run_agent(
+            runner,
+            show_tool_use=True,
+            show_tool_call_result=False,
+        )
+    ]
+
+    assert len(outputs) == 2
+    assert outputs[0].type == "break"
+    assert outputs[0].chain == []
+    assert "tool status failed" in outputs[1].get_plain_text()
+    assert event.result_history == []
+    runner.agent_hooks.on_agent_done.assert_awaited_once()
+    llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
+    assert llm_response.role == "err"
+    assert "RuntimeError" in llm_response.completion_text
+
+
+@pytest.mark.asyncio
+async def test_run_agent_streaming_tool_call_without_status_does_not_yield_break_or_send():
+    event = FakeEvent()
+    runner = FakeRunner(
+        [
+            _response(
+                "tool_call",
+                MessageChain(chain=[Json(data={"id": "call-1", "name": "search"})]),
+            ),
+        ],
+        event=event,
+        streaming=True,
+    )
+
+    outputs = [
+        chain
+        async for chain in util.run_agent(
+            runner,
+            show_tool_use=False,
+            show_tool_call_result=False,
+        )
+    ]
+
+    assert outputs == []
+    event.send.assert_not_awaited()
+    assert event.result_history == []
+
+
+@pytest.mark.asyncio
 async def test_run_agent_sends_generic_tool_call_status_for_unstructured_payload():
     event = FakeEvent()
     runner = FakeRunner(
@@ -338,6 +476,67 @@ async def test_run_agent_tool_direct_result_sends_chain_immediately():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_tool_direct_result_send_failure_reports_execution_error(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        util,
+        "extract_persona_custom_error_message_from_event",
+        lambda event: None,
+    )
+    event = FakeEvent()
+    event.send.side_effect = RuntimeError("direct send failed")
+    direct_chain = MessageChain(type="tool_direct_result").message("direct reply")
+    runner = FakeRunner(
+        [_response("tool_call_result", direct_chain)],
+        event=event,
+    )
+
+    outputs = [chain async for chain in util.run_agent(runner)]
+
+    assert outputs == []
+    assert len(event.result_history) == 1
+    assert "direct send failed" in event.result_history[0].get_plain_text()
+    runner.agent_hooks.on_agent_done.assert_awaited_once()
+    llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
+    assert llm_response.role == "err"
+    assert "RuntimeError" in llm_response.completion_text
+
+
+@pytest.mark.asyncio
+async def test_run_agent_hides_tool_result_when_only_tool_call_status_is_enabled():
+    event = FakeEvent(platform_id="qq")
+    runner = FakeRunner(
+        [
+            _response(
+                "tool_call",
+                MessageChain(chain=[Json(data={"id": "call-1", "name": "search"})]),
+            ),
+            _response(
+                "tool_call_result",
+                MessageChain(chain=[Json(data={"id": "call-1", "result": "hidden"})]),
+            ),
+        ],
+        event=event,
+    )
+
+    outputs = [
+        chain
+        async for chain in util.run_agent(
+            runner,
+            show_tool_use=True,
+            show_tool_call_result=False,
+        )
+    ]
+
+    assert outputs == []
+    event.send.assert_awaited_once()
+    sent_chain = event.send.await_args.args[0]
+    assert sent_chain.type == "tool_call"
+    assert sent_chain.get_plain_text() == "🔨 调用工具: search"
+
+
+@pytest.mark.asyncio
 async def test_run_agent_max_step_disables_tools_and_injects_summary_prompt():
     event = FakeEvent()
     runner = MultiStepRunner(
@@ -371,6 +570,26 @@ async def test_run_agent_streaming_uses_persona_custom_error_message(monkeypatch
     assert len(outputs) == 1
     assert outputs[0].get_plain_text() == "persona error"
     assert event.result_history == []
+    runner.agent_hooks.on_agent_done.assert_awaited_once()
+    llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
+    assert llm_response.completion_text == "persona error"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_non_streaming_uses_persona_custom_error_message(monkeypatch):
+    monkeypatch.setattr(
+        util,
+        "extract_persona_custom_error_message_from_event",
+        lambda event: "persona error",
+    )
+    event = FakeEvent()
+    runner = FakeRunner(RuntimeError("boom"), event=event)
+
+    outputs = [chain async for chain in util.run_agent(runner)]
+
+    assert outputs == []
+    assert len(event.result_history) == 1
+    assert event.result_history[0].get_plain_text() == "persona error"
     runner.agent_hooks.on_agent_done.assert_awaited_once()
     llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
     assert llm_response.completion_text == "persona error"
@@ -424,6 +643,54 @@ async def test_run_agent_feeder_closes_queue_when_run_agent_raises(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_agent_feeder_flushes_short_tail_and_ignores_none_chunks(monkeypatch):
+    async def fake_run_agent(*args, **kwargs):
+        yield None
+        yield MessageChain().message("hi.")
+        yield MessageChain().message("ok?")
+
+    monkeypatch.setattr(util, "run_agent", fake_run_agent)
+    text_queue = asyncio.Queue()
+
+    await util._run_agent_feeder(
+        SimpleNamespace(),
+        text_queue,
+        max_step=3,
+        show_tool_use=True,
+        show_tool_call_result=False,
+        show_reasoning=False,
+        buffer_intermediate_messages=False,
+    )
+
+    assert await text_queue.get() == "hi.ok?"
+    assert await text_queue.get() is None
+
+
+@pytest.mark.asyncio
+async def test_run_agent_feeder_accumulates_short_sentences_until_threshold(monkeypatch):
+    async def fake_run_agent(*args, **kwargs):
+        yield MessageChain().message("Hi.")
+        yield MessageChain().message("Yo.")
+        yield MessageChain().message("Again.")
+
+    monkeypatch.setattr(util, "run_agent", fake_run_agent)
+    text_queue = asyncio.Queue()
+
+    await util._run_agent_feeder(
+        SimpleNamespace(),
+        text_queue,
+        max_step=3,
+        show_tool_use=True,
+        show_tool_call_result=False,
+        show_reasoning=False,
+        buffer_intermediate_messages=False,
+    )
+
+    assert await text_queue.get() == "Hi.Yo.Again."
+    assert await text_queue.get() is None
+
+
+@pytest.mark.asyncio
 async def test_safe_tts_stream_wrapper_always_closes_audio_queue():
     audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
     text_queue: asyncio.Queue[str | None] = asyncio.Queue()
@@ -433,6 +700,22 @@ async def test_safe_tts_stream_wrapper_always_closes_audio_queue():
 
     await util._safe_tts_stream_wrapper(provider, text_queue, audio_queue)
 
+    assert await audio_queue.get() is None
+
+
+@pytest.mark.asyncio
+async def test_safe_tts_stream_wrapper_preserves_generated_audio_before_sentinel():
+    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
+    text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def fake_get_audio_stream(_text_queue, passed_audio_queue) -> None:
+        await passed_audio_queue.put(("hello", b"\x00\x01"))
+
+    provider = SimpleNamespace(get_audio_stream=fake_get_audio_stream)
+
+    await util._safe_tts_stream_wrapper(provider, text_queue, audio_queue)
+
+    assert await audio_queue.get() == ("hello", b"\x00\x01")
     assert await audio_queue.get() is None
 
 
@@ -476,6 +759,39 @@ async def test_simulated_stream_tts_skips_empty_audio_paths():
 
     assert await audio_queue.get() is None
     event.track_temporary_local_file.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_simulated_stream_tts_continues_when_audio_file_read_fails(
+    monkeypatch, tmp_path: Path
+):
+    good_audio = tmp_path / "good.wav"
+    good_audio.write_bytes(b"audio-data")
+
+    async def fake_get_audio(text: str) -> str:
+        if text == "missing":
+            return str(tmp_path / "missing.wav")
+        return str(good_audio)
+
+    provider = SimpleNamespace(get_audio=AsyncMock(side_effect=fake_get_audio))
+    text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
+    event = FakeEvent()
+    logger_error = MagicMock()
+
+    monkeypatch.setattr(util.logger, "error", logger_error)
+
+    await text_queue.put("missing")
+    await text_queue.put("good")
+    await text_queue.put(None)
+
+    await util._simulated_stream_tts(provider, text_queue, audio_queue, event)
+
+    assert await audio_queue.get() == ("good", b"audio-data")
+    assert await audio_queue.get() is None
+    event.track_temporary_local_file.assert_called_once_with(str(good_audio))
+    logger_error.assert_called_once()
+    assert "[Live TTS Simulated] Error processing text" in logger_error.call_args.args[0]
 
 
 @pytest.mark.asyncio
@@ -544,6 +860,32 @@ async def test_run_agent_non_streaming_webchat_sends_agent_stats_after_completio
     event.send.assert_awaited_once()
     assert event.send.await_args.args[0].type == "agent_stats"
     assert event.send.await_args.args[0].chain[0].data == {"steps": 1}
+
+
+@pytest.mark.asyncio
+async def test_run_agent_webchat_stats_send_failure_reports_execution_error(monkeypatch):
+    monkeypatch.setattr(
+        util,
+        "extract_persona_custom_error_message_from_event",
+        lambda event: None,
+    )
+    event = FakeEvent(platform_name="webchat")
+    event.send.side_effect = RuntimeError("stats send failed")
+    runner = FakeRunner(
+        [_response("llm_result", MessageChain().message("done"))],
+        event=event,
+    )
+
+    outputs = [chain async for chain in util.run_agent(runner)]
+
+    assert [chain.get_plain_text() for chain in outputs] == ["done"]
+    assert len(event.result_history) == 2
+    assert event.result_history[0].get_plain_text() == "done"
+    assert "stats send failed" in event.result_history[1].get_plain_text()
+    runner.agent_hooks.on_agent_done.assert_awaited_once()
+    llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
+    assert llm_response.role == "err"
+    assert "RuntimeError" in llm_response.completion_text
 
 
 @pytest.mark.asyncio
@@ -623,6 +965,28 @@ async def test_run_agent_stream_to_general_emits_llm_result_chain():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_midstream_stop_request_suppresses_later_outputs():
+    event = FakeEvent()
+    runner = FakeRunner(
+        [
+            _response("llm_result", MessageChain().message("first")),
+            _response("llm_result", MessageChain().message("second")),
+        ],
+        event=event,
+    )
+
+    agen = util.run_agent(runner)
+    first = await anext(agen)
+    event.set_extra("agent_stop_requested", True)
+    remaining = [chain async for chain in agen]
+
+    assert first.get_plain_text() == "first"
+    assert remaining == []
+    assert runner.stop_requested is True
+    assert event.clear_result_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_run_agent_requests_stop_when_agent_stop_flag_is_pre_set():
     event = FakeEvent()
     event.set_extra("agent_stop_requested", True)
@@ -663,6 +1027,36 @@ async def test_run_agent_sends_tool_result_status_with_unknown_name_when_untrack
     assert outputs == []
     event.send.assert_awaited_once()
     assert "unknown" in event.send.await_args.args[0].get_plain_text()
+
+
+@pytest.mark.asyncio
+async def test_run_agent_tool_result_status_falls_back_to_plain_text_without_json_result():
+    event = FakeEvent()
+    runner = FakeRunner(
+        [
+            _response(
+                "tool_call",
+                MessageChain(chain=[Json(data={"id": "call-1", "name": "search"})]),
+            ),
+            _response("tool_call_result", MessageChain().message("plain tool output")),
+        ],
+        event=event,
+    )
+
+    outputs = [
+        chain
+        async for chain in util.run_agent(
+            runner,
+            show_tool_use=True,
+            show_tool_call_result=True,
+        )
+    ]
+
+    assert outputs == []
+    event.send.assert_awaited_once()
+    sent_text = event.send.await_args.args[0].get_plain_text()
+    assert "unknown" in sent_text
+    assert "plain tool output" in sent_text
 
 
 @pytest.mark.asyncio
@@ -983,6 +1377,45 @@ async def test_run_live_agent_swallows_tts_stats_send_failure(monkeypatch):
     assert len(outputs) == 1
     assert outputs[0].type == "audio_chunk"
     logger_error.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_run_live_agent_swallows_tts_stats_model_lookup_failure(monkeypatch):
+    event = FakeEvent(platform_name="webchat")
+    runner = FakeRunner([], event=event)
+    runner.provider = SimpleNamespace(get_model=MagicMock(side_effect=RuntimeError("model lookup failed")))
+
+    async def fake_feeder(*args, **kwargs):
+        return None
+
+    async def fake_get_audio_stream(_text_queue, audio_queue) -> None:
+        await audio_queue.put(("hello", b"\x00\x01"))
+        await audio_queue.put(None)
+
+    logger_error = MagicMock()
+    tts_provider = SimpleNamespace(
+        support_stream=lambda: True,
+        get_audio_stream=fake_get_audio_stream,
+        meta=lambda: SimpleNamespace(type="fake-tts"),
+    )
+
+    monkeypatch.setattr(util, "_run_agent_feeder", fake_feeder)
+    monkeypatch.setattr(util.logger, "error", logger_error)
+
+    outputs = [
+        chain
+        async for chain in util.run_live_agent(
+            runner,
+            tts_provider=tts_provider,
+            max_step=2,
+        )
+    ]
+
+    assert len(outputs) == 1
+    assert outputs[0].type == "audio_chunk"
+    event.send.assert_not_awaited()
+    logger_error.assert_called_once()
+    assert "发送 TTS 统计信息失败" in logger_error.call_args.args[0]
 
 
 @pytest.mark.asyncio

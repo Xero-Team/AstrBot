@@ -691,7 +691,7 @@ class FunctionToolManager:
 
         try:
             await asyncio.wait_for(connect_done.wait(), timeout=timeout_seconds)
-        except (asyncio.TimeoutError, asyncio.CancelledError) as e:
+        except (TimeoutError, asyncio.CancelledError) as e:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
             async with self._runtime_lock:

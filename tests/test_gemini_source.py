@@ -165,6 +165,43 @@ def test_gemini_prepare_conversation_handles_tool_calls_and_multimodal_content()
     assert conversation[2].parts[0].function_response.name == "lookup"
 
 
+def test_gemini_prepare_conversation_drops_leading_assistant_and_uses_placeholders(
+    monkeypatch,
+):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    logger_warning = call  # placeholder for type checkers
+    from unittest.mock import MagicMock
+
+    logger_warning = MagicMock()
+    monkeypatch.setattr(gemini_source_module.logger, "warning", logger_warning)
+
+    conversation = provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "think", "encrypted": "not-base64"}],
+                },
+                {
+                    "role": "assistant",
+                    "content": [],
+                },
+                {
+                    "role": "user",
+                    "content": "",
+                },
+            ]
+        }
+    )
+
+    assert len(conversation) == 1
+    assert isinstance(conversation[0], google_types.ModelContent)
+    assert [part.text for part in conversation[0].parts] == ["", ""]
+    assert logger_warning.call_count == 2
+    assert "Failed to decode google gemini thinking signature" in logger_warning.call_args_list[0].args[0]
+    assert "Text content is empty, added a space as placeholder." in logger_warning.call_args_list[1].args[0]
+
+
 @pytest.mark.asyncio
 async def test_gemini_assemble_context_uses_placeholder_and_skips_failed_audio(
     monkeypatch,
@@ -208,6 +245,44 @@ async def test_gemini_assemble_context_uses_placeholder_and_skips_failed_audio(
             },
         ],
     }
+
+
+@pytest.mark.asyncio
+async def test_gemini_assemble_context_keeps_placeholder_when_all_media_resolution_returns_none(
+    monkeypatch,
+):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    async def fake_resolve_media_ref_to_base64_data(ref: str, media_type: str, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        gemini_source_module,
+        "resolve_media_ref_to_base64_data",
+        fake_resolve_media_ref_to_base64_data,
+    )
+
+    assembled = await provider.assemble_context(
+        "",
+        image_urls=["image-ref"],
+        audio_urls=["audio-ref"],
+    )
+
+    assert assembled == {
+        "role": "user",
+        "content": [{"type": "text", "text": "[Image]"}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_gemini_assemble_context_rejects_unsupported_extra_part_type():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    with pytest.raises(ValueError, match="Unsupported extra content part type"):
+        await provider.assemble_context(
+            "",
+            extra_user_content_parts=[object()],
+        )
 
 
 def test_gemini_process_content_parts_collects_reasoning_tool_calls_and_images():
@@ -467,6 +542,71 @@ async def test_gemini_handle_api_error_rotates_key_and_retries(monkeypatch):
     assert provider.chosen_api_key == "good-key"
 
 
+def test_gemini_key_accessors_and_set_key_reinitialize_client(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-a", "key-b"]
+    provider.chosen_api_key = "key-a"
+    init_client = []
+
+    monkeypatch.setattr(
+        provider,
+        "_init_client",
+        lambda: init_client.append(provider.chosen_api_key),
+    )
+
+    assert provider.get_current_key() == "key-a"
+    assert provider.get_keys() == ["key-a", "key-b"]
+
+    provider.set_key("key-b")
+
+    assert provider.chosen_api_key == "key-b"
+    assert init_client == ["key-b"]
+
+
+def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.timeout = 30
+    provider.api_base = "https://gemini.example"
+    provider.chosen_api_key = "key-a"
+    provider._http_client = object()
+    provider._stale_http_clients = []
+
+    created_http_clients = []
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            created_http_clients.append(self)
+
+    class FakeHttpOptions:
+        def __init__(self, **kwargs):
+            self.base_url = kwargs["base_url"]
+            self.timeout = kwargs["timeout"]
+            self.httpx_async_client = None
+
+    class FakeGenAIClient:
+        def __init__(self, *, api_key, http_options):
+            self.aio = SimpleNamespace(api_key=api_key, http_options=http_options)
+
+    monkeypatch.setattr(gemini_source_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(gemini_source_module.types, "HttpOptions", FakeHttpOptions)
+    monkeypatch.setattr(gemini_source_module.genai, "Client", FakeGenAIClient)
+
+    provider.set_key("key-b")
+
+    assert provider.chosen_api_key == "key-b"
+    assert provider._stale_http_clients == [provider._http_client] or len(created_http_clients) == 1
+    assert created_http_clients[0].kwargs == {
+        "base_url": "https://gemini.example",
+        "timeout": 30,
+        "trust_env": True,
+    }
+    assert provider._stale_http_clients[0] is not provider._http_client
+    assert provider.client.api_key == "key-b"
+    assert provider.client.http_options.httpx_async_client is provider._http_client
+
+
 @pytest.mark.asyncio
 async def test_gemini_handle_api_error_raises_when_no_keys_remain():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
@@ -538,6 +678,40 @@ def test_gemini_require_client_raises_when_not_initialized():
 
 
 @pytest.mark.asyncio
+async def test_gemini_encode_image_bs64_raises_when_resolution_returns_none(
+    monkeypatch,
+):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    monkeypatch.setattr(
+        gemini_source_module,
+        "resolve_media_ref_to_base64_data",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        gemini_source_module,
+        "describe_media_ref",
+        lambda ref: f"desc:{ref}",
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to encode image data: desc:image-ref"):
+        await provider.encode_image_bs64("image-ref")
+
+
+@pytest.mark.asyncio
+async def test_gemini_get_models_wraps_api_errors():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.client = SimpleNamespace(
+        models=SimpleNamespace(
+            list=AsyncMock(side_effect=APIError(500, {"message": "boom"}))
+        )
+    )
+
+    with pytest.raises(Exception, match="Failed to fetch Gemini model list: boom"):
+        await provider.get_models()
+
+
+@pytest.mark.asyncio
 async def test_gemini_text_chat_retries_after_api_error_and_strips_no_save_flag():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.api_keys = ["key-a", "key-b"]
@@ -572,6 +746,78 @@ async def test_gemini_text_chat_retries_after_api_error_and_strips_no_save_flag(
     ]
     provider._handle_api_error.assert_awaited_once()
     assert provider._handle_api_error.await_args.args[1] == ["key-a", "key-b"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_text_chat_raises_when_error_handler_declines_retry():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-a"]
+    provider.get_model = lambda: "gemini-test"
+    provider.assemble_context = AsyncMock(
+        return_value={"role": "user", "content": "prompt"}
+    )
+    provider._ensure_message_to_dicts = lambda contexts: list(contexts)
+    provider._handle_api_error = AsyncMock(return_value=False)
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        raise APIError(500, {"message": "fatal"})
+
+    provider._query = fake_query
+
+    with pytest.raises(Exception, match="Gemini request failed."):
+        await provider.text_chat(
+            prompt="hello",
+            contexts=[],
+            request_max_retries=2,
+        )
+
+    provider._handle_api_error.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gemini_text_chat_expands_tool_call_result_lists():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-a"]
+    provider.get_model = lambda: "gemini-test"
+    provider.assemble_context = AsyncMock(
+        return_value={"role": "user", "content": "prompt"}
+    )
+    provider._ensure_message_to_dicts = lambda contexts: list(contexts)
+    provider._handle_api_error = AsyncMock()
+    expected = LLMResponse(role="assistant")
+    payloads_seen: list[dict] = []
+
+    class FakeToolCallResult:
+        def __init__(self, name: str):
+            self.name = name
+
+        def to_openai_messages(self):
+            return [{"role": "tool", "content": f"result-{self.name}"}]
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        payloads_seen.append(payloads)
+        return expected
+
+    provider._query = fake_query
+
+    result = await provider.text_chat(
+        prompt="hello",
+        contexts=[{"role": "assistant", "content": "keep"}],
+        tool_calls_result=[FakeToolCallResult("a"), FakeToolCallResult("b")],
+    )
+
+    assert result is expected
+    assert payloads_seen == [
+        {
+            "messages": [
+                {"role": "assistant", "content": "keep"},
+                {"role": "user", "content": "prompt"},
+                {"role": "tool", "content": "result-a"},
+                {"role": "tool", "content": "result-b"},
+            ],
+            "model": "gemini-test",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -615,6 +861,56 @@ async def test_gemini_text_chat_stream_retries_after_api_error():
     ]
     provider._handle_api_error.assert_awaited_once()
     assert provider._handle_api_error.await_args.args[1] == ["key-a", "key-b"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_text_chat_stream_retries_with_tool_results_and_strips_no_save_flag():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_keys = ["key-a", "key-b"]
+    provider.get_model = lambda: "gemini-test"
+    provider.assemble_context = AsyncMock(return_value={"role": "user", "content": "prompt"})
+    provider._ensure_message_to_dicts = lambda contexts: list(contexts)
+    provider._handle_api_error = AsyncMock(side_effect=[True])
+    yielded = [LLMResponse(role="assistant", is_chunk=False)]
+    stream_calls: list[dict] = []
+
+    class FakeToolCallResult:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def to_openai_messages(self):
+            return [{"role": "tool", "content": f"result-{self.name}"}]
+
+    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+        stream_calls.append(payloads)
+        if len(stream_calls) == 1:
+            raise APIError(429, {"message": "retry"})
+        for item in yielded:
+            yield item
+
+    provider._query_stream = fake_query_stream
+
+    responses = [
+        item
+        async for item in provider.text_chat_stream(
+            prompt="hello",
+            contexts=[{"role": "assistant", "content": "keep", "_no_save": True}],
+            system_prompt="system",
+            tool_calls_result=[FakeToolCallResult("a"), FakeToolCallResult("b")],
+            request_max_retries=3,
+        )
+    ]
+
+    assert responses == yielded
+    assert len(stream_calls) == 2
+    assert stream_calls[0]["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "assistant", "content": "keep"},
+        {"role": "user", "content": "prompt"},
+        {"role": "tool", "content": "result-a"},
+        {"role": "tool", "content": "result-b"},
+    ]
+    assert stream_calls[1]["messages"] == stream_calls[0]["messages"]
 
 
 @pytest.mark.asyncio
@@ -1323,3 +1619,31 @@ async def test_gemini_terminate_closes_clients_and_clears_references():
     assert provider.client is None
     assert provider._stale_http_clients == []
     assert provider._http_client is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_terminate_swallows_client_aclose_errors():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    client = AsyncMock()
+    client.aclose.side_effect = RuntimeError("close failed")
+    provider.client = client
+    provider._http_client = None
+    provider._stale_http_clients = []
+    provider._close_httpx_client = AsyncMock()
+
+    await provider.terminate()
+
+    client.aclose.assert_awaited_once()
+    provider._close_httpx_client.assert_awaited_once_with(None)
+    assert provider.client is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_close_httpx_client_swallows_aclose_errors():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    client = AsyncMock()
+    client.aclose.side_effect = RuntimeError("close failed")
+
+    await provider._close_httpx_client(client)
+
+    client.aclose.assert_awaited_once()

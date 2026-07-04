@@ -1,6 +1,7 @@
 import base64
 import inspect
 import logging
+import ntpath
 import os
 import re
 import shutil
@@ -93,12 +94,13 @@ def extract_zip_safely(
 ) -> None:
     """Extract a zip archive while rejecting path traversal and symlinks."""
 
+    extract_path_str = str(extract_path)
     extract_root = Path(extract_path).resolve()
-    extract_root_str = str(extract_root)
     windows_style_root = (
-        extract_root_str.startswith("\\\\?\\")
-        or re.match(r"^[A-Za-z]:[\\/]", extract_root_str) is not None
+        extract_path_str.startswith("\\\\?\\")
+        or re.match(r"^[A-Za-z]:[\\/]", extract_path_str) is not None
     )
+    windows_extract_root = ntpath.normpath(extract_path_str)
     members = (
         zip_file.infolist() if hasattr(zip_file, "infolist") else zip_file.namelist()
     )
@@ -113,19 +115,18 @@ def extract_zip_safely(
             raise ValueError(f"Unsafe {archive_label} symlink: {filename}")
 
         if windows_style_root:
-            normalized_member = os.path.normpath(filename)
+            normalized_member = ntpath.normpath(filename)
             if normalized_member in ("", "."):
                 continue
-            if os.path.isabs(normalized_member):
+            if ntpath.isabs(normalized_member):
                 raise ValueError(f"Unsafe {archive_label} path: {filename}")
 
-            target_path = os.path.normpath(
-                os.path.join(extract_root_str, normalized_member)
+            target_path = ntpath.normpath(
+                ntpath.join(windows_extract_root, normalized_member)
             )
             try:
-                if (
-                    os.path.commonpath([extract_root_str, target_path])
-                    != extract_root_str
+                if ntpath.commonpath([windows_extract_root, target_path]) != (
+                    windows_extract_root
                 ):
                     raise ValueError(f"Unsafe {archive_label} path: {filename}")
             except ValueError as exc:

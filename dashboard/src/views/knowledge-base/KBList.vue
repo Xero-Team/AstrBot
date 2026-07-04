@@ -197,7 +197,12 @@
               variant="outlined"
               class="mb-4"
               :disabled="editingKB !== null"
-              :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]"
+              :rules="[
+                (v) =>
+                  editingKB !== null ||
+                  !!v ||
+                  t('create.embeddingModelRequired'),
+              ]"
               required
               hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。"
               persistent-hint

@@ -5,8 +5,8 @@ upstream:
   branch: master
 
 last_synced:
-  commit: e2f3b000882ae9999d9dd81a69ae73c3421570b4
-  synced_at_utc: 2026-07-04T11:49:53.9038406Z
+  commit: ea9e3421d9a5cafcaebfa08f06b2ebb9be45bf3f
+  synced_at_utc: 2026-07-04T12:08:28.5586424Z
   sync_method: cherry-pick
-  source_pr: null
-  note: "Cherry-picked upstream/master knowledge-base fixes aecee6fc9f22dcba819b45ac4904c627c2548daa through e2f3b000882ae9999d9dd81a69ae73c3421570b4, covering duplicate kb_name pre-check, retrieval resilience, and KBMedia cleanup/update_kb_stats. Skipped upstream custom-workspace follow-up commits 6d798908ad8a60f0822caf490933e7c4bcf92c14 and 20008f179ca579b3d4ab87bd2380021325172cc5 because this fork does not carry the ChatUI project workspace feature they modify."
+  source_pr: 9000
+  note: "Cherry-picked upstream/master commits aecee6fc9f22dcba819b45ac4904c627c2548daa through ea9e3421d9a5cafcaebfa08f06b2ebb9be45bf3f, covering knowledge-base duplicate-name pre-checks, retrieval resilience, KBMedia cleanup/update_kb_stats, MCP lifecycle cleanup, web-search API key failover, and knowledge-base CRUD/OpenAPI contract alignment. Skipped upstream custom-workspace follow-up commits 6d798908ad8a60f0822caf490933e7c4bcf92c14 and 20008f179ca579b3d4ab87bd2380021325172cc5 because this fork does not carry the ChatUI project workspace feature they modify."

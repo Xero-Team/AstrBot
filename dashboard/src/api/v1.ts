@@ -1655,9 +1655,7 @@ export const knowledgeApi = {
     );
   },
   create(config: KnowledgeBaseCreateRequest) {
-    return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config }),
-    );
+    return typed<OpenConfig>(openApiV1.createKnowledgeBase({ body: config }));
   },
   update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(

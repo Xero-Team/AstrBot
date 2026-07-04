@@ -12,8 +12,8 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.task_utils import create_tracked_task
-from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.schemas import KnowledgeBaseRequest
+from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
 
 
@@ -402,7 +402,8 @@ class KnowledgeBaseService:
         if not current_kb:
             raise KnowledgeBaseServiceError("知识库不存在")
         current = current_kb.kb
-        update_data = {key: getattr(current, key, None) for key in update_keys}
+        current_values = vars(current)
+        update_data = {key: current_values.get(key) for key in update_keys}
         update_data.update(provided_updates)
 
         kb_helper = await self.get_kb_manager().update_kb(

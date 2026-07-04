@@ -668,7 +668,7 @@ class ProviderManager:
 
                     self.tts_provider_insts.append(inst)
                     if (
-                        self.provider_settings.get("provider_id")
+                        self.provider_tts_settings.get("provider_id")
                         == provider_config["id"]
                     ):
                         self.curr_tts_provider_inst = inst

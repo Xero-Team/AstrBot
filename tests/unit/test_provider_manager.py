@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import importlib
 import sys
 import types
@@ -106,6 +107,41 @@ def _build_manager(config: dict | None = None) -> ProviderManager:
     )
     persona_mgr = SimpleNamespace(default_persona="default")
     return ProviderManager(acm, db_helper=MagicMock(), persona_mgr=persona_mgr)
+
+
+def test_register_provider_change_hook_deduplicates_and_notify_swallows_failures(
+    monkeypatch,
+):
+    manager = _build_manager()
+    warning = MagicMock()
+    hook_ok = MagicMock()
+    hook_fail = MagicMock(side_effect=RuntimeError("hook failed"))
+
+    manager.register_provider_change_hook(hook_ok)
+    manager.register_provider_change_hook(hook_ok)
+    manager.register_provider_change_hook(hook_fail)
+
+    monkeypatch.setattr(provider_manager_module.logger, "warning", warning)
+
+    manager._notify_provider_changed(
+        "provider-1",
+        ProviderType.CHAT_COMPLETION,
+        "umo-1",
+    )
+
+    assert manager._provider_change_hooks == [hook_ok, hook_fail]
+    hook_ok.assert_called_once_with(
+        "provider-1",
+        ProviderType.CHAT_COMPLETION,
+        "umo-1",
+    )
+    hook_fail.assert_called_once_with(
+        "provider-1",
+        ProviderType.CHAT_COMPLETION,
+        "umo-1",
+    )
+    warning.assert_called_once()
+    assert "调用 provider 变更钩子失败" in warning.call_args.args[0]
 
 
 @pytest.mark.asyncio
@@ -222,6 +258,17 @@ async def test_set_provider_session_override_persists_and_notifies(monkeypatch):
         ProviderType.CHAT_COMPLETION,
         "umo-1",
     )
+
+
+@pytest.mark.asyncio
+async def test_set_provider_raises_for_unknown_provider_id():
+    manager = _build_manager()
+
+    with pytest.raises(ValueError, match="提供商 missing-provider 不存在"):
+        await manager.set_provider(
+            "missing-provider",
+            ProviderType.CHAT_COMPLETION,
+        )
 
 
 @pytest.mark.asyncio
@@ -369,6 +416,13 @@ def test_get_using_provider_warns_when_configured_provider_is_missing(monkeypatc
     assert warning.call_count == 3
 
 
+def test_get_using_provider_raises_for_unknown_provider_type():
+    manager = _build_manager()
+
+    with pytest.raises(ValueError, match="Unknown provider type"):
+        manager.get_using_provider("bad-type")  # type: ignore[arg-type]
+
+
 @pytest.mark.asyncio
 async def test_load_provider_merges_source_initializes_and_selects_default(
     monkeypatch,
@@ -461,6 +515,52 @@ async def test_load_provider_selects_default_tts_from_tts_settings(monkeypatch):
     inst = manager.inst_map["tts-1"]
     assert isinstance(inst, DummyTTSProvider)
     assert manager.curr_tts_provider_inst is inst
+
+
+@pytest.mark.asyncio
+async def test_load_provider_replaces_existing_current_tts_when_configured_default_matches(
+    monkeypatch,
+):
+    manager = _build_manager(
+        {
+            "provider": [],
+            "provider_sources": [],
+            "provider_settings": {"default_provider_id": "chat-default"},
+            "provider_stt_settings": {"enable": False, "provider_id": None},
+            "provider_tts_settings": {"enable": True, "provider_id": "tts-target"},
+        },
+    )
+    existing = DummyTTSProvider(
+        {"id": "tts-existing", "type": "fake_tts_existing", "enable": True},
+        manager.provider_settings,
+    )
+    manager.tts_provider_insts = [existing]
+    manager.curr_tts_provider_inst = existing
+
+    monkeypatch.setattr(manager, "dynamic_import_provider", lambda provider_type: None)
+    monkeypatch.setitem(
+        provider_cls_map,
+        "fake_tts_target",
+        ProviderMetaData(
+            id="default",
+            model=None,
+            type="fake_tts_target",
+            desc="",
+            provider_type=ProviderType.TEXT_TO_SPEECH,
+            cls_type=DummyTTSProvider,
+        ),
+    )
+
+    await manager.load_provider(
+        {
+            "id": "tts-target",
+            "type": "fake_tts_target",
+            "provider_type": "text_to_speech",
+            "enable": True,
+        },
+    )
+
+    assert manager.curr_tts_provider_inst is manager.inst_map["tts-target"]
 
 
 @pytest.mark.asyncio
@@ -718,6 +818,114 @@ async def test_initialize_continues_after_load_provider_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_initialize_falls_back_when_persisted_provider_ids_have_wrong_types(
+    monkeypatch,
+):
+    manager = _build_manager(
+        {
+            "provider": [{"id": "chat-a", "enable": True}],
+            "provider_sources": [],
+            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_stt_settings": {"enable": True, "provider_id": "stt-a"},
+            "provider_tts_settings": {"enable": True, "provider_id": "tts-a"},
+        }
+    )
+    chat_a = DummyChatProvider(
+        {"id": "chat-a", "type": "fake_chat_a", "enable": True},
+        manager.provider_settings,
+    )
+    stt_a = DummySTTProvider(
+        {"id": "stt-a", "type": "fake_stt_a", "enable": True},
+        manager.provider_settings,
+    )
+    tts_a = DummyTTSProvider(
+        {"id": "tts-a", "type": "fake_tts_a", "enable": True},
+        manager.provider_settings,
+    )
+
+    monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
+    monkeypatch.setattr(manager, "load_provider", AsyncMock())
+    monkeypatch.setattr(
+        provider_manager_module.sp,
+        "get_async",
+        AsyncMock(side_effect=["stt-a", "chat-a", 123]),
+    )
+    manager.provider_insts = [chat_a]
+    manager.stt_provider_insts = [stt_a]
+    manager.tts_provider_insts = [tts_a]
+    manager.inst_map = {
+        "chat-a": chat_a,
+        "stt-a": stt_a,
+        "tts-a": tts_a,
+    }
+    manager.llm_tools.init_mcp_clients = AsyncMock()
+
+    await manager.initialize()
+    if manager._mcp_init_task is not None:
+        await manager._mcp_init_task
+
+    assert manager.curr_provider_inst is chat_a
+    assert manager.curr_stt_provider_inst is stt_a
+    assert manager.curr_tts_provider_inst is tts_a
+
+
+@pytest.mark.asyncio
+async def test_initialize_reuses_pending_mcp_init_task(monkeypatch):
+    manager = _build_manager()
+    existing_task = asyncio.create_task(asyncio.Event().wait())
+
+    monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
+    monkeypatch.setattr(manager, "load_provider", AsyncMock())
+    monkeypatch.setattr(
+        provider_manager_module.sp,
+        "get_async",
+        AsyncMock(side_effect=[None, None, None]),
+    )
+    manager.llm_tools.init_mcp_clients = AsyncMock()
+    manager._mcp_init_task = existing_task
+
+    await manager.initialize()
+
+    assert manager._mcp_init_task is existing_task
+    manager.llm_tools.init_mcp_clients.assert_not_awaited()
+
+    existing_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await existing_task
+
+
+@pytest.mark.asyncio
+async def test_initialize_replaces_done_mcp_task_and_logs_background_failure(
+    monkeypatch,
+):
+    manager = _build_manager()
+    done_task = asyncio.create_task(asyncio.sleep(0))
+    await done_task
+    error = MagicMock()
+
+    monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
+    monkeypatch.setattr(manager, "load_provider", AsyncMock())
+    monkeypatch.setattr(
+        provider_manager_module.sp,
+        "get_async",
+        AsyncMock(side_effect=[None, None, None]),
+    )
+    monkeypatch.setattr(provider_manager_module.logger, "error", error)
+    manager.llm_tools.init_mcp_clients = AsyncMock(side_effect=RuntimeError("mcp boom"))
+    manager._mcp_init_task = done_task
+
+    await manager.initialize()
+    assert manager._mcp_init_task is not done_task
+    if manager._mcp_init_task is not None:
+        await manager._mcp_init_task
+
+    manager.llm_tools.init_mcp_clients.assert_awaited_once()
+    assert error.call_count == 1
+    assert error.call_args.args[0] == "MCP init background task failed"
+    assert error.call_args.kwargs["exc_info"] is True
+
+
+@pytest.mark.asyncio
 async def test_reload_terminates_removed_provider_and_auto_selects_remaining(
     monkeypatch,
 ):
@@ -846,6 +1054,152 @@ async def test_reload_loads_enabled_provider_and_prunes_out_of_config_instances(
 
 
 @pytest.mark.asyncio
+async def test_reload_auto_selects_stt_and_tts_when_current_instances_are_none(
+    monkeypatch,
+):
+    manager = _build_manager(
+        {
+            "provider": [
+                {"id": "stt-a", "enable": True},
+                {"id": "tts-a", "enable": True},
+            ],
+            "provider_sources": [],
+            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_stt_settings": {"enable": True, "provider_id": "stt-a"},
+            "provider_tts_settings": {"enable": True, "provider_id": "tts-a"},
+        }
+    )
+    stt_a = DummySTTProvider(
+        {"id": "stt-a", "type": "fake_stt_a", "enable": True},
+        manager.provider_settings,
+    )
+    tts_a = DummyTTSProvider(
+        {"id": "tts-a", "type": "fake_tts_a", "enable": True},
+        manager.provider_settings,
+    )
+    manager.stt_provider_insts = [stt_a]
+    manager.tts_provider_insts = [tts_a]
+    manager.inst_map = {"stt-a": stt_a, "tts-a": tts_a}
+    manager.curr_stt_provider_inst = None
+    manager.curr_tts_provider_inst = None
+    monkeypatch.setitem(
+        provider_cls_map,
+        "fake_stt_a",
+        ProviderMetaData(
+            id="stt-a",
+            model=None,
+            type="fake_stt_a",
+            desc="",
+            provider_type=ProviderType.SPEECH_TO_TEXT,
+            cls_type=DummySTTProvider,
+        ),
+    )
+    monkeypatch.setitem(
+        provider_cls_map,
+        "fake_tts_a",
+        ProviderMetaData(
+            id="tts-a",
+            model=None,
+            type="fake_tts_a",
+            desc="",
+            provider_type=ProviderType.TEXT_TO_SPEECH,
+            cls_type=DummyTTSProvider,
+        ),
+    )
+
+    monkeypatch.setattr(
+        provider_manager_module,
+        "astrbot_config",
+        {
+            "provider": [
+                {"id": "stt-a", "enable": True},
+                {"id": "tts-a", "enable": True},
+            ],
+            "provider_sources": [],
+        },
+    )
+    monkeypatch.setattr(manager, "load_provider", AsyncMock())
+
+    await manager.reload({"id": "missing-provider", "enable": False})
+
+    assert manager.curr_stt_provider_inst is stt_a
+    assert manager.curr_tts_provider_inst is tts_a
+
+
+@pytest.mark.asyncio
+async def test_delete_provider_by_source_id_terminates_matching_instances_and_saves():
+    manager = _build_manager(
+        {
+            "provider": [
+                {"id": "chat-a", "provider_source_id": "source-1"},
+                {"id": "chat-b", "provider_source_id": "source-1"},
+                {"id": "chat-c", "provider_source_id": "source-2"},
+            ],
+            "provider_sources": [],
+            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_stt_settings": {"enable": False, "provider_id": None},
+            "provider_tts_settings": {"enable": False, "provider_id": None},
+        }
+    )
+    manager.terminate_provider = AsyncMock()
+
+    await manager.delete_provider(provider_source_id="source-1")
+
+    assert manager.terminate_provider.await_args_list == [
+        call("chat-a"),
+        call("chat-b"),
+    ]
+    assert manager.acm.default_conf["provider"] == [
+        {"id": "chat-c", "provider_source_id": "source-2"},
+    ]
+    manager.acm.default_conf.save_config.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_provider_persists_new_config_and_reloads():
+    manager = _build_manager(
+        {
+            "provider": [
+                {"id": "chat-a", "type": "old-type", "enable": True},
+            ],
+            "provider_sources": [],
+            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_stt_settings": {"enable": False, "provider_id": None},
+            "provider_tts_settings": {"enable": False, "provider_id": None},
+        }
+    )
+    manager.reload = AsyncMock()
+    new_config = {"id": "chat-a", "type": "new-type", "enable": True}
+
+    await manager.update_provider("chat-a", new_config)
+
+    assert manager.acm.default_conf["provider"] == [new_config]
+    manager.acm.default_conf.save_config.assert_called_once()
+    manager.reload.assert_awaited_once_with(new_config)
+
+
+@pytest.mark.asyncio
+async def test_create_provider_appends_config_loads_instance_and_syncs_provider_list(
+    monkeypatch,
+):
+    manager = _build_manager()
+    manager.load_provider = AsyncMock()
+    new_config = {"id": "chat-new", "type": "fake-chat", "enable": True}
+    monkeypatch.setattr(
+        provider_manager_module,
+        "astrbot_config",
+        {"provider": [new_config]},
+    )
+
+    await manager.create_provider(new_config)
+
+    assert manager.acm.default_conf["provider"] == [new_config]
+    manager.acm.default_conf.save_config.assert_called_once()
+    manager.load_provider.assert_awaited_once_with(new_config)
+    assert manager.providers_config == [new_config]
+
+
+@pytest.mark.asyncio
 async def test_terminate_provider_cleans_embedding_and_rerank_instances():
     manager = _build_manager()
     embedding = DummyEmbeddingProvider(
@@ -873,6 +1227,36 @@ async def test_terminate_provider_cleans_embedding_and_rerank_instances():
     assert manager.inst_map == {}
     embedding.terminate.assert_awaited_once()
     rerank.terminate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_terminate_provider_clears_current_stt_and_tts_instances():
+    manager = _build_manager()
+    stt_provider = DummySTTProvider(
+        {"id": "stt-1", "type": "fake_stt", "enable": True},
+        manager.provider_settings,
+    )
+    tts_provider = DummyTTSProvider(
+        {"id": "tts-1", "type": "fake_tts", "enable": True},
+        manager.provider_settings,
+    )
+    stt_provider.terminate = AsyncMock()
+    tts_provider.terminate = AsyncMock()
+    manager.stt_provider_insts = [stt_provider]
+    manager.tts_provider_insts = [tts_provider]
+    manager.curr_stt_provider_inst = stt_provider
+    manager.curr_tts_provider_inst = tts_provider
+    manager.inst_map = {"stt-1": stt_provider, "tts-1": tts_provider}
+
+    await manager.terminate_provider("stt-1")
+    await manager.terminate_provider("tts-1")
+
+    assert manager.curr_stt_provider_inst is None
+    assert manager.curr_tts_provider_inst is None
+    assert manager.stt_provider_insts == []
+    assert manager.tts_provider_insts == []
+    stt_provider.terminate.assert_awaited_once()
+    tts_provider.terminate.assert_awaited_once()
 
 
 @pytest.mark.asyncio

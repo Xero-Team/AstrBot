@@ -4,7 +4,7 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Coroutine
 from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
@@ -51,6 +51,7 @@ class AiocqhttpAdapter(Platform):
             id=cast(str, self.config.get("id")),
             support_streaming_message=False,
         )
+        self._inbound_tasks: set[asyncio.Task[None]] = set()
 
         self.bot = CQHttp(
             use_ws_reverse=True,
@@ -63,54 +64,57 @@ class AiocqhttpAdapter(Platform):
 
         @self.bot.on_request()
         async def request(event: Event) -> None:
-            try:
-                abm = await self.convert_message(event)
-                if not abm:
-                    return
-                await self.handle_msg(abm)
-            except Exception as e:
-                logger.exception(f"Handle request message failed: {e}")
-                return
+            self._start_inbound_task(self._process_inbound_event(event), "request")
 
         @self.bot.on_notice()
         async def notice(event: Event) -> None:
-            try:
-                abm = await self.convert_message(event)
-                if abm:
-                    await self.handle_msg(abm)
-            except Exception as e:
-                logger.exception(f"Handle notice message failed: {e}")
-                return
+            self._start_inbound_task(self._process_inbound_event(event), "notice")
 
         @self.bot.on_message("group")
         async def group(event: Event) -> None:
-            try:
-                abm = await self.convert_message(event)
-                if abm:
-                    await self.handle_msg(abm)
-            except Exception as e:
-                logger.exception(f"Handle group message failed: {e}")
-                return
+            self._start_inbound_task(
+                self._process_inbound_event(event),
+                "group message",
+            )
 
         @self.bot.on_message("private")
         async def private(event: Event) -> None:
-            try:
-                abm = await self.convert_message(event)
-                if abm:
-                    await self.handle_msg(abm)
-            except Exception as e:
-                logger.exception(f"Handle private message failed: {e}")
-                return
+            self._start_inbound_task(
+                self._process_inbound_event(event),
+                "private message",
+            )
 
         @self.bot.on_websocket_connection
         def on_websocket_connection(_) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
 
+    def _start_inbound_task(
+        self,
+        coro: Coroutine[Any, Any, None],
+        label: str,
+    ) -> None:
+        task = asyncio.create_task(coro, name=f"aiocqhttp:{label}")
+        self._inbound_tasks.add(task)
+        task.add_done_callback(self._on_inbound_task_done)
+
+    def _on_inbound_task_done(self, task: asyncio.Task[None]) -> None:
+        self._inbound_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("aiocqhttp inbound task failed", exc_info=exc)
+
+    async def _process_inbound_event(self, event: Event) -> None:
+        abm = await self.convert_message(event)
+        if abm:
+            await self.handle_msg(abm)
+
     async def send_by_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
             session_id = session.session_id.split("_")[-1]
@@ -123,7 +127,7 @@ class AiocqhttpAdapter(Platform):
             is_group=is_group,
             session_id=session_id,
         )
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
@@ -198,12 +202,10 @@ class AiocqhttpAdapter(Platform):
     async def _convert_handle_message_event(
         self,
         event: Event,
-        get_reply=True,
     ) -> AstrBotMessage:
         """OneBot V11 消息类事件
 
         @param event: 事件对象
-        @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
         assert event.sender is not None
         abm = AstrBotMessage()
@@ -253,94 +255,72 @@ class AiocqhttpAdapter(Platform):
 
             elif t == "file":
                 for m in m_group:
-                    if m["data"].get("url") and m["data"].get("url").startswith("http"):
+                    file_data = m["data"]
+                    if file_data.get("url") and file_data.get("url").startswith("http"):
                         # Lagrange
                         logger.info("guessing lagrange")
                         # 检查多个可能的文件名字段
                         file_name = (
-                            m["data"].get("file_name", "")
-                            or m["data"].get("name", "")
-                            or m["data"].get("file", "")
+                            file_data.get("file_name", "")
+                            or file_data.get("name", "")
+                            or file_data.get("file", "")
                             or "file"
                         )
-                        abm.message.append(File(name=file_name, url=m["data"]["url"]))
+                        abm.message.append(File(name=file_name, url=file_data["url"]))
                     else:
-                        try:
-                            # Napcat
-                            ret = None
-                            if abm.type == MessageType.GROUP_MESSAGE:
-                                ret = await self.bot.call_action(
-                                    action="get_group_file_url",
-                                    file_id=m["data"]["file_id"],
-                                    group_id=event.group_id,
-                                    **routing_params,
-                                )
-                            elif abm.type == MessageType.FRIEND_MESSAGE:
-                                ret = await self.bot.call_action(
-                                    action="get_private_file_url",
-                                    file_id=m["data"]["file_id"],
-                                    **routing_params,
-                                )
-                            if ret and "url" in ret:
-                                file_url = ret["url"]  # https
-                                # 优先从 API 返回值获取文件名，其次从原始消息数据获取
-                                file_name = (
+                        file_name = (
+                            file_data.get("file_name", "")
+                            or file_data.get("name", "")
+                            or file_data.get("file", "")
+                            or "file"
+                        )
+                        file_component = File(name=file_name)
+                        file_id = str(file_data.get("file_id", "")).strip()
+                        if file_id:
+
+                            async def _resolve_file_url(
+                                *,
+                                file_id: str = file_id,
+                                file_name: str = file_name,
+                                is_group_message: bool = (
+                                    abm.type == MessageType.GROUP_MESSAGE
+                                ),
+                                group_id: int | str | None = event.get("group_id"),
+                                routing_params: dict[str, object] = dict(
+                                    routing_params
+                                ),
+                            ) -> tuple[str | None, str | None]:
+                                ret = None
+                                if is_group_message and group_id is not None:
+                                    ret = await self.bot.call_action(
+                                        "get_group_file_url",
+                                        file_id=file_id,
+                                        group_id=group_id,
+                                        **routing_params,
+                                    )
+                                elif not is_group_message:
+                                    ret = await self.bot.call_action(
+                                        "get_private_file_url",
+                                        file_id=file_id,
+                                        **routing_params,
+                                    )
+                                if not ret or "url" not in ret:
+                                    logger.error(f"获取文件失败: {ret}")
+                                    return None, file_name
+                                resolved_name = (
                                     ret.get("file_name", "")
                                     or ret.get("name", "")
-                                    or m["data"].get("file", "")
-                                    or m["data"].get("file_name", "")
+                                    or file_name
                                 )
-                                a = File(name=file_name, url=file_url)
-                                abm.message.append(a)
-                            else:
-                                logger.error(f"获取文件失败: {ret}")
+                                return str(ret["url"]), resolved_name
 
-                        except ActionFailed as e:
-                            logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
-                        except Exception as e:
-                            logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                            file_component.set_url_resolver(_resolve_file_url)
+                        abm.message.append(file_component)
 
             elif t == "reply":
                 for m in m_group:
-                    if not get_reply:
-                        a = ComponentTypes[t](**m["data"])
-                        abm.message.append(a)
-                    else:
-                        try:
-                            reply_event_data = await self.bot.call_action(
-                                action="get_msg",
-                                message_id=int(m["data"]["id"]),
-                                **routing_params,
-                            )
-                            # 添加必要的 post_type 字段，防止 Event.from_payload 报错
-                            reply_event_data["post_type"] = "message"
-                            new_event = Event.from_payload(reply_event_data)
-                            if not new_event:
-                                logger.error(
-                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}",
-                                )
-                                continue
-                            abm_reply = await self._convert_handle_message_event(
-                                new_event,
-                                get_reply=False,
-                            )
-
-                            reply_seg = Reply(
-                                id=abm_reply.message_id,
-                                chain=abm_reply.message,
-                                sender_id=abm_reply.sender.user_id,
-                                sender_nickname=abm_reply.sender.nickname,
-                                time=abm_reply.timestamp,
-                                message_str=abm_reply.message_str,
-                                text=abm_reply.message_str,  # for compatibility
-                                qq=abm_reply.sender.user_id,  # for compatibility
-                            )
-
-                            abm.message.append(reply_seg)
-                        except Exception as e:
-                            logger.error(f"获取引用消息失败: {e}。")
-                            a = ComponentTypes[t](**m["data"])
-                            abm.message.append(a)
+                    a = ComponentTypes[t](**m["data"])
+                    abm.message.append(a)
             elif t == "at":
                 first_at_self_processed = False
                 # Accumulate @ mention text for efficient concatenation
@@ -352,47 +332,20 @@ class AiocqhttpAdapter(Platform):
                             abm.message.append(At(qq="all", name="全体成员"))
                             continue
 
-                        at_info = await self.bot.call_action(
-                            action="get_group_member_info",
-                            group_id=event.group_id,
-                            user_id=int(m["data"]["qq"]),
-                            no_cache=False,
-                            **routing_params,
-                        )
-                        if at_info:
-                            nickname = at_info.get("card", "")
-                            if nickname == "":
-                                at_info = await self.bot.call_action(
-                                    action="get_stranger_info",
-                                    user_id=int(m["data"]["qq"]),
-                                    no_cache=False,
-                                    **routing_params,
-                                )
-                                nickname = at_info.get("nick", "") or at_info.get(
-                                    "nickname",
-                                    "",
-                                )
-                            is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
+                        target = str(m["data"]["qq"])
+                        is_at_self = target in {abm.self_id, "all"}
+                        abm.message.append(At(qq=target, name=""))
 
-                            abm.message.append(
-                                At(
-                                    qq=m["data"]["qq"],
-                                    name=nickname,
-                                ),
-                            )
-
-                            if is_at_self and not first_at_self_processed:
-                                # 第一个@是机器人，不添加到message_str
-                                first_at_self_processed = True
-                            else:
-                                # 非第一个@机器人或@其他用户，添加到message_str
-                                at_parts.append(f" @{nickname}({m['data']['qq']}) ")
+                        if is_at_self and not first_at_self_processed:
+                            # 第一个@是机器人，不添加到message_str
+                            first_at_self_processed = True
                         else:
-                            abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
+                            # 非第一个@机器人或@其他用户，添加到message_str
+                            at_parts.append(f" @{target} ")
                     except ActionFailed as e:
-                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+                        logger.error(f"解析 @ 消息段失败: {e}，此消息段将被忽略。")
                     except Exception as e:
-                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+                        logger.error(f"解析 @ 消息段失败: {e}，此消息段将被忽略。")
 
                 message_str += "".join(at_parts)
             elif t == "mface":
@@ -448,6 +401,10 @@ class AiocqhttpAdapter(Platform):
         if hasattr(self, "shutdown_event"):
             self.shutdown_event.set()
         await self._close_reverse_ws_connections()
+        inbound_tasks = list(self._inbound_tasks)
+        if inbound_tasks:
+            await asyncio.gather(*inbound_tasks, return_exceptions=True)
+        self._inbound_tasks.clear()
 
     async def _close_reverse_ws_connections(self) -> None:
         api_clients = getattr(self.bot, "_wsr_api_clients", None)
@@ -508,6 +465,3 @@ class AiocqhttpAdapter(Platform):
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))
-
-    def get_client(self) -> CQHttp:
-        return self.bot

@@ -10,7 +10,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver, detect_image_mime_type_async
+from astrbot.core.utils.media_utils import detect_image_mime_type_async
 
 
 class MattermostClient:
@@ -216,49 +216,85 @@ class MattermostClient:
     async def parse_post_attachments(
         self,
         file_ids: list[str],
+        attachment_infos: list[dict[str, Any]] | None = None,
     ) -> tuple[list[Any], list[str]]:
         components: list[Any] = []
         temp_paths: list[str] = []
+        metadata_by_id: dict[str, dict[str, Any]] = {}
+        if isinstance(attachment_infos, list):
+            for item in attachment_infos:
+                if not isinstance(item, dict):
+                    continue
+                file_id = str(item.get("id") or "").strip()
+                if file_id:
+                    metadata_by_id[file_id] = item
 
         for file_id in file_ids:
-            try:
-                info = await self.get_file_info(file_id)
-                file_bytes = await self.download_file(file_id)
-            except Exception as exc:
-                logger.warning(
-                    "Mattermost fetch attachment failed %s: %s", file_id, exc
-                )
-                continue
+            info = metadata_by_id.get(file_id)
+            filename = str((info or {}).get("name") or f"file_{file_id}")
+            mime_type = str((info or {}).get("mime_type") or "").strip()
 
-            filename = str(info.get("name") or f"file_{file_id}")
-            mime_type = str(info.get("mime_type") or "application/octet-stream")
-            suffix = Path(filename).suffix
-            file_path = Path(get_astrbot_temp_path()) / f"mattermost_{file_id}{suffix}"
-            try:
-                await asyncio.to_thread(file_path.write_bytes, file_bytes)
-            except OSError as exc:
-                logger.warning(
-                    "Mattermost write attachment failed %s -> %s: %s",
-                    file_id,
-                    file_path,
-                    exc,
+            if not mime_type:
+                try:
+                    info = await self.get_file_info(file_id)
+                except Exception as exc:
+                    logger.warning(
+                        "Mattermost fetch attachment metadata failed %s: %s",
+                        file_id,
+                        exc,
+                    )
+                    continue
+                filename = str(info.get("name") or filename)
+                mime_type = str(info.get("mime_type") or "application/octet-stream")
+
+            async def _download_to_temp(
+                *,
+                file_id: str = file_id,
+                filename: str = filename,
+            ) -> str | None:
+                try:
+                    file_bytes = await self.download_file(file_id)
+                except Exception as exc:
+                    logger.warning(
+                        "Mattermost fetch attachment failed %s: %s", file_id, exc
+                    )
+                    return None
+
+                suffix = Path(filename).suffix
+                file_path = (
+                    Path(get_astrbot_temp_path()) / f"mattermost_{file_id}{suffix}"
                 )
-                continue
-            temp_paths.append(str(file_path))
+                try:
+                    await asyncio.to_thread(file_path.write_bytes, file_bytes)
+                except OSError as exc:
+                    logger.warning(
+                        "Mattermost write attachment failed %s -> %s: %s",
+                        file_id,
+                        file_path,
+                        exc,
+                    )
+                    return None
+                resolved_path = str(file_path)
+                if resolved_path not in temp_paths:
+                    temp_paths.append(resolved_path)
+                return resolved_path
 
             if mime_type.startswith("image/"):
-                components.append(Image.fromFileSystem(str(file_path)))
+                image = Image(file="")
+                image.set_source_resolver(_download_to_temp)
+                components.append(image)
             elif mime_type.startswith("audio/"):
-                path_wav = await MediaResolver(
-                    str(file_path),
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                components.append(Record(file=path_wav, url=path_wav))
+                record = Record(file="")
+                record.set_source_resolver(_download_to_temp)
+                components.append(record)
             elif mime_type.startswith("video/"):
-                components.append(Video.fromFileSystem(str(file_path)))
+                video = Video(file="")
+                video.set_source_resolver(_download_to_temp)
+                components.append(video)
             else:
-                components.append(File(name=filename, file=str(file_path)))
+                file_component = File(name=filename)
+                file_component.set_file_resolver(_download_to_temp)
+                components.append(file_component)
 
         return components, temp_paths
 

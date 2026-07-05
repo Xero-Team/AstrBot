@@ -14,6 +14,7 @@ class WebChatQueueMgr:
         self._request_conversation: dict[str, str] = {}
         self._queue_close_events: dict[str, asyncio.Event] = {}
         self._listener_tasks: dict[str, asyncio.Task] = {}
+        self._message_tasks: set[asyncio.Task[None]] = set()
         self._listener_callback: Callable[[tuple], Awaitable[None]] | None = None
         self.queue_maxsize = queue_maxsize
         self.back_queue_maxsize = back_queue_maxsize
@@ -104,6 +105,11 @@ class WebChatQueueMgr:
             await asyncio.gather(*listener_tasks, return_exceptions=True)
         self._listener_tasks.clear()
 
+        message_tasks = list(self._message_tasks)
+        if message_tasks:
+            await asyncio.gather(*message_tasks, return_exceptions=True)
+        self._message_tasks.clear()
+
     def _start_listener_if_needed(self, conversation_id: str):
         if self._listener_callback is None:
             return
@@ -146,12 +152,16 @@ class WebChatQueueMgr:
                 data = get_task.result()
                 if self._listener_callback is None:
                     continue
-                try:
-                    await self._listener_callback(data)
-                except Exception as e:
-                    logger.error(
-                        f"Error processing message from conversation {conversation_id}: {e}"
+                task = asyncio.create_task(
+                    self._listener_callback(data),
+                    name=f"webchat_message_{conversation_id}",
+                )
+                self._message_tasks.add(task)
+                task.add_done_callback(
+                    lambda done_task, conversation_id=conversation_id: (
+                        self._on_message_task_done(conversation_id, done_task)
                     )
+                )
             except asyncio.CancelledError:
                 break
             finally:
@@ -159,6 +169,20 @@ class WebChatQueueMgr:
                     get_task.cancel()
                 if not close_task.done():
                     close_task.cancel()
+
+    def _on_message_task_done(
+        self,
+        conversation_id: str,
+        task: asyncio.Task[None],
+    ) -> None:
+        self._message_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                f"Error processing message from conversation {conversation_id}: {exc}"
+            )
 
 
 webchat_queue_mgr = WebChatQueueMgr()

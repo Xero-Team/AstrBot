@@ -3,8 +3,9 @@ import base64
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -19,6 +20,7 @@ from astrbot.core.platform.sources.kook.kook_client import KookClient
 from astrbot.core.platform.sources.kook.kook_config import KookConfig
 from astrbot.core.platform.sources.kook.kook_types import (
     KookMessageEventData,
+    KookMessageSignal,
     KookWebsocketEvent,
 )
 from tests.test_kook.shared import (
@@ -150,8 +152,8 @@ class JsonFieldPaths:
             [
                 Plain(text="[audio]"),
                 Record(
-                    file=TEST_AUDIO_WAV_PATH,
-                    url=TEST_AUDIO_WAV_PATH,
+                    file="",
+                    url="",
                     text=None,
                     path=None,
                 ),
@@ -164,8 +166,8 @@ class JsonFieldPaths:
                 Plain(text="(met)"),
                 Plain(text="all(met) #hello \\*\\*world\\*\\*  [audio]\n😆"),
                 Record(
-                    file=TEST_AUDIO_WAV_PATH,
-                    url=TEST_AUDIO_WAV_PATH,
+                    file="",
+                    url="",
                     text=None,
                     path=None,
                 ),
@@ -213,10 +215,99 @@ async def test_kook_event_warp_message(
     assert (
         astrbotMessage.sender.nickname == raw_event["d"]["extra"]["author"]["username"]
     )
-    assert astrbotMessage.raw_message == raw_event["d"]
+    assert astrbotMessage.raw_message is event.data
+    assert astrbotMessage.raw_message.to_dict() == raw_event["d"]
     assert astrbotMessage.message_id == raw_event["d"]["msg_id"]
-    assert astrbotMessage.message == expected_message_components
+    assert len(astrbotMessage.message) == len(expected_message_components)
+    for actual, expected in zip(
+        astrbotMessage.message,
+        expected_message_components,
+        strict=True,
+    ):
+        assert type(actual) is type(expected)
+        if isinstance(actual, Record):
+            assert actual.file == expected.file
+            assert actual.url == expected.url
+            assert actual.path == expected.path
+            continue
+        assert actual == expected
     if isinstance(expected_message_str, str):
         assert astrbotMessage.message_str == expected_message_str
     else:
         assert get_json_field(raw_event, expected_message_str)
+
+
+@pytest.mark.asyncio
+async def test_kook_handle_signal_background_dispatches_message_callback():
+    callback_started = asyncio.Event()
+    callback_released = asyncio.Event()
+    callback_finished = asyncio.Event()
+
+    async def _callback(_data):
+        callback_started.set()
+        await callback_released.wait()
+        callback_finished.set()
+
+    client = KookClient(
+        KookConfig.from_dict({"token": "test-token", "id": "test-kook"}),
+        _callback,
+    )
+
+    message_task = asyncio.create_task(
+        client._handle_signal(
+            SimpleNamespace(
+                signal=KookMessageSignal.MESSAGE,
+                data={"msg": "first"},
+                sn=123,
+            )
+        )
+    )
+
+    await asyncio.wait_for(callback_started.wait(), timeout=1.0)
+    await client._handle_signal(
+        SimpleNamespace(
+            signal=KookMessageSignal.PONG,
+            data={},
+            sn=None,
+        )
+    )
+
+    assert client.last_sn == 123
+    callback_released.set()
+    await message_task
+    await asyncio.wait_for(callback_finished.wait(), timeout=1.0)
+    if client._event_tasks:
+        await asyncio.gather(*list(client._event_tasks), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_kook_on_received_prefetches_guild_roles_before_message_convert():
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient", mock_kook_client
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.MediaResolver",
+        FakeMediaResolver,
+    )
+
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    adapter = KookPlatformAdapter({}, {}, asyncio.Queue())
+    adapter._roles_cache = MagicMock()
+    adapter.convert_message = AsyncMock(
+        return_value=SimpleNamespace(session_id="session-1", message_id="msg-1")
+    )
+    adapter.handle_msg = AsyncMock()
+
+    raw_event_str = KookEventDataPath.GROUP_MESSAGE.read_text(encoding="utf-8")
+    event = KookWebsocketEvent.from_json(raw_event_str)
+    assert isinstance(event.data, KookMessageEventData)
+
+    await adapter._on_received(event.data)
+
+    adapter._roles_cache.prefetch_guild_roles.assert_called_once_with(
+        int(event.data.extra.guild_id)
+    )
+    adapter.convert_message.assert_awaited_once_with(event.data)
+    adapter.handle_msg.assert_awaited_once()

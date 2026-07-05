@@ -11,10 +11,14 @@ import pytest
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
-from astrbot.core.star.star import StarMetadata, star_map
-from astrbot.core.star.star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.star import StarMetadata, star_map
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -136,6 +140,15 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
     assert result is not None
     assert result.message_str == "@alice 请总结这份文档"
     assert any(isinstance(component, Comp.File) for component in result.message)
+    file_component = next(
+        component for component in result.message if isinstance(component, Comp.File)
+    )
+    assert file_component.url == ""
+    document.get_file.assert_not_awaited()
+    assert await file_component.get_file(allow_return_url=True) == (
+        "https://api.telegram.org/file/test/report.md"
+    )
+    document.get_file.assert_awaited_once()
     assert any(
         isinstance(component, Comp.Plain) and component.text == "@alice 请总结这份文档"
         for component in result.message
@@ -167,6 +180,11 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
     assert result is not None
     assert result.message_str == "这段视频讲了什么"
     assert any(isinstance(component, Comp.Video) for component in result.message)
+    video_component = next(
+        component for component in result.message if isinstance(component, Comp.Video)
+    )
+    assert video_component.file == ""
+    video.get_file.assert_not_awaited()
     assert any(
         isinstance(component, Comp.Plain) and component.text == "这段视频讲了什么"
         for component in result.message
@@ -187,29 +205,27 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
         voice=voice,
     )
     wav_path = tmp_path / "voice.oga.wav"
-    convert_message_globals = adapter.convert_message.__func__.__globals__
-
-    with (
-        patch.dict(
-            convert_message_globals,
-            {
-                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
-                "download_file": AsyncMock(),
-            },
-        ),
-        patch(
-            "astrbot.core.utils.media_utils.ensure_wav",
-            AsyncMock(return_value=str(wav_path)),
-        ),
-    ):
-        result = await adapter.convert_message(update, _build_context())
+    result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
     assert len(result.message) == 1
     assert isinstance(result.message[0], Comp.Record)
-    assert result.message[0].file == str(wav_path)
-    assert result.message[0].path == str(wav_path)
-    assert result.message[0].url == str(wav_path)
+    assert result.message[0].file == ""
+    assert result.message[0].url == ""
+    voice.get_file.assert_not_awaited()
+
+    media_resolver = MagicMock()
+    media_resolver.to_path = AsyncMock(return_value=str(wav_path))
+    with patch(
+        "astrbot.core.message.components.MediaResolver",
+        MagicMock(return_value=media_resolver),
+    ):
+        resolved_path = await result.message[0].convert_to_file_path()
+
+    assert resolved_path == str(wav_path)
+    voice.get_file.assert_awaited_once()
+    media_resolver.to_path.assert_awaited_once_with(target_format="wav")
+    assert result.message[0].url == "https://api.telegram.org/file/test/voice.oga"
 
 
 @pytest.mark.asyncio
@@ -419,8 +435,11 @@ async def test_telegram_document_with_missing_file_path_does_not_append_caption_
     result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
-    assert result.message == []
-    assert result.message_str == ""
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], Comp.File)
+    assert isinstance(result.message[1], Comp.Plain)
+    assert result.message_str == "ignored caption"
+    assert await result.message[0].get_file(allow_return_url=True) == ""
 
 
 @pytest.mark.asyncio
@@ -442,8 +461,12 @@ async def test_telegram_video_with_missing_file_path_does_not_append_caption_pla
     result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
-    assert result.message == []
-    assert result.message_str == ""
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], Comp.Video)
+    assert isinstance(result.message[1], Comp.Plain)
+    assert result.message_str == "ignored caption"
+    with pytest.raises(Exception, match="not a valid file"):
+        await result.message[0].convert_to_file_path()
 
 
 @pytest.mark.asyncio
@@ -465,7 +488,9 @@ async def test_telegram_sticker_with_emoji_adds_image_and_plain_text():
 
     assert result is not None
     assert isinstance(result.message[0], Comp.Image)
-    assert result.message[0].file == "https://api.telegram.org/file/test/sticker.webp"
+    assert result.message[0].file == ""
+    assert result.message[0].url == ""
+    sticker.get_file.assert_not_awaited()
     assert result.message_str == "Sticker: 🙂"
     assert any(
         isinstance(component, Comp.Plain) and component.text == "Sticker: 🙂"

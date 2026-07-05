@@ -1,5 +1,4 @@
 import asyncio
-import os
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -31,7 +30,6 @@ from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
-    MediaResolver,
     detect_image_mime_type_async,
 )
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -88,6 +86,7 @@ class WecomServer:
 
         self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
+        self._callback_tasks: set[asyncio.Task[None]] = set()
 
     async def verify(self, request):
         """内部服务器的 GET 验证入口"""
@@ -144,7 +143,7 @@ class WecomServer:
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
-                await self.callback(msg)
+                self._start_callback_task(self.callback(msg))
 
         return "success"
 
@@ -160,6 +159,19 @@ class WecomServer:
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
+
+    def _start_callback_task(self, coro: Awaitable[None]) -> None:
+        task = asyncio.create_task(coro, name="wecom:webhook-callback")
+        self._callback_tasks.add(task)
+        task.add_done_callback(self._on_callback_task_done)
+
+    def _on_callback_task_done(self, task: asyncio.Task[None]) -> None:
+        self._callback_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("企业微信 webhook 回调任务失败: %s", exc, exc_info=exc)
 
 
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
@@ -259,18 +271,35 @@ class WecomPlatformAdapter(Platform):
         )
         return False
 
+    async def _download_wecom_media_response(self, media_id: str) -> Response:
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            self.client.media.download,
+            media_id,
+        )
+
+    async def _write_wecom_temp_media(
+        self,
+        *,
+        file_name: str,
+        content: bytes,
+    ) -> str:
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        file_path = temp_dir / file_name
+        await asyncio.to_thread(file_path.write_bytes, content)
+        return str(file_path)
+
     @override
     async def send_by_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
-            await super().send_by_session(session, message_chain)
             raise Exception("企业微信客服模式不支持 send_by_session 主动发送。")
         if not self.agent_id:
-            await super().send_by_session(session, message_chain)
             raise Exception(
                 f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
             )
@@ -287,7 +316,7 @@ class WecomPlatformAdapter(Platform):
 
         event = self.create_event(message_obj)
         await event.send(message_chain)
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     @override
     def meta(self) -> PlatformMetadata:
@@ -352,6 +381,7 @@ class WecomPlatformAdapter(Platform):
 
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
+        setattr(abm, "temporary_file_paths", [])
         if isinstance(msg, TextMessage):
             abm.message_str = msg.content
             abm.self_id = str(msg.agent)
@@ -379,29 +409,21 @@ class WecomPlatformAdapter(Platform):
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, VoiceMessage):
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
-                None,
-                self.client.media.download,
-                msg.media_id,
-            )
-            temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
-            await asyncio.to_thread(Path(path).write_bytes, resp.content)
-
-            try:
-                path_wav = await MediaResolver(
-                    path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-            except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
-                path_wav = path
-                return
-
             abm.message_str = ""
             abm.self_id = str(msg.agent)
-            abm.message = [Record(file=path_wav, url=path_wav)]
+            record = Record(file="")
+
+            async def _resolve_voice_file() -> str | None:
+                resp = await self._download_wecom_media_response(msg.media_id)
+                path = await self._write_wecom_temp_media(
+                    file_name=f"wecom_{msg.media_id}.amr",
+                    content=resp.content,
+                )
+                cast(list[str], getattr(abm, "temporary_file_paths", [])).append(path)
+                return path
+
+            record.set_source_resolver(_resolve_voice_file)
+            abm.message = [record]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
                 cast(str, msg.source),
@@ -425,6 +447,7 @@ class WecomPlatformAdapter(Platform):
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
+        setattr(abm, "temporary_file_paths", [])
         abm.self_id = msg["open_kfid"]
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
@@ -444,67 +467,64 @@ class WecomPlatformAdapter(Platform):
             abm.message_str = text
         elif msgtype == "image":
             media_id = msg.get("image", {}).get("media_id", "")
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
-                None,
-                self.client.media.download,
-                media_id,
-            )
-            temp_dir = get_astrbot_temp_path()
-            mime_type = await detect_image_mime_type_async(
-                resp.content,
-                default_mime_type=None,
-            )
-            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
-            path = os.path.join(temp_dir, f"weixinkefu_{media_id}{suffix}")
-            await asyncio.to_thread(Path(path).write_bytes, resp.content)
-            abm.message = [Image(file=path, url=path)]
+            image = Image(file="")
+
+            async def _resolve_kf_image() -> str | None:
+                resp = await self._download_wecom_media_response(media_id)
+                mime_type = await detect_image_mime_type_async(
+                    resp.content,
+                    default_mime_type=None,
+                )
+                suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+                path = await self._write_wecom_temp_media(
+                    file_name=f"weixinkefu_{media_id}{suffix}",
+                    content=resp.content,
+                )
+                cast(list[str], getattr(abm, "temporary_file_paths", [])).append(path)
+                return path
+
+            image.set_source_resolver(_resolve_kf_image)
+            abm.message = [image]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
-                None,
-                self.client.media.download,
-                media_id,
-            )
+            record = Record(file="")
 
-            temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
-            await asyncio.to_thread(Path(path).write_bytes, resp.content)
+            async def _resolve_kf_voice() -> str | None:
+                resp = await self._download_wecom_media_response(media_id)
+                path = await self._write_wecom_temp_media(
+                    file_name=f"weixinkefu_{media_id}.amr",
+                    content=resp.content,
+                )
+                cast(list[str], getattr(abm, "temporary_file_paths", [])).append(path)
+                return path
 
-            try:
-                path_wav = await MediaResolver(
-                    path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-            except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
-                path_wav = path
-                return
-
-            abm.message = [Record(file=path_wav, url=path_wav)]
+            record.set_source_resolver(_resolve_kf_voice)
+            abm.message = [record]
         elif msgtype == "file":
             media_id = msg.get("file", {}).get("media_id", "")
             if not media_id:
                 logger.warning(f"微信客服文件消息缺少 media_id: {msg}")
                 return
+            file_component = File(name=f"weixinkefu_{media_id}.bin")
 
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
-                None,
-                self.client.media.download,
-                media_id,
-            )
-
-            file_name = (
-                _extract_wecom_media_filename(
-                    resp.headers.get("Content-Disposition"),
+            async def _resolve_kf_file() -> str | None:
+                resp = await self._download_wecom_media_response(media_id)
+                file_name = (
+                    _extract_wecom_media_filename(
+                        resp.headers.get("Content-Disposition"),
+                    )
+                    or f"weixinkefu_{media_id}.bin"
                 )
-                or f"weixinkefu_{media_id}.bin"
-            )
-            temp_dir = Path(get_astrbot_temp_path())
-            file_path = temp_dir / f"weixinkefu_{uuid.uuid4().hex}_{file_name}"
-            file_path.write_bytes(resp.content)
+                file_component.name = file_name
+                path = await self._write_wecom_temp_media(
+                    file_name=f"weixinkefu_{uuid.uuid4().hex}_{file_name}",
+                    content=resp.content,
+                )
+                cast(list[str], getattr(abm, "temporary_file_paths", [])).append(path)
+                return path
 
-            abm.message = [File(name=file_name, file=str(file_path))]
+            file_component.set_file_resolver(_resolve_kf_file)
+            abm.message = [file_component]
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
@@ -530,11 +550,11 @@ class WecomPlatformAdapter(Platform):
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))
 
-    def get_client(self) -> WeChatClient:
-        return self.client
-
     async def terminate(self) -> None:
         self.server.shutdown_event.set()
+        callback_tasks = list(getattr(self.server, "_callback_tasks", set()))
+        if callback_tasks:
+            await asyncio.gather(*callback_tasks, return_exceptions=True)
         try:
             await self.server.server.shutdown()
         except Exception as _:

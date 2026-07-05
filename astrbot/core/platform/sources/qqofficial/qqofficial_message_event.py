@@ -91,7 +91,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         bot: Client,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.bot = bot
+        self._bot = bot
         self.send_buffer = None
 
     async def send(self, message: MessageChain) -> None:
@@ -367,7 +367,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
-                    send_func=lambda retry_payload: self.bot.api.post_group_message(
+                    send_func=lambda retry_payload: self._bot.api.post_group_message(
                         group_openid=source.group_openid,  # type: ignore
                         **retry_payload,
                     ),
@@ -450,7 +450,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 # Guild text-channel send API (/channels/{channel_id}/messages) does not use v2 msg_type.
                 payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
-                    send_func=lambda retry_payload: self.bot.api.post_message(
+                    send_func=lambda retry_payload: self._bot.api.post_message(
                         channel_id=source.channel_id,
                         **retry_payload,
                     ),
@@ -465,7 +465,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 # Guild DM send API (/dms/{guild_id}/messages) does not use v2 msg_type.
                 payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
-                    send_func=lambda retry_payload: self.bot.api.post_dms(
+                    send_func=lambda retry_payload: self._bot.api.post_dms(
                         guild_id=source.guild_id,
                         **retry_payload,
                     ),
@@ -565,7 +565,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 route = Route(
                     "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
                 )
-                return await self.bot.api._http.request(route, json=payload)
+                return await self._bot.api._http.request(route, json=payload)
             elif "group_openid" in kwargs:
                 payload["group_openid"] = kwargs["group_openid"]
                 route = Route(
@@ -573,7 +573,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "/v2/groups/{group_openid}/files",
                     group_openid=kwargs["group_openid"],
                 )
-                return await self.bot.api._http.request(route, json=payload)
+                return await self._bot.api._http.request(route, json=payload)
             else:
                 raise ValueError("Invalid upload parameters")
 
@@ -631,7 +631,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         @_qqofficial_retry
         async def _do_upload():
-            return await self.bot.api._http.request(route, json=payload)
+            return await self._bot.api._http.request(route, json=payload)
 
         try:
             result = await _do_upload()
@@ -680,7 +680,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await self.bot.api._http.request(route, json=payload)
+        result = await self._bot.api._http.request(route, json=payload)
 
         if result is None:
             logger.warning("[QQOfficial] post_c2c_message: API 返回 None，跳过本次发送")

@@ -1,5 +1,9 @@
 import asyncio
 import base64
+import hashlib
+import hmac
+import json
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +14,10 @@ import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import MessageType
 from astrbot.core import db_helper
+from astrbot.core.platform.sources.slack.client import (
+    SlackSocketClient,
+    SlackWebhookClient,
+)
 from astrbot.core.platform.sources.slack.slack_adapter import SlackAdapter
 from tests.fixtures.helpers import make_platform_config
 
@@ -28,6 +36,15 @@ def _build_adapter(**overrides) -> SlackAdapter:
         {},
         asyncio.Queue(),
     )
+
+
+def _slack_signature(secret: str, timestamp: str, body: bytes) -> str:
+    sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
+    return "v0=" + hmac.new(
+        secret.encode("utf-8"),
+        sig_basestring.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 @pytest_asyncio.fixture(scope="module", autouse=True)
@@ -95,18 +112,86 @@ async def test_slack_convert_message_falls_back_when_slack_lookups_fail():
     assert len(result.message) == 1
     assert isinstance(result.message[0], Comp.Plain)
     assert result.message[0].text == "hello slack"
+    adapter.web_client.users_info.assert_not_awaited()
+    adapter.web_client.conversations_info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_slack_webhook_client_background_dispatches_event_handler(monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _handler(_payload):
+        started.set()
+        await release.wait()
+
+    client = SlackWebhookClient(
+        web_client=AsyncMock(),
+        signing_secret="secret",
+        event_handler=_handler,
+    )
+
+    payload = {"type": "event_callback", "event": {"type": "message"}}
+    body = json.dumps(payload).encode("utf-8")
+    timestamp = str(int(time.time()))
+
+    class _Req:
+        headers = {
+            "X-Slack-Request-Timestamp": timestamp,
+            "X-Slack-Signature": _slack_signature("secret", timestamp, body),
+        }
+
+        async def get_data(self):
+            return body
+
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.client.time.time",
+        lambda: int(timestamp),
+    )
+
+    response = await client.handle_callback(_Req())
+
+    assert response.status_code == 200
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    release.set()
+    if client._event_tasks:
+        await asyncio.gather(*list(client._event_tasks), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_slack_socket_client_background_dispatches_event_handler():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _handler(_req):
+        started.set()
+        await release.wait()
+
+    client = SlackSocketClient(
+        web_client=AsyncMock(),
+        app_token="xapp-test",
+        event_handler=_handler,
+    )
+    client.socket_client = SimpleNamespace(
+        send_socket_mode_response=AsyncMock(),
+        disconnect=AsyncMock(),
+        close=AsyncMock(),
+    )
+    request = SimpleNamespace(envelope_id="env-1")
+
+    await client._handle_events(AsyncMock(), request)
+
+    client.socket_client.send_socket_mode_response.assert_awaited_once()
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    release.set()
+    if client._event_tasks:
+        await asyncio.gather(*list(client._event_tasks), return_exceptions=True)
 
 
 @pytest.mark.asyncio
 async def test_slack_convert_message_uses_blocks_and_attachment_parsing():
     adapter = _build_adapter()
     adapter.bot_self_id = "B1"
-    adapter.web_client.users_info = AsyncMock(
-        return_value={"user": {"real_name": "Sender Name"}}
-    )
-    adapter.web_client.conversations_info = AsyncMock(
-        return_value={"channel": {"is_im": True}}
-    )
     adapter._parse_blocks = MagicMock(
         return_value=[
             Comp.Plain("Hello "),
@@ -139,33 +224,28 @@ async def test_slack_convert_message_uses_blocks_and_attachment_parsing():
 
     assert result.type is MessageType.FRIEND_MESSAGE
     assert result.session_id == "U1"
-    assert result.sender.nickname == "Sender Name"
+    assert result.sender.nickname == "U1"
     assert result.message_str == "Hello world"
     assert isinstance(result.message[0], Comp.Plain)
     assert isinstance(result.message[1], Comp.At)
     assert isinstance(result.message[2], Comp.Plain)
     assert isinstance(result.message[3], Comp.Image)
     assert isinstance(result.message[4], Comp.File)
+    assert result.message[3].file == ""
     adapter._parse_blocks.assert_called_once_with([{"type": "rich_text"}])
-    adapter.get_file_base64.assert_awaited_once_with(
-        "https://files.example.com/image"
-    )
+    adapter.get_file_base64.assert_not_awaited()
+
+    await result.message[3]._resolve_deferred_source()
+
+    adapter.get_file_base64.assert_awaited_once_with("https://files.example.com/image")
+    assert result.message[3].file == "base64://base64-image"
 
 
 @pytest.mark.asyncio
 async def test_slack_convert_message_parses_mentions_and_mention_lookup_failures():
     adapter = _build_adapter()
     adapter.bot_self_id = "B1"
-
-    async def users_info(*, user: str):
-        if user == "U1":
-            return {"user": {"real_name": "Sender Name"}}
-        raise RuntimeError("mention lookup failed")
-
-    adapter.web_client.users_info = AsyncMock(side_effect=users_info)
-    adapter.web_client.conversations_info = AsyncMock(
-        return_value={"channel": {"is_im": False}}
-    )
+    adapter.web_client.users_info = AsyncMock()
 
     result = await adapter.convert_message(
         {
@@ -185,6 +265,7 @@ async def test_slack_convert_message_parses_mentions_and_mention_lookup_failures
     assert result.message[0].name == ""
     assert isinstance(result.message[1], Comp.Plain)
     assert result.message[1].text == "hi there"
+    adapter.web_client.users_info.assert_not_awaited()
 
 
 def test_slack_parse_blocks_handles_rich_text_lists_and_markdown_sections():
@@ -336,10 +417,6 @@ async def test_slack_send_by_session_uses_dm_session_id_directly():
 async def test_slack_convert_message_uses_group_fallback_when_conversation_lookup_fails():
     adapter = _build_adapter()
     adapter.bot_self_id = "B1"
-    adapter.web_client.users_info = AsyncMock(
-        return_value={"user": {"real_name": "Sender Name"}}
-    )
-    adapter.web_client.conversations_info = AsyncMock(side_effect=RuntimeError("boom"))
 
     result = await adapter.convert_message(
         {
@@ -360,12 +437,6 @@ async def test_slack_convert_message_uses_group_fallback_when_conversation_looku
 async def test_slack_convert_message_keeps_whitespace_only_text_out_of_components():
     adapter = _build_adapter()
     adapter.bot_self_id = "B1"
-    adapter.web_client.users_info = AsyncMock(
-        return_value={"user": {"real_name": "Sender Name"}}
-    )
-    adapter.web_client.conversations_info = AsyncMock(
-        return_value={"channel": {"is_im": False}}
-    )
 
     result = await adapter.convert_message(
         {

@@ -10,10 +10,12 @@ from astrbot import logger
 
 from .kook_types import KookApiPaths, KookUserViewResponse
 
-USER_VIEW_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=3)
+USER_VIEW_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=1)
 ROLES_CACHE_MAX_SIZE = 2000
 MAX_RETRY_TIMES = 3
 RETRY_INTERVAL_SECOND = 1 * 60
+ROLE_LOOKUP_WAIT_TIMEOUT_SECONDS = 0.35
+SLOW_ROLE_LOOKUP_LOG_THRESHOLD_SECONDS = 0.2
 
 
 @dataclass
@@ -51,13 +53,17 @@ class KookRolesRecord:
         self._max_retry_times = MAX_RETRY_TIMES
         self._retry_interval = RETRY_INTERVAL_SECOND
         self._roles_cache: OrderedDict[int, RolesCache] = OrderedDict()
-        self._pending_tasks: dict[int, asyncio.Future] = {}
+        self._pending_tasks: dict[int, asyncio.Future[set[int] | None]] = {}
+        self._fetch_tasks: dict[int, asyncio.Task[None]] = {}
 
     def set_bot_id(self, bot_id: str):
         self._bot_id = bot_id
 
     def clear_guild_roles_cache(self, guild_id: int):
         self._roles_cache.pop(guild_id, None)
+        pending_task = self._fetch_tasks.pop(guild_id, None)
+        if pending_task is not None:
+            pending_task.cancel()
         self._pending_tasks.pop(guild_id, None)
 
     async def _fetch_roles_by_guild_id(self, guild_id: int) -> set[int] | None:
@@ -105,37 +111,49 @@ class KookRolesRecord:
             )
             return
 
-    async def has_role_in_channel(self, role_id: int, guild_id: int) -> bool:
-        if (cache := self._roles_cache.get(guild_id)) is not None:
-            self._roles_cache.move_to_end(guild_id)
-            roles = cache.value
-            if roles is not None:
-                return role_id in roles
-
-        new_future: asyncio.Future[set[int] | None] = asyncio.Future()
-        actual_future: asyncio.Future[set[int] | None] = self._pending_tasks.setdefault(
-            guild_id, new_future
+    def _should_back_off(self, guild_id: int) -> bool:
+        cache = self._roles_cache.get(guild_id)
+        return bool(
+            cache is not None
+            and cache.failed_count > self._max_retry_times
+            and time.time() - cache.latest_update_time < self._retry_interval
         )
 
-        if actual_future is not new_future:
-            roles = await actual_future
-            if roles is None:
-                return False
-            return role_id in roles
+    def prefetch_guild_roles(self, guild_id: int) -> None:
+        if (cache := self._roles_cache.get(guild_id)) is not None:
+            self._roles_cache.move_to_end(guild_id)
+            if cache.value is not None:
+                return
 
+        if guild_id in self._pending_tasks:
+            return
+
+        if self._should_back_off(guild_id):
+            return
+
+        if len(self._roles_cache) + 1 > self._cache_max_size:
+            self._roles_cache.popitem(last=False)
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[set[int] | None] = loop.create_future()
+        task = asyncio.create_task(
+            self._refresh_guild_roles(guild_id, future),
+            name=f"kook_roles_prefetch_{guild_id}",
+        )
+        self._pending_tasks[guild_id] = future
+        self._fetch_tasks[guild_id] = task
+        task.add_done_callback(
+            lambda done_task, guild_id=guild_id: self._on_fetch_task_done(
+                guild_id, done_task
+            )
+        )
+
+    async def _refresh_guild_roles(
+        self,
+        guild_id: int,
+        future: asyncio.Future[set[int] | None],
+    ) -> None:
         try:
-            if (cache := self._roles_cache.get(guild_id)) is not None:
-                if (
-                    cache.failed_count > self._max_retry_times
-                    and time.time() - cache.latest_update_time < self._retry_interval
-                ):
-                    new_future.set_result(None)
-                    return False
-
-            # 简单的容量控制 (LRU)
-            if len(self._roles_cache) + 1 > self._cache_max_size:
-                self._roles_cache.popitem(last=False)
-
             roles_set = await self._fetch_roles_by_guild_id(guild_id)
 
             cache = self._roles_cache.get(guild_id)
@@ -146,19 +164,77 @@ class KookRolesRecord:
                 cache = RolesCache(roles_set, latest_update_time=time.time())
                 self._roles_cache[guild_id] = cache
 
-            result = False
             if roles_set is None:
                 cache.add_failed()
-            else:
-                result = role_id in roles_set
 
-            new_future.set_result(roles_set)
-            return result
+            if not future.done():
+                future.set_result(roles_set)
+        except asyncio.CancelledError:
+            if not future.done():
+                future.cancel()
+            raise
         except Exception as e:
-            new_future.set_result(None)
+            if not future.done():
+                future.set_result(None)
             logger.error(
                 f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时发生异常: {e}'
             )
+
+    def _on_fetch_task_done(
+        self,
+        guild_id: int,
+        task: asyncio.Task[None],
+    ) -> None:
+        self._fetch_tasks.pop(guild_id, None)
+        self._pending_tasks.pop(guild_id, None)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f'[KOOK] 刷新频道"{guild_id}"角色缓存任务失败: {exc}')
+
+    async def has_role_in_channel(
+        self,
+        role_id: int,
+        guild_id: int,
+        *,
+        wait_timeout: float = ROLE_LOOKUP_WAIT_TIMEOUT_SECONDS,
+    ) -> bool:
+        started_at = time.monotonic()
+        if (cache := self._roles_cache.get(guild_id)) is not None:
+            self._roles_cache.move_to_end(guild_id)
+            roles = cache.value
+            if roles is not None:
+                return role_id in roles
+
+        self.prefetch_guild_roles(guild_id)
+        pending = self._pending_tasks.get(guild_id)
+        if pending is None:
             return False
-        finally:
-            self._pending_tasks.pop(guild_id, None)
+
+        try:
+            if wait_timeout <= 0:
+                roles = await asyncio.shield(pending)
+            else:
+                roles = await asyncio.wait_for(
+                    asyncio.shield(pending),
+                    timeout=wait_timeout,
+                )
+        except TimeoutError:
+            logger.info(
+                '[KOOK] 频道"%s"角色缓存查询超时(%.2fs)，本条消息跳过 role mention 命中判定，等待后台缓存补齐。',
+                guild_id,
+                wait_timeout,
+            )
+            return False
+
+        elapsed = time.monotonic() - started_at
+        if elapsed >= SLOW_ROLE_LOOKUP_LOG_THRESHOLD_SECONDS:
+            logger.info(
+                '[KOOK] 频道"%s"角色缓存命中耗时 %.2fs',
+                guild_id,
+                elapsed,
+            )
+        if roles is None:
+            return False
+        return role_id in roles

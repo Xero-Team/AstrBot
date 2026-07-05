@@ -256,8 +256,9 @@ class QQOfficialPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         await self._send_by_session_common(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def _send_by_session_common(
         self,
@@ -495,13 +496,15 @@ class QQOfficialPlatformAdapter(Platform):
     ) -> Record:
         ext = Path(filename).suffix.lower()
         source_ext = ext or ".audio"
-        path_wav = await MediaResolver(
-            url,
-            media_type="audio",
-            default_suffix=source_ext,
-        ).to_path(target_format="wav")
-
-        return Record(file=path_wav, url=path_wav)
+        record = Record(file="")
+        record.set_source_resolver(
+            lambda url=url, source_ext=source_ext: MediaResolver(
+                url,
+                media_type="audio",
+                default_suffix=source_ext,
+            ).to_path(target_format="wav")
+        )
+        return record
 
     @staticmethod
     async def _append_attachments(
@@ -550,20 +553,12 @@ class QQOfficialPlatformAdapter(Platform):
                 }
 
                 if content_type.startswith("voice") or ext in audio_exts:
-                    try:
-                        msg.append(
-                            await QQOfficialPlatformAdapter._prepare_audio_attachment(
-                                url,
-                                filename,
-                            )
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "[QQOfficial] Failed to prepare audio attachment %s: %s",
+                    msg.append(
+                        await QQOfficialPlatformAdapter._prepare_audio_attachment(
                             url,
-                            e,
+                            filename,
                         )
-                        msg.append(Record.fromURL(url))
+                    )
                 elif content_type.startswith("video") or ext in video_exts:
                     msg.append(Video.fromURL(url))
                 elif content_type.startswith("image") or ext in image_exts:
@@ -719,9 +714,6 @@ class QQOfficialPlatformAdapter(Platform):
 
     async def run(self) -> None:
         await self.client.start(appid=self.appid, secret=self.secret)
-
-    def get_client(self) -> botClient:
-        return self.client
 
     async def terminate(self) -> None:
         await self.client.shutdown()

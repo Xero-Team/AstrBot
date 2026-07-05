@@ -23,13 +23,13 @@ class NapCatMessageEvent(AstrMessageEvent):
         adapter: NapCatPlatformAdapter,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.adapter = adapter
+        self._adapter = adapter
 
     async def send(self, message: MessageChain) -> None:
         if not message.chain:
-            return
-        await self.adapter.send_by_session(self.session, message)
-        await super().send(message)
+            return await super().send(message)
+        await self._adapter.send_by_route(self.route_identity, message)
+        return await super().send(message)
 
     async def delete(self) -> None:
         if self.get_extra("onebot_post_type") != "message":
@@ -38,7 +38,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         message_id = getattr(self.message_obj, "message_id", "")
         if not message_id:
             raise ValueError("current NapCat event does not contain a message_id")
-        await self.adapter.client.delete_message(message_id)
+        await self._adapter.client.delete_message(message_id)
 
     def is_notice_type(self, notice_type: str, *, sub_type: str | None = None) -> bool:
         if self.get_extra("onebot_post_type") != "notice":
@@ -254,7 +254,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         user_id: str | int | None = None,
     ) -> dict[str, object]:
         resolved_user_id = self._resolve_online_file_user_id(user_id=user_id)
-        return await self.adapter.client.get_online_file_messages(
+        return await self._adapter.client.get_online_file_messages(
             user_id=resolved_user_id
         )
 
@@ -265,7 +265,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         name: str | None = None,
         thumb_path: str | None = None,
     ) -> dict[str, object]:
-        return await self.adapter.client.create_flash_task(
+        return await self._adapter.client.create_flash_task(
             files=files,
             name=name,
             thumb_path=thumb_path,
@@ -275,7 +275,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         self,
         fileset_id: str,
     ) -> dict[str, object]:
-        return await self.adapter.client.get_flash_file_list(fileset_id=fileset_id)
+        return await self._adapter.client.get_flash_file_list(fileset_id=fileset_id)
 
     async def get_flash_file_url(
         self,
@@ -284,7 +284,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         file_name: str | None = None,
         file_index: int | float | None = None,
     ) -> dict[str, object]:
-        return await self.adapter.client.get_flash_file_url(
+        return await self._adapter.client.get_flash_file_url(
             fileset_id=fileset_id,
             file_name=file_name,
             file_index=file_index,
@@ -305,7 +305,7 @@ class NapCatMessageEvent(AstrMessageEvent):
                 require_element_id=True,
             )
         )
-        return await self.adapter.client.receive_online_file(
+        return await self._adapter.client.receive_online_file(
             user_id=resolved_user_id,
             msg_id=resolved_msg_id,
             element_id=resolved_element_id,
@@ -326,7 +326,7 @@ class NapCatMessageEvent(AstrMessageEvent):
                 require_element_id=True,
             )
         )
-        return await self.adapter.client.refuse_online_file(
+        return await self._adapter.client.refuse_online_file(
             user_id=resolved_user_id,
             msg_id=resolved_msg_id,
             element_id=resolved_element_id,
@@ -344,7 +344,7 @@ class NapCatMessageEvent(AstrMessageEvent):
             element_id=None,
             require_element_id=False,
         )
-        return await self.adapter.client.cancel_online_file(
+        return await self._adapter.client.cancel_online_file(
             user_id=resolved_user_id,
             msg_id=resolved_msg_id,
         )
@@ -357,7 +357,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         user_id: str | int | None = None,
     ) -> dict[str, object]:
         resolved_user_id = self._resolve_online_file_user_id(user_id=user_id)
-        return await self.adapter.client.send_online_file(
+        return await self._adapter.client.send_online_file(
             user_id=resolved_user_id,
             file_path=file_path,
             file_name=file_name,
@@ -371,7 +371,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         user_id: str | int | None = None,
     ) -> dict[str, object]:
         resolved_user_id = self._resolve_online_file_user_id(user_id=user_id)
-        return await self.adapter.client.send_online_folder(
+        return await self._adapter.client.send_online_folder(
             user_id=resolved_user_id,
             folder_path=folder_path,
             folder_name=folder_name,
@@ -385,7 +385,7 @@ class NapCatMessageEvent(AstrMessageEvent):
             group_id = self.get_group_id().strip()
             if not group_id:
                 raise ValueError("group_id is required for group flash messages")
-            return await self.adapter.client.send_flash_message(
+            return await self._adapter.client.send_flash_message(
                 fileset_id=fileset_id,
                 group_id=group_id,
             )
@@ -393,7 +393,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         user_id = self.get_sender_id().strip()
         if not user_id:
             raise ValueError("user_id is required for private flash messages")
-        return await self.adapter.client.send_flash_message(
+        return await self._adapter.client.send_flash_message(
             fileset_id=fileset_id,
             user_id=user_id,
         )
@@ -407,7 +407,7 @@ class NapCatMessageEvent(AstrMessageEvent):
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.set_group_admin(
+        return await self._adapter.client.set_group_admin(
             group_id=resolved_group_id,
             user_id=resolved_user_id,
             enable=enable,
@@ -422,7 +422,7 @@ class NapCatMessageEvent(AstrMessageEvent):
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.set_group_ban(
+        return await self._adapter.client.set_group_ban(
             group_id=resolved_group_id,
             user_id=resolved_user_id,
             duration=duration,
@@ -437,7 +437,7 @@ class NapCatMessageEvent(AstrMessageEvent):
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.set_group_card(
+        return await self._adapter.client.set_group_card(
             group_id=resolved_group_id,
             user_id=resolved_user_id,
             card=card,
@@ -452,7 +452,7 @@ class NapCatMessageEvent(AstrMessageEvent):
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.set_group_kick(
+        return await self._adapter.client.set_group_kick(
             group_id=resolved_group_id,
             user_id=resolved_user_id,
             reject_add_request=reject_add_request,
@@ -469,7 +469,7 @@ class NapCatMessageEvent(AstrMessageEvent):
             raise ValueError("user_ids is required for NapCat batch group kicks")
 
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.set_group_kick_members(
+        return await self._adapter.client.set_group_kick_members(
             group_id=resolved_group_id,
             user_ids=user_ids,
             reject_add_request=reject_add_request,
@@ -482,7 +482,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         is_dismiss: bool | None = None,
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.set_group_leave(
+        return await self._adapter.client.set_group_leave(
             group_id=resolved_group_id,
             is_dismiss=is_dismiss,
         )
@@ -494,7 +494,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         group_id: str | int | None = None,
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.set_group_whole_ban(
+        return await self._adapter.client.set_group_whole_ban(
             group_id=resolved_group_id,
             enable=enable,
         )
@@ -504,7 +504,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         message_id: str | int | float | None = None,
     ) -> dict[str, object]:
         resolved_message_id = self._resolve_message_id(message_id)
-        return await self.adapter.client.set_essence_message(
+        return await self._adapter.client.set_essence_message(
             message_id=resolved_message_id,
         )
 
@@ -523,7 +523,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         if not resolved_group_id:
             resolved_group_id = self.get_group_id().strip()
 
-        return await self.adapter.client.delete_essence_message(
+        return await self._adapter.client.delete_essence_message(
             message_id=message_id,
             msg_seq=msg_seq,
             msg_random=msg_random,
@@ -543,7 +543,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         image: str | None = None,
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.send_group_notice(
+        return await self._adapter.client.send_group_notice(
             group_id=resolved_group_id,
             content=content,
             pinned=pinned,
@@ -561,7 +561,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         times: int | float = 1,
     ) -> dict[str, object]:
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.send_like(
+        return await self._adapter.client.send_like(
             user_id=resolved_user_id,
             times=times,
         )
@@ -579,12 +579,12 @@ class NapCatMessageEvent(AstrMessageEvent):
             resolved_group_id = self.get_group_id().strip()
 
         if resolved_group_id:
-            return await self.adapter.client.group_poke(
+            return await self._adapter.client.group_poke(
                 user_id=resolved_user_id,
                 group_id=resolved_group_id,
                 target_id=target_id,
             )
-        return await self.adapter.client.friend_poke(
+        return await self._adapter.client.friend_poke(
             user_id=resolved_user_id,
             target_id=target_id,
         )
@@ -596,7 +596,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         event_type: int | float = 1,
     ) -> dict[str, object]:
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.set_input_status(
+        return await self._adapter.client.set_input_status(
             user_id=resolved_user_id,
             event_type=event_type,
         )
@@ -609,7 +609,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         message_seq: int | str | None = None,
     ) -> list[dict[str, object]]:
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.get_group_msg_history(
+        return await self._adapter.client.get_group_msg_history(
             group_id=resolved_group_id,
             count=count,
             message_seq=message_seq,
@@ -623,14 +623,14 @@ class NapCatMessageEvent(AstrMessageEvent):
         message_seq: int | str | None = None,
     ) -> list[dict[str, object]]:
         resolved_user_id = self._resolve_user_id(user_id)
-        return await self.adapter.client.get_friend_msg_history(
+        return await self._adapter.client.get_friend_msg_history(
             user_id=resolved_user_id,
             count=count,
             message_seq=message_seq,
         )
 
     async def fetch_custom_face(self, *, count: int = 48) -> list[object]:
-        return await self.adapter.client.fetch_custom_face(count=count)
+        return await self._adapter.client.fetch_custom_face(count=count)
 
     async def get_ai_characters(
         self,
@@ -639,7 +639,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         chat_type: int | float = 1,
     ) -> list[object]:
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.get_ai_characters(
+        return await self._adapter.client.get_ai_characters(
             group_id=resolved_group_id,
             chat_type=chat_type,
         )
@@ -654,7 +654,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         timeout_seconds: float = 10.0,
     ) -> dict[str, object]:
         resolved_group_id = self._resolve_group_id(group_id)
-        return await self.adapter.client.send_group_ai_record(
+        return await self._adapter.client.send_group_ai_record(
             group_id=resolved_group_id,
             character=character,
             text=text,
@@ -693,7 +693,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         if request_type == "friend":
             if reason is not None:
                 raise ValueError("friend add requests do not support a reject reason")
-            await self.adapter.client.set_friend_add_request(
+            await self._adapter.client.set_friend_add_request(
                 flag=flag,
                 approve=approve,
                 remark=remark,
@@ -702,7 +702,7 @@ class NapCatMessageEvent(AstrMessageEvent):
 
         if remark is not None:
             raise ValueError("group add requests do not support a remark")
-        await self.adapter.client.set_group_add_request(
+        await self._adapter.client.set_group_add_request(
             flag=flag,
             approve=approve,
             reason=reason,
@@ -813,15 +813,15 @@ class NapCatMessageEvent(AstrMessageEvent):
                         break
         if not resolved_id:
             return None
-        return await self.adapter.client.get_forward_message(resolved_id)
+        return await self._adapter.client.get_forward_message(resolved_id)
 
     async def get_group(self, group_id=None, **kwargs):
         resolved_group_id = str(group_id) if group_id else self.get_group_id()
         if not resolved_group_id:
             return None
 
-        info = await self.adapter.client.get_group_info(group_id=resolved_group_id)
-        members = await self.adapter.client.get_group_member_list(
+        info = await self._adapter.client.get_group_info(group_id=resolved_group_id)
+        members = await self._adapter.client.get_group_member_list(
             resolved_group_id,
             no_cache=kwargs.get("no_cache"),
         )

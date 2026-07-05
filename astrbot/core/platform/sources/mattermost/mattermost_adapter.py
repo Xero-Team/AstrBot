@@ -63,14 +63,15 @@ class MattermostPlatformAdapter(Platform):
         self._seen_post_ids: dict[str, float] = {}
         self._seen_post_queue: deque[tuple[str, float]] = deque()
         self._dedup_ttl = 300.0
+        self._ws_payload_tasks: set[asyncio.Task[None]] = set()
 
     async def send_by_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         await self.client.send_message_chain(session.session_id, message_chain)
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
@@ -135,9 +136,29 @@ class MattermostPlatformAdapter(Platform):
                     )
                     continue
                 if isinstance(payload, dict):
-                    await self._handle_ws_event(payload)
+                    self._start_ws_payload_task(payload)
         finally:
+            payload_tasks = list(self._ws_payload_tasks)
+            if payload_tasks:
+                await asyncio.gather(*payload_tasks, return_exceptions=True)
+            self._ws_payload_tasks.clear()
             await ws.close()
+
+    def _start_ws_payload_task(self, payload: dict[str, Any]) -> None:
+        task = asyncio.create_task(
+            self._handle_ws_event(payload),
+            name="mattermost:ws-payload",
+        )
+        self._ws_payload_tasks.add(task)
+        task.add_done_callback(self._on_ws_payload_task_done)
+
+    def _on_ws_payload_task_done(self, task: asyncio.Task[None]) -> None:
+        self._ws_payload_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Mattermost websocket payload handling failed: %s", exc)
 
     async def _handle_ws_event(self, payload: dict[str, Any]) -> None:
         if payload.get("event") != "posted":
@@ -224,10 +245,11 @@ class MattermostPlatformAdapter(Platform):
             abm.group_id = channel_id
 
         if file_ids:
+            attachment_infos = post.get("metadata", {}).get("files")
             (
                 attachment_components,
                 temp_paths,
-            ) = await self.client.parse_post_attachments(file_ids)
+            ) = await self.client.parse_post_attachments(file_ids, attachment_infos)
             abm.message.extend(attachment_components)
             setattr(abm, "temporary_file_paths", temp_paths)
 
@@ -328,6 +350,3 @@ class MattermostPlatformAdapter(Platform):
     async def terminate(self) -> None:
         self._running = False
         await self.client.close()
-
-    def get_client(self) -> MattermostClient:
-        return self.client

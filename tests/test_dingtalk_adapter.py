@@ -11,6 +11,7 @@ from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import MessageType
 from astrbot.core import db_helper
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
     DINGTALK_RECONNECT_INITIAL_DELAY,
@@ -19,6 +20,18 @@ from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
     _dingtalk_reconnect_delay,
 )
 from astrbot.core.platform.sources.dingtalk.dingtalk_event import DingtalkMessageEvent
+
+
+def _dingtalk_platform_meta():
+    return SimpleNamespace(id="dingtalk", name="dingtalk")
+
+
+def _dingtalk_route_identity(target_id: str):
+    return PlatformRouteIdentity(
+        platform_id="dingtalk",
+        message_type=MessageType.FRIEND_MESSAGE,
+        target_id=target_id,
+    )
 
 
 def test_dingtalk_reconnect_delay_uses_exponential_backoff():
@@ -263,8 +276,8 @@ async def test_dingtalk_convert_msg_rich_text_group_parses_mentions_and_images()
     assert isinstance(result.message[2], Plain)
     assert result.message[2].text == " hello "
     assert isinstance(result.message[3], Image)
-    assert result.message[3].file.endswith("/tmp/rich.jpg")
-    adapter.download_ding_file.assert_awaited_once_with("pic-1", "robot-code", "jpg")
+    assert result.message[3].file == ""
+    adapter.download_ding_file.assert_not_awaited()
     adapter._remember_sender_binding.assert_awaited_once_with(message, result)
 
 
@@ -363,13 +376,14 @@ async def test_dingtalk_convert_msg_file_download_failure_leaves_message_empty()
 
     result = await adapter.convert_msg(message)
 
-    assert result.message == []
-    adapter.download_ding_file.assert_awaited_once_with("file-1", "robot-code", "pdf")
+    assert len(result.message) == 1
+    assert isinstance(result.message[0], File)
+    adapter.download_ding_file.assert_not_awaited()
     adapter._remember_sender_binding.assert_awaited_once_with(message, result)
 
 
 @pytest.mark.asyncio
-async def test_dingtalk_convert_msg_audio_uses_default_amr_extension_and_converts_to_wav():
+async def test_dingtalk_convert_msg_audio_uses_default_amr_extension_lazily():
     adapter = _build_adapter()
     adapter.download_ding_file = AsyncMock(return_value="/tmp/voice.amr")
     adapter._remember_sender_binding = AsyncMock()
@@ -389,29 +403,144 @@ async def test_dingtalk_convert_msg_audio_uses_default_amr_extension_and_convert
         sender_staff_id="",
     )
 
-    with patch.object(
-        dingtalk_adapter,
-        "MediaResolver",
-        return_value=SimpleNamespace(to_path=AsyncMock(return_value="/tmp/voice.wav")),
-    ) as media_resolver:
-        result = await adapter.convert_msg(message)
+    result = await adapter.convert_msg(message)
 
-    adapter.download_ding_file.assert_awaited_once_with("voice-1", "robot-code", "amr")
-    media_resolver.assert_called_once_with(
-        "/tmp/voice.amr",
-        media_type="audio",
-        default_suffix=".wav",
-    )
     assert len(result.message) == 1
     assert isinstance(result.message[0], Record)
-    assert result.message[0].file == "/tmp/voice.wav"
+    assert result.message[0].file == ""
+    adapter.download_ding_file.assert_not_awaited()
     adapter._remember_sender_binding.assert_awaited_once_with(message, result)
 
 
 @pytest.mark.asyncio
-async def test_dingtalk_convert_msg_file_without_name_uses_downloaded_basename():
+async def test_dingtalk_rich_text_image_resolves_download_lazily():
     adapter = _build_adapter()
-    adapter.download_ding_file = AsyncMock(return_value="C:/tmp/downloaded.bin")
+    adapter.download_ding_file = AsyncMock(return_value="/tmp/rich.jpg")
+    adapter._remember_sender_binding = AsyncMock()
+
+    message = SimpleNamespace(
+        create_at=1_700_000_000_123,
+        conversation_type="2",
+        sender_id="$:LWCP_v1:$user-1",
+        sender_nick="Alice",
+        chatbot_user_id="$:LWCP_v1:$bot-1",
+        message_id="msg-1",
+        at_users=[],
+        conversation_id="group-1",
+        message_type="richText",
+        robot_code="robot-code",
+        extensions={"content": {}},
+        rich_text_content=SimpleNamespace(
+            rich_text_list=[
+                {"type": "picture", "downloadCode": "pic-1"},
+            ]
+        ),
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    image = result.message[0]
+    assert isinstance(image, Image)
+    assert image.file == ""
+    adapter.download_ding_file.assert_not_awaited()
+
+    with patch(
+        "astrbot.core.message.components.MediaResolver",
+        return_value=SimpleNamespace(to_path=AsyncMock(return_value="/tmp/rich.jpg")),
+    ) as media_resolver:
+        resolved_path = await image.convert_to_file_path()
+
+    assert resolved_path == "/tmp/rich.jpg"
+    adapter.download_ding_file.assert_awaited_once_with("pic-1", "robot-code", "jpg")
+    media_resolver.assert_called_once_with("/tmp/rich.jpg", media_type="image")
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_audio_record_resolves_download_lazily():
+    adapter = _build_adapter()
+    adapter.download_ding_file = AsyncMock(return_value="/tmp/voice.amr")
+    adapter._remember_sender_binding = AsyncMock()
+
+    message = SimpleNamespace(
+        create_at=1_700_000_260_000,
+        conversation_type="1",
+        sender_id="$:LWCP_v1:$user-4",
+        sender_nick="Eve",
+        chatbot_user_id="$:LWCP_v1:$bot-1",
+        message_id="msg-audio",
+        at_users=[],
+        conversation_id="ignored",
+        message_type="audio",
+        robot_code="robot-code",
+        extensions={"content": {"downloadCode": "voice-1"}},
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    record = result.message[0]
+    assert isinstance(record, Record)
+    adapter.download_ding_file.assert_not_awaited()
+
+    media_resolver = SimpleNamespace(to_path=AsyncMock(return_value="/tmp/voice.wav"))
+    with patch(
+        "astrbot.core.message.components.MediaResolver",
+        return_value=media_resolver,
+    ) as resolver_factory:
+        resolved_path = await record.convert_to_file_path()
+
+    assert resolved_path == "/tmp/voice.wav"
+    adapter.download_ding_file.assert_awaited_once_with("voice-1", "robot-code", "amr")
+    resolver_factory.assert_called_once_with(
+        "/tmp/voice.amr",
+        media_type="audio",
+        default_suffix=".wav",
+    )
+    media_resolver.to_path.assert_awaited_once_with(target_format="wav")
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_file_resolves_download_lazily(tmp_path):
+    adapter = _build_adapter()
+    downloaded = tmp_path / "downloaded.pdf"
+    downloaded.write_bytes(b"payload")
+    adapter.download_ding_file = AsyncMock(return_value=str(downloaded))
+    adapter._remember_sender_binding = AsyncMock()
+
+    message = SimpleNamespace(
+        create_at=1_700_000_250_000,
+        conversation_type="2",
+        sender_id="$:LWCP_v1:$user-3",
+        sender_nick="Dora",
+        chatbot_user_id="$:LWCP_v1:$bot-1",
+        message_id="msg-file",
+        at_users=[],
+        conversation_id="group-3",
+        message_type="file",
+        robot_code="robot-code",
+        extensions={"content": {"downloadCode": "file-1", "fileName": "report.pdf"}},
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    file_seg = result.message[0]
+    assert isinstance(file_seg, File)
+    adapter.download_ding_file.assert_not_awaited()
+
+    resolved_path = await file_seg.get_file()
+
+    assert resolved_path == str(downloaded)
+    adapter.download_ding_file.assert_awaited_once_with("file-1", "robot-code", "pdf")
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_convert_msg_file_without_name_uses_downloaded_basename(tmp_path):
+    adapter = _build_adapter()
+    downloaded = tmp_path / "downloaded.bin"
+    downloaded.write_bytes(b"payload")
+    adapter.download_ding_file = AsyncMock(return_value=str(downloaded))
     adapter._remember_sender_binding = AsyncMock()
 
     message = SimpleNamespace(
@@ -431,11 +560,15 @@ async def test_dingtalk_convert_msg_file_without_name_uses_downloaded_basename()
 
     result = await adapter.convert_msg(message)
 
-    adapter.download_ding_file.assert_awaited_once_with("file-2", "robot-code", "file")
+    adapter.download_ding_file.assert_not_awaited()
     assert len(result.message) == 1
     assert isinstance(result.message[0], File)
+    assert result.message[0].name == "dingtalk_file.file"
+    resolved_path = await result.message[0].get_file()
+    adapter.download_ding_file.assert_awaited_once_with("file-2", "robot-code", "file")
     assert result.message[0].name == "downloaded.bin"
-    assert result.message[0].file_ == "C:/tmp/downloaded.bin"
+    assert result.message[0].file_ == str(downloaded)
+    assert resolved_path == str(downloaded)
     adapter._remember_sender_binding.assert_awaited_once_with(message, result)
 
 
@@ -786,7 +919,8 @@ async def test_dingtalk_send_message_chain_skips_file_when_path_is_missing():
 @pytest.mark.asyncio
 async def test_dingtalk_event_send_streaming_buffers_plain_segments_once():
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
-    event.platform_meta = SimpleNamespace(name="dingtalk")
+    event.platform_meta = _dingtalk_platform_meta()
+    event.route_identity = _dingtalk_route_identity("user-1")
     event._has_send_oper = False
     event.send = AsyncMock()
 
@@ -804,8 +938,9 @@ async def test_dingtalk_event_send_streaming_buffers_plain_segments_once():
 @pytest.mark.asyncio
 async def test_dingtalk_event_send_without_adapter_logs_and_skips_parent_send(monkeypatch):
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
-    event.adapter = None
-    event.platform_meta = SimpleNamespace(name="dingtalk")
+    event._adapter = None
+    event.platform_meta = _dingtalk_platform_meta()
+    event.route_identity = _dingtalk_route_identity("user-1")
     event.message_obj = SimpleNamespace(raw_message={})
     event._has_send_oper = False
     logger_error = MagicMock()
@@ -825,7 +960,8 @@ async def test_dingtalk_event_send_without_adapter_logs_and_skips_parent_send(mo
 @pytest.mark.asyncio
 async def test_dingtalk_event_send_streaming_returns_none_for_empty_generator():
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
-    event.platform_meta = SimpleNamespace(name="dingtalk")
+    event.platform_meta = _dingtalk_platform_meta()
+    event.route_identity = _dingtalk_route_identity("user-1")
     event._has_send_oper = False
     event.send = AsyncMock()
 
@@ -842,7 +978,8 @@ async def test_dingtalk_event_send_streaming_returns_none_for_empty_generator():
 @pytest.mark.asyncio
 async def test_dingtalk_event_send_streaming_merges_mixed_components_before_send():
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
-    event.platform_meta = SimpleNamespace(name="dingtalk")
+    event.platform_meta = _dingtalk_platform_meta()
+    event.route_identity = _dingtalk_route_identity("user-1")
     event._has_send_oper = False
     event.send = AsyncMock()
 

@@ -6,6 +6,7 @@ import ssl
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any, cast
 
 from pydantic import ValidationError
@@ -253,6 +254,9 @@ class _RawMessageSegment:
 
 
 class NapCatForwardWebSocketClient:
+    _VALIDATION_SLOW_LOG_THRESHOLD_S = 0.1
+    _PAYLOAD_HANDLE_SLOW_LOG_THRESHOLD_S = 0.2
+
     def __init__(
         self,
         *,
@@ -278,6 +282,7 @@ class NapCatForwardWebSocketClient:
         self._stop_event = asyncio.Event()
         self._send_lock = asyncio.Lock()
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._payload_tasks: set[asyncio.Task[None]] = set()
 
     def _build_api_error(
         self, operation: str, payload: Mapping[str, Any]
@@ -314,6 +319,10 @@ class NapCatForwardWebSocketClient:
         if self._runner_task is not None:
             await self._runner_task
             self._runner_task = None
+        payload_tasks = list(self._payload_tasks)
+        if payload_tasks:
+            await asyncio.gather(*payload_tasks, return_exceptions=True)
+        self._payload_tasks.clear()
         self._connected_event.clear()
 
     async def _run_loop(self) -> None:
@@ -375,7 +384,7 @@ class NapCatForwardWebSocketClient:
 
             try:
                 async for payload in websocket:
-                    await self._handle_ws_payload(payload)
+                    self._start_payload_task(payload)
             except ConnectionClosed as exc:
                 raise NapCatTransportError(
                     "forward_ws",
@@ -386,7 +395,26 @@ class NapCatForwardWebSocketClient:
                 self._connected_event.clear()
                 self._fail_pending("connection lost")
 
+    def _start_payload_task(self, payload: str | bytes) -> None:
+        task = asyncio.create_task(
+            self._handle_ws_payload(payload),
+            name="napcat:forward-ws-payload",
+        )
+        self._payload_tasks.add(task)
+        task.add_done_callback(self._on_payload_task_done)
+
+    def _on_payload_task_done(self, task: asyncio.Task[None]) -> None:
+        self._payload_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                "[NapCat] Forward WebSocket payload handling failed", exc_info=exc
+            )
+
     async def _handle_ws_payload(self, payload: str | bytes) -> None:
+        started_at = monotonic()
         if isinstance(payload, bytes):
             try:
                 payload = payload.decode("utf-8")
@@ -411,6 +439,7 @@ class NapCatForwardWebSocketClient:
             return
 
         if "post_type" in parsed:
+            validation_started_at = monotonic()
             validation_payload = parsed
             normalization_notes: list[str] = []
             if parsed.get("post_type") in {"message", "message_sent"}:
@@ -448,11 +477,31 @@ class NapCatForwardWebSocketClient:
                     payload_excerpt,
                 )
                 return
+            validation_elapsed = monotonic() - validation_started_at
+            if validation_elapsed >= self._VALIDATION_SLOW_LOG_THRESHOLD_S:
+                logger.info(
+                    "[NapCat] Slow payload validation: post_type=%s message_type=%s notice_type=%s request_type=%s elapsed=%.2fs",
+                    validation_payload.get("post_type"),
+                    validation_payload.get("message_type"),
+                    validation_payload.get("notice_type"),
+                    validation_payload.get("request_type"),
+                    validation_elapsed,
+                )
             logger.debug(
                 "[NapCat] Forward WebSocket validated event with %s",
                 event_model_name,
             )
             await self.on_event(event)
+            elapsed = monotonic() - started_at
+            if elapsed >= self._PAYLOAD_HANDLE_SLOW_LOG_THRESHOLD_S:
+                logger.info(
+                    "[NapCat] Slow payload handling: post_type=%s message_type=%s notice_type=%s request_type=%s elapsed=%.2fs",
+                    validation_payload.get("post_type"),
+                    validation_payload.get("message_type"),
+                    validation_payload.get("notice_type"),
+                    validation_payload.get("request_type"),
+                    elapsed,
+                )
             return
 
         echo = parsed.get("echo")

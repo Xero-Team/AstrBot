@@ -50,6 +50,7 @@ class KookClient:
         self.last_sn = 0  # 记录最后处理的消息序号
         self.last_heartbeat_time = 0
         self.heartbeat_failed_count = 0
+        self._event_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def bot_id(self):
@@ -229,6 +230,10 @@ class KookClient:
             logger.error(f"[KOOK] WebSocket 监听异常: {e}")
         finally:
             self.running = False
+            event_tasks = list(self._event_tasks)
+            if event_tasks:
+                await asyncio.gather(*event_tasks, return_exceptions=True)
+            self._event_tasks.clear()
             self._stop_event.set()
 
     async def _handle_signal(self, event: KookWebsocketEvent):
@@ -239,7 +244,7 @@ class KookClient:
             case KookMessageSignal.MESSAGE:
                 if event.sn is not None:
                     self.last_sn = event.sn
-                await self.event_callback(data)
+                self._start_event_callback_task(data)
 
             case KookMessageSignal.HELLO:
                 assert isinstance(data, KookHelloEventData), (
@@ -263,6 +268,22 @@ class KookClient:
                 logger.debug(
                     f"[KOOK] 未处理的信令类型: {event.signal.name}({event.signal.value})"
                 )
+
+    def _start_event_callback_task(self, data) -> None:
+        task = asyncio.create_task(
+            self.event_callback(data),
+            name="kook:event-callback",
+        )
+        self._event_tasks.add(task)
+        task.add_done_callback(self._on_event_callback_task_done)
+
+    def _on_event_callback_task_done(self, task: asyncio.Task[None]) -> None:
+        self._event_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"[KOOK] 事件回调任务异常: {exc}")
 
     async def _handle_hello(self, data: KookHelloEventData):
         """处理HELLO握手"""
@@ -455,6 +476,11 @@ class KookClient:
                 await self.heartbeat_task
             except asyncio.CancelledError:
                 pass
+
+        event_tasks = list(self._event_tasks)
+        if event_tasks:
+            await asyncio.gather(*event_tasks, return_exceptions=True)
+        self._event_tasks.clear()
 
         if self.ws:
             try:

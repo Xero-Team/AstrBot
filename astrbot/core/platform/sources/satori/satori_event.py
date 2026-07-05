@@ -40,7 +40,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 platform_meta.id = f"{platform_name}({user_id})"
 
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.adapter = adapter
+        self._adapter = adapter
         self.platform = None
         self.user_id = None
         if (
@@ -137,8 +137,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
         user_id = getattr(self, "user_id", None)
 
         if not platform or not user_id:
-            if hasattr(self.adapter, "logins") and self.adapter.logins:
-                current_login = self.adapter.logins[0]
+            if hasattr(self._adapter, "logins") and self._adapter.logins:
+                current_login = self._adapter.logins[0]
                 platform = current_login.get("platform", "")
                 user = current_login.get("user", {})
                 user_id = user.get("id", "") if user else ""
@@ -168,7 +168,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             channel_id = self.session_id
             data = {"channel_id": channel_id, "content": content}
 
-            result = await self.adapter.send_http_request(
+            result = await self._adapter.send_http_request(
                 "POST",
                 "/message.create",
                 data,

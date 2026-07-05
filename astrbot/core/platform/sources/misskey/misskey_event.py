@@ -28,7 +28,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         client,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
 
     def _is_system_command(self, message_str: str) -> bool:
         """检测是否为系统指令"""
@@ -66,13 +66,13 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             )
 
             logger.debug(
-                f"[MisskeyEvent] 检查适配器方法: hasattr(self.client, 'send_by_session') = {hasattr(self.client, 'send_by_session')}",
+                f"[MisskeyEvent] 检查适配器方法: hasattr(self._client, 'send_by_session') = {hasattr(self._client, 'send_by_session')}",
             )
 
             # 调用适配器的 send_by_session 方法
-            if hasattr(self.client, "send_by_session"):
+            if hasattr(self._client, "send_by_session"):
                 logger.debug("[MisskeyEvent] 调用适配器的 send_by_session 方法")
-                await self.client.send_by_session(session, message)
+                await self._client.send_by_session(session, message)
             else:
                 # 回退到原来的简化发送逻辑
                 content, has_at = serialize_message_chain(message.chain)
@@ -96,30 +96,30 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     content = add_at_mention_if_needed(content, user_info, has_at)
 
                 # 根据会话类型选择发送方式
-                if hasattr(self.client, "send_message") and is_valid_user_session_id(
+                if hasattr(self._client, "send_message") and is_valid_user_session_id(
                     self.session_id,
                 ):
                     user_id = extract_user_id_from_session_id(self.session_id)
-                    await self.client.send_message(user_id, content)
+                    await self._client.send_message(user_id, content)
                 elif hasattr(
-                    self.client,
+                    self._client,
                     "send_room_message",
                 ) and is_valid_room_session_id(self.session_id):
                     room_id = extract_room_id_from_session_id(self.session_id)
-                    await self.client.send_room_message(room_id, content)
-                elif original_message_id and hasattr(self.client, "create_note"):
+                    await self._client.send_room_message(room_id, content)
+                elif original_message_id and hasattr(self._client, "create_note"):
                     visibility, visible_user_ids = resolve_message_visibility(
                         raw_message=raw_message,
                     )
-                    await self.client.create_note(
+                    await self._client.create_note(
                         content,
                         reply_id=original_message_id,
                         visibility=visibility,
                         visible_user_ids=visible_user_ids,
                     )
-                elif hasattr(self.client, "create_note"):
+                elif hasattr(self._client, "create_note"):
                     logger.debug("[MisskeyEvent] 创建新帖子")
-                    await self.client.create_note(content)
+                    await self._client.create_note(content)
 
             await super().send(message)
 

@@ -50,16 +50,24 @@ class WecomAIQueueListener:
         self,
         queue_mgr: WecomAIQueueMgr,
         callback: Callable[[dict], Awaitable[None]],
+        stop_event: asyncio.Event,
     ) -> None:
         self.queue_mgr = queue_mgr
         self.callback = callback
+        self.stop_event = stop_event
 
     async def run(self) -> None:
         """注册监听回调并定期清理过期响应。"""
         self.queue_mgr.set_listener(self.callback)
-        while True:
-            self.queue_mgr.cleanup_expired_responses()
-            await asyncio.sleep(1)
+        try:
+            while not self.stop_event.is_set():
+                self.queue_mgr.cleanup_expired_responses()
+                try:
+                    await asyncio.wait_for(self.stop_event.wait(), timeout=1)
+                except TimeoutError:
+                    continue
+        finally:
+            await self.queue_mgr.clear_listener()
 
 
 @register_platform_adapter(
@@ -159,6 +167,7 @@ class WecomAIBotAdapter(Platform):
         self.queue_listener = WecomAIQueueListener(
             self.queue_mgr,
             self._handle_queued_message,
+            self.shutdown_event,
         )
         self._stream_plain_cache: dict[str, str] = {}
 
@@ -571,7 +580,7 @@ class WecomAIBotAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         """通过消息推送 webhook 发送消息。"""
         if not self.webhook_client:
             raise RuntimeError(
@@ -586,7 +595,7 @@ class WecomAIBotAdapter(Platform):
             raise RuntimeError(
                 f"企业微信消息推送失败: session_id={session.session_id}, error={e}"
             ) from e
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def run(self) -> None:
         """运行适配器，同时启动HTTP服务器和队列监听器"""
@@ -678,10 +687,6 @@ class WecomAIBotAdapter(Platform):
             self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error("处理消息时发生异常: %s", e)
-
-    def get_client(self) -> WecomAIBotAPIClient | None:
-        """获取 API 客户端"""
-        return self.api_client
 
     def get_server(self) -> WecomAIBotServer | None:
         """获取 HTTP 服务器实例"""

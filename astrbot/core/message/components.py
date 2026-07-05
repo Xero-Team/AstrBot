@@ -26,10 +26,11 @@ import base64
 import json
 import os
 import uuid
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -182,6 +183,9 @@ class Record(BaseMessageComponent):
     text: str | None = None
     # 额外
     path: str | None = None
+    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
+        default=None
+    )
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:
@@ -205,6 +209,28 @@ class Record(BaseMessageComponent):
     def fromBase64(bs64_data: str, **_):
         return Record(file=f"base64://{bs64_data}", **_)
 
+    def set_source_resolver(
+        self,
+        resolver: Callable[[], Awaitable[str | None]],
+    ) -> None:
+        self._source_resolver = resolver
+
+    async def _resolve_deferred_source(self) -> None:
+        if self._source_resolver is None or self.file or self.url or self.path:
+            return
+        resolved = await self._source_resolver()
+        self._source_resolver = None
+        if not resolved:
+            return
+        if resolved.startswith(
+            ("http://", "https://", "file://", "data:", "base64://")
+        ):
+            self.url = resolved
+            self.file = resolved
+            return
+        self.file = resolved
+        self.path = resolved
+
     @staticmethod
     def _decode_file_uri(uri: str) -> str:
         """解码 file:/// URI 为本地文件路径。
@@ -222,6 +248,7 @@ class Record(BaseMessageComponent):
         而真实路径在 url（如 file:///C:/Users/...）或 path（如 C:\\Users\\...）中。
         Image.convert_to_file_path 使用 self.url or self.file，Record 同样需要 fallback。
         """
+        await self._resolve_deferred_source()
         # 1) 优先尝试 file：如果它已包含完整 URI 或已知格式，直接使用
         if self.file:
             file_exists = False
@@ -334,6 +361,9 @@ class Video(BaseMessageComponent):
     cover: str | None = ""
     # 额外
     path: str | None = ""
+    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
+        default=None
+    )
 
     def __init__(self, file: str, **_) -> None:
         super().__init__(file=file, **_)
@@ -353,7 +383,30 @@ class Video(BaseMessageComponent):
     def fromBase64(base64_data: str, **_):
         return Video(file=f"base64://{base64_data}", **_)
 
+    def set_source_resolver(
+        self,
+        resolver: Callable[[], Awaitable[str | None]],
+    ) -> None:
+        self._source_resolver = resolver
+
+    async def _resolve_deferred_source(self) -> None:
+        if self._source_resolver is None or self.file or self.url or self.path:
+            return
+        resolved = await self._source_resolver()
+        self._source_resolver = None
+        if not resolved:
+            return
+        if resolved.startswith(
+            ("http://", "https://", "file://", "data:", "base64://")
+        ):
+            self.url = resolved
+            self.file = resolved
+            return
+        self.file = resolved
+        self.path = resolved
+
     async def _resolve_file_source(self) -> str:
+        await self._resolve_deferred_source()
         for candidate in (self.file, self.url):
             if not candidate:
                 continue
@@ -603,6 +656,9 @@ class Image(BaseMessageComponent):
     url: str | None = ""
     # 额外
     path: str | None = ""
+    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
+        default=None
+    )
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
@@ -630,6 +686,28 @@ class Image(BaseMessageComponent):
     def fromIO(IO):
         return Image.fromBytes(IO.read())
 
+    def set_source_resolver(
+        self,
+        resolver: Callable[[], Awaitable[str | None]],
+    ) -> None:
+        self._source_resolver = resolver
+
+    async def _resolve_deferred_source(self) -> None:
+        if self._source_resolver is None or self.file or self.url or self.path:
+            return
+        resolved = await self._source_resolver()
+        self._source_resolver = None
+        if not resolved:
+            return
+        if resolved.startswith(
+            ("http://", "https://", "file://", "data:", "base64://")
+        ):
+            self.url = resolved
+            self.file = resolved
+            return
+        self.file = resolved
+        self.path = resolved
+
     async def convert_to_file_path(self) -> str:
         """将这个图片统一转换为本地文件路径。这个方法避免了手动判断图片数据类型，直接返回图片数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
@@ -637,6 +715,7 @@ class Image(BaseMessageComponent):
             str: 图片的本地路径，以绝对路径表示。
 
         """
+        await self._resolve_deferred_source()
         url = self.url or self.file
         if not url:
             raise ValueError("No valid file or URL provided")
@@ -650,6 +729,7 @@ class Image(BaseMessageComponent):
 
         """
         # convert to base64
+        await self._resolve_deferred_source()
         url = self.url or self.file
         if not url:
             raise ValueError("No valid file or URL provided")
@@ -877,6 +957,12 @@ class File(BaseMessageComponent):
     name: str | None = ""  # 名字
     file_: str | None = ""  # 本地路径
     url: str | None = ""  # url
+    _file_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
+        default=None
+    )
+    _url_resolver: Callable[[], Awaitable[tuple[str | None, str | None]]] | None = (
+        PrivateAttr(default=None)
+    )
 
     def __init__(self, name: str, file: str = "", url: str = "") -> None:
         """文件消息段。"""
@@ -933,6 +1019,36 @@ class File(BaseMessageComponent):
         else:
             self.file_ = value
 
+    def set_url_resolver(
+        self,
+        resolver: Callable[[], Awaitable[tuple[str | None, str | None]]],
+    ) -> None:
+        self._url_resolver = resolver
+
+    def set_file_resolver(
+        self,
+        resolver: Callable[[], Awaitable[str | None]],
+    ) -> None:
+        self._file_resolver = resolver
+
+    async def _resolve_file_if_needed(self) -> None:
+        if self.file_ or self._file_resolver is None:
+            return
+        resolved_file = await self._file_resolver()
+        self._file_resolver = None
+        if resolved_file:
+            self.file_ = resolved_file
+
+    async def _resolve_url_if_needed(self) -> None:
+        if self.url or self._url_resolver is None:
+            return
+        resolved_url, resolved_name = await self._url_resolver()
+        if resolved_url:
+            self.url = resolved_url
+        if resolved_name:
+            self.name = resolved_name
+        self._url_resolver = None
+
     async def get_file(self, allow_return_url: bool = False) -> str:
         """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
 
@@ -943,6 +1059,11 @@ class File(BaseMessageComponent):
             str: 文件路径或者 http 下载链接
 
         """
+        if not self.file_ and self._file_resolver is not None:
+            await self._resolve_file_if_needed()
+        if not self.url and self._url_resolver is not None:
+            await self._resolve_url_if_needed()
+
         if allow_return_url and self.url:
             return self.url
 

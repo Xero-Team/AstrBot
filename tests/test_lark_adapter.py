@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -89,6 +90,8 @@ async def test_lark_parse_message_components_post_parses_mentions_links_and_imag
     assert components[0].name == "Alice"
     assert components[1].text == "hello"
     assert components[2].text == "Doc(https://example.com/docs)"
+    assert components[3].file == ""
+    await components[3]._resolve_deferred_source()
     assert components[3].file.startswith("base64://")
     assert adapter._build_message_str_from_components(components) == (
         "@Alice hello Doc(https://example.com/docs) [image]"
@@ -119,9 +122,9 @@ async def test_lark_parse_message_components_file_requires_message_id_and_file_k
 
 
 @pytest.mark.asyncio
-async def test_lark_parse_message_components_audio_skips_when_download_returns_none():
+async def test_lark_parse_message_components_audio_keeps_lazy_record():
     adapter = _adapter()
-    adapter._download_file_resource_to_temp = AsyncMock(return_value=None)
+    adapter._download_file_resource_to_temp = AsyncMock(return_value="/tmp/audio.opus")
 
     components = await adapter._parse_message_components(
         message_id="msg-2",
@@ -130,13 +133,10 @@ async def test_lark_parse_message_components_audio_skips_when_download_returns_n
         at_map={},
     )
 
-    assert components == []
-    adapter._download_file_resource_to_temp.assert_awaited_once_with(
-        message_id="msg-2",
-        file_key="audio-1",
-        message_type="audio",
-        default_suffix=".opus",
-    )
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.Record)
+    assert components[0].file == ""
+    adapter._download_file_resource_to_temp.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -208,6 +208,24 @@ async def test_lark_build_reply_from_parent_id_builds_reply_chain_from_message()
 
 
 @pytest.mark.asyncio
+async def test_lark_build_reply_from_parent_id_falls_back_to_lightweight_reply_on_timeout():
+    adapter = _adapter()
+
+    async def _slow_aget(_request):
+        await asyncio.sleep(1)
+        return SimpleNamespace(success=lambda: True, data=SimpleNamespace(items=[]))
+
+    adapter.lark_api.im.v1.message.aget = _slow_aget
+
+    reply = await adapter._build_reply_from_parent_id("parent-timeout")
+
+    assert reply is not None
+    assert reply.id == "parent-timeout"
+    assert not reply.chain
+    assert reply.message_str == ""
+
+
+@pytest.mark.asyncio
 async def test_lark_convert_msg_builds_group_message_with_reply_and_self_mention():
     adapter = _adapter()
     adapter._build_reply_from_parent_id = AsyncMock(
@@ -248,7 +266,9 @@ async def test_lark_convert_msg_builds_group_message_with_reply_and_self_mention
 
     await adapter.convert_msg(event)
 
-    adapter._build_reply_from_parent_id.assert_awaited_once_with("parent-1")
+    adapter._build_reply_from_parent_id.assert_awaited_once()
+    assert adapter._build_reply_from_parent_id.await_args.args[0] == "parent-1"
+    assert adapter._build_reply_from_parent_id.await_args.args[1] == []
     adapter.handle_msg.assert_awaited_once()
     abm = adapter.handle_msg.await_args.args[0]
     assert abm.type == MessageType.GROUP_MESSAGE

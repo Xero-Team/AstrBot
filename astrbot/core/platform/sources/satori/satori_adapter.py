@@ -1,7 +1,8 @@
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
 import websockets
@@ -73,12 +74,13 @@ class SatoriPlatformAdapter(Platform):
         self.running = False
         self.heartbeat_task: asyncio.Task | None = None
         self.ready_received = False
+        self._event_tasks: set[asyncio.Task[None]] = set()
 
     async def send_by_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         from .satori_event import SatoriPlatformEvent
 
         await SatoriPlatformEvent.send_with_adapter(
@@ -86,7 +88,7 @@ class SatoriPlatformAdapter(Platform):
             message_chain,
             session.session_id,
         )
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
@@ -174,6 +176,10 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"Satori WebSocket 连接异常: {e}")
             raise
         finally:
+            event_tasks = list(self._event_tasks)
+            if event_tasks:
+                await asyncio.gather(*event_tasks, return_exceptions=True)
+            self._event_tasks.clear()
             if self.heartbeat_task:
                 self.heartbeat_task.cancel()
                 try:
@@ -267,9 +273,9 @@ class SatoriPlatformAdapter(Platform):
                 pass
 
             elif op == 0:  # EVENT
-                await self.handle_event(body)
                 if "sn" in body:
                     self.sequence = body["sn"]
+                self._start_event_task(self.handle_event(body))
 
             elif op == 5:  # META
                 if "sn" in body:
@@ -279,6 +285,19 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"解析 WebSocket 消息失败: {e}, 消息内容: {message}")
         except Exception as e:
             logger.error(f"处理 WebSocket 消息异常: {e}")
+
+    def _start_event_task(self, coro: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.create_task(coro, name="satori:event")
+        self._event_tasks.add(task)
+        task.add_done_callback(self._on_event_task_done)
+
+    def _on_event_task_done(self, task: asyncio.Task[None]) -> None:
+        self._event_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"Satori 事件处理任务失败: {exc}")
 
     async def handle_event(self, event_data: dict) -> None:
         try:
@@ -673,12 +692,15 @@ class SatoriPlatformAdapter(Platform):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                path_wav = await MediaResolver(
-                    src,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                elements.append(Record(file=path_wav, url=path_wav))
+                record = Record(file="")
+                record.set_source_resolver(
+                    lambda src=src: MediaResolver(
+                        src,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                )
+                elements.append(record)
 
             elif tag_name == "quote":
                 # quote标签已经被特殊处理

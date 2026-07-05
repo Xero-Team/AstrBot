@@ -219,7 +219,7 @@ async def test_line_convert_message_returns_none_for_non_message_or_standby_or_b
 
 
 @pytest.mark.asyncio
-async def test_line_parse_message_components_file_falls_back_to_placeholder_when_download_fails():
+async def test_line_parse_message_components_file_keeps_lazy_component_when_download_fails():
     adapter = _adapter()
     adapter.line_api.get_message_content = AsyncMock(return_value=None)
 
@@ -228,12 +228,13 @@ async def test_line_parse_message_components_file_falls_back_to_placeholder_when
     )
 
     assert len(components) == 1
-    assert isinstance(components[0], Plain)
-    assert components[0].text == "[file]"
+    assert isinstance(components[0], File)
+    assert components[0].name == "report.pdf"
+    assert await components[0].get_file() == ""
 
 
 @pytest.mark.asyncio
-async def test_line_parse_message_components_image_falls_back_to_placeholder_when_download_fails():
+async def test_line_parse_message_components_image_keeps_lazy_component_when_download_fails():
     adapter = _adapter()
     adapter.line_api.get_message_content = AsyncMock(return_value=None)
 
@@ -242,8 +243,9 @@ async def test_line_parse_message_components_image_falls_back_to_placeholder_whe
     )
 
     assert len(components) == 1
-    assert isinstance(components[0], Plain)
-    assert components[0].text == "[image]"
+    assert isinstance(components[0], Image)
+    await components[0]._resolve_deferred_source()
+    assert components[0].file == ""
 
 
 @pytest.mark.asyncio
@@ -259,9 +261,13 @@ async def test_line_build_file_component_uses_downloaded_filename_when_available
     )
 
     assert isinstance(component, File)
+    assert component.name == "fallback.bin"
+    assert component.file == ""
+
+    resolved = await component.get_file()
+
     assert component.name == "invoice.pdf"
-    assert component.file.endswith(".bin")
-    assert component.url == component.file
+    assert resolved.endswith(".pdf")
 
 
 @pytest.mark.asyncio
@@ -277,7 +283,11 @@ async def test_line_build_image_component_downloads_binary_content_when_no_exter
     )
 
     assert isinstance(component, Image)
-    assert component.file.startswith("base64://")
+    assert component.file == ""
+
+    await component._resolve_deferred_source()
+
+    assert component.file.endswith(".png")
 
 
 @pytest.mark.asyncio
@@ -441,6 +451,47 @@ async def test_line_handle_webhook_event_skips_when_convert_message_returns_none
 
 
 @pytest.mark.asyncio
+async def test_line_handle_webhook_event_processes_batch_entries_concurrently():
+    adapter = _adapter()
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    second_handled = asyncio.Event()
+
+    async def _convert_message(event):
+        if event["webhookEventId"] == "evt-1":
+            first_started.set()
+            await release_first.wait()
+            return SimpleNamespace(message_id="msg-1")
+        return SimpleNamespace(message_id="msg-2")
+
+    async def _handle_msg(message):
+        if message.message_id == "msg-2":
+            second_handled.set()
+
+    adapter.convert_message = AsyncMock(side_effect=_convert_message)
+    adapter.handle_msg = AsyncMock(side_effect=_handle_msg)
+
+    task = asyncio.create_task(
+        adapter.handle_webhook_event(
+            {
+                "events": [
+                    {"webhookEventId": "evt-1", "type": "message", "message": {}},
+                    {"webhookEventId": "evt-2", "type": "message", "message": {}},
+                ]
+            }
+        )
+    )
+
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    await asyncio.wait_for(second_handled.wait(), timeout=1.0)
+    release_first.set()
+    await task
+
+    assert adapter.convert_message.await_count == 2
+    assert adapter.handle_msg.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_line_webhook_callback_rejects_bad_signature_bad_body_and_non_dict_payload():
     adapter = _adapter()
     adapter.handle_webhook_event = AsyncMock()
@@ -512,8 +563,14 @@ async def test_line_build_audio_component_uses_external_url_with_media_resolver(
     )
 
     assert component is not None
+    assert component.file == ""
+    assert component.url == ""
+    media_resolver.to_path.assert_not_awaited()
+
+    await component._resolve_deferred_source()
+
     assert component.file == "C:/tmp/converted.wav"
-    assert component.url == "C:/tmp/converted.wav"
+    assert component.path == "C:/tmp/converted.wav"
     media_resolver.to_path.assert_awaited_once_with(target_format="wav")
     adapter.line_api.get_message_content.assert_not_awaited()
 
@@ -541,8 +598,14 @@ async def test_line_build_audio_component_downloads_and_converts_content(monkeyp
     )
 
     assert component is not None
+    assert component.file == ""
+    assert list(tmp_path.glob("*.m4a")) == []
+    media_resolver.to_path.assert_not_awaited()
+
+    await component._resolve_deferred_source()
+
     assert component.file == "C:/tmp/voice.wav"
-    saved_files = list(tmp_path.glob("line_audio_msg-audio_*.m4a"))
+    saved_files = list(tmp_path.glob("voice_msg-audio_*.m4a"))
     assert len(saved_files) == 1
     assert saved_files[0].read_bytes() == b"audio-bytes"
     media_resolver.to_path.assert_awaited_once_with(target_format="wav")
@@ -558,7 +621,9 @@ async def test_line_build_video_component_returns_none_when_download_fails():
         {"id": "msg-video", "type": "video"},
     )
 
-    assert component is None
+    assert isinstance(component, Video)
+    await component._resolve_deferred_source()
+    assert component.file == ""
 
 
 @pytest.mark.asyncio
@@ -578,9 +643,14 @@ async def test_line_build_video_component_stores_downloaded_video(monkeypatch, t
     )
 
     assert component is not None
+    assert component.file == ""
+    assert list(tmp_path.glob("*.mp4")) == []
+
+    await component._resolve_deferred_source()
+
     assert component.file.endswith(".mp4")
     assert component.path == component.file
-    saved_files = list(tmp_path.glob("line_video_msg-video_*.mp4"))
+    saved_files = list(tmp_path.glob("clip_msg-video_*.mp4"))
     assert len(saved_files) == 1
     assert saved_files[0].read_bytes() == b"video-bytes"
 

@@ -36,6 +36,8 @@ from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+LARK_REPLY_FETCH_TIMEOUT_SECONDS = 0.35
+LARK_SLOW_REPLY_FETCH_LOG_THRESHOLD_SECONDS = 0.2
 
 
 @register_platform_adapter(
@@ -202,8 +204,10 @@ class LarkPlatformAdapter(Platform):
         message_type: str,
         content: dict[str, Any],
         at_map: dict[str, Comp.At],
+        temporary_file_paths: list[str] | None = None,
     ) -> list[Comp.BaseMessageComponent]:
         components: list[Comp.BaseMessageComponent] = []
+        tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
 
         if message_type == "text":
             message_str_raw = str(content.get("text", ""))
@@ -254,15 +258,25 @@ class LarkPlatformAdapter(Platform):
                     if not message_id:
                         logger.error("[Lark] 图片消息缺少 message_id")
                         continue
-                    image_bytes = await self._download_message_resource(
-                        message_id=message_id,
-                        file_key=image_key,
-                        resource_type="image",
-                    )
-                    if image_bytes is None:
-                        continue
-                    image_base64 = base64.b64encode(image_bytes).decode()
-                    components.append(Comp.Image.fromBase64(image_base64))
+                    image = Comp.Image(file="")
+
+                    async def _resolve_image_source(
+                        *,
+                        message_id: str = message_id,
+                        image_key: str = image_key,
+                    ) -> str | None:
+                        image_bytes = await self._download_message_resource(
+                            message_id=message_id,
+                            file_key=image_key,
+                            resource_type="image",
+                        )
+                        if image_bytes is None:
+                            return None
+                        image_base64 = base64.b64encode(image_bytes).decode()
+                        return f"base64://{image_base64}"
+
+                    image.set_source_resolver(_resolve_image_source)
+                    components.append(image)
                 elif tag == "media":
                     file_key = str(comp.get("file_key", "")).strip()
                     file_name = (
@@ -273,15 +287,27 @@ class LarkPlatformAdapter(Platform):
                     if not message_id:
                         logger.error("[Lark] 富文本视频消息缺少 message_id")
                         continue
-                    file_path = await self._download_file_resource_to_temp(
-                        message_id=message_id,
-                        file_key=file_key,
-                        message_type="post_media",
-                        file_name=file_name,
-                        default_suffix=".mp4",
-                    )
-                    if file_path:
-                        components.append(Comp.Video(file=file_path, path=file_path))
+                    video = Comp.Video(file="")
+
+                    async def _resolve_post_media_source(
+                        *,
+                        message_id: str = message_id,
+                        file_key: str = file_key,
+                        file_name: str = file_name,
+                    ) -> str | None:
+                        file_path = await self._download_file_resource_to_temp(
+                            message_id=message_id,
+                            file_key=file_key,
+                            message_type="post_media",
+                            file_name=file_name,
+                            default_suffix=".mp4",
+                        )
+                        if file_path:
+                            tracked_paths.append(file_path)
+                        return file_path
+
+                    video.set_source_resolver(_resolve_post_media_source)
+                    components.append(video)
 
             return components
 
@@ -294,14 +320,21 @@ class LarkPlatformAdapter(Platform):
             if not file_key:
                 logger.error("[Lark] 文件消息缺少 file_key")
                 return components
-            file_path = await self._download_file_resource_to_temp(
-                message_id=message_id,
-                file_key=file_key,
-                message_type="file",
-                file_name=file_name,
-            )
-            if file_path:
-                components.append(Comp.File(name=file_name, file=file_path))
+            file_component = Comp.File(name=file_name)
+
+            async def _resolve_file_path() -> str | None:
+                file_path = await self._download_file_resource_to_temp(
+                    message_id=message_id,
+                    file_key=file_key,
+                    message_type="file",
+                    file_name=file_name,
+                )
+                if file_path:
+                    tracked_paths.append(file_path)
+                return file_path
+
+            file_component.set_file_resolver(_resolve_file_path)
+            components.append(file_component)
             return components
 
         if message_type == "audio":
@@ -312,19 +345,28 @@ class LarkPlatformAdapter(Platform):
             if not file_key:
                 logger.error("[Lark] 音频消息缺少 file_key")
                 return components
-            file_path = await self._download_file_resource_to_temp(
-                message_id=message_id,
-                file_key=file_key,
-                message_type="audio",
-                default_suffix=".opus",
-            )
-            if file_path:
+            record = Comp.Record(file="")
+
+            async def _resolve_audio_source() -> str | None:
+                file_path = await self._download_file_resource_to_temp(
+                    message_id=message_id,
+                    file_key=file_key,
+                    message_type="audio",
+                    default_suffix=".opus",
+                )
+                if not file_path:
+                    return None
+                tracked_paths.append(file_path)
                 path_wav = await MediaResolver(
                     file_path,
                     media_type="audio",
                     default_suffix=".wav",
                 ).to_path(target_format="wav")
-                components.append(Comp.Record(file=path_wav, url=path_wav))
+                tracked_paths.append(path_wav)
+                return path_wav
+
+            record.set_source_resolver(_resolve_audio_source)
+            components.append(record)
             return components
 
         if message_type == "media":
@@ -336,15 +378,22 @@ class LarkPlatformAdapter(Platform):
             if not file_key:
                 logger.error("[Lark] 视频消息缺少 file_key")
                 return components
-            file_path = await self._download_file_resource_to_temp(
-                message_id=message_id,
-                file_key=file_key,
-                message_type="media",
-                file_name=file_name,
-                default_suffix=".mp4",
-            )
-            if file_path:
-                components.append(Comp.Video(file=file_path, path=file_path))
+            video = Comp.Video(file="")
+
+            async def _resolve_media_source() -> str | None:
+                file_path = await self._download_file_resource_to_temp(
+                    message_id=message_id,
+                    file_key=file_key,
+                    message_type="media",
+                    file_name=file_name,
+                    default_suffix=".mp4",
+                )
+                if file_path:
+                    tracked_paths.append(file_path)
+                return file_path
+
+            video.set_source_resolver(_resolve_media_source)
+            components.append(video)
             return components
 
         return components
@@ -352,25 +401,56 @@ class LarkPlatformAdapter(Platform):
     async def _build_reply_from_parent_id(
         self,
         parent_message_id: str,
+        temporary_file_paths: list[str] | None = None,
     ) -> Comp.Reply | None:
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
             return None
 
+        def _lightweight_reply() -> Comp.Reply:
+            return Comp.Reply(id=parent_message_id)
+
         request = GetMessageRequest.builder().message_id(parent_message_id).build()
-        response = await self.lark_api.im.v1.message.aget(request)
+        started_at = time.monotonic()
+        try:
+            response = await asyncio.wait_for(
+                self.lark_api.im.v1.message.aget(request),
+                timeout=LARK_REPLY_FETCH_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.info(
+                "[Lark] 获取引用消息超时 id=%s timeout=%.2fs，降级为轻量 Reply。",
+                parent_message_id,
+                LARK_REPLY_FETCH_TIMEOUT_SECONDS,
+            )
+            return _lightweight_reply()
+        except Exception as e:
+            logger.warning(
+                "[Lark] 获取引用消息异常 id=%s error=%s，降级为轻量 Reply。",
+                parent_message_id,
+                e,
+            )
+            return _lightweight_reply()
+
+        elapsed = time.monotonic() - started_at
+        if elapsed >= LARK_SLOW_REPLY_FETCH_LOG_THRESHOLD_SECONDS:
+            logger.info(
+                "[Lark] 获取引用消息耗时 %.2fs id=%s",
+                elapsed,
+                parent_message_id,
+            )
         if not response.success():
             logger.error(
                 f"[Lark] 获取引用消息失败 id={parent_message_id}, "
                 f"code={response.code}, msg={response.msg}",
             )
-            return None
+            return _lightweight_reply()
 
         if response.data is None or not response.data.items:
             logger.error(
                 f"[Lark] 引用消息响应为空 id={parent_message_id}",
             )
-            return None
+            return _lightweight_reply()
 
         parent_message = response.data.items[0]
         quoted_message_id = parent_message.message_id or parent_message_id
@@ -406,6 +486,7 @@ class LarkPlatformAdapter(Platform):
             message_type=quoted_type,
             content=quoted_content_json,
             at_map=quoted_at_map,
+            temporary_file_paths=temporary_file_paths,
         )
         quoted_text = self._build_message_str_from_components(quoted_chain)
         sender_nickname = (
@@ -478,7 +559,7 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
             receive_id = session.session_id
@@ -496,7 +577,7 @@ class LarkPlatformAdapter(Platform):
             receive_id_type=id_type,
         )
 
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
@@ -516,6 +597,7 @@ class LarkPlatformAdapter(Platform):
             return
 
         abm = AstrBotMessage()
+        setattr(abm, "temporary_file_paths", [])
 
         if message.create_time:
             abm.timestamp = int(message.create_time) // 1000
@@ -534,7 +616,10 @@ class LarkPlatformAdapter(Platform):
 
         at_list = {}
         if message.parent_id:
-            reply_seg = await self._build_reply_from_parent_id(message.parent_id)
+            reply_seg = await self._build_reply_from_parent_id(
+                message.parent_id,
+                getattr(abm, "temporary_file_paths", []),
+            )
             if reply_seg:
                 abm.message.append(reply_seg)
 
@@ -571,6 +656,7 @@ class LarkPlatformAdapter(Platform):
             message_type=message.message_type or "unknown",
             content=content_json_b,
             at_map=at_list,
+            temporary_file_paths=getattr(abm, "temporary_file_paths", []),
         )
         abm.message.extend(parsed_components)
         abm.message_str = self._build_message_str_from_components(parsed_components)
@@ -684,10 +770,11 @@ class LarkPlatformAdapter(Platform):
     async def terminate(self) -> None:
         if self.connection_mode == "socket":
             await self.client._disconnect()
+        elif self.webhook_server is not None:
+            callback_tasks = list(self.webhook_server._callback_tasks)
+            if callback_tasks:
+                await asyncio.gather(*callback_tasks, return_exceptions=True)
         logger.info("飞书(Lark) 适配器已关闭")
-
-    def get_client(self) -> lark.ws.Client:
-        return self.client
 
     def unified_webhook(self) -> bool:
         return bool(

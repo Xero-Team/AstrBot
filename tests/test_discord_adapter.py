@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from io import BytesIO
 from types import SimpleNamespace
@@ -10,10 +11,12 @@ from astrbot.api.message_components import Image, Record
 from astrbot.core import db_helper
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.sources.discord import (
     discord_platform_adapter,
     discord_platform_event,
 )
+from astrbot.core.platform.sources.discord.client import DiscordBotClient
 from astrbot.core.platform.sources.discord.discord_platform_adapter import (
     DiscordPlatformAdapter,
 )
@@ -28,6 +31,18 @@ _WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
 _WAV_PATH = "/tmp/discord_voice.wav"
 
 
+def _discord_platform_meta():
+    return SimpleNamespace(id="discord", name="discord")
+
+
+def _discord_route_identity(target_id: str):
+    return PlatformRouteIdentity(
+        platform_id="discord",
+        message_type=discord_platform_adapter.MessageType.GROUP_MESSAGE,
+        target_id=target_id,
+    )
+
+
 @pytest_asyncio.fixture(scope="module", autouse=True)
 async def _isolate_metrics_and_dispose_global_db_helper():
     with patch(
@@ -39,22 +54,7 @@ async def _isolate_metrics_and_dispose_global_db_helper():
 
 
 @pytest.mark.asyncio
-async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
-    class FakeMediaResolver:
-        def __init__(self, media_ref: str, **kwargs) -> None:
-            assert media_ref == "https://cdn.example/voice.ogg"
-            assert kwargs["media_type"] == "audio"
-
-        async def to_path(self, **kwargs) -> str:
-            assert kwargs["target_format"] == "wav"
-            return _WAV_PATH
-
-    monkeypatch.setattr(
-        discord_platform_adapter,
-        "MediaResolver",
-        FakeMediaResolver,
-    )
-
+async def test_discord_audio_attachment_keeps_remote_record_lazy():
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     adapter.bot_self_id = "1"
     adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
@@ -79,9 +79,38 @@ async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
 
     assert len(abm.message) == 1
     assert isinstance(abm.message[0], Record)
-    assert abm.message[0].file == _WAV_PATH
-    assert abm.message[0].url == _WAV_PATH
-    assert abm.message[0].path == _WAV_PATH
+    assert abm.message[0].file == "https://cdn.example/voice.ogg"
+    assert abm.message[0].url == "https://cdn.example/voice.ogg"
+    assert abm.message[0].path is None
+
+
+@pytest.mark.asyncio
+async def test_discord_client_on_message_background_dispatches_callback():
+    client = DiscordBotClient.__new__(DiscordBotClient)
+    client.allow_bot_messages = False
+    client._message_tasks = set()
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _callback(_payload: dict) -> None:
+        started.set()
+        await release.wait()
+
+    client.on_message_received = _callback
+    client._create_message_data = lambda _message: {"content": "hello"}  # type: ignore[method-assign]
+
+    message = SimpleNamespace(
+        author=SimpleNamespace(bot=False, name="tester"),
+        content="hello",
+    )
+
+    await client.on_message(message)
+
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    release.set()
+    if client._message_tasks:
+        await asyncio.gather(*list(client._message_tasks), return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -443,14 +472,15 @@ async def test_discord_event_send_uses_reference_for_regular_messages_only(monke
     channel = SimpleNamespace(send=AsyncMock(), id=123)
 
     regular_event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    regular_event.client = client
+    regular_event._client = client
     regular_event.interaction_followup_webhook = None
     regular_event.session = MessageSession(
         "discord",
         discord_platform_adapter.MessageType.GROUP_MESSAGE,
         "123",
     )
-    regular_event.platform_meta = SimpleNamespace(name="discord")
+    regular_event.platform_meta = _discord_platform_meta()
+    regular_event.route_identity = _discord_route_identity("123")
     regular_event.message_obj = SimpleNamespace(
         sender=SimpleNamespace(user_id="1"),
         type=discord_platform_adapter.MessageType.GROUP_MESSAGE,
@@ -470,14 +500,15 @@ async def test_discord_event_send_uses_reference_for_regular_messages_only(monke
 
     followup = SimpleNamespace(send=AsyncMock())
     followup_event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    followup_event.client = client
+    followup_event._client = client
     followup_event.interaction_followup_webhook = followup
     followup_event.session = MessageSession(
         "discord",
         discord_platform_adapter.MessageType.GROUP_MESSAGE,
         "123",
     )
-    followup_event.platform_meta = SimpleNamespace(name="discord")
+    followup_event.platform_meta = _discord_platform_meta()
+    followup_event.route_identity = _discord_route_identity("123")
     followup_event.message_obj = regular_event.message_obj
     followup_event._parse_to_discord = AsyncMock(
         return_value=("hello", [], None, [], "42")
@@ -491,8 +522,10 @@ async def test_discord_event_send_uses_reference_for_regular_messages_only(monke
 @pytest.mark.asyncio
 async def test_discord_event_send_ignores_empty_payload():
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    event.client = SimpleNamespace()
+    event._client = SimpleNamespace()
     event.interaction_followup_webhook = None
+    event.platform_meta = _discord_platform_meta()
+    event.route_identity = _discord_route_identity("123")
     event._parse_to_discord = AsyncMock(return_value=("", [], None, [], None))
     event._get_channel = AsyncMock()
 
@@ -512,8 +545,10 @@ async def test_discord_event_send_skips_non_messageable_channel(monkeypatch):
     client = SimpleNamespace()
     channel = SimpleNamespace(id=123)
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    event.client = client
+    event._client = client
     event.interaction_followup_webhook = None
+    event.platform_meta = _discord_platform_meta()
+    event.route_identity = _discord_route_identity("123")
     event._parse_to_discord = AsyncMock(return_value=("hello", [], None, [], None))
     event._get_channel = AsyncMock(return_value=channel)
     monkeypatch.setattr(discord_platform_event.discord.abc, "Messageable", type("FakeMessageable", (), {}))
@@ -535,8 +570,8 @@ async def test_discord_event_get_channel_uses_fetch_when_cache_misses():
         fetch_channel=AsyncMock(return_value="fetched-channel"),
     )
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    event.client = client
-    event.session = SimpleNamespace(session_id="456")
+    event._client = client
+    event.route_identity = _discord_route_identity("456")
 
     result = await event._get_channel()
 
@@ -548,14 +583,14 @@ async def test_discord_event_get_channel_uses_fetch_when_cache_misses():
 @pytest.mark.asyncio
 async def test_discord_event_get_channel_returns_none_for_invalid_session_id():
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    event.client = SimpleNamespace(get_channel=MagicMock(), fetch_channel=AsyncMock())
-    event.session = SimpleNamespace(session_id="not-a-number")
+    event._client = SimpleNamespace(get_channel=MagicMock(), fetch_channel=AsyncMock())
+    event.route_identity = _discord_route_identity("not-a-number")
 
     result = await event._get_channel()
 
     assert result is None
-    event.client.get_channel.assert_not_called()
-    event.client.fetch_channel.assert_not_awaited()
+    event._client.get_channel.assert_not_called()
+    event._client.fetch_channel.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -569,8 +604,8 @@ async def test_discord_event_get_channel_returns_none_when_fetch_forbidden(monke
         fetch_channel=AsyncMock(side_effect=forbidden_error),
     )
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    event.client = client
-    event.session = SimpleNamespace(session_id="456")
+    event._client = client
+    event.route_identity = _discord_route_identity("456")
     logger_error = MagicMock()
 
     monkeypatch.setattr(discord_platform_event.logger, "error", logger_error)
@@ -608,13 +643,15 @@ async def test_discord_event_send_streaming_aggregates_plain_segments_once():
 
 
 @pytest.mark.asyncio
-async def test_discord_event_send_swallow_followup_send_error_and_still_calls_parent_send(
+async def test_discord_event_send_swallow_followup_send_error_without_parent_success_side_effect(
     monkeypatch,
 ):
     followup = SimpleNamespace(send=AsyncMock(side_effect=RuntimeError("followup failed")))
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    event.client = SimpleNamespace(get_message=MagicMock())
+    event._client = SimpleNamespace(get_message=MagicMock())
     event.interaction_followup_webhook = followup
+    event.platform_meta = _discord_platform_meta()
+    event.route_identity = _discord_route_identity("123")
     event._parse_to_discord = AsyncMock(return_value=("hello", [], None, [], None))
     logger_error = MagicMock()
 
@@ -625,11 +662,13 @@ async def test_discord_event_send_swallow_followup_send_error_and_still_calls_pa
         "send",
         AsyncMock(return_value=None),
     ) as parent_send:
-        await event.send(MessageChain().message("hello"))
+        result = await event.send(MessageChain().message("hello"))
 
     followup.send.assert_awaited_once_with(content="hello")
-    parent_send.assert_awaited_once()
+    parent_send.assert_not_awaited()
     logger_error.assert_called_once()
+    assert result.success is False
+    assert result.target == "123"
 
 
 @pytest.mark.asyncio

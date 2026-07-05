@@ -129,12 +129,13 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         await QQOfficialPlatformAdapter._send_by_session_common(
             cast(Any, self),
             session,
             message_chain,
         )
+        return await super().send_by_session(session, message_chain)
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
         if not session_id or not message_id:
@@ -202,9 +203,6 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             await self.webhook_helper.shutdown_event.wait()
         else:
             await self.webhook_helper.start_polling()
-
-    def get_client(self) -> botClient:
-        return self.client
 
     async def webhook_callback(self, request: Any) -> Any:
         """统一 Webhook 回调入口"""

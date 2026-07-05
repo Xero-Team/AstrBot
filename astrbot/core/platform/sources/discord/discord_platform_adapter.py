@@ -22,7 +22,6 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
-from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
@@ -55,7 +54,7 @@ class DiscordPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
@@ -65,9 +64,11 @@ class DiscordPlatformAdapter(Platform):
 
         # 创建一个 message_obj 以便在 event 中使用
         message_obj = AstrBotMessage()
-        if "_" in session.session_id:
-            session.session_id = session.session_id.split("_")[1]
-        channel_id_str = session.session_id
+        channel_id_str = (
+            session.session_id.split("_")[1]
+            if "_" in session.session_id
+            else session.session_id
+        )
         channel = None
         try:
             channel_id = int(channel_id_str)
@@ -83,7 +84,7 @@ class DiscordPlatformAdapter(Platform):
                 f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
             )
             message_obj.type = MessageType.GROUP_MESSAGE
-            message_obj.group_id = session.session_id
+            message_obj.group_id = channel_id_str
 
         message_obj.message_str = message_chain.get_plain_text()
         message_obj.sender = MessageMember(
@@ -91,12 +92,12 @@ class DiscordPlatformAdapter(Platform):
             nickname=self.client.user.display_name,
         )
         message_obj.self_id = cast(str, self.bot_self_id)
-        message_obj.session_id = session.session_id
+        message_obj.session_id = channel_id_str
         message_obj.message = message_chain.chain
 
         temp_event = self.create_event(message_obj)
         await temp_event.send(message_chain)
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     @override
     def meta(self) -> PlatformMetadata:
@@ -256,20 +257,7 @@ class DiscordPlatformAdapter(Platform):
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用，我们只处理普通消息
-        abm = self._convert_message_to_abm(data)
-        for component in abm.message:
-            if isinstance(component, Record):
-                audio_ref = component.url or component.file
-                if audio_ref:
-                    path_wav = await MediaResolver(
-                        audio_ref,
-                        media_type="audio",
-                        default_suffix=".wav",
-                    ).to_path(target_format="wav")
-                    component.file = path_wav
-                    component.url = path_wav
-                    component.path = path_wav
-        return abm
+        return self._convert_message_to_abm(data)
 
     def create_event(
         self, message: AstrBotMessage, followup_webhook=None

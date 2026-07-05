@@ -34,6 +34,7 @@ class WecomAIBotLongConnectionClient:
         self._send_lock = asyncio.Lock()
         self._command_lock = asyncio.Lock()
         self._response_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._message_tasks: set[asyncio.Task[None]] = set()
 
     @staticmethod
     def gen_req_id() -> str:
@@ -72,7 +73,7 @@ class WecomAIBotLongConnectionClient:
                     while not self._shutdown_event.is_set():
                         message = await ws.receive()
                         if message.type == aiohttp.WSMsgType.TEXT:
-                            await self._handle_text_message(message.data)
+                            self._start_message_task(message.data)
                         elif message.type in {
                             aiohttp.WSMsgType.CLOSED,
                             aiohttp.WSMsgType.CLOSE,
@@ -85,7 +86,27 @@ class WecomAIBotLongConnectionClient:
                         await heartbeat_task
                     except asyncio.CancelledError:
                         pass
+                    message_tasks = list(self._message_tasks)
+                    if message_tasks:
+                        await asyncio.gather(*message_tasks, return_exceptions=True)
+                    self._message_tasks.clear()
                     self._ws = None
+
+    def _start_message_task(self, text: str) -> None:
+        task = asyncio.create_task(
+            self._handle_text_message(text),
+            name="wecomai:long-connection-message",
+        )
+        self._message_tasks.add(task)
+        task.add_done_callback(self._on_message_task_done)
+
+    def _on_message_task_done(self, task: asyncio.Task[None]) -> None:
+        self._message_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("[WecomAI][LongConn] 消息处理任务失败: %s", exc)
 
     async def _subscribe(self) -> None:
         """发送 aibot_subscribe，并等待响应。"""

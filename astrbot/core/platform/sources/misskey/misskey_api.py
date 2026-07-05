@@ -53,6 +53,7 @@ class StreamingClient:
         self.desired_channels: dict[str, dict | None] = {}
         self._running = False
         self._last_pong = None
+        self._handler_tasks: set[asyncio.Task[None]] = set()
 
     async def connect(self) -> bool:
         try:
@@ -92,6 +93,10 @@ class StreamingClient:
 
     async def disconnect(self) -> None:
         self._running = False
+        handler_tasks = list(self._handler_tasks)
+        if handler_tasks:
+            await asyncio.gather(*handler_tasks, return_exceptions=True)
+        self._handler_tasks.clear()
         if self.websocket:
             await self.websocket.close()
             self.websocket = None
@@ -186,6 +191,11 @@ class StreamingClient:
                 await self.disconnect()
             except Exception:
                 pass
+        finally:
+            handler_tasks = list(self._handler_tasks)
+            if handler_tasks:
+                await asyncio.gather(*handler_tasks, return_exceptions=True)
+            self._handler_tasks.clear()
 
     async def _handle_message(self, data: dict[str, Any]) -> None:
         message_type = data.get("type")
@@ -236,30 +246,49 @@ class StreamingClient:
 
                 if handler_key in self.message_handlers:
                     logger.debug(f"[Misskey WebSocket] 使用处理器: {handler_key}")
-                    await self.message_handlers[handler_key](event_body)
+                    self._start_handler_task(
+                        self.message_handlers[handler_key](event_body)
+                    )
                 elif event_type in self.message_handlers:
                     logger.debug(f"[Misskey WebSocket] 使用事件处理器: {event_type}")
-                    await self.message_handlers[event_type](event_body)
+                    self._start_handler_task(
+                        self.message_handlers[event_type](event_body)
+                    )
                 else:
                     logger.debug(
                         f"[Misskey WebSocket] 未找到处理器: {handler_key} 或 {event_type}",
                     )
                     if "_debug" in self.message_handlers:
-                        await self.message_handlers["_debug"](
-                            {
-                                "type": event_type,
-                                "body": event_body,
-                                "channel": channel_type,
-                            },
+                        self._start_handler_task(
+                            self.message_handlers["_debug"](
+                                {
+                                    "type": event_type,
+                                    "body": event_body,
+                                    "channel": channel_type,
+                                },
+                            )
                         )
 
         elif message_type in self.message_handlers:
             logger.debug(f"[Misskey WebSocket] 直接消息处理器: {message_type}")
-            await self.message_handlers[message_type](body)
+            self._start_handler_task(self.message_handlers[message_type](body))
         else:
             logger.debug(f"[Misskey WebSocket] 未处理的消息类型: {message_type}")
             if "_debug" in self.message_handlers:
-                await self.message_handlers["_debug"](data)
+                self._start_handler_task(self.message_handlers["_debug"](data))
+
+    def _start_handler_task(self, coro: Awaitable[None]) -> None:
+        task = asyncio.create_task(coro, name="misskey:handler")
+        self._handler_tasks.add(task)
+        task.add_done_callback(self._on_handler_task_done)
+
+    def _on_handler_task_done(self, task: asyncio.Task[None]) -> None:
+        self._handler_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"[Misskey WebSocket] 处理器任务失败: {exc}")
 
 
 def retry_async(

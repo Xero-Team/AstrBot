@@ -23,7 +23,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         message_out: dict[Any, Any],
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
         self.message_out = message_out
 
     @staticmethod
@@ -91,7 +91,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 plain_chunks = await self.split_plain(comp.text)
                 if active_send_mode:
                     for chunk in plain_chunks:
-                        self.client.message.send_text(message_obj.sender.user_id, chunk)
+                        self._client.message.send_text(
+                            message_obj.sender.user_id, chunk
+                        )
                 else:
                     # disable passive sending, just store the chunks in
                     logger.debug(
@@ -103,7 +105,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
                 with open(img_path, "rb") as f:
                     try:
-                        response = self.client.media.upload("image", f)
+                        response = self._client.media.upload("image", f)
                     except Exception as e:
                         logger.error(f"微信公众平台上传图片失败: {e}")
                         await self.send(
@@ -113,7 +115,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     logger.debug(f"微信公众平台上传图片返回: {response}")
 
                     if active_send_mode:
-                        self.client.message.send_image(
+                        self._client.message.send_image(
                             message_obj.sender.user_id,
                             response["media_id"],
                         )
@@ -134,7 +136,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 try:
                     with open(record_path_amr, "rb") as f:
                         try:
-                            response = self.client.media.upload("voice", f)
+                            response = self._client.media.upload("voice", f)
                         except Exception as e:
                             logger.error(f"微信公众平台上传语音失败: {e}")
                             await self.send(
@@ -146,7 +148,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         logger.info(f"微信公众平台上传语音返回: {response}")
 
                         if active_send_mode:
-                            self.client.message.send_voice(
+                            self._client.message.send_voice(
                                 message_obj.sender.user_id,
                                 response["media_id"],
                             )

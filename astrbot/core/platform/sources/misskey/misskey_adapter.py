@@ -761,6 +761,3 @@ class MisskeyPlatformAdapter(Platform):
         self._running = False
         if self.api:
             await self.api.close()
-
-    def get_client(self) -> Any:
-        return self.api

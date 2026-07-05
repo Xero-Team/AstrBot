@@ -27,6 +27,7 @@ class WecomAIQueueMgr:
         """已结束的 stream 缓存，用于兼容平台后续重复轮询"""
         self._queue_close_events: dict[str, asyncio.Event] = {}
         self._listener_tasks: dict[str, asyncio.Task] = {}
+        self._message_tasks: set[asyncio.Task[None]] = set()
         self._listener_callback: Callable[[dict], Awaitable[None]] | None = None
         self.queue_maxsize = queue_maxsize
         self.back_queue_maxsize = back_queue_maxsize
@@ -199,6 +200,24 @@ class WecomAIQueueMgr:
         for session_id in list(self.queues.keys()):
             self._start_listener_if_needed(session_id)
 
+    async def clear_listener(self) -> None:
+        self._listener_callback = None
+        for close_event in list(self._queue_close_events.values()):
+            close_event.set()
+        self._queue_close_events.clear()
+
+        listener_tasks = list(self._listener_tasks.values())
+        for task in listener_tasks:
+            task.cancel()
+        if listener_tasks:
+            await asyncio.gather(*listener_tasks, return_exceptions=True)
+        self._listener_tasks.clear()
+
+        message_tasks = list(self._message_tasks)
+        if message_tasks:
+            await asyncio.gather(*message_tasks, return_exceptions=True)
+        self._message_tasks.clear()
+
     def _start_listener_if_needed(self, session_id: str):
         if self._listener_callback is None:
             return
@@ -239,10 +258,16 @@ class WecomAIQueueMgr:
                 data = get_task.result()
                 if self._listener_callback is None:
                     continue
-                try:
-                    await self._listener_callback(data)
-                except Exception as e:
-                    logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
+                task = asyncio.create_task(
+                    self._listener_callback(data),
+                    name=f"wecomai_message_{session_id}",
+                )
+                self._message_tasks.add(task)
+                task.add_done_callback(
+                    lambda done_task, session_id=session_id: self._on_message_task_done(
+                        session_id, done_task
+                    )
+                )
             except asyncio.CancelledError:
                 break
             finally:
@@ -250,6 +275,18 @@ class WecomAIQueueMgr:
                     get_task.cancel()
                 if not close_task.done():
                     close_task.cancel()
+
+    def _on_message_task_done(
+        self,
+        session_id: str,
+        task: asyncio.Task[None],
+    ) -> None:
+        self._message_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"处理会话 {session_id} 消息时发生错误: {exc}")
 
     def get_stats(self) -> dict[str, int]:
         """获取队列统计信息

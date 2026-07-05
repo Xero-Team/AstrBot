@@ -3,8 +3,8 @@ import hashlib
 import hmac
 import json
 import time
-from collections.abc import Callable
-from typing import cast
+from collections.abc import Callable, Coroutine
+from typing import Any, cast
 
 from fastapi.responses import Response
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
@@ -35,6 +35,7 @@ class SlackWebhookClient:
         self.port = port
         self.path = path
         self.event_handler = event_handler
+        self._event_tasks: set[asyncio.Task[None]] = set()
 
         self.app = FastAPIWebhookServer("slack-webhook")
         self._setup_routes()
@@ -100,7 +101,7 @@ class SlackWebhookClient:
                 return {"challenge": event_data.get("challenge")}
             # 处理事件
             if self.event_handler and event_data.get("type") == "event_callback":
-                await self.event_handler(event_data)
+                self._start_event_task(self.event_handler(event_data))
 
             return Response("", status_code=200)
 
@@ -127,7 +128,24 @@ class SlackWebhookClient:
     async def stop(self) -> None:
         """停止 Webhook 服务器"""
         self.shutdown_event.set()
+        event_tasks = list(self._event_tasks)
+        if event_tasks:
+            await asyncio.gather(*event_tasks, return_exceptions=True)
+        self._event_tasks.clear()
         logger.info("Slack Webhook 服务器已停止")
+
+    def _start_event_task(self, coro: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.create_task(coro, name="slack:webhook-event")
+        self._event_tasks.add(task)
+        task.add_done_callback(self._on_event_task_done)
+
+    def _on_event_task_done(self, task: asyncio.Task[None]) -> None:
+        self._event_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"处理 Slack Webhook 事件任务时出错: {exc}")
 
 
 class SlackSocketClient:
@@ -143,6 +161,7 @@ class SlackSocketClient:
         self.app_token = app_token
         self.event_handler = event_handler
         self.socket_client = None
+        self._event_tasks: set[asyncio.Task[None]] = set()
 
     async def _handle_events(
         self, _: AsyncBaseSocketModeClient, req: SocketModeRequest
@@ -158,7 +177,7 @@ class SlackSocketClient:
 
             # 处理事件
             if self.event_handler:
-                await self.event_handler(req)
+                self._start_event_task(self.event_handler(req))
 
         except Exception as e:
             logger.error(f"处理 Socket Mode 事件时出错: {e}")
@@ -179,7 +198,24 @@ class SlackSocketClient:
 
     async def stop(self) -> None:
         """停止 Socket Mode 连接"""
+        event_tasks = list(self._event_tasks)
+        if event_tasks:
+            await asyncio.gather(*event_tasks, return_exceptions=True)
+        self._event_tasks.clear()
         if self.socket_client:
             await self.socket_client.disconnect()
             await self.socket_client.close()
         logger.info("Slack Socket Mode 客户端已停止")
+
+    def _start_event_task(self, coro: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.create_task(coro, name="slack:socket-event")
+        self._event_tasks.add(task)
+        task.add_done_callback(self._on_event_task_done)
+
+    def _on_event_task_done(self, task: asyncio.Task[None]) -> None:
+        self._event_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"处理 Slack Socket Mode 事件任务时出错: {exc}")

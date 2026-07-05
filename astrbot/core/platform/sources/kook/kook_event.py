@@ -42,7 +42,7 @@ class KookEvent(AstrMessageEvent):
         client: KookClient,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
         self.channel_id = message_obj.group_id or message_obj.session_id
         self.astrbot_message_type: MessageType = message_obj.type
         self._file_message_counter = 0
@@ -77,7 +77,7 @@ class KookEvent(AstrMessageEvent):
                 return wrap_upload(
                     index,
                     KookMessageType.IMAGE,
-                    self.client.upload_asset(message_component.file),
+                    self._client.upload_asset(message_component.file),
                 )
 
             case Video():
@@ -85,13 +85,13 @@ class KookEvent(AstrMessageEvent):
                 return wrap_upload(
                     index,
                     KookMessageType.VIDEO,
-                    self.client.upload_asset(message_component.file),
+                    self._client.upload_asset(message_component.file),
                 )
             case File():
 
                 async def handle_file(index: int, f_item: File):
                     f_data = await f_item.get_file()
-                    url = await self.client.upload_asset(f_data)
+                    url = await self._client.upload_asset(f_data)
                     return OrderMessage(
                         index=index, text=url, type=KookMessageType.FILE
                     )
@@ -103,7 +103,7 @@ class KookEvent(AstrMessageEvent):
 
                 async def handle_audio(index: int, f_item: Record):
                     file_path = await f_item.convert_to_file_path()
-                    url = await self.client.upload_asset(file_path)
+                    url = await self._client.upload_asset(file_path)
                     title = f_item.text or Path(file_path).name
                     return OrderMessage(
                         index=index,
@@ -186,7 +186,7 @@ class KookEvent(AstrMessageEvent):
                 logger.debug(f'[Kook] 跳过空消息,类型为"{item.type.name}"')
                 continue
             try:
-                await self.client.send_text(
+                await self._client.send_text(
                     self.channel_id,
                     item.text,
                     self.astrbot_message_type,
@@ -194,7 +194,7 @@ class KookEvent(AstrMessageEvent):
                     reply_id,
                 )
             except RuntimeError as exp:
-                await self.client.send_text(
+                await self._client.send_text(
                     self.channel_id,
                     str(exp),
                     self.astrbot_message_type,

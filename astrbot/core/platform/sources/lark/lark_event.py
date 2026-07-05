@@ -50,7 +50,7 @@ class LarkMessageEvent(AstrMessageEvent):
         bot: lark.Client,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.bot = bot
+        self._bot = bot
 
     @staticmethod
     async def _send_im_message(
@@ -555,7 +555,7 @@ class LarkMessageEvent(AstrMessageEvent):
         """发送消息链到飞书，然后交给父类做框架级发送/记录"""
         await LarkMessageEvent.send_message_chain(
             message,
-            self.bot,
+            self._bot,
             reply_message_id=self.message_obj.message_id,
         )
         await super().send(message)
@@ -741,7 +741,7 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
     async def react(self, emoji: str) -> None:
-        if self.bot.im is None:
+        if self._bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
             return
 
@@ -756,14 +756,14 @@ class LarkMessageEvent(AstrMessageEvent):
             .build()
         )
 
-        response = await self.bot.im.v1.message_reaction.acreate(request)
+        response = await self._bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
             return
 
     async def _create_streaming_card(self) -> str | None:
         """创建一个开启流式更新模式的卡片实体，返回 card_id。"""
-        if self.bot.cardkit is None:
+        if self._bot.cardkit is None:
             logger.error("[Lark] API Client cardkit 模块未初始化")
             return None
 
@@ -804,7 +804,7 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         try:
-            response = await self.bot.cardkit.v1.card.acreate(request)
+            response = await self._bot.cardkit.v1.card.acreate(request)
         except Exception as e:
             logger.error(f"[Lark] 创建流式卡片实体失败: {e}")
             return None
@@ -836,7 +836,7 @@ class LarkMessageEvent(AstrMessageEvent):
             ensure_ascii=False,
         )
         return await self._send_im_message(
-            self.bot,
+            self._bot,
             content=content,
             msg_type="interactive",
             reply_message_id=reply_message_id,
@@ -851,7 +851,7 @@ class LarkMessageEvent(AstrMessageEvent):
         sequence: int,
     ) -> bool:
         """调用 CardKit 流式更新文本接口，向 markdown_1 组件推送全量文本。"""
-        if self.bot.cardkit is None:
+        if self._bot.cardkit is None:
             logger.error("[Lark] API Client cardkit 模块未初始化")
             return False
 
@@ -870,7 +870,7 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         try:
-            response = await self.bot.cardkit.v1.card_element.acontent(request)
+            response = await self._bot.cardkit.v1.card_element.acontent(request)
         except Exception as e:
             logger.debug(f"[Lark] 流式更新文本失败 (ignored): {e}")
             return False
@@ -887,7 +887,7 @@ class LarkMessageEvent(AstrMessageEvent):
         sequence: int,
     ) -> None:
         """关闭卡片的流式更新模式，使其可正常转发、摘要恢复。"""
-        if self.bot.cardkit is None:
+        if self._bot.cardkit is None:
             logger.error("[Lark] API Client cardkit 模块未初始化")
             return
 
@@ -910,7 +910,7 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         try:
-            response = await self.bot.cardkit.v1.card.asettings(request)
+            response = await self._bot.cardkit.v1.card.asettings(request)
         except Exception as e:
             logger.error(f"[Lark] 关闭流式模式失败: {e}")
             return

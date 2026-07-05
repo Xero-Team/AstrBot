@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import PurePosixPath
+from time import monotonic
 from typing import cast
 
 from astrbot.api import logger
@@ -119,7 +120,6 @@ from .generated.ob11_events import (
     OnlineFileSegment as OB11OnlineFileSegment,
 )
 from .message_event import NapCatMessageEvent
-from .types import NapCatFetchedMessage
 
 NAPCAT_NOTICE_EVENT_TYPES = (
     OneBot11BotOffline,
@@ -270,6 +270,8 @@ NAPCAT_I18N_RESOURCES = {
     i18n_resources=NAPCAT_I18N_RESOURCES,
 )
 class NapCatPlatformAdapter(Platform):
+    _MESSAGE_EVENT_HANDLE_SLOW_LOG_THRESHOLD_S = 0.2
+
     def __init__(
         self,
         platform_config: dict,
@@ -302,9 +304,6 @@ class NapCatPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
-
-    def get_client(self) -> object:
-        return self.client
 
     async def set_group_admin(
         self,
@@ -562,14 +561,14 @@ class NapCatPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         if any(
             isinstance(component, Node | Nodes) for component in message_chain.chain
         ):
             await self._send_mixed_outbound_message(session, message_chain)
         else:
             await self._send_standard_message(session, message_chain)
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def _send_standard_message(
         self,
@@ -912,6 +911,7 @@ class NapCatPlatformAdapter(Platform):
                     payload.raw_message or "[empty]",
                 )
                 return
+            started_at = monotonic()
             message = await self._convert_message_event(payload)
             queued_event = self.create_event(message)
             scope = "group" if message.type == MessageType.GROUP_MESSAGE else "private"
@@ -924,6 +924,17 @@ class NapCatPlatformAdapter(Platform):
                 queued_event.get_message_outline() or message.message_str or "[empty]",
             )
             self.commit_event(queued_event)
+            elapsed = monotonic() - started_at
+            if elapsed >= self._MESSAGE_EVENT_HANDLE_SLOW_LOG_THRESHOLD_S:
+                logger.info(
+                    "[NapCat] Slow inbound message handling: platform_id=%s session=%s elapsed=%.2fs outline=%s",
+                    self.meta().id,
+                    message.session_id,
+                    elapsed,
+                    queued_event.get_message_outline()
+                    or message.message_str
+                    or "[empty]",
+                )
             return
 
         if isinstance(payload, NAPCAT_NOTICE_EVENT_TYPES):
@@ -1020,10 +1031,6 @@ class NapCatPlatformAdapter(Platform):
                 )
                 message.group_id = str(temp_group_id)
 
-        resolved_at_names: dict[str, str] = {}
-        if isinstance(event, OB11GroupMessage):
-            resolved_at_names = await self._resolve_group_at_names(event)
-
         message.message = []
         raw_message_text = str(getattr(event, "raw_message", "") or "")
         if isinstance(event.message, str):
@@ -1067,8 +1074,6 @@ class NapCatPlatformAdapter(Platform):
                     segment.root,
                     self_id=message.self_id,
                     first_at_self_processed=first_at_self_processed,
-                    resolve_reply=True,
-                    resolved_at_names=resolved_at_names,
                 )
                 message.message.extend(components)
                 message_parts.extend(segment_texts)
@@ -1090,8 +1095,6 @@ class NapCatPlatformAdapter(Platform):
                     payload,
                     self_id=message.self_id,
                     first_at_self_processed=first_at_self_processed,
-                    resolve_reply=True,
-                    resolved_at_names=resolved_at_names,
                 )
                 message.message.extend(components)
                 message_parts.extend(segment_texts)
@@ -1104,235 +1107,6 @@ class NapCatPlatformAdapter(Platform):
 
         message.message_str = "".join(message_parts).strip()
         return message
-
-    async def _resolve_group_at_names(
-        self,
-        event: OB11GroupMessage,
-    ) -> dict[str, str]:
-        missing_targets: list[str] = []
-        seen_targets: set[str] = set()
-        if isinstance(event.message, str):
-            message_payload = event.message or str(
-                getattr(event, "raw_message", "") or ""
-            )
-            for item in self._decode_cq_message_string(message_payload):
-                if item.get("type") != "at":
-                    continue
-                data = item.get("data")
-                if not isinstance(data, dict):
-                    continue
-                target = str(data.get("qq", "")).strip()
-                if not target or target == "all" or data.get("name"):
-                    continue
-                if target in seen_targets:
-                    continue
-                seen_targets.add(target)
-                missing_targets.append(target)
-        else:
-            for segment in event.message:
-                payload = segment.root
-                if not isinstance(payload, AtSegment):
-                    continue
-                target = str(payload.data.qq)
-                if target == "all" or payload.data.name:
-                    continue
-                if target in seen_targets:
-                    continue
-                seen_targets.add(target)
-                missing_targets.append(target)
-
-        if not missing_targets:
-            return {}
-
-        resolved_names = await asyncio.gather(
-            *[
-                self._resolve_group_at_name(group_id=event.group_id, user_id=target)
-                for target in missing_targets
-            ]
-        )
-        return {
-            target: resolved_name
-            for target, resolved_name in zip(
-                missing_targets, resolved_names, strict=True
-            )
-            if resolved_name
-        }
-
-    async def _resolve_group_at_name(
-        self,
-        *,
-        group_id: int | str,
-        user_id: int | str,
-    ) -> str | None:
-        try:
-            member_info = await self.client.get_group_member_info(group_id, user_id)
-        except NapCatError as exc:
-            logger.debug(
-                "[NapCat] Failed to resolve group member info for @%s in group %s: %s",
-                user_id,
-                group_id,
-                exc,
-            )
-        else:
-            member_name = self._pick_display_name(
-                self._value_from_mapping_or_attrs(member_info, "card"),
-                self._value_from_mapping_or_attrs(member_info, "nickname"),
-            )
-            if member_name:
-                return member_name
-
-        try:
-            stranger_info = await self.client.get_stranger_info(user_id)
-        except NapCatError as exc:
-            logger.debug(
-                "[NapCat] Failed to resolve stranger info for @%s: %s",
-                user_id,
-                exc,
-            )
-            return None
-
-        return self._pick_display_name(
-            self._value_from_mapping_or_attrs(stranger_info, "remark"),
-            self._value_from_mapping_or_attrs(stranger_info, "nickname"),
-        )
-
-    async def _build_reply_component(self, reply_id: str) -> Reply:
-        try:
-            quoted = await self.client.get_message(reply_id)
-        except NapCatError as exc:
-            logger.warning(
-                "[NapCat] Failed to resolve quoted message %s: %s",
-                reply_id,
-                exc,
-            )
-            return Reply(id=reply_id)
-
-        return await self._build_reply_from_fetched_message(reply_id, quoted)
-
-    async def _build_reply_from_fetched_message(
-        self,
-        reply_id: str,
-        quoted: NapCatFetchedMessage,
-    ) -> Reply:
-        quoted_group_id = self._stringify_event_value(quoted.extra.get("group_id"))
-        reply_chain, reply_message_str = await self._convert_fetched_message_payload(
-            quoted.message_payload,
-            group_id=quoted_group_id or None,
-        )
-        resolved_message_str = (
-            reply_message_str
-            if reply_message_str
-            else quoted.message_str
-            if not reply_chain
-            else ""
-        )
-        return Reply(
-            id=reply_id,
-            chain=reply_chain,
-            sender_id=str(quoted.sender_id) if quoted.sender_id is not None else 0,
-            sender_nickname=quoted.sender_nickname or "",
-            time=quoted.time or 0,
-            message_str=resolved_message_str,
-            text=resolved_message_str,
-            qq=str(quoted.sender_id) if quoted.sender_id is not None else 0,
-        )
-
-    async def _convert_fetched_message_payload(
-        self,
-        payload: object,
-        *,
-        group_id: str | None = None,
-    ) -> tuple[list[BaseMessageComponent], str]:
-        if isinstance(payload, str):
-            payload = self._decode_cq_message_string(payload)
-
-        if isinstance(payload, dict):
-            payload = [payload]
-
-        if not isinstance(payload, list):
-            return [], ""
-
-        resolved_at_names = (
-            await self._resolve_fetched_message_at_names(payload, group_id=group_id)
-            if group_id
-            else {}
-        )
-        chain: list[BaseMessageComponent] = []
-        message_parts: list[str] = []
-        first_at_self_processed = False
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            converted_nonstandard = self._convert_nonstandard_segment_dict(item)
-            if converted_nonstandard is not None:
-                components, segment_texts = converted_nonstandard
-                chain.extend(components)
-                message_parts.extend(segment_texts)
-                continue
-            try:
-                segment = OB11Segment.model_validate(item)
-            except Exception as exc:
-                logger.warning(
-                    "[NapCat] Failed to validate quoted message segment %s: %s",
-                    item,
-                    exc,
-                )
-                continue
-
-            (
-                components,
-                segment_texts,
-                first_at_self_processed,
-            ) = await self._convert_segment_payload_async(
-                segment.root,
-                self_id="",
-                first_at_self_processed=first_at_self_processed,
-                resolve_reply=False,
-                resolved_at_names=resolved_at_names,
-            )
-            chain.extend(components)
-            message_parts.extend(segment_texts)
-
-        return chain, "".join(message_parts).strip()
-
-    async def _resolve_fetched_message_at_names(
-        self,
-        payload: Sequence[object],
-        *,
-        group_id: str,
-    ) -> dict[str, str]:
-        missing_targets: list[str] = []
-        seen_targets: set[str] = set()
-        for item in payload:
-            if not isinstance(item, dict) or item.get("type") != "at":
-                continue
-            data = item.get("data")
-            if not isinstance(data, dict):
-                continue
-            target = str(data.get("qq", "")).strip()
-            if not target or target == "all" or data.get("name"):
-                continue
-            if target in seen_targets:
-                continue
-            seen_targets.add(target)
-            missing_targets.append(target)
-
-        if not missing_targets:
-            return {}
-
-        resolved_names = await asyncio.gather(
-            *[
-                self._resolve_group_at_name(group_id=group_id, user_id=target)
-                for target in missing_targets
-            ]
-        )
-        return {
-            target: resolved_name
-            for target, resolved_name in zip(
-                missing_targets, resolved_names, strict=True
-            )
-            if resolved_name
-        }
 
     def _convert_nonstandard_segment_dict(
         self,
@@ -1486,25 +1260,17 @@ class NapCatPlatformAdapter(Platform):
         *,
         self_id: str,
         first_at_self_processed: bool,
-        resolve_reply: bool,
-        resolved_at_names: dict[str, str] | None = None,
     ) -> tuple[list[BaseMessageComponent], list[str], bool]:
         if isinstance(payload, ReplySegment):
             reply_id = payload.data.id or payload.data.seq
             if reply_id is None:
                 return [], [], first_at_self_processed
-            reply_component = (
-                await self._build_reply_component(str(reply_id))
-                if resolve_reply
-                else Reply(id=str(reply_id))
-            )
-            return [reply_component], [], first_at_self_processed
+            return [Reply(id=str(reply_id))], [], first_at_self_processed
 
         return self._convert_segment_payload(
             payload,
             self_id=self_id,
             first_at_self_processed=first_at_self_processed,
-            resolved_at_names=resolved_at_names,
         )
 
     def _convert_segment_payload(
@@ -1513,7 +1279,6 @@ class NapCatPlatformAdapter(Platform):
         *,
         self_id: str,
         first_at_self_processed: bool,
-        resolved_at_names: dict[str, str] | None = None,
     ) -> tuple[list[BaseMessageComponent], list[str], bool]:
         if isinstance(payload, AnonymousSegment):
             ignore = payload.data.ignore
@@ -1534,9 +1299,7 @@ class NapCatPlatformAdapter(Platform):
             if target == "all":
                 return [AtAll(name="全体成员")], [" @all "], first_at_self_processed
 
-            resolved_name = payload.data.name or (resolved_at_names or {}).get(
-                str(target)
-            )
+            resolved_name = payload.data.name
             component = At(qq=target, name=resolved_name or "")
             if self_id and str(target) == self_id and not first_at_self_processed:
                 return [component], [], True
@@ -1854,9 +1617,9 @@ class NapCatPlatformAdapter(Platform):
         model_dump = getattr(raw_event, "model_dump", None)
         if callable(model_dump):
             try:
-                event.set_extra(
+                event.set_lazy_extra(
                     "napcat_event",
-                    model_dump(mode="json"),
+                    lambda: model_dump(mode="json"),
                 )
             except Exception as exc:
                 logger.warning("[NapCat] Failed to dump raw event payload: %s", exc)

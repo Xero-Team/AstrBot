@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -36,10 +37,8 @@ from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.platform.sources.napcat.exceptions import (
-    NapCatApiError,
-    NapCatTransportError,
-)
+from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.platform.sources.napcat.exceptions import NapCatApiError
 from astrbot.core.platform.sources.napcat.generated.ob11_events import OB11AllEvent
 from astrbot.core.platform.sources.napcat.napcat_platform_adapter import (
     NapCatPlatformAdapter,
@@ -218,6 +217,75 @@ async def test_napcat_forward_ws_client_surfaces_failed_response_without_echo():
 
     with pytest.raises(NapCatApiError, match="token验证失败"):
         await future
+
+
+@pytest.mark.asyncio
+async def test_napcat_forward_ws_client_background_dispatch_allows_action_response():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self.sent_payloads: list[dict[str, object]] = []
+
+        async def send(self, payload: str) -> None:
+            self.sent_payloads.append(json.loads(payload))
+
+    fake_socket = _FakeSocket()
+    adapter.client._socket = fake_socket
+    adapter.client._connected_event.set()
+
+    action_started = asyncio.Event()
+    action_finished = asyncio.Event()
+
+    async def mock_on_event(_event) -> None:
+        action_started.set()
+        payload = await adapter.client.call_action("unit_test_action", foo="bar")
+        assert payload["status"] == "ok"
+        action_finished.set()
+
+    adapter.client.on_event = mock_on_event
+    adapter.client._start_payload_task(
+        """
+        {
+          "post_type": "message",
+          "message_type": "private",
+          "sub_type": "friend",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "message_id": 778,
+          "font": 14,
+          "raw_message": "/sid",
+          "sender": {
+            "user_id": 111222,
+            "nickname": "tester"
+          },
+          "message": [
+            {"type": "text", "data": {"text": "/sid"}}
+          ]
+        }
+        """
+    )
+
+    await asyncio.wait_for(action_started.wait(), timeout=1.0)
+    assert len(fake_socket.sent_payloads) == 1
+
+    echo = str(fake_socket.sent_payloads[0]["echo"])
+    await adapter.client._handle_ws_payload(
+        json.dumps(
+            {
+                "status": "ok",
+                "retcode": 0,
+                "data": {"done": True},
+                "echo": echo,
+            }
+        )
+    )
+
+    await asyncio.wait_for(action_finished.wait(), timeout=1.0)
+    if adapter.client._payload_tasks:
+        await asyncio.gather(*list(adapter.client._payload_tasks), return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -559,17 +627,7 @@ async def test_napcat_forward_ws_client_accepts_group_string_message_payload():
 async def test_napcat_forward_ws_client_parses_group_string_cq_segments():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9004,
-            sender_id=333447,
-            sender_nickname="quoted-cq-string",
-            time=1720000003,
-            message_str="quoted @member text",
-            raw_message="quoted [CQ:at,qq=445566,name=member] text",
-            message_payload="quoted [CQ:at,qq=445566,name=member] text",
-        )
-    )
+    adapter.client.get_message = AsyncMock()
 
     await adapter.client._handle_ws_payload(
         """
@@ -607,36 +665,21 @@ async def test_napcat_forward_ws_client_parses_group_string_cq_segments():
         "Reply",
     ]
     reply = queued.get_messages()[-1]
-    assert reply.sender_id == "333447"
-    assert reply.sender_nickname == "quoted-cq-string"
-    assert [type(component).__name__ for component in reply.chain] == [
-        "Plain",
-        "At",
-        "Plain",
-    ]
-    assert reply.chain[1].name == "member"
+    assert reply.id == "9004"
+    assert reply.sender_id == 0
+    assert reply.sender_nickname == ""
+    assert reply.message_str == ""
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_napcat_forward_ws_client_enriches_group_string_at_names_from_client():
+async def test_napcat_forward_ws_client_keeps_group_string_at_targets_without_lookup():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.get_message = AsyncMock()
-
-    async def mock_get_group_member_info(group_id: int | str, user_id: int | str):
-        assert str(group_id) == "654321"
-        if str(user_id) == "999999":
-            return SimpleNamespace(card="member-card", nickname="member-nick")
-        raise NapCatTransportError("get_group_member_info", "member not found")
-
-    async def mock_get_stranger_info(user_id: int | str):
-        assert str(user_id) == "888888"
-        return SimpleNamespace(remark="", nickname="stranger-nick")
-
-    adapter.client.get_group_member_info = AsyncMock(
-        side_effect=mock_get_group_member_info
-    )
-    adapter.client.get_stranger_info = AsyncMock(side_effect=mock_get_stranger_info)
+    adapter.client.get_group_member_info = AsyncMock()
+    adapter.client.get_stranger_info = AsyncMock()
 
     await adapter.client._handle_ws_payload(
         """
@@ -668,7 +711,7 @@ async def test_napcat_forward_ws_client_enriches_group_string_at_names_from_clie
     queued = queue.get_nowait()
     assert (
         queued.get_message_str()
-        == "@member-card  hi  @stranger-nick  @all  @inline-name"
+        == "@999999  hi  @888888  @all  @inline-name"
     )
     messages = queued.get_messages()
     assert [type(component).__name__ for component in messages] == [
@@ -678,34 +721,19 @@ async def test_napcat_forward_ws_client_enriches_group_string_at_names_from_clie
         "AtAll",
         "At",
     ]
-    assert messages[0].name == "member-card"
-    assert messages[2].name == "stranger-nick"
+    assert messages[0].name == ""
+    assert messages[2].name == ""
     assert messages[4].name == "inline-name"
-    assert {
-        (str(call.args[0]), str(call.args[1]))
-        for call in adapter.client.get_group_member_info.await_args_list
-    } == {
-        ("654321", "999999"),
-        ("654321", "888888"),
-    }
-    adapter.client.get_stranger_info.assert_awaited_once_with("888888")
+    adapter.client.get_group_member_info.assert_not_awaited()
+    adapter.client.get_stranger_info.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_napcat_forward_ws_client_enriches_group_string_at_names_from_raw_message_fallback():
+async def test_napcat_forward_ws_client_keeps_group_string_at_targets_from_raw_message_fallback():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.get_message = AsyncMock()
-
-    async def mock_get_group_member_info(group_id: int | str, user_id: int | str):
-        assert str(group_id) == "654321"
-        if str(user_id) == "999999":
-            return SimpleNamespace(card="member-card", nickname="member-nick")
-        raise NapCatTransportError("get_group_member_info", "member not found")
-
-    adapter.client.get_group_member_info = AsyncMock(
-        side_effect=mock_get_group_member_info
-    )
+    adapter.client.get_group_member_info = AsyncMock()
     adapter.client.get_stranger_info = AsyncMock()
 
     await adapter.client._handle_ws_payload(
@@ -736,14 +764,11 @@ async def test_napcat_forward_ws_client_enriches_group_string_at_names_from_raw_
     )
 
     queued = queue.get_nowait()
-    assert queued.get_message_str() == "@member-card  hello"
+    assert queued.get_message_str() == "@999999  hello"
     messages = queued.get_messages()
     assert [type(component).__name__ for component in messages] == ["At", "Plain"]
-    assert messages[0].name == "member-card"
-    assert {
-        tuple(str(arg) for arg in call.args)
-        for call in adapter.client.get_group_member_info.await_args_list
-    } == {("654321", "999999")}
+    assert messages[0].name == ""
+    adapter.client.get_group_member_info.assert_not_awaited()
     adapter.client.get_stranger_info.assert_not_awaited()
 
 
@@ -1091,13 +1116,12 @@ async def test_napcat_group_message_event_is_queued_with_expected_components():
         "Reply",
     ]
     reply = queued.get_messages()[-1]
-    assert reply.sender_id == "333444"
-    assert reply.sender_nickname == "quoted-user"
-    assert reply.message_str == "quoted text"
-    assert [type(component).__name__ for component in reply.chain] == [
-        "Plain",
-        "Image",
-    ]
+    assert reply.id == "9001"
+    assert reply.sender_id == 0
+    assert reply.sender_nickname == ""
+    assert reply.message_str == ""
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
     await queued.delete()
     adapter.client.delete_message.assert_awaited_once_with("777")
 
@@ -1106,18 +1130,7 @@ async def test_napcat_group_message_event_is_queued_with_expected_components():
 async def test_napcat_group_message_reply_accepts_string_quoted_payload():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9003,
-            sender_id=333446,
-            sender_nickname="quoted-string",
-            time=1720000002,
-            message_str="quoted string text",
-            raw_message="quoted string text",
-            message_payload="quoted string text",
-            extra={"message_format": "string"},
-        )
-    )
+    adapter.client.get_message = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1147,31 +1160,19 @@ async def test_napcat_group_message_reply_accepts_string_quoted_payload():
 
     queued = queue.get_nowait()
     reply = queued.get_messages()[-1]
-    assert reply.sender_id == "333446"
-    assert reply.sender_nickname == "quoted-string"
-    assert reply.message_str == "quoted string text"
-    assert [type(component).__name__ for component in reply.chain] == ["Plain"]
-    assert reply.chain[0].text == "quoted string text"
+    assert reply.id == "9003"
+    assert reply.sender_id == 0
+    assert reply.sender_nickname == ""
+    assert reply.message_str == ""
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_napcat_group_message_reply_prefers_decoded_text_for_array_payload():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9004,
-            sender_id=333447,
-            sender_nickname="quoted-array",
-            time=1720000003,
-            message_str="[CQ:at,qq=445566,name=member] text",
-            raw_message="[CQ:at,qq=445566,name=member] text",
-            message_payload=[
-                {"type": "at", "data": {"qq": "445566", "name": "member"}},
-                {"type": "text", "data": {"text": " text"}},
-            ],
-        )
-    )
+    adapter.client.get_message = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1201,30 +1202,17 @@ async def test_napcat_group_message_reply_prefers_decoded_text_for_array_payload
 
     queued = queue.get_nowait()
     reply = queued.get_messages()[-1]
-    assert reply.message_str == "@member  text"
-    assert [type(component).__name__ for component in reply.chain] == [
-        "At",
-        "Plain",
-    ]
-    assert reply.chain[0].name == "member"
+    assert reply.id == "9004"
+    assert reply.message_str == ""
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_napcat_group_message_reply_uses_decoded_text_for_runtime_string_payload():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9005,
-            sender_id=333448,
-            sender_nickname="quoted-runtime-string",
-            time=1720000004,
-            message_str="[CQ:at,qq=445566,name=member] hi",
-            raw_message="[CQ:at,qq=445566,name=member] hi",
-            message_payload="[CQ:at,qq=445566,name=member] hi",
-            extra={"message_format": "string"},
-        )
-    )
+    adapter.client.get_message = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1254,41 +1242,19 @@ async def test_napcat_group_message_reply_uses_decoded_text_for_runtime_string_p
 
     queued = queue.get_nowait()
     reply = queued.get_messages()[-1]
-    assert reply.message_str == "@member  hi"
-    assert [type(component).__name__ for component in reply.chain] == [
-        "At",
-        "Plain",
-    ]
-    assert reply.chain[0].name == "member"
+    assert reply.id == "9005"
+    assert reply.message_str == ""
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_napcat_group_message_reply_enriches_missing_at_names_from_group_context():
+async def test_napcat_group_message_reply_keeps_missing_at_targets_without_group_lookup():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-
-    async def mock_get_group_member_info(group_id: int | str, user_id: int | str):
-        assert str(group_id) == "654321"
-        if str(user_id) == "445566":
-            return SimpleNamespace(card="member-card", nickname="member-nick")
-        raise NapCatTransportError("get_group_member_info", "member not found")
-
-    adapter.client.get_group_member_info = AsyncMock(
-        side_effect=mock_get_group_member_info
-    )
+    adapter.client.get_group_member_info = AsyncMock()
     adapter.client.get_stranger_info = AsyncMock()
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9005,
-            sender_id=333448,
-            sender_nickname="quoted-runtime-string",
-            time=1720000004,
-            message_str="[CQ:at,qq=445566] hi",
-            raw_message="[CQ:at,qq=445566] hi",
-            message_payload="[CQ:at,qq=445566] hi",
-            extra={"message_format": "string", "group_id": 654321},
-        )
-    )
+    adapter.client.get_message = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1318,32 +1284,19 @@ async def test_napcat_group_message_reply_enriches_missing_at_names_from_group_c
 
     queued = queue.get_nowait()
     reply = queued.get_messages()[-1]
-    assert reply.message_str == "@member-card  hi"
-    assert [type(component).__name__ for component in reply.chain] == [
-        "At",
-        "Plain",
-    ]
-    assert reply.chain[0].name == "member-card"
-    adapter.client.get_group_member_info.assert_awaited_once_with("654321", "445566")
+    assert reply.id == "9005"
+    assert reply.message_str == ""
+    assert not reply.chain
+    adapter.client.get_group_member_info.assert_not_awaited()
     adapter.client.get_stranger_info.assert_not_awaited()
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_napcat_group_message_reply_keeps_nontext_runtime_string_payload_empty():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9006,
-            sender_id=333449,
-            sender_nickname="quoted-runtime-nontext",
-            time=1720000005,
-            message_str="[CQ:forward,id=forward-1]",
-            raw_message="[CQ:forward,id=forward-1]",
-            message_payload="[CQ:forward,id=forward-1]",
-            extra={"message_format": "string"},
-        )
-    )
+    adapter.client.get_message = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1373,9 +1326,10 @@ async def test_napcat_group_message_reply_keeps_nontext_runtime_string_payload_e
 
     queued = queue.get_nowait()
     reply = queued.get_messages()[-1]
+    assert reply.id == "9006"
     assert reply.message_str == ""
-    assert [type(component).__name__ for component in reply.chain] == ["Forward"]
-    assert reply.chain[0].id == "forward-1"
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1414,25 +1368,12 @@ async def test_napcat_group_message_event_logs_inbound_summary(caplog):
 
 
 @pytest.mark.asyncio
-async def test_napcat_group_message_at_segment_names_are_enriched_from_client():
+async def test_napcat_group_message_at_segment_keeps_targets_without_client_lookup():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.get_message = AsyncMock()
-
-    async def mock_get_group_member_info(group_id: int | str, user_id: int | str):
-        assert str(group_id) == "654321"
-        if str(user_id) == "999999":
-            return SimpleNamespace(card="member-card", nickname="member-nick")
-        raise NapCatTransportError("get_group_member_info", "member not found")
-
-    async def mock_get_stranger_info(user_id: int | str):
-        assert str(user_id) == "888888"
-        return SimpleNamespace(remark="", nickname="stranger-nick")
-
-    adapter.client.get_group_member_info = AsyncMock(
-        side_effect=mock_get_group_member_info
-    )
-    adapter.client.get_stranger_info = AsyncMock(side_effect=mock_get_stranger_info)
+    adapter.client.get_group_member_info = AsyncMock()
+    adapter.client.get_stranger_info = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1462,20 +1403,12 @@ async def test_napcat_group_message_at_segment_names_are_enriched_from_client():
     await adapter.handle_forward_ws_event(event)
 
     queued = queue.get_nowait()
-    assert queued.get_message_str() == "@member-card  hi  @stranger-nick"
-    assert "999999" not in queued.get_message_str()
-    assert "888888" not in queued.get_message_str()
+    assert queued.get_message_str() == "@999999  hi  @888888"
     messages = queued.get_messages()
-    assert messages[0].name == "member-card"
-    assert messages[2].name == "stranger-nick"
-    assert {
-        (str(call.args[0]), str(call.args[1]))
-        for call in adapter.client.get_group_member_info.await_args_list
-    } == {
-        ("654321", "999999"),
-        ("654321", "888888"),
-    }
-    adapter.client.get_stranger_info.assert_awaited_once_with("888888")
+    assert messages[0].name == ""
+    assert messages[2].name == ""
+    adapter.client.get_group_member_info.assert_not_awaited()
+    adapter.client.get_stranger_info.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1772,45 +1705,7 @@ async def test_napcat_forward_ws_group_message_accepts_real_file_like_payloads()
 async def test_napcat_group_message_reply_preserves_nonstandard_quoted_segments():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    adapter.client.get_message = AsyncMock(
-        return_value=NapCatFetchedMessage(
-            message_id=9002,
-            sender_id=333445,
-            sender_nickname="quoted-nonstandard",
-            time=1720000001,
-            message_str="quoted rich payload",
-            raw_message="quoted rich payload",
-            message_payload=[
-                {
-                    "type": "mface",
-                    "data": {
-                        "emoji_package_id": 1152,
-                        "emoji_id": "987654321",
-                        "key": "market-face-key",
-                        "summary": "[HappyFace]",
-                    },
-                },
-                {"type": "markdown", "data": {"content": "# title"}},
-                {"type": "miniapp", "data": {"data": '{"app":"demo"}'}},
-                {
-                    "type": "onlinefile",
-                    "data": {
-                        "msgId": "msg-1",
-                        "elementId": "element-1",
-                        "fileName": "demo.zip",
-                        "fileSize": "1024",
-                        "isDir": False,
-                    },
-                },
-                {
-                    "type": "flashtransfer",
-                    "data": {
-                        "fileSetId": "flash-set-1",
-                    },
-                },
-            ],
-        )
-    )
+    adapter.client.get_message = AsyncMock()
     event = OB11AllEvent.model_validate(
         {
             "post_type": "message",
@@ -1839,18 +1734,9 @@ async def test_napcat_group_message_reply_preserves_nonstandard_quoted_segments(
 
     queued = queue.get_nowait()
     reply = queued.get_messages()[0]
-    assert [type(component).__name__ for component in reply.chain] == [
-        "MFace",
-        "Markdown",
-        "MiniApp",
-        "OnlineFile",
-        "FlashTransfer",
-    ]
-    assert reply.chain[0].summary == "[HappyFace]"
-    assert reply.chain[1].content == "# title"
-    assert reply.chain[2].data == '{"app":"demo"}'
-    assert reply.chain[3].file_name == "demo.zip"
-    assert reply.chain[4].file_set_id == "flash-set-1"
+    assert reply.id == "9002"
+    assert not reply.chain
+    adapter.client.get_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -2041,6 +1927,148 @@ async def test_napcat_group_notice_keeps_group_session_when_unique_session_enabl
     await stage.process(queued)
 
     assert queued.session.session_id == "654321"
+
+
+@pytest.mark.asyncio
+async def test_napcat_group_message_route_identity_keeps_original_group_target_after_unique_session(
+    monkeypatch,
+):
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    queued = _make_manual_event(
+        adapter,
+        sender_id="111222",
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="654321",
+        message=[Plain("hello")],
+    )
+    queued.message_str = "hello"
+
+    stage = WakingCheckStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config={
+                "admins_id": [],
+                "wake_prefix": ["/"],
+                "platform_settings": {
+                    "no_permission_reply": True,
+                    "friend_message_needs_wake_prefix": False,
+                    "ignore_bot_self_message": False,
+                    "ignore_at_all": False,
+                    "unique_session": True,
+                },
+                "disable_builtin_commands": False,
+                "plugin_set": ["*"],
+            }
+        )
+    )
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *args, **kwargs: [],
+    )
+
+    assert queued.route_origin == "napcat-test:GroupMessage:654321"
+
+    await stage.process(queued)
+
+    assert queued.session.session_id == "111222_654321"
+    assert queued.route_identity.target_id == "654321"
+    assert queued.route_origin == "napcat-test:GroupMessage:654321"
+
+
+@pytest.mark.asyncio
+async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
+    monkeypatch,
+):
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.get_message = AsyncMock(
+        return_value=NapCatFetchedMessage(message_id=9001, sender_id=123456)
+    )
+    event = OB11AllEvent.model_validate(
+        {
+            "post_type": "message",
+            "message_type": "group",
+            "sub_type": "normal",
+            "time": 1720000000,
+            "self_id": 123456,
+            "group_id": 654321,
+            "user_id": 111222,
+            "message_id": 781,
+            "font": 14,
+            "raw_message": "[CQ:reply,id=9001] hello",
+            "sender": {
+                "user_id": 111222,
+                "nickname": "tester",
+                "card": "tester-card",
+                "role": "member",
+            },
+            "message": [
+                {"type": "reply", "data": {"id": "9001"}},
+                {"type": "text", "data": {"text": " hello"}},
+            ],
+        }
+    )
+
+    await adapter.handle_forward_ws_event(event)
+    queued = queue.get_nowait()
+    reply = queued.get_messages()[0]
+    assert reply.sender_id == 0
+    adapter.client.get_message.assert_not_awaited()
+
+    stage = WakingCheckStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config={
+                "admins_id": [],
+                "wake_prefix": ["/"],
+                "platform_settings": {
+                    "no_permission_reply": True,
+                    "friend_message_needs_wake_prefix": False,
+                    "ignore_bot_self_message": False,
+                    "ignore_at_all": False,
+                    "unique_session": False,
+                },
+                "disable_builtin_commands": False,
+                "plugin_set": ["*"],
+            }
+        )
+    )
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *args, **kwargs: [],
+    )
+
+    await stage.process(queued)
+
+    assert queued.is_wake is True
+    assert queued.is_at_or_wake_command is True
+    assert reply.sender_id == "123456"
+    adapter.client.get_message.assert_awaited_once_with("9001")
+
+
+@pytest.mark.asyncio
+async def test_napcat_event_send_uses_route_identity_after_unique_session_mutation():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock()
+    event = _make_manual_event(
+        adapter,
+        sender_id="111222",
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="654321",
+    )
+    event.session_id = "111222_654321"
+
+    await event.send(MessageChain([Plain("reply")]))
+
+    adapter.client.send_group_message.assert_awaited_once()
+    call = adapter.client.send_group_message.await_args.kwargs
+    assert call["group_id"] == "654321"
+    assert event.route_identity.target_id == "654321"
+    assert event.session.session_id == "111222_654321"
 
 
 @pytest.mark.asyncio
@@ -3498,7 +3526,11 @@ async def test_napcat_event_send_streaming_batches_without_fallback():
 
     result = await event.send_streaming(_generator())
 
-    assert result is None
+    assert result == PlatformSendResult(
+        platform_id="napcat-test",
+        success=True,
+        target="445566",
+    )
     event.send.assert_awaited_once()
     sent_chain = event.send.await_args.args[0]
     assert isinstance(sent_chain, MessageChain)
@@ -3531,7 +3563,11 @@ async def test_napcat_event_send_streaming_fallback_sends_components_incremental
 
     result = await event.send_streaming(_generator(), use_fallback=True)
 
-    assert result is None
+    assert result == PlatformSendResult(
+        platform_id="napcat-test",
+        success=True,
+        target="445566",
+    )
     assert event.send.await_count == 3
     first_chain = event.send.await_args_list[0].args[0]
     second_chain = event.send.await_args_list[1].args[0]

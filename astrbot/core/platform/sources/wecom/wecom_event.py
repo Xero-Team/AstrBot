@@ -23,7 +23,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         client: WeChatClient,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
 
     @staticmethod
     async def send_with_client(
@@ -82,10 +82,10 @@ class WecomPlatformEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
 
-        is_wechat_kf = hasattr(self.client, "kf_message")
+        is_wechat_kf = hasattr(self._client, "kf_message")
         if is_wechat_kf:
             # 微信客服
-            kf_message_api = getattr(self.client, "kf_message", None)
+            kf_message_api = getattr(self._client, "kf_message", None)
             if not isinstance(kf_message_api, WeChatKFMessage):
                 logger.warning("未找到微信客服发送消息方法。")
                 return
@@ -104,7 +104,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 logger.warning(
                                     f"kf API error 40096 for user {user_id}, falling back to regular message API"
                                 )
-                                self.client.message.send_text(
+                                self._client.message.send_text(
                                     self.get_self_id(), user_id, chunk
                                 )
                             else:
@@ -115,7 +115,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
                     with open(img_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("image", f)
+                            response = self._client.media.upload("image", f)
                         except Exception as e:
                             logger.error(f"微信客服上传图片失败: {e}")
                             await self.send(
@@ -135,7 +135,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     try:
                         with open(record_path_amr, "rb") as f:
                             try:
-                                response = self.client.media.upload("voice", f)
+                                response = self._client.media.upload("voice", f)
                             except Exception as e:
                                 logger.error(f"微信客服上传语音失败: {e}")
                                 await self.send(
@@ -163,7 +163,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
                     with open(file_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("file", f)
+                            response = self._client.media.upload("file", f)
                         except Exception as e:
                             logger.error(f"微信客服上传文件失败: {e}")
                             await self.send(
@@ -181,7 +181,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
                     with open(video_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("video", f)
+                            response = self._client.media.upload("video", f)
                         except Exception as e:
                             logger.error(f"微信客服上传视频失败: {e}")
                             await self.send(
@@ -203,7 +203,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     # Split long text messages if needed
                     plain_chunks = await self.split_plain(comp.text)
                     for chunk in plain_chunks:
-                        self.client.message.send_text(
+                        self._client.message.send_text(
                             message_obj.self_id,
                             message_obj.session_id,
                             chunk,
@@ -214,7 +214,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
                     with open(img_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("image", f)
+                            response = self._client.media.upload("image", f)
                         except Exception as e:
                             logger.error(f"企业微信上传图片失败: {e}")
                             await self.send(
@@ -222,7 +222,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             )
                             return
                         logger.debug(f"企业微信上传图片返回: {response}")
-                        self.client.message.send_image(
+                        self._client.message.send_image(
                             message_obj.self_id,
                             message_obj.session_id,
                             response["media_id"],
@@ -234,7 +234,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     try:
                         with open(record_path_amr, "rb") as f:
                             try:
-                                response = self.client.media.upload("voice", f)
+                                response = self._client.media.upload("voice", f)
                             except Exception as e:
                                 logger.error(f"企业微信上传语音失败: {e}")
                                 await self.send(
@@ -244,7 +244,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 )
                                 return
                             logger.info(f"企业微信上传语音返回: {response}")
-                            self.client.message.send_voice(
+                            self._client.message.send_voice(
                                 message_obj.self_id,
                                 message_obj.session_id,
                                 response["media_id"],
@@ -262,7 +262,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
                     with open(file_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("file", f)
+                            response = self._client.media.upload("file", f)
                         except Exception as e:
                             logger.error(f"企业微信上传文件失败: {e}")
                             await self.send(
@@ -270,7 +270,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             )
                             return
                         logger.debug(f"企业微信上传文件返回: {response}")
-                        self.client.message.send_file(
+                        self._client.message.send_file(
                             message_obj.self_id,
                             message_obj.session_id,
                             response["media_id"],
@@ -280,7 +280,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
                     with open(video_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("video", f)
+                            response = self._client.media.upload("video", f)
                         except Exception as e:
                             logger.error(f"企业微信上传视频失败: {e}")
                             await self.send(
@@ -288,7 +288,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             )
                             return
                         logger.debug(f"企业微信上传视频返回: {response}")
-                        self.client.message.send_video(
+                        self._client.message.send_video(
                             message_obj.self_id,
                             message_obj.session_id,
                             response["media_id"],

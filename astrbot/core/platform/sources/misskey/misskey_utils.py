@@ -267,12 +267,15 @@ async def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
     if file_type.startswith("image/"):
         return Comp.Image(url=file_url, file=file_name), f"图片[{file_name}]"
     if file_type.startswith("audio/"):
-        path_wav = await MediaResolver(
-            file_url,
-            media_type="audio",
-            default_suffix=".wav",
-        ).to_path(target_format="wav")
-        return Comp.Record(url=path_wav, file=path_wav), f"音频[{file_name}]"
+        record = Comp.Record(file="")
+        record.set_source_resolver(
+            lambda file_url=file_url: MediaResolver(
+                file_url,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+        )
+        return record, f"音频[{file_name}]"
     if file_type.startswith("video/"):
         return Comp.Video(url=file_url, file=file_name), f"视频[{file_name}]"
     return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"

@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import override
 
@@ -16,6 +17,7 @@ class DiscordBotClient(discord.Bot):
         self.token = token
         self.proxy = proxy
         self.allow_bot_messages = allow_bot_messages
+        self._message_tasks: set[asyncio.Task[None]] = set()
 
         # 设置Intent权限，遵循权限最小化原则
         intents = discord.Intents.default()
@@ -102,7 +104,7 @@ class DiscordBotClient(discord.Bot):
 
         if self.on_message_received:
             message_data = self._create_message_data(message)
-            await self.on_message_received(message_data)
+            self._start_message_task(self.on_message_received(message_data))
 
     def _extract_interaction_content(self, interaction: discord.Interaction) -> str:
         """从交互中提取内容"""
@@ -135,5 +137,22 @@ class DiscordBotClient(discord.Bot):
     @override
     async def close(self) -> None:
         """关闭客户端"""
+        message_tasks = list(self._message_tasks)
+        if message_tasks:
+            await asyncio.gather(*message_tasks, return_exceptions=True)
+        self._message_tasks.clear()
         if not self.is_closed():
             await super().close()
+
+    def _start_message_task(self, coro: Awaitable[None]) -> None:
+        task = asyncio.create_task(coro, name="discord:on-message")
+        self._message_tasks.add(task)
+        task.add_done_callback(self._on_message_task_done)
+
+    def _on_message_task_done(self, task: asyncio.Task[None]) -> None:
+        self._message_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(f"[Discord] Message task failed: {exc}")

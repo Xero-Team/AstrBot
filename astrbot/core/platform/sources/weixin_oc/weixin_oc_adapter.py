@@ -735,8 +735,10 @@ class WeixinOCAdapter(Platform):
     async def _resolve_inbound_media_component(
         self,
         item: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> Image | Video | File | Record | None:
         item_type = int(item.get("type") or 0)
+        tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
 
         if item_type == self.IMAGE_ITEM_TYPE:
             image_item = cast(dict[str, Any], item.get("image_item", {}) or {})
@@ -751,25 +753,34 @@ class WeixinOCAdapter(Platform):
                 )
             else:
                 aes_key_value = str(media.get("aes_key", "")).strip()
-            if aes_key_value:
-                content = await self.client.download_and_decrypt_media(
-                    encrypted_query_param,
-                    aes_key_value,
+            image = Image(file="")
+
+            async def _resolve_image_source() -> str | None:
+                if aes_key_value:
+                    content = await self.client.download_and_decrypt_media(
+                        encrypted_query_param,
+                        aes_key_value,
+                    )
+                else:
+                    content = await self.client.download_cdn_bytes(
+                        encrypted_query_param
+                    )
+                mime_type = await detect_image_mime_type_async(
+                    content,
+                    default_mime_type=None,
                 )
-            else:
-                content = await self.client.download_cdn_bytes(encrypted_query_param)
-            mime_type = await detect_image_mime_type_async(
-                content,
-                default_mime_type=None,
-            )
-            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
-            image_path = self._save_inbound_media(
-                content,
-                prefix="weixin_oc_img",
-                file_name=f"image{suffix}",
-                fallback_suffix=suffix,
-            )
-            return Image.fromFileSystem(str(image_path))
+                suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+                image_path = self._save_inbound_media(
+                    content,
+                    prefix="weixin_oc_img",
+                    file_name=f"image{suffix}",
+                    fallback_suffix=suffix,
+                )
+                tracked_paths.append(str(image_path))
+                return str(image_path)
+
+            image.set_source_resolver(_resolve_image_source)
+            return image
 
         if item_type == self.VIDEO_ITEM_TYPE:
             video_item = cast(dict[str, Any], item.get("video_item", {}) or {})
@@ -778,17 +789,24 @@ class WeixinOCAdapter(Platform):
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
                 return None
-            content = await self.client.download_and_decrypt_media(
-                encrypted_query_param,
-                aes_key_value,
-            )
-            video_path = self._save_inbound_media(
-                content,
-                prefix="weixin_oc_video",
-                file_name="video.mp4",
-                fallback_suffix=".mp4",
-            )
-            return Video.fromFileSystem(str(video_path))
+            video = Video(file="")
+
+            async def _resolve_video_source() -> str | None:
+                content = await self.client.download_and_decrypt_media(
+                    encrypted_query_param,
+                    aes_key_value,
+                )
+                video_path = self._save_inbound_media(
+                    content,
+                    prefix="weixin_oc_video",
+                    file_name="video.mp4",
+                    fallback_suffix=".mp4",
+                )
+                tracked_paths.append(str(video_path))
+                return str(video_path)
+
+            video.set_source_resolver(_resolve_video_source)
+            return video
 
         if item_type == self.FILE_ITEM_TYPE:
             file_item = cast(dict[str, Any], item.get("file_item", {}) or {})
@@ -801,17 +819,24 @@ class WeixinOCAdapter(Platform):
                 str(file_item.get("file_name", "")).strip(),
                 "file.bin",
             )
-            content = await self.client.download_and_decrypt_media(
-                encrypted_query_param,
-                aes_key_value,
-            )
-            file_path = self._save_inbound_media(
-                content,
-                prefix="weixin_oc_file",
-                file_name=file_name,
-                fallback_suffix=".bin",
-            )
-            return File(name=file_name, file=str(file_path))
+            file_component = File(name=file_name)
+
+            async def _resolve_file_path() -> str | None:
+                content = await self.client.download_and_decrypt_media(
+                    encrypted_query_param,
+                    aes_key_value,
+                )
+                file_path = self._save_inbound_media(
+                    content,
+                    prefix="weixin_oc_file",
+                    file_name=file_name,
+                    fallback_suffix=".bin",
+                )
+                tracked_paths.append(str(file_path))
+                return str(file_path)
+
+            file_component.set_file_resolver(_resolve_file_path)
+            return file_component
 
         if item_type == self.VOICE_ITEM_TYPE:
             voice_item = cast(dict[str, Any], item.get("voice_item", {}) or {})
@@ -820,22 +845,30 @@ class WeixinOCAdapter(Platform):
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
                 return None
-            content = await self.client.download_and_decrypt_media(
-                encrypted_query_param,
-                aes_key_value,
-            )
-            voice_path = self._save_inbound_media(
-                content,
-                prefix="weixin_oc_voice",
-                file_name="voice.silk",
-                fallback_suffix=".silk",
-            )
-            path_wav = await MediaResolver(
-                str(voice_path),
-                media_type="audio",
-                default_suffix=".wav",
-            ).to_path(target_format="wav")
-            return Record(file=path_wav, url=path_wav)
+            record = Record(file="")
+
+            async def _resolve_voice_file() -> str | None:
+                content = await self.client.download_and_decrypt_media(
+                    encrypted_query_param,
+                    aes_key_value,
+                )
+                voice_path = self._save_inbound_media(
+                    content,
+                    prefix="weixin_oc_voice",
+                    file_name="voice.silk",
+                    fallback_suffix=".silk",
+                )
+                tracked_paths.append(str(voice_path))
+                path_wav = await MediaResolver(
+                    str(voice_path),
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                tracked_paths.append(path_wav)
+                return path_wav
+
+            record.set_source_resolver(_resolve_voice_file)
+            return record
 
         return None
 
@@ -1342,6 +1375,7 @@ class WeixinOCAdapter(Platform):
         *,
         session_id: str,
         ref_msg: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> tuple[Reply | None, WeixinOCReplyMeta]:
         metadata = WeixinOCReplyMeta(ref_msg=ref_msg)
         message_item = ref_msg.get("message_item")
@@ -1373,7 +1407,10 @@ class WeixinOCAdapter(Platform):
         quoted_components: list[Any] = []
         quoted_text = ""
         if quoted_item_type is not None:
-            quoted_components = await self._item_list_to_components([message_item])
+            quoted_components = await self._item_list_to_components(
+                [message_item],
+                temporary_file_paths,
+            )
             quoted_text = self._message_text_from_item_list(
                 [message_item],
                 include_ref_text=False,
@@ -1468,7 +1505,9 @@ class WeixinOCAdapter(Platform):
         return normalized_sender_id
 
     async def _item_list_to_components(
-        self, item_list: list[dict[str, Any]] | None
+        self,
+        item_list: list[dict[str, Any]] | None,
+        temporary_file_paths: list[str] | None = None,
     ) -> list[Any]:
         if not item_list:
             return []
@@ -1481,7 +1520,10 @@ class WeixinOCAdapter(Platform):
                     parts.append(Plain(text))
                 continue
             try:
-                media_component = await self._resolve_inbound_media_component(item)
+                media_component = await self._resolve_inbound_media_component(
+                    item,
+                    temporary_file_paths,
+                )
             except Exception as e:
                 logger.warning(
                     "weixin_oc(%s): resolve inbound media failed: %s",
@@ -1507,6 +1549,7 @@ class WeixinOCAdapter(Platform):
                 self._context_tokens_dirty = True
 
         item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
+        temporary_file_paths: list[str] = []
         reply_component = None
         reply_metadata = WeixinOCReplyMeta()
         for item in item_list:
@@ -1518,9 +1561,13 @@ class WeixinOCAdapter(Platform):
                 ) = await self._build_reply_component_from_ref(
                     session_id=from_user_id,
                     ref_msg=ref_msg,
+                    temporary_file_paths=temporary_file_paths,
                 )
                 break
-        cached_components = await self._item_list_to_components(item_list)
+        cached_components = await self._item_list_to_components(
+            item_list,
+            temporary_file_paths,
+        )
         components = list(cached_components)
         if reply_component is not None:
             components.insert(0, reply_component)
@@ -1548,6 +1595,7 @@ class WeixinOCAdapter(Platform):
         abm.message_str = text
         abm.timestamp = ts
         abm.raw_message = msg
+        setattr(abm, "temporary_file_paths", temporary_file_paths)
         abm.is_reply = reply_metadata.is_reply
         abm.ref_msg = reply_metadata.ref_msg
         abm.reply_kind = reply_metadata.reply_kind
@@ -1635,7 +1683,7 @@ class WeixinOCAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         target_user = session.session_id
         pending_text = ""
         has_supported_segment = False
@@ -1679,7 +1727,7 @@ class WeixinOCAdapter(Platform):
                 f"weixin_oc({self.meta().id}, target_user={target_user}) "
                 f"failed to send {failed_segments} message segment(s)"
             )
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return self.metadata

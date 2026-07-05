@@ -27,7 +27,6 @@ from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
-    MediaResolver,
     convert_audio_format,
     convert_video_format,
     extract_video_cover,
@@ -123,7 +122,7 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         robot_code = self.client_id
 
         if session.message_type == MessageType.GROUP_MESSAGE:
@@ -146,7 +145,7 @@ class DingtalkPlatformAdapter(Platform):
                 message_chain=message_chain,
             )
 
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def send_with_session(
         self,
@@ -171,6 +170,7 @@ class DingtalkPlatformAdapter(Platform):
         abm = AstrBotMessage()
         abm.message = []
         abm.message_str = ""
+        setattr(abm, "temporary_file_paths", [])
         abm.timestamp = int(cast(int, message.create_at) / 1000)
         abm.type = (
             MessageType.GROUP_MESSAGE
@@ -201,6 +201,27 @@ class DingtalkPlatformAdapter(Platform):
         raw_content = cast(dict, message.extensions.get("content") or {})
         if not isinstance(raw_content, dict):
             raw_content = {}
+
+        def _track_temp_path(path: str) -> str:
+            temp_paths = cast(list[str], getattr(abm, "temporary_file_paths", []))
+            if path and path not in temp_paths:
+                temp_paths.append(path)
+            return path
+
+        async def _download_media_lazily(
+            *,
+            download_code: str,
+            file_ext: str,
+        ) -> str | None:
+            f_path = await self.download_ding_file(
+                download_code,
+                robot_code,
+                file_ext,
+            )
+            if not f_path:
+                return None
+            return _track_temp_path(f_path)
+
         match message_type:
             case "text":
                 abm.message_str = message.text.content.strip()
@@ -220,15 +241,14 @@ class DingtalkPlatformAdapter(Platform):
                 if not download_code:
                     logger.warning("钉钉图片消息缺少 downloadCode，已跳过")
                 else:
-                    f_path = await self.download_ding_file(
-                        download_code,
-                        robot_code,
-                        "jpg",
+                    image = Image(file="")
+                    image.set_source_resolver(
+                        lambda download_code=download_code: _download_media_lazily(
+                            download_code=download_code,
+                            file_ext="jpg",
+                        )
                     )
-                    if f_path:
-                        abm.message.append(Image.fromFileSystem(f_path))
-                    else:
-                        logger.warning("钉钉图片消息下载失败，无法解析为图片")
+                    abm.message.append(image)
             case "richText":
                 rtc: dingtalk_stream.RichTextContent = cast(
                     dingtalk_stream.RichTextContent, message.rich_text_content
@@ -253,13 +273,14 @@ class DingtalkPlatformAdapter(Platform):
                                 "钉钉富文本图片消息解析失败: 回调中缺少 robotCode"
                             )
                             continue
-                        f_path = await self.download_ding_file(
-                            download_code,
-                            robot_code,
-                            "jpg",
+                        image = Image(file="")
+                        image.set_source_resolver(
+                            lambda download_code=download_code: _download_media_lazily(
+                                download_code=download_code,
+                                file_ext="jpg",
+                            )
                         )
-                        if f_path:
-                            abm.message.append(Image.fromFileSystem(f_path))
+                        abm.message.append(image)
                 abm.message_str = "".join(plain_parts).strip()
             case "audio" | "voice":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
@@ -272,18 +293,16 @@ class DingtalkPlatformAdapter(Platform):
                     if not voice_ext:
                         voice_ext = "amr"
                     voice_ext = voice_ext.lstrip(".")
-                    f_path = await self.download_ding_file(
-                        download_code,
-                        robot_code,
-                        voice_ext,
+                    record = Record(file="")
+                    record.set_source_resolver(
+                        lambda download_code=download_code, voice_ext=voice_ext: (
+                            _download_media_lazily(
+                                download_code=download_code,
+                                file_ext=voice_ext,
+                            )
+                        )
                     )
-                    if f_path:
-                        path_wav = await MediaResolver(
-                            f_path,
-                            media_type="audio",
-                            default_suffix=".wav",
-                        ).to_path(target_format="wav")
-                        abm.message.append(Record(file=path_wav, url=path_wav))
+                    abm.message.append(record)
             case "file":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
                 if not download_code:
@@ -292,20 +311,32 @@ class DingtalkPlatformAdapter(Platform):
                     logger.error("钉钉文件消息解析失败: 回调中缺少 robotCode")
                 else:
                     file_name = cast(str, raw_content.get("fileName") or "")
+                    file_name_missing = not file_name
                     file_ext = Path(file_name).suffix.lstrip(".") if file_name else ""
                     if not file_ext:
                         file_ext = cast(str, raw_content.get("fileExtension") or "")
                     if not file_ext:
                         file_ext = "file"
-                    f_path = await self.download_ding_file(
-                        download_code,
-                        robot_code,
-                        file_ext,
-                    )
-                    if f_path:
-                        if not file_name:
-                            file_name = Path(f_path).name
-                        abm.message.append(File(name=file_name, file=f_path))
+                    if not file_name:
+                        file_name = f"dingtalk_file.{file_ext}"
+                    file_component = File(name=file_name)
+
+                    async def _resolve_file_path(
+                        *,
+                        download_code: str = download_code,
+                        file_ext: str = file_ext,
+                        file_name_missing: bool = file_name_missing,
+                    ) -> str | None:
+                        resolved_path = await _download_media_lazily(
+                            download_code=download_code,
+                            file_ext=file_ext,
+                        )
+                        if resolved_path and file_name_missing:
+                            file_component.name = Path(resolved_path).name
+                        return resolved_path
+
+                    file_component.set_file_resolver(_resolve_file_path)
+                    abm.message.append(file_component)
 
         await self._remember_sender_binding(message, abm)
         return abm  # 别忘了返回转换后的消息对象
@@ -862,6 +893,3 @@ class DingtalkPlatformAdapter(Platform):
         if self.client_.websocket is not None:
             self.client_.open_connection = monkey_patch_close
             await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
-
-    def get_client(self):
-        return self.client

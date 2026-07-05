@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from requests import Response
-from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.enterprise.messages import ImageMessage, TextMessage, VoiceMessage
+from wechatpy.exceptions import InvalidSignatureException
 
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record
@@ -144,6 +144,7 @@ async def test_wecom_server_handle_callback_decrypts_parses_and_invokes_callback
     monkeypatch,
 ):
     server = wecom_adapter.WecomServer.__new__(wecom_adapter.WecomServer)
+    server._callback_tasks = set()
     server.crypto = SimpleNamespace(
         decrypt_message=MagicMock(return_value="<xml>ok</xml>")
     )
@@ -163,12 +164,53 @@ async def test_wecom_server_handle_callback_decrypts_parses_and_invokes_callback
         b"encrypted", "sig", "ts", "nonce"
     )
     wecom_adapter.parse_message.assert_called_once_with("<xml>ok</xml>")
+    await asyncio.gather(*list(server._callback_tasks), return_exceptions=True)
     callback.assert_awaited_once_with(parsed_message)
+
+
+@pytest.mark.asyncio
+async def test_wecom_server_handle_callback_returns_before_callback_finishes(
+    monkeypatch,
+):
+    server = wecom_adapter.WecomServer.__new__(wecom_adapter.WecomServer)
+    server._callback_tasks = set()
+    server.crypto = SimpleNamespace(
+        decrypt_message=MagicMock(return_value="<xml>ok</xml>")
+    )
+    callback_started = asyncio.Event()
+    release_callback = asyncio.Event()
+    callback_finished = asyncio.Event()
+
+    async def callback(_msg):
+        callback_started.set()
+        await release_callback.wait()
+        callback_finished.set()
+
+    server.callback = callback
+    monkeypatch.setattr(
+        wecom_adapter,
+        "parse_message",
+        MagicMock(return_value=SimpleNamespace(type="text")),
+    )
+    request = SimpleNamespace(
+        args={"msg_signature": "sig", "timestamp": "ts", "nonce": "nonce"},
+        get_data=AsyncMock(return_value=b"encrypted"),
+    )
+
+    result = await server.handle_callback(request)
+
+    assert result == "success"
+    await asyncio.wait_for(callback_started.wait(), timeout=1.0)
+    assert not callback_finished.is_set()
+    release_callback.set()
+    await asyncio.gather(*list(server._callback_tasks), return_exceptions=True)
+    assert callback_finished.is_set()
 
 
 @pytest.mark.asyncio
 async def test_wecom_server_handle_callback_reraises_invalid_signature():
     server = wecom_adapter.WecomServer.__new__(wecom_adapter.WecomServer)
+    server._callback_tasks = set()
     server.crypto = SimpleNamespace(
         decrypt_message=MagicMock(side_effect=InvalidSignatureException())
     )
@@ -356,7 +398,6 @@ async def test_wecom_convert_message_image_builds_image_component():
 async def test_wecom_convert_message_voice_uses_media_resolver(monkeypatch, tmp_path):
     adapter = _adapter()
     adapter.client.media.download.return_value = _response(b"amr-bytes")
-    _patch_media_resolver(monkeypatch, result="/tmp/wecom-converted.wav")
     monkeypatch.setattr(
         wecom_adapter,
         "get_astrbot_temp_path",
@@ -375,26 +416,28 @@ async def test_wecom_convert_message_voice_uses_media_resolver(monkeypatch, tmp_
 
     await adapter.convert_message(msg)
 
-    assert (tmp_path / "wecom_media-1.amr").read_bytes() == b"amr-bytes"
-    assert FakeMediaResolver.calls == [
-        (
-            str(tmp_path / "wecom_media-1.amr"),
-            {"media_type": "audio", "default_suffix": ".wav"},
-            {"target_format": "wav"},
-        )
-    ]
     abm = adapter.handle_msg.await_args.args[0]
     assert [type(component) for component in abm.message] == [Record]
-    assert abm.message[0].file == "/tmp/wecom-converted.wav"
+    assert abm.message[0].file == ""
+
+    media_resolver = SimpleNamespace(to_path=AsyncMock(return_value="/tmp/wecom-converted.wav"))
+    with patch(
+        "astrbot.core.message.components.MediaResolver",
+        return_value=media_resolver,
+    ):
+        resolved = await abm.message[0].convert_to_file_path()
+
+    assert resolved == "/tmp/wecom-converted.wav"
+    assert (tmp_path / "wecom_media-1.amr").read_bytes() == b"amr-bytes"
+    media_resolver.to_path.assert_awaited_once_with(target_format="wav")
 
 
 @pytest.mark.asyncio
-async def test_wecom_convert_message_voice_stops_on_media_resolver_failure(
+async def test_wecom_convert_message_voice_allows_lazy_media_resolver_failure(
     monkeypatch, tmp_path
 ):
     adapter = _adapter()
     adapter.client.media.download.return_value = _response(b"amr-bytes")
-    _patch_media_resolver(monkeypatch, error=RuntimeError("ffmpeg missing"))
     monkeypatch.setattr(
         wecom_adapter,
         "get_astrbot_temp_path",
@@ -414,7 +457,19 @@ async def test_wecom_convert_message_voice_stops_on_media_resolver_failure(
     result = await adapter.convert_message(msg)
 
     assert result is None
-    adapter.handle_msg.assert_not_awaited()
+    adapter.handle_msg.assert_awaited_once()
+    abm = adapter.handle_msg.await_args.args[0]
+    media_resolver = SimpleNamespace(
+        to_path=AsyncMock(side_effect=RuntimeError("ffmpeg missing"))
+    )
+    with (
+        patch(
+            "astrbot.core.message.components.MediaResolver",
+            return_value=media_resolver,
+        ),
+        pytest.raises(RuntimeError, match="ffmpeg missing"),
+    ):
+        await abm.message[0].convert_to_file_path()
 
 
 @pytest.mark.asyncio
@@ -542,7 +597,6 @@ async def test_wecom_convert_wechat_kf_message_voice_uses_media_resolver(
 ):
     adapter = _adapter()
     adapter.client.media.download.return_value = _response(b"amr-bytes")
-    _patch_media_resolver(monkeypatch, result="/tmp/weixinkefu-converted.wav")
     monkeypatch.setattr(
         wecom_adapter,
         "get_astrbot_temp_path",
@@ -558,26 +612,30 @@ async def test_wecom_convert_wechat_kf_message_voice_uses_media_resolver(
         }
     )
 
-    assert (tmp_path / "weixinkefu_voice-1.amr").read_bytes() == b"amr-bytes"
-    assert FakeMediaResolver.calls == [
-        (
-            str(tmp_path / "weixinkefu_voice-1.amr"),
-            {"media_type": "audio", "default_suffix": ".wav"},
-            {"target_format": "wav"},
-        )
-    ]
     abm = adapter.handle_msg.await_args.args[0]
     assert [type(component) for component in abm.message] == [Record]
-    assert abm.message[0].file == "/tmp/weixinkefu-converted.wav"
+    assert abm.message[0].file == ""
+
+    media_resolver = SimpleNamespace(
+        to_path=AsyncMock(return_value="/tmp/weixinkefu-converted.wav")
+    )
+    with patch(
+        "astrbot.core.message.components.MediaResolver",
+        return_value=media_resolver,
+    ):
+        resolved = await abm.message[0].convert_to_file_path()
+
+    assert resolved == "/tmp/weixinkefu-converted.wav"
+    assert (tmp_path / "weixinkefu_voice-1.amr").read_bytes() == b"amr-bytes"
+    media_resolver.to_path.assert_awaited_once_with(target_format="wav")
 
 
 @pytest.mark.asyncio
-async def test_wecom_convert_wechat_kf_message_voice_returns_none_on_convert_failure(
+async def test_wecom_convert_wechat_kf_message_voice_allows_lazy_convert_failure(
     monkeypatch, tmp_path
 ):
     adapter = _adapter()
     adapter.client.media.download.return_value = _response(b"amr-bytes")
-    _patch_media_resolver(monkeypatch, error=RuntimeError("ffmpeg missing"))
     monkeypatch.setattr(
         wecom_adapter,
         "get_astrbot_temp_path",
@@ -594,7 +652,19 @@ async def test_wecom_convert_wechat_kf_message_voice_returns_none_on_convert_fai
     )
 
     assert result is None
-    adapter.handle_msg.assert_not_awaited()
+    adapter.handle_msg.assert_awaited_once()
+    abm = adapter.handle_msg.await_args.args[0]
+    media_resolver = SimpleNamespace(
+        to_path=AsyncMock(side_effect=RuntimeError("ffmpeg missing"))
+    )
+    with (
+        patch(
+            "astrbot.core.message.components.MediaResolver",
+            return_value=media_resolver,
+        ),
+        pytest.raises(RuntimeError, match="ffmpeg missing"),
+    ):
+        await abm.message[0].convert_to_file_path()
 
 
 @pytest.mark.asyncio
@@ -625,7 +695,8 @@ async def test_wecom_convert_wechat_kf_message_image_uses_detected_suffix(
 
     abm = adapter.handle_msg.await_args.args[0]
     assert [type(component) for component in abm.message] == [Image]
-    image_path = Path(abm.message[0].file)
+    assert abm.message[0].file == ""
+    image_path = Path(await abm.message[0].convert_to_file_path())
     assert image_path.name == "weixinkefu_img-1.png"
     assert image_path.read_bytes() == b"img-bytes"
 
@@ -657,7 +728,9 @@ async def test_wecom_convert_wechat_kf_message_image_falls_back_to_jpg_suffix(
     )
 
     abm = adapter.handle_msg.await_args.args[0]
-    assert Path(abm.message[0].file).name == "weixinkefu_img-fallback.jpg"
+    assert Path(await abm.message[0].convert_to_file_path()).name == (
+        "weixinkefu_img-fallback.jpg"
+    )
 
 
 @pytest.mark.asyncio
@@ -688,9 +761,11 @@ async def test_wecom_convert_wechat_kf_message_file_uses_content_disposition_fil
     abm = adapter.handle_msg.await_args.args[0]
     assert [type(component) for component in abm.message] == [File]
     file_component = abm.message[0]
+    assert file_component.name == "weixinkefu_file-1.bin"
+    resolved_path = Path(await file_component.get_file())
     assert file_component.name == "report.txt"
-    assert Path(file_component.file).name == "weixinkefu_fixed_report.txt"
-    assert Path(file_component.file).read_bytes() == b"file-bytes"
+    assert resolved_path.name == "weixinkefu_fixed_report.txt"
+    assert resolved_path.read_bytes() == b"file-bytes"
 
 
 @pytest.mark.asyncio
@@ -718,7 +793,9 @@ async def test_wecom_convert_wechat_kf_message_file_falls_back_to_default_filena
     abm = adapter.handle_msg.await_args.args[0]
     file_component = abm.message[0]
     assert file_component.name == "weixinkefu_file-fallback.bin"
-    assert Path(file_component.file).name == "weixinkefu_fixed_weixinkefu_file-fallback.bin"
+    assert Path(await file_component.get_file()).name == (
+        "weixinkefu_fixed_weixinkefu_file-fallback.bin"
+    )
 
 
 @pytest.mark.asyncio

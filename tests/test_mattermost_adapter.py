@@ -104,6 +104,11 @@ async def test_mattermost_convert_message_dm_sets_friend_type_and_attachments():
             "message": "hello there",
             "create_at": 1_700_000_000,
             "file_ids": ["file-1"],
+            "metadata": {
+                "files": [
+                    {"id": "file-1", "name": "note.txt", "mime_type": "text/plain"}
+                ]
+            },
         },
         data={"channel_type": "D", "sender_name": "@bob"},
     )
@@ -115,7 +120,10 @@ async def test_mattermost_convert_message_dm_sets_friend_type_and_attachments():
     assert result.message_str == "hello there"
     assert isinstance(result.message[-1], Comp.File)
     assert getattr(result, "temporary_file_paths") == ["/tmp/note.txt"]
-    adapter.client.parse_post_attachments.assert_awaited_once_with(["file-1"])
+    adapter.client.parse_post_attachments.assert_awaited_once_with(
+        ["file-1"],
+        [{"id": "file-1", "name": "note.txt", "mime_type": "text/plain"}],
+    )
 
 
 def test_mattermost_parse_text_components_without_bot_username_falls_back_to_plain():
@@ -327,7 +335,7 @@ async def test_mattermost_event_send_forwards_message_chain():
     ) as parent_send:
         await event.send(MessageChain().message("hello"))
 
-    event.client.send_message_chain.assert_awaited_once_with(
+    event._client.send_message_chain.assert_awaited_once_with(
         "channel-1",
         MessageChain().message("hello"),
     )
@@ -432,7 +440,7 @@ async def test_mattermost_event_get_group_returns_none_without_channel_id():
     group = await event.get_group(group_id=None)
 
     assert group is None
-    event.client.get_channel.assert_not_awaited()
+    event._client.get_channel.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -503,9 +511,64 @@ async def test_mattermost_ws_connect_and_listen_skips_non_json_text_frame(monkey
 
 
 @pytest.mark.asyncio
+async def test_mattermost_ws_connect_and_listen_background_dispatches_payloads():
+    adapter = _build_adapter()
+    first_started = asyncio.Event()
+    second_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def _handle(payload):
+        post = payload["data"]["post"]
+        if post == '{"id":"first"}':
+            first_started.set()
+            await release_first.wait()
+            return
+        if post == '{"id":"second"}':
+            second_started.set()
+
+    class _WSMessage:
+        def __init__(self, data: str) -> None:
+            self.type = 1
+            self.data = data
+
+    class _AsyncWS:
+        def __init__(self, messages):
+            self._messages = iter(messages)
+            self.send_json = AsyncMock()
+            self.close = AsyncMock()
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._messages)
+            except StopIteration as exc:
+                raise StopAsyncIteration from exc
+
+    ws = _AsyncWS(
+        [
+            _WSMessage('{"event":"posted","data":{"post":"{\\"id\\":\\"first\\"}"}}'),
+            _WSMessage('{"event":"posted","data":{"post":"{\\"id\\":\\"second\\"}"}}'),
+            SimpleNamespace(type=257, data=""),
+        ]
+    )
+    adapter.client.ws_connect = AsyncMock(return_value=ws)
+    adapter._handle_ws_event = AsyncMock(side_effect=_handle)
+
+    listener_task = asyncio.create_task(adapter._ws_connect_and_listen())
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    await asyncio.wait_for(second_started.wait(), timeout=1.0)
+    release_first.set()
+    await listener_task
+
+    ws.send_json.assert_awaited_once()
+    ws.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
     client = MattermostClient("https://chat.example.com", "test_token")
-    wav_path = str(tmp_path / "mattermost_voice.wav")
 
     file_infos = {
         "img": {"name": "image.png", "mime_type": "image/png"},
@@ -517,24 +580,9 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
     client.get_file_info = AsyncMock(side_effect=lambda file_id: file_infos[file_id])
     client.download_file = AsyncMock(return_value=b"payload")
 
-    class FakeMediaResolver:
-        def __init__(self, media_ref: str, **kwargs) -> None:
-            assert media_ref.endswith("mattermost_audio.ogg")
-            assert kwargs["media_type"] == "audio"
-
-        async def to_path(self, **kwargs) -> str:
-            assert kwargs["target_format"] == "wav"
-            return wav_path
-
-    with (
-        patch(
-            "astrbot.core.platform.sources.mattermost.client.get_astrbot_temp_path",
-            MagicMock(return_value=str(tmp_path)),
-        ),
-        patch(
-            "astrbot.core.platform.sources.mattermost.client.MediaResolver",
-            FakeMediaResolver,
-        ),
+    with patch(
+        "astrbot.core.platform.sources.mattermost.client.get_astrbot_temp_path",
+        MagicMock(return_value=str(tmp_path)),
     ):
         components, temp_paths = await client.parse_post_attachments(
             ["img", "audio", "video", "doc"]
@@ -543,14 +591,63 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
     assert len(components) == 4
     assert isinstance(components[0], Comp.Image)
     assert isinstance(components[1], Comp.Record)
-    assert components[1].file == wav_path
-    assert components[1].url == wav_path
+    assert components[1].file == ""
+    assert components[1].url == ""
     assert isinstance(components[2], Comp.Video)
     assert isinstance(components[3], Comp.File)
-    assert len(temp_paths) == 4
+    assert temp_paths == []
+    client.download_file.assert_not_awaited()
 
+    image_path = await components[0].convert_to_file_path()
+    record_path = await components[1]._resolve_file_source()
+    video_path = await components[2]._resolve_file_source()
+    file_path = await components[3].get_file()
+
+    assert len(temp_paths) == 4
+    assert client.download_file.await_count == 4
+    resolved_paths = [image_path, record_path, video_path, file_path]
     expected_names = ["image.png", "voice.ogg", "clip.mp4", "report.pdf"]
-    for temp_path, expected_name in zip(temp_paths, expected_names):
+    for temp_path, expected_name in zip(resolved_paths, expected_names):
         path = Path(temp_path)
         assert path.exists()
         assert path.name.endswith(Path(expected_name).suffix)
+
+
+@pytest.mark.asyncio
+async def test_mattermost_parse_post_attachments_uses_post_metadata_without_fetching_info():
+    client = MattermostClient("https://chat.example.com", "test_token")
+    client.get_file_info = AsyncMock()
+    client.download_file = AsyncMock(return_value=b"payload")
+
+    components, temp_paths = await client.parse_post_attachments(
+        ["img", "doc"],
+        [
+            {"id": "img", "name": "image.png", "mime_type": "image/png"},
+            {"id": "doc", "name": "report.pdf", "mime_type": "application/pdf"},
+        ],
+    )
+
+    assert len(components) == 2
+    assert isinstance(components[0], Comp.Image)
+    assert isinstance(components[1], Comp.File)
+    assert temp_paths == []
+    client.get_file_info.assert_not_awaited()
+    client.download_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mattermost_parse_post_attachments_fetches_info_when_metadata_lacks_mime_type():
+    client = MattermostClient("https://chat.example.com", "test_token")
+    client.get_file_info = AsyncMock(
+        return_value={"name": "voice.ogg", "mime_type": "audio/ogg"}
+    )
+    client.download_file = AsyncMock(return_value=b"payload")
+
+    components, _temp_paths = await client.parse_post_attachments(
+        ["audio"],
+        [{"id": "audio", "name": "voice.ogg"}],
+    )
+
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.Record)
+    client.get_file_info.assert_awaited_once_with("audio")

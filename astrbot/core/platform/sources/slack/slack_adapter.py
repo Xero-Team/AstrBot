@@ -81,7 +81,7 @@ class SlackAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message_chain=message_chain,
             web_client=self.web_client,
@@ -110,7 +110,7 @@ class SlackAdapter(Platform):
         except Exception as e:
             logger.error(f"Slack 发送消息失败: {e}")
 
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: dict) -> AstrBotMessage:
         logger.debug(f"[slack] RawMessage {event}")
@@ -118,30 +118,13 @@ class SlackAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = cast(str, self.bot_self_id)
 
-        # 获取用户信息
-        user_id = event.get("user", "")
-        try:
-            user_info = await self.web_client.users_info(user=user_id)
-            user_data = cast(dict, user_info["user"])
-            user_name = user_data.get("real_name") or user_data.get("name", user_id)
-        except Exception:
-            user_name = user_id
+        user_id = str(event.get("user", "")).strip()
+        channel_id = str(event.get("channel", "")).strip()
+        abm.sender = MessageMember(user_id=user_id, nickname=user_id)
 
-        abm.sender = MessageMember(user_id=user_id, nickname=user_name)
-
-        # 判断消息类型
-        channel_id = event.get("channel", "")
-        try:
-            channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = cast(dict, channel_info["channel"])["is_im"]
-
-            if is_im:
-                abm.type = MessageType.FRIEND_MESSAGE
-            else:
-                abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = channel_id
-        except Exception:
-            # 默认作为群组消息处理
+        if channel_id.startswith("D"):
+            abm.type = MessageType.FRIEND_MESSAGE
+        else:
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = channel_id
 
@@ -172,16 +155,7 @@ class SlackAdapter(Platform):
             if "<@" in message_text:
                 mentions = re.findall(r"<@([^>]+)>", message_text)
                 for mention in mentions:
-                    try:
-                        mentioned_user = await self.web_client.users_info(user=mention)
-                        user_data = cast(dict, mentioned_user["user"])
-                        user_name = user_data.get("real_name") or user_data.get(
-                            "name",
-                            mention,
-                        )
-                        abm.message.append(At(qq=mention, name=user_name))
-                    except Exception:
-                        abm.message.append(At(qq=mention, name=""))
+                    abm.message.append(At(qq=mention, name=""))
 
                 # 清理消息文本中的@标记
                 if clean_text := re.sub(r"<@[^>]+>", "", message_text).strip():
@@ -195,8 +169,13 @@ class SlackAdapter(Platform):
                 file_name = file_info.get("name", "unknown")
                 file_url = file_info.get("url_private", "")
                 if file_info.get("mimetype", "").startswith("image/"):
-                    file_url = await self.get_file_base64(file_url)
-                    abm.message.append(Image.fromBase64(base64=file_url))
+                    image = Image(file="")
+                    image.set_source_resolver(
+                        lambda file_url=file_url: self._resolve_slack_image_source(
+                            file_url
+                        )
+                    )
+                    abm.message.append(image)
                 else:
                     # TODO: 下载鉴权
                     abm.message.append(
@@ -205,6 +184,12 @@ class SlackAdapter(Platform):
 
         abm.raw_message = event
         return abm
+
+    async def _resolve_slack_image_source(self, url: str) -> str | None:
+        if not url:
+            return None
+        file_base64 = await self.get_file_base64(url)
+        return f"base64://{file_base64}"
 
     def _parse_blocks(self, blocks: list) -> list:
         """解析 Slack blocks 格式的消息内容"""
@@ -430,9 +415,6 @@ class SlackAdapter(Platform):
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))
-
-    def get_client(self):
-        return self.web_client
 
     def unified_webhook(self) -> bool:
         return bool(

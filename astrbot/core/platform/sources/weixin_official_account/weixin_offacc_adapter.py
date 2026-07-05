@@ -64,6 +64,7 @@ class WeixinOfficialAccountServer:
         self.shutdown_event = asyncio.Event()
 
         self._wx_msg_time_out = 4.0  # 微信服务器要求 5 秒内回复
+        self._slow_callback_log_threshold = 0.5
         self.user_buffer: dict[str, dict[str, Any]] = user_buffer  # from_user -> state
         self.active_send_mode = False  # 是否启用主动发送模式，启用后 callback 将直接返回回复内容，无需等待微信回调
 
@@ -147,149 +148,182 @@ class WeixinOfficialAccountServer:
             if not self.callback:
                 return "success"
 
-            # by pass passive reply logic and return active reply directly.
-            if self.active_send_mode:
-                result_xml = await self.callback(msg)
-                if not result_xml:
-                    return "success"
-                if isinstance(result_xml, str):
-                    return result_xml
-
-            # passive reply
+            callback_started_at = time.monotonic()
             from_user = str(getattr(msg, "source", ""))
             msg_id = str(cast(str | int, getattr(msg, "id", "")))
-            state = self.user_buffer.get(from_user)
+            result_kind = "success"
 
-            def _reply_text(text: str) -> str:
-                reply_obj = create_reply(text, msg)
-                reply_xml = reply_obj if isinstance(reply_obj, str) else str(reply_obj)
-                return self._maybe_encrypt(reply_xml, nonce, timestamp)
+            try:
+                # by pass passive reply logic and return active reply directly.
+                if self.active_send_mode:
+                    result_xml = await self.callback(msg)
+                    if not result_xml:
+                        result_kind = "active-send-empty"
+                        return "success"
+                    if isinstance(result_xml, str):
+                        result_kind = "active-send-response"
+                        return result_xml
 
-            # if in cached state, return cached result or placeholder
-            if state:
-                logger.debug(f"用户消息缓冲状态: user={from_user} state={state}")
-                cached = state.get("cached_xml")
-                # send one cached each time, if cached is empty after pop, remove the buffer
-                if cached and len(cached) > 0:
-                    logger.info(f"wx buffer hit on trigger: user={from_user}")
-                    cached_xml = cached.pop(0)
-                    if len(cached) == 0:
-                        self.user_buffer.pop(from_user, None)
-                        return _reply_text(cached_xml)
-                    else:
+                state = self.user_buffer.get(from_user)
+
+                def _reply_text(text: str) -> str:
+                    reply_obj = create_reply(text, msg)
+                    reply_xml = (
+                        reply_obj if isinstance(reply_obj, str) else str(reply_obj)
+                    )
+                    return self._maybe_encrypt(reply_xml, nonce, timestamp)
+
+                # if in cached state, return cached result or placeholder
+                if state:
+                    logger.debug(f"用户消息缓冲状态: user={from_user} state={state}")
+                    cached = state.get("cached_xml")
+                    # send one cached each time, if cached is empty after pop, remove the buffer
+                    if cached and len(cached) > 0:
+                        logger.info(f"wx buffer hit on trigger: user={from_user}")
+                        cached_xml = cached.pop(0)
+                        if len(cached) == 0:
+                            self.user_buffer.pop(from_user, None)
+                            result_kind = "cached-final"
+                            return _reply_text(cached_xml)
+                        result_kind = "cached-partial"
                         return _reply_text(
                             cached_xml
                             + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
                         )
 
-                task: asyncio.Task | None = cast(asyncio.Task | None, state.get("task"))
-                placeholder = (
-                    f"【正在思考'{state.get('preview', '...')}'中，已思考"
-                    f"{int(time.monotonic() - state.get('started_at', time.monotonic()))}s，回复任意文字尝试获取回复】"
-                )
-
-                # same msgid => WeChat retry: wait a little; new msgid => user trigger: just placeholder
-                if task and state.get("msg_id") == msg_id:
-                    done, _ = await asyncio.wait(
-                        {task},
-                        timeout=self._wx_msg_time_out,
-                        return_when=asyncio.FIRST_COMPLETED,
+                    task: asyncio.Task | None = cast(
+                        asyncio.Task | None,
+                        state.get("task"),
                     )
-                    if done:
-                        try:
-                            cached = state.get("cached_xml")
-                            # send one cached each time, if cached is empty after pop, remove the buffer
-                            if cached and len(cached) > 0:
-                                logger.info(
-                                    f"wx buffer hit on retry window: user={from_user}"
-                                )
-                                cached_xml = cached.pop(0)
-                                if len(cached) == 0:
-                                    self.user_buffer.pop(from_user, None)
-                                    logger.debug(
-                                        f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} "
+                    placeholder = (
+                        f"【正在思考'{state.get('preview', '...')}'中，已思考"
+                        f"{int(time.monotonic() - state.get('started_at', time.monotonic()))}s，回复任意文字尝试获取回复】"
+                    )
+
+                    # same msgid => WeChat retry: wait a little; new msgid => user trigger: just placeholder
+                    if task and state.get("msg_id") == msg_id:
+                        done, _ = await asyncio.wait(
+                            {task},
+                            timeout=self._wx_msg_time_out,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if done:
+                            try:
+                                cached = state.get("cached_xml")
+                                # send one cached each time, if cached is empty after pop, remove the buffer
+                                if cached and len(cached) > 0:
+                                    logger.info(
+                                        f"wx buffer hit on retry window: user={from_user}"
                                     )
-                                    return _reply_text(cached_xml)
-                                else:
+                                    cached_xml = cached.pop(0)
+                                    if len(cached) == 0:
+                                        self.user_buffer.pop(from_user, None)
+                                        logger.debug(
+                                            f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} "
+                                        )
+                                        result_kind = "retry-window-final"
+                                        return _reply_text(cached_xml)
                                     logger.debug(
                                         f"wx finished message sending in passive window but not final: user={from_user} msg_id={msg_id} "
                                     )
+                                    result_kind = "retry-window-partial"
                                     return _reply_text(
                                         cached_xml
                                         + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
                                     )
-                            logger.info(
-                                f"wx finished in window but not final; return placeholder: user={from_user} msg_id={msg_id} "
-                            )
-                            return _reply_text(placeholder)
-                        except Exception:
-                            logger.critical(
-                                "wx task failed in passive window", exc_info=True
-                            )
-                            self.user_buffer.pop(from_user, None)
-                            return _reply_text("处理消息失败，请稍后再试。")
+                                logger.info(
+                                    f"wx finished in window but not final; return placeholder: user={from_user} msg_id={msg_id} "
+                                )
+                                result_kind = "retry-window-placeholder"
+                                return _reply_text(placeholder)
+                            except Exception:
+                                logger.critical(
+                                    "wx task failed in passive window", exc_info=True
+                                )
+                                self.user_buffer.pop(from_user, None)
+                                result_kind = "retry-window-error"
+                                return _reply_text("处理消息失败，请稍后再试。")
 
-                    logger.info(
-                        f"wx passive window timeout: user={from_user} msg_id={msg_id}"
-                    )
+                        logger.info(
+                            f"wx passive window timeout: user={from_user} msg_id={msg_id}"
+                        )
+                        result_kind = "retry-window-timeout"
+                        return _reply_text(placeholder)
+
+                    logger.debug(f"wx trigger while thinking: user={from_user}")
+                    result_kind = "thinking-placeholder"
                     return _reply_text(placeholder)
 
-                logger.debug(f"wx trigger while thinking: user={from_user}")
-                return _reply_text(placeholder)
+                # create new trigger when state is empty, and store state in buffer
+                logger.debug(f"wx new trigger: user={from_user} msg_id={msg_id}")
+                preview = self._preview(msg)
+                placeholder = (
+                    f"【正在思考'{preview}'中，已思考0s，回复任意文字尝试获取回复】"
+                )
+                logger.info(
+                    f"wx start task: user={from_user} msg_id={msg_id} preview={preview}"
+                )
 
-            # create new trigger when state is empty, and store state in buffer
-            logger.debug(f"wx new trigger: user={from_user} msg_id={msg_id}")
-            preview = self._preview(msg)
-            placeholder = (
-                f"【正在思考'{preview}'中，已思考0s，回复任意文字尝试获取回复】"
-            )
-            logger.info(
-                f"wx start task: user={from_user} msg_id={msg_id} preview={preview}"
-            )
+                self.user_buffer[from_user] = state = {
+                    "msg_id": msg_id,
+                    "preview": preview,
+                    "task": None,  # set later after task created
+                    "cached_xml": [],  # for passive reply
+                    "started_at": time.monotonic(),
+                }
+                self.user_buffer[from_user]["task"] = task = asyncio.create_task(
+                    self.callback(msg)
+                )
 
-            self.user_buffer[from_user] = state = {
-                "msg_id": msg_id,
-                "preview": preview,
-                "task": None,  # set later after task created
-                "cached_xml": [],  # for passive reply
-                "started_at": time.monotonic(),
-            }
-            self.user_buffer[from_user]["task"] = task = asyncio.create_task(
-                self.callback(msg)
-            )
-
-            # immediate return if done
-            done, _ = await asyncio.wait(
-                {task},
-                timeout=self._wx_msg_time_out,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if done:
-                try:
-                    cached = state.get("cached_xml", None)
-                    # send one cached each time, if cached is empty after pop, remove the buffer
-                    if cached and len(cached) > 0:
-                        logger.info(f"wx buffer hit immediately: user={from_user}")
-                        cached_xml = cached.pop(0)
-                        if len(cached) == 0:
-                            self.user_buffer.pop(from_user, None)
-                            return _reply_text(cached_xml)
-                        else:
+                # immediate return if done
+                done, _ = await asyncio.wait(
+                    {task},
+                    timeout=self._wx_msg_time_out,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if done:
+                    try:
+                        cached = state.get("cached_xml", None)
+                        # send one cached each time, if cached is empty after pop, remove the buffer
+                        if cached and len(cached) > 0:
+                            logger.info(f"wx buffer hit immediately: user={from_user}")
+                            cached_xml = cached.pop(0)
+                            if len(cached) == 0:
+                                self.user_buffer.pop(from_user, None)
+                                result_kind = "first-window-final"
+                                return _reply_text(cached_xml)
+                            result_kind = "first-window-partial"
                             return _reply_text(
                                 cached_xml
                                 + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
                             )
-                    logger.info(
-                        f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} "
-                    )
-                    return _reply_text(placeholder)
-                except Exception:
-                    logger.critical("wx task failed in first window", exc_info=True)
-                    self.user_buffer.pop(from_user, None)
-                    return _reply_text("处理消息失败，请稍后再试。")
+                        logger.info(
+                            f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} "
+                        )
+                        result_kind = "first-window-placeholder"
+                        return _reply_text(placeholder)
+                    except Exception:
+                        logger.critical("wx task failed in first window", exc_info=True)
+                        self.user_buffer.pop(from_user, None)
+                        result_kind = "first-window-error"
+                        return _reply_text("处理消息失败，请稍后再试。")
 
-            logger.info(f"wx first window timeout: user={from_user} msg_id={msg_id}")
-            return _reply_text(placeholder)
+                logger.info(
+                    f"wx first window timeout: user={from_user} msg_id={msg_id}"
+                )
+                result_kind = "first-window-timeout"
+                return _reply_text(placeholder)
+            finally:
+                elapsed = time.monotonic() - callback_started_at
+                if elapsed >= self._slow_callback_log_threshold:
+                    logger.info(
+                        "wx callback handled in %.2fs: user=%s msg_id=%s mode=%s active_send_mode=%s",
+                        elapsed,
+                        from_user,
+                        msg_id,
+                        result_kind,
+                        self.active_send_mode,
+                    )
 
     async def start_polling(self) -> None:
         logger.info(
@@ -388,7 +422,6 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
-        await super().send_by_session(session, message_chain)
         raise Exception("微信公众号不支持发送主动消息")
 
     @override
@@ -426,6 +459,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         future: asyncio.Future | None = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
+        setattr(abm, "temporary_file_paths", [])
         if isinstance(msg, TextMessage):
             abm.message_str = cast(str, msg.content)
             abm.self_id = str(msg.target)
@@ -454,31 +488,41 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
 
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
-                None,
-                self.client.media.download,
-                msg.media_id,
-            )
-            temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"weixin_offacc_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
-
-            try:
-                path_wav = await MediaResolver(
-                    path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-            except Exception as e:
-                logger.error(
-                    f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。",
-                )
-                path_wav = path
-
             abm.message_str = ""
             abm.self_id = str(msg.target)
-            abm.message = [Record(file=path_wav, url=path_wav)]
+            record = Record(file="")
+
+            async def _resolve_voice_file() -> str | None:
+                resp: Response = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    self.client.media.download,
+                    msg.media_id,
+                )
+                temp_dir = get_astrbot_temp_path()
+                path = os.path.join(temp_dir, f"weixin_offacc_{msg.media_id}.amr")
+                with open(path, "wb") as f:
+                    f.write(resp.content)
+                cast(list[str], getattr(abm, "temporary_file_paths", [])).append(path)
+
+                try:
+                    path_wav = await MediaResolver(
+                        path,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                except Exception as e:
+                    logger.error(
+                        f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。",
+                    )
+                    return path
+
+                cast(list[str], getattr(abm, "temporary_file_paths", [])).append(
+                    path_wav
+                )
+                return path_wav
+
+            record.set_source_resolver(_resolve_voice_file)
+            abm.message = [record]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
                 cast(str, msg.source),
@@ -536,9 +580,6 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self.commit_event(self.create_event(message))
         except ValueError as e:
             logger.critical("%s", e)
-
-    def get_client(self) -> WeChatClient:
-        return self.client
 
     async def terminate(self) -> None:
         self.server.shutdown_event.set()

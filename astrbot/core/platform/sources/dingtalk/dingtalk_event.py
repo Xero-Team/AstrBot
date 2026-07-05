@@ -15,14 +15,14 @@ class DingtalkMessageEvent(AstrMessageEvent):
         adapter: Any = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
-        self.adapter = adapter
+        self._client = client
+        self._adapter = adapter
 
     async def send(self, message: MessageChain) -> None:
-        if not self.adapter:
+        if not self._adapter:
             logger.error("钉钉消息发送失败: 缺少 adapter")
             return
-        await self.adapter.send_message_chain_with_incoming(
+        await self._adapter.send_message_chain_with_incoming(
             incoming_message=self.message_obj.raw_message,
             message_chain=message,
         )

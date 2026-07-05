@@ -70,6 +70,7 @@ class KookPlatformAdapter(Platform):
         inner_message.message_str = message_chain.get_plain_text()
         message_event = self.create_event(inner_message)
         await message_event.send(message_chain)
+        return await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
@@ -83,6 +84,9 @@ class KookPlatformAdapter(Platform):
         logger.debug(
             f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})'
         )
+        guild_id = event.extra.guild_id
+        if guild_id and guild_id.isdigit():
+            self._roles_cache.prefetch_guild_roles(int(guild_id))
         event_type = event.type
         if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
             if self._should_ignore_event_by_bot_nickname(event.author_id):
@@ -411,12 +415,15 @@ class KookPlatformAdapter(Platform):
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
             elif file_type == KookModuleType.AUDIO:
-                path_wav = await MediaResolver(
-                    file_url,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                message.append(Record(file=path_wav, url=path_wav))
+                record = Record(file="")
+                record.set_source_resolver(
+                    lambda file_url=file_url: MediaResolver(
+                        file_url,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                )
+                message.append(record)
             else:
                 logger.warning(f"[KOOK] 跳过未知文件类型: {file_type}")
 
@@ -443,7 +450,7 @@ class KookPlatformAdapter(Platform):
 
     async def convert_message(self, data: KookMessageEventData) -> AstrBotMessage:
         abm = AstrBotMessage()
-        abm.raw_message = data.to_dict()
+        abm.raw_message = data
         abm.self_id = self.client.bot_id
 
         channel_type = data.channel_type

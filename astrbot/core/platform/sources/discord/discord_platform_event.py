@@ -48,10 +48,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
         interaction_followup_webhook: discord.Webhook | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
         self.interaction_followup_webhook = interaction_followup_webhook
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain):
         """发送消息到Discord平台"""
         # 解析消息链为 Discord 所需的对象
         try:
@@ -64,7 +64,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
             ) = await self._parse_to_discord(message)
         except Exception as e:
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
-            return
+            return self._failure_send_result(
+                str(e),
+                message_count=len(message.chain),
+            )
 
         kwargs = {}
         if content:
@@ -76,10 +79,13 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if embeds:
             kwargs["embeds"] = embeds
         if reference_message_id and not self.interaction_followup_webhook:
-            kwargs["reference"] = self.client.get_message(int(reference_message_id))
+            kwargs["reference"] = self._client.get_message(int(reference_message_id))
         if not kwargs:
             logger.debug("[Discord] 尝试发送空消息，已忽略。")
-            return
+            return self._failure_send_result(
+                "empty Discord outbound payload",
+                message_count=len(message.chain),
+            )
 
         # 根据上下文执行发送/回复操作
         try:
@@ -91,16 +97,26 @@ class DiscordPlatformEvent(AstrMessageEvent):
             else:
                 channel = await self._get_channel()
                 if not channel:
-                    return
+                    return self._failure_send_result(
+                        f"channel unavailable for target {self.route_identity.target_id}",
+                        message_count=len(message.chain),
+                    )
                 if not isinstance(channel, discord.abc.Messageable):
                     logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
-                    return
+                    return self._failure_send_result(
+                        f"channel {channel.id} is not messageable",
+                        message_count=len(message.chain),
+                    )
                 await channel.send(**kwargs)
 
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
+            return self._failure_send_result(
+                str(e),
+                message_count=len(message.chain),
+            )
 
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(
         self, generator: AsyncGenerator[MessageChain], use_fallback: bool = False
@@ -112,7 +128,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             else:
                 buffer.chain.extend(chain.chain)
         if not buffer:
-            return None
+            return await super().send_streaming(generator, use_fallback)
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)
@@ -122,12 +138,12 @@ class DiscordPlatformEvent(AstrMessageEvent):
     ) -> discord.Thread | discord.abc.GuildChannel | discord.abc.PrivateChannel | None:
         """获取当前事件对应的频道对象"""
         try:
-            channel_id = int(self.session_id)
-            return self.client.get_channel(
+            channel_id = int(self.route_identity.target_id)
+            return self._client.get_channel(
                 channel_id,
-            ) or await self.client.fetch_channel(channel_id)
+            ) or await self._client.fetch_channel(channel_id)
         except ValueError, discord.errors.NotFound, discord.errors.Forbidden:
-            logger.error(f"[Discord] 无法获取频道 {self.session_id}")
+            logger.error(f"[Discord] 无法获取频道 {self.route_identity.target_id}")
             return None
 
     async def _parse_to_discord(

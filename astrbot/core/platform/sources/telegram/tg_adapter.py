@@ -1,16 +1,15 @@
 import asyncio
-import os
 import re
 import uuid
 from contextlib import suppress
-from typing import cast, override
+from typing import override
 
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
-from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
+from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
 import astrbot.api.message_components as Comp
@@ -29,9 +28,6 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
-from astrbot.core.utils.media_utils import MediaResolver
 
 from .tg_event import TelegramPlatformEvent
 
@@ -207,14 +203,14 @@ class TelegramPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         from_username = session.session_id
         await TelegramPlatformEvent.send_with_client(
             self.client,
             message_chain,
             from_username,
         )
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     @override
     def meta(self) -> PlatformMetadata:
@@ -460,6 +456,14 @@ class TelegramPlatformAdapter(Platform):
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
 
+        async def _resolve_attachment_file_path(attachment) -> str | None:
+            fetched = await attachment.get_file()
+            file_path = getattr(fetched, "file_path", None)
+            if not file_path:
+                logger.warning("Telegram attachment file_path is None.")
+                return None
+            return str(file_path)
+
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
 
@@ -564,64 +568,71 @@ class TelegramPlatformAdapter(Platform):
                 return None
 
         elif update.message.voice:
-            file = await update.message.voice.get_file()
-
-            file_basename = os.path.basename(cast(str, file.file_path))
-            temp_dir = get_astrbot_temp_path()
-            temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(cast(str, file.file_path), path=temp_path)
-            path_wav = await MediaResolver(
-                temp_path,
-                media_type="audio",
-                default_suffix=".wav",
-            ).to_path(target_format="wav")
-
-            record = Comp.Record(file=path_wav, url=path_wav)
-            record.path = path_wav
+            record = Comp.Record(file="")
+            record.set_source_resolver(
+                lambda voice=update.message.voice: _resolve_attachment_file_path(voice)
+            )
             message.message.append(record)
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
-            file = await photo.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            image = Comp.Image(file="")
+            image.set_source_resolver(
+                lambda photo=photo: _resolve_attachment_file_path(photo)
+            )
+            message.message.append(image)
             _apply_caption()
 
         elif update.message.sticker:
             # 将sticker当作图片处理
-            file = await update.message.sticker.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            image = Comp.Image(file="")
+            image.set_source_resolver(
+                lambda sticker=update.message.sticker: _resolve_attachment_file_path(
+                    sticker
+                )
+            )
+            message.message.append(image)
             if update.message.sticker.emoji:
                 sticker_text = f"Sticker: {update.message.sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
 
         elif update.message.document:
-            file = await update.message.document.get_file()
             file_name = update.message.document.file_name or uuid.uuid4().hex
-            file_path = file.file_path
-            if file_path is None:
-                logger.warning(
-                    f"Telegram document file_path is None, cannot save the file {file_name}.",
+            file_component = Comp.File(name=file_name)
+            file_component.set_url_resolver(
+                lambda document=update.message.document, file_name=file_name: (
+                    self._resolve_telegram_document_url(document, file_name)
                 )
-            else:
-                message.message.append(
-                    Comp.File(file=file_path, name=file_name, url=file_path)
-                )
-                _apply_caption()
+            )
+            message.message.append(file_component)
+            _apply_caption()
 
         elif update.message.video:
-            file = await update.message.video.get_file()
             file_name = update.message.video.file_name or uuid.uuid4().hex
-            file_path = file.file_path
-            if file_path is None:
-                logger.warning(
-                    f"Telegram video file_path is None, cannot save the file {file_name}.",
-                )
-            else:
-                message.message.append(Comp.Video(file=file_path, path=file.file_path))
-                _apply_caption()
+            video = Comp.Video(file="")
+            video.set_source_resolver(
+                lambda video=update.message.video: _resolve_attachment_file_path(video)
+            )
+            message.message.append(video)
+            _apply_caption()
 
         return message
+
+    @staticmethod
+    async def _resolve_telegram_document_url(
+        document,
+        file_name: str,
+    ) -> tuple[str | None, str | None]:
+        fetched = await document.get_file()
+        file_path = getattr(fetched, "file_path", None)
+        if not file_path:
+            logger.warning(
+                "Telegram document file_path is None, cannot resolve the file %s.",
+                file_name,
+            )
+            return None, file_name
+        return str(file_path), file_name
 
     async def handle_media_group_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -662,15 +673,15 @@ class TelegramPlatformAdapter(Platform):
         elapsed = (datetime.now() - entry["created_at"]).total_seconds()
         if elapsed >= self.media_group_max_wait:
             delay = 0
-            logger.debug(
-                f"Media group {media_group_id} has reached max wait time "
+            logger.info(
+                f"Telegram media group {media_group_id} has reached max wait time "
                 f"({elapsed:.1f}s >= {self.media_group_max_wait}s), processing immediately.",
             )
         else:
             delay = self.media_group_timeout
-            logger.debug(
-                f"Scheduled media group {media_group_id} to be processed in {delay} seconds "
-                f"(already waited {elapsed:.1f}s)"
+            logger.info(
+                f"Telegram media group {media_group_id} will wait {delay:.1f}s "
+                f"to collect the full album (already waited {elapsed:.1f}s)."
             )
 
         # Schedule/reschedule processing (replace_existing=True handles debounce)
@@ -754,9 +765,6 @@ class TelegramPlatformAdapter(Platform):
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))
-
-    def get_client(self) -> ExtBot:
-        return self.client
 
     async def terminate(self) -> None:
         try:

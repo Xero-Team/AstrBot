@@ -67,6 +67,7 @@ class LarkWebhookServer:
 
         self.event_queue = event_queue
         self.callback: Callable[[dict], Awaitable[None]] | None = None
+        self._callback_tasks: set[asyncio.Task[None]] = set()
 
         # 初始化加密工具
         self.cipher = None
@@ -193,7 +194,7 @@ class LarkWebhookServer:
         # 调用回调函数处理事件
         if self.callback:
             try:
-                await self.callback(event_data)
+                self._start_callback_task(self.callback(event_data))
             except Exception as e:
                 logger.error(f"[Lark Webhook] 处理事件回调失败: {e}", exc_info=True)
                 return {"error": "Event processing failed"}, 500
@@ -207,3 +208,16 @@ class LarkWebhookServer:
             callback: 处理事件的异步函数
         """
         self.callback = callback
+
+    def _start_callback_task(self, coro: Awaitable[None]) -> None:
+        task = asyncio.create_task(coro, name="lark:webhook-callback")
+        self._callback_tasks.add(task)
+        task.add_done_callback(self._on_callback_task_done)
+
+    def _on_callback_task_done(self, task: asyncio.Task[None]) -> None:
+        self._callback_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("[Lark Webhook] 事件回调任务失败: %s", exc, exc_info=exc)

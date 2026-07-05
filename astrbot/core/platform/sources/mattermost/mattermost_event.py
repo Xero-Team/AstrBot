@@ -21,12 +21,12 @@ class MattermostMessageEvent(AstrMessageEvent):
         client: MattermostClient,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
         for path in getattr(message_obj, "temporary_file_paths", []):
             self.track_temporary_local_file(path)
 
     async def send(self, message: MessageChain) -> None:
-        await self.client.send_message_chain(self.get_session_id(), message)
+        await self._client.send_message_chain(self.get_session_id(), message)
         await super().send(message)
 
     async def send_streaming(
@@ -73,7 +73,7 @@ class MattermostMessageEvent(AstrMessageEvent):
         channel_id = group_id or self.get_group_id()
         if not channel_id:
             return None
-        channel = await self.client.get_channel(channel_id)
+        channel = await self._client.get_channel(channel_id)
         return Group(
             group_id=channel_id,
             group_name=channel.get("display_name") or channel.get("name") or channel_id,

@@ -17,7 +17,6 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.media_utils import MediaResolver
 
 AttachmentGetter = Callable[[str], Awaitable[Attachment | None]]
 AttachmentInserter = Callable[[str, str, str], Awaitable[Attachment | None]]
@@ -152,12 +151,7 @@ async def parse_webchat_message_parts(
         if part_type == "image":
             components.append(Image.fromFileSystem(file_path_str))
         elif part_type == "record":
-            path_wav = await MediaResolver(
-                file_path_str,
-                media_type="audio",
-                default_suffix=".wav",
-            ).to_path(target_format="wav")
-            components.append(Record(file=path_wav, url=path_wav))
+            components.append(Record(file=file_path_str, url=file_path_str))
         elif part_type == "video":
             components.append(Video.fromFileSystem(file_path_str))
         else:

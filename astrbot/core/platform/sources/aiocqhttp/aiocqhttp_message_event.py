@@ -29,7 +29,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         bot: CQHttp,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.bot = bot
+        self._bot = bot
 
     @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
@@ -188,7 +188,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id = self.get_group_id() if is_group else self.get_sender_id()
 
         await self.send_message(
-            bot=self.bot,
+            bot=self._bot,
             message_chain=message,
             event=event,  # 不强制要求一定是 Event
             is_group=is_group,
@@ -245,13 +245,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if getattr(self.message_obj, "self_id", None):
             routing_params["self_id"] = self.message_obj.self_id
 
-        info: dict = await self.bot.call_action(
+        info: dict = await self._bot.call_action(
             "get_group_info",
             group_id=group_id,
             **routing_params,
         )
 
-        members: list[dict] = await self.bot.call_action(
+        members: list[dict] = await self._bot.call_action(
             "get_group_member_list",
             group_id=group_id,
             **routing_params,

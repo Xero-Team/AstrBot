@@ -81,7 +81,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.client = client
+        self._client = client
 
     @classmethod
     def _split_message(cls, text: str) -> list[str]:
@@ -253,7 +253,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         """确保显示 typing 状态"""
         await self._send_chat_action(
-            self.client, user_name, ChatAction.TYPING, message_thread_id
+            self._client, user_name, ChatAction.TYPING, message_thread_id
         )
 
     async def send_typing(self) -> None:
@@ -343,12 +343,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, payload),
                 )
 
-    async def send(self, message: MessageChain) -> None:
-        if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            await self.send_with_client(self.client, message, self.message_obj.group_id)
-        else:
-            await self.send_with_client(self.client, message, self.get_sender_id())
-        await super().send(message)
+    async def send(self, message: MessageChain):
+        await self.send_with_client(
+            self._client,
+            message,
+            self.route_identity.target_id,
+        )
+        return await super().send(message)
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：
@@ -373,7 +374,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             else:  # 普通 emoji
                 reaction_param = [ReactionTypeEmoji(emoji)]
 
-            await self.client.set_message_reaction(
+            await self._client.set_message_reaction(
                 chat_id=chat_id,
                 message_id=message_id,
                 reaction=reaction_param,  # 注意是列表
@@ -414,7 +415,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             logger.debug(
                 f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}"
             )
-            await self.client.send_message_draft(
+            await self._client.send_message_draft(
                 chat_id=int(chat_id),
                 draft_id=draft_id,
                 text=text,
@@ -439,14 +440,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
                     action = ChatAction.UPLOAD_VIDEO
-                    send_coro = self.client.send_animation
+                    send_coro = self._client.send_animation
                     media_kwarg = {"animation": image_path}
                 else:
                     action = ChatAction.UPLOAD_PHOTO
-                    send_coro = self.client.send_photo
+                    send_coro = self._client.send_photo
                     media_kwarg = {"photo": image_path}
                 await self._send_media_with_action(
-                    self.client,
+                    self._client,
                     action,
                     send_coro,
                     user_name=user_name,
@@ -457,9 +458,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
                 await self._send_media_with_action(
-                    self.client,
+                    self._client,
                     ChatAction.UPLOAD_DOCUMENT,
-                    self.client.send_document,
+                    self._client.send_document,
                     user_name=user_name,
                     document=path,
                     filename=name,
@@ -468,7 +469,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
                 await self._send_voice_with_fallback(
-                    self.client,
+                    self._client,
                     path,
                     payload,
                     caption=i.text or None,
@@ -479,9 +480,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Video):
                 path = await i.convert_to_file_path()
                 await self._send_media_with_action(
-                    self.client,
+                    self._client,
                     ChatAction.UPLOAD_VIDEO,
-                    self.client.send_video,
+                    self._client.send_video,
                     user_name=user_name,
                     video=path,
                     **cast(Any, payload),
@@ -491,7 +492,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送，失败时回退到纯文本。"""
-        await self._send_text_chunks(self.client, delta, payload)
+        await self._send_text_chunks(self._client, delta, payload)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
@@ -531,6 +532,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             name=f"metric:telegram-stream:{self.platform_meta.name}",
         )
         self._has_send_oper = True
+        return await super().send_streaming(generator, use_fallback)
 
     async def _send_streaming_draft(
         self,
@@ -667,7 +669,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 # 分割符
                 if message_id:
                     try:
-                        await self.client.edit_message_text(
+                        await self._client.edit_message_text(
                             text=delta,
                             chat_id=payload["chat_id"],
                             message_id=message_id,
@@ -693,7 +695,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         await self._ensure_typing(user_name, message_thread_id)
                         last_chat_action_time = current_time
                     try:
-                        await self.client.edit_message_text(
+                        await self._client.edit_message_text(
                             text=delta,
                             chat_id=payload["chat_id"],
                             message_id=message_id,
@@ -709,7 +711,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     last_chat_action_time = current_time
                 msg = None
                 try:
-                    msg = await self.client.send_message(
+                    msg = await self._client.send_message(
                         text=delta, **cast(Any, payload)
                     )
                     current_content = delta
@@ -725,7 +727,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     markdown_text = telegramify_markdown.markdownify(
                         delta,
                     )
-                    await self.client.edit_message_text(
+                    await self._client.edit_message_text(
                         text=markdown_text,
                         chat_id=payload["chat_id"],
                         message_id=message_id,
@@ -733,7 +735,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     )
                 except Exception as e:
                     logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
-                    await self.client.edit_message_text(
+                    await self._client.edit_message_text(
                         text=delta,
                         chat_id=payload["chat_id"],
                         message_id=message_id,

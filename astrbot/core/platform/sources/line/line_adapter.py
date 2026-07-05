@@ -99,11 +99,11 @@ class LinePlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         messages = await LineMessageEvent.build_line_messages(message_chain)
         if messages:
             await self.line_api.push_message(session.session_id, messages)
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
@@ -153,6 +153,7 @@ class LinePlatformAdapter(Platform):
         if not isinstance(events, list):
             return
 
+        tasks: list[asyncio.Task[None]] = []
         for event in events:
             if not isinstance(event, dict):
                 continue
@@ -162,10 +163,26 @@ class LinePlatformAdapter(Platform):
                 logger.debug("[LINE] duplicate event skipped: %s", event_id)
                 continue
 
-            abm = await self.convert_message(event)
-            if abm is None:
-                continue
-            await self.handle_msg(abm)
+            tasks.append(
+                asyncio.create_task(
+                    self._process_webhook_event(event),
+                    name="line:webhook-event",
+                )
+            )
+
+        if not tasks:
+            return
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("[LINE] webhook event processing failed: %s", result)
+
+    async def _process_webhook_event(self, event: dict[str, Any]) -> None:
+        abm = await self.convert_message(event)
+        if abm is None:
+            return
+        await self.handle_msg(abm)
 
     async def convert_message(self, event: dict[str, Any]) -> AstrBotMessage | None:
         if str(event.get("type", "")) != "message":
@@ -190,6 +207,7 @@ class LinePlatformAdapter(Platform):
         abm.self_id = self.destination or self.meta().id
         abm.message = []
         abm.raw_message = event
+        temporary_file_paths: list[str] = []
         abm.message_id = str(
             message.get("id")
             or event.get("webhookEventId")
@@ -224,16 +242,21 @@ class LinePlatformAdapter(Platform):
 
         abm.sender = MessageMember(user_id=sender_id, nickname=sender_id[:8])
 
-        components = await self._parse_line_message_components(message)
+        components = await self._parse_line_message_components(
+            message,
+            temporary_file_paths,
+        )
         if not components:
             return None
         abm.message = components
         abm.message_str = self._build_message_str(components)
+        setattr(abm, "temporary_file_paths", temporary_file_paths)
         return abm
 
     async def _parse_line_message_components(
         self,
         message: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> list:
         msg_type = str(message.get("type", ""))
         message_id = str(message.get("id", "")).strip()
@@ -246,19 +269,35 @@ class LinePlatformAdapter(Platform):
             return [Plain(text=text)] if text else []
 
         if msg_type == "image":
-            image_component = await self._build_image_component(message_id, message)
+            image_component = await self._build_image_component(
+                message_id,
+                message,
+                temporary_file_paths,
+            )
             return [image_component] if image_component else [Plain(text="[image]")]
 
         if msg_type == "video":
-            video_component = await self._build_video_component(message_id, message)
+            video_component = await self._build_video_component(
+                message_id,
+                message,
+                temporary_file_paths,
+            )
             return [video_component] if video_component else [Plain(text="[video]")]
 
         if msg_type == "audio":
-            audio_component = await self._build_audio_component(message_id, message)
+            audio_component = await self._build_audio_component(
+                message_id,
+                message,
+                temporary_file_paths,
+            )
             return [audio_component] if audio_component else [Plain(text="[audio]")]
 
         if msg_type == "file":
-            file_component = await self._build_file_component(message_id, message)
+            file_component = await self._build_file_component(
+                message_id,
+                message,
+                temporary_file_paths,
+            )
             return [file_component] if file_component else [Plain(text="[file]")]
 
         if msg_type == "sticker":
@@ -309,81 +348,142 @@ class LinePlatformAdapter(Platform):
         self,
         message_id: str,
         message: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> Image | None:
         external_url = self._get_external_content_url(message)
         if external_url:
             return Image.fromURL(external_url)
 
-        content = await self.line_api.get_message_content(message_id)
-        if not content:
-            return None
-        content_bytes, _, _ = content
-        return Image.fromBytes(content_bytes)
+        tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
+        image = Image(file="")
+
+        async def _resolve_image_source() -> str | None:
+            content = await self.line_api.get_message_content(message_id)
+            if not content:
+                return None
+            content_bytes, content_type, filename = content
+            suffix = self._guess_suffix(content_type, ".png")
+            image_path = self._store_temp_content(
+                "image",
+                message_id,
+                content_bytes,
+                suffix,
+                original_name=filename,
+            )
+            tracked_paths.append(image_path)
+            return image_path
+
+        image.set_source_resolver(_resolve_image_source)
+        return image
 
     async def _build_video_component(
         self,
         message_id: str,
         message: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> Video | None:
         external_url = self._get_external_content_url(message)
         if external_url:
             return Video.fromURL(external_url)
 
-        content = await self.line_api.get_message_content(message_id)
-        if not content:
-            return None
-        content_bytes, content_type, _ = content
-        suffix = self._guess_suffix(content_type, ".mp4")
-        file_path = self._store_temp_content("video", message_id, content_bytes, suffix)
-        return Video(file=file_path, path=file_path)
+        tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
+        video = Video(file="")
+
+        async def _resolve_video_source() -> str | None:
+            content = await self.line_api.get_message_content(message_id)
+            if not content:
+                return None
+            content_bytes, content_type, filename = content
+            suffix = self._guess_suffix(content_type, ".mp4")
+            file_path = self._store_temp_content(
+                "video",
+                message_id,
+                content_bytes,
+                suffix,
+                original_name=filename,
+            )
+            tracked_paths.append(file_path)
+            return file_path
+
+        video.set_source_resolver(_resolve_video_source)
+        return video
 
     async def _build_audio_component(
         self,
         message_id: str,
         message: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> Record | None:
         external_url = self._get_external_content_url(message)
         if external_url:
+            record = Record(file="")
+            record.set_source_resolver(
+                lambda external_url=external_url: MediaResolver(
+                    external_url,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+            )
+            return record
+
+        tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
+        record = Record(file="")
+
+        async def _resolve_audio_source() -> str | None:
+            content = await self.line_api.get_message_content(message_id)
+            if not content:
+                return None
+            content_bytes, content_type, filename = content
+            suffix = self._guess_suffix(content_type, ".m4a")
+            file_path = self._store_temp_content(
+                "audio",
+                message_id,
+                content_bytes,
+                suffix,
+                original_name=filename,
+            )
+            tracked_paths.append(file_path)
             path_wav = await MediaResolver(
-                external_url,
+                file_path,
                 media_type="audio",
                 default_suffix=".wav",
             ).to_path(target_format="wav")
-            return Record(file=path_wav, url=path_wav)
+            tracked_paths.append(path_wav)
+            return path_wav
 
-        content = await self.line_api.get_message_content(message_id)
-        if not content:
-            return None
-        content_bytes, content_type, _ = content
-        suffix = self._guess_suffix(content_type, ".m4a")
-        file_path = self._store_temp_content("audio", message_id, content_bytes, suffix)
-        path_wav = await MediaResolver(
-            file_path,
-            media_type="audio",
-            default_suffix=".wav",
-        ).to_path(target_format="wav")
-        return Record(file=path_wav, url=path_wav)
+        record.set_source_resolver(_resolve_audio_source)
+        return record
 
     async def _build_file_component(
         self,
         message_id: str,
         message: dict[str, Any],
+        temporary_file_paths: list[str] | None = None,
     ) -> File | None:
-        content = await self.line_api.get_message_content(message_id)
-        if not content:
-            return None
-        content_bytes, content_type, filename = content
         default_name = str(message.get("fileName", "")).strip() or f"{message_id}.bin"
-        suffix = Path(default_name).suffix or self._guess_suffix(content_type, ".bin")
-        final_name = filename or default_name
-        file_path = self._store_temp_content(
-            "file",
-            message_id,
-            content_bytes,
-            suffix,
-            original_name=final_name,
-        )
-        return File(name=final_name, file=file_path, url=file_path)
+        tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
+        file_component = File(name=default_name)
+
+        async def _resolve_file_path() -> str | None:
+            content = await self.line_api.get_message_content(message_id)
+            if not content:
+                return None
+            content_bytes, content_type, filename = content
+            final_name = filename or default_name
+            suffix = Path(final_name).suffix or self._guess_suffix(content_type, ".bin")
+            file_component.name = final_name
+            file_path = self._store_temp_content(
+                "file",
+                message_id,
+                content_bytes,
+                suffix,
+                original_name=final_name,
+            )
+            tracked_paths.append(file_path)
+            return file_path
+
+        file_component.set_file_resolver(_resolve_file_path)
+        return file_component
 
     @staticmethod
     def _get_external_content_url(message: dict[str, Any]) -> str:

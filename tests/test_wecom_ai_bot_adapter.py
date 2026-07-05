@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,6 +14,9 @@ from astrbot.core.platform.sources.wecom_ai_bot.wecomai_adapter import (
 )
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_api import (
     WecomAIBotStreamMessageBuilder,
+)
+from astrbot.core.platform.sources.wecom_ai_bot.wecomai_long_connection import (
+    WecomAIBotLongConnectionClient,
 )
 
 
@@ -452,3 +456,66 @@ async def test_wecom_ai_bot_process_long_connection_event_callback_sends_welcome
     )
 
     adapter._send_long_connection_respond_welcome.assert_awaited_once_with("req-2")
+
+
+@pytest.mark.asyncio
+async def test_wecom_ai_long_connection_background_dispatch_allows_command_response():
+    class _FakeWebSocket:
+        def __init__(self) -> None:
+            self.closed = False
+            self.sent_payloads: list[dict[str, object]] = []
+
+        async def send_json(self, payload: dict[str, object]) -> None:
+            self.sent_payloads.append(payload)
+
+    client = WecomAIBotLongConnectionClient(
+        bot_id="bot-1",
+        secret="secret-1",
+        ws_url="wss://example.test/ws",
+        heartbeat_interval=30,
+        message_handler=AsyncMock(),
+    )
+    fake_ws = _FakeWebSocket()
+    client._ws = fake_ws
+
+    command_started = asyncio.Event()
+    command_finished = asyncio.Event()
+
+    async def _handler(_payload: dict[str, object]) -> None:
+        command_started.set()
+        ok = await client.send_command(
+            "aibot_respond_msg",
+            "req-1",
+            {"msgtype": "text", "text": {"content": "hello"}},
+        )
+        assert ok is True
+        command_finished.set()
+
+    client.message_handler = _handler
+    client._start_message_task(
+        json.dumps(
+            {
+                "cmd": "aibot_msg_callback",
+                "headers": {"req_id": "callback-1"},
+                "body": {"msgtype": "text", "text": {"content": "hi"}},
+            }
+        )
+    )
+
+    await asyncio.wait_for(command_started.wait(), timeout=1.0)
+    assert len(fake_ws.sent_payloads) == 1
+    assert fake_ws.sent_payloads[0]["cmd"] == "aibot_respond_msg"
+
+    await client._handle_text_message(
+        json.dumps(
+            {
+                "errcode": 0,
+                "errmsg": "ok",
+                "headers": {"req_id": "req-1"},
+            }
+        )
+    )
+
+    await asyncio.wait_for(command_finished.wait(), timeout=1.0)
+    if client._message_tasks:
+        await asyncio.gather(*list(client._message_tasks), return_exceptions=True)

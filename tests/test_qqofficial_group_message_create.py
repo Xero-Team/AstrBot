@@ -320,18 +320,7 @@ async def test_append_attachments_normalizes_schema_less_urls_and_skips_empty_at
 
 
 @pytest.mark.asyncio
-async def test_append_attachments_falls_back_to_remote_record_when_audio_prepare_fails(
-    monkeypatch,
-):
-    async def fail_prepare(url: str, filename: str):
-        raise RuntimeError(f"failed to prepare {filename}: {url}")
-
-    monkeypatch.setattr(
-        QQOfficialPlatformAdapter,
-        "_prepare_audio_attachment",
-        fail_prepare,
-    )
-
+async def test_append_attachments_keeps_audio_attachment_lazy():
     msg = []
     await QQOfficialPlatformAdapter._append_attachments(
         msg,
@@ -346,7 +335,8 @@ async def test_append_attachments_falls_back_to_remote_record_when_audio_prepare
 
     assert len(msg) == 1
     assert isinstance(msg[0], Record)
-    assert msg[0].file == "https://cdn.example/voice.ogg"
+    assert msg[0].file == ""
+    assert msg[0].url == ""
 
 
 def test_parse_face_message_decodes_ext_text_and_falls_back_on_invalid_payload():
@@ -449,7 +439,7 @@ async def test_send_with_markdown_fallback_downgrades_to_plain_content(monkeypat
 async def test_post_c2c_message_drops_none_msg_id_and_stream_id():
     request = AsyncMock(return_value=None)
     event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
-    event.bot = SimpleNamespace(api=SimpleNamespace(_http=SimpleNamespace(request=request)))
+    event._bot = SimpleNamespace(api=SimpleNamespace(_http=SimpleNamespace(request=request)))
 
     result = await event.post_c2c_message(
         openid="friend-1",

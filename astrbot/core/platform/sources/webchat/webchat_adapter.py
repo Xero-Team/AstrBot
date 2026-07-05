@@ -86,7 +86,7 @@ class WebChatAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ):
         conversation_id = _extract_conversation_id(session.session_id)
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
@@ -106,8 +106,7 @@ class WebChatAdapter(Platform):
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
                     exc_info=True,
                 )
-            await super().send_by_session(session, message_chain)
-            return
+            return await super().send_by_session(session, message_chain)
 
         for request_id in target_request_ids:
             await WebChatMessageEvent._send(
@@ -130,7 +129,7 @@ class WebChatAdapter(Platform):
                     exc_info=True,
                 )
 
-        await super().send_by_session(session, message_chain)
+        return await super().send_by_session(session, message_chain)
 
     async def _save_proactive_message(
         self,

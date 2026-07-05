@@ -41,7 +41,7 @@ def _patch_resolver(monkeypatch, module) -> None:
 
 
 @pytest.mark.asyncio
-async def test_line_audio_component_uses_media_resolver_for_external_url(monkeypatch):
+async def test_line_audio_component_resolves_media_lazily_for_external_url(monkeypatch):
     _patch_resolver(monkeypatch, line_adapter)
     adapter = LinePlatformAdapter.__new__(LinePlatformAdapter)
 
@@ -56,8 +56,14 @@ async def test_line_audio_component_uses_media_resolver_for_external_url(monkeyp
     )
 
     assert isinstance(record, Record)
+    assert record.file == ""
+    assert record.url == ""
+    assert FakeMediaResolver.calls == []
+
+    await record._resolve_deferred_source()
+
     assert record.file == WAV_PATH
-    assert record.url == WAV_PATH
+    assert record.path == WAV_PATH
     assert FakeMediaResolver.calls == [
         (
             "https://example.test/voice.m4a",
@@ -68,7 +74,7 @@ async def test_line_audio_component_uses_media_resolver_for_external_url(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_lark_audio_component_uses_media_resolver_after_download(monkeypatch):
+async def test_lark_audio_component_uses_media_resolver_after_lazy_download(monkeypatch):
     _patch_resolver(monkeypatch, lark_adapter)
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
 
@@ -91,8 +97,14 @@ async def test_lark_audio_component_uses_media_resolver_after_download(monkeypat
 
     assert len(records) == 1
     assert isinstance(records[0], Record)
+    assert records[0].file == ""
+    assert records[0].url == ""
+    assert FakeMediaResolver.calls == []
+
+    await records[0]._resolve_deferred_source()
+
     assert records[0].file == WAV_PATH
-    assert records[0].url == WAV_PATH
+    assert records[0].path == WAV_PATH
     assert FakeMediaResolver.calls == [
         (
             "/tmp/lark-source.opus",
@@ -103,7 +115,7 @@ async def test_lark_audio_component_uses_media_resolver_after_download(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_qqofficial_audio_attachment_uses_media_resolver(monkeypatch):
+async def test_qqofficial_audio_attachment_resolves_media_lazily(monkeypatch):
     _patch_resolver(monkeypatch, qqofficial_platform_adapter)
 
     record = await QQOfficialPlatformAdapter._prepare_audio_attachment(
@@ -112,8 +124,14 @@ async def test_qqofficial_audio_attachment_uses_media_resolver(monkeypatch):
     )
 
     assert isinstance(record, Record)
+    assert record.file == ""
+    assert record.url == ""
+    assert FakeMediaResolver.calls == []
+
+    await record._resolve_deferred_source()
+
     assert record.file == WAV_PATH
-    assert record.url == WAV_PATH
+    assert record.path == WAV_PATH
     assert FakeMediaResolver.calls == [
         (
             "https://example.test/voice.amr",
@@ -142,7 +160,7 @@ async def test_qqofficial_send_record_resolves_to_tencent_silk(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_misskey_audio_file_component_uses_media_resolver(monkeypatch):
+async def test_misskey_audio_file_component_uses_media_resolver_lazily(monkeypatch):
     _patch_resolver(monkeypatch, misskey_utils)
 
     record, part_text = await create_file_component(
@@ -154,9 +172,15 @@ async def test_misskey_audio_file_component_uses_media_resolver(monkeypatch):
     )
 
     assert isinstance(record, Record)
-    assert record.file == WAV_PATH
-    assert record.url == WAV_PATH
+    assert record.file == ""
+    assert record.url == ""
     assert part_text == "音频[voice.ogg]"
+    assert FakeMediaResolver.calls == []
+
+    await record._resolve_deferred_source()
+
+    assert record.file == WAV_PATH
+    assert record.path == WAV_PATH
     assert FakeMediaResolver.calls == [
         (
             "https://example.test/voice.ogg",

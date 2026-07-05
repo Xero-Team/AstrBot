@@ -389,3 +389,38 @@ async def test_delete_profile_clears_routing_entries_for_deleted_config() -> Non
     assert "conf-a" not in core_lifecycle.pipeline_scheduler_mapping
     acm.delete_conf.assert_awaited_once_with("conf-a")
     ucr.update_routing_data.assert_awaited_once_with({"onebot:friend:456": "conf-b"})
+
+
+@pytest.mark.asyncio
+async def test_delete_profile_preserves_more_specific_routes_for_other_profiles() -> None:
+    acm = SimpleNamespace(delete_conf=AsyncMock(return_value=True))
+    ucr = SimpleNamespace(
+        umop_to_conf_id={
+            "::": "conf-a",
+            "telegram::": "conf-b",
+            "telegram:group:room-*": "conf-b",
+            "telegram:group:room-123": "conf-c",
+        },
+        update_routing_data=AsyncMock(),
+    )
+    core_lifecycle = SimpleNamespace(
+        astrbot_config_mgr=acm,
+        pipeline_scheduler_mapping={
+            "conf-a": object(),
+            "conf-b": object(),
+            "conf-c": object(),
+        },
+        umop_config_router=ucr,
+    )
+    service = config_service.ConfigProfileService(core_lifecycle)
+
+    await service.delete_profile("conf-a")
+
+    assert "conf-a" not in core_lifecycle.pipeline_scheduler_mapping
+    ucr.update_routing_data.assert_awaited_once_with(
+        {
+            "telegram::": "conf-b",
+            "telegram:group:room-*": "conf-b",
+            "telegram:group:room-123": "conf-c",
+        }
+    )

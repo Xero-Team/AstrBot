@@ -179,46 +179,6 @@ class TestAstrBotCoreLifecycleTaskWrapper:
                 for call in mock_logger.error.call_args_list
             )
 
-
-class TestAstrBotCoreLifecycleLoadPlatform:
-    """Tests for AstrBotCoreLifecycle.load_platform method."""
-
-    @pytest.mark.asyncio
-    async def test_load_platform(self, mock_log_broker, mock_db):
-        """Test load_platform method."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        # Set up mock platform manager
-        mock_platform_manager = MagicMock()
-
-        mock_inst1 = MagicMock()
-        mock_inst1.meta = MagicMock()
-        mock_inst1.meta.return_value.id = "inst1"
-        mock_inst1.meta.return_value.name = "Instance1"
-        mock_inst1.run = AsyncMock()
-
-        mock_inst2 = MagicMock()
-        mock_inst2.meta = MagicMock()
-        mock_inst2.meta.return_value.id = "inst2"
-        mock_inst2.meta.return_value.name = "Instance2"
-        mock_inst2.run = AsyncMock()
-
-        mock_platform_manager.get_insts = MagicMock(
-            return_value=[mock_inst1, mock_inst2]
-        )
-        lifecycle.platform_manager = mock_platform_manager
-
-        # Call load_platform
-        tasks = lifecycle.load_platform()
-
-        # Verify tasks were created
-        assert len(tasks) == 2
-
-        # Verify task names
-        assert any("inst1" in task.get_name() for task in tasks)
-        assert any("inst2" in task.get_name() for task in tasks)
-
-
 class TestAstrBotCoreLifecycleErrorHandling:
     """Tests for AstrBotCoreLifecycle error handling."""
 

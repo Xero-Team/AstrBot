@@ -11,6 +11,7 @@ class:
 """
 
 import asyncio
+import time
 from asyncio import Queue
 
 from astrbot.core import logger
@@ -22,6 +23,8 @@ from .platform import AstrMessageEvent
 
 class EventBus:
     """用于处理事件的分发和处理"""
+
+    _QUEUE_WAIT_LOG_THRESHOLD_S = 0.5
 
     def __init__(
         self,
@@ -101,13 +104,20 @@ class EventBus:
             event (AstrMessageEvent): 事件对象
 
         """
+        queue_wait_suffix = ""
+        created_at = getattr(event, "created_at", None)
+        if isinstance(created_at, int | float):
+            queue_wait = max(0.0, time.time() - created_at)
+            if queue_wait >= self._QUEUE_WAIT_LOG_THRESHOLD_S:
+                queue_wait_suffix = f" (queued {queue_wait:.2f}s)"
+
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
         if event.get_sender_name():
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}{queue_wait_suffix}",
             )
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}{queue_wait_suffix}",
             )

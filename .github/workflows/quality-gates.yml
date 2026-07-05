@@ -38,8 +38,14 @@ jobs:
             astrbot/api \
             astrbot/cli \
             astrbot/core/backup \
+            astrbot/core/event_bus.py \
             astrbot/core/knowledge_base \
+            astrbot/core/pipeline/respond \
+            astrbot/core/pipeline/waking_check \
+            astrbot/core/platform \
             astrbot/core/skills \
+            astrbot/core/star/context.py \
+            astrbot/core/umop_config_router.py \
             astrbot/utils \
             -c pyproject.toml
 
@@ -53,8 +59,14 @@ jobs:
             astrbot/cli \
             astrbot/core/backup \
             astrbot/core/config \
+            astrbot/core/event_bus.py \
             astrbot/core/knowledge_base \
+            astrbot/core/pipeline/respond \
+            astrbot/core/pipeline/waking_check \
+            astrbot/core/platform \
             astrbot/core/skills \
+            astrbot/core/star/context.py \
+            astrbot/core/umop_config_router.py \
             astrbot/utils \
             -s -n C
           uv run radon mi \
@@ -62,7 +74,13 @@ jobs:
             astrbot/cli \
             astrbot/core/backup \
             astrbot/core/config \
+            astrbot/core/event_bus.py \
             astrbot/core/knowledge_base \
+            astrbot/core/pipeline/respond \
+            astrbot/core/pipeline/waking_check \
+            astrbot/core/platform \
             astrbot/core/skills \
+            astrbot/core/star/context.py \
+            astrbot/core/umop_config_router.py \
             astrbot/utils \
             -s

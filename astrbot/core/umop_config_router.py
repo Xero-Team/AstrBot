@@ -45,6 +45,35 @@ class UmopConfigRouter:
 
         return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
 
+    @staticmethod
+    def _segment_priority(segment: str) -> tuple[int, int]:
+        """Return a sortable priority for a single route segment.
+
+        Routing priority is explicit and stable:
+        1. exact literal segment
+        2. partial wildcard pattern (for example ``group-*``)
+        3. catch-all segment (``*`` or empty string)
+
+        Longer literal content wins within the same category. Final ties keep
+        insertion order because ``sorted()`` is stable.
+        """
+        if segment in {"", "*"}:
+            return (0, 0)
+
+        has_glob = any(ch in segment for ch in "*?[]")
+        if has_glob:
+            literal_length = len(segment.translate(str.maketrans("", "", "*?[]")))
+            return (1, literal_length)
+
+        return (2, len(segment))
+
+    def _route_priority(self, pattern: str) -> tuple[tuple[int, int], ...]:
+        """Build a comparable priority tuple for a route pattern."""
+        parts = self._split_umo(pattern)
+        if parts is None:
+            return ((-1, -1), (-1, -1), (-1, -1))
+        return tuple(self._segment_priority(part) for part in parts)
+
     def get_conf_id_for_umop(self, umo: str) -> str | None:
         """根据 UMO 获取对应的配置文件 ID
 
@@ -55,7 +84,12 @@ class UmopConfigRouter:
             str | None: 配置文件 ID，如果没有找到则返回 None
 
         """
-        for pattern, conf_id in self.umop_to_conf_id.items():
+        ranked_routes = sorted(
+            self.umop_to_conf_id.items(),
+            key=lambda item: self._route_priority(item[0]),
+            reverse=True,
+        )
+        for pattern, conf_id in ranked_routes:
             if self._is_umo_match(pattern, umo):
                 return conf_id
         return None

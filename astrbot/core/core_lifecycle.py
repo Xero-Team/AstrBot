@@ -414,19 +414,6 @@ class AstrBotCoreLifecycle:
             daemon=True,
         ).start()
 
-    def load_platform(self) -> list[asyncio.Task]:
-        """加载平台实例并返回所有平台实例的异步任务列表"""
-        tasks = []
-        platform_insts = self.platform_manager.get_insts()
-        for platform_inst in platform_insts:
-            tasks.append(
-                asyncio.create_task(
-                    platform_inst.run(),
-                    name=f"{platform_inst.meta().id}({platform_inst.meta().name})",
-                ),
-            )
-        return tasks
-
     async def load_pipeline_scheduler(self) -> dict[str, PipelineScheduler]:
         """加载消息事件流水线调度器.
 

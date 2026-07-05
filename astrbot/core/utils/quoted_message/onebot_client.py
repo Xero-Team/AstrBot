@@ -31,11 +31,15 @@ class OneBotClient:
 
     @staticmethod
     def _resolve_call_action(event: AstrMessageEvent) -> CallAction | None:
-        bot = getattr(event, "bot", None)
+        bot = getattr(event, "bot", None) or getattr(event, "_bot", None)
         api = getattr(bot, "api", None)
         call_action = getattr(api, "call_action", None)
         if not callable(call_action):
-            adapter = getattr(event, "adapter", None)
+            call_action = getattr(bot, "call_action", None)
+        if not callable(call_action):
+            adapter = getattr(event, "adapter", None) or getattr(
+                event, "_adapter", None
+            )
             client = getattr(adapter, "client", None)
             if client is None:
                 return None
@@ -226,6 +230,23 @@ class OneBotClient:
 
     async def get_msg(self, message_id: str | int) -> dict[str, Any] | None:
         return await self._call_action_compat("get_msg", message_id)
+
+    async def get_msg_sender_id(self, message_id: str | int) -> str | None:
+        payload = await self.get_msg(message_id)
+        data = _unwrap_action_response(payload)
+        sender = data.get("sender")
+        if isinstance(sender, dict):
+            sender_id = sender.get("user_id")
+            if sender_id is not None:
+                sender_text = str(sender_id).strip()
+                if sender_text:
+                    return sender_text
+
+        sender_id = data.get("user_id")
+        if sender_id is None:
+            return None
+        sender_text = str(sender_id).strip()
+        return sender_text or None
 
     async def get_forward_msg(self, forward_id: str | int) -> dict[str, Any] | None:
         return await self._call_action_compat("get_forward_msg", forward_id)

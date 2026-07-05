@@ -294,7 +294,14 @@ function Start-ManagedProcess {
     $resolvedFilePath = $FilePath
     $resolvedArgumentList = $ArgumentList
 
-    if (-not $IsWindows) {
+    if ($IsWindows -and -not [System.IO.Path]::IsPathRooted($resolvedFilePath)) {
+        # Prefer an actual application shim such as .cmd over a PowerShell script shim.
+        $applicationCommand = Get-ApplicationCommandPath -Names @($resolvedFilePath)
+        if ($applicationCommand) {
+            $resolvedFilePath = $applicationCommand
+        }
+    }
+    elseif (-not $IsWindows) {
         $setsidCommand = Get-ApplicationCommandPath -Names @("setsid")
         if ($setsidCommand) {
             $resolvedFilePath = $setsidCommand

@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from time import time
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
@@ -16,6 +17,8 @@ from .stage_order import STAGES_ORDER
 
 class PipelineScheduler:
     """管道调度器，负责调度各个阶段的执行"""
+
+    _PIPELINE_SLOW_LOG_THRESHOLD_S = 1.0
 
     def __init__(self, context: PipelineContext) -> None:
         ensure_builtin_stages_registered()
@@ -83,6 +86,7 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
+        started_at = time()
         try:
             await self._process_stages(event)
 
@@ -90,7 +94,17 @@ class PipelineScheduler:
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 
-            logger.debug("pipeline execution completed.")
+            elapsed = time() - started_at
+            if elapsed >= self._PIPELINE_SLOW_LOG_THRESHOLD_S:
+                logger.info(
+                    "pipeline completed in %.2fs. platform=%s session=%s message=%s",
+                    elapsed,
+                    event.get_platform_id(),
+                    event.unified_msg_origin,
+                    event.get_message_outline(),
+                )
+            else:
+                logger.debug("pipeline execution completed.")
         finally:
             event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)

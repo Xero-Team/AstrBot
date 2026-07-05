@@ -10,6 +10,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.quoted_message.onebot_client import OneBotClient
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -128,7 +129,16 @@ class WakingCheckStage(Stage):
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
+            unresolved_replies: list[Reply] = []
             for message in messages:
+                reply_sender_id = ""
+                if isinstance(message, Reply) and message.sender_id not in (
+                    None,
+                    "",
+                    0,
+                    "0",
+                ):
+                    reply_sender_id = str(message.sender_id)
                 if (
                     (
                         isinstance(message, At)
@@ -137,7 +147,7 @@ class WakingCheckStage(Stage):
                     or (isinstance(message, AtAll) and not self.ignore_at_all)
                     or (
                         isinstance(message, Reply)
-                        and str(message.sender_id) == str(event.get_self_id())
+                        and reply_sender_id == str(event.get_self_id())
                     )
                 ):
                     is_wake = True
@@ -145,6 +155,24 @@ class WakingCheckStage(Stage):
                     wake_prefix = ""
                     event.is_at_or_wake_command = True
                     break
+                if isinstance(message, Reply) and not reply_sender_id:
+                    unresolved_replies.append(message)
+
+            if not is_wake and unresolved_replies:
+                onebot_client = OneBotClient(event)
+                for message in unresolved_replies:
+                    resolved_sender_id = await onebot_client.get_msg_sender_id(
+                        message.id
+                    )
+                    if not resolved_sender_id:
+                        continue
+                    message.sender_id = resolved_sender_id
+                    if resolved_sender_id == str(event.get_self_id()):
+                        is_wake = True
+                        event.is_wake = True
+                        event.is_at_or_wake_command = True
+                        wake_prefix = ""
+                        break
             # 检查是否是私聊
             if (
                 event.is_private_chat()

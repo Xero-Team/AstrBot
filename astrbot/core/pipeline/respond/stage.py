@@ -143,6 +143,21 @@ class RespondStage(Stage):
         except Exception:
             logger.warning("stop_typing failed before send", exc_info=True)
 
+    def _log_send_result(
+        self,
+        result,
+        *,
+        chain: MessageChain | None = None,
+    ) -> None:
+        if result is None or getattr(result, "success", True):
+            return
+        logger.error(
+            "发送消息链失败: target=%s chain=%s error=%s",
+            getattr(result, "target", ""),
+            chain,
+            getattr(result, "error_message", "unknown error"),
+        )
+
     def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
         """检查是否需要分段回复"""
         if not self.enable_seg:
@@ -237,7 +252,11 @@ class RespondStage(Stage):
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
             await self._stop_typing_before_send(event)
-            await event.send_streaming(result.async_stream, realtime_segmenting)
+            send_result = await event.send_streaming(
+                result.async_stream,
+                realtime_segmenting,
+            )
+            self._log_send_result(send_result)
             return
         if len(result.chain) > 0:
             # 检查路径映射
@@ -287,10 +306,16 @@ class RespondStage(Stage):
                     try:
                         await self._stop_typing_before_send(event)
                         if comp.type in need_separately:
-                            await event.send(result.derive([comp]))
+                            send_result = await event.send(result.derive([comp]))
                         else:
-                            await event.send(result.derive([*header_comps, comp]))
+                            send_result = await event.send(
+                                result.derive([*header_comps, comp])
+                            )
                             header_comps.clear()
+                        self._log_send_result(
+                            send_result,
+                            chain=MessageChain([comp]),
+                        )
                     except Exception as e:
                         logger.error(
                             f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
@@ -315,7 +340,8 @@ class RespondStage(Stage):
                     chain = result.derive([comp])
                     try:
                         await self._stop_typing_before_send(event)
-                        await event.send(chain)
+                        send_result = await event.send(chain)
+                        self._log_send_result(send_result, chain=chain)
                     except Exception as e:
                         logger.error(
                             f"发送消息链失败: chain = {chain}, error = {e}",
@@ -325,7 +351,8 @@ class RespondStage(Stage):
                 if result.chain and len(result.chain) > 0:
                     try:
                         await self._stop_typing_before_send(event)
-                        await event.send(chain)
+                        send_result = await event.send(chain)
+                        self._log_send_result(send_result, chain=chain)
                     except Exception as e:
                         logger.error(
                             f"发送消息链失败: chain = {chain}, error = {e}",

@@ -23,7 +23,6 @@ from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.totp import (
     is_totp_enabled,
     revoke_user_trusted_devices,
@@ -1292,16 +1291,25 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
+        providers = []
+        model_metadata = {}
+        for provider in self.config.get("provider", []):
+            provider_response = self._build_provider_response(provider)
+            model_id = provider_response.get("model")
+            if isinstance(model_id, str) and "model_metadata" in provider_response:
+                model_metadata[model_id] = provider_response.pop("model_metadata")
+            providers.append(provider_response)
+
+        provider_sources = [
+            self._build_provider_source_response(source)
+            for source in self.config.get("provider_sources", [])
+        ]
+
         return {
             "config_schema": config_schema,
-            "providers": [
-                self._build_provider_response(provider)
-                for provider in self.config.get("provider", [])
-            ],
-            "provider_sources": [
-                self._build_provider_source_response(source)
-                for source in self.config.get("provider_sources", [])
-            ],
+            "providers": providers,
+            "provider_sources": provider_sources,
+            "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
@@ -1485,6 +1493,7 @@ class ProviderConfigService:
             item.strip() for item in (provider_type or "").split(",") if item.strip()
         }
         providers = []
+        model_metadata = {}
         for provider in self.provider_manager.providers_config:
             if (
                 provider_source_id
@@ -1497,8 +1506,11 @@ class ProviderConfigService:
             effective_type = normalized_provider.get("provider_type")
             if provider_types and effective_type not in provider_types:
                 continue
+            model_id = normalized_provider.get("model")
+            if isinstance(model_id, str) and "model_metadata" in normalized_provider:
+                model_metadata[model_id] = normalized_provider.pop("model_metadata")
             providers.append(normalized_provider)
-        return {"providers": providers}
+        return {"providers": providers, "model_metadata": model_metadata}
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None
@@ -1514,10 +1526,16 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
-        if merged:
-            provider_response = self._ensure_provider_type(copy.deepcopy(provider))
-            return {"provider": self._attach_model_metadata(provider_response)}
-        return {"provider": self._build_raw_provider_response(provider)}
+        provider_response = (
+            self._build_provider_response(provider)
+            if merged
+            else self._build_raw_provider_response(provider)
+        )
+        model_id = provider_response.get("model")
+        model_metadata = {}
+        if isinstance(model_id, str) and "model_metadata" in provider_response:
+            model_metadata[model_id] = provider_response.pop("model_metadata")
+        return {"provider": provider_response, "model_metadata": model_metadata}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)

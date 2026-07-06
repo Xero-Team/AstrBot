@@ -99,6 +99,21 @@ export interface ProviderSchemaData {
   config_schema?: OpenConfig;
   providers?: OpenConfig[];
   provider_sources?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderListData {
+  providers?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByTypeEnvelope extends ApiEnvelope<OpenConfig[]> {
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByIdData {
+  provider?: OpenConfig;
+  model_metadata?: Record<string, unknown>;
 }
 
 export interface ProviderSourceModelsData {
@@ -855,21 +870,45 @@ export const providerApi = {
     );
   },
   list(params?: ProviderListParams) {
-    return typed<{ providers: OpenConfig[] }>(
+    return typed<ProviderListData>(
       openApiV1.listProviders({ query: generatedQuery(params) }),
     );
   },
   async listByProviderType(
     providerType: string,
-  ): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
-    const response = await providerApi.list(
-      providerType ? { provider_type: providerType } : undefined,
+  ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
+    const capabilities = providerTypeToCapabilities(providerType);
+    if (capabilities.length === 0) {
+      const response = await providerApi.list();
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          data: response.data.data.providers || [],
+          model_metadata: response.data.data.model_metadata || {},
+        },
+      };
+    }
+
+    const responses = await Promise.all(
+      capabilities.map((capability) => providerApi.list({ capability })),
+    );
+    const first = responses[0];
+    const modelMetadata = responses.reduce<Record<string, unknown>>(
+      (acc, response) => ({
+        ...acc,
+        ...(response.data.data.model_metadata || {}),
+      }),
+      {},
     );
     return {
-      ...response,
+      ...first,
       data: {
-        ...response.data,
-        data: response.data.data.providers || [],
+        ...first.data,
+        data: responses.flatMap(
+          (response) => response.data.data.providers || [],
+        ),
+        model_metadata: modelMetadata,
       },
     };
   },
@@ -898,10 +937,9 @@ export const providerApi = {
     );
   },
   get(providerId: string, merged = false) {
-    return typed<{ provider: OpenConfig }>(
-      openApiV1.getProvider({
-        path: { provider_id: providerId },
-        query: { merged },
+    return typed<ProviderByIdData>(
+      openApiV1.getProviderById({
+        query: { provider_id: providerId, merged },
       }),
     );
   },

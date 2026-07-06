@@ -993,9 +993,12 @@ export const useExtensionPage = () => {
   };
 
   const pluginOn = async (extension: InstalledPlugin) => {
+    const previousActivated = extension.activated;
+    extension.activated = true;
     try {
       const res = await pluginApi.setEnabled(extension.name, true);
       if (res.data.status === 'error') {
+        extension.activated = previousActivated;
         toast(res.data.message, 'error');
         return;
       }
@@ -1004,20 +1007,25 @@ export const useExtensionPage = () => {
 
       await checkAndPromptConflicts();
     } catch (err) {
+      extension.activated = previousActivated;
       toast(err, 'error');
     }
   };
 
   const pluginOff = async (extension: InstalledPlugin) => {
+    const previousActivated = extension.activated;
+    extension.activated = false;
     try {
       const res = await pluginApi.setEnabled(extension.name, false);
       if (res.data.status === 'error') {
+        extension.activated = previousActivated;
         toast(res.data.message, 'error');
         return;
       }
       toast(res.data.message, 'success');
-      void getExtensions();
+      await getExtensions();
     } catch (err) {
+      extension.activated = previousActivated;
       toast(err, 'error');
     }
   };

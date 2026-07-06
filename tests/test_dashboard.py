@@ -2289,10 +2289,10 @@ async def test_batch_delete_sessions_uses_batch_lookup(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "path_template",
+    ("path_template", "expected_status", "expected_message"),
     [
-        "/api/chat/get_session?session_id={session_id}",
-        "/api/v1/chat/sessions/{session_id}",
+        ("/api/chat/get_session?session_id={session_id}", 404, None),
+        ("/api/v1/chat/sessions/{session_id}", 200, "Permission denied"),
     ],
 )
 async def test_get_chat_session_rejects_session_owned_by_another_user(
@@ -2300,8 +2300,10 @@ async def test_get_chat_session_rejects_session_owned_by_another_user(
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     path_template: str,
+    expected_status: int,
+    expected_message: str | None,
 ):
-    test_client = app.test_client()
+    test_client = DashboardTestClient(app)
     session_id = f"foreign_get_session_{uuid.uuid4().hex[:8]}"
     await core_lifecycle_td.db.create_platform_session(
         creator="not_dashboard_user",
@@ -2326,10 +2328,12 @@ async def test_get_chat_session_rejects_session_owned_by_another_user(
         headers=authenticated_header,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == expected_status
+    if expected_message is None:
+        return
     data = await response.get_json()
     assert data["status"] == "error"
-    assert data["message"] == "Permission denied"
+    assert data["message"] == expected_message
 
 
 @pytest.mark.asyncio

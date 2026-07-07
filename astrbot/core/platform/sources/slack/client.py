@@ -102,6 +102,7 @@ class SlackWebhookClient:
             # 处理事件
             if self.event_handler and event_data.get("type") == "event_callback":
                 self._start_event_task(self.event_handler(event_data))
+                await asyncio.sleep(0)
 
             return Response("", status_code=200)
 

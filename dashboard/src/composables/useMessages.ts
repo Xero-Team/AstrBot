@@ -34,8 +34,62 @@ export interface ChatContent {
   message: MessagePart[];
   reasoning?: string;
   isLoading?: boolean;
-  agentStats?: any;
-  refs?: any;
+  agentStats?: AgentStats | null;
+  refs?: ChatRefs | null;
+}
+
+export interface TokenUsageStats {
+  input_other?: number | string;
+  input_cached?: number | string;
+  output?: number | string;
+  [key: string]: unknown;
+}
+
+export interface AgentStats {
+  token_usage?: TokenUsageStats;
+  [key: string]: unknown;
+}
+
+export interface ChatRefItem {
+  index?: unknown;
+  title?: string;
+  url?: string;
+  snippet?: string;
+  favicon?: string;
+  [key: string]: unknown;
+}
+
+export interface ChatRefs {
+  used?: ChatRefItem[];
+  [key: string]: unknown;
+}
+
+export interface StreamPayload {
+  ct?: string;
+  t?: string;
+  type?: string;
+  chain_type?: string;
+  data?: unknown;
+  streaming?: boolean;
+  [key: string]: unknown;
+}
+
+export interface HistoryRecord {
+  id?: string | number;
+  content?: {
+    type?: string;
+    message?: unknown;
+    reasoning?: string;
+    agentStats?: AgentStats | null;
+    agent_stats?: AgentStats | null;
+    refs?: ChatRefs | null;
+    [key: string]: unknown;
+  };
+  created_at?: string;
+  sender_id?: string;
+  sender_name?: string;
+  llm_checkpoint_id?: string | null;
+  [key: string]: unknown;
 }
 
 export interface MessageDisplayBlock {
@@ -137,7 +191,9 @@ export function useMessages(options: UseMessagesOptions) {
   onBeforeUnmount(() => {
     cleanupConnections();
     for (const promise of attachmentBlobCache.values()) {
-      promise.then((url) => void URL.revokeObjectURL(url)).catch(() => {});
+      promise
+        .then((url) => void URL.revokeObjectURL(url))
+        .catch((_error) => undefined);
     }
     attachmentBlobCache.clear();
   });
@@ -233,7 +289,9 @@ export function useMessages(options: UseMessagesOptions) {
       const response = await chatApi.getSession(sessionId);
       const payload = response.data?.data || {};
       const history = payload.history || [];
-      const records = history.map(normalizeHistoryRecord);
+      const records = history.map((record) =>
+        normalizeHistoryRecord(record as HistoryRecord),
+      );
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
       messagesBySession[sessionId] = records;
@@ -329,7 +387,9 @@ export function useMessages(options: UseMessagesOptions) {
     record: ChatRecord,
     editedText: string,
   ) {
-    if (!sessionId || record.id == null) return { needsRegenerate: false };
+    if (!sessionId || record.id === null || record.id === undefined) {
+      return { needsRegenerate: false };
+    }
     const content = cloneContentWithEditedText(record, editedText);
     const response = await chatApi.updateMessage(sessionId, record.id, {
       content: content as unknown as Record<string, unknown>,
@@ -353,7 +413,8 @@ export function useMessages(options: UseMessagesOptions) {
 
   function truncateMessagesAfter(sessionId: string, record: ChatRecord) {
     const records = messagesBySession[sessionId];
-    if (!records?.length || record.id == null) return;
+    if (!records?.length || record.id === null || record.id === undefined)
+      return;
     const index = records.findIndex(
       (message) => String(message.id) === String(record.id),
     );
@@ -405,7 +466,8 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider = '',
     selectedModel = '',
   ) {
-    if (!sessionId || botRecord.id == null) return;
+    if (!sessionId || botRecord.id === null || botRecord.id === undefined)
+      return;
     const targetMessageId = botRecord.id;
 
     botRecord.id = `local-regenerate-${Date.now()}`;
@@ -484,7 +546,7 @@ export function useMessages(options: UseMessagesOptions) {
     });
   }
 
-  function normalizeHistoryRecord(record: any): ChatRecord {
+  function normalizeHistoryRecord(record: HistoryRecord): ChatRecord {
     const content = record.content || {};
     const normalizedMessage = normalizeMessageParts(
       content.message || [],
@@ -497,7 +559,7 @@ export function useMessages(options: UseMessagesOptions) {
         normalizedMessage,
         content.reasoning || '',
       ),
-      agentStats: content.agentStats || content.agent_stats,
+      agentStats: content.agentStats || content.agent_stats || null,
       refs: content.refs,
     };
 
@@ -516,7 +578,8 @@ export function useMessages(options: UseMessagesOptions) {
       threadsByMessage.set(key, list);
     }
     for (const record of records) {
-      const key = record.id == null ? '' : String(record.id);
+      const key =
+        record.id === null || record.id === undefined ? '' : String(record.id);
       record.threads = threadsByMessage.get(key) || [];
     }
   }
@@ -541,7 +604,7 @@ export function useMessages(options: UseMessagesOptions) {
       abort,
     };
 
-    fetchWithAuth(chatApi.sendStreamUrl(), {
+    void fetchWithAuth(chatApi.sendStreamUrl(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -691,7 +754,13 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     if (ws.readyState === WebSocket.CONNECTING) {
-      ws.addEventListener('open', send, { once: true });
+      ws.addEventListener(
+        'open',
+        () => {
+          send();
+        },
+        { once: true },
+      );
       return;
     }
     void finishWebSocketStream(sessionId, messageId);
@@ -744,7 +813,7 @@ export function useMessages(options: UseMessagesOptions) {
 
   function processStreamPayload(
     botRecord: ChatRecord,
-    payload: any,
+    payload: StreamPayload,
     userRecord?: ChatRecord,
   ) {
     const normalized =
@@ -758,27 +827,48 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === 'session_id' || msgType === 'session_bound') return;
     if (msgType === 'user_message_saved') {
       if (userRecord) {
-        userRecord.id = data?.id || userRecord.id;
-        userRecord.created_at = data?.created_at || userRecord.created_at;
+        const messageData =
+          data && typeof data === 'object'
+            ? (data as Record<string, unknown>)
+            : null;
+        userRecord.id =
+          (messageData?.id as string | number | undefined) || userRecord.id;
+        userRecord.created_at =
+          (typeof messageData?.created_at === 'string'
+            ? messageData.created_at
+            : userRecord.created_at) || userRecord.created_at;
         userRecord.llm_checkpoint_id =
-          data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+          (typeof messageData?.llm_checkpoint_id === 'string'
+            ? messageData.llm_checkpoint_id
+            : userRecord.llm_checkpoint_id) || userRecord.llm_checkpoint_id;
       }
       return;
     }
     if (msgType === 'message_saved') {
       markMessageStarted(botRecord);
-      botRecord.id = data?.id || botRecord.id;
-      botRecord.created_at = data?.created_at || botRecord.created_at;
+      const messageData =
+        data && typeof data === 'object'
+          ? (data as Record<string, unknown>)
+          : null;
+      botRecord.id =
+        (messageData?.id as string | number | undefined) || botRecord.id;
+      botRecord.created_at =
+        (typeof messageData?.created_at === 'string'
+          ? messageData.created_at
+          : botRecord.created_at) || botRecord.created_at;
       botRecord.llm_checkpoint_id =
-        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
-      if (data?.refs) {
-        messageContent(botRecord).refs = data.refs;
+        (typeof messageData?.llm_checkpoint_id === 'string'
+          ? messageData.llm_checkpoint_id
+          : botRecord.llm_checkpoint_id) || botRecord.llm_checkpoint_id;
+      if (messageData?.refs && typeof messageData.refs === 'object') {
+        messageContent(botRecord).refs = messageData.refs as ChatRefs;
       }
       return;
     }
     if (msgType === 'agent_stats' || chainType === 'agent_stats') {
       markMessageStarted(botRecord);
-      messageContent(botRecord).agentStats = data;
+      messageContent(botRecord).agentStats =
+        data && typeof data === 'object' ? { ...data } : { value: data };
       return;
     }
     if (msgType === 'error') {
@@ -817,7 +907,10 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
 
-    if (['image', 'record', 'file', 'video'].includes(msgType)) {
+    if (
+      typeof msgType === 'string' &&
+      ['image', 'record', 'file', 'video'].includes(msgType)
+    ) {
       markMessageStarted(botRecord);
       const rawFilename = String(data)
         .replace('[IMAGE]', '')
@@ -838,8 +931,11 @@ export function useMessages(options: UseMessagesOptions) {
       if (storedFilename && storedFilename !== filename) {
         mediaPart.stored_filename = storedFilename;
       }
+      if (!filename) {
+        return;
+      }
       if (msgType !== 'file') {
-        resolvePartMedia(mediaPart).then(() => {
+        void resolvePartMedia(mediaPart).then(() => {
           messageContent(botRecord).message.push(mediaPart);
         });
       } else {
@@ -1065,7 +1161,7 @@ function partToPayload(part: MessagePart) {
 
 async function readSseStream(
   body: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
+  onPayload: (payload: StreamPayload) => void,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -1099,18 +1195,27 @@ function normalizePartsInternal(parts: unknown): MessagePart[] {
     return parts ? [{ type: 'plain', text: parts }] : [];
   }
   if (!Array.isArray(parts)) return [];
-  return parts.map((part: any) => {
+  return parts.map((part: unknown): MessagePart => {
     if (!part || typeof part !== 'object') {
       return { type: 'plain', text: String(part ?? '') };
     }
-    if (part.type === 'reasoning') {
+    const normalizedPart = part as Record<string, unknown>;
+    if (normalizedPart.type === 'reasoning') {
       return {
-        ...part,
+        ...normalizedPart,
         type: 'think',
-        think: String(part.think ?? part.text ?? ''),
+        think: String(normalizedPart.think ?? normalizedPart.text ?? ''),
       };
     }
-    return { ...part };
+    return {
+      ...normalizedPart,
+      type:
+        typeof normalizedPart.type === 'string' ? normalizedPart.type : 'plain',
+      text:
+        typeof normalizedPart.type === 'string'
+          ? (normalizedPart.text as string | undefined)
+          : String(normalizedPart.text ?? ''),
+    };
   });
 }
 
@@ -1122,15 +1227,11 @@ function isThinkingPart(part: MessagePart) {
   return part.type === 'think' || part.type === 'tool_call';
 }
 
-function firstNonEmptyPartIndex(parts: MessagePart[]) {
-  return parts.findIndex((part) => !isEmptyPlainPart(part));
-}
-
 export function appendPlain(record: ChatRecord, text: string, append = true) {
   markMessageStarted(record);
   const content = record.content;
   let last = content.message[content.message.length - 1];
-  if (!last || last.type !== 'plain') {
+  if (last?.type !== 'plain') {
     last = { type: 'plain', text: '' };
     content.message.push(last);
   }
@@ -1150,37 +1251,39 @@ export function appendReasoningPart(record: ChatRecord, text: string) {
   content.reasoning = extractReasoningText(content.message);
 }
 
-export function upsertToolCall(record: ChatRecord, toolCall: any) {
+export function upsertToolCall(record: ChatRecord, toolCall: unknown) {
   markMessageStarted(record);
   if (!toolCall || typeof toolCall !== 'object') return;
-  const targetId = toolCall.id;
-  if (targetId != null) {
+  const normalizedToolCall = toolCall as ToolCall;
+  const targetId = normalizedToolCall.id;
+  if (targetId !== null && targetId !== undefined) {
     for (const part of record.content.message) {
       if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls))
         continue;
       const matched = part.tool_calls.find((item) => item.id === targetId);
       if (matched) {
-        Object.assign(matched, toolCall);
+        Object.assign(matched, normalizedToolCall);
         return;
       }
     }
   }
   record.content.message.push({
     type: 'tool_call',
-    tool_calls: [{ ...toolCall }],
+    tool_calls: [{ ...normalizedToolCall }],
   });
 }
 
-export function finishToolCall(record: ChatRecord, result: any) {
+export function finishToolCall(record: ChatRecord, result: unknown) {
   markMessageStarted(record);
   if (!result || typeof result !== 'object') return;
-  const targetId = result.id;
+  const normalizedResult = result as ToolCall;
+  const targetId = normalizedResult.id;
   for (const part of record.content.message) {
     if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
-      tool.result = result.result;
-      tool.finished_ts = result.ts || Date.now() / 1000;
+      tool.result = normalizedResult.result;
+      tool.finished_ts = normalizedResult.ts || Date.now() / 1000;
       return;
     }
   }
@@ -1189,8 +1292,8 @@ export function finishToolCall(record: ChatRecord, result: any) {
     tool_calls: [
       {
         id: targetId,
-        result: result.result,
-        finished_ts: result.ts || Date.now() / 1000,
+        result: normalizedResult.result,
+        finished_ts: normalizedResult.ts || Date.now() / 1000,
       },
     ],
   });
@@ -1209,7 +1312,7 @@ export function hasPlainText(record: ChatRecord) {
 
 export function payloadText(value: unknown) {
   if (typeof value === 'string') return value;
-  if (value == null) return '';
+  if (value === null || value === undefined) return '';
   if (typeof value === 'object') {
     const payload = value as Record<string, unknown>;
     if (typeof payload.text === 'string') return payload.text;

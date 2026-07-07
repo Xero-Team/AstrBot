@@ -76,7 +76,7 @@ import type {
   CommandItem,
   ToolItem,
 } from '../components/extension/componentPanel/types';
-import type { ChatContent } from '../composables/useMessages';
+import type { AgentStats, ChatContent } from '../composables/useMessages';
 
 openApiV1Client.setConfig({
   axios: httpClient,
@@ -521,7 +521,7 @@ export interface ReleaseItemData {
 
 export interface HistoryRecordData {
   content?: ChatContent & {
-    agent_stats?: unknown;
+    agent_stats?: AgentStats | null;
   };
   sender_id?: string;
   [key: string]: unknown;
@@ -606,6 +606,8 @@ export interface ProviderListParams {
   provider_source_id?: string;
   enabled?: boolean;
 }
+
+type ProviderTypeList = NonNullable<ProviderListParams['provider_type']>;
 
 export interface ToolListParams {
   origin?: 'builtin' | 'plugin' | 'mcp';
@@ -877,8 +879,8 @@ export const providerApi = {
   async listByProviderType(
     providerType: string,
   ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
-    const capabilities = providerTypeToCapabilities(providerType);
-    if (capabilities.length === 0) {
+    const providerTypes = normalizeProviderTypes(providerType);
+    if (providerTypes.length === 0) {
       const response = await providerApi.list();
       return {
         ...response,
@@ -891,11 +893,14 @@ export const providerApi = {
     }
 
     const responses = await Promise.all(
-      capabilities.map((capability) => providerApi.list({ capability })),
+      providerTypes.map((type) => providerApi.list({ provider_type: type })),
     );
     const first = responses[0];
     const modelMetadata = responses.reduce<Record<string, unknown>>(
-      (acc, response) => ({
+      (
+        acc: Record<string, unknown>,
+        response: AxiosResponse<ApiEnvelope<ProviderListData>>,
+      ) => ({
         ...acc,
         ...(response.data.data.model_metadata || {}),
       }),
@@ -906,7 +911,8 @@ export const providerApi = {
       data: {
         ...first.data,
         data: responses.flatMap(
-          (response) => response.data.data.providers || [],
+          (response: AxiosResponse<ApiEnvelope<ProviderListData>>) =>
+            response.data.data.providers || [],
         ),
         model_metadata: modelMetadata,
       },
@@ -938,8 +944,9 @@ export const providerApi = {
   },
   get(providerId: string, merged = false) {
     return typed<ProviderByIdData>(
-      openApiV1.getProviderById({
-        query: { provider_id: providerId, merged },
+      openApiV1.getProvider({
+        path: { provider_id: providerId },
+        query: { merged },
       }),
     );
   },
@@ -980,6 +987,13 @@ export const providerApi = {
     );
   },
 };
+
+function normalizeProviderTypes(providerType: string): ProviderTypeList[] {
+  return providerType
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value): value is ProviderTypeList => value.length > 0);
+}
 
 export const authApi = {
   login(payload: LoginRequest) {

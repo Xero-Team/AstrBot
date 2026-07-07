@@ -386,7 +386,12 @@ watch(viewMode, async (mode) => {
   />
 
   <!-- Snackbar -->
-  <v-snackbar :timeout="2000" elevation="6" :color="snackbar.color" v-model="snackbar.show">
+  <v-snackbar
+    :timeout="2000"
+    elevation="6"
+    :color="snackbar.color"
+    v-model="snackbar.show"
+  >
     {{ snackbar.message }}
   </v-snackbar>
 </template>

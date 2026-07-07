@@ -633,7 +633,7 @@ const loadingSessions = ref(false);
 const draft = ref('');
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
-const selectedTokenProviderId = ref("");
+const selectedTokenProviderId = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
@@ -804,7 +804,10 @@ const latestTokenUsageTotal = computed(() => {
 });
 const tokenUsageIndicator = computed(() => {
   const used = latestTokenUsageTotal.value;
-  const limit = contextLimit(currentTokenProvider.value, currentTokenMetadata.value);
+  const limit = contextLimit(
+    currentTokenProvider.value,
+    currentTokenMetadata.value,
+  );
   if (used <= 0 || limit <= 0) return null;
 
   const percent = (used / limit) * 100;
@@ -812,7 +815,7 @@ const tokenUsageIndicator = computed(() => {
     used,
     limit,
     percent: Math.min(100, Math.max(0, percent)),
-    tooltip: tm("tokenUsage.tooltip", {
+    tooltip: tm('tokenUsage.tooltip', {
       used: formatTokenCount(used),
       limit: formatTokenCount(limit),
       percent: formatUsagePercent(percent),
@@ -826,8 +829,8 @@ function getSelectedProviderSelection() {
     selectedTokenProviderId.value = inputSelection.providerId;
     return inputSelection;
   }
-  if (typeof window === "undefined") {
-    return { providerId: "", modelName: "" };
+  if (typeof window === 'undefined') {
+    return { providerId: '', modelName: '' };
   }
   syncSelectedTokenProvider();
   return {
@@ -926,24 +929,26 @@ function sessionTitle(session: Session) {
 }
 
 function syncSelectedTokenProvider() {
-  if (typeof window === "undefined") return;
-  selectedTokenProviderId.value = localStorage.getItem("selectedProvider") || "";
+  if (typeof window === 'undefined') return;
+  selectedTokenProviderId.value =
+    localStorage.getItem('selectedProvider') || '';
 }
 
 async function loadTokenProviders() {
   syncSelectedTokenProvider();
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      tokenModelMetadata.value = (
-        (response.data as any).model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
+    const response = await providerApi.listByProviderType('chat_completion');
+    if (response.data.status === 'ok') {
+      tokenModelMetadata.value = (response.data.model_metadata || {}) as Record<
+        string,
+        ProviderModelMetadata
+      >;
       tokenProviderConfigs.value = (
         (response.data.data || []) as unknown as TokenProviderConfig[]
       ).filter((provider) => provider.enable !== false);
     }
   } catch (error) {
-    console.error("Failed to load provider context metadata:", error);
+    console.error('Failed to load provider context metadata:', error);
   }
 }
 
@@ -953,7 +958,7 @@ function readTokenCount(value: unknown) {
 }
 
 function formatUsagePercent(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (!Number.isFinite(value) || value <= 0) return '0';
   if (value >= 10) return String(Math.round(value));
   if (value >= 1) return String(Math.round(value * 10) / 10);
   return String(Math.round(value * 100) / 100);

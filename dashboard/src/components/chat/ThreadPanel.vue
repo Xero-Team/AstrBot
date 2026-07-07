@@ -64,10 +64,12 @@ import {
   extractReasoningText,
   finishToolCall,
   hasPlainText,
+  type HistoryRecord,
   markMessageStarted,
   normalizeMessageParts,
   parseJsonSafe,
   payloadText,
+  type StreamPayload,
   upsertToolCall,
   type ChatRecord,
   type MessagePart,
@@ -98,7 +100,7 @@ watch(
   () => props.thread?.thread_id,
   (threadId) => {
     if (threadId) {
-      loadThread(threadId);
+      void loadThread(threadId);
     } else {
       messages.value = [];
     }
@@ -114,7 +116,9 @@ async function loadThread(threadId: string) {
   try {
     const response = await chatApi.getThread(threadId);
     const history = response.data?.data?.history || [];
-    messages.value = history.map(normalizeRecord);
+    messages.value = history.map((record) =>
+      normalizeRecord(record as HistoryRecord),
+    );
     scrollToBottom();
   } catch (error) {
     console.error('Failed to load thread:', error);
@@ -185,7 +189,7 @@ async function send() {
   }
 }
 
-function normalizeRecord(record: any): ChatRecord {
+function normalizeRecord(record: HistoryRecord): ChatRecord {
   const content = record.content || {};
   const normalizedMessage = normalizeMessageParts(
     content.message || [],
@@ -200,7 +204,7 @@ function normalizeRecord(record: any): ChatRecord {
         normalizedMessage,
         content.reasoning || '',
       ),
-      agentStats: content.agentStats || content.agent_stats,
+      agentStats: content.agentStats || content.agent_stats || null,
       refs: content.refs,
     },
   };
@@ -208,7 +212,7 @@ function normalizeRecord(record: any): ChatRecord {
 
 async function readSseStream(
   stream: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
+  onPayload: (payload: StreamPayload) => void,
 ) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -238,7 +242,7 @@ async function readSseStream(
 function processPayload(
   botRecord: ChatRecord,
   userRecord: ChatRecord,
-  payload: any,
+  payload: StreamPayload,
 ) {
   const normalized =
     payload?.ct === 'chat'
@@ -251,28 +255,50 @@ function processPayload(
   if (type === 'session_id' || type === 'session_bound') return;
 
   if (type === 'user_message_saved') {
-    userRecord.id = data?.id || userRecord.id;
-    userRecord.created_at = data?.created_at || userRecord.created_at;
+    const messageData =
+      data && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null;
+    userRecord.id =
+      (messageData?.id as string | number | undefined) || userRecord.id;
+    userRecord.created_at =
+      (typeof messageData?.created_at === 'string'
+        ? messageData.created_at
+        : userRecord.created_at) || userRecord.created_at;
     userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+      (typeof messageData?.llm_checkpoint_id === 'string'
+        ? messageData.llm_checkpoint_id
+        : userRecord.llm_checkpoint_id) || userRecord.llm_checkpoint_id;
     return;
   }
 
   if (type === 'message_saved') {
     markMessageStarted(botRecord);
-    botRecord.id = data?.id || botRecord.id;
-    botRecord.created_at = data?.created_at || botRecord.created_at;
+    const messageData =
+      data && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null;
+    botRecord.id =
+      (messageData?.id as string | number | undefined) || botRecord.id;
+    botRecord.created_at =
+      (typeof messageData?.created_at === 'string'
+        ? messageData.created_at
+        : botRecord.created_at) || botRecord.created_at;
     botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
-    if (data?.refs) {
-      botRecord.content.refs = data.refs;
+      (typeof messageData?.llm_checkpoint_id === 'string'
+        ? messageData.llm_checkpoint_id
+        : botRecord.llm_checkpoint_id) || botRecord.llm_checkpoint_id;
+    if (messageData?.refs && typeof messageData.refs === 'object') {
+      botRecord.content.refs =
+        messageData.refs as ChatRecord['content']['refs'];
     }
     return;
   }
 
   if (type === 'agent_stats' || chainType === 'agent_stats') {
     markMessageStarted(botRecord);
-    botRecord.content.agentStats = data;
+    botRecord.content.agentStats =
+      data && typeof data === 'object' ? { ...data } : { value: data };
     return;
   }
 
@@ -314,7 +340,10 @@ function processPayload(
     return;
   }
 
-  if (['image', 'record', 'file', 'video'].includes(type)) {
+  if (
+    typeof type === 'string' &&
+    ['image', 'record', 'file', 'video'].includes(type)
+  ) {
     markMessageStarted(botRecord);
     const rawFilename = String(data)
       .replace('[IMAGE]', '')
@@ -333,12 +362,15 @@ function processPayload(
     if (storedFilename && storedFilename !== filename) {
       mediaPart.stored_filename = storedFilename;
     }
-    botRecord.content.message.push(mediaPart);
+    const content = botRecord.content.message;
+    if (filename) {
+      content.push(mediaPart);
+    }
   }
 }
 
 function scrollToBottom() {
-  nextTick(() => {
+  void nextTick(() => {
     if (messagesEl.value) {
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
     }

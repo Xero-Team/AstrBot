@@ -284,6 +284,13 @@ class FunctionToolManager:
         """Read-only view of MCP runtime metadata for external callers."""
         return self._mcp_server_runtime_view
 
+    @property
+    def mcp_client_dict(self) -> dict[str, MCPClient]:
+        """Compatibility view keyed by MCP server name."""
+        return {
+            name: runtime.client for name, runtime in self._mcp_server_runtime.items()
+        }
+
     def empty(self) -> bool:
         return len(self.func_list) == 0
 
@@ -839,6 +846,7 @@ class FunctionToolManager:
         config: dict,
         shutdown_event: asyncio.Event | None = None,
         timeout_seconds: float | int | str | None = None,
+        **legacy_kwargs: float | int | str | None,
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -853,11 +861,20 @@ class FunctionToolManager:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
         """
-        if timeout_seconds is None:
+        timeout_arg = timeout_seconds
+        if "timeout" in legacy_kwargs:
+            if timeout_arg is None:
+                timeout_arg = legacy_kwargs.pop("timeout")
+            else:
+                legacy_kwargs.pop("timeout")
+        if legacy_kwargs:
+            unexpected = ", ".join(sorted(legacy_kwargs))
+            raise TypeError(f"Unexpected keyword argument(s): {unexpected}")
+        if timeout_arg is None:
             timeout_value = self._enable_timeout_default
         else:
             timeout_value = _resolve_timeout(
-                timeout=timeout_seconds,
+                timeout=timeout_arg,
                 env_name=ENABLE_MCP_TIMEOUT_ENV,
                 default=self._enable_timeout_default,
             )
@@ -871,7 +888,8 @@ class FunctionToolManager:
     async def disable_mcp_server(
         self,
         name: str | None = None,
-        timeout_seconds: float = 10,
+        timeout_seconds: float | int | str | None = 10,
+        **legacy_kwargs: float | int | str | None,
     ) -> None:
         """Disable an MCP server by its name.
 
@@ -884,17 +902,33 @@ class FunctionToolManager:
                 Only raised when disabling a specific server (name is not None).
 
         """
+        timeout_arg = timeout_seconds
+        if "timeout" in legacy_kwargs:
+            if timeout_arg == 10:
+                timeout_arg = legacy_kwargs.pop("timeout")
+            else:
+                legacy_kwargs.pop("timeout")
+        if legacy_kwargs:
+            unexpected = ", ".join(sorted(legacy_kwargs))
+            raise TypeError(f"Unexpected keyword argument(s): {unexpected}")
+
+        timeout_value = _resolve_timeout(
+            timeout=timeout_arg,
+            env_name=ENABLE_MCP_TIMEOUT_ENV,
+            default=10,
+        )
+
         if name:
             async with self._runtime_lock:
                 runtime = self._mcp_server_runtime.get(name)
             if runtime is None:
                 return
 
-            await self._shutdown_runtimes([runtime], timeout_seconds, strict=True)
+            await self._shutdown_runtimes([runtime], timeout_value, strict=True)
         else:
             async with self._runtime_lock:
                 runtimes = list(self._mcp_server_runtime.values())
-            await self._shutdown_runtimes(runtimes, timeout_seconds, strict=False)
+            await self._shutdown_runtimes(runtimes, timeout_value, strict=False)
 
     def _warn_on_timeout_mismatch(
         self,

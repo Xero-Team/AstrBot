@@ -16,15 +16,11 @@
       />
     </template>
 
-    <v-list-item
-      class="styled-menu-item"
-      rounded="md"
-      @click="emit('retry')"
-    >
+    <v-list-item class="styled-menu-item" rounded="md" @click="emit('retry')">
       <template #prepend>
         <v-icon size="18">mdi-refresh</v-icon>
       </template>
-      <v-list-item-title>{{ tm("actions.retry") }}</v-list-item-title>
+      <v-list-item-title>{{ tm('actions.retry') }}</v-list-item-title>
     </v-list-item>
 
     <v-menu
@@ -44,7 +40,9 @@
           <template #prepend>
             <v-icon size="18">mdi-creation</v-icon>
           </template>
-          <v-list-item-title>{{ tm("actions.retryWithModel") }}</v-list-item-title>
+          <v-list-item-title>{{
+            tm('actions.retryWithModel')
+          }}</v-list-item-title>
           <template #append>
             <v-progress-circular
               v-if="loadingProviders"
@@ -97,7 +95,9 @@
                   <span>{{ item.tooltip }}</span>
                 </v-tooltip>
                 <v-tooltip
-                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
+                  v-if="
+                    formatContextLimit(provider, metadataForProvider(provider))
+                  "
                   location="top"
                   max-width="320"
                 >
@@ -107,11 +107,16 @@
                       class="regenerate-model-context-badge"
                       @click.stop
                     >
-                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
+                      {{
+                        formatContextLimit(
+                          provider,
+                          metadataForProvider(provider),
+                        )
+                      }}
                     </span>
                   </template>
                   <span>{{
-                    providerTm("models.metadata.context", {
+                    providerTm('models.metadata.context', {
                       tokens: formatContextLimit(
                         provider,
                         metadataForProvider(provider),
@@ -123,8 +128,11 @@
             </v-list-item-subtitle>
           </v-list-item>
 
-          <div v-if="!loadingProviders && !providerConfigs.length" class="regenerate-empty">
-            {{ tm("actions.noAvailableModels") }}
+          <div
+            v-if="!loadingProviders && !providerConfigs.length"
+            class="regenerate-empty"
+          >
+            {{ tm('actions.noAvailableModels') }}
           </div>
         </v-list>
       </v-card>
@@ -133,16 +141,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { providerApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { ref } from 'vue';
+import { providerApi } from '@/api/v1';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
+import { useModuleI18n } from '@/i18n/composables';
 import {
   formatContextLimit,
   providerCapabilityBadges,
   type ProviderModelMetadata,
   type ProviderMetadataSource,
-} from "@/utils/providerMetadata";
+} from '@/utils/providerMetadata';
 
 interface ProviderConfig extends ProviderMetadataSource {
   id: string;
@@ -160,8 +168,8 @@ const emit = defineEmits<{
   retryWithModel: [selection: RegenerateModelSelection];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
-const { tm: providerTm } = useModuleI18n("features/provider");
+const { tm } = useModuleI18n('features/chat');
+const { tm: providerTm } = useModuleI18n('features/provider');
 const providerConfigs = ref<ProviderConfig[]>([]);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
@@ -171,18 +179,19 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      modelMetadata.value = (
-        response.data.model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
+    const response = await providerApi.listByProviderType('chat_completion');
+    if (response.data.status === 'ok') {
+      modelMetadata.value = (response.data.model_metadata || {}) as Record<
+        string,
+        ProviderModelMetadata
+      >;
       providerConfigs.value = (
         (response.data.data || []) as unknown as ProviderConfig[]
       ).filter((provider: ProviderConfig) => provider.enable !== false);
       providersLoaded.value = true;
     }
   } catch (error) {
-    console.error("Failed to load provider list:", error);
+    console.error('Failed to load provider list:', error);
   } finally {
     loadingProviders.value = false;
   }
@@ -190,18 +199,18 @@ async function loadProviderConfigs(force = false) {
 
 function handleMenuToggle(isOpen: boolean) {
   if (isOpen) {
-    loadProviderConfigs();
+    void loadProviderConfigs();
   }
 }
 
 function handleModelMenuToggle(isOpen: boolean) {
   if (isOpen) {
-    loadProviderConfigs();
+    void loadProviderConfigs();
   }
 }
 
 function retryWithModel(provider: ProviderConfig) {
-  emit("retryWithModel", {
+  emit('retryWithModel', {
     providerId: provider.id,
     modelName: provider.model,
   });

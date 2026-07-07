@@ -130,7 +130,7 @@ def _open_watchdog_log_file(log_path: Path, max_bytes: int) -> TextIO:
 
 async def faulthandler_event_loop_watchdog(
     *,
-    timeout: float = DEFAULT_WATCHDOG_TIMEOUT,
+    dump_after: float = DEFAULT_WATCHDOG_TIMEOUT,
     interval: float = DEFAULT_WATCHDOG_INTERVAL,
     dump_file: TextIO | None = None,
     dump_path: Path | None = None,
@@ -139,7 +139,8 @@ async def faulthandler_event_loop_watchdog(
     """Dump all thread stacks if the event loop is blocked for too long.
 
     Args:
-        timeout: Seconds without watchdog refresh before faulthandler dumps stacks.
+        dump_after: Seconds without watchdog refresh before faulthandler dumps
+            stacks.
         interval: Seconds between watchdog refreshes while the event loop is healthy.
         dump_file: File object that receives faulthandler output.
         dump_path: Path that receives faulthandler output when dump_file is unset.
@@ -155,7 +156,7 @@ async def faulthandler_event_loop_watchdog(
                 output = dump_file or _open_watchdog_log_file(log_path, max_bytes)
                 should_close = dump_file is None
                 faulthandler.dump_traceback_later(
-                    timeout,
+                    dump_after,
                     repeat=False,
                     file=output,
                 )
@@ -204,7 +205,7 @@ def create_event_loop_diagnostic_tasks() -> list[asyncio.Task]:
         tasks.append(
             asyncio.create_task(
                 faulthandler_event_loop_watchdog(
-                    timeout=settings.watchdog_timeout,
+                    dump_after=settings.watchdog_timeout,
                     interval=settings.watchdog_interval,
                     dump_path=settings.watchdog_log_path,
                     max_bytes=settings.watchdog_log_max_bytes,

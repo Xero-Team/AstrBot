@@ -278,8 +278,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     const configuredEntries: ConfiguredModelEntry[] = (
       sourceProviders.value || []
     ).map((provider) => {
-      const modelMetadataForProvider =
-        getModelMetadata(provider.model) || null;
+      const modelMetadataForProvider = getModelMetadata(provider.model) || null;
       return {
         type: 'configured',
         provider,
@@ -903,11 +902,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template;
         }
         providerSources.value = payload.provider_sources || [];
-        modelMetadata.value =
-          (payload.model_metadata || {}) as Record<
-            string,
-            ProviderModelMetadata | null
-          >;
+        modelMetadata.value = (payload.model_metadata || {}) as Record<
+          string,
+          ProviderModelMetadata | null
+        >;
         providers.value = payload.providers || [];
       }
     } catch (error) {

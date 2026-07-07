@@ -669,7 +669,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 )
         except APIReturnNoneError:
             logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
-        except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
+        except botpy.errors.ServerError, botpy.errors.SequenceNumberError:
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")

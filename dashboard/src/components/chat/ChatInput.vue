@@ -241,11 +241,7 @@
             class="mr-1"
             width="1.5"
           />
-          <v-tooltip
-            v-if="tokenUsageVisible"
-            location="top"
-            max-width="320"
-          >
+          <v-tooltip v-if="tokenUsageVisible" location="top" max-width="320">
             <template #activator="{ props: tokenTooltipProps }">
               <span
                 v-bind="tokenTooltipProps"
@@ -563,18 +559,18 @@ const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
   return (
-    (props.prompt && props.prompt.trim()) ||
+    Boolean(props.prompt?.trim()) ||
     props.stagedImagesUrl.length > 0 ||
-    props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
+    Boolean(props.stagedAudioUrl) ||
+    Boolean(props.stagedFiles?.length)
   );
 });
 
 const hasStagedAttachments = computed(() => {
   return (
     props.stagedImagesUrl.length > 0 ||
-    props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
+    Boolean(props.stagedAudioUrl) ||
+    Boolean(props.stagedFiles?.length)
   );
 });
 
@@ -604,10 +600,10 @@ const tokenUsageVisible = computed(() => {
   const usage = props.tokenUsage;
   return Boolean(
     usage &&
-      Number.isFinite(usage.used) &&
-      Number.isFinite(usage.limit) &&
-      usage.used > 0 &&
-      usage.limit > 0,
+    Number.isFinite(usage.used) &&
+    Number.isFinite(usage.limit) &&
+    usage.used > 0 &&
+    usage.limit > 0,
   );
 });
 
@@ -619,8 +615,8 @@ const tokenUsagePercent = computed(() => {
 
 const tokenUsageColor = computed(() =>
   isDark.value
-    ? "rgba(var(--v-theme-on-surface), 0.82)"
-    : "rgba(var(--v-theme-on-surface), 0.72)",
+    ? 'rgba(var(--v-theme-on-surface), 0.82)'
+    : 'rgba(var(--v-theme-on-surface), 0.72)',
 );
 
 // Auto-resize textarea
@@ -634,7 +630,7 @@ function autoResize() {
     if (shouldExpand) {
       const cursor = el.selectionStart ?? localPrompt.value.length;
       inputIsMultiline.value = true;
-      nextTick(() => {
+      void nextTick(() => {
         inputField.value?.focus();
         inputField.value?.setSelectionRange(cursor, cursor);
         autoResize();
@@ -663,7 +659,7 @@ function autoResize() {
   if (inputIsMultiline.value !== shouldUseMultiline) {
     const cursor = el.selectionStart ?? localPrompt.value.length;
     inputIsMultiline.value = shouldUseMultiline;
-    nextTick(() => {
+    void nextTick(() => {
       inputField.value?.focus();
       inputField.value?.setSelectionRange(cursor, cursor);
       autoResize();
@@ -681,12 +677,12 @@ watch(
     if (!value) {
       inputIsMultiline.value = false;
     }
-    nextTick(autoResize);
+    void nextTick(autoResize);
   },
 );
 
 watch(inputIsMultiline, () => {
-  nextTick(autoResize);
+  void nextTick(autoResize);
 });
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -766,7 +762,7 @@ function handleKeyDown(e: KeyboardEvent) {
     const end = target.selectionEnd ?? start;
     localPrompt.value = `${localPrompt.value.slice(0, start)}\n${localPrompt.value.slice(end)}`;
     inputIsMultiline.value = true;
-    nextTick(() => {
+    void nextTick(() => {
       inputField.value?.focus();
       inputField.value?.setSelectionRange(start + 1, start + 1);
       autoResize();
@@ -789,7 +785,7 @@ function handleInput() {
 function handleBlur() {
   clearCompositionState();
   // 延迟关闭，避免点击候选项时面板已消失
-  setTimeout(() => {
+  window.setTimeout(() => {
     showCommandSuggestion.value = false;
   }, 200);
 }
@@ -798,7 +794,7 @@ function handleBlur() {
 function handleCommandSelect(cmd: SuggestionCommand) {
   localPrompt.value = `${cmd.effective_command} `;
   showCommandSuggestion.value = false;
-  nextTick(() => {
+  void nextTick(() => {
     inputField.value?.focus();
     autoResize();
   });
@@ -847,7 +843,7 @@ function handleCompositionEnd(e: CompositionEvent) {
   // where props.prompt is externally updated between now and nextTick.
   const endValue = inputField.value?.value;
 
-  nextTick(() => {
+  void nextTick(() => {
     const el = inputField.value;
     // Only sync if the DOM hasn't been changed externally in the meantime.
     if (el && el.value === endValue && el.value !== props.prompt) {
@@ -856,7 +852,7 @@ function handleCompositionEnd(e: CompositionEvent) {
       // composition (handleInput checks isComposing). Only needed when
       // the value actually changed. Runs in a nested nextTick so
       // props.prompt reflects the emit above.
-      nextTick(() => {
+      void nextTick(() => {
         handleInput();
       });
     }
@@ -897,7 +893,7 @@ function handlePaste(e: ClipboardEvent) {
       pastedText +
       localPrompt.value.slice(end);
     inputIsMultiline.value = true;
-    nextTick(() => {
+    void nextTick(() => {
       inputField.value?.focus();
       const cursor = start + pastedText.length;
       inputField.value?.setSelectionRange(cursor, cursor);
@@ -920,7 +916,7 @@ function handleDragOver(e: DragEvent) {
   }
 }
 
-function handleDragLeave(e: DragEvent) {
+function handleDragLeave() {
   // 使用 timeout 避免在子元素间移动时闪烁
   dragLeaveTimeout = window.setTimeout(() => {
     isDragging.value = false;
@@ -967,7 +963,7 @@ function handleConfigChange(payload: {
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
     currentConfigId.value = payload.configId;
-    fetchCommands();
+    void fetchCommands();
   }
 }
 
@@ -986,8 +982,8 @@ function focusInput() {
 onMounted(() => {
   document.addEventListener('keyup', handleKeyUp);
   // 预加载指令列表
-  fetchCommands();
-  nextTick(autoResize);
+  void fetchCommands();
+  void nextTick(autoResize);
 });
 
 onBeforeUnmount(() => {

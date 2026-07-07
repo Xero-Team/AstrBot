@@ -50,7 +50,7 @@ async def test_faulthandler_watchdog_cancels_pending_dump(monkeypatch):
     monkeypatch.setattr(diagnostics, "faulthandler", fake_faulthandler)
 
     task = asyncio.create_task(
-        diagnostics.faulthandler_event_loop_watchdog(timeout=10, interval=1)
+        diagnostics.faulthandler_event_loop_watchdog(dump_after=10, interval=1)
     )
     await asyncio.sleep(0)
     task.cancel()
@@ -82,7 +82,7 @@ async def test_faulthandler_watchdog_writes_rotating_log(tmp_path, monkeypatch):
 
     task = asyncio.create_task(
         diagnostics.faulthandler_event_loop_watchdog(
-            timeout=10,
+            dump_after=10,
             interval=1,
             dump_path=log_path,
             max_bytes=4,
@@ -121,7 +121,7 @@ async def test_faulthandler_watchdog_survives_dump_failure(tmp_path, monkeypatch
 
     task = asyncio.create_task(
         diagnostics.faulthandler_event_loop_watchdog(
-            timeout=10,
+            dump_after=10,
             interval=0.01,
             dump_path=log_path,
         )

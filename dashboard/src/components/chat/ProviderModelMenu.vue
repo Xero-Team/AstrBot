@@ -73,7 +73,9 @@
                   <span>{{ item.tooltip }}</span>
                 </v-tooltip>
                 <v-tooltip
-                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
+                  v-if="
+                    formatContextLimit(provider, metadataForProvider(provider))
+                  "
                   location="top"
                   max-width="320"
                 >
@@ -83,11 +85,16 @@
                       class="meta-context-badge"
                       @click.stop
                     >
-                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
+                      {{
+                        formatContextLimit(
+                          provider,
+                          metadataForProvider(provider),
+                        )
+                      }}
                     </span>
                   </template>
                   <span>{{
-                    tm("models.metadata.context", {
+                    tm('models.metadata.context', {
                       tokens: formatContextLimit(
                         provider,
                         metadataForProvider(provider),
@@ -111,7 +118,7 @@
                       @click.stop="testProvider(provider)"
                     />
                   </template>
-                  <span>{{ tm("models.testButton") }}</span>
+                  <span>{{ tm('models.testButton') }}</span>
                 </v-tooltip>
                 <v-icon
                   v-if="selectedProviderId === provider.id"
@@ -125,9 +132,7 @@
           </v-list-item>
         </v-list>
 
-        <div v-if="loadingProviders" class="empty-hint">
-          Loading models...
-        </div>
+        <div v-if="loadingProviders" class="empty-hint">Loading models...</div>
         <div v-else-if="filteredProviders.length === 0" class="empty-hint">
           No available models
         </div>
@@ -137,16 +142,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { providerApi } from "@/api/v1";
-import { useModuleI18n } from "@/i18n/composables";
-import { useToast } from "@/utils/toast";
+import { isAxiosError } from 'axios';
+import { ref, computed, onMounted } from 'vue';
+import { providerApi } from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
+import { useToast } from '@/utils/toast';
 import {
   formatContextLimit,
   providerCapabilityBadges,
   type ProviderModelMetadata,
   type ProviderMetadataSource,
-} from "@/utils/providerMetadata";
+} from '@/utils/providerMetadata';
 
 interface ProviderConfig extends ProviderMetadataSource {
   id: string;
@@ -157,30 +163,30 @@ interface ProviderConfig extends ProviderMetadataSource {
 
 const props = withDefaults(
   defineProps<{
-    variant?: "input" | "header";
+    variant?: 'input' | 'header';
   }>(),
   {
-    variant: "input",
+    variant: 'input',
   },
 );
 
-const SELECTED_PROVIDER_KEY = "selectedProvider";
-const SELECTED_PROVIDER_MODEL_KEY = "selectedProviderModel";
+const SELECTED_PROVIDER_KEY = 'selectedProvider';
+const SELECTED_PROVIDER_MODEL_KEY = 'selectedProviderModel';
 const providerConfigs = ref<ProviderConfig[]>([]);
-const selectedProviderId = ref("");
-const selectedModelName = ref("");
-const searchQuery = ref("");
+const selectedProviderId = ref('');
+const selectedModelName = ref('');
+const searchQuery = ref('');
 const menuOpen = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
 const testingProviderIds = ref<string[]>([]);
 const modelMetadata = ref<Record<string, ProviderModelMetadata>>({});
-const { tm } = useModuleI18n("features/provider");
+const { tm } = useModuleI18n('features/provider');
 const { success: toastSuccess, error: toastError } = useToast();
 
 const variant = computed(() => props.variant);
 const menuLocation = computed(() =>
-  props.variant === "header" ? "bottom start" : "top",
+  props.variant === 'header' ? 'bottom start' : 'top',
 );
 
 const selectedProvider = computed(() =>
@@ -192,12 +198,12 @@ const selectedProvider = computed(() =>
 const triggerTitle = computed(() => {
   if (selectedProvider.value?.id) return selectedProvider.value.id;
   if (selectedProviderId.value) return selectedProviderId.value;
-  return props.variant === "header" ? "Default model" : "Model";
+  return props.variant === 'header' ? 'Default model' : 'Model';
 });
 
 const triggerMeta = computed(() => {
   const model = selectedProvider.value?.model || selectedModelName.value;
-  if (!model || model === triggerTitle.value) return "";
+  if (!model || model === triggerTitle.value) return '';
   return model;
 });
 
@@ -226,30 +232,31 @@ function loadFromStorage() {
 
 function saveToStorage(provider: ProviderConfig) {
   localStorage.setItem(SELECTED_PROVIDER_KEY, provider.id);
-  localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, provider.model || "");
+  localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, provider.model || '');
 }
 
 async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      modelMetadata.value = (
-        response.data.model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
+    const response = await providerApi.listByProviderType('chat_completion');
+    if (response.data.status === 'ok') {
+      modelMetadata.value = (response.data.model_metadata || {}) as Record<
+        string,
+        ProviderModelMetadata
+      >;
       providerConfigs.value = (
         (response.data.data || []) as unknown as ProviderConfig[]
       ).filter((provider: ProviderConfig) => provider.enable !== false);
       providersLoaded.value = true;
       const selected = selectedProvider.value;
       if (selected) {
-        selectedModelName.value = selected.model || "";
+        selectedModelName.value = selected.model || '';
         saveToStorage(selected);
       }
     }
   } catch (error) {
-    console.error("Failed to load provider list:", error);
+    console.error('Failed to load provider list:', error);
   } finally {
     loadingProviders.value = false;
   }
@@ -257,7 +264,7 @@ async function loadProviderConfigs(force = false) {
 
 function selectProvider(provider: ProviderConfig) {
   selectedProviderId.value = provider.id;
-  selectedModelName.value = provider.model || "";
+  selectedModelName.value = provider.model || '';
   saveToStorage(provider);
   menuOpen.value = false;
 }
@@ -276,21 +283,25 @@ async function testProvider(provider: ProviderConfig) {
   try {
     const startTime = performance.now();
     const response = await providerApi.test(provider.id);
-    if (response.data.status === "ok" && response.data.data.error === null) {
+    if (response.data.status === 'ok' && response.data.data.error === null) {
       const latency = Math.max(0, Math.round(performance.now() - startTime));
       toastSuccess(
-        tm("models.testSuccessWithLatency", {
+        tm('models.testSuccessWithLatency', {
           id: provider.id,
           latency,
         }),
       );
     } else {
-      throw new Error(response.data.data.error || tm("models.testError"));
+      throw new Error(response.data.data.error || tm('models.testError'));
     }
-  } catch (error: any) {
-    toastError(
-      error.response?.data?.message || error.message || tm("models.testError"),
-    );
+  } catch (error: unknown) {
+    let message = tm('models.testError');
+    if (isAxiosError(error)) {
+      message = error.response?.data?.message || error.message || message;
+    } else if (error instanceof Error) {
+      message = error.message;
+    }
+    toastError(message || tm('models.testError'));
   } finally {
     testingProviderIds.value = testingProviderIds.value.filter(
       (id) => id !== provider.id,
@@ -301,19 +312,19 @@ async function testProvider(provider: ProviderConfig) {
 function getCurrentSelection() {
   return {
     providerId: selectedProviderId.value,
-    modelName: selectedProvider.value?.model || selectedModelName.value || "",
+    modelName: selectedProvider.value?.model || selectedModelName.value || '',
   };
 }
 
 function handleMenuToggle(isOpen: boolean) {
   if (isOpen) {
-    loadProviderConfigs(true);
+    void loadProviderConfigs(true);
   }
 }
 
 onMounted(() => {
   loadFromStorage();
-  loadProviderConfigs();
+  void loadProviderConfigs();
 });
 
 defineExpose({

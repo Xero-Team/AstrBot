@@ -737,7 +737,7 @@ class QQOfficialPlatformAdapter(Platform):
         raw_message_type = getattr(message, "message_type", None)
         try:
             is_quoted_message = int(raw_message_type or 0) == 103
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             is_quoted_message = False
         msg_elements = getattr(message, "msg_elements", None)
         quoted_message_str = ""

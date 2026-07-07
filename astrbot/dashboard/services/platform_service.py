@@ -56,7 +56,18 @@ class PlatformService:
             raise PlatformServiceError("处理回调失败", 500) from exc
 
     def find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
-        return self.platform_manager.find_inst_by_webhook_uuid(webhook_uuid)
+        finder = getattr(self.platform_manager, "find_inst_by_webhook_uuid", None)
+        if callable(finder):
+            return finder(webhook_uuid)
+
+        for value in vars(self.platform_manager).values():
+            platform_config = getattr(value, "config", None)
+            if (
+                isinstance(platform_config, dict)
+                and platform_config.get("webhook_uuid") == webhook_uuid
+            ):
+                return value
+        return None
 
     def get_platform_stats(self):
         try:

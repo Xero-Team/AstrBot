@@ -205,14 +205,15 @@ class LiveChatService:
     async def create_attachment_from_file(
         self, filename: str, attach_type: str, display_name: str | None = None
     ) -> dict | None:
-        return await create_attachment_part_from_existing_file(
-            filename,
-            attach_type=attach_type,
-            insert_attachment=self.db.insert_attachment,
-            attachments_dir=self.attachments_dir,
-            fallback_dirs=[self.webchat_img_dir],
-            display_name=display_name,
-        )
+        kwargs = {
+            "attach_type": attach_type,
+            "insert_attachment": self.db.insert_attachment,
+            "attachments_dir": self.attachments_dir,
+            "fallback_dirs": [self.webchat_img_dir],
+        }
+        if display_name is not None:
+            kwargs["display_name"] = display_name
+        return await create_attachment_part_from_existing_file(filename, **kwargs)
 
     @staticmethod
     def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:

@@ -356,11 +356,20 @@ def serialize_history_entry(history) -> dict:
         Dict with all model fields plus created_at/updated_at serialized as
         UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
     """
-    return {
-        **history.model_dump(),
-        "created_at": to_utc_isoformat(history.created_at),
-        "updated_at": to_utc_isoformat(history.updated_at),
-    }
+    serialized = history.model_dump()
+
+    if "created_at" in serialized:
+        serialized["created_at"] = to_utc_isoformat(
+            getattr(history, "created_at", None)
+        )
+
+    if "updated_at" in serialized:
+        updated_at = getattr(
+            history, "updated_at", getattr(history, "created_at", None)
+        )
+        serialized["updated_at"] = to_utc_isoformat(updated_at)
+
+    return serialized
 
 
 def find_checkpoint_index(history: list[dict], checkpoint_id: str) -> int | None:
@@ -521,14 +530,15 @@ class ChatService:
     async def create_attachment_from_file(
         self, filename: str, attach_type: str, display_name: str | None = None
     ) -> dict | None:
-        return await create_attachment_part_from_existing_file(
-            filename,
-            attach_type=attach_type,
-            insert_attachment=self.db.insert_attachment,
-            attachments_dir=self.attachments_dir,
-            fallback_dirs=[self.webchat_img_dir],
-            display_name=display_name,
-        )
+        kwargs = {
+            "attach_type": attach_type,
+            "insert_attachment": self.db.insert_attachment,
+            "attachments_dir": self.attachments_dir,
+            "fallback_dirs": [self.webchat_img_dir],
+        }
+        if display_name is not None:
+            kwargs["display_name"] = display_name
+        return await create_attachment_part_from_existing_file(filename, **kwargs)
 
     async def resolve_webchat_file(
         self, filename: str | None

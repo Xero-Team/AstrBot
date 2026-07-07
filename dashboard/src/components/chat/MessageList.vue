@@ -298,6 +298,7 @@ import {
   attachmentPresentation,
 } from '@/components/chat/attachmentPresentation';
 import {
+  type ChatRefItem,
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
@@ -353,10 +354,6 @@ function messageParts(message: ChatRecord): MessagePart[] {
 
 function isMessageStreaming(messageIndex: number) {
   return props.isStreaming && messageIndex === messages.value.length - 1;
-}
-
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === 'content');
 }
 
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
@@ -425,7 +422,7 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  nextTick(() => {
+  void nextTick(() => {
     const rows = messageListRoot.value?.querySelectorAll('.message-row');
     rows?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
@@ -444,13 +441,14 @@ function resolvedMessageRefs(message: ChatRecord) {
 }
 
 function normalizeRefs(refs: unknown) {
-  if (!refs) return { used: [] as Array<Record<string, unknown>> };
+  if (!refs) return { used: [] as ChatRefItem[] };
   const refsValue = refs as { used?: unknown };
-  const used = Array.isArray(refsValue.used)
-    ? refsValue.used
-    : Array.isArray(refs)
-      ? refs
-      : [];
+  let used: unknown[] = [];
+  if (Array.isArray(refsValue.used)) {
+    used = refsValue.used;
+  } else if (Array.isArray(refs)) {
+    used = refs;
+  }
 
   return {
     used: normalizeRefItems(used),
@@ -459,13 +457,16 @@ function normalizeRefs(refs: unknown) {
 
 function normalizeRefItems(items: unknown[]) {
   return items
-    .map((item: any) => ({
-      index: item?.index,
-      title: item?.title || item?.url || tm('refs.title'),
-      url: item?.url,
-      snippet: item?.snippet,
-      favicon: item?.favicon,
-    }))
+    .map((item) => {
+      const normalized = item as ChatRefItem;
+      return {
+        index: normalized?.index,
+        title: normalized?.title || normalized?.url || tm('refs.title'),
+        url: normalized?.url,
+        snippet: normalized?.snippet,
+        favicon: normalized?.favicon,
+      };
+    })
     .filter((item) => item.url);
 }
 
@@ -549,20 +550,25 @@ function formatTime(value: string) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function inputTokens(stats: any) {
+function inputTokens(stats: Record<string, unknown> | null | undefined) {
   const usage = stats?.token_usage || {};
-  return usage.input_other || 0;
+  return Number((usage as Record<string, unknown>).input_other || 0);
 }
 
-function outputTokens(stats: any) {
-  return stats?.token_usage?.output || 0;
+function outputTokens(stats: Record<string, unknown> | null | undefined) {
+  return Number(
+    (stats?.token_usage as Record<string, unknown> | undefined)?.output || 0,
+  );
 }
 
-function cachedInputTokens(stats: any) {
-  return stats?.token_usage?.input_cached || 0;
+function cachedInputTokens(stats: Record<string, unknown> | null | undefined) {
+  return Number(
+    (stats?.token_usage as Record<string, unknown> | undefined)?.input_cached ||
+      0,
+  );
 }
 
-function agentDuration(stats: any) {
+function agentDuration(stats: Record<string, unknown> | null | undefined) {
   const directDuration = readPositiveNumber(stats, [
     'duration',
     'total_duration',
@@ -575,7 +581,7 @@ function agentDuration(stats: any) {
   return formatDuration(endTime - startTime);
 }
 
-function agentTtft(stats: any) {
+function agentTtft(stats: Record<string, unknown> | null | undefined) {
   const ttft = readPositiveNumber(stats, [
     'time_to_first_token',
     'ttft',
@@ -585,7 +591,10 @@ function agentTtft(stats: any) {
   return formatDuration(ttft);
 }
 
-function readPositiveNumber(source: any, keys: string[]) {
+function readPositiveNumber(
+  source: Record<string, unknown> | null | undefined,
+  keys: string[],
+) {
   for (const key of keys) {
     const value = Number(source?.[key]);
     if (Number.isFinite(value) && value > 0) return value;

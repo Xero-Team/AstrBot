@@ -372,10 +372,6 @@ function buildOutgoingParts(text: string): MessagePart[] {
   return parts;
 }
 
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === 'content');
-}
-
 function bubbleParts(message: ChatRecord) {
   return displayMessageParts(messageContent(message));
 }
@@ -411,7 +407,7 @@ async function handleFilesSelected(files: FileList) {
 }
 
 function scrollToBottom() {
-  nextTick(() => {
+  void nextTick(() => {
     const container = messagesContainer.value;
     if (!container) return;
     container.scrollTop = container.scrollHeight;

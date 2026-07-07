@@ -473,6 +473,8 @@ import {
   attachmentPresentation,
 } from '@/components/chat/attachmentPresentation';
 import {
+  type ChatRefItem,
+  type ChatRefs,
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
@@ -604,8 +606,10 @@ function isMessageStreaming(message: ChatRecord, messageIndex: number) {
 
 function isEditingMessage(message: ChatRecord) {
   return (
-    props.editingMessageId != null &&
-    message.id != null &&
+    props.editingMessageId !== null &&
+    props.editingMessageId !== undefined &&
+    message.id !== null &&
+    message.id !== undefined &&
     String(props.editingMessageId) === String(message.id)
   );
 }
@@ -615,7 +619,8 @@ function canEditMessage(message: ChatRecord, messageIndex: number) {
     props.enableEdit &&
     isUserMessage(message) &&
     messageIndex === latestEditableUserIndex() &&
-    message.id != null &&
+    message.id !== null &&
+    message.id !== undefined &&
     !String(message.id).startsWith('local-')
   );
 }
@@ -625,7 +630,8 @@ function latestEditableUserIndex() {
     const message = props.messages[index];
     if (
       isUserMessage(message) &&
-      message.id != null &&
+      message.id !== null &&
+      message.id !== undefined &&
       !String(message.id).startsWith('local-')
     ) {
       return index;
@@ -649,10 +655,6 @@ function showMessageMeta(message: ChatRecord, messageIndex: number) {
     !messageContent(message).isLoading &&
     !isMessageStreaming(message, messageIndex)
   );
-}
-
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === 'content');
 }
 
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
@@ -726,7 +728,7 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  nextTick(() => {
+  void nextTick(() => {
     listRoot.value
       ?.querySelectorAll('.message-row')
       [index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -764,24 +766,29 @@ function resolvedMessageRefs(message: ChatRecord) {
 }
 
 function normalizeRefs(refs: unknown) {
-  if (!refs) return { used: [] as Array<Record<string, unknown>> };
-  const used = Array.isArray((refs as any)?.used)
-    ? (refs as any).used
-    : Array.isArray(refs)
-      ? refs
-      : [];
+  if (!refs) return { used: [] as ChatRefItem[] };
+  const refsValue = refs as ChatRefs | ChatRefItem[];
+  let used: unknown[] = [];
+  if (!Array.isArray(refsValue) && Array.isArray(refsValue.used)) {
+    used = refsValue.used || [];
+  } else if (Array.isArray(refsValue)) {
+    used = refsValue;
+  }
   return { used: normalizeRefItems(used) };
 }
 
 function normalizeRefItems(items: unknown[]) {
   return items
-    .map((item: any) => ({
-      index: item?.index,
-      title: item?.title || item?.url || tm('refs.title'),
-      url: item?.url,
-      snippet: item?.snippet,
-      favicon: item?.favicon,
-    }))
+    .map((item) => {
+      const normalized = item as ChatRefItem;
+      return {
+        index: normalized?.index,
+        title: normalized?.title || normalized?.url || tm('refs.title'),
+        url: normalized?.url,
+        snippet: normalized?.snippet,
+        favicon: normalized?.favicon,
+      };
+    })
     .filter((item) => item.url);
 }
 
@@ -856,20 +863,25 @@ function formatTime(value: string) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function inputTokens(stats: any) {
+function inputTokens(stats: Record<string, unknown> | null | undefined) {
   const usage = stats?.token_usage || {};
-  return usage.input_other || 0;
+  return Number((usage as Record<string, unknown>).input_other || 0);
 }
 
-function outputTokens(stats: any) {
-  return stats?.token_usage?.output || 0;
+function outputTokens(stats: Record<string, unknown> | null | undefined) {
+  return Number(
+    (stats?.token_usage as Record<string, unknown> | undefined)?.output || 0,
+  );
 }
 
-function cachedInputTokens(stats: any) {
-  return stats?.token_usage?.input_cached || 0;
+function cachedInputTokens(stats: Record<string, unknown> | null | undefined) {
+  return Number(
+    (stats?.token_usage as Record<string, unknown> | undefined)?.input_cached ||
+      0,
+  );
 }
 
-function agentDuration(stats: any) {
+function agentDuration(stats: Record<string, unknown> | null | undefined) {
   const directDuration = readPositiveNumber(stats, [
     'duration',
     'total_duration',
@@ -882,7 +894,7 @@ function agentDuration(stats: any) {
   return formatDuration(endTime - startTime);
 }
 
-function agentTtft(stats: any) {
+function agentTtft(stats: Record<string, unknown> | null | undefined) {
   const ttft = readPositiveNumber(stats, [
     'time_to_first_token',
     'ttft',
@@ -892,7 +904,10 @@ function agentTtft(stats: any) {
   return formatDuration(ttft);
 }
 
-function readPositiveNumber(source: any, keys: string[]) {
+function readPositiveNumber(
+  source: Record<string, unknown> | null | undefined,
+  keys: string[],
+) {
   for (const key of keys) {
     const value = Number(source?.[key]);
     if (Number.isFinite(value) && value > 0) return value;

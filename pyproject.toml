@@ -131,6 +131,16 @@ omit = ["data/plugins/*", "data/plugins/**/*"]
 [tool.coverage.report]
 omit = ["data/plugins/*", "data/plugins/**/*"]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore:'_UnionGenericAlias' is deprecated.*Python 3\\.17:DeprecationWarning:google\\.genai\\.types",
+  "ignore:'return' in a 'finally' block:SyntaxWarning:dingtalk_stream\\.stream",
+  "ignore:'return' in a 'finally' block:SyntaxWarning:discord\\.gateway",
+  "ignore:datetime\\.datetime\\.utcfromtimestamp\\(\\) is deprecated and scheduled for removal in a future version.*:DeprecationWarning:lark_oapi\\.ws\\.pb\\.google\\.protobuf\\.internal\\.well_known_types",
+  "ignore:The default datetime adapter is deprecated as of Python 3\\.12.*:DeprecationWarning:aiosqlite\\.core",
+  "ignore:Use 'content=<\\.\\.\\.>' to upload raw bytes/text content\\.:DeprecationWarning:httpx\\._models",
+]
+
 [tool.hatch.metadata]
 allow-direct-references = true
 

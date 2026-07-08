@@ -102,7 +102,9 @@ class FakeInternalRunner:
         )
         self._done = done
         self._aborted = aborted
-        self.run_context = SimpleNamespace(messages=[Message(role="assistant", content="done")])
+        self.run_context = SimpleNamespace(
+            messages=[Message(role="assistant", content="done")]
+        )
         self.stats = SimpleNamespace(
             to_dict=lambda: {"steps": 1},
             token_usage=TokenUsage(output=1),
@@ -196,9 +198,7 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
         {"role": "_checkpoint", "content": {"id": "ck-prev"}},
         {"role": "_checkpoint", "content": {"id": "ck-latest"}},
     ]
-    assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 5
-    )
+    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 5
 
 
 @pytest.mark.asyncio
@@ -219,7 +219,9 @@ async def test_internal_save_to_history_keeps_aborted_error_response():
 
     stage.conv_manager.update_conversation.assert_awaited_once()
     assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["history"][0]["content"]
+        stage.conv_manager.update_conversation.await_args.kwargs["history"][0][
+            "content"
+        ]
         == "partial output"
     )
 
@@ -262,7 +264,9 @@ async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
     assert stage.conv_manager.update_conversation.await_args.kwargs["history"] == [
         {"role": "assistant", "content": "tool output saved"}
     ]
-    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+    assert (
+        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+    )
 
 
 @pytest.mark.asyncio
@@ -354,6 +358,49 @@ async def test_internal_save_to_history_preserves_non_initial_system_messages():
 
 
 @pytest.mark.asyncio
+async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
+    monkeypatch,
+):
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    persona_runtime_manager = SimpleNamespace()
+    memory_manager = SimpleNamespace()
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(
+                persona_runtime_manager=persona_runtime_manager,
+                memory_manager=memory_manager,
+            )
+        )
+    )
+    event = FakeEvent(extras={"selected_persona_id": "persona-a"})
+    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-post"))
+    scheduled = []
+
+    def fake_create_tracked_task(tasks, coro, *, name):
+        scheduled.append((tasks, coro, name))
+        coro.close()
+
+    monkeypatch.setattr(internal, "create_tracked_task", fake_create_tracked_task)
+
+    await stage._save_to_history(
+        event,
+        req,
+        LLMResponse(role="assistant", completion_text="answer"),
+        [
+            Message(role="system", content="drop"),
+            Message(role="user", content="I like tea."),
+            Message(role="assistant", content="answer"),
+        ],
+        runner_stats=None,
+    )
+
+    stage.conv_manager.update_conversation.assert_awaited_once()
+    assert len(scheduled) == 1
+    assert scheduled[0][2] == "runtime_memory_postprocess"
+
+
+@pytest.mark.asyncio
 async def test_internal_save_to_history_skips_no_save_assistant_and_ignores_runner_stats_usage():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
@@ -378,7 +425,9 @@ async def test_internal_save_to_history_skips_no_save_assistant_and_ignores_runn
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "final answer"},
     ]
-    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+    assert (
+        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+    )
 
 
 @pytest.mark.asyncio
@@ -447,8 +496,12 @@ def test_runner_result_aggregator_prefers_final_response_and_has_fallbacks():
 
 
 @pytest.mark.asyncio
-async def test_handle_non_streaming_response_uses_final_runner_error_result(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+async def test_handle_non_streaming_response_uses_final_runner_error_result(
+    monkeypatch,
+):
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeEvent()
     runner = FakeThirdPartyRunner(
         final_resp=LLMResponse(
@@ -461,7 +514,9 @@ async def test_handle_non_streaming_response_uses_final_runner_error_result(monk
         yield MessageChain().message("ignored partial"), False
         yield MessageChain().message("ignored error"), True
 
-    monkeypatch.setattr(third_party, "run_third_party_agent", fake_run_third_party_agent)
+    monkeypatch.setattr(
+        third_party, "run_third_party_agent", fake_run_third_party_agent
+    )
 
     yields = [
         item
@@ -475,13 +530,18 @@ async def test_handle_non_streaming_response_uses_final_runner_error_result(monk
 
     assert yields == [None, None, None]
     assert event.get_extra(third_party.THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY) is True
-    assert event.result_history[-1].result_content_type == ResultContentType.AGENT_RUNNER_ERROR
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.AGENT_RUNNER_ERROR
+    )
     assert event.result_history[-1].get_plain_text() == "runner failed"
 
 
 @pytest.mark.asyncio
 async def test_handle_streaming_response_sets_stream_then_finalizes(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeEvent()
     runner = FakeThirdPartyRunner(
         final_resp=LLMResponse(
@@ -497,7 +557,9 @@ async def test_handle_streaming_response_sets_stream_then_finalizes(monkeypatch)
         yield MessageChain().message("chunk-1"), False
         yield MessageChain().message("chunk-2"), False
 
-    monkeypatch.setattr(third_party, "run_third_party_agent", fake_run_third_party_agent)
+    monkeypatch.setattr(
+        third_party, "run_third_party_agent", fake_run_third_party_agent
+    )
 
     gen = stage._handle_streaming_response(
         runner=runner,
@@ -521,7 +583,10 @@ async def test_handle_streaming_response_sets_stream_then_finalizes(monkeypatch)
     with pytest.raises(StopAsyncIteration):
         await gen.__anext__()
 
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_FINISH
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_FINISH
+    )
     assert event.result_history[-1].get_plain_text() == "stream final"
     assert event.get_extra(third_party.THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY) is False
 
@@ -530,7 +595,9 @@ async def test_handle_streaming_response_sets_stream_then_finalizes(monkeypatch)
 async def test_handle_streaming_response_marks_runner_error_and_preserves_finish_result(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeEvent()
     runner = FakeThirdPartyRunner(
         final_resp=LLMResponse(
@@ -544,7 +611,9 @@ async def test_handle_streaming_response_marks_runner_error_and_preserves_finish
     async def fake_run_third_party_agent(*args, **kwargs):
         yield MessageChain().message("partial failure"), True
 
-    monkeypatch.setattr(third_party, "run_third_party_agent", fake_run_third_party_agent)
+    monkeypatch.setattr(
+        third_party, "run_third_party_agent", fake_run_third_party_agent
+    )
 
     gen = stage._handle_streaming_response(
         runner=runner,
@@ -565,20 +634,27 @@ async def test_handle_streaming_response_marks_runner_error_and_preserves_finish
 
     assert close_runner_once.await_count == 1
     assert event.get_extra(third_party.THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY) is True
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_FINISH
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_FINISH
+    )
     assert event.result_history[-1].get_plain_text() == "stream final"
 
 
 @pytest.mark.asyncio
 async def test_handle_streaming_response_skips_finish_when_runner_not_done(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeEvent()
     runner = FakeThirdPartyRunner(done=False)
 
     async def fake_run_third_party_agent(*args, **kwargs):
         yield MessageChain().message("chunk-1"), False
 
-    monkeypatch.setattr(third_party, "run_third_party_agent", fake_run_third_party_agent)
+    monkeypatch.setattr(
+        third_party, "run_third_party_agent", fake_run_third_party_agent
+    )
 
     gen = stage._handle_streaming_response(
         runner=runner,
@@ -589,22 +665,27 @@ async def test_handle_streaming_response_skips_finish_when_runner_not_done(monke
     )
 
     assert await gen.__anext__() is None
-    assert [chain.get_plain_text() async for chain in event.result_history[-1].async_stream] == [
-        "chunk-1"
-    ]
+    assert [
+        chain.get_plain_text() async for chain in event.result_history[-1].async_stream
+    ] == ["chunk-1"]
 
     with pytest.raises(StopAsyncIteration):
         await gen.__anext__()
 
     assert len(event.result_history) == 1
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_RESULT
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_RESULT
+    )
 
 
 @pytest.mark.asyncio
 async def test_handle_streaming_response_falls_back_to_streamed_chunks_when_final_response_missing(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeEvent()
     runner = FakeThirdPartyRunner(final_resp=None, done=True)
     close_runner_once = AsyncMock()
@@ -612,7 +693,9 @@ async def test_handle_streaming_response_falls_back_to_streamed_chunks_when_fina
     async def fake_run_third_party_agent(*args, **kwargs):
         yield MessageChain().message("partial answer"), False
 
-    monkeypatch.setattr(third_party, "run_third_party_agent", fake_run_third_party_agent)
+    monkeypatch.setattr(
+        third_party, "run_third_party_agent", fake_run_third_party_agent
+    )
 
     gen = stage._handle_streaming_response(
         runner=runner,
@@ -623,16 +706,19 @@ async def test_handle_streaming_response_falls_back_to_streamed_chunks_when_fina
     )
 
     assert await gen.__anext__() is None
-    assert [chain.get_plain_text() async for chain in event.result_history[-1].async_stream] == [
-        "partial answer"
-    ]
+    assert [
+        chain.get_plain_text() async for chain in event.result_history[-1].async_stream
+    ] == ["partial answer"]
 
     with pytest.raises(StopAsyncIteration):
         await gen.__anext__()
 
     close_runner_once.assert_awaited_once()
     assert event.get_extra(third_party.THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY) is False
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_FINISH
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_FINISH
+    )
     assert event.result_history[-1].get_plain_text() == "partial answer"
 
 
@@ -640,7 +726,9 @@ async def test_handle_streaming_response_falls_back_to_streamed_chunks_when_fina
 async def test_handle_non_streaming_response_falls_back_when_runner_returns_nothing(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeEvent()
     runner = FakeThirdPartyRunner(final_resp=None)
 
@@ -648,7 +736,9 @@ async def test_handle_non_streaming_response_falls_back_when_runner_returns_noth
         if False:
             yield MessageChain().message("unused"), False
 
-    monkeypatch.setattr(third_party, "run_third_party_agent", fake_run_third_party_agent)
+    monkeypatch.setattr(
+        third_party, "run_third_party_agent", fake_run_third_party_agent
+    )
 
     yields = [
         item
@@ -662,7 +752,10 @@ async def test_handle_non_streaming_response_falls_back_when_runner_returns_noth
 
     assert yields == [None]
     assert event.get_extra(third_party.THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY) is True
-    assert event.result_history[-1].result_content_type == ResultContentType.AGENT_RUNNER_ERROR
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.AGENT_RUNNER_ERROR
+    )
     assert (
         event.result_history[-1].get_plain_text()
         == third_party.RUNNER_NO_RESULT_FALLBACK_MESSAGE
@@ -726,7 +819,9 @@ async def test_close_runner_if_supported_handles_sync_async_and_close_errors():
     await third_party._close_runner_if_supported(async_runner)
     async_runner.close.assert_awaited_once()
 
-    bad_runner = SimpleNamespace(close=MagicMock(side_effect=RuntimeError("close boom")))
+    bad_runner = SimpleNamespace(
+        close=MagicMock(side_effect=RuntimeError("close boom"))
+    )
     await third_party._close_runner_if_supported(bad_runner)
 
 
@@ -734,7 +829,9 @@ async def test_close_runner_if_supported_handles_sync_async_and_close_errors():
 async def test_resolve_persona_custom_error_message_returns_none_on_failure(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
             context=SimpleNamespace(
@@ -761,7 +858,9 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
 
 @pytest.mark.asyncio
 async def test_third_party_process_returns_early_when_wake_prefix_does_not_match():
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     event = FakeInternalProcessEvent(message_str="hello")
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -774,13 +873,19 @@ async def test_third_party_process_returns_early_when_wake_prefix_does_not_match
 async def test_third_party_process_returns_early_when_request_has_no_prompt_or_media(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     event = FakeInternalProcessEvent(message_str="ask", message_components=[])
 
-    monkeypatch.setattr(third_party, "astrbot_config", {"provider": [{"id": "runner-1"}]})
+    monkeypatch.setattr(
+        third_party, "astrbot_config", {"provider": [{"id": "runner-1"}]}
+    )
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -790,12 +895,16 @@ async def test_third_party_process_returns_early_when_request_has_no_prompt_or_m
 
 @pytest.mark.asyncio
 async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "unknown"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     event = FakeInternalProcessEvent(message_str="ask hello")
 
     monkeypatch.setattr(
@@ -820,13 +929,17 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
 async def test_third_party_process_uses_non_streaming_path_when_event_disables_streaming(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(
         message_str="ask hello",
@@ -878,7 +991,9 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    monkeypatch.setattr(stage, "_handle_non_streaming_response", fake_non_streaming_response)
+    monkeypatch.setattr(
+        stage, "_handle_non_streaming_response", fake_non_streaming_response
+    )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
     monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
 
@@ -896,13 +1011,17 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
 async def test_third_party_process_turns_streaming_into_general_when_platform_does_not_support_it(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "turn_off"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     event.platform_meta.support_streaming_message = False
@@ -952,7 +1071,9 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    monkeypatch.setattr(stage, "_handle_non_streaming_response", fake_non_streaming_response)
+    monkeypatch.setattr(
+        stage, "_handle_non_streaming_response", fake_non_streaming_response
+    )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
     monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
 
@@ -970,13 +1091,17 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
 async def test_third_party_process_closes_runner_when_streaming_handler_raises_before_yield(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     runner = FakeThirdPartyRunner()
@@ -1035,13 +1160,17 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
 async def test_third_party_process_closes_runner_when_reset_raises_and_skips_metric(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1096,13 +1225,17 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
 async def test_third_party_process_closes_runner_when_non_streaming_handler_raises(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1146,7 +1279,9 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    monkeypatch.setattr(stage, "_handle_non_streaming_response", fake_non_streaming_response)
+    monkeypatch.setattr(
+        stage, "_handle_non_streaming_response", fake_non_streaming_response
+    )
     monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
 
     with pytest.raises(RuntimeError, match="non-streaming failed"):
@@ -1159,12 +1294,16 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
 
 @pytest.mark.asyncio
 async def test_third_party_process_returns_early_when_provider_id_missing(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = ""
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     logger_error = MagicMock()
@@ -1183,12 +1322,16 @@ async def test_third_party_process_returns_early_when_provider_id_missing(monkey
 async def test_third_party_process_returns_early_when_provider_config_missing(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     logger_error = MagicMock()
@@ -1205,13 +1348,17 @@ async def test_third_party_process_returns_early_when_provider_config_missing(
 
 @pytest.mark.asyncio
 async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
 
@@ -1247,13 +1394,17 @@ async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatc
 async def test_third_party_process_watchdog_closes_runner_when_stream_never_consumed(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 0
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1314,20 +1465,27 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
     assert yielded == [None]
     assert runner.close.await_count == 1
     assert metric_upload.await_count == 1
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_RESULT
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_RESULT
+    )
 
 
 @pytest.mark.asyncio
 async def test_third_party_process_builds_media_only_request_and_uses_non_streaming_path(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     image = MagicMock(spec=Image)
     image.convert_to_base64 = AsyncMock(return_value="data:image/png;base64,abc")
@@ -1380,7 +1538,9 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    monkeypatch.setattr(stage, "_handle_non_streaming_response", fake_non_streaming_response)
+    monkeypatch.setattr(
+        stage, "_handle_non_streaming_response", fake_non_streaming_response
+    )
     monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -1401,13 +1561,17 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
 async def test_third_party_process_streaming_consumed_closes_runner_after_stream_use(
     monkeypatch,
 ):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(third_party.ThirdPartyAgentSubStage)
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1465,14 +1629,19 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
         chain.get_plain_text() async for chain in stream_result.async_stream
     ]
     assert streamed_chunks == []
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_FINISH
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_FINISH
+    )
     assert event.result_history[-1].get_plain_text() == "stream final"
     assert runner.close.await_count == 1
     assert metric_upload.await_count == 1
 
 
 @pytest.mark.asyncio
-async def test_internal_process_skips_empty_messages_without_provider_request(monkeypatch):
+async def test_internal_process_skips_empty_messages_without_provider_request(
+    monkeypatch,
+):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.streaming_response = False
     stage.show_tool_use = True
@@ -1483,7 +1652,9 @@ async def test_internal_process_skips_empty_messages_without_provider_request(mo
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace(get_using_tts_provider=lambda _umo: None))
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+        )
     )
     event = FakeInternalProcessEvent(message_str="   ", message_components=[])
 
@@ -1583,13 +1754,17 @@ async def test_internal_process_stops_when_follow_up_ticket_was_consumed(monkeyp
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace(get_using_tts_provider=lambda _umo: None))
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+        )
     )
     event = FakeInternalProcessEvent(message_str="follow up")
     capture = SimpleNamespace(ticket=SimpleNamespace(seq=3))
 
     finalize = AsyncMock()
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=capture))
+    monkeypatch.setattr(
+        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    )
     monkeypatch.setattr(
         internal,
         "prepare_follow_up_capture",
@@ -1635,7 +1810,9 @@ async def test_internal_process_sends_error_message_and_finalizes_follow_up_on_e
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=capture))
+    monkeypatch.setattr(
+        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    )
     monkeypatch.setattr(
         internal,
         "prepare_follow_up_capture",
@@ -1692,7 +1869,9 @@ async def test_internal_process_finalizes_follow_up_when_waiting_hook_blocks(
     capture = SimpleNamespace(ticket=SimpleNamespace(seq=9))
     finalize = AsyncMock()
 
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=capture))
+    monkeypatch.setattr(
+        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    )
     monkeypatch.setattr(
         internal,
         "prepare_follow_up_capture",
@@ -1742,7 +1921,9 @@ async def test_internal_process_sends_llm_error_message_when_build_returns_none(
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
@@ -1784,8 +1965,12 @@ async def test_internal_process_build_none_finalizes_follow_up_capture(monkeypat
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=capture))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
+    monkeypatch.setattr(
+        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    )
     monkeypatch.setattr(
         internal,
         "prepare_follow_up_capture",
@@ -1833,7 +2018,9 @@ async def test_internal_process_skips_send_when_build_returns_none_without_llm_e
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
@@ -1878,10 +2065,16 @@ async def test_internal_process_closes_reset_coro_when_llm_request_hook_blocks(
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(side_effect=[False, True]))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "call_event_hook", AsyncMock(side_effect=[False, True])
+    )
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -1925,15 +2118,23 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=capture))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
+    monkeypatch.setattr(
+        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    )
     monkeypatch.setattr(
         internal,
         "prepare_follow_up_capture",
         AsyncMock(return_value=(False, True)),
     )
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(side_effect=[False, True]))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "call_event_hook", AsyncMock(side_effect=[False, True])
+    )
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -2009,7 +2210,9 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
@@ -2078,7 +2281,9 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
     runner = FakeInternalRunner()
     build_result = SimpleNamespace(
         agent_runner=runner,
-        provider_request=ProviderRequest(conversation=SimpleNamespace(cid="conv-blocked")),
+        provider_request=ProviderRequest(
+            conversation=SimpleNamespace(cid="conv-blocked")
+        ),
         provider=SimpleNamespace(
             provider_config={
                 "api_base": f"https://{next(iter(internal.BLOCKED_PROVIDER_HOSTS))}/v1"
@@ -2093,10 +2298,14 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     register_runner = MagicMock()
     monkeypatch.setattr(internal, "register_active_runner", register_runner)
 
@@ -2176,10 +2385,14 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2192,8 +2405,14 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
-    assert event.result_history[-2].result_content_type == ResultContentType.STREAMING_RESULT
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_FINISH
+    assert (
+        event.result_history[-2].result_content_type
+        == ResultContentType.STREAMING_RESULT
+    )
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_FINISH
+    )
     assert event.result_history[-1].get_plain_text() == expected_text
     save_to_history.assert_awaited_once()
 
@@ -2246,7 +2465,9 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
     )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2308,10 +2529,14 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2342,9 +2567,7 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(
-                get_using_tts_provider=lambda _umo: "tts-provider"
-            )
+            context=SimpleNamespace(get_using_tts_provider=lambda _umo: "tts-provider")
         )
     )
     event = FakeInternalProcessEvent(
@@ -2376,10 +2599,14 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2392,7 +2619,10 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
-    assert event.result_history[-1].result_content_type == ResultContentType.STREAMING_RESULT
+    assert (
+        event.result_history[-1].result_content_type
+        == ResultContentType.STREAMING_RESULT
+    )
     streamed_chunks = [
         chain.get_plain_text() async for chain in event.result_history[-1].async_stream
     ]
@@ -2405,7 +2635,9 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_internal_process_live_mode_skips_history_when_runner_not_done(monkeypatch):
+async def test_internal_process_live_mode_skips_history_when_runner_not_done(
+    monkeypatch,
+):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.streaming_response = False
     stage.show_tool_use = True
@@ -2418,9 +2650,7 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(mon
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(
-                get_using_tts_provider=lambda _umo: None
-            )
+            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
         )
     )
     event = FakeInternalProcessEvent(
@@ -2430,7 +2660,9 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(mon
     runner = FakeInternalRunner(done=False)
     build_result = SimpleNamespace(
         agent_runner=runner,
-        provider_request=ProviderRequest(conversation=SimpleNamespace(cid="conv-live-skip")),
+        provider_request=ProviderRequest(
+            conversation=SimpleNamespace(cid="conv-live-skip")
+        ),
         provider=runner.provider,
         reset_coro=None,
     )
@@ -2450,10 +2682,14 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(mon
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2496,7 +2732,9 @@ async def test_internal_process_live_mode_skips_history_when_event_stopped_witho
     runner = FakeInternalRunner(done=True, aborted=False)
     build_result = SimpleNamespace(
         agent_runner=runner,
-        provider_request=ProviderRequest(conversation=SimpleNamespace(cid="conv-live-stopped")),
+        provider_request=ProviderRequest(
+            conversation=SimpleNamespace(cid="conv-live-stopped")
+        ),
         provider=runner.provider,
         reset_coro=None,
     )
@@ -2516,10 +2754,14 @@ async def test_internal_process_live_mode_skips_history_when_event_stopped_witho
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2583,10 +2825,14 @@ async def test_internal_process_live_mode_saves_history_when_event_stopped_but_r
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2644,10 +2890,14 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", register_runner)
@@ -2702,10 +2952,14 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", MagicMock())
@@ -2763,10 +3017,14 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", register_runner)
@@ -2835,10 +3093,14 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", register_runner)
@@ -2915,10 +3177,14 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs))
+    monkeypatch.setattr(
+        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
+    )
     monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=build_result))
+    monkeypatch.setattr(
+        internal, "build_main_agent", AsyncMock(return_value=build_result)
+    )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "register_active_runner", register_runner)
@@ -2960,7 +3226,9 @@ async def test_record_internal_agent_stats_persists_expected_status(
     expected_status,
 ):
     insert_provider_stat = AsyncMock()
-    monkeypatch.setattr(internal.db_helper, "insert_provider_stat", insert_provider_stat)
+    monkeypatch.setattr(
+        internal.db_helper, "insert_provider_stat", insert_provider_stat
+    )
 
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-stats"))
@@ -2984,7 +3252,9 @@ async def test_record_internal_agent_stats_falls_back_to_provider_meta_id_withou
     monkeypatch,
 ):
     insert_provider_stat = AsyncMock()
-    monkeypatch.setattr(internal.db_helper, "insert_provider_stat", insert_provider_stat)
+    monkeypatch.setattr(
+        internal.db_helper, "insert_provider_stat", insert_provider_stat
+    )
 
     runner = FakeInternalRunner()
     runner.provider.provider_config = {}
@@ -3012,7 +3282,9 @@ async def test_record_internal_agent_stats_skips_when_provider_or_stats_missing(
     monkeypatch,
 ):
     insert_provider_stat = AsyncMock()
-    monkeypatch.setattr(internal.db_helper, "insert_provider_stat", insert_provider_stat)
+    monkeypatch.setattr(
+        internal.db_helper, "insert_provider_stat", insert_provider_stat
+    )
 
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-stats"))

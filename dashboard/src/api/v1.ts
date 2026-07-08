@@ -38,6 +38,10 @@ import type {
   KnowledgeDocumentUrlImportRequest,
   LoginRequest,
   ListConversationsData,
+  MemoryFactActionRequest,
+  MemoryFactCreateRequest,
+  MemoryFactPatchRequest,
+  MemoryProfileRefreshRequest,
   McpServerConfig,
   ModelScopeSyncRequest,
   NeoCandidateActionRequest,
@@ -456,6 +460,71 @@ export interface KnowledgeRetrieveResultData {
 export interface KnowledgeRetrieveData {
   results?: KnowledgeRetrieveResultData[];
   visualization?: string | null;
+  [key: string]: unknown;
+}
+
+export interface MemoryFactData {
+  id: number;
+  person_id: string;
+  chat_id: string;
+  scope_id: string;
+  fact_text: string;
+  fact_type: string;
+  source_message_id?: string;
+  evidence_message_ids?: string[];
+  confidence: number;
+  status: 'active' | 'deleted' | string;
+  ttl_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface MemoryProfileData {
+  id: number;
+  person_id: string;
+  chat_scope: string;
+  profile_text: string;
+  source_version: number;
+  is_override: boolean;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface MemoryOperationData {
+  id: number;
+  operation_id: string;
+  operator: string;
+  target_type: string;
+  target_id: string;
+  action: string;
+  reason?: string | null;
+  payload?: OpenConfig;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface MemoryFactDetailData {
+  fact?: MemoryFactData;
+  operation_logs?: MemoryOperationData[];
+  [key: string]: unknown;
+}
+
+export interface MemoryStatsData {
+  facts?: number;
+  deleted_facts?: number;
+  profiles?: number;
+  episodes?: number;
+  operations?: number;
+  worker?: {
+    running?: boolean;
+    queue_size?: number;
+    queue_max_size?: number;
+    recent_profile_tasks?: unknown[];
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -1799,6 +1868,85 @@ export const knowledgeApi = {
         body: payload as never,
       }),
     );
+  },
+};
+
+export const memoryApi = {
+  facts(params?: {
+    page?: number;
+    page_size?: number;
+    person_id?: string;
+    chat_id?: string;
+    scope_id?: string;
+    status?: 'active' | 'deleted' | 'all';
+    query?: string;
+  }) {
+    return typed<PagedItemsData<MemoryFactData>>(
+      openApiV1.listMemoryFacts({ query: generatedQuery(params) }),
+    );
+  },
+  fact(factId: number) {
+    return typed<MemoryFactDetailData>(
+      openApiV1.getMemoryFact({ path: { fact_id: factId } }),
+    );
+  },
+  createFact(payload: MemoryFactCreateRequest) {
+    return typed<MemoryFactData>(openApiV1.createMemoryFact({ body: payload }));
+  },
+  updateFact(factId: number, payload: MemoryFactPatchRequest) {
+    return typed<MemoryFactData>(
+      openApiV1.updateMemoryFact({
+        path: { fact_id: factId },
+        body: payload,
+      }),
+    );
+  },
+  deleteFact(factId: number, payload?: MemoryFactActionRequest) {
+    return typed<OpenConfig>(
+      openApiV1.deleteMemoryFact({
+        path: { fact_id: factId },
+        body: payload,
+      }),
+    );
+  },
+  restoreFact(factId: number, payload?: MemoryFactActionRequest) {
+    return typed<OpenConfig>(
+      openApiV1.restoreMemoryFact({
+        path: { fact_id: factId },
+        body: payload,
+      }),
+    );
+  },
+  profiles(params?: {
+    page?: number;
+    page_size?: number;
+    person_id?: string;
+    chat_scope?: string;
+  }) {
+    return typed<PagedItemsData<MemoryProfileData>>(
+      openApiV1.listMemoryProfiles({ query: generatedQuery(params) }),
+    );
+  },
+  refreshProfile(personId: string, payload: MemoryProfileRefreshRequest) {
+    return typed<OpenConfig>(
+      openApiV1.refreshMemoryProfile({
+        path: { person_id: personId },
+        body: payload,
+      }),
+    );
+  },
+  operations(params?: {
+    page?: number;
+    page_size?: number;
+    target_type?: string;
+    target_id?: string;
+  }) {
+    return typed<PagedItemsData<MemoryOperationData>>(
+      openApiV1.listMemoryOperations({ query: generatedQuery(params) }),
+    );
+  },
+  stats() {
+    return typed<MemoryStatsData>(openApiV1.getMemoryStats());
   },
 };
 

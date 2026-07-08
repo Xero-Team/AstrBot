@@ -4,6 +4,7 @@ import pytest
 from sqlmodel import col, update
 
 from astrbot.core.db.po import (
+    MemoryFact,
     PlatformMessageHistory,
     PlatformSession,
     ProviderStat,
@@ -86,6 +87,256 @@ async def test_insert_provider_stat_normalizes_defaults_and_persists_numbers(
     assert stored.start_time == 1.5
     assert stored.end_time == 0.0
     assert stored.time_to_first_token == 0.25
+
+
+@pytest.mark.asyncio
+async def test_persona_runtime_and_memory_sqlite_interfaces(temp_db: SQLiteDatabase):
+    state = await temp_db.upsert_persona_session_state(
+        persona_id="persona-a",
+        umo="webchat:FriendMessage:session-a",
+        agent_state="running",
+        talk_frequency_adjust=1.25,
+        consecutive_idle_count=0,
+        extra_state={"proactive_enabled": False},
+    )
+    updated_state = await temp_db.upsert_persona_session_state(
+        persona_id="persona-a",
+        umo="webchat:FriendMessage:session-a",
+        agent_state="wait",
+        talk_frequency_adjust=0.9,
+        consecutive_idle_count=1,
+        extra_state={"proactive_enabled": True},
+    )
+    fact, created = await temp_db.upsert_memory_fact(
+        person_id="user-a",
+        chat_id="webchat:FriendMessage:session-a",
+        scope_id="isolated:webchat:FriendMessage:session-a",
+        fact_text="User likes green tea.",
+        fact_type="preference",
+        source_message_id="conv-a:1",
+        evidence_message_ids=["conv-a:1"],
+    )
+    merged_fact, merged_created = await temp_db.upsert_memory_fact(
+        person_id="user-a",
+        chat_id="webchat:FriendMessage:session-a",
+        scope_id="isolated:webchat:FriendMessage:session-a",
+        fact_text="User likes green tea.",
+        fact_type="preference",
+        source_message_id="conv-a:2",
+        evidence_message_ids=["conv-a:2"],
+    )
+    profile = await temp_db.upsert_memory_profile(
+        person_id="user-a",
+        chat_scope="isolated:webchat:FriendMessage:session-a",
+        profile_text="User likes green tea.",
+    )
+    log = await temp_db.insert_memory_operation_log(
+        operator="test",
+        target_type="memory_fact",
+        target_id=str(fact.id),
+        action="merge",
+        payload={"source": "unit"},
+    )
+
+    assert state.id == updated_state.id
+    assert updated_state.agent_state == "wait"
+    assert updated_state.extra_state == {"proactive_enabled": True}
+    assert created is True
+    assert merged_created is False
+    assert merged_fact.id == fact.id
+    assert merged_fact.evidence_message_ids == ["conv-a:1", "conv-a:2"]
+    assert (
+        await temp_db.get_memory_profile("user-a", profile.chat_scope)
+    ).id == profile.id
+    assert [row.operation_id for row in await temp_db.list_memory_operation_logs()] == [
+        log.operation_id
+    ]
+    episode = await temp_db.upsert_memory_episode(
+        episode_id="episode-a",
+        chat_id="webchat:FriendMessage:session-a",
+        scope_id="isolated:webchat:FriendMessage:session-a",
+        title="Green tea preference",
+        summary="User said they like green tea.",
+        participant_ids=["user-a"],
+        source_message_ids=["conv-a:1"],
+    )
+    updated_episode = await temp_db.upsert_memory_episode(
+        episode_id="episode-a",
+        chat_id="webchat:FriendMessage:session-a",
+        scope_id="isolated:webchat:FriendMessage:session-a",
+        title="Green tea preference updated",
+        summary="User repeated that they like green tea.",
+        participant_ids=["user-a"],
+        source_message_ids=["conv-a:1", "conv-a:2"],
+    )
+    scope_policy = await temp_db.upsert_memory_scope_policy(
+        owner_scope_id="isolated:webchat:FriendMessage:session-a",
+        target_scope_id="isolated:webchat:FriendMessage:session-b",
+    )
+
+    assert episode.id == updated_episode.id
+    assert [
+        item.title
+        for item in await temp_db.list_memory_episodes(
+            chat_ids=["webchat:FriendMessage:session-a"],
+            query="green tea",
+        )
+    ] == ["Green tea preference updated"]
+    assert [
+        item.target_scope_id
+        for item in await temp_db.list_memory_scope_policies(
+            owner_scope_id="isolated:webchat:FriendMessage:session-a"
+        )
+    ] == [scope_policy.target_scope_id]
+    scope_logs = await temp_db.list_memory_operation_logs(
+        target_type="memory_scope_policy"
+    )
+    assert scope_logs[0].action == "enable"
+    tuning_task = await temp_db.upsert_memory_tuning_task(
+        task_id="tune-a",
+        task_type="retrieval_probe",
+        target_scope="isolated:webchat:FriendMessage:session-a",
+        candidate_config={"limit": 3},
+        evaluation_result={"coverage": 1.0},
+        status="completed",
+    )
+    assert [
+        task.task_id
+        for task in await temp_db.list_memory_tuning_tasks(
+            target_scope="isolated:webchat:FriendMessage:session-a",
+            status="completed",
+        )
+    ] == [tuning_task.task_id]
+
+    async with temp_db.get_db() as session:
+        stored_fact = await session.get(MemoryFact, fact.id)
+    assert stored_fact is not None
+    assert stored_fact.fact_text == "User likes green tea."
+
+    assert await temp_db.update_memory_fact_status(
+        fact.id,
+        status="deleted",
+        operator="unit",
+        reason="incorrect",
+    )
+    deleted = await temp_db.get_memory_fact(fact.id)
+    assert deleted is not None
+    assert deleted.status == "deleted"
+    assert await temp_db.list_memory_facts(person_id="user-a") == []
+    assert (await temp_db.count_memory_facts(person_id="user-a", status="deleted")) == 1
+    merged_deleted, merged_deleted_created = await temp_db.upsert_memory_fact(
+        person_id="user-a",
+        chat_id="webchat:FriendMessage:session-a",
+        scope_id="isolated:webchat:FriendMessage:session-a",
+        fact_text="User likes green tea.",
+        fact_type="preference",
+        source_message_id="conv-a:deleted-merge",
+        evidence_message_ids=["conv-a:deleted-merge"],
+    )
+    assert merged_deleted_created is False
+    assert merged_deleted.id == fact.id
+    assert merged_deleted.status == "deleted"
+    assert await temp_db.list_memory_facts(person_id="user-a") == []
+
+    assert await temp_db.update_memory_fact_status(
+        fact.id,
+        status="active",
+        operator="unit",
+        reason="restored",
+    )
+    restored = await temp_db.get_memory_fact(fact.id)
+    assert restored is not None
+    assert restored.status == "active"
+    updated_fact = await temp_db.update_memory_fact(
+        fact.id,
+        fact_text="User likes jasmine tea.",
+        confidence=0.8,
+        operator="unit",
+        reason="dashboard edit",
+    )
+    assert updated_fact is not None
+    assert updated_fact.fact_text == "User likes jasmine tea."
+    assert (
+        await temp_db.count_memory_facts(
+            person_id="user-a",
+            query="jasmine",
+            status="active",
+        )
+    ) == 1
+    assert [
+        item.id
+        for item in await temp_db.list_memory_profiles(
+            person_id="user-a",
+            limit=5,
+        )
+    ] == [profile.id]
+    assert await temp_db.count_memory_profiles(person_id="user-a") == 1
+    assert await temp_db.count_memory_episodes(status="active") == 1
+    logs = await temp_db.list_memory_operation_logs(target_id=str(fact.id))
+    assert [row.action for row in logs[:3]] == ["update", "restore", "delete"]
+    assert (
+        await temp_db.count_memory_operation_logs(
+            target_type="memory_fact",
+            target_id=str(fact.id),
+        )
+    ) == 4
+
+    expression = await temp_db.upsert_persona_expression_asset(
+        persona_id="persona-a",
+        scope="isolated:webchat:FriendMessage:session-a",
+        trigger_scene="general",
+        style_text="Prefer concise replies.",
+        source_message_id="conv-a:3",
+        score=0.5,
+    )
+    updated_expression = await temp_db.upsert_persona_expression_asset(
+        persona_id="persona-a",
+        scope="isolated:webchat:FriendMessage:session-a",
+        trigger_scene="general",
+        style_text="Prefer concise replies.",
+        source_message_id="conv-a:4",
+        score=0.7,
+    )
+    jargon = await temp_db.upsert_persona_jargon_asset(
+        persona_id="persona-a",
+        scope="isolated:webchat:FriendMessage:session-a",
+        term="ship-it",
+        meaning=None,
+        source_message_id="conv-a:5",
+        score=0.6,
+    )
+    policy = await temp_db.upsert_persona_behavior_policy(
+        persona_id="persona-a",
+        scope="isolated:webchat:FriendMessage:session-a",
+        situation="simple request",
+        preferred_action="Answer briefly.",
+        confidence=0.6,
+    )
+
+    assert expression.id == updated_expression.id
+    assert updated_expression.score == 0.7
+    assert [
+        item.style_text
+        for item in await temp_db.list_persona_expression_assets(
+            persona_id="persona-a",
+            scope="isolated:webchat:FriendMessage:session-a",
+        )
+    ] == ["Prefer concise replies."]
+    assert [
+        item.term
+        for item in await temp_db.list_persona_jargon_assets(
+            persona_id="persona-a",
+            scope="isolated:webchat:FriendMessage:session-a",
+            approved=False,
+        )
+    ] == [jargon.term]
+    assert [
+        item.preferred_action
+        for item in await temp_db.list_persona_behavior_policies(
+            persona_id="persona-a",
+            scope="isolated:webchat:FriendMessage:session-a",
+        )
+    ] == [policy.preferred_action]
 
 
 @pytest.mark.asyncio
@@ -195,7 +446,9 @@ async def test_delete_conversation_and_delete_conversations_by_user_id_scope_cor
 
 
 @pytest.mark.asyncio
-async def test_get_filtered_conversations_combines_filters_and_paginates(temp_db: SQLiteDatabase):
+async def test_get_filtered_conversations_combines_filters_and_paginates(
+    temp_db: SQLiteDatabase,
+):
     now = datetime.now(UTC)
     await temp_db.create_conversation(
         user_id="telegram:FriendMessage:user-1",
@@ -235,7 +488,9 @@ async def test_get_filtered_conversations_combines_filters_and_paginates(temp_db
     )
 
     assert total == 1
-    assert [conversation.conversation_id for conversation in conversations] == ["conv-1"]
+    assert [conversation.conversation_id for conversation in conversations] == [
+        "conv-1"
+    ]
 
 
 @pytest.mark.asyncio
@@ -383,7 +638,9 @@ async def test_get_session_conversations_handles_missing_related_rows_and_pagina
 
 
 @pytest.mark.asyncio
-async def test_batch_update_sort_order_reorders_personas_and_folders(temp_db: SQLiteDatabase):
+async def test_batch_update_sort_order_reorders_personas_and_folders(
+    temp_db: SQLiteDatabase,
+):
     root_b = await temp_db.insert_persona_folder(name="B", sort_order=20)
     root_a = await temp_db.insert_persona_folder(name="A", sort_order=10)
     await temp_db.insert_persona(
@@ -462,11 +719,15 @@ async def test_preference_upsert_filter_remove_and_clear_paths(temp_db: SQLiteDa
     await temp_db.clear_preferences("umo", "session-a")
     assert await temp_db.get_preferences("umo", scope_id="session-a") == []
     remaining = await temp_db.get_preferences("umo")
-    assert [(item.scope_id, item.key) for item in remaining] == [("session-b", "sel_conv_id")]
+    assert [(item.scope_id, item.key) for item in remaining] == [
+        ("session-b", "sel_conv_id")
+    ]
 
 
 @pytest.mark.asyncio
-async def test_update_persona_folder_can_clear_parent_and_description(temp_db: SQLiteDatabase):
+async def test_update_persona_folder_can_clear_parent_and_description(
+    temp_db: SQLiteDatabase,
+):
     parent = await temp_db.insert_persona_folder(name="Parent")
     child = await temp_db.insert_persona_folder(
         name="Child",
@@ -489,7 +750,9 @@ async def test_update_persona_folder_can_clear_parent_and_description(temp_db: S
 
 
 @pytest.mark.asyncio
-async def test_upsert_umo_alias_updates_existing_row_and_filtered_reads(temp_db: SQLiteDatabase):
+async def test_upsert_umo_alias_updates_existing_row_and_filtered_reads(
+    temp_db: SQLiteDatabase,
+):
     created = await temp_db.upsert_umo_alias(
         "umo-1",
         "sender-1",
@@ -604,8 +867,12 @@ async def test_add_session_to_project_replaces_existing_relation_and_queries_fol
     await temp_db.add_session_to_project(session.session_id, first_project.project_id)
     await temp_db.add_session_to_project(session.session_id, second_project.project_id)
 
-    first_project_sessions = await temp_db.get_project_sessions(first_project.project_id)
-    second_project_sessions = await temp_db.get_project_sessions(second_project.project_id)
+    first_project_sessions = await temp_db.get_project_sessions(
+        first_project.project_id
+    )
+    second_project_sessions = await temp_db.get_project_sessions(
+        second_project.project_id
+    )
     linked_project = await temp_db.get_project_by_session(session.session_id, "alice")
 
     assert first_project_sessions == []
@@ -615,7 +882,9 @@ async def test_add_session_to_project_replaces_existing_relation_and_queries_fol
 
 
 @pytest.mark.asyncio
-async def test_platform_message_history_update_and_offset_delete(temp_db: SQLiteDatabase):
+async def test_platform_message_history_update_and_offset_delete(
+    temp_db: SQLiteDatabase,
+):
     now = datetime.now()
     older = await temp_db.insert_platform_message_history(
         platform_id="webchat",
@@ -673,7 +942,9 @@ async def test_platform_message_history_update_and_offset_delete(temp_db: SQLite
 
 
 @pytest.mark.asyncio
-async def test_attachment_reads_and_deletes_return_expected_counts(temp_db: SQLiteDatabase):
+async def test_attachment_reads_and_deletes_return_expected_counts(
+    temp_db: SQLiteDatabase,
+):
     first = await temp_db.insert_attachment(
         path="/tmp/a.txt",
         type="file",
@@ -703,7 +974,9 @@ async def test_attachment_reads_and_deletes_return_expected_counts(temp_db: SQLi
 
 
 @pytest.mark.asyncio
-async def test_api_key_lifecycle_filters_active_and_tracks_state(temp_db: SQLiteDatabase):
+async def test_api_key_lifecycle_filters_active_and_tracks_state(
+    temp_db: SQLiteDatabase,
+):
     active = await temp_db.create_api_key(
         name="active",
         key_hash="hash-active",
@@ -833,7 +1106,10 @@ async def test_webchat_thread_queries_and_bulk_delete_paths(temp_db: SQLiteDatab
     )
     assert deleted_by_message == [second.thread_id]
     assert await temp_db.get_webchat_thread_by_id(second.thread_id) is None
-    assert await temp_db.delete_webchat_threads_by_parent_message_ids("session-1", []) == []
+    assert (
+        await temp_db.delete_webchat_threads_by_parent_message_ids("session-1", [])
+        == []
+    )
 
     deleted_by_session = await temp_db.delete_webchat_threads_by_parent_session(
         "session-1"
@@ -937,7 +1213,9 @@ async def test_command_conflict_upsert_filter_and_delete(temp_db: SQLiteDatabase
 
 
 @pytest.mark.asyncio
-async def test_cron_job_update_distinguishes_not_set_from_explicit_none(temp_db: SQLiteDatabase):
+async def test_cron_job_update_distinguishes_not_set_from_explicit_none(
+    temp_db: SQLiteDatabase,
+):
     scheduled_time = datetime.now(UTC) + timedelta(hours=1)
     job = await temp_db.create_cron_job(
         name="Morning sync",
@@ -1078,7 +1356,10 @@ async def test_get_platform_sessions_by_creator_paginated_orders_by_latest_updat
     )
 
     assert total == 2
-    assert [row["session"].session_id for row in rows] == ["session-newer", "session-older"]
+    assert [row["session"].session_id for row in rows] == [
+        "session-newer",
+        "session-older",
+    ]
 
 
 @pytest.mark.asyncio
@@ -1156,7 +1437,10 @@ async def test_get_platform_message_history_is_paginated_and_scoped_by_platform_
     await temp_db.insert_platform_message_history(
         platform_id="telegram",
         user_id="session-1",
-        content={"type": "user", "message": [{"type": "plain", "text": "other platform"}]},
+        content={
+            "type": "user",
+            "message": [{"type": "plain", "text": "other platform"}],
+        },
     )
     await temp_db.insert_platform_message_history(
         platform_id="webchat",
@@ -1292,4 +1576,7 @@ async def test_get_webchat_threads_by_parent_session_without_creator_orders_by_c
 
     threads = await temp_db.get_webchat_threads_by_parent_session("session-1")
 
-    assert [thread.thread_id for thread in threads] == [second.thread_id, first.thread_id]
+    assert [thread.thread_id for thread in threads] == [
+        second.thread_id,
+        first.thread_id,
+    ]

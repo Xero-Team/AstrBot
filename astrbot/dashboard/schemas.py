@@ -288,6 +288,35 @@ class KnowledgeBaseRetrieveRequest(OpenModel):
     rerank: bool | None = None
 
 
+class MemoryFactCreateRequest(OpenModel):
+    person_id: str
+    chat_id: str
+    fact_text: str
+    scope_id: str | None = None
+    fact_type: str | None = None
+    source_message_id: str | None = None
+    evidence_message_ids: list[str] | None = None
+    confidence: float | None = None
+    reason: str | None = None
+
+
+class MemoryFactPatchRequest(OpenModel):
+    fact_text: str | None = None
+    fact_type: str | None = None
+    confidence: float | None = None
+    reason: str | None = None
+
+
+class MemoryFactActionRequest(OpenModel):
+    reason: str | None = None
+
+
+class MemoryProfileRefreshRequest(OpenModel):
+    chat_scope: str | None = None
+    scope_id: str | None = None
+    chat_id: str | None = None
+
+
 class ToolEnabledRequest(BaseModel):
     enabled: bool
 

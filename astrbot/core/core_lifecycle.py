@@ -24,7 +24,9 @@ from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.memory import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
+from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
@@ -190,6 +192,12 @@ class AstrBotCoreLifecycle:
         self.persona_mgr = PersonaManager(self.db, self.astrbot_config_mgr)
         await self.persona_mgr.initialize()
 
+        self.persona_runtime_manager = PersonaRuntimeManager(self.db)
+        await self.persona_runtime_manager.initialize()
+
+        self.memory_manager = MemoryManager(self.db)
+        await self.memory_manager.initialize()
+
         # 初始化供应商管理器
         self.provider_manager = ProviderManager(
             self.astrbot_config_mgr,
@@ -230,6 +238,8 @@ class AstrBotCoreLifecycle:
             self.cron_manager,
             self.subagent_orchestrator,
         )
+        self.star_context.persona_runtime_manager = self.persona_runtime_manager
+        self.star_context.memory_manager = self.memory_manager
 
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
@@ -378,6 +388,9 @@ class AstrBotCoreLifecycle:
 
         if self.cron_manager:
             await self.cron_manager.shutdown()
+
+        if hasattr(self, "memory_manager"):
+            await self.memory_manager.terminate()
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:

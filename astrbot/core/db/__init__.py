@@ -14,8 +14,18 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     CronJob,
+    MemoryEpisode,
+    MemoryFact,
+    MemoryOperationLog,
+    MemoryProfile,
+    MemoryScopePolicyRecord,
+    MemoryTuningTask,
     Persona,
+    PersonaBehaviorPolicy,
+    PersonaExpressionAsset,
     PersonaFolder,
+    PersonaJargonAsset,
+    PersonaSessionState,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
@@ -100,6 +110,363 @@ class BaseDatabase(abc.ABC):
         agent_type: str = "internal",
     ) -> ProviderStat:
         """Insert a per-response provider stat record."""
+        ...
+
+    @abc.abstractmethod
+    async def get_persona_session_state(
+        self,
+        persona_id: str,
+        umo: str,
+    ) -> PersonaSessionState | None:
+        """Get runtime persona state for one chat stream."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_persona_session_state(
+        self,
+        *,
+        persona_id: str,
+        umo: str,
+        agent_state: str = "running",
+        talk_frequency_adjust: float = 1.0,
+        consecutive_idle_count: int = 0,
+        cooldown_until: datetime.datetime | None = None,
+        last_interaction_at: datetime.datetime | None = None,
+        last_proactive_at: datetime.datetime | None = None,
+        extra_state: dict | None = None,
+    ) -> PersonaSessionState:
+        """Create or update runtime persona state for one chat stream."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_persona_expression_asset(
+        self,
+        *,
+        persona_id: str,
+        scope: str,
+        trigger_scene: str,
+        style_text: str,
+        source_message_id: str,
+        score: float = 0.5,
+        enabled: bool = True,
+    ) -> PersonaExpressionAsset:
+        """Create or merge a learned persona expression asset."""
+        ...
+
+    @abc.abstractmethod
+    async def list_persona_expression_assets(
+        self,
+        *,
+        persona_id: str,
+        scope: str,
+        enabled: bool = True,
+        limit: int = 10,
+    ) -> list[PersonaExpressionAsset]:
+        """List learned expression assets for one persona scope."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_persona_jargon_asset(
+        self,
+        *,
+        persona_id: str,
+        scope: str,
+        term: str,
+        meaning: str | None,
+        source_message_id: str,
+        score: float = 0.5,
+        approved: bool = False,
+        enabled: bool = True,
+    ) -> PersonaJargonAsset:
+        """Create or merge a learned jargon asset."""
+        ...
+
+    @abc.abstractmethod
+    async def list_persona_jargon_assets(
+        self,
+        *,
+        persona_id: str,
+        scope: str,
+        enabled: bool = True,
+        approved: bool | None = None,
+        limit: int = 10,
+    ) -> list[PersonaJargonAsset]:
+        """List learned jargon assets for one persona scope."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_persona_behavior_policy(
+        self,
+        *,
+        persona_id: str,
+        scope: str,
+        situation: str,
+        preferred_action: str,
+        avoid_action: str | None = None,
+        confidence: float = 0.5,
+        enabled: bool = True,
+    ) -> PersonaBehaviorPolicy:
+        """Create or merge a learned persona behavior policy."""
+        ...
+
+    @abc.abstractmethod
+    async def list_persona_behavior_policies(
+        self,
+        *,
+        persona_id: str,
+        scope: str,
+        enabled: bool = True,
+        limit: int = 10,
+    ) -> list[PersonaBehaviorPolicy]:
+        """List learned behavior policies for one persona scope."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_memory_fact(
+        self,
+        *,
+        person_id: str,
+        chat_id: str,
+        scope_id: str,
+        fact_text: str,
+        fact_type: str,
+        source_message_id: str,
+        evidence_message_ids: list[str] | None = None,
+        confidence: float = 0.6,
+        status: str = "active",
+        ttl_at: datetime.datetime | None = None,
+    ) -> tuple[MemoryFact, bool]:
+        """Create or merge a long-term memory fact."""
+        ...
+
+    @abc.abstractmethod
+    async def list_memory_facts(
+        self,
+        *,
+        person_id: str | None = None,
+        chat_ids: list[str] | None = None,
+        scope_id: str | None = None,
+        query: str | None = None,
+        status: str | None = "active",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[MemoryFact]:
+        """List memory facts with conservative scope filters."""
+        ...
+
+    @abc.abstractmethod
+    async def count_memory_facts(
+        self,
+        *,
+        person_id: str | None = None,
+        chat_ids: list[str] | None = None,
+        scope_id: str | None = None,
+        query: str | None = None,
+        status: str | None = "active",
+    ) -> int:
+        """Count memory facts with the same filters used for listing."""
+        ...
+
+    @abc.abstractmethod
+    async def get_memory_fact(self, fact_id: int) -> MemoryFact | None:
+        """Get one memory fact by internal ID."""
+        ...
+
+    @abc.abstractmethod
+    async def update_memory_fact(
+        self,
+        fact_id: int,
+        *,
+        fact_text: str | None = None,
+        fact_type: str | None = None,
+        confidence: float | None = None,
+        operator: str,
+        reason: str | None = None,
+    ) -> MemoryFact | None:
+        """Update editable fact fields and write an audit log."""
+        ...
+
+    @abc.abstractmethod
+    async def update_memory_fact_status(
+        self,
+        fact_id: int,
+        *,
+        status: str,
+        operator: str,
+        reason: str | None = None,
+    ) -> bool:
+        """Soft-delete or restore a memory fact and write an audit log."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_memory_profile(
+        self,
+        *,
+        person_id: str,
+        chat_scope: str,
+        profile_text: str,
+        is_override: bool = False,
+    ) -> MemoryProfile:
+        """Create or update an aggregated memory profile."""
+        ...
+
+    @abc.abstractmethod
+    async def get_memory_profile(
+        self,
+        person_id: str,
+        chat_scope: str,
+        *,
+        include_override: bool = True,
+    ) -> MemoryProfile | None:
+        """Get the active profile for one person and scope."""
+        ...
+
+    @abc.abstractmethod
+    async def list_memory_profiles(
+        self,
+        *,
+        person_id: str | None = None,
+        chat_scope: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[MemoryProfile]:
+        """List memory profiles for dashboard management."""
+        ...
+
+    @abc.abstractmethod
+    async def count_memory_profiles(
+        self,
+        *,
+        person_id: str | None = None,
+        chat_scope: str | None = None,
+    ) -> int:
+        """Count memory profiles for dashboard pagination."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_memory_episode(
+        self,
+        *,
+        episode_id: str,
+        chat_id: str,
+        scope_id: str,
+        title: str,
+        summary: str,
+        participant_ids: list[str] | None = None,
+        source_message_ids: list[str] | None = None,
+        status: str = "active",
+        start_at: datetime.datetime | None = None,
+        end_at: datetime.datetime | None = None,
+    ) -> MemoryEpisode:
+        """Create or update an event-style memory episode."""
+        ...
+
+    @abc.abstractmethod
+    async def list_memory_episodes(
+        self,
+        *,
+        chat_ids: list[str] | None = None,
+        scope_id: str | None = None,
+        query: str | None = None,
+        status: str = "active",
+        limit: int = 10,
+    ) -> list[MemoryEpisode]:
+        """List memory episodes inside the allowed retrieval scope."""
+        ...
+
+    @abc.abstractmethod
+    async def count_memory_episodes(
+        self,
+        *,
+        status: str | None = "active",
+    ) -> int:
+        """Count memory episodes by status."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_memory_scope_policy(
+        self,
+        *,
+        owner_scope_id: str,
+        target_scope_id: str,
+        sharing_mode: str = "group-shared",
+        enabled: bool = True,
+        operator: str = "memory_scope_policy",
+        reason: str | None = None,
+    ) -> MemoryScopePolicyRecord:
+        """Create or update an explicit memory sharing policy."""
+        ...
+
+    @abc.abstractmethod
+    async def list_memory_scope_policies(
+        self,
+        *,
+        owner_scope_id: str | None = None,
+        enabled: bool = True,
+        limit: int = 50,
+    ) -> list[MemoryScopePolicyRecord]:
+        """List explicit memory sharing policies."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_memory_tuning_task(
+        self,
+        *,
+        task_id: str,
+        task_type: str,
+        target_scope: str,
+        candidate_config: dict | None = None,
+        evaluation_result: dict | None = None,
+        status: str = "pending",
+    ) -> MemoryTuningTask:
+        """Create or update a memory tuning task result."""
+        ...
+
+    @abc.abstractmethod
+    async def list_memory_tuning_tasks(
+        self,
+        *,
+        target_scope: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[MemoryTuningTask]:
+        """List memory tuning tasks."""
+        ...
+
+    @abc.abstractmethod
+    async def insert_memory_operation_log(
+        self,
+        *,
+        operator: str,
+        target_type: str,
+        target_id: str,
+        action: str,
+        reason: str | None = None,
+        payload: dict | None = None,
+    ) -> MemoryOperationLog:
+        """Append an audit log record for a memory operation."""
+        ...
+
+    @abc.abstractmethod
+    async def list_memory_operation_logs(
+        self,
+        *,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[MemoryOperationLog]:
+        """List memory operation audit logs."""
+        ...
+
+    @abc.abstractmethod
+    async def count_memory_operation_logs(
+        self,
+        *,
+        target_type: str | None = None,
+        target_id: str | None = None,
+    ) -> int:
+        """Count memory operation audit logs."""
         ...
 
     @abc.abstractmethod

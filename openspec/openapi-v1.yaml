@@ -8,8 +8,8 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
-    grants bot and provider access.
+    persona, im, config, chat, kb, memory, data, file, plugin, mcp, skill. The
+    config scope also grants bot and provider access.
 servers:
   - url: http://localhost:6185
     description: Local AstrBot server
@@ -37,6 +37,7 @@ tags:
   - name: MCP
   - name: Skills
   - name: Knowledge Base
+  - name: Memory
   - name: Personas
   - name: Sessions
   - name: Conversations
@@ -2559,6 +2560,193 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/memory/facts:
+    get:
+      tags: [Memory]
+      summary: List long-term memory facts
+      operationId: listMemoryFacts
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: person_id
+          in: query
+          schema:
+            type: string
+        - name: chat_id
+          in: query
+          schema:
+            type: string
+        - name: scope_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, deleted, all]
+            default: active
+        - name: query
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+    post:
+      tags: [Memory]
+      summary: Create a long-term memory fact
+      operationId: createMemoryFact
+      x-astrbot-scope: memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryFactCreateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/facts/{fact_id}:
+    get:
+      tags: [Memory]
+      summary: Get a memory fact with operation logs
+      operationId: getMemoryFact
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/FactId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+    patch:
+      tags: [Memory]
+      summary: Update editable memory fact fields
+      operationId: updateMemoryFact
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/FactId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryFactPatchRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/facts/{fact_id}/delete:
+    post:
+      tags: [Memory]
+      summary: Soft-delete a memory fact
+      operationId: deleteMemoryFact
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/FactId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryFactActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/facts/{fact_id}/restore:
+    post:
+      tags: [Memory]
+      summary: Restore a soft-deleted memory fact
+      operationId: restoreMemoryFact
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/FactId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryFactActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/profiles:
+    get:
+      tags: [Memory]
+      summary: List aggregated memory profiles
+      operationId: listMemoryProfiles
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: person_id
+          in: query
+          schema:
+            type: string
+        - name: chat_scope
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/profiles/{person_id}/refresh:
+    post:
+      tags: [Memory]
+      summary: Refresh a memory profile asynchronously
+      operationId: refreshMemoryProfile
+      x-astrbot-scope: memory
+      parameters:
+        - name: person_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryProfileRefreshRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/operations:
+    get:
+      tags: [Memory]
+      summary: List memory operation audit logs
+      operationId: listMemoryOperations
+      x-astrbot-scope: memory
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: target_type
+          in: query
+          schema:
+            type: string
+        - name: target_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/memory/stats:
+    get:
+      tags: [Memory]
+      summary: Get memory subsystem stats
+      operationId: getMemoryStats
+      x-astrbot-scope: memory
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/personas/tree:
     get:
       tags: [Personas]
@@ -3867,6 +4055,12 @@ components:
       description: URL-encoded relative file path.
       schema:
         type: string
+    FactId:
+      name: fact_id
+      in: path
+      required: true
+      schema:
+        type: integer
     Filename:
       name: filename
       in: path
@@ -4087,6 +4281,8 @@ components:
                 im,
                 config,
                 chat,
+                kb,
+                memory,
                 data,
                 file,
                 plugin,
@@ -4101,6 +4297,8 @@ components:
               im,
               config,
               chat,
+              kb,
+              memory,
               data,
               file,
               plugin,
@@ -4672,6 +4870,67 @@ components:
         score_threshold:
           type: number
       additionalProperties: false
+
+    MemoryFactCreateRequest:
+      type: object
+      required: [person_id, chat_id, fact_text]
+      properties:
+        person_id:
+          type: string
+        chat_id:
+          type: string
+        scope_id:
+          type: string
+        fact_text:
+          type: string
+        fact_type:
+          type: string
+        source_message_id:
+          type: string
+        evidence_message_ids:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+      additionalProperties: true
+
+    MemoryFactPatchRequest:
+      type: object
+      properties:
+        fact_text:
+          type: string
+        fact_type:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+      additionalProperties: true
+
+    MemoryFactActionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+      additionalProperties: true
+
+    MemoryProfileRefreshRequest:
+      type: object
+      properties:
+        chat_scope:
+          type: string
+        scope_id:
+          type: string
+        chat_id:
+          type: string
+      additionalProperties: true
 
     PersonaRequest:
       type: object

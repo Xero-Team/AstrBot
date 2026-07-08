@@ -1,97 +1,73 @@
 {
   "title": "Долгосрочная память",
-  "subtitle": "Управление памятью вашего AI-помощника",
+  "subtitle": "Управление проверяемой памятью персонажа с удалением и восстановлением",
+  "stats": {
+    "title": "Состояние",
+    "activeFacts": "Активные факты",
+    "deletedFacts": "Удаленные факты",
+    "profiles": "Профили",
+    "queue": "Очередь записи",
+    "workerRunning": "Worker записи работает",
+    "workerStopped": "Worker записи остановлен"
+  },
   "memories": {
-    "title": "Список воспоминаний",
+    "title": "Факты памяти",
+    "id": "ID",
     "content": "Содержание",
-    "importance": "Важность",
-    "createTime": "Дата создания",
-    "lastAccess": "Последнее обращение",
-    "category": "Категория"
-  },
-  "categories": {
-    "personal": "Личное",
-    "preferences": "Предпочтения",
-    "conversations": "История диалогов",
-    "facts": "Факты",
-    "skills": "Навыки"
-  },
-  "importance": {
-    "high": "Высокая",
-    "medium": "Средняя",
-    "low": "Низкая"
-  },
-  "actions": {
-    "view": "Детали",
-    "edit": "Изменить",
-    "delete": "Удалить",
-    "pin": "Закрепить",
-    "unpin": "Открепить"
+    "person": "Пользователь",
+    "chat": "Чат",
+    "scope": "Scope",
+    "confidence": "Уверенность",
+    "status": "Статус",
+    "updatedAt": "Обновлено"
   },
   "filters": {
-    "all": "Все",
-    "category": "По категории",
-    "importance": "По важности",
-    "dateRange": "По периоду",
-    "title": "Фильтр",
-    "userIdLabel": "Фильтр по User ID",
-    "filterButton": "Применить",
-    "resetButton": "Сбросить",
-    "refreshButton": "Обновить граф"
+    "personId": "Person ID",
+    "chatId": "Chat ID",
+    "scopeId": "Scope ID",
+    "status": "Статус",
+    "query": "Поиск"
   },
-  "search": {
-    "title": "Поиск по памяти",
-    "userIdLabel": "ID пользователя",
-    "queryLabel": "Ключевое слово",
-    "searchButton": "Поиск",
-    "resultsTitle": "Результаты поиска",
-    "noResults": "Ничего не найдено",
-    "similarity": "Сходство",
-    "noTextContent": "Нет текста"
+  "status": {
+    "active": "Активно",
+    "deleted": "Удалено",
+    "all": "Все"
   },
-  "addMemory": {
-    "title": "Добавить данные в память",
-    "textLabel": "Текст воспоминания",
-    "userIdLabel": "ID пользователя",
-    "summarizeLabel": "Нужна суммаризация",
-    "addButton": "Добавить"
+  "actions": {
+    "title": "Действия",
+    "refresh": "Обновить",
+    "search": "Найти",
+    "view": "Детали",
+    "delete": "Удалить",
+    "restore": "Восстановить",
+    "cancel": "Отмена",
+    "close": "Закрыть"
   },
-  "nodeDetails": {
-    "title": "Детали узла",
-    "id": "ID",
-    "type": "Тип",
-    "name": "Имя",
-    "userId": "ID пользователя",
-    "timestamp": "Метка времени"
+  "profiles": {
+    "title": "Профили пользователей",
+    "refresh": "Обновить профиль"
   },
-  "graphStats": {
-    "title": "Статистика графа",
-    "nodeCount": "Узлов",
-    "edgeCount": "Связей"
+  "operations": {
+    "title": "Журнал операций"
   },
-  "factDialog": {
-    "title": "Факт из памяти",
-    "id": "ID",
-    "docId": "ID документа",
-    "createdAt": "Создано",
-    "updatedAt": "Обновлено",
-    "metadata": "Метаданные",
-    "metadataKey": "Ключ",
-    "metadataValue": "Значение",
-    "loading": "Загрузка...",
-    "close": "Закрыть",
-    "noValue": "нет",
-    "unknown": "неизвестно"
+  "detail": {
+    "title": "Детали памяти"
+  },
+  "confirm": {
+    "deleteTitle": "Мягко удалить эту память?",
+    "restoreTitle": "Восстановить эту память?",
+    "reason": "Причина"
   },
   "messages": {
-    "searchQueryRequired": "Пожалуйста, введите запрос",
-    "searchSuccess": "Найдено записей: {count}",
-    "searchNoResults": "В памяти ничего не найдено",
-    "searchError": "Ошибка поиска",
-    "addSuccess": "Данные успешно добавлены в память!",
-    "addError": "Не удалось добавить данные",
-    "factDetailsError": "Ошибка загрузки деталей",
-    "metadataParseError": "Не удалось разобрать метаданные",
-    "relationNoMemoryData": "У этой связи нет ассоциированных данных"
+    "emptyFacts": "Фактов памяти нет",
+    "emptyProfiles": "Профилей нет",
+    "emptyOperations": "Журнал операций пуст",
+    "loadFactsError": "Не удалось загрузить память",
+    "detailError": "Не удалось загрузить детали",
+    "deleteSuccess": "Память удалена",
+    "restoreSuccess": "Память восстановлена",
+    "actionError": "Операция не выполнена",
+    "refreshQueued": "Обновление профиля поставлено в очередь",
+    "refreshError": "Не удалось обновить профиль"
   }
 }

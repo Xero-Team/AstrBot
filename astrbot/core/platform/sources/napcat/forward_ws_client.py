@@ -1544,7 +1544,7 @@ class NapCatForwardWebSocketClient:
     ) -> dict[str, Any]:
         return self._build_action_payload(
             await self.call_action(
-                "send_group_notice",
+                "_send_group_notice",
                 group_id=str(group_id),
                 content=content,
                 pinned=float(pinned) if pinned is not None else 0.0,

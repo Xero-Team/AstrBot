@@ -48,7 +48,6 @@ class TestAstrBotCoreLifecycleInit:
         assert lifecycle.cron_manager is None
         assert lifecycle.temp_dir_cleaner is None
 
-
     def test_init_with_proxy(
         self,
         mock_log_broker,
@@ -178,6 +177,7 @@ class TestAstrBotCoreLifecycleTaskWrapper:
                 "error" in str(call).lower()
                 for call in mock_logger.error.call_args_list
             )
+
 
 class TestAstrBotCoreLifecycleErrorHandling:
     """Tests for AstrBotCoreLifecycle error handling."""
@@ -364,6 +364,12 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_persona_mgr = MagicMock()
         mock_persona_mgr.initialize = AsyncMock()
 
+        mock_persona_runtime_manager = MagicMock()
+        mock_persona_runtime_manager.initialize = AsyncMock()
+
+        mock_memory_manager = MagicMock()
+        mock_memory_manager.initialize = AsyncMock()
+
         mock_provider_manager = MagicMock()
         mock_provider_manager.initialize = AsyncMock()
 
@@ -406,6 +412,14 @@ class TestAstrBotCoreLifecycleInitialize:
             patch(
                 "astrbot.core.core_lifecycle.PersonaManager",
                 return_value=mock_persona_mgr,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.PersonaRuntimeManager",
+                return_value=mock_persona_runtime_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.MemoryManager",
+                return_value=mock_memory_manager,
             ),
             patch(
                 "astrbot.core.core_lifecycle.ProviderManager",
@@ -465,6 +479,13 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify persona manager initialized
         mock_persona_mgr.initialize.assert_awaited_once()
+        mock_persona_runtime_manager.initialize.assert_awaited_once()
+        mock_memory_manager.initialize.assert_awaited_once()
+        assert (
+            lifecycle.star_context.persona_runtime_manager
+            is mock_persona_runtime_manager
+        )
+        assert lifecycle.star_context.memory_manager is mock_memory_manager
 
         # Verify provider manager initialized
         mock_provider_manager.initialize.assert_awaited_once()

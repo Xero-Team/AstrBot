@@ -40,6 +40,8 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.memory import MemoryManager
+    from astrbot.core.persona_runtime import PersonaRuntimeManager
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
@@ -145,6 +147,8 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
+        self.persona_runtime_manager: PersonaRuntimeManager | None = None
+        self.memory_manager: MemoryManager | None = None
         self.registered_web_apis: list[RegisteredWebApi] = []
         self._register_tasks: list[Awaitable] = []
         self._star_manager = None

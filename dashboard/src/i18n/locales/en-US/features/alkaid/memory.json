@@ -1,97 +1,73 @@
 {
   "title": "Long-term Memory",
-  "subtitle": "AI assistant's long-term memory management",
+  "subtitle": "Manage auditable, deletable, and restorable persona memory",
+  "stats": {
+    "title": "Runtime",
+    "activeFacts": "Active facts",
+    "deletedFacts": "Deleted facts",
+    "profiles": "Profiles",
+    "queue": "Writeback queue",
+    "workerRunning": "Writeback worker running",
+    "workerStopped": "Writeback worker stopped"
+  },
   "memories": {
-    "title": "Memory List",
-    "content": "Memory Content",
-    "importance": "Importance Level",
-    "createTime": "Create Time",
-    "lastAccess": "Last Access",
-    "category": "Category"
-  },
-  "categories": {
-    "personal": "Personal Information",
-    "preferences": "Preference Settings",
-    "conversations": "Conversation History",
-    "facts": "Factual Information",
-    "skills": "Skill Knowledge"
-  },
-  "importance": {
-    "high": "High",
-    "medium": "Medium",
-    "low": "Low"
-  },
-  "actions": {
-    "view": "View Details",
-    "edit": "Edit",
-    "delete": "Delete",
-    "pin": "Pin",
-    "unpin": "Unpin"
+    "title": "Memory Facts",
+    "id": "ID",
+    "content": "Content",
+    "person": "Person",
+    "chat": "Chat",
+    "scope": "Scope",
+    "confidence": "Confidence",
+    "status": "Status",
+    "updatedAt": "Updated"
   },
   "filters": {
-    "all": "All",
-    "category": "By Category",
-    "importance": "By Importance",
-    "dateRange": "By Date Range",
-    "title": "Filters",
-    "userIdLabel": "Filter by User ID",
-    "filterButton": "Filter",
-    "resetButton": "Reset Filter",
-    "refreshButton": "Refresh Graph"
+    "personId": "Person ID",
+    "chatId": "Chat ID",
+    "scopeId": "Scope ID",
+    "status": "Status",
+    "query": "Search content"
   },
-  "search": {
-    "title": "Search Memory",
-    "userIdLabel": "User ID",
-    "queryLabel": "Enter keywords",
-    "searchButton": "Search",
-    "resultsTitle": "Search Results",
-    "noResults": "No relevant memory content found",
-    "similarity": "Relevance",
-    "noTextContent": "No text content"
+  "status": {
+    "active": "Active",
+    "deleted": "Deleted",
+    "all": "All"
   },
-  "addMemory": {
-    "title": "Add Memory Data",
-    "textLabel": "Enter text content",
-    "userIdLabel": "User ID",
-    "summarizeLabel": "Need summary",
-    "addButton": "Add Data"
+  "actions": {
+    "title": "Actions",
+    "refresh": "Refresh",
+    "search": "Search",
+    "view": "View details",
+    "delete": "Delete",
+    "restore": "Restore",
+    "cancel": "Cancel",
+    "close": "Close"
   },
-  "nodeDetails": {
-    "title": "Node Details",
-    "id": "ID",
-    "type": "Type",
-    "name": "Name",
-    "userId": "User ID",
-    "timestamp": "Timestamp"
+  "profiles": {
+    "title": "Person Profiles",
+    "refresh": "Refresh profile"
   },
-  "graphStats": {
-    "title": "Graph Statistics",
-    "nodeCount": "Node Count",
-    "edgeCount": "Edge Count"
+  "operations": {
+    "title": "Operation Log"
   },
-  "factDialog": {
-    "title": "Memory Fact",
-    "id": "ID",
-    "docId": "Document ID",
-    "createdAt": "Created At",
-    "updatedAt": "Updated At",
-    "metadata": "Metadata",
-    "metadataKey": "Key",
-    "metadataValue": "Value",
-    "loading": "Loading...",
-    "close": "Close",
-    "noValue": "None",
-    "unknown": "Unknown"
+  "detail": {
+    "title": "Memory Detail"
+  },
+  "confirm": {
+    "deleteTitle": "Soft-delete this memory?",
+    "restoreTitle": "Restore this memory?",
+    "reason": "Reason"
   },
   "messages": {
-    "searchQueryRequired": "Please enter search keywords",
-    "searchSuccess": "Found {count} relevant memories",
-    "searchNoResults": "No relevant memory content found",
-    "searchError": "Search failed",
-    "addSuccess": "Memory data added successfully!",
-    "addError": "Failed to add memory data",
-    "factDetailsError": "Failed to get memory details",
-    "metadataParseError": "Unable to parse metadata",
-    "relationNoMemoryData": "This relation has no associated memory data"
+    "emptyFacts": "No memory facts",
+    "emptyProfiles": "No person profiles",
+    "emptyOperations": "No operation logs",
+    "loadFactsError": "Failed to load memories",
+    "detailError": "Failed to load memory detail",
+    "deleteSuccess": "Memory deleted",
+    "restoreSuccess": "Memory restored",
+    "actionError": "Operation failed",
+    "refreshQueued": "Profile refresh queued",
+    "refreshError": "Profile refresh failed"
   }
 }

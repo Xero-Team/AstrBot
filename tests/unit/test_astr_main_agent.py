@@ -1,7 +1,6 @@
 """Tests for astr_main_agent module."""
 
 import datetime
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -148,7 +147,7 @@ def test_append_system_reminders_includes_weekday(mock_event):
         8,
         12,
         34,
-        tzinfo=datetime.timezone.utc,
+        tzinfo=datetime.UTC,
     )
 
     class FixedDateTime(datetime.datetime):
@@ -418,51 +417,211 @@ class TestApplyKb:
 
         assert req.system_prompt == "System"
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("prompt", ["", "   \n\t"])
-    async def test_apply_kb_blank_prompt(self, prompt, mock_event, mock_context):
-        """Test applying knowledge base when prompt is blank."""
-        module = ama
-        req = ProviderRequest(prompt=prompt, system_prompt="System")
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, kb_agentic_mode=False
+
+@pytest.mark.asyncio
+async def test_persona_runtime_and_memory_context_are_extra_user_parts(
+    mock_event,
+    mock_context,
+):
+    req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
+    req.system_prompt = ""
+    mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+        return_value=(
+            "persona-a",
+            {
+                "name": "persona-a",
+                "prompt": "Stable seed.",
+                "tools": [],
+                "skills": [],
+                "_begin_dialogs_processed": [],
+                "custom_error_message": None,
+            },
+            None,
+            False,
         )
-        retrieve = AsyncMock(return_value="KB result")
+    )
+    tool_mgr = MagicMock()
+    tool_mgr.get_full_tool_set.return_value = ToolSet()
+    mock_context.get_llm_tool_manager.return_value = tool_mgr
 
-        with patch("astrbot.core.astr_main_agent.retrieve_knowledge_base", retrieve):
-            await module._apply_kb(mock_event, req, mock_context, config)
+    class RuntimeManager:
+        async def inject_context(self, *, req, persona_id, umo):
+            req.extra_user_content_parts.append(
+                ama.TextPart(
+                    text=f"<runtime>{persona_id}:{umo}</runtime>"
+                ).mark_as_temp()
+            )
 
-        retrieve.assert_not_awaited()
-        assert req.system_prompt == "System"
+    class MemoryManager:
+        async def inject_context(self, *, req, event, query=None):
+            req.extra_user_content_parts.append(
+                ama.TextPart(text=f"<memory>{query}</memory>").mark_as_temp()
+            )
 
-    @pytest.mark.asyncio
-    async def test_apply_kb_no_result(self, mock_event, mock_context):
-        """Test applying knowledge base when no result is returned."""
-        module = ama
-        req = ProviderRequest(prompt="test", system_prompt="System")
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, kb_agentic_mode=False
+    mock_context.persona_runtime_manager = RuntimeManager()
+    mock_context.memory_manager = MemoryManager()
+
+    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+    assert "Stable seed." in req.system_prompt
+    assert "<runtime>" not in req.system_prompt
+    assert "<memory>" not in req.system_prompt
+    texts = [part.text for part in req.extra_user_content_parts]
+    assert texts == [
+        f"<runtime>persona-a:{mock_event.unified_msg_origin}</runtime>",
+        "<memory>hello</memory>",
+    ]
+    assert all(part._no_save for part in req.extra_user_content_parts)
+
+
+
+@pytest.mark.asyncio
+async def test_memory_retrieval_tools_are_available_for_default_persona(
+    mock_event,
+    mock_context,
+):
+    req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
+    tool_mgr = MagicMock()
+    tool_mgr.get_full_tool_set.return_value = ToolSet()
+    tool_mgr.get_builtin_tool.side_effect = lambda cls: cls()
+    mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+    class MemoryManager:
+        async def inject_context(self, *, req, event, query=None):
+            return None
+
+    mock_context.memory_manager = MemoryManager()
+
+    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+    assert req.func_tool is not None
+    assert {
+        "search_memory",
+        "get_person_profile",
+        "query_episode",
+        "maintain_memory",
+    }.issubset(set(req.func_tool.names()))
+
+
+@pytest.mark.asyncio
+async def test_memory_retrieval_tools_respect_explicit_empty_persona_tools(
+    mock_event,
+    mock_context,
+):
+    req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
+    mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+        return_value=(
+            "persona-no-tools",
+            {
+                "name": "persona-no-tools",
+                "prompt": "Stable seed.",
+                "tools": [],
+                "skills": [],
+                "_begin_dialogs_processed": [],
+                "custom_error_message": None,
+            },
+            None,
+            False,
         )
+    )
+    tool_mgr = MagicMock()
+    tool_mgr.get_full_tool_set.return_value = ToolSet()
+    mock_context.get_llm_tool_manager.return_value = tool_mgr
 
-        with patch(
-            "astrbot.core.astr_main_agent.retrieve_knowledge_base",
-            AsyncMock(return_value=None),
-        ):
-            await module._apply_kb(mock_event, req, mock_context, config)
+    class MemoryManager:
+        async def inject_context(self, *, req, event, query=None):
+            return None
 
-        assert req.system_prompt == "System"
+    mock_context.memory_manager = MemoryManager()
 
-    @pytest.mark.asyncio
-    async def test_apply_kb_with_existing_tools(self, mock_event, mock_context):
-        """Test applying knowledge base with existing toolset."""
-        module = ama
-        existing_tools = ToolSet()
-        req = ProviderRequest(prompt="test", func_tool=existing_tools)
-        config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
+    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
+    assert req.func_tool is not None
+    assert req.func_tool.names() == []
+
+
+@pytest.mark.asyncio
+async def test_memory_retrieval_tool_can_be_enabled_by_explicit_persona_tool(
+    mock_event,
+    mock_context,
+):
+    req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
+    mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+        return_value=(
+            "persona-memory-tool",
+            {
+                "name": "persona-memory-tool",
+                "prompt": "Stable seed.",
+                "tools": ["search_memory"],
+                "skills": [],
+                "_begin_dialogs_processed": [],
+                "custom_error_message": None,
+            },
+            None,
+            False,
+        )
+    )
+    tool_mgr = MagicMock()
+    tool_mgr.get_tool.side_effect = lambda name: (
+        ama.SearchMemoryTool() if name == "search_memory" else None
+    )
+    mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+    class MemoryManager:
+        async def inject_context(self, *, req, event, query=None):
+            return None
+
+    mock_context.memory_manager = MemoryManager()
+
+    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+    assert req.func_tool is not None
+    assert req.func_tool.names() == ["search_memory"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prompt", ["", "   \n\t"])
+async def test_apply_kb_blank_prompt(prompt, mock_event, mock_context):
+    """Test applying knowledge base when prompt is blank."""
+    module = ama
+    req = ProviderRequest(prompt=prompt, system_prompt="System")
+    config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
+    retrieve = AsyncMock(return_value="KB result")
+
+    with patch("astrbot.core.astr_main_agent.retrieve_knowledge_base", retrieve):
         await module._apply_kb(mock_event, req, mock_context, config)
 
-        assert req.func_tool is not None
+    retrieve.assert_not_awaited()
+    assert req.system_prompt == "System"
+
+
+@pytest.mark.asyncio
+async def test_apply_kb_no_result(mock_event, mock_context):
+    """Test applying knowledge base when no result is returned."""
+    module = ama
+    req = ProviderRequest(prompt="test", system_prompt="System")
+    config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
+
+    with patch(
+        "astrbot.core.astr_main_agent.retrieve_knowledge_base",
+        AsyncMock(return_value=None),
+    ):
+        await module._apply_kb(mock_event, req, mock_context, config)
+
+    assert req.system_prompt == "System"
+
+
+@pytest.mark.asyncio
+async def test_apply_kb_with_existing_tools(mock_event, mock_context):
+    """Test applying knowledge base with existing toolset."""
+    module = ama
+    existing_tools = ToolSet()
+    req = ProviderRequest(prompt="test", func_tool=existing_tools)
+    config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
+
+    await module._apply_kb(mock_event, req, mock_context, config)
+
+    assert req.func_tool is not None
 
 
 class TestBuiltinToolInjection:
@@ -2427,9 +2586,7 @@ class TestApplySandboxTools:
         assert "send_to_user=true" in req.system_prompt
         assert "focused and empty or safe to append" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_neo_adds_path_rule(
-        self, mock_context
-    ):
+    def test_apply_sandbox_tools_with_shipyard_neo_adds_path_rule(self, mock_context):
         """Test Shipyard Neo sandbox guidance adds workspace path rule."""
         module = ama
         config = module.MainAgentBuildConfig(

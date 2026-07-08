@@ -54,7 +54,7 @@ export type TotpSetupRequest = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<'bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill'>;
+    scopes?: Array<'bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'kb' | 'memory' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill'>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -352,6 +352,39 @@ export type KnowledgeRetrieveRequest = {
     score_threshold?: number;
 };
 
+export type MemoryFactCreateRequest = {
+    person_id: string;
+    chat_id: string;
+    scope_id?: string;
+    fact_text: string;
+    fact_type?: string;
+    source_message_id?: string;
+    evidence_message_ids?: Array<string>;
+    confidence?: number;
+    reason?: string;
+    [key: string]: unknown;
+};
+
+export type MemoryFactPatchRequest = {
+    fact_text?: string;
+    fact_type?: string;
+    confidence?: number;
+    reason?: string;
+    [key: string]: unknown;
+};
+
+export type MemoryFactActionRequest = {
+    reason?: string;
+    [key: string]: unknown;
+};
+
+export type MemoryProfileRefreshRequest = {
+    chat_scope?: string;
+    scope_id?: string;
+    chat_id?: string;
+    [key: string]: unknown;
+};
+
 export type PersonaRequest = {
     persona_id: string;
     system_prompt: string;
@@ -565,6 +598,8 @@ export type DocumentId = string;
  * URL-encoded relative file path.
  */
 export type FilePath = string;
+
+export type FactId = number;
 
 export type Filename = string;
 
@@ -3531,6 +3566,194 @@ export type GetKnowledgeTaskResponses = {
 };
 
 export type GetKnowledgeTaskResponse = GetKnowledgeTaskResponses[keyof GetKnowledgeTaskResponses];
+
+export type ListMemoryFactsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        page?: number;
+        page_size?: number;
+        person_id?: string;
+        chat_id?: string;
+        scope_id?: string;
+        status?: 'active' | 'deleted' | 'all';
+        query?: string;
+    };
+    url: '/api/v1/memory/facts';
+};
+
+export type ListMemoryFactsResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type ListMemoryFactsResponse = ListMemoryFactsResponses[keyof ListMemoryFactsResponses];
+
+export type CreateMemoryFactData = {
+    body: MemoryFactCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/memory/facts';
+};
+
+export type CreateMemoryFactResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type CreateMemoryFactResponse = CreateMemoryFactResponses[keyof CreateMemoryFactResponses];
+
+export type GetMemoryFactData = {
+    body?: never;
+    path: {
+        fact_id: number;
+    };
+    query?: never;
+    url: '/api/v1/memory/facts/{fact_id}';
+};
+
+export type GetMemoryFactResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type GetMemoryFactResponse = GetMemoryFactResponses[keyof GetMemoryFactResponses];
+
+export type UpdateMemoryFactData = {
+    body: MemoryFactPatchRequest;
+    path: {
+        fact_id: number;
+    };
+    query?: never;
+    url: '/api/v1/memory/facts/{fact_id}';
+};
+
+export type UpdateMemoryFactResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type UpdateMemoryFactResponse = UpdateMemoryFactResponses[keyof UpdateMemoryFactResponses];
+
+export type DeleteMemoryFactData = {
+    body?: MemoryFactActionRequest;
+    path: {
+        fact_id: number;
+    };
+    query?: never;
+    url: '/api/v1/memory/facts/{fact_id}/delete';
+};
+
+export type DeleteMemoryFactResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type DeleteMemoryFactResponse = DeleteMemoryFactResponses[keyof DeleteMemoryFactResponses];
+
+export type RestoreMemoryFactData = {
+    body?: MemoryFactActionRequest;
+    path: {
+        fact_id: number;
+    };
+    query?: never;
+    url: '/api/v1/memory/facts/{fact_id}/restore';
+};
+
+export type RestoreMemoryFactResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type RestoreMemoryFactResponse = RestoreMemoryFactResponses[keyof RestoreMemoryFactResponses];
+
+export type ListMemoryProfilesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        page?: number;
+        page_size?: number;
+        person_id?: string;
+        chat_scope?: string;
+    };
+    url: '/api/v1/memory/profiles';
+};
+
+export type ListMemoryProfilesResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type ListMemoryProfilesResponse = ListMemoryProfilesResponses[keyof ListMemoryProfilesResponses];
+
+export type RefreshMemoryProfileData = {
+    body?: MemoryProfileRefreshRequest;
+    path: {
+        person_id: string;
+    };
+    query?: never;
+    url: '/api/v1/memory/profiles/{person_id}/refresh';
+};
+
+export type RefreshMemoryProfileResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type RefreshMemoryProfileResponse = RefreshMemoryProfileResponses[keyof RefreshMemoryProfileResponses];
+
+export type ListMemoryOperationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        page?: number;
+        page_size?: number;
+        target_type?: string;
+        target_id?: string;
+    };
+    url: '/api/v1/memory/operations';
+};
+
+export type ListMemoryOperationsResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type ListMemoryOperationsResponse = ListMemoryOperationsResponses[keyof ListMemoryOperationsResponses];
+
+export type GetMemoryStatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/memory/stats';
+};
+
+export type GetMemoryStatsResponses = {
+    /**
+     * Standard AstrBot success response
+     */
+    200: SuccessEnvelope;
+};
+
+export type GetMemoryStatsResponse = GetMemoryStatsResponses[keyof GetMemoryStatsResponses];
 
 export type GetPersonaTreeData = {
     body?: never;

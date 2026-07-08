@@ -16,6 +16,7 @@ from .files import router as files_router
 from .knowledge_bases import router as knowledge_bases_router
 from .live_chat import router as live_chat_router
 from .logs import router as logs_router
+from .memory import router as memory_router
 from .open_api import router as open_api_router
 from .personas import router as personas_router
 from .platform import router as platform_router
@@ -47,6 +48,7 @@ def build_api_router() -> APIRouter:
     router.include_router(cron_router)
     router.include_router(files_router)
     router.include_router(knowledge_bases_router)
+    router.include_router(memory_router)
     router.include_router(extensions_router)
     router.include_router(skills_router)
     router.include_router(sessions_router)

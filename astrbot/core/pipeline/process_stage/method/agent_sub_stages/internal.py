@@ -534,6 +534,53 @@ class InternalAgentSubStage(Stage):
             history=message_to_save,
             token_usage=token_usage,
         )
+        self._schedule_runtime_memory_postprocess(
+            event,
+            req,
+            llm_response.completion_text,
+        )
+
+    def _schedule_runtime_memory_postprocess(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        assistant_text: str,
+    ) -> None:
+        plugin_context = getattr(
+            getattr(getattr(self, "ctx", None), "plugin_manager", None),
+            "context",
+            None,
+        )
+        if plugin_context is None:
+            return
+
+        persona_runtime_manager = getattr(
+            plugin_context,
+            "persona_runtime_manager",
+            None,
+        )
+        memory_manager = getattr(plugin_context, "memory_manager", None)
+        if persona_runtime_manager is None and memory_manager is None:
+            return
+
+        try:
+            create_tracked_task(
+                _BACKGROUND_TASKS,
+                _run_runtime_memory_postprocess(
+                    event=event,
+                    req=req,
+                    assistant_text=assistant_text,
+                    persona_runtime_manager=persona_runtime_manager,
+                    memory_manager=memory_manager,
+                ),
+                name="runtime_memory_postprocess",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Failed to schedule runtime/memory postprocess: %s",
+                exc,
+                exc_info=True,
+            )
 
 
 # We prevent AstrBot from connecting to known malicious hosts.
@@ -587,3 +634,46 @@ async def _record_internal_agent_stats(
         )
     except Exception as e:
         logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+
+
+async def _run_runtime_memory_postprocess(
+    *,
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    assistant_text: str,
+    persona_runtime_manager,
+    memory_manager,
+) -> None:
+    conversation_id = req.conversation.cid if req.conversation else None
+    if persona_runtime_manager is not None:
+        persona_id = event.get_extra("selected_persona_id")
+        if isinstance(persona_id, str) and persona_id and persona_id != "[%None]":
+            try:
+                await persona_runtime_manager.process_turn(
+                    event=event,
+                    persona_id=persona_id,
+                    conversation_id=conversation_id,
+                    assistant_text=assistant_text,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "Persona runtime postprocess failed for umo=%s: %s",
+                    event.unified_msg_origin,
+                    exc,
+                    exc_info=True,
+                )
+
+    if memory_manager is not None:
+        try:
+            await memory_manager.enqueue_turn(
+                event=event,
+                conversation_id=conversation_id,
+                assistant_text=assistant_text,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Memory writeback enqueue failed for umo=%s: %s",
+                event.unified_msg_origin,
+                exc,
+                exc_info=True,
+            )

@@ -1,10 +1,19 @@
 """Tokenization helpers shared by sparse retrieval indexes."""
 
 import re
+import warnings
 from pathlib import Path
 from re import Pattern
 
-import jieba
+with warnings.catch_warnings():
+    # Python 3.14 raises SyntaxWarning for jieba's legacy non-raw regex strings.
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*invalid escape sequence.*",
+        category=SyntaxWarning,
+        module=r"jieba(\..*)?",
+    )
+    import jieba
 
 _TERM_PATTERN: Pattern[str] = re.compile(r"\w", re.UNICODE)
 

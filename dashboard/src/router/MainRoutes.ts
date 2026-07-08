@@ -123,6 +123,31 @@ const MainRoutes = {
         },
       ],
     },
+    {
+      name: 'Alkaid',
+      path: '/alkaid',
+      component: () => import('@/views/AlkaidPage.vue'),
+      children: [
+        {
+          path: '',
+          redirect: '/alkaid/long-term-memory',
+        },
+        {
+          path: 'knowledge-base',
+          redirect: '/knowledge-base',
+        },
+        {
+          name: 'AlkaidLongTermMemory',
+          path: 'long-term-memory',
+          component: () => import('@/views/alkaid/LongTermMemoryPage.vue'),
+        },
+        {
+          name: 'AlkaidOther',
+          path: 'other',
+          component: () => import('@/views/alkaid/Other.vue'),
+        },
+      ],
+    },
 
     {
       name: 'Chat',

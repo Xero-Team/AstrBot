@@ -53,6 +53,7 @@ ALL_OPEN_API_SCOPES = (
     "config",
     "chat",
     "kb",
+    "memory",
     "data",
     "file",
     "plugin",

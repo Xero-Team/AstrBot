@@ -27,6 +27,12 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.memory.tools import (
+    GetPersonProfileTool,
+    MaintainMemoryTool,
+    QueryEpisodeTool,
+    SearchMemoryTool,
+)
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -454,6 +460,10 @@ def _filter_skills_for_current_config(
     return filtered
 
 
+def _get_context_runtime_attr(plugin_context: Context, name: str):
+    return getattr(plugin_context, "__dict__", {}).get(name)
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -483,14 +493,43 @@ async def _ensure_persona_and_skills(
     if req.system_prompt is None:
         req.system_prompt = ""
 
+    selected_persona_id = persona_id
     if persona:
+        selected_persona_id = persona["name"]
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
     elif use_webchat_special_default:
+        selected_persona_id = "_chatui_default_"
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+
+    if selected_persona_id and selected_persona_id != "[%None]":
+        event.set_extra("selected_persona_id", selected_persona_id)
+        persona_runtime_manager = _get_context_runtime_attr(
+            plugin_context, "persona_runtime_manager"
+        )
+        if persona_runtime_manager is not None:
+            try:
+                await persona_runtime_manager.inject_context(
+                    req=req,
+                    persona_id=selected_persona_id,
+                    umo=event.unified_msg_origin,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to inject persona runtime context: %s", exc)
+
+    memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
+    if memory_manager is not None:
+        try:
+            await memory_manager.inject_context(
+                req=req,
+                event=event,
+                query=req.prompt,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to inject memory context: %s", exc)
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
@@ -544,6 +583,13 @@ async def _ensure_persona_and_skills(
         req.func_tool = persona_toolset
     else:
         req.func_tool.merge(persona_toolset)
+    if memory_manager is not None and (not persona or persona.get("tools") is None):
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(tmgr.get_builtin_tool(SearchMemoryTool))
+        req.func_tool.add_tool(tmgr.get_builtin_tool(GetPersonProfileTool))
+        req.func_tool.add_tool(tmgr.get_builtin_tool(QueryEpisodeTool))
+        req.func_tool.add_tool(tmgr.get_builtin_tool(MaintainMemoryTool))
 
     # sub agents integration
     orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})

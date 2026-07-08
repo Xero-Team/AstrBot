@@ -84,6 +84,11 @@ const sidebarItem: menu[] = [
     to: '/persona',
   },
   {
+    title: 'core.navigation.alkaidMemory',
+    icon: 'mdi-dots-hexagon',
+    to: '/alkaid/long-term-memory',
+  },
+  {
     title: 'core.navigation.groups.more',
     icon: 'mdi-dots-horizontal',
     children: [

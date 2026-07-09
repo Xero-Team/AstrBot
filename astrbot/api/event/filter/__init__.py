@@ -1,3 +1,4 @@
+from astrbot.core.star.filter.command import option
 from astrbot.core.star.filter.custom_filter import CustomFilter
 from astrbot.core.star.filter.event_message_type import (
     EventMessageType,
@@ -53,6 +54,7 @@ __all__ = [
     "custom_filter",
     "event_message_type",
     "llm_tool",
+    "option",
     "on_agent_begin",
     "on_agent_done",
     "on_astrbot_loaded",

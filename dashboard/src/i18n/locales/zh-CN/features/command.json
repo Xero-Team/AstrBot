@@ -57,6 +57,7 @@
       "module": "模块路径",
       "originalCommand": "原始指令",
       "effectiveCommand": "生效指令",
+      "signature": "调用签名",
       "parentGroup": "所属指令组",
       "subCommands": "子指令列表",
       "aliases": "别名",

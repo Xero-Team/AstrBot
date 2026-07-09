@@ -57,6 +57,7 @@
       "module": "Путь к модулю",
       "originalCommand": "Исходная команда",
       "effectiveCommand": "Действующая команда",
+      "signature": "Сигнатура вызова",
       "parentGroup": "Родительская группа",
       "subCommands": "Под-команды",
       "aliases": "Алиасы (Синонимы)",

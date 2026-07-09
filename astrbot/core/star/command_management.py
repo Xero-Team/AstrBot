@@ -32,6 +32,8 @@ class CommandDescriptor:
     parent_group_handler: str = ""
     original_command: str | None = None
     effective_command: str | None = None
+    signature: str = ""
+    display_signature: str = ""
     aliases: list[str] = field(default_factory=list)
     permission: str = "everyone"
     enabled: bool = True
@@ -326,6 +328,12 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         parent_group_handler=parent_group_handler,
         original_command=original_command,
         effective_command=effective_command,
+        signature=_build_command_signature(filter_ref, effective_command),
+        display_signature=_build_command_signature(
+            filter_ref,
+            effective_command,
+            include_aliases=True,
+        ),
         aliases=sorted(getattr(filter_ref, "alias", set())),
         permission=_determine_permission(handler),
         enabled=handler.enabled,
@@ -398,12 +406,26 @@ def _compose_command(parent_signature: str, fragment: str | None) -> str:
     return f"{parent_signature} {fragment}"
 
 
+def _build_command_signature(
+    filter_ref: CommandFilter | CommandGroupFilter | None,
+    command_name: str | None,
+    include_aliases: bool = False,
+) -> str:
+    if filter_ref is None:
+        return command_name or ""
+
+    return filter_ref.format_invocation(
+        command_name=command_name,
+        include_aliases=include_aliases,
+    )
+
+
 def _bind_descriptor_with_config(
     descriptor: CommandDescriptor,
     config: CommandConfig,
 ) -> None:
-    _apply_config_to_descriptor(descriptor, config)
     _apply_config_to_runtime(descriptor, config)
+    _apply_config_to_descriptor(descriptor, config)
 
 
 def _apply_config_to_descriptor(
@@ -422,11 +444,25 @@ def _apply_config_to_descriptor(
         descriptor.parent_signature,
         new_fragment,
     )
+    descriptor.signature = _build_command_signature(
+        descriptor.filter_ref,
+        descriptor.effective_command,
+    )
+    descriptor.display_signature = _build_command_signature(
+        descriptor.filter_ref,
+        descriptor.effective_command,
+        include_aliases=True,
+    )
 
     extra = config.extra_data or {}
     resolved_aliases = extra.get("resolved_aliases")
     if isinstance(resolved_aliases, list):
         descriptor.aliases = [str(x) for x in resolved_aliases if str(x).strip()]
+        descriptor.display_signature = _build_command_signature(
+            descriptor.filter_ref,
+            descriptor.effective_command,
+            include_aliases=True,
+        )
 
 
 def _apply_config_to_runtime(
@@ -435,8 +471,9 @@ def _apply_config_to_runtime(
 ) -> None:
     descriptor.handler.enabled = config.enabled
     if descriptor.filter_ref:
-        if descriptor.current_fragment:
-            _set_filter_fragment(descriptor.filter_ref, descriptor.current_fragment)
+        new_fragment = config.resolved_command or descriptor.current_fragment
+        if new_fragment:
+            _set_filter_fragment(descriptor.filter_ref, new_fragment)
         extra = config.extra_data or {}
         resolved_aliases = extra.get("resolved_aliases")
         if isinstance(resolved_aliases, list):
@@ -525,6 +562,8 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "original_command": desc.original_command,
         "current_fragment": desc.current_fragment,
         "effective_command": desc.effective_command,
+        "signature": desc.signature,
+        "display_signature": desc.display_signature,
         "aliases": desc.aliases,
         "permission": desc.permission,
         "enabled": desc.enabled,

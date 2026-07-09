@@ -1,5 +1,6 @@
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.command_parser import tokenize_command_args
 
 from . import HandlerFilter
 from .command import CommandFilter
@@ -32,6 +33,18 @@ class CommandGroupFilter(HandlerFilter):
 
     def add_custom_filter(self, custom_filter: CustomFilter) -> None:
         self.custom_filter_list.append(custom_filter)
+
+    def format_invocation(
+        self,
+        command_name: str | None = None,
+        include_aliases: bool = False,
+    ) -> str:
+        display_name = command_name or self.get_complete_command_names()[0]
+        result = display_name
+        if include_aliases and self.alias:
+            aliases = ", ".join(sorted(self.alias))
+            result += f" [aliases: {aliases}]"
+        return result
 
     def get_complete_command_names(self) -> list[str]:
         """遍历父节点获取完整的指令名。
@@ -72,11 +85,8 @@ class CommandGroupFilter(HandlerFilter):
                 if event and cfg:
                     custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
                 if custom_filter_pass:
-                    cmd_th = sub_filter.print_types()
-                    line = f"{prefix}├── {sub_filter.command_name}"
-                    if cmd_th:
-                        line += f" ({cmd_th})"
-                    else:
+                    line = f"{prefix}├── {sub_filter.format_invocation(include_aliases=True)}"
+                    if not sub_filter.print_types():
                         line += " (无参数指令)"
 
                     if sub_filter.handler_md and sub_filter.handler_md.desc:
@@ -88,7 +98,9 @@ class CommandGroupFilter(HandlerFilter):
                 if event and cfg:
                     custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
                 if custom_filter_pass:
-                    parts.append(f"{prefix}├── {sub_filter.group_name}\n")
+                    parts.append(
+                        f"{prefix}├── {sub_filter.format_invocation(include_aliases=True)}\n"
+                    )
                     parts.append(
                         sub_filter.print_cmd_tree(
                             sub_filter.sub_command_filters,
@@ -107,10 +119,19 @@ class CommandGroupFilter(HandlerFilter):
         return True
 
     def startswith(self, message_str: str) -> bool:
-        return message_str.startswith(tuple(self.get_complete_command_names()))
+        message_tokens = tokenize_command_args(message_str.strip())
+        for full_cmd in self.get_complete_command_names():
+            command_tokens = full_cmd.split(" ")
+            if message_tokens[: len(command_tokens)] == command_tokens:
+                return True
+        return False
 
     def equals(self, message_str: str) -> bool:
-        return message_str in self.get_complete_command_names()
+        message_tokens = tokenize_command_args(message_str.strip())
+        for full_cmd in self.get_complete_command_names():
+            if message_tokens == full_cmd.split(" "):
+                return True
+        return False
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
@@ -120,7 +141,8 @@ class CommandGroupFilter(HandlerFilter):
         if not self.custom_filter_ok(event, cfg):
             return False
 
-        if self.equals(event.message_str.strip()):
+        message_str = event.message_str.strip()
+        if self.equals(message_str):
             tree = (
                 self.group_name
                 + "\n"
@@ -130,4 +152,4 @@ class CommandGroupFilter(HandlerFilter):
                 f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree,
             )
 
-        return self.startswith(event.message_str)
+        return self.startswith(message_str)

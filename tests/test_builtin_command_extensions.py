@@ -1,12 +1,22 @@
 from types import SimpleNamespace
+from typing import Annotated
 
 import pytest
 
 from astrbot.builtin_stars.builtin_commands.commands.help import HelpCommand
 from astrbot.builtin_stars.builtin_commands.commands.llm import LLMCommands
 from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaCommands
+from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.star.filter.command import CommandFilter, option
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.star import StarMetadata, star_map
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 
 
 class DummyEvent:
@@ -110,6 +120,86 @@ async def test_help_command_lists_rewritten_builtin_extension_commands(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_plugin_help_lists_command_signatures_and_aliases():
+    original_handlers = list(star_handlers_registry)
+    original_star_map = dict(star_map)
+
+    star_handlers_registry.clear()
+    star_map.clear()
+
+    try:
+        plugin = StarMetadata(
+            name="demo",
+            author="Tester",
+            version="1.2.3",
+            module_path="plugin.demo",
+            activated=True,
+        )
+        star_map["plugin.demo"] = plugin
+
+        async def greet(
+            self,
+            event,
+            name: str,
+            force: Annotated[bool, option("--force", "-f")] = False,
+        ) -> None: ...
+
+        greet.__module__ = "plugin.demo"
+        greet_handler = StarHandlerMetadata(
+            event_type=EventType.AdapterMessageEvent,
+            handler_full_name="plugin.demo_greet",
+            handler_name="greet",
+            handler_module_path="plugin.demo",
+            handler=greet,
+            event_filters=[],
+            desc="Greet someone",
+        )
+        greet_filter = CommandFilter("greet", alias={"hello"})
+        greet_filter.init_handler_md(greet_handler)
+        greet_handler.event_filters.append(greet_filter)
+        star_handlers_registry.append(greet_handler)
+
+        async def tools(self, event) -> None: ...
+
+        tools.__module__ = "plugin.demo"
+        tools_handler = StarHandlerMetadata(
+            event_type=EventType.AdapterMessageEvent,
+            handler_full_name="plugin.demo_tools",
+            handler_name="tools",
+            handler_module_path="plugin.demo",
+            handler=tools,
+            event_filters=[],
+            desc="Tool commands",
+        )
+        tools_handler.event_filters.append(CommandGroupFilter("tools", alias={"t"}))
+        star_handlers_registry.append(tools_handler)
+
+        context = SimpleNamespace(
+            get_registered_star=lambda plugin_name: (
+                plugin if plugin_name == "demo" else None
+            )
+        )
+        command = PluginCommands(context)
+        event = DummyEvent(message_str="plugin help demo")
+
+        await command.plugin_help(event, "demo")
+
+        text = _plain_text(event.result)
+        assert (
+            "/greet (name(str),force[--force/-f](bool)=False) [aliases: hello]" in text
+        )
+        assert "/tools [aliases: t]" in text
+        assert "Greet someone" in text
+        assert "Tool commands" in text
+    finally:
+        star_handlers_registry.clear()
+        star_map.clear()
+        for handler in original_handlers:
+            star_handlers_registry.append(handler)
+        star_map.update(original_star_map)
+
+
+@pytest.mark.asyncio
 async def test_llm_command_toggles_session_service_status(monkeypatch):
     calls: list[tuple[str, bool]] = []
 
@@ -148,7 +238,9 @@ async def test_persona_command_switches_current_conversation_persona():
         _ = kwargs
         return SimpleNamespace(title="Current", persona_id=None)
 
-    async def update_conversation(*, unified_msg_origin: str, persona_id: str, **kwargs):
+    async def update_conversation(
+        *, unified_msg_origin: str, persona_id: str, **kwargs
+    ):
         _ = kwargs
         updates.append((unified_msg_origin, persona_id))
 

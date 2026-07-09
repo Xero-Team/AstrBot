@@ -333,7 +333,11 @@ import StyledMenu from '@/components/shared/StyledMenu.vue';
 import CommandSuggestion from './CommandSuggestion.vue';
 import { attachmentPresentation } from './attachmentPresentation';
 import type { Session } from '@/composables/useSessions';
-import type { SuggestionCommand } from './CommandSuggestion.vue';
+import {
+  buildSuggestionSignature,
+  rankSuggestionCommands,
+} from './commandSuggestion';
+import type { SuggestionCommand } from './commandSuggestion';
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -470,6 +474,11 @@ const enabledCommands = computed(() => {
       result.push({
         handler_full_name: cmd.handler_full_name,
         effective_command: displayCmd,
+        display_signature: buildSuggestionSignature(
+          displayCmd,
+          cmd.signature,
+          cmd.effective_command,
+        ),
         description: cmd.description,
         plugin_display_name: cmd.plugin_display_name,
         enabled: cmd.enabled,
@@ -489,6 +498,11 @@ const enabledCommands = computed(() => {
         result.push({
           handler_full_name: cmd.handler_full_name,
           effective_command: aliasKey,
+          display_signature: buildSuggestionSignature(
+            aliasKey,
+            cmd.signature,
+            cmd.effective_command,
+          ),
           description: cmd.description,
           plugin_display_name: cmd.plugin_display_name,
           enabled: cmd.enabled,
@@ -502,42 +516,18 @@ const enabledCommands = computed(() => {
   return result;
 });
 
-function sortSystemPluginCommandsFirst(commands: SuggestionCommand[]) {
-  return [...commands].sort((a, b) => Number(b.reserved) - Number(a.reserved));
-}
-
 /** 根据当前输入过滤候选指令 */
 const filteredCommands = computed(() => {
   const text = props.prompt;
   if (!text || !hasWakePrefix(text)) return [];
 
   const query = normalizeCommandSearchText(text);
-  if (!query) return sortSystemPluginCommandsFirst(enabledCommands.value);
 
-  const startsWithMatches: SuggestionCommand[] = [];
-  const containsMatches: SuggestionCommand[] = [];
-
-  for (const cmd of enabledCommands.value) {
-    const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(
-      cmd.plugin_display_name || '',
-    );
-    const descriptionText = normalizeCommandSearchText(cmd.description || '');
-    const matchesCommand = commandText.includes(query);
-    const matchesMetadata =
-      pluginText.includes(query) || descriptionText.includes(query);
-
-    if (commandText.startsWith(query)) {
-      startsWithMatches.push(cmd);
-    } else if (matchesCommand || matchesMetadata) {
-      containsMatches.push(cmd);
-    }
-  }
-
-  return [
-    ...sortSystemPluginCommandsFirst(startsWithMatches),
-    ...sortSystemPluginCommandsFirst(containsMatches),
-  ];
+  return rankSuggestionCommands(
+    enabledCommands.value,
+    query,
+    normalizeCommandSearchText,
+  );
 });
 
 const localPrompt = computed({

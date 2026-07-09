@@ -57,6 +57,7 @@
       "module": "Module Path",
       "originalCommand": "Original Command",
       "effectiveCommand": "Effective Command",
+      "signature": "Invocation",
       "parentGroup": "Parent Group",
       "subCommands": "Sub-commands",
       "aliases": "Aliases",

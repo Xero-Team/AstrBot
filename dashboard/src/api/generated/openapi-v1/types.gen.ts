@@ -277,6 +277,59 @@ export type CommandPatchRequest = {
     permission_group?: string;
 };
 
+export type CommandSummary = {
+    total?: number;
+    disabled?: number;
+    conflicts?: number;
+    [key: string]: unknown;
+};
+
+export type CommandItem = {
+    handler_full_name?: string;
+    handler_name?: string;
+    plugin?: string;
+    plugin_display_name?: string;
+    module_path?: string;
+    description?: string;
+    type?: 'command' | 'group' | 'sub_command';
+    parent_signature?: string;
+    parent_group_handler?: string;
+    original_command?: string;
+    current_fragment?: string;
+    effective_command?: string;
+    signature?: string;
+    display_signature?: string;
+    aliases?: Array<string>;
+    permission?: 'admin' | 'everyone' | 'member';
+    enabled?: boolean;
+    is_group?: boolean;
+    has_conflict?: boolean;
+    reserved?: boolean;
+    sub_commands?: Array<CommandItem>;
+    [key: string]: unknown;
+};
+
+export type CommandListData = {
+    items?: Array<CommandItem>;
+    wake_prefix?: Array<string>;
+    summary?: CommandSummary;
+    [key: string]: unknown;
+};
+
+export type CommandListEnvelope = {
+    status: 'ok';
+    message?: string;
+    data: CommandListData;
+    [key: string]: unknown;
+};
+
+export type CommandItemEnvelope = {
+    status: 'ok';
+    message?: string;
+    data: CommandItem;
+    [key: string]: unknown;
+};
+
 export type McpServerConfig = {
     name: string;
     active?: boolean;
@@ -2717,9 +2770,9 @@ export type ListCommandsData = {
 
 export type ListCommandsResponses = {
     /**
-     * Standard AstrBot success response
+     * Command list
      */
-    200: SuccessEnvelope;
+    200: CommandListEnvelope;
 };
 
 export type ListCommandsResponse = ListCommandsResponses[keyof ListCommandsResponses];
@@ -2738,9 +2791,9 @@ export type UpdateCommandData = {
 
 export type UpdateCommandResponses = {
     /**
-     * Standard AstrBot success response
+     * Updated command
      */
-    200: SuccessEnvelope;
+    200: CommandItemEnvelope;
 };
 
 export type UpdateCommandResponse = UpdateCommandResponses[keyof UpdateCommandResponses];

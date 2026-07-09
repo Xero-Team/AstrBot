@@ -1825,7 +1825,11 @@ paths:
             type: string
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: Command list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandListEnvelope'
 
   /api/v1/commands/{command_id}:
     patch:
@@ -1843,7 +1847,11 @@ paths:
               $ref: '#/components/schemas/CommandPatchRequest'
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: Updated command
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandItemEnvelope'
 
   /api/v1/commands/conflicts:
     get:
@@ -4720,6 +4728,114 @@ components:
         permission_group:
           type: string
       additionalProperties: false
+
+    CommandSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        disabled:
+          type: integer
+        conflicts:
+          type: integer
+      additionalProperties: true
+
+    CommandItem:
+      type: object
+      properties:
+        handler_full_name:
+          type: string
+        handler_name:
+          type: string
+        plugin:
+          type: string
+        plugin_display_name:
+          type: string
+          nullable: true
+        module_path:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [command, group, sub_command]
+        parent_signature:
+          type: string
+        parent_group_handler:
+          type: string
+        original_command:
+          type: string
+        current_fragment:
+          type: string
+        effective_command:
+          type: string
+        signature:
+          type: string
+        display_signature:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        permission:
+          type: string
+          enum: [admin, everyone, member]
+        enabled:
+          type: boolean
+        is_group:
+          type: boolean
+        has_conflict:
+          type: boolean
+        reserved:
+          type: boolean
+        sub_commands:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandItem'
+      additionalProperties: true
+
+    CommandListData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandItem'
+        wake_prefix:
+          type: array
+          items:
+            type: string
+        summary:
+          $ref: '#/components/schemas/CommandSummary'
+      additionalProperties: true
+
+    CommandListEnvelope:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        message:
+          type: string
+          nullable: true
+        data:
+          $ref: '#/components/schemas/CommandListData'
+      additionalProperties: true
+
+    CommandItemEnvelope:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        message:
+          type: string
+          nullable: true
+        data:
+          $ref: '#/components/schemas/CommandItem'
+      additionalProperties: true
 
     McpServerConfig:
       type: object

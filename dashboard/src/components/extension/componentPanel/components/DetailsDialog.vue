@@ -125,6 +125,14 @@ const getPermissionLabel = (permission: string): string => {
               }}</code></v-list-item-subtitle
             >
           </v-list-item>
+          <v-list-item v-if="command.signature">
+            <v-list-item-title class="font-weight-bold">{{
+              tm('dialogs.details.signature')
+            }}</v-list-item-title>
+            <v-list-item-subtitle
+              ><code>{{ command.signature }}</code></v-list-item-subtitle
+            >
+          </v-list-item>
           <v-list-item v-if="command.parent_signature">
             <v-list-item-title class="font-weight-bold">{{
               tm('dialogs.details.parentGroup')
@@ -162,7 +170,7 @@ const getPermissionLabel = (permission: string): string => {
                   size="small"
                   variant="outlined"
                 >
-                  {{ sub.current_fragment }}
+                  {{ sub.signature || sub.current_fragment }}
                 </v-chip>
               </div>
             </v-list-item-subtitle>

@@ -17,7 +17,9 @@
         @mouseleave="handleMouseLeave"
       >
         <div class="command-suggestion-main">
-          <span class="command-name">{{ cmd.effective_command }}</span>
+          <span class="command-name">{{
+            cmd.display_signature || cmd.effective_command
+          }}</span>
           <span v-if="cmd.plugin_display_name" class="command-plugin">
             {{ cmd.plugin_display_name }}
           </span>
@@ -49,15 +51,7 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-
-export interface SuggestionCommand {
-  handler_full_name: string;
-  effective_command: string;
-  description: string;
-  plugin_display_name: string | null;
-  enabled: boolean;
-  reserved: boolean;
-}
+import type { SuggestionCommand } from './commandSuggestion';
 
 interface Props {
   visible: boolean;

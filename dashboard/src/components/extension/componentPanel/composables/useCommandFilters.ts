@@ -56,6 +56,8 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     if (query) {
       const matchesSearch =
         cmd.effective_command?.toLowerCase().includes(query) ||
+        cmd.signature?.toLowerCase().includes(query) ||
+        cmd.display_signature?.toLowerCase().includes(query) ||
         cmd.description?.toLowerCase().includes(query) ||
         cmd.plugin?.toLowerCase().includes(query);
       if (!matchesSearch) return false;

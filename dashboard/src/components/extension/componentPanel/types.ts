@@ -16,6 +16,8 @@ export interface CommandItem {
   original_command: string;
   current_fragment: string;
   effective_command: string;
+  signature: string;
+  display_signature: string;
   aliases: string[];
   permission: PermissionType;
   enabled: boolean;

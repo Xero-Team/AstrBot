@@ -120,8 +120,7 @@ class PluginCommands:
             return
 
         help_msg = f"\n\nAuthor: {plugin.author}\nVersion: {plugin.version}"
-        command_handlers: list[StarHandlerMetadata] = []
-        command_names: list[str] = []
+        command_entries: list[tuple[str, StarHandlerMetadata]] = []
 
         for handler in star_handlers_registry:
             if not isinstance(handler, StarHandlerMetadata):
@@ -130,18 +129,33 @@ class PluginCommands:
                 continue
             for filter_ in handler.event_filters:
                 if isinstance(filter_, CommandFilter):
-                    command_handlers.append(handler)
-                    command_names.append(filter_.command_name)
+                    command_entries.append(
+                        (
+                            filter_.format_invocation(
+                                command_name=filter_.get_complete_command_names()[0],
+                                include_aliases=True,
+                            ),
+                            handler,
+                        )
+                    )
                     break
                 if isinstance(filter_, CommandGroupFilter):
-                    command_handlers.append(handler)
-                    command_names.append(filter_.group_name)
+                    command_entries.append(
+                        (
+                            filter_.format_invocation(
+                                command_name=filter_.get_complete_command_names()[0],
+                                include_aliases=True,
+                            ),
+                            handler,
+                        )
+                    )
                     break
 
-        if command_handlers:
+        if command_entries:
+            command_entries.sort(key=lambda item: item[0].lower())
             parts = ["\n\nCommands:\n"]
-            for index, handler in enumerate(command_handlers):
-                line = f"- {command_names[index]}"
+            for command_name, handler in command_entries:
+                line = f"- /{command_name}"
                 if handler.desc:
                     line += f": {handler.desc}"
                 parts.append(line + "\n")

@@ -97,6 +97,22 @@ class CommandService:
     async def _get_command_payload(handler_full_name: str) -> dict:
         commands = await list_commands()
         for cmd in commands:
-            if cmd["handler_full_name"] == handler_full_name:
-                return cmd
+            found = CommandService._find_command_payload(cmd, handler_full_name)
+            if found:
+                return found
         return {}
+
+    @staticmethod
+    def _find_command_payload(command: dict, handler_full_name: str) -> dict | None:
+        if command.get("handler_full_name") == handler_full_name:
+            return command
+
+        for sub_command in command.get("sub_commands", []):
+            found = CommandService._find_command_payload(
+                sub_command,
+                handler_full_name,
+            )
+            if found:
+                return found
+
+        return None

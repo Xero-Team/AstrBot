@@ -171,7 +171,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
             <div class="text-subtitle-1 font-weight-medium">
               <code
                 :class="{ 'sub-command-code': item.type === 'sub_command' }"
-                >{{ item.effective_command }}</code
+                >{{ item.display_signature || item.effective_command }}</code
               >
             </div>
           </div>

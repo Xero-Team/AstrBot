@@ -194,6 +194,9 @@ class RepoZipUpdator:
                         "zipball_url": release["zipball_url"],
                     },
                 )
+        except httpx.TimeoutException as e:
+            logger.error(f"请求版本信息超时: {url}, 错误: {e!r}")
+            raise Exception("请求版本信息超时") from e
         except httpx.HTTPStatusError as e:
             response_body = ""
             if e.response is not None:

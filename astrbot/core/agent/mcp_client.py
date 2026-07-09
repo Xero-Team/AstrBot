@@ -139,17 +139,34 @@ def _prepare_config(config: dict) -> dict:
     return config
 
 
-def _validate_remote_url(url: str) -> None:
+def _is_truthy_config_value(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _allow_private_network_access(config: dict) -> bool:
+    return _is_truthy_config_value(config.get("allow_private_network", False))
+
+
+def _validate_remote_url(url: str, *, allow_private_network: bool = False) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("MCP remote connection URL must use http or https.")
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("MCP remote connection URL must include a hostname.")
-    if hostname.lower() in {"localhost", "localhost.localdomain"}:
+    if not allow_private_network and hostname.lower() in {
+        "localhost",
+        "localhost.localdomain",
+    }:
         raise ValueError(
             "MCP remote connection URL cannot target private or local IP addresses."
         )
+    if allow_private_network:
+        return
 
     resolved_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
     try:
@@ -347,7 +364,10 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     cfg = _prepare_config(config.copy())
 
     url = cfg["url"]
-    _validate_remote_url(url)
+    _validate_remote_url(
+        url,
+        allow_private_network=_allow_private_network_access(cfg),
+    )
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
 
@@ -612,7 +632,10 @@ class MCPClient:
                 self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
-            _validate_remote_url(cfg["url"])
+            _validate_remote_url(
+                cfg["url"],
+                allow_private_network=_allow_private_network_access(cfg),
+            )
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
                 raise Exception(error_msg)

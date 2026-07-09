@@ -158,6 +158,18 @@ class _FakeStatusErrorAsyncClient:
         return self._response
 
 
+class _FakeTimeoutAsyncClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str):
+        request = httpx.Request("GET", url)
+        raise httpx.ReadTimeout("timed out", request=request)
+
+
 class _FakeFailingStreamAsyncClient:
     async def __aenter__(self):
         return self
@@ -328,7 +340,12 @@ async def test_plugin_updator_install_prefers_download_url(
     updator = PluginUpdator()
     updator.plugin_store_path = str(tmp_path)
 
-    async def fake_download_file(url: str, path: str, timeout: float = 1800.0):  # noqa: ARG001
+    async def fake_download_file(
+        url: str,
+        path: str,
+        timeout_seconds: float = 1800.0,
+    ):  # noqa: ARG001
+        del timeout_seconds
         calls["download"] = (url, path)
         Path(path).write_bytes(b"zip-data")
 
@@ -873,6 +890,33 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
     assert any("状态码: 502" in message for message in log_messages)
     assert any("内容: " in message for message in log_messages)
     assert any("...[truncated]" in message for message in log_messages)
+
+
+@pytest.mark.asyncio
+async def test_fetch_release_info_reports_timeout_clearly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    url = "https://api.soulter.top/releases"
+    log_messages: list[str] = []
+
+    monkeypatch.setattr(
+        RepoZipUpdator,
+        "_create_httpx_client",
+        staticmethod(lambda timeout=30.0: _FakeTimeoutAsyncClient()),  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        zip_updator_module.logger,
+        "error",
+        lambda message: log_messages.append(message),
+    )
+
+    with pytest.raises(Exception, match="请求版本信息超时"):
+        await RepoZipUpdator().fetch_release_info(url)
+
+    assert any("请求版本信息超时" in message for message in log_messages)
+    assert any(url in message for message in log_messages)
 
 
 @pytest.mark.asyncio

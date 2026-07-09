@@ -13,6 +13,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.send_result import PlatformSendResult
 
 from .misskey_api import MisskeyAPI
 
@@ -372,7 +373,7 @@ class MisskeyPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> PlatformSendResult | None:
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
             return await super().send_by_session(session, message_chain)

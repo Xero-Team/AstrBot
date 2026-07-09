@@ -152,8 +152,13 @@ class WebChatQueueMgr:
                 data = get_task.result()
                 if self._listener_callback is None:
                     continue
+                listener_callback = self._listener_callback
+
+                async def _run_listener_callback() -> None:
+                    await listener_callback(data)
+
                 task = asyncio.create_task(
-                    self._listener_callback(data),
+                    _run_listener_callback(),
                     name=f"webchat_message_{conversation_id}",
                 )
                 self._message_tasks.add(task)

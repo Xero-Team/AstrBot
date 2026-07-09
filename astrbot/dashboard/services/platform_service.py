@@ -1,9 +1,9 @@
 import secrets
 import string
+from typing import Any, Protocol, cast
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.platform import Platform
 from astrbot.core.platform.sources.dingtalk.app_registration import (
     poll_dingtalk_app_registration_once,
     request_dingtalk_app_registration,
@@ -33,6 +33,14 @@ def random_platform_id_suffix() -> str:
     return "_" + "".join(secrets.choice(string.ascii_lowercase) for _ in range(4))
 
 
+class WebhookPlatformAdapter(Protocol):
+    config: dict[str, Any]
+
+    def meta(self) -> Any: ...
+
+    async def webhook_callback(self, request_obj) -> Any: ...
+
+
 class PlatformService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.platform_manager = core_lifecycle.platform_manager
@@ -43,6 +51,8 @@ class PlatformService:
         if not platform_adapter:
             logger.warning(f"未找到 webhook_uuid 为 {webhook_uuid} 的平台")
             raise PlatformServiceError("未找到对应平台", 404)
+
+        platform_adapter = cast(WebhookPlatformAdapter, platform_adapter)
 
         try:
             return await platform_adapter.webhook_callback(request_obj)
@@ -55,12 +65,15 @@ class PlatformService:
             logger.error(f"处理 webhook 回调时发生错误: {exc}", exc_info=True)
             raise PlatformServiceError("处理回调失败", 500) from exc
 
-    def find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
+    def find_platform_by_uuid(self, webhook_uuid: str) -> object | None:
         finder = getattr(self.platform_manager, "find_inst_by_webhook_uuid", None)
         if callable(finder):
             return finder(webhook_uuid)
 
         for value in vars(self.platform_manager).values():
+            webhook_callback = getattr(value, "webhook_callback", None)
+            if not callable(webhook_callback):
+                continue
             platform_config = getattr(value, "config", None)
             if (
                 isinstance(platform_config, dict)

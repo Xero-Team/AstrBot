@@ -145,7 +145,10 @@ class DiscordBotClient(discord.Bot):
             await super().close()
 
     def _start_message_task(self, coro: Awaitable[None]) -> None:
-        task = asyncio.create_task(coro, name="discord:on-message")
+        async def _run_message_task() -> None:
+            await coro
+
+        task = asyncio.create_task(_run_message_task(), name="discord:on-message")
         self._message_tasks.add(task)
         task.add_done_callback(self._on_message_task_done)
 

@@ -161,7 +161,10 @@ class WecomServer:
         await self.shutdown_event.wait()
 
     def _start_callback_task(self, coro: Awaitable[None]) -> None:
-        task = asyncio.create_task(coro, name="wecom:webhook-callback")
+        async def _run_callback_task() -> None:
+            await coro
+
+        task = asyncio.create_task(_run_callback_task(), name="wecom:webhook-callback")
         self._callback_tasks.add(task)
         task.add_done_callback(self._on_callback_task_done)
 

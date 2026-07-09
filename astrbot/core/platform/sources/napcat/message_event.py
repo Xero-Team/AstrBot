@@ -8,6 +8,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Forward, OnlineFile, Plain
 from astrbot.api.platform import Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.send_result import PlatformSendResult
 
 if TYPE_CHECKING:
     from .napcat_platform_adapter import NapCatPlatformAdapter
@@ -25,7 +26,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self._adapter = adapter
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         if not message.chain:
             return await super().send(message)
         await self._adapter.send_by_route(self.route_identity, message)

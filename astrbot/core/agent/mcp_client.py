@@ -99,6 +99,9 @@ _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
 if TYPE_CHECKING:
     import anyio
     import mcp
+    from mcp import ClientSession as MCPClientSession
+else:
+    MCPClientSession = Any
 
 try:
     import anyio as _anyio
@@ -490,7 +493,7 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 class MCPClient:
     def __init__(self) -> None:
-        self.session: mcp.ClientSession | None = None
+        self.session: MCPClientSession | None = None
 
         # Each connection runs in its own task so that anyio cancel scopes
         # are always exited from the task that entered them, preventing

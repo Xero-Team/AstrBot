@@ -171,7 +171,7 @@ class Platform(abc.ABC):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> PlatformSendResult:
+    ) -> PlatformSendResult | None:
         """通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
 
         异步方法。
@@ -192,7 +192,7 @@ class Platform(abc.ABC):
         self,
         route_identity: PlatformRouteIdentity,
         message_chain: MessageChain,
-    ) -> PlatformSendResult:
+    ) -> PlatformSendResult | None:
         """Send a reply using immutable transport routing identity."""
         session = MessageSession(
             platform_name=route_identity.platform_id,

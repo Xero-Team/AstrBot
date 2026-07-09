@@ -278,7 +278,10 @@ class StreamingClient:
                 self._start_handler_task(self.message_handlers["_debug"](data))
 
     def _start_handler_task(self, coro: Awaitable[None]) -> None:
-        task = asyncio.create_task(coro, name="misskey:handler")
+        async def _run_handler_task() -> None:
+            await coro
+
+        task = asyncio.create_task(_run_handler_task(), name="misskey:handler")
         self._handler_tasks.add(task)
         task.add_done_callback(self._on_handler_task_done)
 

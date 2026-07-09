@@ -443,7 +443,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain],
         use_fallback: bool = False,
-    ) -> PlatformSendResult:
+    ) -> PlatformSendResult | None:
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
@@ -638,7 +638,7 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
-    async def send(self, message: MessageChain) -> PlatformSendResult:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息到消息平台。
 
         Args:

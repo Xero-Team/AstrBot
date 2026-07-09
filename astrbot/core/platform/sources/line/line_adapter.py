@@ -510,7 +510,7 @@ class LinePlatformAdapter(Platform):
         message_id: str,
         content: bytes,
         suffix: str,
-        original_name: str = "",
+        original_name: str | None = "",
     ) -> str:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)

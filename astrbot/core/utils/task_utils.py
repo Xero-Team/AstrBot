@@ -1,5 +1,6 @@
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Coroutine
+from typing import Any, cast
 
 from astrbot import logger
 
@@ -11,7 +12,17 @@ def create_tracked_task(
     name: str | None = None,
 ) -> asyncio.Task:
     """Create a task with a strong reference until completion."""
-    task = asyncio.create_task(coro, name=name)
+    if asyncio.iscoroutine(coro):
+        task = asyncio.create_task(
+            cast(Coroutine[Any, Any, Any], coro),
+            name=name,
+        )
+    else:
+
+        async def _await_coro() -> Any:
+            return await coro
+
+        task = asyncio.create_task(_await_coro(), name=name)
     task_set.add(task)
 
     def _on_done(done_task: asyncio.Task) -> None:

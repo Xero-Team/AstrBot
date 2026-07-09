@@ -10,6 +10,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
+from .astrbot_message import AstrBotMessage
 from .message_session import MessageSession
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
@@ -450,7 +451,7 @@ class PlatformManager:
         if inst is None:
             raise ValueError(f"Platform not found: {platform}")
 
-        event = inst.create_event(event_message)
+        event = inst.create_event(cast(AstrBotMessage, event_message))
         event.is_wake = is_wake
         inst.commit_event(event)
 

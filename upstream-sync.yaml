@@ -5,8 +5,8 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 0be821afc600a8b47d583d7952a1d1b1d605e534
-  synced_at_utc: 2026-07-08T10:07:22Z
+  commit: 12f2f5a09ce0e7b0535f5d0754567151b88942a7
+  synced_at_utc: 2026-07-09T16:32:29.5467001Z
   sync_method: cherry-pick
-  source_pr: 9175
-  note: "Cherry-picked upstream/master commit dcc40ede1decb1f62b950291c02b413a7b33a3e9 for dashboard account username validation and trimming. Skipped README-only commits adebd2958ed885548107cd69552757f76197da66 and 0be821afc600a8b47d583d7952a1d1b1d605e534 because this fork preserves fork-specific documentation, Python 3.14+ requirements, and BegoniaHe repository links instead of upstream README content."
+  source_pr: "9187, 9183"
+  note: "Cherry-picked upstream/master commits afb898e61fc7e8ba8cbe38f4858cde6bd3191914 and 12f2f5a09ce0e7b0535f5d0754567151b88942a7 for LINE webhook JSON parsing and safer result-decorate content cleanup filtering. No upstream commits in this range were skipped."

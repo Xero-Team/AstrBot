@@ -70,6 +70,11 @@ class ContentPart(BaseModel):
         self._no_save = True
         return self
 
+    @property
+    def is_temp(self) -> bool:
+        """Return whether this content part is provider-facing only."""
+        return self._no_save
+
     def model_dump_for_context(self) -> dict[str, Any]:
         data = self.model_dump()
         if self._no_save:

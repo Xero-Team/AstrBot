@@ -40,6 +40,8 @@ class DummyEvent:
         self._sender_id = sender_id
         self.result = None
         self.extras: dict[str, object] = {}
+        self.temporary_files: list[str] = []
+        self.call_llm = False
 
     def set_result(self, result) -> None:
         self.result = result
@@ -62,13 +64,19 @@ class DummyEvent:
     def set_extra(self, key: str, value: object) -> None:
         self.extras[key] = value
 
+    def track_temporary_local_file(self, path: str) -> None:
+        self.temporary_files.append(path)
+
+    def should_call_llm(self, call_llm: bool) -> None:
+        self.call_llm = call_llm
+
 
 def _plain_text(result) -> str:
     return result.chain[0].text
 
 
 @pytest.mark.asyncio
-async def test_help_command_lists_rewritten_builtin_extension_commands(monkeypatch):
+async def test_help_command_defaults_to_plain_text(monkeypatch):
     async def fake_list_commands():
         return [
             {
@@ -114,9 +122,286 @@ async def test_help_command_lists_rewritten_builtin_extension_commands(monkeypat
     await command.help(event)
 
     text = _plain_text(event.result)
+    assert "AstrBot v" in text
     assert "/persona - View or switch persona" in text
     assert "/plugin - Plugin management" in text
     assert "/model - View or switch the current model" in text
+    assert "/help --image" in text
+    assert event.result.use_t2i_ is False
+    assert event.call_llm is True
+
+
+@pytest.mark.asyncio
+async def test_help_command_supports_image_mode(monkeypatch):
+    async def fake_list_commands():
+        return [
+            {
+                "reserved": True,
+                "enabled": True,
+                "type": "command",
+                "parent_signature": None,
+                "effective_command": "persona",
+                "description": "View or switch persona",
+            }
+        ]
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.command_management.list_commands",
+        fake_list_commands,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
+        fake_dashboard_version,
+    )
+    render_calls: list[dict[str, object]] = []
+
+    async def fake_render_t2i(
+        text: str,
+        *,
+        template_name: str | None = None,
+    ) -> str:
+        render_calls.append(
+            {
+                "text": text,
+                "template_name": template_name,
+            }
+        )
+        return "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+
+    async def fake_register_file(path: str) -> str:
+        assert path == "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+        return "token-123"
+
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
+        fake_render_t2i,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.file_token_service.register_file",
+        fake_register_file,
+    )
+
+    command = HelpCommand(
+        SimpleNamespace(
+            get_config=lambda umo=None: {
+                "callback_api_base": "http://127.0.0.1:6185",
+            }
+        )
+    )
+    event = DummyEvent(message_str="help --image")
+    await command.help(event, image=True)
+
+    assert len(render_calls) == 1
+    assert render_calls[0]["template_name"] == "astrbot_help"
+    assert "help-grid" in str(render_calls[0]["text"])
+
+    assert event.result.chain[0].file == (
+        "http://127.0.0.1:6185/api/v1/files/tokens/token-123"
+    )
+    assert event.result.chain[0].path == ""
+    assert event.result.use_t2i_ is False
+    assert event.temporary_files == [
+        "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+    ]
+    assert event.call_llm is True
+
+
+@pytest.mark.asyncio
+async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
+    monkeypatch,
+):
+    async def fake_list_commands():
+        return [
+            {
+                "reserved": True,
+                "enabled": True,
+                "type": "command",
+                "parent_signature": None,
+                "effective_command": "persona",
+                "description": "View or switch persona",
+            }
+        ]
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    async def fake_render_t2i(
+        text: str,
+        *,
+        template_name: str | None = None,
+    ) -> str:
+        _ = text, template_name
+        return "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.command_management.list_commands",
+        fake_list_commands,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
+        fake_dashboard_version,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
+        fake_render_t2i,
+    )
+
+    command = HelpCommand(SimpleNamespace())
+    event = DummyEvent(message_str="help --image")
+    await command.help(event, image=True)
+
+    assert (
+        event.result.chain[0].file
+        == "file:///D:/Documents/Github/AstrBot/data/temp/help-card.png"
+    )
+    assert (
+        event.result.chain[0].path
+        == "D:\\Documents\\Github\\AstrBot\\data\\temp\\help-card.png"
+    )
+    assert event.result.use_t2i_ is False
+    assert event.temporary_files == [
+        "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_help_command_sends_local_image_when_file_token_registration_fails(
+    monkeypatch,
+):
+    async def fake_list_commands():
+        return [
+            {
+                "reserved": True,
+                "enabled": True,
+                "type": "command",
+                "parent_signature": None,
+                "effective_command": "persona",
+                "description": "View or switch persona",
+            }
+        ]
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    async def fake_render_t2i(
+        text: str,
+        *,
+        template_name: str | None = None,
+    ) -> str:
+        _ = text, template_name
+        return "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+
+    async def fake_register_file(path: str) -> str:
+        assert path == "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+        raise RuntimeError("file service unavailable")
+
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.command_management.list_commands",
+        fake_list_commands,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
+        fake_dashboard_version,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
+        fake_render_t2i,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.file_token_service.register_file",
+        fake_register_file,
+    )
+
+    command = HelpCommand(
+        SimpleNamespace(
+            get_config=lambda umo=None: {
+                "callback_api_base": "http://127.0.0.1:6185",
+            }
+        )
+    )
+    event = DummyEvent(message_str="help --image")
+    await command.help(event, image=True)
+
+    assert (
+        event.result.chain[0].file
+        == "file:///D:/Documents/Github/AstrBot/data/temp/help-card.png"
+    )
+    assert (
+        event.result.chain[0].path
+        == "D:\\Documents\\Github\\AstrBot\\data\\temp\\help-card.png"
+    )
+    assert event.temporary_files == [
+        "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_help_command_uses_file_token_for_local_image_when_callback_is_available(
+    monkeypatch,
+):
+    async def fake_list_commands():
+        return [
+            {
+                "reserved": True,
+                "enabled": True,
+                "type": "command",
+                "parent_signature": None,
+                "effective_command": "persona",
+                "description": "View or switch persona",
+            }
+        ]
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    async def fake_render_t2i(
+        text: str,
+        *,
+        template_name: str | None = None,
+    ) -> str:
+        _ = text, template_name
+        return "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+
+    async def fake_register_file(path: str) -> str:
+        assert path == "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+        return "token-123"
+
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.command_management.list_commands",
+        fake_list_commands,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
+        fake_dashboard_version,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
+        fake_render_t2i,
+    )
+    monkeypatch.setattr(
+        "astrbot.builtin_stars.builtin_commands.commands.help.file_token_service.register_file",
+        fake_register_file,
+    )
+
+    command = HelpCommand(
+        SimpleNamespace(
+            get_config=lambda umo=None: {
+                "callback_api_base": "http://127.0.0.1:6185",
+            }
+        )
+    )
+    event = DummyEvent(message_str="help --image")
+    await command.help(event, image=True)
+
+    assert event.result.chain[0].file == (
+        "http://127.0.0.1:6185/api/v1/files/tokens/token-123"
+    )
+    assert event.temporary_files == [
+        "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+    ]
 
 
 @pytest.mark.asyncio

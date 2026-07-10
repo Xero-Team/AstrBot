@@ -1,6 +1,8 @@
+from typing import Annotated
+
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.core.star.filter.command import GreedyStr
+from astrbot.core.star.filter.command import GreedyStr, option
 
 from .commands import (
     AdminCommands,
@@ -32,9 +34,13 @@ class Main(star.Star):
         self.sid_c = SIDCommand(self.context)
 
     @filter.command("help")
-    async def help(self, event: AstrMessageEvent) -> None:
+    async def help(
+        self,
+        event: AstrMessageEvent,
+        image: Annotated[bool, option("--image", "-i")] = False,
+    ) -> None:
         """Show help message"""
-        await self.help_c.help(event)
+        await self.help_c.help(event, image=image)
 
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent) -> None:

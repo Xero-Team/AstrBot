@@ -58,6 +58,7 @@
     "updateAll": "更新全部插件",
     "pin": "置顶",
     "unpin": "取消置顶",
+    "moreActions": "更多插件操作",
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },

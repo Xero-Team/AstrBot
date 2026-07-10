@@ -311,6 +311,7 @@ const togglePin = () => {
           <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
+              :aria-label="tm('buttons.viewDocs')"
               icon="mdi-book-open-page-variant"
               size="small"
               variant="tonal"
@@ -324,6 +325,7 @@ const togglePin = () => {
           <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
+              :aria-label="tm('card.actions.pluginConfig')"
               icon="mdi-cog"
               size="small"
               variant="tonal"
@@ -337,6 +339,7 @@ const togglePin = () => {
           <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
+              :aria-label="tm('card.actions.reloadPlugin')"
               icon="mdi-refresh"
               size="small"
               variant="tonal"
@@ -350,6 +353,7 @@ const togglePin = () => {
           <template #activator="{ props: menuProps }">
             <v-btn
               v-bind="menuProps"
+              :aria-label="tm('buttons.moreActions')"
               icon="mdi-dots-horizontal"
               size="small"
               variant="tonal"

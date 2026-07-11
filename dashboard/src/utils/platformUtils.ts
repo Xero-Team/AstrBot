@@ -79,10 +79,11 @@ const TUTORIAL_LINKS: Record<string, string> = {
   slack: 'https://docs.astrbot.app/platform/slack.html',
   kook: 'https://docs.astrbot.app/platform/kook.html',
   vocechat: 'https://docs.astrbot.app/platform/vocechat.html',
-  satori: 'https://docs.astrbot.app/platform/satori/llonebot.html',
+  satori: 'https://docs.astrbot.app/platform/satori/guide.html',
   misskey: 'https://docs.astrbot.app/platform/misskey.html',
   line: 'https://docs.astrbot.app/platform/line.html',
   matrix: 'https://docs.astrbot.app/platform/matrix.html',
+  mattermost: 'https://docs.astrbot.app/platform/mattermost.html',
 };
 
 const PLATFORM_DISPLAY_NAMES: Record<string, string> = {

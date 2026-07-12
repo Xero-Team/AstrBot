@@ -177,7 +177,10 @@ class WakingCheckStage(Stage):
             if (
                 event.is_private_chat()
                 and not skip_private_wake
-                and not self.friend_message_needs_wake_prefix
+                and (
+                    not self.friend_message_needs_wake_prefix
+                    or event.get_platform_name() == "webchat"
+                )
             ):
                 is_wake = True
                 event.is_wake = True

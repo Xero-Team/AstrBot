@@ -42,6 +42,14 @@
           <!-- 操作按钮组 -->
           <div class="d-flex ga-2">
             <v-btn
+              variant="outlined"
+              prepend-icon="mdi-upload"
+              rounded="lg"
+              @click="triggerImport"
+            >
+              {{ tm('buttons.import') }}
+            </v-btn>
+            <v-btn
               color="primary"
               variant="tonal"
               prepend-icon="mdi-plus"
@@ -50,6 +58,13 @@
             >
               {{ tm('buttons.create') }}
             </v-btn>
+            <input
+              ref="importFileInput"
+              type="file"
+              accept="application/json,.json"
+              hidden
+              @change="handleImportFile"
+            />
             <v-btn
               variant="outlined"
               prepend-icon="mdi-folder-plus"
@@ -123,6 +138,7 @@
                   @edit="editPersona(persona)"
                   @move="openMovePersonaDialog(persona)"
                   @delete="confirmDeletePersona(persona)"
+                  @export="handlePersonaExport"
                 />
               </v-col>
             </v-row>
@@ -432,6 +448,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
+import { personaApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { storeToRefs } from 'pinia';
 
@@ -465,6 +482,7 @@ const {
 } = storeToRefs(personaStore);
 
 const showPersonaDialog = ref(false);
+const importFileInput = ref<HTMLInputElement | null>(null);
 const showViewDialog = ref(false);
 const editingPersona = ref<StorePersona | null>(null);
 const viewingPersona = ref<StorePersona | null>(null);
@@ -555,6 +573,87 @@ async function initialize() {
 function openCreatePersonaDialog() {
   editingPersona.value = null;
   showPersonaDialog.value = true;
+}
+
+function handlePersonaExport(exportMessage: string, isError: boolean) {
+  if (isError) {
+    showError(exportMessage);
+    return;
+  }
+  showSuccess(exportMessage);
+}
+
+function triggerImport() {
+  if (importFileInput.value) {
+    importFileInput.value.value = '';
+    importFileInput.value.click();
+  }
+}
+
+async function handleImportFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+
+  try {
+    const data: unknown = JSON.parse(await file.text());
+    if (!data || typeof data !== 'object' || !('system_prompt' in data)) {
+      showError(tm('messages.importMissingPrompt'));
+      return;
+    }
+    const imported = data as {
+      persona_id?: unknown;
+      system_prompt?: unknown;
+      begin_dialogs?: unknown;
+    };
+    if (typeof imported.system_prompt !== 'string' || !imported.system_prompt) {
+      showError(tm('messages.importMissingPrompt'));
+      return;
+    }
+
+    const response = await personaApi.list();
+    const existingIds = new Set(
+      response.data.status === 'ok'
+        ? (response.data.data || []).map((persona) => persona.persona_id)
+        : [],
+    );
+    const baseId =
+      typeof imported.persona_id === 'string' && imported.persona_id
+        ? imported.persona_id
+        : 'imported_persona';
+    let personaId = baseId;
+    let suffix = 1;
+    while (existingIds.has(personaId)) {
+      personaId = `${baseId}_imported${suffix === 1 ? '' : `_${suffix}`}`;
+      suffix += 1;
+    }
+
+    const createResponse = await personaApi.create({
+      persona_id: personaId,
+      system_prompt: imported.system_prompt,
+      begin_dialogs: Array.isArray(imported.begin_dialogs)
+        ? imported.begin_dialogs.filter((item): item is string => typeof item === 'string')
+        : [],
+      tools: null,
+      skills: null,
+      folder_id: currentFolderId.value,
+    });
+    if (createResponse.data.status !== 'ok') {
+      throw new Error(createResponse.data.message || tm('messages.importError'));
+    }
+    await personaStore.refreshCurrentFolder();
+    if (personaId !== baseId) {
+      showSuccess(tm('messages.importIdExists', { id: personaId }));
+    } else {
+      showSuccess(tm('messages.importSuccess'));
+    }
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      showError(tm('messages.importFormatError'));
+      return;
+    }
+    console.error('Failed to import persona:', error);
+    showError(resolveErrorMessage(error, tm('messages.importError')));
+  }
 }
 
 function editPersona(persona: StorePersona) {

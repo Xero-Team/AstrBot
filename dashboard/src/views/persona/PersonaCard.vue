@@ -37,6 +37,12 @@
               tm('persona.contextMenu.moveTo')
             }}</v-list-item-title>
           </v-list-item>
+          <v-list-item @click.stop="exportPersona">
+            <template #prepend>
+              <v-icon size="small">mdi-download</v-icon>
+            </template>
+            <v-list-item-title>{{ tm('buttons.export') }}</v-list-item-title>
+          </v-list-item>
           <v-divider class="my-1" />
           <v-list-item class="text-error" @click.stop="emit('delete')">
             <template #prepend>
@@ -121,6 +127,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import {
+  askForConfirmation as askForConfirmationDialog,
+  useConfirmDialog,
+} from '@/utils/confirmDialog';
 
 interface Persona {
   persona_id: string;
@@ -143,9 +153,11 @@ const emit = defineEmits<{
   edit: [];
   move: [];
   delete: [];
+  export: [message: string, isError: boolean];
 }>();
 
 const { tm } = useModuleI18n('features/persona');
+const confirmDialog = useConfirmDialog();
 const dragPreview = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
 
@@ -188,6 +200,38 @@ function formatDate(dateString: string | undefined | null): string {
     return '';
   }
   return new Date(dateString).toLocaleString();
+}
+
+async function exportPersona() {
+  if (!(await askForConfirmationDialog(tm('messages.exportConfirm'), confirmDialog))) {
+    return;
+  }
+
+  try {
+    const exportData = {
+      persona_id: props.persona.persona_id,
+      system_prompt: props.persona.system_prompt,
+      begin_dialogs: props.persona.begin_dialogs || [],
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json',
+      }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `persona_${props.persona.persona_id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    emit('export', tm('messages.exportSuccess'), false);
+  } catch (error) {
+    console.error('Failed to export persona:', error);
+    emit(
+      'export',
+      tm('messages.exportError', { error: String(error) }),
+      true,
+    );
+  }
 }
 </script>
 

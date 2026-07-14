@@ -8,7 +8,7 @@
 	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier \
 	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
 	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker \
-	format-py format-web format-data format-md format-toml format-yaml format-shell format-ps
+	format-py format-web format-data format-md format-toml format-yaml format-shell format-ps format-eol
 
 WORKTREE_DIR ?= ../astrbot_worktree
 BRANCH ?= $(word 2,$(MAKECMDGOALS))
@@ -213,6 +213,7 @@ format:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) format-all
 
 format-all: $(FORMAT_TARGETS)
+	@$(MAKE) --no-print-directory format-eol
 	@echo "==> formatting complete; run 'make check' to verify"
 
 test: test-all
@@ -378,6 +379,10 @@ check-ps:
 format-ps:
 	@echo "==> [ps] Invoke-Formatter"
 	@$(PS) scripts/lint_powershell.ps1 -Fix
+
+format-eol:
+	@echo "==> [eol] normalize tracked text files to LF"
+	@$(PS) scripts/normalize_line_endings.ps1
 
 check-docker:
 	@if command -v hadolint >/dev/null 2>&1; then \

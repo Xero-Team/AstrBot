@@ -212,7 +212,10 @@ async def test_help_command_supports_image_mode(monkeypatch):
 @pytest.mark.asyncio
 async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
     monkeypatch,
+    tmp_path,
 ):
+    image_path = tmp_path / "help-card.png"
+
     async def fake_list_commands():
         return [
             {
@@ -234,7 +237,7 @@ async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
         template_name: str | None = None,
     ) -> str:
         _ = text, template_name
-        return "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+        return str(image_path)
 
     monkeypatch.setattr(
         "astrbot.builtin_stars.builtin_commands.commands.help.command_management.list_commands",
@@ -253,24 +256,19 @@ async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
     event = DummyEvent(message_str="help --image")
     await command.help(event, image=True)
 
-    assert (
-        event.result.chain[0].file
-        == "file:///D:/Documents/Github/AstrBot/data/temp/help-card.png"
-    )
-    assert (
-        event.result.chain[0].path
-        == "D:\\Documents\\Github\\AstrBot\\data\\temp\\help-card.png"
-    )
+    assert event.result.chain[0].file == image_path.resolve().as_uri()
+    assert event.result.chain[0].path == str(image_path.resolve())
     assert event.result.use_t2i_ is False
-    assert event.temporary_files == [
-        "D:/Documents/Github/AstrBot/data/temp/help-card.png"
-    ]
+    assert event.temporary_files == [str(image_path)]
 
 
 @pytest.mark.asyncio
 async def test_help_command_sends_local_image_when_file_token_registration_fails(
     monkeypatch,
+    tmp_path,
 ):
+    image_path = tmp_path / "help-card.png"
+
     async def fake_list_commands():
         return [
             {
@@ -292,10 +290,10 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
         template_name: str | None = None,
     ) -> str:
         _ = text, template_name
-        return "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+        return str(image_path)
 
     async def fake_register_file(path: str) -> str:
-        assert path == "D:/Documents/Github/AstrBot/data/temp/help-card.png"
+        assert path == str(image_path)
         raise RuntimeError("file service unavailable")
 
     monkeypatch.setattr(
@@ -325,17 +323,9 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
     event = DummyEvent(message_str="help --image")
     await command.help(event, image=True)
 
-    assert (
-        event.result.chain[0].file
-        == "file:///D:/Documents/Github/AstrBot/data/temp/help-card.png"
-    )
-    assert (
-        event.result.chain[0].path
-        == "D:\\Documents\\Github\\AstrBot\\data\\temp\\help-card.png"
-    )
-    assert event.temporary_files == [
-        "D:/Documents/Github/AstrBot/data/temp/help-card.png"
-    ]
+    assert event.result.chain[0].file == image_path.resolve().as_uri()
+    assert event.result.chain[0].path == str(image_path.resolve())
+    assert event.temporary_files == [str(image_path)]
 
 
 @pytest.mark.asyncio

@@ -97,13 +97,16 @@ async def test_result_decorate_uses_local_t2i_and_file_token_url(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_result_decorate_keeps_local_file_when_no_callback_url(monkeypatch):
+async def test_result_decorate_keeps_local_file_when_no_callback_url(
+    monkeypatch, tmp_path
+):
     stage = _make_stage(use_file_service=False, callback_api_base="")
     result = MessageEventResult(chain=[Plain("0123456789abcde")])
+    image_path = tmp_path / "rendered.png"
 
     monkeypatch.setattr(
         "astrbot.core.pipeline.result_decorate.stage.html_renderer.render_t2i",
-        AsyncMock(return_value="D:/temp/rendered.png"),
+        AsyncMock(return_value=str(image_path)),
     )
 
     event = SimpleNamespace(
@@ -124,7 +127,5 @@ async def test_result_decorate_keeps_local_file_when_no_callback_url(monkeypatch
         await cast(Any, processed)
 
     image = result.chain[0]
-    assert image.file == "file:///D:/temp/rendered.png"
-    assert (
-        image.path == "D:\\temp\\rendered.png" or image.path == "D:/temp/rendered.png"
-    )
+    assert image.file == image_path.resolve().as_uri()
+    assert image.path == str(image_path.resolve())

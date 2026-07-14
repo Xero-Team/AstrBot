@@ -794,7 +794,10 @@ const latestContextTokens = computed(() => {
     if (isUserMessage(message)) continue;
     const stats = message.content?.agentStats;
     if (!stats) continue;
-    if (stats.current_context_tokens != null) {
+    if (
+      stats.current_context_tokens !== undefined &&
+      stats.current_context_tokens !== null
+    ) {
       return readTokenCount(stats.current_context_tokens);
     }
     const usage = stats.token_usage;

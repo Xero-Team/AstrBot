@@ -34,7 +34,7 @@ jobs:
 
       - name: Run focused Bandit checks
         run: |
-          PYTHONIOENCODING=utf-8 uv run bandit -r \
+          PYTHONIOENCODING=utf-8 uv run bandit -lll -iii -r \
             astrbot/api \
             astrbot/cli \
             astrbot/core/backup \

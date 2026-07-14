@@ -101,12 +101,6 @@ class OpenAIChatStreamAccumulator:
         content = delta.content
         if isinstance(content, str):
             self.content += content
-        elif isinstance(content, list):
-            self.content += "".join(
-                str(part.get("text", ""))
-                for part in content
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
         self.reasoning += getattr(delta, "reasoning_content", None) or ""
         self.refusal += getattr(delta, "refusal", None) or ""
         for position, call in enumerate(delta.tool_calls or []):

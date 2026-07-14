@@ -66,15 +66,22 @@ class ProviderOpenAIResponses(Provider):
                 "OpenAI Responses", provider_config.get("proxy", "")
             ),
         }
+        api_base = provider_config.get("api_base")
         if provider_config.get("api_version"):
-            self.client = AsyncAzureOpenAI(
-                api_version=provider_config["api_version"],
-                base_url=provider_config.get("api_base") or None,
-                **client_options,
-            )
+            if isinstance(api_base, str) and api_base:
+                self.client = AsyncAzureOpenAI(
+                    api_version=provider_config["api_version"],
+                    base_url=api_base,
+                    **client_options,
+                )
+            else:
+                self.client = AsyncAzureOpenAI(
+                    api_version=provider_config["api_version"],
+                    **client_options,
+                )
         else:
             self.client = AsyncOpenAI(
-                base_url=provider_config.get("api_base") or None,
+                base_url=api_base if isinstance(api_base, str) and api_base else None,
                 **client_options,
             )
         self.set_model(provider_config.get("model", "unknown"))
@@ -356,7 +363,7 @@ class ProviderOpenAIResponses(Provider):
         )
         web = self.provider_config.get("web_search", {})
         if isinstance(web, dict) and web.get("enable"):
-            tool = {"type": "web_search"}
+            tool: dict[str, Any] = {"type": "web_search"}
             for key in ("search_context_size",):
                 if key in web:
                     tool[key] = copy.deepcopy(web[key])
@@ -684,6 +691,7 @@ class ProviderOpenAIResponses(Provider):
     async def text_chat(
         self,
         prompt: str | None = None,
+        session_id: str | None = None,
         image_urls: list[str] | None = None,
         audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
@@ -691,10 +699,12 @@ class ProviderOpenAIResponses(Provider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
-        tool_choice: Literal["auto", "required", "none"] = "auto",
+        extra_user_content_parts: list[ContentPart] | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        _ = session_id
         if audio_urls:
             raise ProviderResponseError(
                 "OpenAI Responses audio input is not supported by this provider"
@@ -705,7 +715,7 @@ class ProviderOpenAIResponses(Provider):
             prompt,
             image_urls,
             tool_calls_result,
-            kwargs.get("extra_user_content_parts"),
+            extra_user_content_parts,
         )
         items, instructions = await self._input_items_from_history(history, model)
         if system_prompt:
@@ -734,7 +744,11 @@ class ProviderOpenAIResponses(Provider):
             prefix_fingerprint = self._fingerprint(history[:matching_index])
             if checkpoint != prefix_fingerprint:
                 matching_state = None
-        if mode == "previous_response_id" and matching_state is not None:
+        if (
+            mode == "previous_response_id"
+            and matching_state is not None
+            and matching_index is not None
+        ):
             response_id = matching_state.data.get("response_id")
             if isinstance(response_id, str) and response_id:
                 options["previous_response_id"] = response_id
@@ -908,7 +922,11 @@ class ProviderOpenAIResponses(Provider):
                 history[:matching_index]
             ):
                 matching_state = None
-        if mode == "previous_response_id" and matching_state is not None:
+        if (
+            mode == "previous_response_id"
+            and matching_state is not None
+            and matching_index is not None
+        ):
             response_id = matching_state.data.get("response_id")
             if isinstance(response_id, str) and response_id:
                 options["previous_response_id"] = response_id
@@ -1101,16 +1119,21 @@ class ProviderOpenAIResponses(Provider):
             except ProviderResponseError:
                 raise
             except Exception as exc:
-                if not options.get("background") or not response_id:
+                if (
+                    not options.get("background")
+                    or not isinstance(response_id, str)
+                    or not response_id
+                ):
                     raise ProviderResponseError(
                         "OpenAI Responses stream interrupted after output; it was not replayed."
                     ) from exc
+                replay_response_id = response_id
                 stream = cast(
                     AsyncIterator[Any],
                     await retry_provider_request(
                         "OpenAI Responses",
                         lambda: client.responses.retrieve(
-                            response_id,
+                            replay_response_id,
                             stream=True,
                             starting_after=(
                                 last_sequence_number

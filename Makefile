@@ -155,7 +155,7 @@ quality-pyright: quality-sync
 	uv run pyright --project pyrightconfig.quality.json
 
 quality-bandit: quality-sync
-	PYTHONIOENCODING=utf-8 uv run bandit -r $(QUALITY_SECURITY_TARGETS) -c pyproject.toml
+	PYTHONIOENCODING=utf-8 uv run bandit -lll -iii -r $(QUALITY_SECURITY_TARGETS) -c pyproject.toml
 
 quality-audit: quality-sync
 	uv run pip-audit

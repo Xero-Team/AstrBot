@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from astrbot.api.message_components import Plain
 from astrbot.core.platform.sources.satori.satori_adapter import SatoriPlatformAdapter
 
 
@@ -98,3 +99,20 @@ async def test_satori_parse_elements_keeps_audio_lazy():
     assert record.file == "/tmp/satori.wav"
     assert record.path == "/tmp/satori.wav"
     media_resolver.to_path.assert_awaited_once_with(target_format="wav")
+
+
+@pytest.mark.asyncio
+async def test_satori_parse_elements_rejects_xml_entities():
+    adapter = SatoriPlatformAdapter(
+        {
+            "id": "satori-test",
+            "satori_endpoint": "ws://localhost:5140/satori/v1/events",
+        },
+        {},
+        asyncio.Queue(),
+    )
+    payload = '<!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><p>&xxe;</p>'
+
+    elements = await adapter.parse_satori_elements(payload)
+
+    assert elements == [Plain(text=payload)]

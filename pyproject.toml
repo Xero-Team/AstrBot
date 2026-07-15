@@ -21,6 +21,7 @@ dependencies = [
   "loguru>=0.7.3",
   "cryptography>=49.0.0",
   "dashscope>=1.26.2",
+  "defusedxml>=0.7.1",
   "dingtalk-stream>=0.24.3",
   "docstring-parser>=0.18.0",
   "faiss-cpu>=1.14.3",
@@ -129,7 +130,6 @@ max-complexity = 15
 
 [tool.bandit]
 exclude_dirs = ["tests", "data", ".venv", "dashboard/node_modules"]
-skips = ["B101", "B105", "B110"]
 
 [tool.coverage.run]
 omit = ["data/plugins/*", "data/plugins/**/*"]

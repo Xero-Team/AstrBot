@@ -3,10 +3,12 @@ import json
 import time
 from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any
-from xml.etree import ElementTree as ET
+from xml.etree.ElementTree import Element
 
 import websockets
 from aiohttp import ClientSession, ClientTimeout
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 from websockets.asyncio.client import ClientConnection, connect
 
 from astrbot.api import logger
@@ -543,7 +545,7 @@ class SatoriPlatformAdapter(Platform):
                 }
 
             return None
-        except ET.ParseError as e:
+        except (ET.ParseError, DefusedXmlException) as e:
             logger.warning(f"XML解析失败，使用正则提取: {e}")
             return await self._extract_quote_with_regex(content)
         except Exception as e:
@@ -643,7 +645,7 @@ class SatoriPlatformAdapter(Platform):
 
             root = ET.fromstring(processed_content)
             await self._parse_xml_node(root, elements)
-        except ET.ParseError as e:
+        except (ET.ParseError, DefusedXmlException) as e:
             logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
             # 如果解析失败，将整个内容当作纯文本
             if content.strip():
@@ -658,7 +660,7 @@ class SatoriPlatformAdapter(Platform):
 
         return elements
 
-    async def _parse_xml_node(self, node: ET.Element, elements: list) -> None:
+    async def _parse_xml_node(self, node: Element, elements: list) -> None:
         """递归解析 XML 节点"""
         if node.text and node.text.strip():
             elements.append(Plain(text=node.text))

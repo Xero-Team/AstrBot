@@ -1407,6 +1407,46 @@ class NapCatPlatformAdapter(Platform):
             return [FlashTransfer(file_set_id=payload.data.fileSetId)]
         return None
 
+    @staticmethod
+    def _convert_scalar_segment(
+        payload: object,
+    ) -> list[BaseMessageComponent] | None:
+        """Convert remaining non-recursive scalar inbound segments."""
+        if isinstance(payload, ContactSegment):
+            contact_id = int(payload.data.id) if payload.data.id.isdigit() else 0
+            return [Contact(_type=payload.data.type.value, id=contact_id)]
+        if isinstance(payload, LocationSegment):
+            return [
+                Location(
+                    lat=float(payload.data.lat),
+                    lon=float(payload.data.lon),
+                    title=payload.data.title or "",
+                    content=payload.data.content or "",
+                )
+            ]
+        if isinstance(payload, MusicSegment):
+            music_id = int(payload.data.id) if payload.data.id.isdigit() else 0
+            return [Music(_type=payload.data.type.value, id=music_id)]
+        if isinstance(payload, CustomMusicSegment):
+            return [
+                Music(
+                    _type="custom",
+                    url=payload.data.url,
+                    audio=payload.data.audio,
+                    title=payload.data.title,
+                    content=payload.data.content or "",
+                    image=payload.data.image or "",
+                )
+            ]
+        if isinstance(payload, ForwardSegment):
+            return [Forward(id=payload.data.id)]
+        if isinstance(payload, DirectNodeSegment):
+            node_id: int | str = payload.data.id
+            if payload.data.id.isdigit():
+                node_id = int(payload.data.id)
+            return [Node(id=node_id, content=[])]
+        return None
+
     def _convert_segment_payload(
         self,
         payload: object,
@@ -1451,60 +1491,9 @@ class NapCatPlatformAdapter(Platform):
         if interactive_components is not None:
             return interactive_components, [], first_at_self_processed
 
-        if isinstance(payload, ContactSegment):
-            contact_id = int(payload.data.id) if payload.data.id.isdigit() else 0
-            return (
-                [Contact(_type=payload.data.type.value, id=contact_id)],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, LocationSegment):
-            return (
-                [
-                    Location(
-                        lat=float(payload.data.lat),
-                        lon=float(payload.data.lon),
-                        title=payload.data.title or "",
-                        content=payload.data.content or "",
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, MusicSegment):
-            music_id = int(payload.data.id) if payload.data.id.isdigit() else 0
-            return (
-                [Music(_type=payload.data.type.value, id=music_id)],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, CustomMusicSegment):
-            return (
-                [
-                    Music(
-                        _type="custom",
-                        url=payload.data.url,
-                        audio=payload.data.audio,
-                        title=payload.data.title,
-                        content=payload.data.content or "",
-                        image=payload.data.image or "",
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, ForwardSegment):
-            return [Forward(id=payload.data.id)], [], first_at_self_processed
-
-        if isinstance(payload, DirectNodeSegment):
-            node_id: int | str = payload.data.id
-            if payload.data.id.isdigit():
-                node_id = int(payload.data.id)
-            return [Node(id=node_id, content=[])], [], first_at_self_processed
+        scalar_components = self._convert_scalar_segment(payload)
+        if scalar_components is not None:
+            return scalar_components, [], first_at_self_processed
 
         if isinstance(payload, CustomNodeSegments):
             nested_components: list[BaseMessageComponent] = []

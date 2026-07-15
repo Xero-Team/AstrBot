@@ -4,7 +4,7 @@ import hashlib
 import os
 import re
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from time import time
 from typing import Any
 
@@ -441,6 +441,84 @@ class AstrMessageEvent(abc.ABC):
             buffer = buffer[match.end() :]
         return buffer
 
+    async def send_non_streaming_response(
+        self,
+        generator: AsyncGenerator[MessageChain],
+        *,
+        use_fallback: bool,
+        sentence_pattern: re.Pattern | None = None,
+        component_delay: float = 1.5,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        record_empty: bool = False,
+    ) -> PlatformSendResult | None:
+        """Consume a non-native stream once and send its ordinary message parts.
+
+        Adapters use this for platforms without a native streaming protocol. The
+        adapter-specific ``send`` method remains responsible for transport and
+        rate limits; this shared path only owns stream consumption and metrics.
+        """
+        if not use_fallback:
+            message_buffer: MessageChain | None = None
+            async for chain in generator:
+                if message_buffer is None:
+                    message_buffer = chain
+                else:
+                    message_buffer.chain.extend(chain.chain)
+            if message_buffer is None:
+                if record_empty:
+                    return await AstrMessageEvent.send_streaming(
+                        self,
+                        generator,
+                        use_fallback,
+                    )
+                return None
+            message_buffer.squash_plain()
+            await self.send(message_buffer)
+            return await AstrMessageEvent.send_streaming(self, generator, use_fallback)
+
+        text_buffer = ""
+        sent_any = False
+        for_sentence_flush = sentence_pattern is not None
+        async for chain in generator:
+            if not isinstance(chain, MessageChain):
+                continue
+            for component in chain.chain:
+                if isinstance(component, Plain):
+                    text_buffer += component.text
+                    if for_sentence_flush and any(p in text_buffer for p in "。？！~…"):
+                        text_buffer = await self.process_buffer(
+                            text_buffer,
+                            sentence_pattern,
+                        )
+                        sent_any = True
+                else:
+                    await self.send(MessageChain(chain=[component]))
+                    sent_any = True
+                    await sleep(component_delay)
+
+        if text_buffer.strip():
+            await self.send(MessageChain([Plain(text_buffer.strip())]))
+            sent_any = True
+        if not sent_any:
+            if record_empty:
+                return await AstrMessageEvent.send_streaming(
+                    self,
+                    generator,
+                    use_fallback,
+                )
+            return None
+        return await AstrMessageEvent.send_streaming(self, generator, use_fallback)
+
+    async def _record_streaming_send(self) -> PlatformSendResult:
+        """Record exactly one successful logical streaming response."""
+        create_tracked_task(
+            _BACKGROUND_TASKS,
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
+            name=f"metric:stream:{self.platform_meta.name}",
+        )
+        self._has_send_oper = True
+        return self._success_send_result()
+
     async def send_streaming(
         self,
         generator: AsyncGenerator[MessageChain],
@@ -450,13 +528,7 @@ class AstrMessageEvent(abc.ABC):
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
         """
-        create_tracked_task(
-            _BACKGROUND_TASKS,
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
-            name=f"metric:stream:{self.platform_meta.name}",
-        )
-        self._has_send_oper = True
-        return self._success_send_result()
+        return await self._record_streaming_send()
 
     async def send_typing(self) -> None:
         """发送输入中状态。

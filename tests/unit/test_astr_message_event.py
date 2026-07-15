@@ -15,7 +15,7 @@ from astrbot.core.message.components import (
     Plain,
     Reply,
 )
-from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
@@ -703,6 +703,62 @@ class TestSendStreaming:
             await astr_message_event.send_streaming(generator())
 
         assert astr_message_event._has_send_oper is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("chains", "use_fallback", "pattern", "expected_count"),
+        [
+            ([], True, None, 0),
+            (
+                [MessageChain([Plain("one")]), MessageChain([Plain(" two")])],
+                False,
+                None,
+                1,
+            ),
+            (
+                [
+                    MessageChain([Plain("first。")]),
+                    MessageChain([Image.fromURL("https://example.com/image.png")]),
+                    MessageChain([Plain("tail")]),
+                ],
+                True,
+                re.compile(r"[^。]+。"),
+                3,
+            ),
+        ],
+    )
+    async def test_send_non_streaming_response_contract(
+        self,
+        astr_message_event,
+        chains,
+        use_fallback,
+        pattern,
+        expected_count,
+    ):
+        async def generator():
+            for chain in chains:
+                yield chain
+
+        astr_message_event.send = AsyncMock()
+        with patch.object(
+            AstrMessageEvent,
+            "send_streaming",
+            AsyncMock(return_value="recorded"),
+        ) as record_send:
+            result = await astr_message_event.send_non_streaming_response(
+                generator(),
+                use_fallback=use_fallback,
+                sentence_pattern=pattern,
+                sleep=AsyncMock(),
+            )
+
+        assert astr_message_event.send.await_count == expected_count
+        if expected_count:
+            assert result == "recorded"
+            record_send.assert_awaited_once()
+        else:
+            assert result is None
+            record_send.assert_not_awaited()
 
 
 class TestSendTyping:

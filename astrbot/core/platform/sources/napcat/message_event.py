@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Forward, OnlineFile, Plain
+from astrbot.api.message_components import Forward, OnlineFile
 from astrbot.api.platform import Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import PlatformSendResult
@@ -870,35 +870,9 @@ class NapCatMessageEvent(AstrMessageEvent):
         )
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            buffer.squash_plain()
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
-
-        buffer = ""
-        sent_any = False
-        async for chain in generator:
-            if not isinstance(chain, MessageChain):
-                continue
-            for component in chain.chain:
-                if isinstance(component, Plain):
-                    buffer += component.text
-                    continue
-                await self.send(MessageChain(chain=[component]))
-                sent_any = True
-                await asyncio.sleep(1.2)
-
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
-            sent_any = True
-        if not sent_any:
-            return None
-        return await super().send_streaming(generator, use_fallback)
+        return await self.send_non_streaming_response(
+            generator,
+            use_fallback=use_fallback,
+            component_delay=1.2,
+            sleep=asyncio.sleep,
+        )

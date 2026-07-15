@@ -76,28 +76,9 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         )
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
-
-        buffer = ""
-        async for chain in generator:
-            if not isinstance(chain, MessageChain):
-                continue
-            for component in chain.chain:
-                if not isinstance(component, Plain):
-                    await self.send(MessageChain(chain=[component]))
-                    await asyncio.sleep(1.2)
-                    continue
-                buffer += component.text
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
+        return await self.send_non_streaming_response(
+            generator,
+            use_fallback=use_fallback,
+            component_delay=1.2,
+            sleep=asyncio.sleep,
+        )

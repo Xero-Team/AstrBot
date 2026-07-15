@@ -251,33 +251,8 @@ class LineMessageEvent(AstrMessageEvent):
         generator: AsyncGenerator,
         use_fallback: bool = False,
     ):
-        if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            buffer.squash_plain()
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
-
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
-
-        async for chain in generator:
-            if isinstance(chain, MessageChain):
-                for comp in chain.chain:
-                    if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
-                    else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)
-
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
+        return await self.send_non_streaming_response(
+            generator,
+            use_fallback=use_fallback,
+            sentence_pattern=re.compile(r"[^。？！~…]+[。？！~…]+"),
+        )

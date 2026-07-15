@@ -314,7 +314,7 @@ check-toml-all: $(CHECK_TOML_TARGETS)
 
 check-toml-format:
 	@echo "==> [toml] taplo fmt --check"
-	@for f in $$(git ls-files '*.toml'); do \
+	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
 		$(NPX) @taplo/cli fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
 	done
 
@@ -326,7 +326,7 @@ check-toml-lint:
 
 format-toml:
 	@echo "==> [toml] taplo fmt"
-	@for f in $$(git ls-files '*.toml'); do \
+	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
 		tmp=$$(mktemp); \
 		$(NPX) @taplo/cli fmt --stdin-filepath "$$f" - < "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
 	done

@@ -48,6 +48,13 @@ from astrbot.core.platform.platform import Platform
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.register import register_platform_adapter
 
+from .codec import (
+    build_notice_message,
+    build_request_message,
+    coerce_bool_value,
+    coerce_numeric_value,
+    decode_cq_text,
+)
 from .exceptions import NapCatError
 from .forward_ws_client import NapCatForwardWebSocketClient
 from .generated.ob11_events import (
@@ -1259,28 +1266,13 @@ class NapCatPlatformAdapter(Platform):
         return segments
 
     def _decode_cq_text(self, value: str) -> str:
-        return (
-            value.replace("&#91;", "[")
-            .replace("&#93;", "]")
-            .replace("&#44;", ",")
-            .replace("&amp;", "&")
-        )
+        return decode_cq_text(value)
 
     def _coerce_numeric_segment_value(self, value: object) -> object:
-        if isinstance(value, str):
-            stripped = value.strip()
-            if stripped.isdigit():
-                return int(stripped)
-        return value
+        return coerce_numeric_value(value)
 
     def _coerce_bool_segment_value(self, value: object) -> object:
-        if isinstance(value, str):
-            stripped = value.strip().lower()
-            if stripped == "true":
-                return True
-            if stripped == "false":
-                return False
-        return value
+        return coerce_bool_value(value)
 
     async def _convert_segment_payload_async(
         self,
@@ -1735,110 +1727,7 @@ class NapCatPlatformAdapter(Platform):
         return getattr(value, field, None)
 
     def _build_notice_message_str(self, event: object) -> str:
-        notice_type = self._stringify_event_value(getattr(event, "notice_type", None))
-        sub_type = self._stringify_event_value(getattr(event, "sub_type", None))
-        parts = [f"[notice:{notice_type or 'unknown'}"]
-        if sub_type:
-            parts[0] = f"{parts[0]}:{sub_type}"
-        parts[0] = f"{parts[0]}]"
-
-        user_id = self._stringify_event_value(getattr(event, "user_id", None))
-        group_id = self._stringify_event_value(getattr(event, "group_id", None))
-        peer_id = self._stringify_event_value(getattr(event, "peer_id", None))
-        target_id = self._stringify_event_value(getattr(event, "target_id", None))
-        operator_id = self._stringify_event_value(getattr(event, "operator_id", None))
-        operator_nick = self._stringify_event_value(
-            getattr(event, "operator_nick", None)
-        )
-        message_id = self._stringify_event_value(getattr(event, "message_id", None))
-        honor_type = self._stringify_event_value(getattr(event, "honor_type", None))
-        duration = getattr(event, "duration", None)
-        likes = getattr(event, "likes", None)
-        code = self._stringify_event_value(getattr(event, "code", None))
-        count = self._stringify_event_value(getattr(event, "count", None))
-        times = self._stringify_event_value(getattr(event, "times", None))
-        event_type = self._stringify_event_value(getattr(event, "event_type", None))
-        status_text = self._stringify_event_value(getattr(event, "status_text", None))
-        busi_id = self._stringify_event_value(getattr(event, "busi_id", None))
-        content = self._stringify_event_value(getattr(event, "content", None))
-        name_new = self._stringify_event_value(getattr(event, "name_new", None))
-        title = self._stringify_event_value(getattr(event, "title", None))
-        tag = self._stringify_event_value(getattr(event, "tag", None))
-        event_message = self._stringify_event_value(getattr(event, "message", None))
-        file_info = getattr(event, "file", None)
-
-        if user_id and user_id != "0":
-            parts.append(f"user {user_id}")
-        if peer_id and peer_id != "0":
-            parts.append(f"peer {peer_id}")
-        if target_id and target_id != "0":
-            parts.append(f"target {target_id}")
-        if operator_id and operator_id != "0":
-            parts.append(f"operator {operator_id}")
-        if operator_nick:
-            parts.append(f"operator_nick {operator_nick}")
-        if message_id:
-            parts.append(f"message {message_id}")
-        if group_id and group_id != "0":
-            parts.append(f"group {group_id}")
-        if honor_type:
-            parts.append(f"honor {honor_type}")
-        if duration is not None:
-            parts.append(f"duration {duration}s")
-        if isinstance(likes, list):
-            parts.append(f"likes {len(likes)}")
-        if code:
-            parts.append(f"code {code}")
-        if count:
-            parts.append(f"count {count}")
-        if times:
-            parts.append(f"times {times}")
-        if event_type:
-            parts.append(f"event_type {event_type}")
-        if status_text:
-            parts.append(f"status {status_text}")
-        if busi_id:
-            parts.append(f"busi {busi_id}")
-        if content:
-            parts.append(f"content {content}")
-        if name_new:
-            parts.append(f"name {name_new}")
-        if title:
-            parts.append(f"title {title}")
-        if tag:
-            parts.append(f"tag {tag}")
-        if event_message and event_message != message_id:
-            parts.append(f"message {event_message}")
-        if file_info is not None:
-            file_name = self._stringify_event_value(getattr(file_info, "name", None))
-            if file_name:
-                parts.append(f"file {file_name}")
-
-        if isinstance(event, OneBot11GroupCard):
-            if event.card_old:
-                parts.append(f"old_card {event.card_old}")
-            if event.card_new:
-                parts.append(f"new_card {event.card_new}")
-
-        return " ".join(parts)
+        return build_notice_message(event)
 
     def _build_request_message_str(self, event: object) -> str:
-        request_type = self._stringify_event_value(getattr(event, "request_type", None))
-        sub_type = self._stringify_event_value(getattr(event, "sub_type", None))
-        parts = [f"[request:{request_type or 'unknown'}"]
-        if sub_type:
-            parts[0] = f"{parts[0]}:{sub_type}"
-        parts[0] = f"{parts[0]}]"
-
-        user_id = self._stringify_event_value(getattr(event, "user_id", None))
-        group_id = self._stringify_event_value(getattr(event, "group_id", None))
-        comment = self._stringify_event_value(getattr(event, "comment", None))
-
-        if user_id:
-            parts.append(f"user {user_id}")
-        if group_id:
-            parts.append(f"group {group_id}")
-        if comment:
-            parts.append(f"comment {comment}")
-
-        return " ".join(parts)
+        return build_request_message(event)

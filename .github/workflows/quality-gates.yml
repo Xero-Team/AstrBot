@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   quality-gates:
-    name: Run focused quality checks
+    name: Run quality checks
     runs-on: ubuntu-latest
 
     steps:
@@ -35,57 +35,5 @@ jobs:
       - name: Verify Python lockfile
         run: uv lock --check
 
-      - name: Run focused Pyright checks
-        run: uv run pyright --project pyrightconfig.quality.json
-
-      - name: Run Bandit checks
-        run: |
-          PYTHONIOENCODING=utf-8 uv run bandit -ll -ii -r astrbot -c pyproject.toml
-
-      - name: Audit dependencies
-        run: uv run pip-audit --strict
-
-      - name: Audit frontend dependencies
-        working-directory: dashboard
-        run: |
-          corepack enable
-          corepack pnpm install --frozen-lockfile
-          corepack pnpm audit --audit-level=low
-
-      - name: Enforce complexity baseline
-        run: >
-          uv run ruff check --select C901
-          --config "lint.mccabe.max-complexity=40" astrbot
-
-      - name: Report complexity
-        run: |
-          uv run radon cc \
-            astrbot/api \
-            astrbot/cli \
-            astrbot/core/backup \
-            astrbot/core/config \
-            astrbot/core/event_bus.py \
-            astrbot/core/knowledge_base \
-            astrbot/core/pipeline/respond \
-            astrbot/core/pipeline/waking_check \
-            astrbot/core/platform \
-            astrbot/core/skills \
-            astrbot/core/star/context.py \
-            astrbot/core/umop_config_router.py \
-            astrbot/utils \
-            -s -n C
-          uv run radon mi \
-            astrbot/api \
-            astrbot/cli \
-            astrbot/core/backup \
-            astrbot/core/config \
-            astrbot/core/event_bus.py \
-            astrbot/core/knowledge_base \
-            astrbot/core/pipeline/respond \
-            astrbot/core/pipeline/waking_check \
-            astrbot/core/platform \
-            astrbot/core/skills \
-            astrbot/core/star/context.py \
-            astrbot/core/umop_config_router.py \
-            astrbot/utils \
-            -s
+      - name: Run repository quality gate
+        run: make quality

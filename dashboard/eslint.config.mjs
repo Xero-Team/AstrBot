@@ -175,7 +175,7 @@ export default tseslint.config(
       'vue/no-template-shadow': 'error',
       'vue/no-unused-components': 'error',
       'vue/no-unused-vars': 'error',
-      'vue/no-v-html': 'off',
+      'vue/no-v-html': 'error',
       'no-implicit-coercion': 'error',
       'dot-notation': 'error',
       'no-empty-function': 'error',

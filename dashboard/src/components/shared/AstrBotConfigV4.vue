@@ -1,5 +1,6 @@
 <script setup>
 import MarkdownIt from 'markdown-it';
+import DOMPurify from 'dompurify';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
 import { ref, computed } from 'vue';
@@ -52,7 +53,7 @@ const hintMarkdown = new MarkdownIt({
 const renderHint = (value) => {
   const text = translateIfKey(value);
   if (!text) return '';
-  return hintMarkdown.renderInline(text);
+  return DOMPurify.sanitize(hintMarkdown.renderInline(text));
 };
 
 const dialog = ref(false);
@@ -244,6 +245,7 @@ function shouldShowSection() {
           class="important-hint"
           >‼️</span
         >
+        <!-- eslint-disable-next-line vue/no-v-html -- renderHint sanitizes Markdown with DOMPurify. -->
         <span v-html="renderHint(metadata[metadataKey]?.hint)"></span>
       </v-list-item-subtitle>
     </v-card-text>
@@ -269,9 +271,11 @@ function shouldShowSection() {
                   class="important-hint"
                   >‼️</span
                 >
+                <!-- eslint-disable vue/no-v-html -- renderHint sanitizes Markdown with DOMPurify. -->
                 <span
                   v-html="renderHint(getItemHint(itemKey, itemMeta))"
                 ></span>
+                <!-- eslint-enable vue/no-v-html -->
               </v-list-item-subtitle>
             </v-list-item>
           </v-col>
@@ -399,9 +403,11 @@ function shouldShowSection() {
                       class="important-hint"
                       >‼️</span
                     >
+                    <!-- eslint-disable vue/no-v-html -- renderHint sanitizes Markdown with DOMPurify. -->
                     <span
                       v-html="renderHint(getItemHint(itemKey, itemMeta))"
                     ></span>
+                    <!-- eslint-enable vue/no-v-html -->
                   </v-list-item-subtitle>
                 </v-list-item>
               </v-col>

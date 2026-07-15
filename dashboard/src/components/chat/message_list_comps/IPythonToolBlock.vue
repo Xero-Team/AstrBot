@@ -3,11 +3,13 @@
     <div v-if="displayExpanded" class="py-3 animate-fade-in">
       <!-- Code Section -->
       <div class="code-section">
+        <!-- eslint-disable vue/no-v-html -- DOMPurify sanitizes the Shiki output. -->
         <div
           v-if="shikiReady && code"
           class="code-highlighted"
           v-html="highlightedCode"
         ></div>
+        <!-- eslint-enable vue/no-v-html -->
         <pre v-else class="code-fallback" :class="{ 'dark-theme': isDark }">{{
           code || 'No code available'
         }}</pre>
@@ -26,6 +28,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import DOMPurify from 'dompurify';
 import { useModuleI18n } from '@/i18n/composables';
 import {
   ensureShikiLanguages,
@@ -89,15 +92,18 @@ const highlightedCode = computed(() => {
     return '';
   }
   try {
-    return renderShikiCode(
+    const html = renderShikiCode(
       shikiHighlighter.value,
       code.value,
       'python',
       props.isDark ? 'dark' : 'light',
     );
+    return DOMPurify.sanitize(html);
   } catch (err) {
     console.error('Failed to highlight code:', err);
-    return `<pre><code>${escapeHtml(code.value)}</code></pre>`;
+    return DOMPurify.sanitize(
+      `<pre><code>${escapeHtml(code.value)}</code></pre>`,
+    );
   }
 });
 

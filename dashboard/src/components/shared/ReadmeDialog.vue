@@ -472,12 +472,14 @@ const showActionArea = computed(() => {
           <p class="text-body-1 text-center">{{ modeConfig.loading }}</p>
         </div>
 
+        <!-- eslint-disable vue/no-v-html -- renderedHtml is sanitized by DOMPurify. -->
         <div
           v-else-if="renderedHtml"
           class="markdown-body"
           @click="handleContainerClick"
           v-html="renderedHtml"
         ></div>
+        <!-- eslint-enable vue/no-v-html -->
 
         <div
           v-else-if="error"

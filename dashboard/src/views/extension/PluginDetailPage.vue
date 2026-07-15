@@ -969,6 +969,7 @@ onBeforeUnmount(() => {
           <div v-else-if="readmeEmpty" class="text-medium-emphasis">
             {{ tm('detail.docsEmpty') }}
           </div>
+          <!-- eslint-disable-next-line vue/no-v-html -- renderedReadme is sanitized by DOMPurify. -->
           <div v-else class="docs-markdown" v-html="renderedReadme"></div>
         </v-card-text>
       </v-card>
@@ -989,6 +990,7 @@ onBeforeUnmount(() => {
           <div v-else-if="changelogEmpty" class="text-medium-emphasis">
             {{ tm('detail.changelogEmpty') }}
           </div>
+          <!-- eslint-disable-next-line vue/no-v-html -- renderedChangelog is sanitized by DOMPurify. -->
           <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
         </v-card-text>
       </v-card>

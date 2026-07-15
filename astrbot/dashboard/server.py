@@ -71,6 +71,7 @@ class _RateLimiterRegistry:
 
     _ENTRY_TTL: float = 3600.0
     _INTERVAL: float = 1800.0
+    _MAX_ENTRIES: int = 10_000
 
     def __init__(self) -> None:
         self._limiters: dict[str, _AuthRateLimiter] = {}
@@ -82,6 +83,12 @@ class _RateLimiterRegistry:
         self._evict_expired()
         limiter = self._limiters.get(key)
         if limiter is None:
+            if len(self._limiters) >= self._MAX_ENTRIES:
+                oldest_key = min(
+                    self._limiters,
+                    key=lambda item: self._limiters[item].last_accessed,
+                )
+                del self._limiters[oldest_key]
             limiter = _AuthRateLimiter(capacity=capacity, refill_rate=refill_rate)
             self._limiters[key] = limiter
         return limiter

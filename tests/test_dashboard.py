@@ -43,7 +43,7 @@ from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
-from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.server import AstrBotDashboard, _RateLimiterRegistry
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_service import PluginService
 from tests.fixtures.helpers import (
@@ -707,6 +707,24 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
+
+
+def test_auth_rate_limiter_registry_evicts_oldest_entry_at_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """An attacker cannot grow the per-IP limiter registry without bound."""
+    monkeypatch.setattr(_RateLimiterRegistry, "_MAX_ENTRIES", 2)
+    registry = _RateLimiterRegistry()
+    oldest = registry.get_or_create("198.51.100.1", capacity=1, refill_rate=1.0)
+    newest = registry.get_or_create("198.51.100.2", capacity=1, refill_rate=1.0)
+    oldest.last_accessed = 1.0
+    newest.last_accessed = 2.0
+
+    registry.get_or_create("198.51.100.3", capacity=1, refill_rate=1.0)
+
+    assert "198.51.100.1" not in registry
+    assert "198.51.100.2" in registry
+    assert "198.51.100.3" in registry
 
 
 @pytest.mark.asyncio

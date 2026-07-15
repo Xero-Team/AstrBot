@@ -38,10 +38,23 @@ class BaseAgentRunner[TContext]:
         """Process a single step of the agent."""
         ...
 
-    @abc.abstractmethod
-    def step_until_done(self, max_step: int) -> T.AsyncGenerator[AgentResponse]:
+    async def step_until_done(
+        self, max_step: int = 30
+    ) -> T.AsyncGenerator[AgentResponse]:
         """Process steps until the agent is done."""
-        ...
+        if max_step <= 0:
+            raise ValueError("max_step must be greater than 0")
+
+        step_count = 0
+        while not self.done() and step_count < max_step:
+            step_count += 1
+            async for response in self.step():
+                yield response
+
+        if not self.done():
+            raise RuntimeError(
+                f"{type(self).__name__} reached max_step ({max_step}) without completion."
+            )
 
     @abc.abstractmethod
     def done(self) -> bool:

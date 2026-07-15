@@ -113,23 +113,6 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             )
 
     @override
-    async def step_until_done(
-        self, max_step: int = 30
-    ) -> T.AsyncGenerator[AgentResponse]:
-        if max_step <= 0:
-            raise ValueError("max_step must be greater than 0")
-
-        step_count = 0
-        while not self.done() and step_count < max_step:
-            step_count += 1
-            async for resp in self.step():
-                yield resp
-
-        if not self.done():
-            raise RuntimeError(
-                f"Dashscope agent reached max_step ({max_step}) without completion."
-            )
-
     def _consume_sync_generator(
         self, response: T.Any, response_queue: queue.Queue
     ) -> None:

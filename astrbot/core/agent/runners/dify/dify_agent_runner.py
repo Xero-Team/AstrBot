@@ -92,23 +92,6 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             await self.api_client.close()
 
     @override
-    async def step_until_done(
-        self, max_step: int = 30
-    ) -> T.AsyncGenerator[AgentResponse]:
-        if max_step <= 0:
-            raise ValueError("max_step must be greater than 0")
-
-        step_count = 0
-        while not self.done() and step_count < max_step:
-            step_count += 1
-            async for resp in self.step():
-                yield resp
-
-        if not self.done():
-            raise RuntimeError(
-                f"Dify agent reached max_step ({max_step}) without completion."
-            )
-
     async def _upload_image_for_dify(
         self,
         image_url: str,

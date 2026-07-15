@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import (

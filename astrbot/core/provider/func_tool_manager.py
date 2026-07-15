@@ -12,7 +12,6 @@ from typing import Any
 import aiohttp
 
 from astrbot import logger
-from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.tools.registry import (
@@ -22,6 +21,7 @@ from astrbot.core.tools.registry import (
     iter_builtin_tool_classes,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -252,6 +252,7 @@ class _PermissionGuardedTool(FunctionTool):
 
 class FunctionToolManager:
     def __init__(self) -> None:
+        self.preferences: SharedPreferences | None = None
         self.func_list: list[FunctionTool] = []
         """All tools include mcp tools and plugin tools, except astrbot builtin tools."""
         self.builtin_func_list: dict[type[FunctionTool], FunctionTool] = {}
@@ -278,6 +279,10 @@ class FunctionToolManager:
             self._init_timeout_default,
             self._enable_timeout_default,
         )
+
+    def bind_preferences(self, preferences: SharedPreferences) -> None:
+        """Bind runtime preferences after the tool registry has been imported."""
+        self.preferences = preferences
 
     @property
     def mcp_server_runtime_view(self) -> Mapping[str, _MCPServerRuntime]:
@@ -427,7 +432,9 @@ class FunctionToolManager:
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
         try:
-            perms_raw = await sp.global_get("tool_permissions", {})
+            if self.preferences is None:
+                return {}
+            perms_raw = await self.preferences.global_get("tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
@@ -985,10 +992,16 @@ class FunctionToolManager:
         if func_tool is not None:
             func_tool.active = False
 
-            inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
+            if self.preferences is None:
+                return
+            inactivated_llm_tools = await self.preferences.global_get(
+                "inactivated_llm_tools", []
+            )
             if name not in inactivated_llm_tools:
                 inactivated_llm_tools.append(name)
-                await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
+                await self.preferences.global_put(
+                    "inactivated_llm_tools", inactivated_llm_tools
+                )
 
             return True
         return False
@@ -1005,10 +1018,16 @@ class FunctionToolManager:
 
             func_tool.active = True
 
-            inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
+            if self.preferences is None:
+                return
+            inactivated_llm_tools = await self.preferences.global_get(
+                "inactivated_llm_tools", []
+            )
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
-                await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
+                await self.preferences.global_put(
+                    "inactivated_llm_tools", inactivated_llm_tools
+                )
 
             return True
         return False

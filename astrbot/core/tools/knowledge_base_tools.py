@@ -1,7 +1,7 @@
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.api import logger, sp
+from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -30,7 +30,7 @@ async def retrieve_knowledge_base(
     kb_mgr = context.kb_manager
     config = context.get_config(umo=umo)
 
-    session_config = await sp.session_get(umo, "kb_config", default={})
+    session_config = await context.preferences.session_get(umo, "kb_config", default={})
     if session_config and "kb_ids" in session_config:
         kb_ids = session_config.get("kb_ids", [])
         if not kb_ids:

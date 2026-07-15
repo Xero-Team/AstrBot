@@ -9,7 +9,7 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart

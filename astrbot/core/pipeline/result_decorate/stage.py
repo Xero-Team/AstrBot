@@ -5,7 +5,7 @@ import time
 import traceback
 from collections.abc import AsyncGenerator
 
-from astrbot.core import file_token_service, html_renderer, logger
+from astrbot import logger
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
@@ -274,7 +274,6 @@ class ResultDecorateStage(Stage):
                 and result.is_llm_result()
                 and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= self.tts_trigger_probability
-                and tts_provider
             )
             if should_tts and not tts_provider:
                 logger.warning(
@@ -334,7 +333,7 @@ class ResultDecorateStage(Stage):
 
                             url = None
                             if use_file_service and callback_api_base:
-                                token = await file_token_service.register_file(
+                                token = await self.ctx.file_token_service.register_file(
                                     audio_path,
                                 )
                                 url = f"{callback_api_base}/api/v1/files/tokens/{token}"
@@ -371,7 +370,7 @@ class ResultDecorateStage(Stage):
                 if plain_str and len(plain_str) > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
-                        image_path = await html_renderer.render_t2i(
+                        image_path = await self.ctx.html_renderer.render_t2i(
                             plain_str,
                             template_name=self.t2i_active_template,
                         )
@@ -398,7 +397,7 @@ class ResultDecorateStage(Stage):
                         )
                         if should_use_file_service:
                             try:
-                                token = await file_token_service.register_file(
+                                token = await self.ctx.file_token_service.register_file(
                                     image_path,
                                 )
                                 image_url = (

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import psutil
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,

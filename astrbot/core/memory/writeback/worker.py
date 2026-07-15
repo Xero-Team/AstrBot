@@ -1,6 +1,6 @@
 import asyncio
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.memory.models import MemoryWritebackItem
 

@@ -5,7 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext

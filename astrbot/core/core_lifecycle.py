@@ -16,14 +16,14 @@ import time
 import traceback
 from asyncio import Queue
 
-from astrbot.api import logger, sp
-from astrbot.core import LogBroker, LogManager
+from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.log import LogBroker, LogManager
 from astrbot.core.memory import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.persona_runtime import PersonaRuntimeManager
@@ -31,6 +31,7 @@ from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -44,7 +45,6 @@ from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
 
-from . import astrbot_config, html_renderer
 from .event_bus import EventBus
 
 EVENT_QUEUE_MAXSIZE = 1024
@@ -58,10 +58,11 @@ class AstrBotCoreLifecycle:
     该类还负责加载和执行插件, 以及处理事件总线的分发。
     """
 
-    def __init__(self, log_broker: LogBroker, db: BaseDatabase) -> None:
+    def __init__(self, log_broker: LogBroker, services: RuntimeServices) -> None:
         self.log_broker = log_broker  # 初始化日志代理
-        self.astrbot_config = astrbot_config  # 初始化配置
-        self.db = db  # 初始化数据库
+        self.services = services
+        self.astrbot_config = services.config
+        self.db: BaseDatabase = services.db
 
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
@@ -165,17 +166,17 @@ class AstrBotCoreLifecycle:
 
         await self.db.initialize()
 
-        await html_renderer.initialize()
+        await self.services.html_renderer.initialize()
 
         # 初始化 UMOP 配置路由器
-        self.umop_config_router = UmopConfigRouter(sp=sp)
+        self.umop_config_router = UmopConfigRouter(sp=self.services.preferences)
         await self.umop_config_router.initialize()
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
             default_config=self.astrbot_config,
             ucr=self.umop_config_router,
-            sp=sp,
+            sp=self.services.preferences,
         )
         await self.astrbot_config_mgr.initialize()
         self.temp_dir_cleaner = TempDirCleaner(
@@ -189,7 +190,11 @@ class AstrBotCoreLifecycle:
         self.event_queue = Queue(maxsize=EVENT_QUEUE_MAXSIZE)
 
         # 初始化人格管理器
-        self.persona_mgr = PersonaManager(self.db, self.astrbot_config_mgr)
+        self.persona_mgr = PersonaManager(
+            self.db,
+            self.astrbot_config_mgr,
+            self.services.preferences,
+        )
         await self.persona_mgr.initialize()
 
         self.persona_runtime_manager = PersonaRuntimeManager(self.db)
@@ -203,13 +208,17 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.db,
             self.persona_mgr,
+            self.services.preferences,
         )
 
         # 初始化平台管理器
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
 
         # 初始化对话管理器
-        self.conversation_manager = ConversationManager(self.db)
+        self.conversation_manager = ConversationManager(
+            self.db,
+            self.services.preferences,
+        )
 
         # 初始化平台消息历史管理器
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
@@ -236,13 +245,21 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.kb_manager,
             self.cron_manager,
+            self.services.preferences,
+            self.services.html_renderer,
+            self.services.file_token_service,
             self.subagent_orchestrator,
         )
         self.star_context.persona_runtime_manager = self.persona_runtime_manager
         self.star_context.memory_manager = self.memory_manager
 
         # 初始化插件管理器
-        self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
+        self.plugin_manager = PluginManager(
+            self.star_context,
+            self.astrbot_config,
+            self.services.preferences,
+            self.services.pip_installer,
+        )
 
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
@@ -404,7 +421,7 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
-        await html_renderer.terminate()
+        await self.services.html_renderer.terminate()
         self.dashboard_shutdown_event.set()
 
         # 再次遍历curr_tasks等待每个任务真正结束
@@ -429,7 +446,7 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
-        await html_renderer.terminate()
+        await self.services.html_renderer.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
             target=self.astrbot_updator._reboot,
@@ -447,7 +464,13 @@ class AstrBotCoreLifecycle:
         mapping = {}
         for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id),
+                PipelineContext(
+                    ab_config,
+                    self.plugin_manager,
+                    conf_id,
+                    self.services.html_renderer,
+                    self.services.file_token_service,
+                ),
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
@@ -464,7 +487,13 @@ class AstrBotCoreLifecycle:
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
         scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id),
+            PipelineContext(
+                ab_config,
+                self.plugin_manager,
+                conf_id,
+                self.services.html_renderer,
+                self.services.file_token_service,
+            ),
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler

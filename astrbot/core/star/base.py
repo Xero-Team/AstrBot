@@ -1,7 +1,6 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
-from astrbot.core import html_renderer
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
@@ -55,7 +54,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
                 template_name = config_obj.get("t2i_active_template")
             except Exception:
                 template_name = None
-        return await html_renderer.render_t2i(
+        return await self.context.html_renderer.render_t2i(
             text,
             template_name=template_name,
         )
@@ -67,7 +66,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         options: dict | None = None,
     ) -> str:
         """渲染 HTML"""
-        return await html_renderer.render_custom_template(
+        return await self.context.html_renderer.render_custom_template(
             tmpl,
             data,
             options=options,

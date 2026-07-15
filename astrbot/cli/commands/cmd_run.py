@@ -14,16 +14,16 @@ DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
 
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
-    from astrbot.core import LogBroker, LogManager, db_helper, logger
+    from astrbot import logger
     from astrbot.core.initial_loader import InitialLoader
+    from astrbot.core.log import LogBroker, LogManager
+    from astrbot.core.runtime_services import create_runtime_services
 
     await check_dashboard(astrbot_root / "data")
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
-    db = db_helper
-
-    core_lifecycle = InitialLoader(db, log_broker)
+    core_lifecycle = InitialLoader(create_runtime_services(), log_broker)
 
     await core_lifecycle.start()
 

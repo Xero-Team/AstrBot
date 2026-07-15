@@ -1,4 +1,4 @@
-from astrbot.core import logger
+from astrbot import logger
 
 from .entities import ProviderMetaData, ProviderType
 from .func_tool_manager import FunctionToolManager

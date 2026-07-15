@@ -1,10 +1,10 @@
 from astrbot import logger
-from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
@@ -18,9 +18,15 @@ DEFAULT_PERSONALITY = Personality(
 
 
 class PersonaManager:
-    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
+    def __init__(
+        self,
+        db_helper: BaseDatabase,
+        acm: AstrBotConfigManager,
+        preferences: SharedPreferences,
+    ) -> None:
         self.db = db_helper
         self.acm = acm
+        self.preferences = preferences
         default_ps = acm.default_conf.get("provider_settings", {})
         self.default_persona: str = default_ps.get("default_personality", "default")
         self.personas: list[Persona] = []
@@ -89,7 +95,7 @@ class PersonaManager:
                 - whether use webchat special default persona
         """
         session_service_config = (
-            await sp.get_async(
+            await self.preferences.get_async(
                 scope="umo",
                 scope_id=str(umo),
                 key="session_service_config",

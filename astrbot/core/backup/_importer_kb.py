@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete
 
-from astrbot.core import logger
+from astrbot import logger
 
 from .constants import KB_METADATA_MODELS
 

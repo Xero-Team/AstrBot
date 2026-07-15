@@ -20,12 +20,7 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from astrbot.core import (
-    DependencyConflictError,
-    logger,
-    pip_installer,
-    sp,
-)
+from astrbot import logger
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
@@ -39,10 +34,12 @@ from astrbot.core.utils.astrbot_path import (
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.pip_installer import DependencyConflictError, PipInstaller
 from astrbot.core.utils.requirements_utils import (
     MissingRequirementsPlan,
     plan_missing_requirements_install,
 )
+from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from . import StarMetadata
@@ -132,6 +129,7 @@ async def _install_requirements_with_precheck(
     *,
     plugin_label: str,
     requirements_path: str,
+    pip_installer: PipInstaller,
 ) -> None:
     install_plan = plan_missing_requirements_install(requirements_path)
 
@@ -176,7 +174,13 @@ async def _install_requirements_with_precheck(
 
 
 class PluginManager:
-    def __init__(self, context: Context, config: AstrBotConfig) -> None:
+    def __init__(
+        self,
+        context: Context,
+        config: AstrBotConfig,
+        preferences: SharedPreferences,
+        pip_installer: PipInstaller,
+    ) -> None:
         from .star_tools import StarTools
 
         self.updator = PluginUpdator()
@@ -186,6 +190,8 @@ class PluginManager:
         StarTools.initialize(context)
 
         self.config = config
+        self.preferences = preferences
+        self.pip_installer = pip_installer
         self.plugin_store_path = get_astrbot_plugin_path()
         """存储插件的路径。即 data/plugins"""
         self.plugin_config_path = get_astrbot_config_path()
@@ -339,6 +345,7 @@ class PluginManager:
             await _install_requirements_with_precheck(
                 plugin_label=plugin_label,
                 requirements_path=requirements_path,
+                pip_installer=self.pip_installer,
             )
         except asyncio.CancelledError:
             raise
@@ -379,8 +386,8 @@ class PluginManager:
             install_plan=install_plan,
         )
 
-    @staticmethod
     def _try_import_from_installed_dependencies(
+        self,
         path: str,
         module_str: str,
         root_dir_name: str,
@@ -391,7 +398,7 @@ class PluginManager:
             logger.info(
                 f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
             )
-            pip_installer.prefer_installed_dependencies(
+            self.pip_installer.prefer_installed_dependencies(
                 requirements_path=requirements_path
             )
             module = __import__(path, fromlist=[module_str])
@@ -421,7 +428,7 @@ class PluginManager:
 
         if recovery_state.mode is ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER:
             try:
-                pip_installer.prefer_installed_dependencies(
+                self.pip_installer.prefer_installed_dependencies(
                     requirements_path=requirements_path
                 )
             except Exception as preload_exc:
@@ -903,9 +910,13 @@ class PluginManager:
                 - error_message (str|None): 错误信息，成功时为 None
 
         """
-        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
-        alter_cmd = await sp.global_get("alter_cmd", {})
+        inactivated_plugins = await self.preferences.global_get(
+            "inactivated_plugins", []
+        )
+        inactivated_llm_tools = await self.preferences.global_get(
+            "inactivated_llm_tools", []
+        )
+        alter_cmd = await self.preferences.global_get("alter_cmd", {})
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1183,7 +1194,7 @@ class PluginManager:
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
         try:
-            await sync_command_configs()
+            await sync_command_configs(self.context.get_db())
         except Exception as e:
             logger.error(f"同步指令配置失败: {e!s}")
             logger.error(traceback.format_exc())
@@ -1654,12 +1665,14 @@ class PluginManager:
             await self._terminate_plugin(plugin)
 
             # 加入到 shared_preferences 中
-            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
+            inactivated_plugins: list = await self.preferences.global_get(
+                "inactivated_plugins", []
+            )
             if plugin.module_path not in inactivated_plugins:
                 inactivated_plugins.append(plugin.module_path)
 
             inactivated_llm_tools: list = list(
-                set(await sp.global_get("inactivated_llm_tools", [])),
+                set(await self.preferences.global_get("inactivated_llm_tools", [])),
             )  # 后向兼容
 
             # 禁用插件启用的 llm_tool
@@ -1675,8 +1688,12 @@ class PluginManager:
                     if func_tool.name not in inactivated_llm_tools:
                         inactivated_llm_tools.append(func_tool.name)
 
-            await sp.global_put("inactivated_plugins", inactivated_plugins)
-            await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
+            await self.preferences.global_put(
+                "inactivated_plugins", inactivated_plugins
+            )
+            await self.preferences.global_put(
+                "inactivated_llm_tools", inactivated_llm_tools
+            )
 
             plugin.activated = False
 
@@ -1731,11 +1748,15 @@ class PluginManager:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在。")
-        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
+        inactivated_plugins: list = await self.preferences.global_get(
+            "inactivated_plugins", []
+        )
+        inactivated_llm_tools: list = await self.preferences.global_get(
+            "inactivated_llm_tools", []
+        )
         if plugin.module_path in inactivated_plugins:
             inactivated_plugins.remove(plugin.module_path)
-        await sp.global_put("inactivated_plugins", inactivated_plugins)
+        await self.preferences.global_put("inactivated_plugins", inactivated_plugins)
 
         # 启用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
@@ -1749,7 +1770,9 @@ class PluginManager:
             ):
                 inactivated_llm_tools.remove(func_tool.name)
                 func_tool.active = True
-        await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
+        await self.preferences.global_put(
+            "inactivated_llm_tools", inactivated_llm_tools
+        )
 
         success, error = await self.reload(plugin_name)
         if not success:

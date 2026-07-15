@@ -8,19 +8,25 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable
 
-from astrbot.core import sp
+from astrbot import logger
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
-    def __init__(self, db_helper: BaseDatabase) -> None:
+    def __init__(
+        self,
+        db_helper: BaseDatabase,
+        preferences: SharedPreferences,
+    ) -> None:
         self.session_conversations: dict[str, str] = {}
         self.db = db_helper
+        self.preferences = preferences
         self.save_interval = 60  # 每 60 秒保存一次
         self._conversation_locks: dict[str, asyncio.Lock] = {}
 
@@ -53,8 +59,6 @@ class ConversationManager:
             try:
                 await callback(unified_msg_origin)
             except Exception as e:
-                from astrbot.core import logger
-
                 logger.error(
                     f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
                 )
@@ -108,7 +112,9 @@ class ConversationManager:
             persona_id=persona_id,
         )
         self.session_conversations[unified_msg_origin] = conv.conversation_id
-        await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
+        await self.preferences.session_put(
+            unified_msg_origin, "sel_conv_id", conv.conversation_id
+        )
         return conv.conversation_id
 
     async def switch_conversation(
@@ -122,7 +128,9 @@ class ConversationManager:
 
         """
         self.session_conversations[unified_msg_origin] = conversation_id
-        await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
+        await self.preferences.session_put(
+            unified_msg_origin, "sel_conv_id", conversation_id
+        )
 
     async def delete_conversation(
         self,
@@ -143,7 +151,7 @@ class ConversationManager:
             curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
             if curr_cid == conversation_id:
                 self.session_conversations.pop(unified_msg_origin, None)
-                await sp.session_remove(unified_msg_origin, "sel_conv_id")
+                await self.preferences.session_remove(unified_msg_origin, "sel_conv_id")
 
     async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话
@@ -154,7 +162,7 @@ class ConversationManager:
         """
         await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
         self.session_conversations.pop(unified_msg_origin, None)
-        await sp.session_remove(unified_msg_origin, "sel_conv_id")
+        await self.preferences.session_remove(unified_msg_origin, "sel_conv_id")
 
         # 触发会话删除回调（级联清理）
         await self._trigger_session_deleted(unified_msg_origin)
@@ -170,7 +178,9 @@ class ConversationManager:
         """
         ret = self.session_conversations.get(unified_msg_origin, None)
         if not ret:
-            ret = await sp.session_get(unified_msg_origin, "sel_conv_id", None)
+            ret = await self.preferences.session_get(
+                unified_msg_origin, "sel_conv_id", None
+            )
             if ret:
                 self.session_conversations[unified_msg_origin] = ret
         return ret

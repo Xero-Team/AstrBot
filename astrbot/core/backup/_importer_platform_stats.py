@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from astrbot.core import logger
+from astrbot import logger
 
 DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
 PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (

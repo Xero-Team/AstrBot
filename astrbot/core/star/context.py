@@ -40,8 +40,11 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.file_token_service import FileTokenService
     from astrbot.core.memory import MemoryManager
     from astrbot.core.persona_runtime import PersonaRuntimeManager
+    from astrbot.core.utils.shared_preferences import SharedPreferences
+    from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
@@ -122,6 +125,9 @@ class Context:
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
+        preferences: SharedPreferences,
+        html_renderer: HtmlRenderer,
+        file_token_service: FileTokenService,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
         self._event_queue = event_queue
@@ -146,6 +152,12 @@ class Context:
         """知识库管理器"""
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
+        self.preferences = preferences
+        """Persistent preferences available to plugins."""
+        self.html_renderer = html_renderer
+        """HTML-to-image capability available to plugins."""
+        self.file_token_service = file_token_service
+        """Temporary file publication capability available to plugins."""
         self.subagent_orchestrator = subagent_orchestrator
         self.persona_runtime_manager: PersonaRuntimeManager | None = None
         self.memory_manager: MemoryManager | None = None

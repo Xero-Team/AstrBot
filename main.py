@@ -32,9 +32,11 @@ def _apply_startup_env_flags(argv: list[str]) -> None:
 
 _apply_startup_env_flags(sys.argv[1:])
 
-from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
+from astrbot import logger  # noqa: E402
 from astrbot.core.config.default import VERSION  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
+from astrbot.core.log import LogBroker, LogManager  # noqa: E402
+from astrbot.core.runtime_services import create_runtime_services  # noqa: E402
 from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_config_path,
     get_astrbot_data_path,
@@ -213,12 +215,12 @@ async def main_async(webui_dir_arg: str | None) -> None:
             "请检查网络连接或手动指定 --webui-dir 参数。"
         )
 
-    db = db_helper
+    services = create_runtime_services()
 
     # 打印 logo
     logger.info(logo_tmpl)
 
-    core_lifecycle = InitialLoader(db, log_broker)
+    core_lifecycle = InitialLoader(services, log_broker)
     core_lifecycle.webui_dir = webui_dir
     await core_lifecycle.start()
 

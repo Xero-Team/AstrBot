@@ -8,23 +8,24 @@
 import asyncio
 import traceback
 
-from astrbot.core import LogBroker, logger
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db import BaseDatabase
+from astrbot.core.log import LogBroker
+from astrbot.core.runtime_services import RuntimeServices
 from astrbot.dashboard.server import AstrBotDashboard
 
 
 class InitialLoader:
     """AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。"""
 
-    def __init__(self, db: BaseDatabase, log_broker: LogBroker) -> None:
-        self.db = db
+    def __init__(self, services: RuntimeServices, log_broker: LogBroker) -> None:
+        self.services = services
         self.logger = logger
         self.log_broker = log_broker
         self.webui_dir: str | None = None
 
     async def start(self) -> None:
-        core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
+        core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.services)
 
         try:
             await core_lifecycle.initialize()
@@ -39,7 +40,7 @@ class InitialLoader:
 
         self.dashboard_server = AstrBotDashboard(
             core_lifecycle,
-            self.db,
+            self.services.db,
             core_lifecycle.dashboard_shutdown_event,
             webui_dir,
         )

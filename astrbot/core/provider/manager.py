@@ -5,10 +5,11 @@ import traceback
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
-from astrbot.core import astrbot_config, logger, sp
+from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
@@ -34,6 +35,7 @@ class ProviderManager:
         acm: AstrBotConfigManager,
         db_helper: BaseDatabase,
         persona_mgr: PersonaManager,
+        preferences: SharedPreferences,
     ) -> None:
         self.reload_lock = asyncio.Lock()
         self.resource_lock = asyncio.Lock()
@@ -65,6 +67,7 @@ class ProviderManager:
         ] = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
+        self.llm_tools.bind_preferences(preferences)
 
         self.curr_provider_inst: Provider | None = None
         """默认的 Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
@@ -73,6 +76,7 @@ class ProviderManager:
         self.curr_tts_provider_inst: TTSProvider | None = None
         """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
+        self.preferences = preferences
         self._provider_change_hooks: list[
             Callable[[str, ProviderType, str | None], None]
         ] = []
@@ -125,7 +129,7 @@ class ProviderManager:
             self._session_provider_overrides.setdefault(umo, {})[provider_type] = (
                 provider_id
             )
-            await sp.session_put(
+            await self.preferences.session_put(
                 umo,
                 f"provider_perf_{provider_type.value}",
                 provider_id,
@@ -140,7 +144,7 @@ class ProviderManager:
             TTSProvider,
         ):
             self.curr_tts_provider_inst = prov
-            await sp.put_async(
+            await self.preferences.put_async(
                 key="curr_provider_tts",
                 value=provider_id,
                 scope="global",
@@ -152,7 +156,7 @@ class ProviderManager:
             STTProvider,
         ):
             self.curr_stt_provider_inst = prov
-            await sp.put_async(
+            await self.preferences.put_async(
                 key="curr_provider_stt",
                 value=provider_id,
                 scope="global",
@@ -164,7 +168,7 @@ class ProviderManager:
             Provider,
         ):
             self.curr_provider_inst = prov
-            await sp.put_async(
+            await self.preferences.put_async(
                 key="curr_provider",
                 value=provider_id,
                 scope="global",
@@ -182,7 +186,7 @@ class ProviderManager:
 
     async def _load_session_provider_overrides(self) -> None:
         overrides: dict[str, dict[ProviderType, str]] = {}
-        prefs = await sp.session_get(None, None)
+        prefs = await self.preferences.session_get(None, None)
         for pref in prefs:
             key = pref.key
             if not isinstance(key, str) or not key.startswith("provider_perf_"):
@@ -210,12 +214,16 @@ class ProviderManager:
             provider_overrides.pop(provider_type, None)
             if not provider_overrides:
                 self._session_provider_overrides.pop(umo, None)
-        await sp.session_remove(umo, self._provider_pref_key(provider_type))
+        await self.preferences.session_remove(
+            umo, self._provider_pref_key(provider_type)
+        )
 
     async def clear_all_provider_overrides(self, umo: str) -> None:
         overrides = self._session_provider_overrides.pop(umo, {})
         for provider_type in list(overrides):
-            await sp.session_remove(umo, self._provider_pref_key(provider_type))
+            await self.preferences.session_remove(
+                umo, self._provider_pref_key(provider_type)
+            )
 
     def get_using_provider(
         self, provider_type: ProviderType, umo=None
@@ -288,19 +296,19 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
-        selected_provider_id = await sp.get_async(
+        selected_provider_id = await self.preferences.get_async(
             key="curr_provider",
             default=self.provider_settings.get("default_provider_id"),
             scope="global",
             scope_id="global",
         )
-        selected_stt_provider_id = await sp.get_async(
+        selected_stt_provider_id = await self.preferences.get_async(
             key="curr_provider_stt",
             default=self.provider_stt_settings.get("provider_id"),
             scope="global",
             scope_id="global",
         )
-        selected_tts_provider_id = await sp.get_async(
+        selected_tts_provider_id = await self.preferences.get_async(
             key="curr_provider_tts",
             default=self.provider_tts_settings.get("provider_id"),
             scope="global",
@@ -749,8 +757,10 @@ class ProviderManager:
                 await self.load_provider(provider_config)
 
             # 和配置文件保持同步
-            self.providers_config = astrbot_config["provider"]
-            self.provider_sources_config = astrbot_config.get("provider_sources", [])
+            self.providers_config = self.acm.default_conf["provider"]
+            self.provider_sources_config = self.acm.default_conf.get(
+                "provider_sources", []
+            )
             config_ids = [provider["id"] for provider in self.providers_config]
             logger.info(f"providers in user's config: {config_ids}")
             for key in list(self.inst_map.keys()):
@@ -892,7 +902,7 @@ class ProviderManager:
             # load instance
             await self.load_provider(new_config)
             # sync in-memory config for API queries (e.g., embedding provider list)
-            self.providers_config = astrbot_config["provider"]
+            self.providers_config = self.acm.default_conf["provider"]
 
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():

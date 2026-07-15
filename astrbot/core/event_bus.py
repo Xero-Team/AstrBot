@@ -14,7 +14,7 @@ import asyncio
 import time
 from asyncio import Queue
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 

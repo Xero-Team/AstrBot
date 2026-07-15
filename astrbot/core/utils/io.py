@@ -179,60 +179,24 @@ async def download_image_by_url(
     path: str | None = None,
 ) -> str:
     """下载图片, 返回 path"""
-    try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
-        async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-        ) as session:
-            if post:
-                async with session.post(url, json=post_data) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except (
-        aiohttp.ClientConnectorSSLError,
-        aiohttp.ClientConnectorCertificateError,
-    ):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Disabling SSL verification (CERT_NONE) as a fallback. "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate and resolve certificate issues."
-        )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            if post:
-                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except Exception as e:
-        raise e
+    ssl_context = ssl.create_default_context(
+        cafile=certifi.where(),
+    )  # 使用 certifi 提供的 CA 证书
+    connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+    async with aiohttp.ClientSession(
+        trust_env=True,
+        connector=connector,
+    ) as session:
+        request = session.post(url, json=post_data) if post else session.get(url)
+        async with request as resp:
+            _raise_for_download_status(resp, url)
+            content = await resp.read()
+
+    if not path:
+        return save_temp_img(content)
+    with open(path, "wb") as f:
+        f.write(content)
+    return path
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
@@ -343,7 +307,6 @@ async def download_file(
     path: str,
     show_progress: bool = False,
     progress_callback=None,
-    allow_insecure_ssl_fallback: bool = False,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -352,71 +315,32 @@ async def download_file(
         path: Local destination path.
         show_progress: Whether to print progress to stdout.
         progress_callback: Optional callback for progress payloads.
-        allow_insecure_ssl_fallback: Whether certificate failures may retry with
-            TLS certificate verification disabled.
 
     Returns:
         None.
     """
 
-    try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-        ) as session:
-            async with session.get(
-                url,
-                timeout=aiohttp.ClientTimeout(total=1800),
-            ) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                    )
-    except (
-        aiohttp.ClientConnectorSSLError,
-        aiohttp.ClientConnectorCertificateError,
-    ):
-        if not allow_insecure_ssl_fallback:
-            raise
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-        )
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Falling back to unverified connection (CERT_NONE). "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate certificate issues with the remote server."
-        )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                ssl=ssl_context,
-                timeout=aiohttp.ClientTimeout(total=120),
-            ) as resp:
-                _raise_for_download_status(resp, url)
-                with open(path, "wb") as f:
-                    await _download_response_to_file(
-                        resp,
-                        f,
-                        url,
-                        show_progress,
-                        progress_callback,
-                        show_downloading_label=False,
-                    )
+    ssl_context = ssl.create_default_context(
+        cafile=certifi.where(),
+    )  # 使用 certifi 提供的 CA 证书
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
+    async with aiohttp.ClientSession(
+        trust_env=True,
+        connector=connector,
+    ) as session:
+        async with session.get(
+            url,
+            timeout=aiohttp.ClientTimeout(total=1800),
+        ) as resp:
+            _raise_for_download_status(resp, url)
+            with open(path, "wb") as f:
+                await _download_response_to_file(
+                    resp,
+                    f,
+                    url,
+                    show_progress,
+                    progress_callback,
+                )
     if show_progress:
         print()
 
@@ -598,7 +522,6 @@ async def download_dashboard(
     proxy: str | None = None,
     progress_callback=None,
     extract: bool = True,
-    allow_insecure_ssl_fallback: bool = False,
 ) -> None:
     """Download dashboard assets and optionally extract them.
 
@@ -610,8 +533,6 @@ async def download_dashboard(
         proxy: Optional download proxy prefix.
         progress_callback: Optional callback for download progress payloads.
         extract: Whether to extract the archive after download.
-        allow_insecure_ssl_fallback: Whether certificate failures may retry with
-            TLS certificate verification disabled.
 
     Returns:
         None.
@@ -634,7 +555,6 @@ async def download_dashboard(
                 str(zip_path),
                 show_progress=True,
                 progress_callback=progress_callback,
-                allow_insecure_ssl_fallback=allow_insecure_ssl_fallback,
             )
             if not zipfile.is_zipfile(zip_path):
                 raise RuntimeError(
@@ -666,7 +586,6 @@ async def download_dashboard(
                 str(zip_path),
                 show_progress=True,
                 progress_callback=progress_callback,
-                allow_insecure_ssl_fallback=allow_insecure_ssl_fallback,
             )
             if not zipfile.is_zipfile(zip_path):
                 raise RuntimeError(
@@ -682,7 +601,6 @@ async def download_dashboard(
             str(zip_path),
             show_progress=True,
             progress_callback=progress_callback,
-            allow_insecure_ssl_fallback=allow_insecure_ssl_fallback,
         )
         if not zipfile.is_zipfile(zip_path):
             raise RuntimeError("Downloaded dashboard package is not a valid ZIP file")

@@ -200,7 +200,6 @@ async def test_check_dashboard_files_not_exists(tmp_path):
         mock_download.assert_called_once_with(
             version=f"v{VERSION}",
             latest=False,
-            allow_insecure_ssl_fallback=False,
         )
 
 
@@ -281,7 +280,6 @@ async def test_check_dashboard_files_exists_but_version_mismatch_downloads(tmp_p
             mock_download.assert_called_once_with(
                 version=f"v{VERSION}",
                 latest=False,
-                allow_insecure_ssl_fallback=False,
             )
             mock_logger_warning.assert_called_once()
             call_args, _ = mock_logger_warning.call_args
@@ -322,7 +320,6 @@ async def test_check_dashboard_files_falls_back_to_stale_dist_when_download_fail
     mock_download.assert_called_once_with(
         version=f"v{VERSION}",
         latest=False,
-        allow_insecure_ssl_fallback=False,
     )
     assert any(
         "Falling back to existing data/dist WebUI" in call.args[0]
@@ -359,7 +356,6 @@ async def test_check_dashboard_files_downloads_when_matching_dist_is_incomplete(
     mock_download.assert_called_once_with(
         version=f"v{VERSION}",
         latest=False,
-        allow_insecure_ssl_fallback=False,
     )
 
 

@@ -94,34 +94,21 @@ def test_azure_tts_signature_uses_secrets():
     asyncio.run(test_nonce_generation())
 
 
-def test_ssl_context_fallback_explicit():
-    """Test that SSL context fallback is properly configured."""
-    # This test verifies the SSL context configuration
-    # We can't easily test the full io.py functions without network calls,
-    # but we can verify that ssl.CERT_NONE and check_hostname=False are valid settings
-
-    # Create a context similar to what's used in io.py
+def test_ssl_context_verifies_certificates_by_default():
+    """TLS contexts must verify the peer certificate and hostname by default."""
     ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-
-    # Verify the settings are applied correctly
-    assert ssl_context.check_hostname is False
-    assert ssl_context.verify_mode == ssl.CERT_NONE
-
-    # This configuration should work but is intentionally insecure for fallback
-    # The actual code only uses this when certificate validation fails
+    assert ssl_context.check_hostname is True
+    assert ssl_context.verify_mode == ssl.CERT_REQUIRED
 
 
-def test_io_module_has_ssl_imports():
-    """Verify that io.py properly imports ssl module."""
+def test_io_module_uses_ssl_module():
+    """Verify that io.py creates verified TLS contexts."""
     from astrbot.core.utils import io
 
     # Check that ssl is available in the module
     assert hasattr(io, "ssl")
 
-    # Check that CERT_NONE constant is accessible
-    assert hasattr(io.ssl, "CERT_NONE")
+    assert hasattr(io.ssl, "create_default_context")
 
 
 def test_secrets_module_randomness_quality():

@@ -89,25 +89,12 @@ async def test_download_file_raises_ssl_error_without_insecure_fallback(
 
 
 @pytest.mark.asyncio
-async def test_download_file_rejects_non_200_response_after_ssl_fallback(
+async def test_download_file_has_no_insecure_tls_fallback_option(
     monkeypatch,
     tmp_path,
 ):
-    class FakeSSLError(Exception):
-        pass
-
     target_path = tmp_path / "missing.bin"
-    _patch_download_sessions(
-        monkeypatch,
-        [
-            FakeSSLError(),
-            _FakeResponse(status=404, chunks=[b"not found"]),
-        ],
-    )
-    monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
-    monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
-
-    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
+    with pytest.raises(TypeError, match="allow_insecure_ssl_fallback"):
         await io.download_file(
             "https://example.test/missing",
             str(target_path),
@@ -115,6 +102,38 @@ async def test_download_file_rejects_non_200_response_after_ssl_fallback(
         )
 
     assert not target_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_image_does_not_retry_without_tls_verification(monkeypatch):
+    class FakeSSLError(Exception):
+        pass
+
+    calls = 0
+
+    class _FailingImageSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, *_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise FakeSSLError()
+
+    monkeypatch.setattr(io.aiohttp, "TCPConnector", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        io.aiohttp,
+        "ClientSession",
+        lambda **_kwargs: _FailingImageSession(),
+    )
+
+    with pytest.raises(FakeSSLError):
+        await io.download_image_by_url("https://example.test/image.png")
+
+    assert calls == 1
 
 
 @pytest.mark.asyncio

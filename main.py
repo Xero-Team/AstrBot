@@ -167,7 +167,6 @@ async def check_dashboard_files(webui_dir: str | None = None):
             await download_dashboard(
                 version=f"v{VERSION}",
                 latest=False,
-                allow_insecure_ssl_fallback=False,
             )
         except Exception as e:
             logger.critical(f"下载管理面板文件失败: {e}。")
@@ -195,7 +194,6 @@ async def check_dashboard_files(webui_dir: str | None = None):
         await download_dashboard(
             version=f"v{VERSION}",
             latest=False,
-            allow_insecure_ssl_fallback=False,
         )
     except Exception as e:
         logger.critical(f"下载管理面板文件失败: {e}。")

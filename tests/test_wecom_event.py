@@ -177,11 +177,10 @@ async def test_wecom_event_send_kf_image_failure_sends_error_text(
     ):
         await event.send(MessageChain([image]))
 
-    assert recursive_send.await_count == 2
-    error_chain = recursive_send.await_args_list[1].args[0]
-    assert len(error_chain.chain) == 1
-    assert isinstance(error_chain.chain[0], Plain)
-    assert "微信客服上传图片失败: upload failed" == error_chain.chain[0].text
+    assert recursive_send.await_count == 1
+    kf_message.send_text.assert_called_once_with(
+        "user-1", "bot-1", "微信客服上传图片失败: upload failed"
+    )
     kf_message.send_image.assert_not_called()
 
 
@@ -249,9 +248,10 @@ async def test_wecom_event_send_app_image_failure_sends_error_text(
     ):
         await event.send(MessageChain([image]))
 
-    assert recursive_send.await_count == 2
-    error_chain = recursive_send.await_args_list[1].args[0]
-    assert error_chain.chain[0].text == "企业微信上传图片失败: upload failed"
+    assert recursive_send.await_count == 1
+    client.message.send_text.assert_called_once_with(
+        "bot-1", "user-1", "企业微信上传图片失败: upload failed"
+    )
     client.message.send_image.assert_not_called()
 
 
@@ -339,9 +339,10 @@ async def test_wecom_event_send_app_file_failure_sends_error_text(
     ):
         await event.send(MessageChain([file_comp]))
 
-    assert recursive_send.await_count == 2
-    error_chain = recursive_send.await_args_list[1].args[0]
-    assert error_chain.chain[0].text == "企业微信上传文件失败: upload failed"
+    assert recursive_send.await_count == 1
+    client.message.send_text.assert_called_once_with(
+        "bot-1", "user-1", "企业微信上传文件失败: upload failed"
+    )
     client.message.send_file.assert_not_called()
 
 
@@ -379,9 +380,10 @@ async def test_wecom_event_send_kf_file_failure_sends_error_text(monkeypatch, tm
     ):
         await event.send(MessageChain([file_comp]))
 
-    assert recursive_send.await_count == 2
-    error_chain = recursive_send.await_args_list[1].args[0]
-    assert error_chain.chain[0].text == "微信客服上传文件失败: upload failed"
+    assert recursive_send.await_count == 1
+    kf_message.send_text.assert_called_once_with(
+        "user-1", "bot-1", "微信客服上传文件失败: upload failed"
+    )
     kf_message.send_file.assert_not_called()
 
 
@@ -421,9 +423,10 @@ async def test_wecom_event_send_kf_video_failure_sends_error_text(
     ):
         await event.send(MessageChain([video_comp]))
 
-    assert recursive_send.await_count == 2
-    error_chain = recursive_send.await_args_list[1].args[0]
-    assert error_chain.chain[0].text == "微信客服上传视频失败: upload failed"
+    assert recursive_send.await_count == 1
+    kf_message.send_text.assert_called_once_with(
+        "user-1", "bot-1", "微信客服上传视频失败: upload failed"
+    )
     kf_message.send_video.assert_not_called()
 
 

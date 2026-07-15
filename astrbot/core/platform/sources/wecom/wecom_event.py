@@ -79,222 +79,188 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         return result
 
-    async def send(self, message: MessageChain) -> None:
-        message_obj = self.message_obj
+    async def _send_plain_text(
+        self,
+        text: str,
+        sender_id: str,
+        recipient_id: str,
+        kf_message_api: WeChatKFMessage | None,
+    ) -> None:
+        """Send split text through the selected WeCom messaging mode."""
+        for chunk in await self.split_plain(text):
+            if kf_message_api is None:
+                self._client.message.send_text(sender_id, recipient_id, chunk)
+            else:
+                try:
+                    kf_message_api.send_text(recipient_id, sender_id, chunk)
+                except WeChatClientException as exc:
+                    if getattr(exc, "errcode", None) != 40096:
+                        raise
+                    logger.warning(
+                        "kf API error 40096 for user %s, falling back to regular "
+                        "message API",
+                        recipient_id,
+                    )
+                    self._client.message.send_text(sender_id, recipient_id, chunk)
+            await asyncio.sleep(0.5)
 
-        is_wechat_kf = hasattr(self._client, "kf_message")
-        if is_wechat_kf:
-            # 微信客服
-            kf_message_api = getattr(self._client, "kf_message", None)
-            if not isinstance(kf_message_api, WeChatKFMessage):
-                logger.warning("未找到微信客服发送消息方法。")
-                return
+    async def _send_upload_error(
+        self,
+        error_text: str,
+        sender_id: str,
+        recipient_id: str,
+        kf_message_api: WeChatKFMessage | None,
+    ) -> None:
+        """Report an upload failure without recursively entering ``send``."""
+        await self._send_plain_text(
+            error_text,
+            sender_id,
+            recipient_id,
+            kf_message_api,
+        )
+        await super().send(MessageChain().message(error_text))
 
-            user_id = self.get_sender_id()
-            for comp in message.chain:
-                if isinstance(comp, Plain):
-                    # Split long text messages if needed
-                    plain_chunks = await self.split_plain(comp.text)
-                    for chunk in plain_chunks:
-                        try:
-                            kf_message_api.send_text(user_id, self.get_self_id(), chunk)
-                        except WeChatClientException as e:
-                            if getattr(e, "errcode", None) == 40096:
-                                # 40096: invalid external userid, fallback to regular message API
-                                logger.warning(
-                                    f"kf API error 40096 for user {user_id}, falling back to regular message API"
-                                )
-                                self._client.message.send_text(
-                                    self.get_self_id(), user_id, chunk
-                                )
-                            else:
-                                raise
-                        await asyncio.sleep(0.5)  # Avoid sending too fast
-                elif isinstance(comp, Image):
-                    img_path = await comp.convert_to_file_path()
+    async def _upload_and_send_media(
+        self,
+        path: str,
+        media_type: str,
+        sender_id: str,
+        recipient_id: str,
+        kf_message_api: WeChatKFMessage | None,
+    ) -> bool:
+        """Upload one media file and deliver it through the selected mode."""
+        mode_label = "微信客服" if kf_message_api else "企业微信"
+        media_label = {
+            "image": "图片",
+            "voice": "语音",
+            "file": "文件",
+            "video": "视频",
+        }[media_type]
+        try:
+            with open(path, "rb") as media_file:
+                response = self._client.media.upload(media_type, media_file)
+        except Exception as exc:
+            error_text = f"{mode_label}上传{media_label}失败: {exc}"
+            logger.error(error_text)
+            await self._send_upload_error(
+                error_text,
+                sender_id,
+                recipient_id,
+                kf_message_api,
+            )
+            return False
 
-                    with open(img_path, "rb") as f:
-                        try:
-                            response = self._client.media.upload("image", f)
-                        except Exception as e:
-                            logger.error(f"微信客服上传图片失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"微信客服上传图片失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"微信客服上传图片返回: {response}")
-                        kf_message_api.send_image(
-                            user_id,
-                            self.get_self_id(),
-                            response["media_id"],
-                        )
-                elif isinstance(comp, Record):
-                    record_path = await comp.convert_to_file_path()
-                    record_path_amr = await convert_audio_to_amr(record_path)
-
-                    try:
-                        with open(record_path_amr, "rb") as f:
-                            try:
-                                response = self._client.media.upload("voice", f)
-                            except Exception as e:
-                                logger.error(f"微信客服上传语音失败: {e}")
-                                await self.send(
-                                    MessageChain().message(
-                                        f"微信客服上传语音失败: {e}"
-                                    ),
-                                )
-                                return
-                            logger.info(f"微信客服上传语音返回: {response}")
-                            kf_message_api.send_voice(
-                                user_id,
-                                self.get_self_id(),
-                                response["media_id"],
-                            )
-                    finally:
-                        if record_path_amr != record_path and os.path.exists(
-                            record_path_amr,
-                        ):
-                            try:
-                                os.remove(record_path_amr)
-                            except OSError as e:
-                                logger.warning(f"删除临时音频文件失败: {e}")
-                elif isinstance(comp, File):
-                    file_path = await comp.get_file()
-
-                    with open(file_path, "rb") as f:
-                        try:
-                            response = self._client.media.upload("file", f)
-                        except Exception as e:
-                            logger.error(f"微信客服上传文件失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"微信客服上传文件失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"微信客服上传文件返回: {response}")
-                        kf_message_api.send_file(
-                            user_id,
-                            self.get_self_id(),
-                            response["media_id"],
-                        )
-                elif isinstance(comp, Video):
-                    video_path = await comp.convert_to_file_path()
-
-                    with open(video_path, "rb") as f:
-                        try:
-                            response = self._client.media.upload("video", f)
-                        except Exception as e:
-                            logger.error(f"微信客服上传视频失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"微信客服上传视频失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"微信客服上传视频返回: {response}")
-                        kf_message_api.send_video(
-                            user_id,
-                            self.get_self_id(),
-                            response["media_id"],
-                        )
-                else:
-                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+        if media_type == "voice":
+            logger.info(f"{mode_label}上传语音返回: {response}")
         else:
-            # 企业微信应用
-            for comp in message.chain:
-                if isinstance(comp, Plain):
-                    # Split long text messages if needed
-                    plain_chunks = await self.split_plain(comp.text)
-                    for chunk in plain_chunks:
-                        self._client.message.send_text(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            chunk,
-                        )
-                        await asyncio.sleep(0.5)  # Avoid sending too fast
-                elif isinstance(comp, Image):
-                    img_path = await comp.convert_to_file_path()
+            logger.debug(f"{mode_label}上传{media_label}返回: {response}")
+        media_id = response["media_id"]
+        if kf_message_api:
+            match media_type:
+                case "image":
+                    kf_message_api.send_image(recipient_id, sender_id, media_id)
+                case "voice":
+                    kf_message_api.send_voice(recipient_id, sender_id, media_id)
+                case "file":
+                    kf_message_api.send_file(recipient_id, sender_id, media_id)
+                case _:
+                    kf_message_api.send_video(recipient_id, sender_id, media_id)
+        else:
+            match media_type:
+                case "image":
+                    self._client.message.send_image(sender_id, recipient_id, media_id)
+                case "voice":
+                    self._client.message.send_voice(sender_id, recipient_id, media_id)
+                case "file":
+                    self._client.message.send_file(sender_id, recipient_id, media_id)
+                case _:
+                    self._client.message.send_video(sender_id, recipient_id, media_id)
+        return True
 
-                    with open(img_path, "rb") as f:
-                        try:
-                            response = self._client.media.upload("image", f)
-                        except Exception as e:
-                            logger.error(f"企业微信上传图片失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"企业微信上传图片失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"企业微信上传图片返回: {response}")
-                        self._client.message.send_image(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            response["media_id"],
-                        )
-                elif isinstance(comp, Record):
-                    record_path = await comp.convert_to_file_path()
-                    record_path_amr = await convert_audio_to_amr(record_path)
+    async def _send_media(
+        self,
+        component: Image | Record | File | Video,
+        sender_id: str,
+        recipient_id: str,
+        kf_message_api: WeChatKFMessage | None,
+    ) -> bool:
+        """Prepare, upload, and send a supported media component."""
+        if isinstance(component, Image):
+            return await self._upload_and_send_media(
+                await component.convert_to_file_path(),
+                "image",
+                sender_id,
+                recipient_id,
+                kf_message_api,
+            )
+        if isinstance(component, File):
+            return await self._upload_and_send_media(
+                await component.get_file(),
+                "file",
+                sender_id,
+                recipient_id,
+                kf_message_api,
+            )
+        if isinstance(component, Video):
+            return await self._upload_and_send_media(
+                await component.convert_to_file_path(),
+                "video",
+                sender_id,
+                recipient_id,
+                kf_message_api,
+            )
 
-                    try:
-                        with open(record_path_amr, "rb") as f:
-                            try:
-                                response = self._client.media.upload("voice", f)
-                            except Exception as e:
-                                logger.error(f"企业微信上传语音失败: {e}")
-                                await self.send(
-                                    MessageChain().message(
-                                        f"企业微信上传语音失败: {e}"
-                                    ),
-                                )
-                                return
-                            logger.info(f"企业微信上传语音返回: {response}")
-                            self._client.message.send_voice(
-                                message_obj.self_id,
-                                message_obj.session_id,
-                                response["media_id"],
-                            )
-                    finally:
-                        if record_path_amr != record_path and os.path.exists(
-                            record_path_amr,
-                        ):
-                            try:
-                                os.remove(record_path_amr)
-                            except OSError as e:
-                                logger.warning(f"删除临时音频文件失败: {e}")
-                elif isinstance(comp, File):
-                    file_path = await comp.get_file()
+        record_path = await component.convert_to_file_path()
+        record_path_amr = await convert_audio_to_amr(record_path)
+        try:
+            return await self._upload_and_send_media(
+                record_path_amr,
+                "voice",
+                sender_id,
+                recipient_id,
+                kf_message_api,
+            )
+        finally:
+            if record_path_amr != record_path and os.path.exists(record_path_amr):
+                try:
+                    os.remove(record_path_amr)
+                except OSError as exc:
+                    logger.warning(f"删除临时音频文件失败: {exc}")
 
-                    with open(file_path, "rb") as f:
-                        try:
-                            response = self._client.media.upload("file", f)
-                        except Exception as e:
-                            logger.error(f"企业微信上传文件失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"企业微信上传文件失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"企业微信上传文件返回: {response}")
-                        self._client.message.send_file(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            response["media_id"],
-                        )
-                elif isinstance(comp, Video):
-                    video_path = await comp.convert_to_file_path()
+    async def send(self, message: MessageChain) -> None:
+        """Send a message through customer-service or application mode."""
+        kf_message_api = getattr(self._client, "kf_message", None)
+        if hasattr(self._client, "kf_message") and not isinstance(
+            kf_message_api, WeChatKFMessage
+        ):
+            logger.warning("未找到微信客服发送消息方法。")
+            return
 
-                    with open(video_path, "rb") as f:
-                        try:
-                            response = self._client.media.upload("video", f)
-                        except Exception as e:
-                            logger.error(f"企业微信上传视频失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"企业微信上传视频失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"企业微信上传视频返回: {response}")
-                        self._client.message.send_video(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            response["media_id"],
-                        )
-                else:
-                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+        if kf_message_api:
+            sender_id = self.get_self_id()
+            recipient_id = self.get_sender_id()
+        else:
+            sender_id = self.message_obj.self_id
+            recipient_id = self.message_obj.session_id
+
+        for component in message.chain:
+            if isinstance(component, Plain):
+                await self._send_plain_text(
+                    component.text,
+                    sender_id,
+                    recipient_id,
+                    kf_message_api,
+                )
+            elif isinstance(component, Image | Record | File | Video):
+                if not await self._send_media(
+                    component,
+                    sender_id,
+                    recipient_id,
+                    kf_message_api,
+                ):
+                    return
+            else:
+                logger.warning(f"还没实现这个消息类型的发送逻辑: {component.type}。")
 
         await super().send(message)
 

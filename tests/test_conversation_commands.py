@@ -17,8 +17,8 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
         def __init__(self, **kwargs):
             calls.append(("init", kwargs))
 
-        async def delete_thread(self, thread_id: str, timeout: float = 20):
-            calls.append(("delete", thread_id, timeout))
+        async def delete_thread(self, thread_id: str, timeout_s: float = 20):
+            calls.append(("delete", thread_id, timeout_s))
 
         async def close(self):
             calls.append(("close",))
@@ -49,11 +49,12 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
                 else {"id": provider_id}
             ),
         ),
+        preferences=SimpleNamespace(
+            get_async=fake_get_async, remove_async=fake_remove_async
+        ),
     )
 
     monkeypatch.setattr(conversation_module, "DeerFlowAPIClient", FakeClient)
-    monkeypatch.setattr(conversation_module.sp, "get_async", fake_get_async)
-    monkeypatch.setattr(conversation_module.sp, "remove_async", fake_remove_async)
 
     await conversation_module._clear_third_party_agent_runner_state(
         context,
@@ -83,8 +84,8 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
         def __init__(self, **kwargs):
             _ = kwargs
 
-        async def delete_thread(self, thread_id: str, timeout: float = 20):
-            _ = thread_id, timeout
+        async def delete_thread(self, thread_id: str, timeout_s: float = 20):
+            _ = thread_id, timeout_s
             raise RuntimeError("gateway down")
 
         async def close(self):
@@ -116,11 +117,12 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
                 else {"id": provider_id}
             ),
         ),
+        preferences=SimpleNamespace(
+            get_async=fake_get_async, remove_async=fake_remove_async
+        ),
     )
 
     monkeypatch.setattr(conversation_module, "DeerFlowAPIClient", FakeClient)
-    monkeypatch.setattr(conversation_module.sp, "get_async", fake_get_async)
-    monkeypatch.setattr(conversation_module.sp, "remove_async", fake_remove_async)
 
     await conversation_module._clear_third_party_agent_runner_state(
         context,
@@ -173,11 +175,12 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
                 else {"id": provider_id}
             ),
         ),
+        preferences=SimpleNamespace(
+            get_async=fake_get_async, remove_async=fake_remove_async
+        ),
     )
 
     monkeypatch.setattr(conversation_module, "DeerFlowAPIClient", FakeClient)
-    monkeypatch.setattr(conversation_module.sp, "get_async", fake_get_async)
-    monkeypatch.setattr(conversation_module.sp, "remove_async", fake_remove_async)
 
     await conversation_module._clear_third_party_agent_runner_state(
         context,

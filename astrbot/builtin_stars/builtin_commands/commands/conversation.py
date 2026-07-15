@@ -3,9 +3,9 @@ import datetime
 from sqlalchemy import case, func, select
 from sqlmodel import col
 
-from astrbot.api import sp, star
+from astrbot import logger
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core import logger
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
@@ -33,7 +33,7 @@ async def _cleanup_deerflow_thread_if_present(
     umo: str,
 ) -> None:
     try:
-        thread_id = await sp.get_async(
+        thread_id = await context.preferences.get_async(
             scope="umo",
             scope_id=umo,
             key=DEERFLOW_THREAD_ID_KEY,
@@ -100,7 +100,7 @@ async def _clear_third_party_agent_runner_state(
     if agent_runner_type == DEERFLOW_PROVIDER_TYPE:
         await _cleanup_deerflow_thread_if_present(context, umo)
 
-    await sp.remove_async(
+    await context.preferences.remove_async(
         scope="umo",
         scope_id=umo,
         key=session_key,
@@ -134,7 +134,9 @@ class ConversationCommands:
 
         scene = RstScene.get_scene(is_group, is_unique_session)
 
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
+        alter_cmd_cfg = await self.context.preferences.get_async(
+            "global", "global", "alter_cmd", {}
+        )
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
 

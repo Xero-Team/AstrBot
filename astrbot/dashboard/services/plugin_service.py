@@ -14,8 +14,7 @@ import aiohttp
 import certifi
 from starlette.datastructures import UploadFile
 
-from astrbot.api import sp
-from astrbot.core import DEMO_MODE, file_token_service, logger
+from astrbot import logger
 from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.star.filter.command import CommandFilter
@@ -90,6 +89,7 @@ class PluginService:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
+        self.services = core_lifecycle.services
         self.translated_event_type = {
             EventType.AdapterMessageEvent: "平台消息下发时",
             EventType.OnLLMRequestEvent: "LLM 请求时",
@@ -107,9 +107,8 @@ class PluginService:
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
 
-    @staticmethod
-    def _ensure_not_demo() -> None:
-        if DEMO_MODE:
+    def _ensure_not_demo(self) -> None:
+        if self.services.demo_mode:
             raise PluginServiceError(
                 "You are not permitted to do this operation in demo mode"
             )
@@ -228,9 +227,13 @@ class PluginService:
     async def get_plugin_logo_token(self, logo_path: str) -> str | None:
         try:
             if token := self._logo_cache.get(logo_path):
-                if not await file_token_service.check_token_expired(token):
+                if not await self.services.file_token_service.check_token_expired(
+                    token
+                ):
                     return token
-            token = await file_token_service.register_file(logo_path, ttl_seconds=300)
+            token = await self.services.file_token_service.register_file(
+                logo_path, ttl_seconds=300
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as exc:
@@ -288,22 +291,23 @@ class PluginService:
             return f"{author_name}/{plugin_name}"
         return ""
 
-    @staticmethod
-    async def get_plugin_install_sources() -> dict[str, dict[str, Any]]:
+    async def get_plugin_install_sources(self) -> dict[str, dict[str, Any]]:
         """Return persisted plugin installation source records.
 
         Returns:
             A mapping keyed by local plugin root directory name.
         """
-        records = await sp.global_get(PLUGIN_INSTALL_SOURCES_KEY, {})
+        records = await self.services.preferences.global_get(
+            PLUGIN_INSTALL_SOURCES_KEY, {}
+        )
         if not isinstance(records, dict):
             return {}
         return {
             str(key): value for key, value in records.items() if isinstance(value, dict)
         }
 
-    @staticmethod
     async def save_plugin_install_sources(
+        self,
         records: dict[str, dict[str, Any]],
     ) -> None:
         """Persist plugin installation source records.
@@ -311,7 +315,7 @@ class PluginService:
         Args:
             records: Mapping keyed by local plugin root directory name.
         """
-        await sp.global_put(PLUGIN_INSTALL_SOURCES_KEY, records)
+        await self.services.preferences.global_put(PLUGIN_INSTALL_SOURCES_KEY, records)
 
     @staticmethod
     def resolve_plugin_install_source(
@@ -1792,17 +1796,15 @@ class PluginService:
         logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return {"content": None}, "该插件没有更新日志文件"
 
-    @staticmethod
-    async def get_custom_sources() -> list:
-        return PluginService._normalize_custom_sources(
-            await sp.global_get("custom_plugin_sources", [])
+    async def get_custom_sources(self) -> list:
+        return self._normalize_custom_sources(
+            await self.services.preferences.global_get("custom_plugin_sources", [])
         )
 
-    @staticmethod
-    async def save_custom_sources(data: object) -> tuple[None, str]:
+    async def save_custom_sources(self, data: object) -> tuple[None, str]:
         payload = data if isinstance(data, dict) else {}
         sources = PluginService._custom_sources_from_payload(payload)
-        await sp.global_put("custom_plugin_sources", sources)
+        await self.services.preferences.global_put("custom_plugin_sources", sources)
         return None, "保存成功"
 
     @staticmethod
@@ -1816,24 +1818,21 @@ class PluginService:
             raise PluginServiceError("sources fields must be a list")
         return sources
 
-    @staticmethod
-    async def create_custom_source(data: object) -> list:
+    async def create_custom_source(self, data: object) -> list:
         source = data if isinstance(data, dict) else {}
-        sources = await PluginService.get_custom_sources()
+        sources = await self.get_custom_sources()
         sources.append(source)
-        await sp.global_put("custom_plugin_sources", sources)
+        await self.services.preferences.global_put("custom_plugin_sources", sources)
         return sources
 
-    @staticmethod
-    async def replace_custom_sources(data: object) -> list:
+    async def replace_custom_sources(self, data: object) -> list:
         payload = data if isinstance(data, dict) else {}
         sources = PluginService._custom_sources_from_payload(payload)
-        await sp.global_put("custom_plugin_sources", sources)
+        await self.services.preferences.global_put("custom_plugin_sources", sources)
         return sources
 
-    @staticmethod
-    async def delete_custom_source(source_id: str) -> list:
-        sources = await PluginService.get_custom_sources()
+    async def delete_custom_source(self, source_id: str) -> list:
+        sources = await self.get_custom_sources()
         filtered = [
             source
             for source in sources
@@ -1844,7 +1843,7 @@ class PluginService:
             )
             and not (isinstance(source, str) and source == source_id)
         ]
-        await sp.global_put("custom_plugin_sources", filtered)
+        await self.services.preferences.global_put("custom_plugin_sources", filtered)
         return filtered
 
 

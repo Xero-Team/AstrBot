@@ -1,7 +1,6 @@
 # ruff: noqa: F401, F403, F811, I001
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot import logger
-from astrbot.core import html_renderer
 from astrbot.core.star.register import register_llm_tool as llm_tool
 
 # event

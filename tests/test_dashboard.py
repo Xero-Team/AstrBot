@@ -19,10 +19,11 @@ import pytest_asyncio
 from fastapi import FastAPI
 from werkzeug.datastructures import FileStorage
 
-from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
+from astrbot.core.log import LogBroker
+from astrbot.core.runtime_services import create_runtime_services
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
@@ -201,7 +202,10 @@ async def core_lifecycle_td(tmp_path_factory):
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_v3.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    services = create_runtime_services()
+    services.db = db
+    services.preferences.db_helper = db
+    core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
     await core_lifecycle.initialize()
     generated_password = getattr(
         core_lifecycle.astrbot_config,
@@ -2391,7 +2395,7 @@ async def test_batch_delete_sessions_uses_batch_lookup(
     ],
 )
 async def test_get_chat_session_rejects_session_owned_by_another_user(
-    app: FastAPIAppAdapter,
+    app: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     path_template: str,
@@ -2862,7 +2866,7 @@ async def test_check_update(
 
 @pytest.mark.asyncio
 async def test_restart_core_rejects_desktop_managed_backend(
-    app: FastAPIAppAdapter,
+    app: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -3055,7 +3059,7 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
 
 @pytest.mark.asyncio
 async def test_do_update_rejects_desktop_managed_backend(
-    app: FastAPIAppAdapter,
+    app: DashboardTestClient,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,

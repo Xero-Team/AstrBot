@@ -8,13 +8,14 @@ import pytest_asyncio
 from fastapi import FastAPI
 from starlette.datastructures import UploadFile
 
-from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
+from astrbot.core.log import LogBroker
 from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.runtime_services import create_runtime_services
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_md5_dashboard_password,
@@ -34,7 +35,10 @@ async def core_lifecycle_td(tmp_path_factory):
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_kb.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    services = create_runtime_services()
+    services.db = db
+    services.preferences.db_helper = db
+    core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
     await core_lifecycle.initialize()
 
     # Mock kb_manager and kb_helper
@@ -108,9 +112,7 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(
-    app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle
-):
+async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
@@ -347,7 +349,9 @@ async def test_list_documents_trims_search_and_turns_empty_to_none():
     await service.list_documents(kb_id="kb1", page=1, page_size=10, search="   ")
 
     kb_helper.list_documents.assert_awaited_once_with(
-        offset=0, limit=10, search=None,
+        offset=0,
+        limit=10,
+        search=None,
     )
 
 
@@ -359,7 +363,10 @@ async def test_list_documents_total_comes_from_count_documents():
     kb_helper.count_documents.return_value = 42
 
     result = await service.list_documents(
-        kb_id="kb1", page=1, page_size=10, search="  foo  ",
+        kb_id="kb1",
+        page=1,
+        page_size=10,
+        search="  foo  ",
     )
 
     assert result["total"] == 42
@@ -496,7 +503,9 @@ async def test_list_kbs_clamps_page_and_includes_init_error():
     result = await service.list_kbs(page=0, page_size=0)
 
     assert result == {
-        "items": [{"kb_id": "kb-1", "kb_name": "One", "init_error": "vector db failed"}],
+        "items": [
+            {"kb_id": "kb-1", "kb_name": "One", "init_error": "vector db failed"}
+        ],
         "page": 1,
         "page_size": 1,
         "total": 1,
@@ -533,9 +542,7 @@ async def test_create_kb_wraps_embedding_validation_failure():
     service.upload_tasks = {}
 
     with pytest.raises(KnowledgeBaseServiceError, match="测试嵌入模型失败"):
-        await service.create_kb(
-            {"kb_name": "demo", "embedding_provider_id": "embed-1"}
-        )
+        await service.create_kb({"kb_name": "demo", "embedding_provider_id": "embed-1"})
 
 
 @pytest.mark.asyncio
@@ -553,7 +560,10 @@ async def test_update_kb_uses_existing_name_when_name_is_omitted():
     kb_helper.kb.top_k_sparse = None
     kb_helper.kb.top_m_final = None
     updated_helper = MagicMock()
-    updated_helper.kb.model_dump.return_value = {"kb_id": "kb-1", "kb_name": "Existing KB"}
+    updated_helper.kb.model_dump.return_value = {
+        "kb_id": "kb-1",
+        "kb_name": "Existing KB",
+    }
     kb_manager = MagicMock()
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
     kb_manager.update_kb = AsyncMock(return_value=updated_helper)
@@ -811,4 +821,3 @@ async def test_list_chunks_returns_items_and_offset_page_metadata():
         limit=2,
     )
     kb_helper.get_chunk_count_by_doc_id.assert_awaited_once_with("doc-1")
-

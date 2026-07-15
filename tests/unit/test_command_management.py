@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Annotated
 
 import pytest
@@ -26,10 +27,7 @@ async def test_list_commands_includes_signature_metadata(monkeypatch):
     async def fake_get_command_configs():
         return []
 
-    monkeypatch.setattr(
-        "astrbot.core.star.command_management.db_helper.get_command_configs",
-        fake_get_command_configs,
-    )
+    db = SimpleNamespace(get_command_configs=fake_get_command_configs)
 
     try:
         plugin = StarMetadata(
@@ -82,7 +80,7 @@ async def test_list_commands_includes_signature_metadata(monkeypatch):
         greet_handler.event_filters.append(greet_filter)
         star_handlers_registry.append(greet_handler)
 
-        commands = await list_commands()
+        commands = await list_commands(db)
 
         assert len(commands) == 1
         group = commands[0]
@@ -111,7 +109,7 @@ async def test_list_commands_includes_signature_metadata(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_command_service_finds_nested_subcommand_payload(monkeypatch):
-    async def fake_list_commands():
+    async def fake_list_commands(_db):
         return [
             {
                 "handler_full_name": "plugin.demo_tools",
@@ -129,7 +127,11 @@ async def test_command_service_finds_nested_subcommand_payload(monkeypatch):
         fake_list_commands,
     )
 
-    payload = await CommandService._get_command_payload("plugin.demo_greet")
+    service = CommandService(
+        {},
+        SimpleNamespace(services=SimpleNamespace(db=SimpleNamespace())),
+    )
+    payload = await service._get_command_payload("plugin.demo_greet")
 
     assert payload == {
         "handler_full_name": "plugin.demo_greet",
@@ -183,17 +185,16 @@ async def test_list_commands_uses_configured_aliases_in_display_signature(monkey
                 )
             ]
 
-        monkeypatch.setattr(
-            "astrbot.core.star.command_management.db_helper.get_command_configs",
-            fake_get_command_configs,
-        )
+        db = SimpleNamespace(get_command_configs=fake_get_command_configs)
 
-        commands = await list_commands()
+        commands = await list_commands(db)
 
         assert len(commands) == 1
         assert commands[0]["effective_command"] == "welcome"
         assert commands[0]["aliases"] == ["hi", "yo"]
-        assert commands[0]["display_signature"] == "welcome (name(str)) [aliases: hi, yo]"
+        assert (
+            commands[0]["display_signature"] == "welcome (name(str)) [aliases: hi, yo]"
+        )
     finally:
         star_handlers_registry.clear()
         star_map.clear()

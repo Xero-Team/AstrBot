@@ -1,7 +1,7 @@
 import traceback
 from typing import Any
 
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
@@ -16,6 +16,7 @@ class ToolsService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.tool_mgr = core_lifecycle.provider_manager.llm_tools
+        self.preferences = core_lifecycle.services.preferences
 
     def rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -217,7 +218,7 @@ class ToolsService:
                     tools.append(tool)
 
             config_entries = self._get_config_entries()
-            perms_store = await sp.global_get("tool_permissions", {})
+            perms_store = await self.preferences.global_get("tool_permissions", {})
             defaults = (
                 perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )
@@ -261,7 +262,7 @@ class ToolsService:
             if not any(t.name == tool_name for t in self.tool_mgr.func_list):
                 raise ToolsServiceError(f"Tool '{tool_name}' not found")
 
-            perms_store = await sp.global_get("tool_permissions", {})
+            perms_store = await self.preferences.global_get("tool_permissions", {})
             if not isinstance(perms_store, dict):
                 perms_store = {}
             defaults = perms_store.get("_default", {})
@@ -269,7 +270,7 @@ class ToolsService:
                 defaults = {}
             defaults[tool_name] = permission
             perms_store["_default"] = defaults
-            await sp.global_put("tool_permissions", perms_store)
+            await self.preferences.global_put("tool_permissions", perms_store)
 
             return f"Tool '{tool_name}' permission set to {permission}"
         except ToolsServiceError:

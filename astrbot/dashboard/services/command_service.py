@@ -22,8 +22,13 @@ class CommandService:
         self.config = config
         self.core_lifecycle = core_lifecycle
 
+    def _services(self):
+        if self.core_lifecycle is None:
+            raise CommandServiceError("Core lifecycle is required")
+        return self.core_lifecycle.services
+
     async def list_commands(self, config_id: str = "") -> dict:
-        commands = await list_commands()
+        commands = await list_commands(self._services().db)
         summary = {
             "total": len(commands),
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
@@ -37,7 +42,7 @@ class CommandService:
         }
 
     async def list_conflicts(self):
-        return await list_command_conflicts()
+        return await list_command_conflicts(self._services().db)
 
     async def toggle_command(self, handler_full_name: str | None, enabled) -> dict:
         if handler_full_name is None or enabled is None:
@@ -47,7 +52,7 @@ class CommandService:
             enabled = enabled.lower() in ("1", "true", "yes", "on")
 
         try:
-            await toggle_command(handler_full_name, bool(enabled))
+            await toggle_command(self._services().db, handler_full_name, bool(enabled))
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
@@ -63,7 +68,12 @@ class CommandService:
             raise CommandServiceError("handler_full_name 与 new_name 均为必填。")
 
         try:
-            await rename_command(handler_full_name, new_name, aliases=aliases)
+            await rename_command(
+                self._services().db,
+                handler_full_name,
+                new_name,
+                aliases=aliases,
+            )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
@@ -78,7 +88,11 @@ class CommandService:
             raise CommandServiceError("handler_full_name 与 permission 均为必填。")
 
         try:
-            await update_command_permission(handler_full_name, permission)
+            await update_command_permission(
+                self._services().preferences,
+                handler_full_name,
+                permission,
+            )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
@@ -93,9 +107,8 @@ class CommandService:
                 return config_mgr.confs[config_id].get("wake_prefix", wake_prefix)
         return wake_prefix
 
-    @staticmethod
-    async def _get_command_payload(handler_full_name: str) -> dict:
-        commands = await list_commands()
+    async def _get_command_payload(self, handler_full_name: str) -> dict:
+        commands = await list_commands(self._services().db)
         for cmd in commands:
             found = CommandService._find_command_payload(cmd, handler_full_name)
             if found:

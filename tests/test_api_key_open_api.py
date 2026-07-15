@@ -8,9 +8,10 @@ import pytest_asyncio
 from fastapi import FastAPI
 from werkzeug.datastructures import FileStorage
 
-from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.log import LogBroker
+from astrbot.core.runtime_services import create_runtime_services
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_md5_dashboard_password,
@@ -46,7 +47,10 @@ async def core_lifecycle_td(tmp_path_factory):
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_api_key.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
+    services = create_runtime_services()
+    services.db = db
+    services.preferences.db_helper = db
+    core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
     await core_lifecycle.initialize()
     generated_password = getattr(
         core_lifecycle.astrbot_config,
@@ -104,9 +108,7 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(
-    app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle
-):
+async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
     test_client = DashboardTestClient(app)
     try:
         response = await test_client.post(
@@ -480,9 +482,7 @@ async def test_open_chat_rejects_blank_username_and_uses_session_id(
     assert send_data["status"] == "ok"
     assert send_data["data"]["session_id"] == session_id
 
-    created_session = await core_lifecycle_td.db.get_platform_session_by_id(
-        session_id
-    )
+    created_session = await core_lifecycle_td.db.get_platform_session_by_id(session_id)
     assert created_session is not None
     assert created_session.creator == "alias-user"
 

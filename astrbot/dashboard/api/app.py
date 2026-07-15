@@ -3,9 +3,9 @@ from types import SimpleNamespace
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.log import LogBroker
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
@@ -83,14 +83,18 @@ def create_dashboard_asgi_app(
         config_files=ConfigFileService(core_lifecycle),
         config_routes=ConfigRoutingService(core_lifecycle),
         api_keys=ApiKeyService(db),
-        auth=AuthService(db, core_lifecycle.astrbot_config),
+        auth=AuthService(
+            db,
+            core_lifecycle.astrbot_config,
+            demo_mode=core_lifecycle.services.demo_mode,
+        ),
         backups=BackupService(db, core_lifecycle),
         chat=ChatService(db, core_lifecycle),
         chat_projects=ChatUIProjectService(db),
         commands=CommandService(core_lifecycle.astrbot_config, core_lifecycle),
         conversations=ConversationService(db, core_lifecycle),
         cron=CronService(core_lifecycle),
-        files=FileService(),
+        files=FileService(core_lifecycle.services.file_token_service),
         knowledge_bases=KnowledgeBaseService(core_lifecycle),
         memory=MemoryService(db, core_lifecycle),
         live_chat=LiveChatService(db, core_lifecycle),

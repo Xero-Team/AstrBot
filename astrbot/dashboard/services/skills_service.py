@@ -9,7 +9,7 @@ from typing import Any
 
 from starlette.datastructures import UploadFile
 
-from astrbot.core import DEMO_MODE, logger
+from astrbot import logger
 from astrbot.core.computer.computer_client import (
     _discover_bay_credentials,
     sync_skills_to_active_sandboxes,
@@ -92,14 +92,14 @@ def _next_available_temp_path(temp_dir: str, filename: str) -> str:
 class SkillsService:
     def __init__(self, core_lifecycle) -> None:
         self.core_lifecycle = core_lifecycle
+        self.demo_mode = core_lifecycle.services.demo_mode
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
 
-    @staticmethod
-    def _ensure_mutation_allowed() -> None:
-        if DEMO_MODE:
+    def _ensure_mutation_allowed(self) -> None:
+        if self.demo_mode:
             raise SkillsServiceError(
                 "You are not permitted to do this operation in demo mode"
             )

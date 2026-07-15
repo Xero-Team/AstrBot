@@ -13,7 +13,6 @@ import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
-from astrbot.core import sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -120,6 +119,7 @@ class LiveChatService:
     ) -> None:
         self.db = db
         self.core_lifecycle = core_lifecycle
+        self.preferences = core_lifecycle.services.preferences
         self.config = core_lifecycle.astrbot_config
         self.plugin_manager = core_lifecycle.plugin_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
@@ -215,8 +215,11 @@ class LiveChatService:
             kwargs["display_name"] = display_name
         return await create_attachment_part_from_existing_file(filename, **kwargs)
 
-    @staticmethod
-    def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
+    def extract_web_search_refs(
+        self,
+        accumulated_text: str,
+        accumulated_parts: list,
+    ) -> dict:
         supported = [
             "web_search_baidu",
             "web_search_tavily",
@@ -260,7 +263,9 @@ class LiveChatService:
             if ref_index not in web_search_results:
                 continue
             payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
+            if favicon := self.preferences.temporary_cache.get("_ws_favicon", {}).get(
+                payload["url"]
+            ):
                 payload["favicon"] = favicon
             used_refs.append(payload)
 

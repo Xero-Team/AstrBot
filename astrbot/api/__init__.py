@@ -1,5 +1,4 @@
 from astrbot import logger
-from astrbot.core import html_renderer, sp
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -12,8 +11,6 @@ __all__ = [
     "FunctionTool",
     "ToolSet",
     "agent",
-    "html_renderer",
     "llm_tool",
     "logger",
-    "sp",
 ]

@@ -2,9 +2,9 @@ from html import escape
 
 import aiohttp
 
+from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.star import command_management
 from astrbot.core.utils.io import get_dashboard_version
@@ -30,7 +30,7 @@ class HelpCommand:
         使用实时指令配置生成内置指令清单，确保重命名/禁用后与实际生效状态保持一致。
         """
         try:
-            commands = await command_management.list_commands()
+            commands = await command_management.list_commands(self.context.get_db())
         except Exception:
             return []
 
@@ -194,7 +194,7 @@ class HelpCommand:
             notice=notice,
         )
         try:
-            rendered_image = await html_renderer.render_t2i(
+            rendered_image = await self.context.html_renderer.render_t2i(
                 image_markup,
                 template_name="astrbot_help",
             )
@@ -215,7 +215,9 @@ class HelpCommand:
         callback_base = self._get_callback_base(event)
         if callback_base:
             try:
-                token = await file_token_service.register_file(rendered_image)
+                token = await self.context.file_token_service.register_file(
+                    rendered_image
+                )
                 image_url = f"{callback_base}/api/v1/files/tokens/{token}"
                 event.set_result(
                     MessageEventResult().url_image(image_url).use_t2i(False)

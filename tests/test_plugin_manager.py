@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
@@ -107,7 +108,7 @@ async def test_load_plugin_schema_accepts_utf8_bom(
     async def mock_sync_command_configs():
         return None
 
-    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_get", mock_global_get)
     monkeypatch.setattr(
         plugin_manager_pm,
         "_get_plugin_modules",
@@ -392,7 +393,15 @@ def plugin_manager_pm(tmp_path, monkeypatch):
 
     mock_context = MockContext()
     mock_config = {}
-    pm = PluginManager(cast(Any, mock_context), cast(Any, mock_config))
+    pm = PluginManager(
+        cast(Any, mock_context),
+        cast(Any, mock_config),
+        AsyncMock(),
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        star_manager_module, "pip_installer", pm.pip_installer, raising=False
+    )
 
     # Patch paths to use tmp_path
     monkeypatch.setattr(pm, "plugin_store_path", str(plugin_dir))
@@ -677,8 +686,8 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
         assert plugin_name == plugin.root_dir_name
         return True, None
 
-    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
-    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_put", mock_global_put)
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
     monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
 
@@ -731,7 +740,7 @@ async def test_load_reports_unregistered_plugin_without_index_error(
         return None
 
     monkeypatch.syspath_prepend(str(plugin_root))
-    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_get", mock_global_get)
     monkeypatch.setattr(
         star_manager_module,
         "sync_command_configs",
@@ -1842,7 +1851,7 @@ async def test_load_syncs_existing_metadata_activation_from_preferences(
             activated=False,
         )
 
-    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_get", mock_global_get)
     monkeypatch.setattr(
         plugin_manager_pm,
         "_get_plugin_modules",
@@ -2053,8 +2062,8 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
         assert plugin_name_arg == plugin_name
         return True, None
 
-    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
-    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm.preferences, "global_put", mock_global_put)
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
     monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
 

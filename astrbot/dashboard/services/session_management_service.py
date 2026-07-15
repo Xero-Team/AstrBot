@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
@@ -33,6 +33,7 @@ class SessionManagementService:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.db_helper = db_helper
+        self.preferences = core_lifecycle.services.preferences
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -278,7 +279,7 @@ class SessionManagementService:
                 umo=umo,
             )
         else:
-            await sp.session_put(umo, rule_key, rule_value)
+            await self.preferences.session_put(umo, rule_key, rule_value)
         return {"message": f"规则 {rule_key} 已更新", "umo": umo}
 
     async def delete_session_rule(self, data: object) -> dict:
@@ -299,11 +300,11 @@ class SessionManagementService:
                     provider_type,
                 )
             else:
-                await sp.session_remove(umo, rule_key)
+                await self.preferences.session_remove(umo, rule_key)
             return {"message": f"规则 {rule_key} 已删除", "umo": umo}
 
         await self.core_lifecycle.provider_manager.clear_all_provider_overrides(umo)
-        await sp.clear_async("umo", umo)
+        await self.preferences.clear_async("umo", umo)
         return {"message": "所有规则已删除", "umo": umo}
 
     async def delete_session_rules(self, data: object) -> dict:
@@ -341,12 +342,12 @@ class SessionManagementService:
                             provider_type,
                         )
                     else:
-                        await sp.session_remove(umo, rule_key)
+                        await self.preferences.session_remove(umo, rule_key)
                 else:
                     await self.core_lifecycle.provider_manager.clear_all_provider_overrides(
                         umo
                     )
-                    await sp.clear_async("umo", umo)
+                    await self.preferences.clear_async("umo", umo)
                 success_count += 1
             except Exception as exc:
                 logger.error(f"删除 umo {umo} 的规则失败: {exc!s}")
@@ -496,7 +497,9 @@ class SessionManagementService:
 
         for umo in umos:
             try:
-                session_config = await sp.session_get(umo, "session_service_config", {})
+                session_config = await self.preferences.session_get(
+                    umo, "session_service_config", {}
+                )
                 if not isinstance(session_config, dict):
                     session_config = {}
 
@@ -507,7 +510,9 @@ class SessionManagementService:
                 if session_enabled is not None:
                     session_config["session_enabled"] = session_enabled
 
-                await sp.session_put(umo, "session_service_config", session_config)
+                await self.preferences.session_put(
+                    umo, "session_service_config", session_config
+                )
                 success_count += 1
             except Exception as exc:
                 logger.error(f"更新 {umo} 服务状态失败: {exc!s}")
@@ -581,11 +586,11 @@ class SessionManagementService:
         }
 
     async def get_groups(self) -> dict:
-        groups = await sp.global_get("session_groups", {})
+        groups = await self.preferences.global_get("session_groups", {})
         return groups if isinstance(groups, dict) else {}
 
     async def save_groups(self, groups: dict) -> None:
-        await sp.global_put("session_groups", groups)
+        await self.preferences.global_put("session_groups", groups)
 
     async def list_groups(self) -> dict:
         groups = await self.get_groups()

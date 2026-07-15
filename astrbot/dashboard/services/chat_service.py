@@ -13,7 +13,7 @@ from typing import Any
 
 from starlette.datastructures import UploadFile
 
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
@@ -219,7 +219,11 @@ class BotMessageAccumulator:
         return parsed if isinstance(parsed, dict) else None
 
 
-def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
+def extract_web_search_refs(
+    accumulated_text: str,
+    accumulated_parts: list,
+    preferences,
+) -> dict:
     supported = [
         "web_search_baidu",
         "web_search_tavily",
@@ -258,7 +262,9 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
         if ref_index not in web_search_results:
             continue
         payload = {"index": ref_index, **web_search_results[ref_index]}
-        if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
+        if favicon := preferences.temporary_cache.get("_ws_favicon", {}).get(
+            payload["url"]
+        ):
             payload["favicon"] = favicon
         used_refs.append(payload)
 
@@ -500,6 +506,7 @@ class ChatService:
     ) -> None:
         self.db = db
         self.core_lifecycle = core_lifecycle
+        self.preferences = core_lifecycle.services.preferences
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
@@ -913,6 +920,7 @@ class ChatService:
                 extracted_refs = extract_web_search_refs(
                     plain_text,
                     message_parts_to_save,
+                    self.preferences,
                 )
             except Exception as exc:
                 logger.exception(

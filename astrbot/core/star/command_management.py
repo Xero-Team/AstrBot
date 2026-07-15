@@ -2,14 +2,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from astrbot.api import sp
-from astrbot.core import db_helper, logger
+from astrbot import logger
+from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
 @dataclass
@@ -45,25 +46,27 @@ class CommandDescriptor:
     sub_commands: list[CommandDescriptor] = field(default_factory=list)
 
 
-async def sync_command_configs() -> None:
+async def sync_command_configs(db: BaseDatabase) -> None:
     """同步指令配置，清理过期配置。"""
     descriptors = _collect_descriptors(include_sub_commands=False)
-    config_records = await db_helper.get_command_configs()
+    config_records = await db.get_command_configs()
     config_map = _bind_configs_to_descriptors(descriptors, config_records)
     live_handlers = {desc.handler_full_name for desc in descriptors}
 
     stale_configs = [key for key in config_map if key not in live_handlers]
     if stale_configs:
-        await db_helper.delete_command_configs(stale_configs)
+        await db.delete_command_configs(stale_configs)
 
 
-async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescriptor:
+async def toggle_command(
+    db: BaseDatabase, handler_full_name: str, enabled: bool
+) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    existing_cfg = await db_helper.get_command_config(handler_full_name)
-    config = await db_helper.upsert_command_config(
+    existing_cfg = await db.get_command_config(handler_full_name)
+    config = await db.upsert_command_config(
         handler_full_name=handler_full_name,
         plugin_name=descriptor.plugin_name or "",
         module_path=descriptor.module_path,
@@ -84,11 +87,12 @@ async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescri
         auto_managed=False,
     )
     _bind_descriptor_with_config(descriptor, config)
-    await sync_command_configs()
+    await sync_command_configs(db)
     return descriptor
 
 
 async def rename_command(
+    db: BaseDatabase,
     handler_full_name: str,
     new_fragment: str,
     aliases: list[str] | None = None,
@@ -116,11 +120,11 @@ async def rename_command(
             if _is_command_in_use(handler_full_name, alias_full):
                 raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
 
-    existing_cfg = await db_helper.get_command_config(handler_full_name)
+    existing_cfg = await db.get_command_config(handler_full_name)
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
     merged_extra["resolved_aliases"] = aliases or []
 
-    config = await db_helper.upsert_command_config(
+    config = await db.upsert_command_config(
         handler_full_name=handler_full_name,
         plugin_name=descriptor.plugin_name or "",
         module_path=descriptor.module_path,
@@ -136,11 +140,12 @@ async def rename_command(
     )
     _bind_descriptor_with_config(descriptor, config)
 
-    await sync_command_configs()
+    await sync_command_configs(db)
     return descriptor
 
 
 async def update_command_permission(
+    preferences: SharedPreferences,
     handler_full_name: str,
     permission_type: str,
 ) -> CommandDescriptor:
@@ -157,14 +162,14 @@ async def update_command_permission(
         raise ValueError("未找到指令所属插件")
 
     # 1. Update Persistent Config (alter_cmd)
-    alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+    alter_cmd_cfg = await preferences.global_get("alter_cmd", {})
     plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
     cfg = plugin_.get(handler.handler_name, {})
     cfg["permission"] = permission_type
     plugin_[handler.handler_name] = cfg
     alter_cmd_cfg[found_plugin.name] = plugin_
 
-    await sp.global_put("alter_cmd", alter_cmd_cfg)
+    await preferences.global_put("alter_cmd", alter_cmd_cfg)
 
     # 2. Update Runtime Filter
     found_permission_filter = False
@@ -185,9 +190,9 @@ async def update_command_permission(
     return _build_descriptor(handler) or descriptor
 
 
-async def list_commands() -> list[dict[str, Any]]:
+async def list_commands(db: BaseDatabase) -> list[dict[str, Any]]:
     descriptors = _collect_descriptors(include_sub_commands=True)
-    config_records = await db_helper.get_command_configs()
+    config_records = await db.get_command_configs()
     _bind_configs_to_descriptors(descriptors, config_records)
 
     conflict_groups = _group_conflicts(descriptors)
@@ -223,10 +228,10 @@ async def list_commands() -> list[dict[str, Any]]:
     return result
 
 
-async def list_command_conflicts() -> list[dict[str, Any]]:
+async def list_command_conflicts(db: BaseDatabase) -> list[dict[str, Any]]:
     """列出所有冲突的指令组。"""
     descriptors = _collect_descriptors(include_sub_commands=False)
-    config_records = await db_helper.get_command_configs()
+    config_records = await db.get_command_configs()
     _bind_configs_to_descriptors(descriptors, config_records)
 
     conflict_groups = _group_conflicts(descriptors)

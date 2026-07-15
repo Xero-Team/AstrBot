@@ -43,6 +43,8 @@ def _make_stage(
             "callback_api_base": callback_api_base,
             "t2i": True,
         },
+        html_renderer=SimpleNamespace(render_t2i=AsyncMock()),
+        file_token_service=SimpleNamespace(register_file=AsyncMock()),
     )
     return stage
 
@@ -65,13 +67,9 @@ async def test_result_decorate_uses_local_t2i_and_file_token_url(monkeypatch):
         assert path == "D:/temp/rendered.png"
         return "token-123"
 
+    monkeypatch.setattr(stage.ctx.html_renderer, "render_t2i", fake_render_t2i)
     monkeypatch.setattr(
-        "astrbot.core.pipeline.result_decorate.stage.html_renderer.render_t2i",
-        fake_render_t2i,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.pipeline.result_decorate.stage.file_token_service.register_file",
-        fake_register_file,
+        stage.ctx.file_token_service, "register_file", fake_register_file
     )
 
     event = SimpleNamespace(
@@ -105,7 +103,8 @@ async def test_result_decorate_keeps_local_file_when_no_callback_url(
     image_path = tmp_path / "rendered.png"
 
     monkeypatch.setattr(
-        "astrbot.core.pipeline.result_decorate.stage.html_renderer.render_t2i",
+        stage.ctx.html_renderer,
+        "render_t2i",
         AsyncMock(return_value=str(image_path)),
     )
 

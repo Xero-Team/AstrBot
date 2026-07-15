@@ -7,7 +7,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from astrbot.core import file_token_service, logger
+from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -845,9 +845,11 @@ class ConfigDisplayService:
                 )
                 return
 
-            logo_token = await file_token_service.register_file(
-                logo_file_path,
-                ttl_seconds=3600,
+            logo_token = (
+                await self.core_lifecycle.services.file_token_service.register_file(
+                    logo_file_path,
+                    ttl_seconds=3600,
+                )
             )
             self._set_platform_logo_token(
                 platform_default_tmpl,

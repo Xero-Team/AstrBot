@@ -37,6 +37,7 @@ class TestStarBase:
         from astrbot.core.star import Star
 
         mock_context = MagicMock()
+        mock_context.html_renderer = MagicMock()
         mock_config = MagicMock()
         mock_config.get.side_effect = lambda key, default=None: {
             "t2i_active_template": "default_template",
@@ -49,9 +50,8 @@ class TestStarBase:
 
         star = TestStar(context=mock_context)
 
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_t2i",
-            new_callable=AsyncMock,
+        with patch.object(
+            mock_context.html_renderer, "render_t2i", new_callable=AsyncMock
         ) as mock_render:
             mock_render.return_value = "D:/temp/image.png"
             result = await star.text_to_image("test text")
@@ -68,6 +68,7 @@ class TestStarBase:
         from astrbot.core.star import Star
 
         mock_context = MagicMock()
+        mock_context.html_renderer = MagicMock()
         mock_context.get_config.return_value = None
 
         class TestStar(Star):
@@ -76,9 +77,8 @@ class TestStarBase:
 
         star = TestStar(context=mock_context)
 
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_t2i",
-            new_callable=AsyncMock,
+        with patch.object(
+            mock_context.html_renderer, "render_t2i", new_callable=AsyncMock
         ) as mock_render:
             mock_render.return_value = "D:/temp/image.png"
             result = await star.text_to_image("test text")
@@ -95,6 +95,7 @@ class TestStarBase:
         from astrbot.core.star import Star
 
         mock_context = MagicMock()
+        mock_context.html_renderer = MagicMock()
         mock_context.get_config.return_value = MagicMock()
 
         class TestStar(Star):
@@ -103,8 +104,9 @@ class TestStarBase:
 
         star = TestStar(context=mock_context)
 
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_custom_template",
+        with patch.object(
+            mock_context.html_renderer,
+            "render_custom_template",
             new_callable=AsyncMock,
         ) as mock_render:
             mock_render.return_value = "D:/temp/rendered.png"
@@ -122,6 +124,7 @@ class TestStarBase:
         from astrbot.core.star import Star
 
         mock_context = MagicMock()
+        mock_context.html_renderer = MagicMock()
         mock_context.get_config.return_value = MagicMock()
 
         class TestStar(Star):
@@ -130,8 +133,9 @@ class TestStarBase:
 
         star = TestStar(context=mock_context)
 
-        with patch(
-            "astrbot.core.star.base.html_renderer.render_custom_template",
+        with patch.object(
+            mock_context.html_renderer,
+            "render_custom_template",
             new_callable=AsyncMock,
         ) as mock_render:
             mock_render.return_value = "D:/temp/rendered.png"

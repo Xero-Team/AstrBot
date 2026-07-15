@@ -106,7 +106,12 @@ def _build_manager(config: dict | None = None) -> ProviderManager:
         default_conf=default_conf,
     )
     persona_mgr = SimpleNamespace(default_persona="default")
-    return ProviderManager(acm, db_helper=MagicMock(), persona_mgr=persona_mgr)
+    return ProviderManager(
+        acm,
+        db_helper=MagicMock(),
+        persona_mgr=persona_mgr,
+        preferences=AsyncMock(),
+    )
 
 
 def test_register_provider_change_hook_deduplicates_and_notify_swallows_failures(
@@ -148,7 +153,7 @@ def test_register_provider_change_hook_deduplicates_and_notify_swallows_failures
 async def test_load_session_provider_overrides_ignores_invalid_records(monkeypatch):
     manager = _build_manager()
     monkeypatch.setattr(
-        provider_manager_module.sp,
+        manager.preferences,
         "session_get",
         AsyncMock(
             return_value=[
@@ -237,7 +242,7 @@ async def test_set_provider_session_override_persists_and_notifies(monkeypatch):
     hook = MagicMock()
     manager.register_provider_change_hook(hook)
 
-    monkeypatch.setattr(provider_manager_module.sp, "session_put", AsyncMock())
+    monkeypatch.setattr(manager.preferences, "session_put", AsyncMock())
 
     await manager.set_provider(
         "session-provider",
@@ -248,7 +253,7 @@ async def test_set_provider_session_override_persists_and_notifies(monkeypatch):
     assert manager._session_provider_overrides == {
         "umo-1": {ProviderType.CHAT_COMPLETION: "session-provider"},
     }
-    provider_manager_module.sp.session_put.assert_awaited_once_with(
+    manager.preferences.session_put.assert_awaited_once_with(
         "umo-1",
         "provider_perf_chat_completion",
         "session-provider",
@@ -293,7 +298,7 @@ async def test_set_provider_updates_global_defaults_for_chat_stt_and_tts(monkeyp
     }
     hook = MagicMock()
     manager.register_provider_change_hook(hook)
-    monkeypatch.setattr(provider_manager_module.sp, "put_async", AsyncMock())
+    monkeypatch.setattr(manager.preferences, "put_async", AsyncMock())
 
     await manager.set_provider("chat-global", ProviderType.CHAT_COMPLETION)
     await manager.set_provider("stt-global", ProviderType.SPEECH_TO_TEXT)
@@ -302,7 +307,7 @@ async def test_set_provider_updates_global_defaults_for_chat_stt_and_tts(monkeyp
     assert manager.curr_provider_inst is chat_provider
     assert manager.curr_stt_provider_inst is stt_provider
     assert manager.curr_tts_provider_inst is tts_provider
-    assert provider_manager_module.sp.put_async.await_args_list == [
+    assert manager.preferences.put_async.await_args_list == [
         call(
             key="curr_provider",
             value="chat-global",
@@ -716,14 +721,14 @@ async def test_clear_provider_overrides_remove_cached_and_persisted_entries(
             ProviderType.TEXT_TO_SPEECH: "tts-1",
         }
     }
-    monkeypatch.setattr(provider_manager_module.sp, "session_remove", AsyncMock())
+    monkeypatch.setattr(manager.preferences, "session_remove", AsyncMock())
 
     await manager.clear_provider_override("umo-1", ProviderType.CHAT_COMPLETION)
 
     assert manager._session_provider_overrides == {
         "umo-1": {ProviderType.TEXT_TO_SPEECH: "tts-1"}
     }
-    provider_manager_module.sp.session_remove.assert_awaited_once_with(
+    manager.preferences.session_remove.assert_awaited_once_with(
         "umo-1",
         "provider_perf_chat_completion",
     )
@@ -731,7 +736,7 @@ async def test_clear_provider_overrides_remove_cached_and_persisted_entries(
     await manager.clear_all_provider_overrides("umo-1")
 
     assert manager._session_provider_overrides == {}
-    assert provider_manager_module.sp.session_remove.await_args_list[1:] == [
+    assert manager.preferences.session_remove.await_args_list[1:] == [
         (("umo-1", "provider_perf_text_to_speech"), {})
     ]
 
@@ -775,7 +780,7 @@ async def test_initialize_selects_defaults_and_starts_mcp_init(monkeypatch):
     monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
     monkeypatch.setattr(manager, "load_provider", fake_load_provider)
     monkeypatch.setattr(
-        provider_manager_module.sp,
+        manager.preferences,
         "get_async",
         AsyncMock(side_effect=["missing-chat", "stt-a", None]),
     )
@@ -791,7 +796,7 @@ async def test_initialize_selects_defaults_and_starts_mcp_init(monkeypatch):
     assert manager.curr_provider_inst is chat_a
     assert manager.curr_stt_provider_inst is stt_a
     assert manager.curr_tts_provider_inst is None
-    provider_manager_module.sp.get_async.assert_awaited()
+    manager.preferences.get_async.assert_awaited()
     manager.llm_tools.init_mcp_clients.assert_awaited_once()
 
 
@@ -823,7 +828,7 @@ async def test_initialize_continues_after_load_provider_failure(monkeypatch):
     monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
     monkeypatch.setattr(manager, "load_provider", fake_load_provider)
     monkeypatch.setattr(
-        provider_manager_module.sp,
+        manager.preferences,
         "get_async",
         AsyncMock(side_effect=[None, None, None]),
     )
@@ -866,7 +871,7 @@ async def test_initialize_falls_back_when_persisted_provider_ids_have_wrong_type
     monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
     monkeypatch.setattr(manager, "load_provider", AsyncMock())
     monkeypatch.setattr(
-        provider_manager_module.sp,
+        manager.preferences,
         "get_async",
         AsyncMock(side_effect=["stt-a", "chat-a", 123]),
     )
@@ -897,7 +902,7 @@ async def test_initialize_reuses_pending_mcp_init_task(monkeypatch):
     monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
     monkeypatch.setattr(manager, "load_provider", AsyncMock())
     monkeypatch.setattr(
-        provider_manager_module.sp,
+        manager.preferences,
         "get_async",
         AsyncMock(side_effect=[None, None, None]),
     )
@@ -926,7 +931,7 @@ async def test_initialize_replaces_done_mcp_task_and_logs_background_failure(
     monkeypatch.setattr(manager, "_load_session_provider_overrides", AsyncMock())
     monkeypatch.setattr(manager, "load_provider", AsyncMock())
     monkeypatch.setattr(
-        provider_manager_module.sp,
+        manager.preferences,
         "get_async",
         AsyncMock(side_effect=[None, None, None]),
     )
@@ -974,14 +979,10 @@ async def test_reload_terminates_removed_provider_and_auto_selects_remaining(
     manager.inst_map = {"chat-a": chat_a, "chat-b": chat_b}
     manager.curr_provider_inst = chat_a
 
-    monkeypatch.setattr(
-        provider_manager_module,
-        "astrbot_config",
-        {
-            "provider": [{"id": "chat-b", "enable": True}],
-            "provider_sources": [],
-        },
-    )
+    manager.acm.default_conf = {
+        "provider": [{"id": "chat-b", "enable": True}],
+        "provider_sources": [],
+    }
     monkeypatch.setitem(
         provider_cls_map,
         "fake_chat_b",
@@ -1054,17 +1055,13 @@ async def test_reload_loads_enabled_provider_and_prunes_out_of_config_instances(
     terminate_provider = AsyncMock(side_effect=manager.terminate_provider)
     monkeypatch.setattr(manager, "load_provider", fake_load_provider)
     monkeypatch.setattr(manager, "terminate_provider", terminate_provider)
-    monkeypatch.setattr(
-        provider_manager_module,
-        "astrbot_config",
-        {
-            "provider": [
-                {"id": "chat-new", "enable": True},
-                {"id": "chat-keep", "enable": True},
-            ],
-            "provider_sources": [],
-        },
-    )
+    manager.acm.default_conf = {
+        "provider": [
+            {"id": "chat-new", "enable": True},
+            {"id": "chat-keep", "enable": True},
+        ],
+        "provider_sources": [],
+    }
 
     await manager.reload({"id": "chat-new", "enable": True})
 
@@ -1129,17 +1126,13 @@ async def test_reload_auto_selects_stt_and_tts_when_current_instances_are_none(
         ),
     )
 
-    monkeypatch.setattr(
-        provider_manager_module,
-        "astrbot_config",
-        {
-            "provider": [
-                {"id": "stt-a", "enable": True},
-                {"id": "tts-a", "enable": True},
-            ],
-            "provider_sources": [],
-        },
-    )
+    manager.acm.default_conf = {
+        "provider": [
+            {"id": "stt-a", "enable": True},
+            {"id": "tts-a", "enable": True},
+        ],
+        "provider_sources": [],
+    }
     monkeypatch.setattr(manager, "load_provider", AsyncMock())
 
     await manager.reload({"id": "missing-provider", "enable": False})
@@ -1207,12 +1200,6 @@ async def test_create_provider_appends_config_loads_instance_and_syncs_provider_
     manager = _build_manager()
     manager.load_provider = AsyncMock()
     new_config = {"id": "chat-new", "type": "fake-chat", "enable": True}
-    monkeypatch.setattr(
-        provider_manager_module,
-        "astrbot_config",
-        {"provider": [new_config]},
-    )
-
     await manager.create_provider(new_config)
 
     assert manager.acm.default_conf["provider"] == [new_config]

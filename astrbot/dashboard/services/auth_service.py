@@ -7,7 +7,6 @@ import jwt
 import pyotp
 
 from astrbot import logger
-from astrbot.core import DEMO_MODE
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.auth_password import (
@@ -106,7 +105,7 @@ class AuthService:
         db: BaseDatabase,
         config: AstrBotConfig,
         *,
-        demo_mode: bool = DEMO_MODE,
+        demo_mode: bool,
     ) -> None:
         self.db = db
         self.config = config

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from typing import Annotated
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -77,7 +78,7 @@ def _plain_text(result) -> str:
 
 @pytest.mark.asyncio
 async def test_help_command_defaults_to_plain_text(monkeypatch):
-    async def fake_list_commands():
+    async def fake_list_commands(_db):
         return [
             {
                 "reserved": True,
@@ -117,7 +118,7 @@ async def test_help_command_defaults_to_plain_text(monkeypatch):
         fake_dashboard_version,
     )
 
-    command = HelpCommand(SimpleNamespace())
+    command = HelpCommand(SimpleNamespace(get_db=lambda: object()))
     event = DummyEvent(message_str="help")
     await command.help(event)
 
@@ -133,7 +134,7 @@ async def test_help_command_defaults_to_plain_text(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_help_command_supports_image_mode(monkeypatch):
-    async def fake_list_commands():
+    async def fake_list_commands(_db):
         return [
             {
                 "reserved": True,
@@ -175,20 +176,13 @@ async def test_help_command_supports_image_mode(monkeypatch):
         assert path == "D:/Documents/Github/AstrBot/data/temp/help-card.png"
         return "token-123"
 
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
-        fake_render_t2i,
-    )
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.file_token_service.register_file",
-        fake_register_file,
-    )
-
     command = HelpCommand(
         SimpleNamespace(
             get_config=lambda umo=None: {
                 "callback_api_base": "http://127.0.0.1:6185",
-            }
+            },
+            html_renderer=SimpleNamespace(render_t2i=fake_render_t2i),
+            file_token_service=SimpleNamespace(register_file=fake_register_file),
         )
     )
     event = DummyEvent(message_str="help --image")
@@ -216,7 +210,7 @@ async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
 ):
     image_path = tmp_path / "help-card.png"
 
-    async def fake_list_commands():
+    async def fake_list_commands(_db):
         return [
             {
                 "reserved": True,
@@ -247,12 +241,12 @@ async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
         "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
         fake_dashboard_version,
     )
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
-        fake_render_t2i,
+    command = HelpCommand(
+        SimpleNamespace(
+            html_renderer=SimpleNamespace(render_t2i=fake_render_t2i),
+            file_token_service=SimpleNamespace(register_file=AsyncMock()),
+        )
     )
-
-    command = HelpCommand(SimpleNamespace())
     event = DummyEvent(message_str="help --image")
     await command.help(event, image=True)
 
@@ -269,7 +263,7 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
 ):
     image_path = tmp_path / "help-card.png"
 
-    async def fake_list_commands():
+    async def fake_list_commands(_db):
         return [
             {
                 "reserved": True,
@@ -304,20 +298,13 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
         "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
         fake_dashboard_version,
     )
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
-        fake_render_t2i,
-    )
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.file_token_service.register_file",
-        fake_register_file,
-    )
-
     command = HelpCommand(
         SimpleNamespace(
             get_config=lambda umo=None: {
                 "callback_api_base": "http://127.0.0.1:6185",
-            }
+            },
+            html_renderer=SimpleNamespace(render_t2i=fake_render_t2i),
+            file_token_service=SimpleNamespace(register_file=fake_register_file),
         )
     )
     event = DummyEvent(message_str="help --image")
@@ -332,7 +319,7 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
 async def test_help_command_uses_file_token_for_local_image_when_callback_is_available(
     monkeypatch,
 ):
-    async def fake_list_commands():
+    async def fake_list_commands(_db):
         return [
             {
                 "reserved": True,
@@ -367,20 +354,13 @@ async def test_help_command_uses_file_token_for_local_image_when_callback_is_ava
         "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
         fake_dashboard_version,
     )
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.html_renderer.render_t2i",
-        fake_render_t2i,
-    )
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.file_token_service.register_file",
-        fake_register_file,
-    )
-
     command = HelpCommand(
         SimpleNamespace(
             get_config=lambda umo=None: {
                 "callback_api_base": "http://127.0.0.1:6185",
-            }
+            },
+            html_renderer=SimpleNamespace(render_t2i=fake_render_t2i),
+            file_token_service=SimpleNamespace(register_file=fake_register_file),
         )
     )
     event = DummyEvent(message_str="help --image")

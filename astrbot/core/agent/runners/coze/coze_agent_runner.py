@@ -1,3 +1,4 @@
+import asyncio
 import json
 import typing as T
 from typing import override
@@ -77,6 +78,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         if self._state == AgentState.IDLE:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
@@ -87,6 +90,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             # 执行 Coze 请求并处理结果
             async for response in self._execute_coze_request():
                 yield response
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"Coze 请求失败：{str(e)}")
             self._transition_state(AgentState.ERROR)
@@ -120,156 +125,104 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 f"Coze agent reached max_step ({max_step}) without completion."
             )
 
-    async def _execute_coze_request(self):
-        """执行 Coze 请求的核心逻辑"""
-        prompt = self.req.prompt or ""
-        session_id = self.req.session_id or "unknown"
-        image_urls = self.req.image_urls or []
-        contexts = self.req.contexts or []
-        system_prompt = self.req.system_prompt
-
-        # 用户ID参数
-        user_id = session_id
-
-        # 获取或创建会话ID
-        conversation_id = await self.preferences.get_async(
-            scope="umo",
-            scope_id=user_id,
-            key="coze_conversation_id",
-            default="",
-        )
-
-        # 构建消息
-        additional_messages = []
-
-        if system_prompt:
-            if not self.auto_save_history or not conversation_id:
-                additional_messages.append(
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                        "content_type": "text",
-                    },
+    async def _build_history_messages(self, session_id: str) -> list[dict]:
+        """Convert manually supplied AstrBot history into Coze messages."""
+        messages: list[dict] = []
+        for ctx in self.req.contexts or []:
+            if is_checkpoint_message(ctx) or not isinstance(ctx, dict):
+                continue
+            if "role" not in ctx or "content" not in ctx:
+                continue
+            content = ctx["content"]
+            if not isinstance(content, list):
+                messages.append(
+                    {"role": ctx["role"], "content": content, "content_type": "text"}
                 )
-
-        # 处理历史上下文
-        if not self.auto_save_history and contexts:
-            for ctx in contexts:
-                if is_checkpoint_message(ctx):
+                continue
+            processed_content = []
+            for item in content:
+                if not isinstance(item, dict):
                     continue
-                if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
-                    # 处理上下文中的图片
-                    content = ctx["content"]
-                    if isinstance(content, list):
-                        # 多模态内容，需要处理图片
-                        processed_content = []
-                        for item in content:
-                            if isinstance(item, dict):
-                                if item.get("type") == "text":
-                                    processed_content.append(item)
-                                elif item.get("type") == "image_url":
-                                    # 处理图片上传
-                                    try:
-                                        image_data = item.get("image_url", {})
-                                        url = image_data.get("url", "")
-                                        if url:
-                                            file_id = (
-                                                await self._download_and_upload_image(
-                                                    url, session_id
-                                                )
-                                            )
-                                            processed_content.append(
-                                                {
-                                                    "type": "file",
-                                                    "file_id": file_id,
-                                                    "file_url": url,
-                                                }
-                                            )
-                                    except Exception as e:
-                                        logger.warning(f"处理上下文图片失败: {e}")
-                                        continue
-
-                        if processed_content:
-                            additional_messages.append(
-                                {
-                                    "role": ctx["role"],
-                                    "content": processed_content,
-                                    "content_type": "object_string",
-                                }
-                            )
-                    else:
-                        # 纯文本内容
-                        additional_messages.append(
-                            {
-                                "role": ctx["role"],
-                                "content": content,
-                                "content_type": "text",
-                            }
-                        )
-
-        # 构建当前消息
-        if prompt or image_urls:
-            if image_urls:
-                # 多模态
-                object_string_content = []
-                if prompt:
-                    object_string_content.append({"type": "text", "text": prompt})
-
-                for url in image_urls:
+                if item.get("type") == "text":
+                    processed_content.append(item)
+                elif item.get("type") == "image_url":
                     try:
-                        file_id = await self._download_and_upload_image(
-                            url,
-                            session_id,
-                        )
-                        object_string_content.append(
-                            {
-                                "type": "image",
-                                "file_id": file_id,
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "处理图片失败 %s: %s",
-                            describe_media_ref(url),
-                            e,
-                        )
-                        continue
+                        url = item.get("image_url", {}).get("url", "")
+                        if url:
+                            file_id = await self._download_and_upload_image(
+                                url, session_id
+                            )
+                            processed_content.append(
+                                {"type": "file", "file_id": file_id, "file_url": url}
+                            )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        logger.warning("处理上下文图片失败: %s", exc)
+            if processed_content:
+                messages.append(
+                    {
+                        "role": ctx["role"],
+                        "content": processed_content,
+                        "content_type": "object_string",
+                    }
+                )
+        return messages
 
-                if object_string_content:
-                    content = json.dumps(object_string_content, ensure_ascii=False)
-                    additional_messages.append(
-                        {
-                            "role": "user",
-                            "content": content,
-                            "content_type": "object_string",
-                        }
-                    )
-            elif prompt:
-                # 纯文本
+    async def _build_additional_messages(
+        self,
+        session_id: str,
+        conversation_id: str,
+    ) -> list[dict]:
+        """Build Coze history and current-input payloads for one request."""
+        prompt = self.req.prompt or ""
+        image_urls = self.req.image_urls or []
+        additional_messages: list[dict] = []
+        if self.req.system_prompt and (
+            not self.auto_save_history or not conversation_id
+        ):
+            additional_messages.append(
+                {
+                    "role": "system",
+                    "content": self.req.system_prompt,
+                    "content_type": "text",
+                }
+            )
+
+        if not self.auto_save_history:
+            additional_messages.extend(await self._build_history_messages(session_id))
+
+        if image_urls:
+            content = [{"type": "text", "text": prompt}] if prompt else []
+            for url in image_urls:
+                try:
+                    file_id = await self._download_and_upload_image(url, session_id)
+                    content.append({"type": "image", "file_id": file_id})
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("处理图片失败 %s: %s", describe_media_ref(url), exc)
+            if content:
                 additional_messages.append(
                     {
                         "role": "user",
-                        "content": prompt,
-                        "content_type": "text",
-                    },
+                        "content": json.dumps(content, ensure_ascii=False),
+                        "content_type": "object_string",
+                    }
                 )
+        elif prompt:
+            additional_messages.append(
+                {"role": "user", "content": prompt, "content_type": "text"}
+            )
+        return additional_messages
 
-        # 执行 Coze API 请求
+    async def _consume_coze_events(self, events, user_id: str):
+        """Convert Coze's event stream into agent responses and final state."""
         accumulated_content = ""
         message_started = False
-
-        async for chunk in self.api_client.chat_messages(
-            bot_id=self.bot_id,
-            user_id=user_id,
-            additional_messages=additional_messages,
-            conversation_id=conversation_id,
-            auto_save_history=self.auto_save_history,
-            stream=True,
-            timeout_seconds=self.timeout,
-        ):
+        async for chunk in events:
             event_type = chunk.get("event")
             data = chunk.get("data", {})
-
             if event_type == "conversation.chat.created":
                 if isinstance(data, dict) and "conversation_id" in data:
                     await self.preferences.put_async(
@@ -278,20 +231,15 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                         key="coze_conversation_id",
                         value=data["conversation_id"],
                     )
-
-            if event_type == "conversation.message.delta":
-                # 增量消息
+            elif event_type == "conversation.message.delta":
                 content = data.get("content", "")
                 if not content and "delta" in data:
                     content = data["delta"].get("content", "")
                 if not content and "text" in data:
                     content = data.get("text", "")
-
                 if content:
                     accumulated_content += content
                     message_started = True
-
-                    # 如果是流式响应，发送增量数据
                     if self.streaming:
                         yield AgentResponse(
                             type="streaming_delta",
@@ -299,43 +247,53 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                 chain=MessageChain().message(content)
                             ),
                         )
-
             elif event_type == "conversation.message.completed":
-                # 消息完成
-                logger.debug("Coze message completed")
                 message_started = True
-
             elif event_type == "conversation.chat.completed":
-                # 对话完成
-                logger.debug("Coze chat completed")
                 break
-
             elif event_type == "error":
-                # 错误处理
                 error_msg = data.get("msg", "未知错误")
                 error_code = data.get("code", "UNKNOWN")
-                logger.error(f"Coze 出现错误: {error_code} - {error_msg}")
+                logger.error("Coze 出现错误: %s - %s", error_code, error_msg)
                 raise Exception(f"Coze 出现错误: {error_code} - {error_msg}")
 
         if not message_started and not accumulated_content:
             logger.warning("Coze 未返回任何内容")
-            accumulated_content = ""
-
-        # 创建最终响应
         chain = MessageChain(chain=[Comp.Plain(accumulated_content)])
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
         self._transition_state(AgentState.DONE)
-
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("Error in on_agent_done hook: %s", exc, exc_info=True)
+        yield AgentResponse(type="llm_result", data=AgentResponseData(chain=chain))
 
-        # 返回最终结果
-        yield AgentResponse(
-            type="llm_result",
-            data=AgentResponseData(chain=chain),
+    async def _execute_coze_request(self):
+        """Execute a Coze request after constructing its message payload."""
+        session_id = self.req.session_id or "unknown"
+        conversation_id = await self.preferences.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="coze_conversation_id",
+            default="",
         )
+        additional_messages = await self._build_additional_messages(
+            session_id, conversation_id
+        )
+
+        events = self.api_client.chat_messages(
+            bot_id=self.bot_id,
+            user_id=session_id,
+            additional_messages=additional_messages,
+            conversation_id=conversation_id,
+            auto_save_history=self.auto_save_history,
+            stream=True,
+            timeout_seconds=self.timeout,
+        )
+        async for response in self._consume_coze_events(events, session_id):
+            yield response
 
     async def _download_and_upload_image(
         self,
@@ -372,6 +330,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             return file_id
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error("处理图片失败 %s: %s", describe_media_ref(image_url), e)
             raise Exception(f"处理图片失败: {e!s}") from e

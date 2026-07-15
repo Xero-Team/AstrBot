@@ -1352,6 +1352,61 @@ class NapCatPlatformAdapter(Platform):
             ]
         return None
 
+    @staticmethod
+    def _convert_interactive_segment(
+        payload: object,
+    ) -> list[BaseMessageComponent] | None:
+        """Convert emoji, interactive, and card-like inbound segments."""
+        if isinstance(payload, FaceSegment):
+            return [Face(id=int(payload.data.id))] if payload.data.id.isdigit() else []
+        if isinstance(payload, OB11MFaceSegment):
+            return [
+                MFace(
+                    emoji_package_id=payload.data.emoji_package_id,
+                    emoji_id=payload.data.emoji_id,
+                    key=payload.data.key,
+                    summary=payload.data.summary,
+                )
+            ]
+        if isinstance(payload, PokeSegment):
+            return [Poke(id=payload.data.id or 0, poke_type=payload.data.type)]
+        if isinstance(payload, DiceSegment):
+            return [Dice()]
+        if isinstance(payload, RpsSegment):
+            return [RPS()]
+        if isinstance(payload, ShakeSegment):
+            return [Shake()]
+        if isinstance(payload, JsonSegment):
+            return [Json(data=payload.data.data)]
+        if isinstance(payload, XmlSegment):
+            return [Xml(data=payload.data.data)]
+        if isinstance(payload, OB11MarkdownSegment):
+            return [Markdown(content=payload.data.content)]
+        if isinstance(payload, OB11MiniAppSegment):
+            return [MiniApp(data=payload.data.data)]
+        if isinstance(payload, ShareSegment):
+            return [
+                Share(
+                    url=payload.data.url,
+                    title=payload.data.title,
+                    content=payload.data.content or "",
+                    image=payload.data.image or "",
+                )
+            ]
+        if isinstance(payload, OB11OnlineFileSegment):
+            return [
+                OnlineFile(
+                    msg_id=payload.data.msgId,
+                    element_id=payload.data.elementId,
+                    file_name=payload.data.fileName,
+                    file_size=payload.data.fileSize,
+                    is_dir=payload.data.isDir,
+                )
+            ]
+        if isinstance(payload, OB11FlashTransferSegment):
+            return [FlashTransfer(file_set_id=payload.data.fileSetId)]
+        return None
+
     def _convert_segment_payload(
         self,
         payload: object,
@@ -1392,96 +1447,9 @@ class NapCatPlatformAdapter(Platform):
         if media_components is not None:
             return media_components, [], first_at_self_processed
 
-        if isinstance(payload, FaceSegment):
-            if payload.data.id.isdigit():
-                return [Face(id=int(payload.data.id))], [], first_at_self_processed
-            return [], [], first_at_self_processed
-
-        if isinstance(payload, OB11MFaceSegment):
-            return (
-                [
-                    MFace(
-                        emoji_package_id=payload.data.emoji_package_id,
-                        emoji_id=payload.data.emoji_id,
-                        key=payload.data.key,
-                        summary=payload.data.summary,
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, PokeSegment):
-            return (
-                [Poke(id=payload.data.id or 0, poke_type=payload.data.type)],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, DiceSegment):
-            return [Dice()], [], first_at_self_processed
-
-        if isinstance(payload, RpsSegment):
-            return [RPS()], [], first_at_self_processed
-
-        if isinstance(payload, ShakeSegment):
-            return [Shake()], [], first_at_self_processed
-
-        if isinstance(payload, JsonSegment):
-            return [Json(data=payload.data.data)], [], first_at_self_processed
-
-        if isinstance(payload, XmlSegment):
-            return [Xml(data=payload.data.data)], [], first_at_self_processed
-
-        if isinstance(payload, OB11MarkdownSegment):
-            return (
-                [Markdown(content=payload.data.content)],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, OB11MiniAppSegment):
-            return (
-                [MiniApp(data=payload.data.data)],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, ShareSegment):
-            return (
-                [
-                    Share(
-                        url=payload.data.url,
-                        title=payload.data.title,
-                        content=payload.data.content or "",
-                        image=payload.data.image or "",
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, OB11OnlineFileSegment):
-            return (
-                [
-                    OnlineFile(
-                        msg_id=payload.data.msgId,
-                        element_id=payload.data.elementId,
-                        file_name=payload.data.fileName,
-                        file_size=payload.data.fileSize,
-                        is_dir=payload.data.isDir,
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, OB11FlashTransferSegment):
-            return (
-                [FlashTransfer(file_set_id=payload.data.fileSetId)],
-                [],
-                first_at_self_processed,
-            )
+        interactive_components = self._convert_interactive_segment(payload)
+        if interactive_components is not None:
+            return interactive_components, [], first_at_self_processed
 
         if isinstance(payload, ContactSegment):
             contact_id = int(payload.data.id) if payload.data.id.isdigit() else 0

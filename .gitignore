@@ -57,10 +57,6 @@ venv/
 /dashboard/bun.lock
 /yarn.lock
 
-# Root-local lockfiles for ad-hoc tool installs
-/package-lock.json
-/uv.lock
-
 # Agent / workspace local metadata
 /.agent/
 /.codex/

@@ -26,7 +26,7 @@ if ($ToolArgs) {
 for ($index = 0; $index -lt $files.Count; $index += $BatchSize) {
   $end = [Math]::Min($index + $BatchSize - 1, $files.Count - 1)
   $batch = $files[$index..$end]
-  & npm exec --yes -- $Tool @extraArgs @batch
+  & corepack npm exec --no -- $Tool @extraArgs @batch
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
   }

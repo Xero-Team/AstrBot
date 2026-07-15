@@ -24,7 +24,8 @@ NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
 NAPCAT_MODELS_SOURCE_PATH ?= astrbot/core/platform/sources/napcat/generated/ob11_events.py
 PS ?= pwsh -NoProfile -NonInteractive -File
 PNPM := corepack pnpm
-NPX := npm exec --yes --
+NPM := corepack npm
+NPX := $(NPM) exec --no --
 QUALITY_TYPE_TARGETS := astrbot
 QUALITY_SECURITY_TARGETS := astrbot
 CHECK_TARGETS := check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker
@@ -81,7 +82,7 @@ build-backend:
 	uv sync --locked
 
 build-dashboard:
-	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --no-frozen-lockfile
+	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DASHBOARD_DIR) && $(PNPM) build
 	uv run python scripts/sync_dashboard_dist.py
 
@@ -205,7 +206,7 @@ quality-report-radon-mi: quality-sync
 #   make format   auto-fix every file type
 #
 # Node tools (prettier, markdownlint-cli2, taplo) come from the root
-# package.json; install once with `npm install`. yamllint comes from the uv
+# package.json; install once with `corepack npm ci`. yamllint comes from the uv
 # dev group (`uv sync --group dev`). Shell/Dockerfile linters are native
 # binaries: run if present, skipped with a notice otherwise (CI installs them).
 # ---------------------------------------------------------------------------

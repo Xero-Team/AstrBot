@@ -35,7 +35,7 @@ jobs:
           node-version: '24.15.0'
           package-manager-cache: false
       - name: Install root toolchain
-        run: npm install
+        run: corepack npm ci
       - name: Install dashboard deps
         working-directory: dashboard
         run: corepack pnpm install --frozen-lockfile
@@ -59,7 +59,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --locked
       - name: Install root toolchain
-        run: npm install
+        run: corepack npm ci
       - name: Check json/css/html
         run: make check-data
       - name: Check toml

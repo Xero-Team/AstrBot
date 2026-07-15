@@ -9,6 +9,9 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-nightly-image:
     if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'schedule'
@@ -53,8 +56,8 @@ jobs:
           PY
           )
           cd dashboard
-          npm install
-          npm run build
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm run build
           mkdir -p dist/assets
           echo "$dashboard_version" > dist/assets/version
           cd ..
@@ -161,8 +164,8 @@ jobs:
       - name: Build Dashboard
         run: |
           cd dashboard
-          npm install
-          npm run build
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm run build
           mkdir -p dist/assets
           echo "${{ steps.release-meta.outputs.version }}" > dist/assets/version
           cd ..

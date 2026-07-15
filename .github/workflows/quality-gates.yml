@@ -55,7 +55,7 @@ jobs:
       - name: Enforce complexity baseline
         run: >
           uv run ruff check --select C901
-          --config "lint.mccabe.max-complexity=44" astrbot
+          --config "lint.mccabe.max-complexity=40" astrbot
 
       - name: Report complexity
         run: |

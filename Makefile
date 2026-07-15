@@ -161,7 +161,7 @@ quality-audit: quality-sync
 	uv run pip-audit
 
 quality-complexity: quality-sync
-	uv run ruff check --select C901 --config "lint.mccabe.max-complexity=44" astrbot
+	uv run ruff check --select C901 --config "lint.mccabe.max-complexity=40" astrbot
 
 quality-radon-cc: quality-sync
 	uv run radon cc $(QUALITY_TYPE_TARGETS) -s -n C

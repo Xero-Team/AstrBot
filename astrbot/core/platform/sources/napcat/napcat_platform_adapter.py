@@ -716,6 +716,64 @@ class NapCatPlatformAdapter(Platform):
             return True
         return False
 
+    async def _append_media_outbound_segment(
+        self,
+        component: BaseMessageComponent,
+        segments: list[object],
+        fallback_parts: list[str],
+    ) -> bool:
+        """Convert image, audio, video, and file components."""
+        if isinstance(component, Image | Record | Video):
+            file_value = component.file or component.url or component.path
+            if not file_value:
+                return False
+            if isinstance(component, Image):
+                segments.append(
+                    self.client.image(
+                        file=file_value,
+                        url=component.url or None,
+                        path=component.path or None,
+                    )
+                )
+                fallback_parts.append("[Image]")
+            elif isinstance(component, Record):
+                segments.append(
+                    self.client.record(
+                        file=file_value,
+                        url=component.url or None,
+                        path=component.path or None,
+                    )
+                )
+                fallback_parts.append("[Record]")
+            else:
+                segments.append(
+                    self.client.video(
+                        file=file_value,
+                        url=component.url or None,
+                        path=component.path or None,
+                        thumb=component.cover or None,
+                    )
+                )
+                fallback_parts.append("[Video]")
+            return True
+
+        if not isinstance(component, File):
+            return False
+        file_value = await component.get_file(allow_return_url=True)
+        if not file_value:
+            return False
+        segments.append(
+            self.client.file(
+                file=file_value,
+                url=component.url or None,
+                name=component.name or None,
+            )
+        )
+        fallback_parts.append(
+            f"[File:{component.name}]" if component.name else "[File]"
+        )
+        return True
+
     async def _build_outbound_message(
         self, message_chain: MessageChain
     ) -> str | list[object]:
@@ -724,6 +782,13 @@ class NapCatPlatformAdapter(Platform):
 
         for component in message_chain.chain:
             if self._append_basic_outbound_segments(
+                component,
+                segments,
+                fallback_parts,
+            ):
+                continue
+
+            if await self._append_media_outbound_segment(
                 component,
                 segments,
                 fallback_parts,
@@ -860,61 +925,6 @@ class NapCatPlatformAdapter(Platform):
                 if component.id:
                     segments.append(self.client.forward(component.id))
                     fallback_parts.append("[Forward]")
-                    continue
-
-            if isinstance(component, Image):
-                file_value = component.file or component.url or component.path
-                if file_value:
-                    segments.append(
-                        self.client.image(
-                            file=file_value,
-                            url=component.url or None,
-                            path=component.path or None,
-                        )
-                    )
-                    fallback_parts.append("[Image]")
-                    continue
-
-            if isinstance(component, Record):
-                file_value = component.file or component.url or component.path
-                if file_value:
-                    segments.append(
-                        self.client.record(
-                            file=file_value,
-                            url=component.url or None,
-                            path=component.path or None,
-                        )
-                    )
-                    fallback_parts.append("[Record]")
-                    continue
-
-            if isinstance(component, Video):
-                file_value = component.file or component.url or component.path
-                if file_value:
-                    segments.append(
-                        self.client.video(
-                            file=file_value,
-                            url=component.url or None,
-                            path=component.path or None,
-                            thumb=component.cover or None,
-                        )
-                    )
-                    fallback_parts.append("[Video]")
-                    continue
-
-            if isinstance(component, File):
-                file_value = await component.get_file(allow_return_url=True)
-                if file_value:
-                    segments.append(
-                        self.client.file(
-                            file=file_value,
-                            url=component.url or None,
-                            name=component.name or None,
-                        )
-                    )
-                    fallback_parts.append(
-                        f"[File:{component.name}]" if component.name else "[File]"
-                    )
                     continue
 
             fallback_parts.append(f"[{component.__class__.__name__}]")

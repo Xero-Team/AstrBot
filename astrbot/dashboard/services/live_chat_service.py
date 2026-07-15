@@ -385,76 +385,7 @@ class LiveChatService:
         message: dict,
         send_json: SendJson,
     ) -> None:
-        msg_type = message.get("t")
-
-        if msg_type == "bind":
-            chat_session_id = message.get("session_id")
-            if not isinstance(chat_session_id, str) or not chat_session_id:
-                await self.send_chat_payload(
-                    session,
-                    {
-                        "ct": "chat",
-                        "t": "error",
-                        "data": "session_id is required",
-                        "code": "INVALID_MESSAGE_FORMAT",
-                    },
-                    send_json,
-                )
-                return
-
-            request_id = await self.ensure_chat_subscription(
-                session, chat_session_id, send_json
-            )
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "type": "session_bound",
-                    "session_id": chat_session_id,
-                    "message_id": request_id,
-                },
-                send_json,
-            )
-            return
-
-        if msg_type == "interrupt":
-            session.should_interrupt = True
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "t": "error",
-                    "data": "INTERRUPTED",
-                    "code": "INTERRUPTED",
-                },
-                send_json,
-            )
-            return
-
-        if msg_type != "send":
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "t": "error",
-                    "data": f"Unsupported message type: {msg_type}",
-                    "code": "INVALID_MESSAGE_FORMAT",
-                },
-                send_json,
-            )
-            return
-
-        if session.is_processing:
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "t": "error",
-                    "data": "Session is busy",
-                    "code": "PROCESSING_ERROR",
-                },
-                send_json,
-            )
+        if await self._handle_chat_control_message(session, message, send_json):
             return
 
         payload = message.get("message")
@@ -468,33 +399,23 @@ class LiveChatService:
         show_reasoning = message.get("show_reasoning")
         enable_streaming = message.get("enable_streaming", True)
 
-        if not isinstance(payload, list):
+        (
+            message_parts,
+            validation_error,
+        ) = await self._build_non_empty_chat_message_parts(payload)
+        if validation_error:
             await self.send_chat_payload(
                 session,
                 {
                     "ct": "chat",
                     "t": "error",
-                    "data": "message must be list",
+                    "data": validation_error,
                     "code": "INVALID_MESSAGE_FORMAT",
                 },
                 send_json,
             )
             return
-
-        message_parts = await self.build_chat_message_parts(payload)
-        has_content = webchat_message_parts_have_content(message_parts)
-        if not has_content:
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "t": "error",
-                    "data": "Message content is empty",
-                    "code": "INVALID_MESSAGE_FORMAT",
-                },
-                send_json,
-            )
-            return
+        assert message_parts is not None
 
         await self.ensure_chat_subscription(session, session_id, send_json)
 
@@ -666,60 +587,22 @@ class LiveChatService:
 
                 outgoing = {"ct": "chat", **result}
                 await self.send_chat_payload(session, outgoing, send_json)
-
-                if result_type == "plain":
-                    message_accumulator.add_plain(
-                        result_text,
-                        chain_type=chain_type,
-                        streaming=streaming,
-                    )
-                elif result_type == "image":
-                    filename = str(result_text).replace("[IMAGE]", "")
-                    part = await self.create_attachment_from_file(filename, "image")
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "record":
-                    filename = str(result_text).replace("[RECORD]", "")
-                    part = await self.create_attachment_from_file(filename, "record")
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "file":
-                    filename = str(result_text).replace("[FILE]", "", 1)
-                    display_name = None
-                    if "|" in filename:
-                        filename, display_name = filename.split("|", 1)
-                    part = await self.create_attachment_from_file(
-                        filename,
-                        "file",
-                        display_name=display_name,
-                    )
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
-                elif result_type == "video":
-                    filename = str(result_text).replace("[VIDEO]", "", 1)
-                    display_name = None
-                    if "|" in filename:
-                        filename, display_name = filename.split("|", 1)
-                    part = await self.create_attachment_from_file(
-                        filename,
-                        "video",
-                        display_name=display_name,
-                    )
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
-
-                should_save = False
-                if result_type == "end":
-                    should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
-                    )
-                elif (streaming and result_type == "complete") or not streaming:
-                    if chain_type not in (
-                        "tool_call",
-                        "tool_call_result",
-                        "agent_stats",
-                    ):
-                        should_save = True
+                await self._accumulate_chat_result(
+                    message_accumulator,
+                    result_type,
+                    result_text,
+                    chain_type,
+                    streaming,
+                    send_attachment_saved_event,
+                )
+                should_save = self._should_flush_bot_message(
+                    message_accumulator,
+                    refs,
+                    agent_stats,
+                    result_type,
+                    chain_type,
+                    streaming,
+                )
 
                 if should_save:
                     saved_record = await flush_pending_bot_message()
@@ -750,7 +633,7 @@ class LiveChatService:
                 {
                     "ct": "chat",
                     "t": "error",
-                    "data": f"处理失败: {str(exc)}",
+                    "data": "Unable to process the message.",
                     "code": "PROCESSING_ERROR",
                 },
                 send_json,
@@ -766,6 +649,153 @@ class LiveChatService:
                 )
             session.is_processing = False
             webchat_queue_mgr.remove_back_queue(message_id)
+
+    async def _build_non_empty_chat_message_parts(
+        self, payload: object
+    ) -> tuple[list[dict] | None, str | None]:
+        if not isinstance(payload, list):
+            return None, "message must be list"
+        message_parts = await self.build_chat_message_parts(payload)
+        if not webchat_message_parts_have_content(message_parts):
+            return None, "Message content is empty"
+        return message_parts, None
+
+    async def _accumulate_chat_result(
+        self,
+        accumulator: BotMessageAccumulator,
+        result_type: str | None,
+        result_text: object,
+        chain_type: str | None,
+        streaming: bool,
+        send_attachment_saved_event: Callable[[dict | None], Awaitable[None]],
+    ) -> None:
+        if result_type == "plain":
+            accumulator.add_plain(
+                str(result_text),
+                chain_type=chain_type,
+                streaming=streaming,
+            )
+            return
+        if result_type is None:
+            return
+        markers = {
+            "image": "[IMAGE]",
+            "record": "[RECORD]",
+            "file": "[FILE]",
+            "video": "[VIDEO]",
+        }
+        marker = markers.get(result_type)
+        if marker is None:
+            return
+        filename = str(result_text).replace(marker, "", 1)
+        display_name = None
+        if result_type in {"file", "video"} and "|" in filename:
+            filename, display_name = filename.split("|", 1)
+        if display_name is None:
+            part = await self.create_attachment_from_file(filename, result_type)
+        else:
+            part = await self.create_attachment_from_file(
+                filename,
+                result_type,
+                display_name=display_name,
+            )
+        accumulator.add_attachment(part)
+        await send_attachment_saved_event(part)
+
+    @staticmethod
+    def _should_flush_bot_message(
+        accumulator: BotMessageAccumulator,
+        refs: dict,
+        agent_stats: dict,
+        result_type: str | None,
+        chain_type: str | None,
+        streaming: bool,
+    ) -> bool:
+        if result_type == "end":
+            return bool(accumulator.has_content() or refs or agent_stats)
+        return (streaming and result_type == "complete") or (
+            not streaming
+            and chain_type not in {"tool_call", "tool_call_result", "agent_stats"}
+        )
+
+    async def _handle_chat_control_message(
+        self,
+        session: LiveChatSession,
+        message: dict,
+        send_json: SendJson,
+    ) -> bool:
+        msg_type = message.get("t")
+
+        if msg_type == "bind":
+            chat_session_id = message.get("session_id")
+            if not isinstance(chat_session_id, str) or not chat_session_id:
+                await self.send_chat_payload(
+                    session,
+                    {
+                        "ct": "chat",
+                        "t": "error",
+                        "data": "session_id is required",
+                        "code": "INVALID_MESSAGE_FORMAT",
+                    },
+                    send_json,
+                )
+                return True
+
+            request_id = await self.ensure_chat_subscription(
+                session, chat_session_id, send_json
+            )
+            await self.send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "type": "session_bound",
+                    "session_id": chat_session_id,
+                    "message_id": request_id,
+                },
+                send_json,
+            )
+            return True
+
+        if msg_type == "interrupt":
+            session.should_interrupt = True
+            await self.send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": "INTERRUPTED",
+                    "code": "INTERRUPTED",
+                },
+                send_json,
+            )
+            return True
+
+        if msg_type != "send":
+            await self.send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": f"Unsupported message type: {msg_type}",
+                    "code": "INVALID_MESSAGE_FORMAT",
+                },
+                send_json,
+            )
+            return True
+
+        if session.is_processing:
+            await self.send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": "Session is busy",
+                    "code": "PROCESSING_ERROR",
+                },
+                send_json,
+            )
+            return True
+        return False
 
     async def build_chat_message_parts(self, message: list[dict]) -> list[dict]:
         return await build_webchat_message_parts(
@@ -1006,7 +1036,13 @@ class LiveChatService:
 
         except Exception as exc:
             logger.error(f"[Live Chat] 处理音频失败: {exc}", exc_info=True)
-            await send_json({"t": "error", "data": f"处理失败: {str(exc)}"})
+            await send_json(
+                {
+                    "t": "error",
+                    "data": "Unable to process audio.",
+                    "code": "PROCESSING_ERROR",
+                }
+            )
 
         finally:
             session.is_processing = False

@@ -7,6 +7,63 @@ from astrbot.core.message import components
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("component_factory", "source", "expected"),
+    [
+        (lambda: components.Record(file=None), "https://example.com/a.mp3", "url"),
+        (lambda: components.Video(file=""), "file:///tmp/a.mp4", "url"),
+        (lambda: components.Image(file=None), "data:image/png;base64,AA==", "url"),
+        (lambda: components.Record(file=None), "base64://AA==", "url"),
+        (lambda: components.Video(file=""), "/tmp/a.mp4", "path"),
+        (lambda: components.Image(file=None), None, None),
+    ],
+)
+async def test_deferred_media_sources_resolve_once_and_preserve_source_mapping(
+    component_factory, source, expected
+):
+    calls = 0
+
+    async def resolve():
+        nonlocal calls
+        calls += 1
+        return source
+
+    component = component_factory()
+    component.set_source_resolver(resolve)
+    await component._resolve_deferred_source()
+    await component._resolve_deferred_source()
+
+    assert calls == 1
+    if expected == "url":
+        assert component.file == source
+        assert component.url == source
+    elif expected == "path":
+        assert component.file == source
+        assert component.path == source
+    else:
+        assert not component.file
+        assert not component.url
+        assert not component.path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "component",
+    [
+        components.Record(file="https://example.com/a.mp3"),
+        components.Video(file="https://example.com/a.mp4"),
+        components.Image(file="https://example.com/a.png"),
+    ],
+)
+async def test_deferred_media_sources_do_not_replace_existing_source(component):
+    async def resolve():
+        raise AssertionError("resolver must not run")
+
+    component.set_source_resolver(resolve)
+    await component._resolve_deferred_source()
+
+
+@pytest.mark.asyncio
 async def test_file_component_download_sanitizes_remote_name(monkeypatch, tmp_path):
     temp_dir = tmp_path / "temp"
     downloaded_paths: list[Path] = []
@@ -49,20 +106,11 @@ async def test_file_component_registers_v1_file_token_url(monkeypatch, tmp_path)
         assert path == str(file_path)
         return "token-123"
 
-    monkeypatch.setattr(
-        components,
-        "astrbot_config",
-        SimpleNamespace(
-            get=lambda key, default=None: (
-                "https://example.com" if key == "callback_api_base" else default
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        components.file_token_service, "register_file", fake_register_file
-    )
-
     component = components.File(name="report.txt", file=str(file_path))
+    component.bind_file_service(
+        "https://example.com",
+        SimpleNamespace(register_file=fake_register_file),
+    )
 
     url = await component.register_to_file_service()
 
@@ -78,20 +126,11 @@ async def test_file_component_to_dict_uses_v1_file_token_url(monkeypatch, tmp_pa
         assert path == str(file_path)
         return "token-456"
 
-    monkeypatch.setattr(
-        components,
-        "astrbot_config",
-        SimpleNamespace(
-            get=lambda key, default=None: (
-                "https://example.com/" if key == "callback_api_base" else default
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        components.file_token_service, "register_file", fake_register_file
-    )
-
     component = components.File(name="report.txt", file=str(file_path))
+    component.bind_file_service(
+        "https://example.com/",
+        SimpleNamespace(register_file=fake_register_file),
+    )
 
     payload = await component.to_dict()
 

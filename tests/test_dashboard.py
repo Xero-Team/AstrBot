@@ -2958,10 +2958,7 @@ async def test_do_update(
         "astrbot.dashboard.services.update_service.extract_dashboard",
         mock_extract_dashboard,
     )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.pip_installer.install",
-        mock_pip_install,
-    )
+    app.state.services.updates.pip_install = mock_pip_install
 
     response = await test_client.post(
         "/api/v1/updates/core",
@@ -3229,10 +3226,7 @@ async def test_install_pip_package_returns_generic_error_message(
         del args, kwargs
         raise PipInstallError("install failed", code=2)
 
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.pip_installer.install",
-        mock_pip_install,
-    )
+    app.state.services.updates.pip_install = mock_pip_install
 
     response = await test_client.post(
         "/api/v1/pip/install",
@@ -3466,9 +3460,11 @@ async def test_batch_upload_skills_accepts_zip_files(
         zip_path: str,
         *,
         overwrite: bool = True,
+        skill_name_hint: str | None = None,
     ):
         _ = self, overwrite
         assert zip_path.endswith(".zip")
+        assert skill_name_hint == "demo_skill"
         return "demo_skill"
 
     monkeypatch.setattr(
@@ -3592,8 +3588,10 @@ async def test_batch_upload_skills_partial_success(
         zip_path: str,
         *,
         overwrite: bool = True,
+        skill_name_hint: str | None = None,
     ):
         _ = self, overwrite
+        assert skill_name_hint in {"ok_skill", "bad_skill"}
         if "ok_skill" in zip_path:
             return "ok_skill"
         raise RuntimeError("install failed")
@@ -3644,6 +3642,52 @@ async def test_batch_upload_skills_partial_success(
     ]
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_does_not_retry_internal_type_error(
+    app: FastAPI,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    calls = 0
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+        skill_name_hint: str | None = None,
+    ):
+        nonlocal calls
+        _ = self, zip_path, overwrite, skill_name_hint
+        calls += 1
+        raise TypeError("internal archive parsing failure")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = DashboardTestClient(app)
+    response = await test_client.post(
+        "/api/v1/skills/batch",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"fake-zip"),
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert calls == 1
+    assert data["data"]["failed"] == [
+        {"filename": "demo_skill.zip", "error": "internal archive parsing failure"}
     ]
 
 

@@ -188,6 +188,42 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
+    async def _build_media_component(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        message: dict,
+        component_type: str,
+        index: int,
+    ) -> Comp.BaseMessageComponent | str:
+        path = message.get("path")
+        url = message.get("url")
+        if not path and not url:
+            return (
+                f"error: messages[{index}] must include path or url for "
+                f"{component_type} component."
+            )
+        if path:
+            local_path, _ = await self._resolve_path_from_sandbox(
+                context, path, component_type=component_type
+            )
+            if component_type == "image":
+                return Comp.Image.fromFileSystem(path=local_path)
+            if component_type == "record":
+                return Comp.Record.fromFileSystem(path=local_path)
+            if component_type == "video":
+                return Comp.Video.fromFileSystem(path=local_path)
+            name = message.get("text") or _remote_basename(path) or "file"
+            return Comp.File(name=name, file=local_path)
+
+        if component_type == "image":
+            return Comp.Image.fromURL(url=url)
+        if component_type == "record":
+            return Comp.Record.fromURL(url=url)
+        if component_type == "video":
+            return Comp.Video.fromURL(url=url)
+        name = message.get("text") or os.path.basename(url) or "file"
+        return Comp.File(name=name, url=url)
+
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
@@ -220,60 +256,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
-                elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="image"
-                        )
-                        components.append(Comp.Image.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Image.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for image component."
-                elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="record"
-                        )
-                        components.append(Comp.Record.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Record.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for record component."
-                elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="video"
-                        )
-                        components.append(Comp.Video.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Video.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for video component."
-                elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    name = (
-                        msg.get("text")
-                        or (_remote_basename(path) if path else "")
-                        or (os.path.basename(url) if url else "")
-                        or "file"
+                elif msg_type in {"image", "record", "video", "file"}:
+                    component = await self._build_media_component(
+                        context, msg, msg_type, idx
                     )
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="file"
-                        )
-                        components.append(Comp.File(name=name, file=local_path))
-                    elif url:
-                        components.append(Comp.File(name=name, url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for file component."
+                    if isinstance(component, str):
+                        return component
+                    components.append(component)
                 elif msg_type == "mention_user":
                     mention_user_id = msg.get("mention_user_id")
                     if not mention_user_id:

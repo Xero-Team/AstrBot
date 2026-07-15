@@ -10,12 +10,13 @@ from dashscope import Application
 from dashscope.app.application_response import ApplicationResponse
 
 import astrbot.core.message.components as Comp
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -41,6 +42,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self.preferences: SharedPreferences = kwargs["preferences"]
 
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
@@ -236,7 +238,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             请求payload字典
 
         """
-        conversation_id = await sp.get_async(
+        conversation_id = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="dashscope_conversation_id",
@@ -244,7 +246,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         )
         # 获得会话变量
         payload_vars = self.variables.copy()
-        session_var = await sp.get_async(
+        session_var = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_variables",
@@ -337,7 +339,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                     doc_references = chunk_doc_refs
 
                 if chunk.output.session_id:
-                    await sp.put_async(
+                    await self.preferences.put_async(
                         scope="umo",
                         scope_id=session_id,
                         key="dashscope_conversation_id",

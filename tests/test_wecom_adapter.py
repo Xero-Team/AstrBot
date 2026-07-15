@@ -12,7 +12,6 @@ from wechatpy.exceptions import InvalidSignatureException
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import MessageType
-from astrbot.core import db_helper
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.sources.wecom import wecom_adapter
 from astrbot.core.platform.sources.wecom.wecom_adapter import (
@@ -76,13 +75,11 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 def test_extract_wecom_media_filename_prefers_utf8_filename_star():
     disposition = (
-        "attachment; filename=ignored.bin; "
-        "filename*=UTF-8''..%2Fsafe%20name.txt"
+        "attachment; filename=ignored.bin; filename*=UTF-8''..%2Fsafe%20name.txt"
     )
 
     assert _extract_wecom_media_filename(disposition) == "safe name.txt"
@@ -151,7 +148,9 @@ async def test_wecom_server_handle_callback_decrypts_parses_and_invokes_callback
     callback = AsyncMock()
     server.callback = callback
     parsed_message = SimpleNamespace(type="text")
-    monkeypatch.setattr(wecom_adapter, "parse_message", MagicMock(return_value=parsed_message))
+    monkeypatch.setattr(
+        wecom_adapter, "parse_message", MagicMock(return_value=parsed_message)
+    )
     request = SimpleNamespace(
         args={"msg_signature": "sig", "timestamp": "ts", "nonce": "nonce"},
         get_data=AsyncMock(return_value=b"encrypted"),
@@ -233,9 +232,13 @@ def test_wecom_adapter_init_normalizes_api_base_and_injects_kf_clients(monkeypat
     fake_kf_message = SimpleNamespace(name="kf-message-api")
 
     monkeypatch.setattr(wecom_adapter, "WecomServer", lambda queue, config: fake_server)
-    monkeypatch.setattr(wecom_adapter, "WeChatClient", lambda corpid, secret: fake_client)
+    monkeypatch.setattr(
+        wecom_adapter, "WeChatClient", lambda corpid, secret: fake_client
+    )
     monkeypatch.setattr(wecom_adapter, "WeChatKF", lambda client: fake_kf)
-    monkeypatch.setattr(wecom_adapter, "WeChatKFMessage", lambda client: fake_kf_message)
+    monkeypatch.setattr(
+        wecom_adapter, "WeChatKFMessage", lambda client: fake_kf_message
+    )
 
     adapter = WecomPlatformAdapter(
         {
@@ -333,14 +336,8 @@ async def test_wecom_send_by_session_creates_proactive_event(monkeypatch):
 async def test_wecom_webhook_callback_dispatches_by_method():
     adapter = _adapter()
 
-    assert (
-        await adapter.webhook_callback(SimpleNamespace(method="GET"))
-        == "verified"
-    )
-    assert (
-        await adapter.webhook_callback(SimpleNamespace(method="POST"))
-        == "handled"
-    )
+    assert await adapter.webhook_callback(SimpleNamespace(method="GET")) == "verified"
+    assert await adapter.webhook_callback(SimpleNamespace(method="POST")) == "handled"
     adapter.server.handle_verify.assert_awaited_once()
     adapter.server.handle_callback.assert_awaited_once()
 
@@ -420,7 +417,9 @@ async def test_wecom_convert_message_voice_uses_media_resolver(monkeypatch, tmp_
     assert [type(component) for component in abm.message] == [Record]
     assert abm.message[0].file == ""
 
-    media_resolver = SimpleNamespace(to_path=AsyncMock(return_value="/tmp/wecom-converted.wav"))
+    media_resolver = SimpleNamespace(
+        to_path=AsyncMock(return_value="/tmp/wecom-converted.wav")
+    )
     with patch(
         "astrbot.core.message.components.MediaResolver",
         return_value=media_resolver,
@@ -489,26 +488,17 @@ def test_wecom_kf_text_dedup_expires_after_ttl():
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(wecom_adapter.time, "monotonic", lambda: 100.0)
         assert (
-            adapter._is_duplicate_wechat_kf_text_message("user-1", " hello ")
-            is False
+            adapter._is_duplicate_wechat_kf_text_message("user-1", " hello ") is False
         )
-        assert (
-            adapter._is_duplicate_wechat_kf_text_message("user-1", "hello")
-            is True
-        )
+        assert adapter._is_duplicate_wechat_kf_text_message("user-1", "hello") is True
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
             wecom_adapter.time,
             "monotonic",
-            lambda: 100.0
-            + adapter.WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS
-            + 1,
+            lambda: 100.0 + adapter.WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS + 1,
         )
-        assert (
-            adapter._is_duplicate_wechat_kf_text_message("user-1", "hello")
-            is False
-        )
+        assert adapter._is_duplicate_wechat_kf_text_message("user-1", "hello") is False
 
 
 @pytest.mark.asyncio
@@ -538,7 +528,9 @@ async def test_wecom_convert_wechat_kf_message_text_builds_friend_message(
 ):
     adapter = _adapter()
     adapter._is_duplicate_wechat_kf_text_message = MagicMock(return_value=False)
-    monkeypatch.setattr(wecom_adapter.uuid, "uuid4", lambda: SimpleNamespace(hex="fallbackid"))
+    monkeypatch.setattr(
+        wecom_adapter.uuid, "uuid4", lambda: SimpleNamespace(hex="fallbackid")
+    )
 
     result = await adapter.convert_wechat_kf_message(
         {
@@ -747,7 +739,9 @@ async def test_wecom_convert_wechat_kf_message_file_uses_content_disposition_fil
         "get_astrbot_temp_path",
         lambda: str(tmp_path),
     )
-    monkeypatch.setattr(wecom_adapter.uuid, "uuid4", lambda: SimpleNamespace(hex="fixed"))
+    monkeypatch.setattr(
+        wecom_adapter.uuid, "uuid4", lambda: SimpleNamespace(hex="fixed")
+    )
 
     await adapter.convert_wechat_kf_message(
         {
@@ -779,7 +773,9 @@ async def test_wecom_convert_wechat_kf_message_file_falls_back_to_default_filena
         "get_astrbot_temp_path",
         lambda: str(tmp_path),
     )
-    monkeypatch.setattr(wecom_adapter.uuid, "uuid4", lambda: SimpleNamespace(hex="fixed"))
+    monkeypatch.setattr(
+        wecom_adapter.uuid, "uuid4", lambda: SimpleNamespace(hex="fixed")
+    )
 
     await adapter.convert_wechat_kf_message(
         {

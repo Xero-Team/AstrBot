@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from astrbot import logger
-from astrbot.core import db_helper
 from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
@@ -138,13 +137,13 @@ class WebChatAdapter(Platform):
     ) -> None:
         message_parts = await message_chain_to_storage_message_parts(
             message_chain,
-            insert_attachment=db_helper.insert_attachment,
+            insert_attachment=self.database.insert_attachment,
             attachments_dir=self.attachments_dir,
         )
         if not message_parts:
             return
 
-        await db_helper.insert_platform_message_history(
+        await self.database.insert_platform_message_history(
             platform_id="webchat",
             user_id=conversation_id,
             content={"type": "bot", "message": message_parts},
@@ -155,7 +154,7 @@ class WebChatAdapter(Platform):
     async def _get_message_history(
         self, message_id: int
     ) -> PlatformMessageHistory | None:
-        return await db_helper.get_platform_message_history_by_id(message_id)
+        return await self.database.get_platform_message_history_by_id(message_id)
 
     async def _parse_message_parts(
         self,

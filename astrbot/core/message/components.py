@@ -32,7 +32,7 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from astrbot.core import astrbot_config, file_token_service, logger
+from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
@@ -76,6 +76,8 @@ class BaseMessageComponent(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     type: ComponentType
+    _callback_api_base: str = PrivateAttr(default="")
+    _file_token_service: object | None = PrivateAttr(default=None)
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -112,6 +114,51 @@ class BaseMessageComponent(BaseModel):
     async def to_dict(self) -> dict:
         # Default async bridge for components that still implement only toDict().
         return self.toDict()
+
+    def bind_file_service(
+        self, callback_api_base: str, file_token_service: object
+    ) -> None:
+        """Bind the runtime file capability needed for callback URLs."""
+        self._callback_api_base = callback_api_base.rstrip("/")
+        self._file_token_service = file_token_service
+
+    async def _register_runtime_file(self, file_path: str) -> str:
+        if not self._callback_api_base or self._file_token_service is None:
+            raise RuntimeError("File service capability is not bound to this message")
+        token = await self._file_token_service.register_file(file_path)
+        url = f"{self._callback_api_base}/api/v1/files/tokens/{token}"
+        logger.debug("已注册：%s", url)
+        return url
+
+
+class DeferredMediaSourceComponent(BaseMessageComponent):
+    """Internal base for media components that resolve a source lazily."""
+
+    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
+        default=None
+    )
+
+    def set_source_resolver(
+        self,
+        resolver: Callable[[], Awaitable[str | None]],
+    ) -> None:
+        self._source_resolver = resolver
+
+    async def _resolve_deferred_source(self) -> None:
+        if self._source_resolver is None or self.file or self.url or self.path:
+            return
+        resolved = await self._source_resolver()
+        self._source_resolver = None
+        if not resolved:
+            return
+        if resolved.startswith(
+            ("http://", "https://", "file://", "data:", "base64://")
+        ):
+            self.url = resolved
+            self.file = resolved
+            return
+        self.file = resolved
+        self.path = resolved
 
 
 class Plain(BaseMessageComponent):
@@ -175,7 +222,7 @@ class MFace(BaseMessageComponent):
         )
 
 
-class Record(BaseMessageComponent):
+class Record(DeferredMediaSourceComponent):
     type: ComponentType = ComponentType.Record
     file: str | None = ""
     url: str | None = ""
@@ -183,9 +230,6 @@ class Record(BaseMessageComponent):
     text: str | None = None
     # 额外
     path: str | None = None
-    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
-        default=None
-    )
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:
@@ -208,28 +252,6 @@ class Record(BaseMessageComponent):
     @staticmethod
     def fromBase64(bs64_data: str, **_):
         return Record(file=f"base64://{bs64_data}", **_)
-
-    def set_source_resolver(
-        self,
-        resolver: Callable[[], Awaitable[str | None]],
-    ) -> None:
-        self._source_resolver = resolver
-
-    async def _resolve_deferred_source(self) -> None:
-        if self._source_resolver is None or self.file or self.url or self.path:
-            return
-        resolved = await self._source_resolver()
-        self._source_resolver = None
-        if not resolved:
-            return
-        if resolved.startswith(
-            ("http://", "https://", "file://", "data:", "base64://")
-        ):
-            self.url = resolved
-            self.file = resolved
-            return
-        self.file = resolved
-        self.path = resolved
 
     @staticmethod
     def _decode_file_uri(uri: str) -> str:
@@ -340,30 +362,17 @@ class Record(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
-
         file_path = await self.convert_to_file_path()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
-
-        return f"{callback_host}/api/v1/files/tokens/{token}"
+        return await self._register_runtime_file(file_path)
 
 
-class Video(BaseMessageComponent):
+class Video(DeferredMediaSourceComponent):
     type: ComponentType = ComponentType.Video
     file: str
     url: str | None = ""
     cover: str | None = ""
     # 额外
     path: str | None = ""
-    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
-        default=None
-    )
 
     def __init__(self, file: str, **_) -> None:
         super().__init__(file=file, **_)
@@ -382,28 +391,6 @@ class Video(BaseMessageComponent):
     @staticmethod
     def fromBase64(base64_data: str, **_):
         return Video(file=f"base64://{base64_data}", **_)
-
-    def set_source_resolver(
-        self,
-        resolver: Callable[[], Awaitable[str | None]],
-    ) -> None:
-        self._source_resolver = resolver
-
-    async def _resolve_deferred_source(self) -> None:
-        if self._source_resolver is None or self.file or self.url or self.path:
-            return
-        resolved = await self._source_resolver()
-        self._source_resolver = None
-        if not resolved:
-            return
-        if resolved.startswith(
-            ("http://", "https://", "file://", "data:", "base64://")
-        ):
-            self.url = resolved
-            self.file = resolved
-            return
-        self.file = resolved
-        self.path = resolved
 
     async def _resolve_file_source(self) -> str:
         await self._resolve_deferred_source()
@@ -469,29 +456,16 @@ class Video(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
-
         file_path = await self.convert_to_file_path()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
-
-        return f"{callback_host}/api/v1/files/tokens/{token}"
+        return await self._register_runtime_file(file_path)
 
     async def to_dict(self):
         """需要和 toDict 区分开，toDict 是同步方法"""
         url_or_path = self.file
         if url_or_path.startswith("http"):
             payload_file = url_or_path
-        elif callback_host := astrbot_config.get("callback_api_base"):
-            callback_host = str(callback_host).removesuffix("/")
-            token = await file_token_service.register_file(url_or_path)
-            payload_file = f"{callback_host}/api/v1/files/tokens/{token}"
-            logger.debug(f"Generated video file callback link: {payload_file}")
+        elif self._callback_api_base and self._file_token_service:
+            payload_file = await self._register_runtime_file(url_or_path)
         else:
             payload_file = url_or_path
         return {
@@ -649,16 +623,13 @@ class Music(BaseMessageComponent):
         super().__init__(**_)
 
 
-class Image(BaseMessageComponent):
+class Image(DeferredMediaSourceComponent):
     type: ComponentType = ComponentType.Image
     file: str | None = ""
     sub_type: str | None = Field(default="", alias="_type")
     url: str | None = ""
     # 额外
     path: str | None = ""
-    _source_resolver: Callable[[], Awaitable[str | None]] | None = PrivateAttr(
-        default=None
-    )
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
@@ -685,28 +656,6 @@ class Image(BaseMessageComponent):
     @staticmethod
     def fromIO(IO):
         return Image.fromBytes(IO.read())
-
-    def set_source_resolver(
-        self,
-        resolver: Callable[[], Awaitable[str | None]],
-    ) -> None:
-        self._source_resolver = resolver
-
-    async def _resolve_deferred_source(self) -> None:
-        if self._source_resolver is None or self.file or self.url or self.path:
-            return
-        resolved = await self._source_resolver()
-        self._source_resolver = None
-        if not resolved:
-            return
-        if resolved.startswith(
-            ("http://", "https://", "file://", "data:", "base64://")
-        ):
-            self.url = resolved
-            self.file = resolved
-            return
-        self.file = resolved
-        self.path = resolved
 
     async def convert_to_file_path(self) -> str:
         """将这个图片统一转换为本地文件路径。这个方法避免了手动判断图片数据类型，直接返回图片数据的本地路径（如果是网络 URL, 则会自动进行下载）。
@@ -745,18 +694,8 @@ class Image(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
-
         file_path = await self.convert_to_file_path()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
-
-        return f"{callback_host}/api/v1/files/tokens/{token}"
+        return await self._register_runtime_file(file_path)
 
 
 class Reply(BaseMessageComponent):
@@ -896,6 +835,21 @@ class Nodes(BaseMessageComponent):
             d = await node.to_dict()
             ret["messages"].append(d)
         return ret
+
+
+def bind_file_service(
+    components: list[BaseMessageComponent],
+    callback_api_base: str,
+    file_token_service: object,
+) -> None:
+    """Bind file capabilities to a message chain before it reaches an adapter."""
+    for component in components:
+        component.bind_file_service(callback_api_base, file_token_service)
+        if isinstance(component, Node):
+            bind_file_service(component.content, callback_api_base, file_token_service)
+        elif isinstance(component, Nodes):
+            for node in component.nodes:
+                bind_file_service(node.content, callback_api_base, file_token_service)
 
 
 class Json(BaseMessageComponent):
@@ -1112,29 +1066,16 @@ class File(BaseMessageComponent):
             Exception: 如果未配置 callback_api_base
 
         """
-        callback_host = astrbot_config.get("callback_api_base")
-
-        if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
-
         file_path = await self.get_file()
-
-        token = await file_token_service.register_file(file_path)
-
-        logger.debug(f"已注册：{callback_host}/api/v1/files/tokens/{token}")
-
-        return f"{callback_host}/api/v1/files/tokens/{token}"
+        return await self._register_runtime_file(file_path)
 
     async def to_dict(self):
         """需要和 toDict 区分开，toDict 是同步方法"""
         url_or_path = await self.get_file(allow_return_url=True)
         if url_or_path.startswith("http"):
             payload_file = url_or_path
-        elif callback_host := astrbot_config.get("callback_api_base"):
-            callback_host = str(callback_host).removesuffix("/")
-            token = await file_token_service.register_file(url_or_path)
-            payload_file = f"{callback_host}/api/v1/files/tokens/{token}"
-            logger.debug(f"Generated file callback link: {payload_file}")
+        elif self._callback_api_base and self._file_token_service:
+            payload_file = await self._register_runtime_file(url_or_path)
         else:
             payload_file = url_or_path
         return {

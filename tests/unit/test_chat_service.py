@@ -30,10 +30,13 @@ def _service() -> ChatService:
     service.chat_runs_by_session = {}
     service.delete_threads_by_ids = AsyncMock()
     service.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
+    service.preferences = SimpleNamespace(temporary_cache={})
     return service
 
 
-def _session(session_id: str = "session-1", creator: str = "alice", platform_id: str = "webchat"):
+def _session(
+    session_id: str = "session-1", creator: str = "alice", platform_id: str = "webchat"
+):
     return SimpleNamespace(
         session_id=session_id,
         creator=creator,
@@ -172,34 +175,31 @@ def test_bot_message_accumulator_flushes_unfinished_tool_calls_when_requested():
 
 
 def test_extract_web_search_refs_filters_supported_results_and_adds_favicon():
-    original_cache = getattr(chat_service_module.sp, "temporary_cache", None)
-    chat_service_module.sp.temporary_cache = {
-        "_ws_favicon": {"https://example.com": "favicon.ico"}
-    }
-    try:
-        refs = extract_web_search_refs(
-            "Use <ref>1</ref> but ignore <ref>3</ref>",
-            [
-                {
-                    "type": "tool_call",
-                    "tool_calls": [
-                        {
-                            "name": "web_search_baidu",
-                            "result": (
-                                '{"results":[{"index":"1","url":"https://example.com",'
-                                '"title":"Example","snippet":"snippet"}]}'
-                            ),
-                        },
-                        {
-                            "name": "other_tool",
-                            "result": '{"results":[{"index":"3","url":"https://skip"}]}',
-                        },
-                    ],
-                }
-            ],
-        )
-    finally:
-        chat_service_module.sp.temporary_cache = original_cache
+    preferences = SimpleNamespace(
+        temporary_cache={"_ws_favicon": {"https://example.com": "favicon.ico"}}
+    )
+    refs = extract_web_search_refs(
+        "Use <ref>1</ref> but ignore <ref>3</ref>",
+        [
+            {
+                "type": "tool_call",
+                "tool_calls": [
+                    {
+                        "name": "web_search_baidu",
+                        "result": (
+                            '{"results":[{"index":"1","url":"https://example.com",'
+                            '"title":"Example","snippet":"snippet"}]}'
+                        ),
+                    },
+                    {
+                        "name": "other_tool",
+                        "result": '{"results":[{"index":"3","url":"https://skip"}]}',
+                    },
+                ],
+            }
+        ],
+        preferences,
+    )
 
     assert refs == {
         "used": [
@@ -227,7 +227,9 @@ async def test_load_current_conversation_history_returns_empty_for_invalid_json(
 
 
 @pytest.mark.asyncio
-async def test_resolve_webchat_file_prefers_webchat_image_dir_and_reports_mime(tmp_path):
+async def test_resolve_webchat_file_prefers_webchat_image_dir_and_reports_mime(
+    tmp_path,
+):
     service = _service()
     service.attachments_dir = str(tmp_path / "attachments")
     service.webchat_img_dir = str(tmp_path / "imgs")
@@ -254,7 +256,9 @@ async def test_resolve_attachment_file_rejects_missing_attachment(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_save_uploaded_file_renames_image_to_detected_suffix(tmp_path, monkeypatch):
+async def test_save_uploaded_file_renames_image_to_detected_suffix(
+    tmp_path, monkeypatch
+):
     service = _service()
     service.attachments_dir = str(tmp_path)
     service.db.insert_attachment = AsyncMock(
@@ -297,7 +301,9 @@ async def test_save_uploaded_file_renames_image_to_detected_suffix(tmp_path, mon
 
 
 @pytest.mark.asyncio
-async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(monkeypatch):
+async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
+    monkeypatch,
+):
     service = _service()
     queue = AsyncMock()
     queue.put = AsyncMock()
@@ -346,7 +352,10 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(mon
                 },
                 False,
             ),
-            ({"message_id": "mid-1", "type": "end", "data": "", "streaming": False}, False),
+            (
+                {"message_id": "mid-1", "type": "end", "data": "", "streaming": False},
+                False,
+            ),
         ]
     )
 
@@ -428,7 +437,10 @@ async def test_build_chat_stream_collects_tool_call_refs_and_agent_stats_on_end(
     service.save_bot_message = AsyncMock(
         return_value=_history_record(
             3,
-            {"type": "bot", "message": [{"type": "plain", "text": "Answer <ref>1</ref>"}]},
+            {
+                "type": "bot",
+                "message": [{"type": "plain", "text": "Answer <ref>1</ref>"}],
+            },
             checkpoint_id="ck-2",
         )
     )
@@ -448,8 +460,7 @@ async def test_build_chat_stream_collects_tool_call_refs_and_agent_stats_on_end(
         "remove_back_queue",
         MagicMock(),
     )
-    original_cache = getattr(chat_service_module.sp, "temporary_cache", None)
-    chat_service_module.sp.temporary_cache = {
+    service.preferences.temporary_cache = {
         "_ws_favicon": {"https://example.com": "fav.ico"}
     }
 
@@ -496,7 +507,10 @@ async def test_build_chat_stream_collects_tool_call_refs_and_agent_stats_on_end(
                 },
                 False,
             ),
-            ({"message_id": "mid-2", "type": "end", "data": "", "streaming": True}, False),
+            (
+                {"message_id": "mid-2", "type": "end", "data": "", "streaming": True},
+                False,
+            ),
         ]
     )
 
@@ -552,7 +566,7 @@ async def test_build_chat_stream_collects_tool_call_refs_and_agent_stats_on_end(
         )
         events = await _collect(stream)
     finally:
-        chat_service_module.sp.temporary_cache = original_cache
+        pass
 
     service.platform_history_mgr.insert.assert_not_called()
     assert service.save_bot_message.await_args_list == [
@@ -655,7 +669,10 @@ async def test_build_chat_stream_emits_attachment_saved_event_for_image(monkeypa
                 },
                 False,
             ),
-            ({"message_id": "mid-3", "type": "end", "data": "", "streaming": False}, False),
+            (
+                {"message_id": "mid-3", "type": "end", "data": "", "streaming": False},
+                False,
+            ),
         ]
     )
 
@@ -805,10 +822,16 @@ async def test_update_message_rejects_non_latest_user_message():
     )
 
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
-    service.db.get_platform_message_history_by_id = AsyncMock(return_value=target_record)
-    service.get_sorted_platform_history = AsyncMock(return_value=[target_record, latest_user])
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
+    service.get_sorted_platform_history = AsyncMock(
+        return_value=[target_record, latest_user]
+    )
 
-    with pytest.raises(ChatServiceError, match="Only the latest user message can be edited"):
+    with pytest.raises(
+        ChatServiceError, match="Only the latest user message can be edited"
+    ):
         await service.update_message(
             "alice",
             {"session_id": "session-1", "message_id": 10, "content": edited_content},
@@ -840,7 +863,9 @@ async def test_prepare_regenerate_message_payload_rewrites_latest_turn():
     ]
 
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
-    service.db.get_platform_message_history_by_id = AsyncMock(return_value=target_record)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
     service.load_current_conversation_history = AsyncMock(
         return_value=(
             "conv-1",
@@ -913,7 +938,9 @@ async def test_prepare_regenerate_message_payload_rejects_non_latest_turn():
     )
 
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
-    service.db.get_platform_message_history_by_id = AsyncMock(return_value=target_record)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
     service.load_current_conversation_history = AsyncMock(
         return_value=(
             "conv-1",
@@ -968,7 +995,9 @@ async def test_batch_delete_sessions_tracks_not_found_permission_and_internal_fa
 
 
 @pytest.mark.asyncio
-async def test_delete_attachments_still_deletes_rows_when_file_removal_fails(monkeypatch):
+async def test_delete_attachments_still_deletes_rows_when_file_removal_fails(
+    monkeypatch,
+):
     service = _service()
     first = SimpleNamespace(attachment_id="att-1", path="C:/tmp/one.png")
     second = SimpleNamespace(attachment_id="att-2", path="C:/tmp/two.png")
@@ -1047,7 +1076,9 @@ async def test_create_thread_returns_existing_thread_without_creating_conversati
         updated_at=datetime.now(UTC),
     )
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
-    service.db.get_platform_message_history_by_id = AsyncMock(return_value=parent_record)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=parent_record
+    )
     service.db.get_webchat_thread_by_parent_message_and_text = AsyncMock(
         return_value=existing
     )
@@ -1211,7 +1242,10 @@ async def test_update_message_rejects_message_without_checkpoint():
             {
                 "session_id": "session-1",
                 "message_id": 10,
-                "content": {"type": "user", "message": [{"type": "plain", "text": "x"}]},
+                "content": {
+                    "type": "user",
+                    "message": [{"type": "plain", "text": "x"}],
+                },
             },
         )
 
@@ -1226,7 +1260,9 @@ async def test_prepare_regenerate_message_payload_rejects_missing_linked_user_di
         checkpoint_id="ck-1",
     )
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
-    service.db.get_platform_message_history_by_id = AsyncMock(return_value=target_record)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
     service.load_current_conversation_history = AsyncMock(
         return_value=(
             "conv-1",
@@ -1264,7 +1300,9 @@ async def test_prepare_regenerate_message_payload_rejects_missing_linked_bot_dis
         checkpoint_id="ck-1",
     )
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
-    service.db.get_platform_message_history_by_id = AsyncMock(return_value=target_record)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
     service.load_current_conversation_history = AsyncMock(
         return_value=(
             "conv-1",

@@ -8,7 +8,7 @@ from io import BytesIO
 
 import audioop
 
-from astrbot.core import logger
+from astrbot import logger
 
 # The SILK SDK only supports these rates
 _PYSILK_SUPPORTED_RATES = frozenset({8000, 12000, 16000, 24000, 32000, 48000})

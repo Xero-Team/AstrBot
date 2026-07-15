@@ -304,29 +304,17 @@ async def test_set_provider_updates_global_defaults_for_chat_stt_and_tts(monkeyp
     await manager.set_provider("stt-global", ProviderType.SPEECH_TO_TEXT)
     await manager.set_provider("tts-global", ProviderType.TEXT_TO_SPEECH)
 
-    assert manager.curr_provider_inst is chat_provider
-    assert manager.curr_stt_provider_inst is stt_provider
-    assert manager.curr_tts_provider_inst is tts_provider
-    assert manager.preferences.put_async.await_args_list == [
-        call(
-            key="curr_provider",
-            value="chat-global",
-            scope="global",
-            scope_id="global",
-        ),
-        call(
-            key="curr_provider_stt",
-            value="stt-global",
-            scope="global",
-            scope_id="global",
-        ),
-        call(
-            key="curr_provider_tts",
-            value="tts-global",
-            scope="global",
-            scope_id="global",
-        ),
-    ]
+    assert (
+        manager.acm.default_conf["provider_settings"]["default_provider_id"]
+        == "chat-global"
+    )
+    assert (
+        manager.acm.default_conf["provider_stt_settings"]["provider_id"] == "stt-global"
+    )
+    assert (
+        manager.acm.default_conf["provider_tts_settings"]["provider_id"] == "tts-global"
+    )
+    manager.preferences.put_async.assert_not_awaited()
     assert hook.call_args_list == [
         call("chat-global", ProviderType.CHAT_COMPLETION, None),
         call("stt-global", ProviderType.SPEECH_TO_TEXT, None),
@@ -494,7 +482,7 @@ async def test_load_provider_merges_source_initializes_and_selects_default(
     assert inst.provider_config["id"] == "chat-1"
     assert inst.provider_config["base_url"] == "https://example.test"
     assert inst.provider_config["key"] == ["chat-key"]
-    assert manager.curr_provider_inst is inst
+    assert manager.get_using_provider(ProviderType.CHAT_COMPLETION) is inst
 
 
 @pytest.mark.asyncio
@@ -533,7 +521,7 @@ async def test_load_provider_selects_default_tts_from_tts_settings(monkeypatch):
 
     inst = manager.inst_map["tts-1"]
     assert isinstance(inst, DummyTTSProvider)
-    assert manager.curr_tts_provider_inst is inst
+    assert manager.get_using_provider(ProviderType.TEXT_TO_SPEECH) is inst
 
 
 @pytest.mark.asyncio
@@ -554,7 +542,6 @@ async def test_load_provider_replaces_existing_current_tts_when_configured_defau
         manager.provider_settings,
     )
     manager.tts_provider_insts = [existing]
-    manager.curr_tts_provider_inst = existing
 
     monkeypatch.setattr(manager, "dynamic_import_provider", lambda provider_type: None)
     monkeypatch.setitem(
@@ -579,7 +566,10 @@ async def test_load_provider_replaces_existing_current_tts_when_configured_defau
         },
     )
 
-    assert manager.curr_tts_provider_inst is manager.inst_map["tts-target"]
+    assert (
+        manager.get_using_provider(ProviderType.TEXT_TO_SPEECH)
+        is manager.inst_map["tts-target"]
+    )
 
 
 @pytest.mark.asyncio
@@ -793,10 +783,10 @@ async def test_initialize_selects_defaults_and_starts_mcp_init(monkeypatch):
         await manager._mcp_init_task
 
     manager._load_session_provider_overrides.assert_awaited_once()
-    assert manager.curr_provider_inst is chat_a
-    assert manager.curr_stt_provider_inst is stt_a
-    assert manager.curr_tts_provider_inst is None
-    manager.preferences.get_async.assert_awaited()
+    assert manager.get_using_provider(ProviderType.CHAT_COMPLETION) is chat_a
+    assert manager.get_using_provider(ProviderType.SPEECH_TO_TEXT) is stt_a
+    assert manager.get_using_provider(ProviderType.TEXT_TO_SPEECH) is None
+    manager.preferences.get_async.assert_not_awaited()
     manager.llm_tools.init_mcp_clients.assert_awaited_once()
 
 
@@ -838,7 +828,7 @@ async def test_initialize_continues_after_load_provider_failure(monkeypatch):
     if manager._mcp_init_task is not None:
         await manager._mcp_init_task
 
-    assert manager.curr_provider_inst is chat_ok
+    assert manager.get_using_provider(ProviderType.CHAT_COMPLETION) is chat_ok
     manager.llm_tools.init_mcp_clients.assert_awaited_once()
 
 
@@ -889,9 +879,9 @@ async def test_initialize_falls_back_when_persisted_provider_ids_have_wrong_type
     if manager._mcp_init_task is not None:
         await manager._mcp_init_task
 
-    assert manager.curr_provider_inst is chat_a
-    assert manager.curr_stt_provider_inst is stt_a
-    assert manager.curr_tts_provider_inst is tts_a
+    assert manager.get_using_provider(ProviderType.CHAT_COMPLETION) is chat_a
+    assert manager.get_using_provider(ProviderType.SPEECH_TO_TEXT) is stt_a
+    assert manager.get_using_provider(ProviderType.TEXT_TO_SPEECH) is tts_a
 
 
 @pytest.mark.asyncio
@@ -1001,7 +991,7 @@ async def test_reload_terminates_removed_provider_and_auto_selects_remaining(
 
     assert manager.load_provider.await_count == 0
     assert "chat-a" not in manager.inst_map
-    assert manager.curr_provider_inst is chat_b
+    assert manager.provider_insts == [chat_b]
     chat_a.terminate.assert_awaited_once()
 
 
@@ -1067,7 +1057,7 @@ async def test_reload_loads_enabled_provider_and_prunes_out_of_config_instances(
 
     assert terminate_provider.await_args_list[0] == call("chat-new")
     assert terminate_provider.await_args_list[1] == call("chat-stale")
-    assert manager.curr_provider_inst is loaded_new
+    assert manager.provider_insts[0] is loaded_new
     assert "chat-stale" not in manager.inst_map
     stale.terminate.assert_awaited_once()
 
@@ -1099,8 +1089,6 @@ async def test_reload_auto_selects_stt_and_tts_when_current_instances_are_none(
     manager.stt_provider_insts = [stt_a]
     manager.tts_provider_insts = [tts_a]
     manager.inst_map = {"stt-a": stt_a, "tts-a": tts_a}
-    manager.curr_stt_provider_inst = None
-    manager.curr_tts_provider_inst = None
     monkeypatch.setitem(
         provider_cls_map,
         "fake_stt_a",
@@ -1137,8 +1125,8 @@ async def test_reload_auto_selects_stt_and_tts_when_current_instances_are_none(
 
     await manager.reload({"id": "missing-provider", "enable": False})
 
-    assert manager.curr_stt_provider_inst is stt_a
-    assert manager.curr_tts_provider_inst is tts_a
+    assert manager.stt_provider_insts == [stt_a]
+    assert manager.tts_provider_insts == [tts_a]
 
 
 @pytest.mark.asyncio
@@ -1253,15 +1241,13 @@ async def test_terminate_provider_clears_current_stt_and_tts_instances():
     tts_provider.terminate = AsyncMock()
     manager.stt_provider_insts = [stt_provider]
     manager.tts_provider_insts = [tts_provider]
-    manager.curr_stt_provider_inst = stt_provider
-    manager.curr_tts_provider_inst = tts_provider
     manager.inst_map = {"stt-1": stt_provider, "tts-1": tts_provider}
 
     await manager.terminate_provider("stt-1")
     await manager.terminate_provider("tts-1")
 
-    assert manager.curr_stt_provider_inst is None
-    assert manager.curr_tts_provider_inst is None
+    assert manager.stt_provider_insts == []
+    assert manager.tts_provider_insts == []
     assert manager.stt_provider_insts == []
     assert manager.tts_provider_insts == []
     stt_provider.terminate.assert_awaited_once()

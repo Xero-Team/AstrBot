@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import importlib
 import os
 import traceback
 from collections.abc import Callable
@@ -21,6 +22,7 @@ from .provider import (
     STTProvider,
     TTSProvider,
 )
+from .provider_modules import PROVIDER_MODULES
 from .register import llm_tools, provider_cls_map
 
 
@@ -69,12 +71,6 @@ class ProviderManager:
         self.llm_tools = llm_tools
         self.llm_tools.bind_preferences(preferences)
 
-        self.curr_provider_inst: Provider | None = None
-        """默认的 Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
-        self.curr_stt_provider_inst: STTProvider | None = None
-        """默认的 Speech To Text Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
-        self.curr_tts_provider_inst: TTSProvider | None = None
-        """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
         self.preferences = preferences
         self._provider_change_hooks: list[
@@ -136,44 +132,33 @@ class ProviderManager:
             )
             self._notify_provider_changed(provider_id, provider_type, umo)
             return
-        # 不启用提供商会话隔离模式的情况
-
+        # Global selection belongs to the active default configuration, not a
+        # runtime cache or a second preference-backed source of truth.
         prov = self.inst_map[provider_id]
         if provider_type == ProviderType.TEXT_TO_SPEECH and isinstance(
             prov,
             TTSProvider,
         ):
-            self.curr_tts_provider_inst = prov
-            await self.preferences.put_async(
-                key="curr_provider_tts",
-                value=provider_id,
-                scope="global",
-                scope_id="global",
-            )
+            self.acm.default_conf["provider_tts_settings"]["provider_id"] = provider_id
+            self.acm.default_conf["provider_tts_settings"]["enable"] = True
+            self.acm.default_conf.save_config()
             self._notify_provider_changed(provider_id, provider_type, umo)
         elif provider_type == ProviderType.SPEECH_TO_TEXT and isinstance(
             prov,
             STTProvider,
         ):
-            self.curr_stt_provider_inst = prov
-            await self.preferences.put_async(
-                key="curr_provider_stt",
-                value=provider_id,
-                scope="global",
-                scope_id="global",
-            )
+            self.acm.default_conf["provider_stt_settings"]["provider_id"] = provider_id
+            self.acm.default_conf["provider_stt_settings"]["enable"] = True
+            self.acm.default_conf.save_config()
             self._notify_provider_changed(provider_id, provider_type, umo)
         elif provider_type == ProviderType.CHAT_COMPLETION and isinstance(
             prov,
             Provider,
         ):
-            self.curr_provider_inst = prov
-            await self.preferences.put_async(
-                key="curr_provider",
-                value=provider_id,
-                scope="global",
-                scope_id="global",
+            self.acm.default_conf["provider_settings"]["default_provider_id"] = (
+                provider_id
             )
+            self.acm.default_conf.save_config()
             self._notify_provider_changed(provider_id, provider_type, umo)
 
     async def get_provider_by_id(self, provider_id: str) -> Providers | None:
@@ -296,58 +281,6 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
-        selected_provider_id = await self.preferences.get_async(
-            key="curr_provider",
-            default=self.provider_settings.get("default_provider_id"),
-            scope="global",
-            scope_id="global",
-        )
-        selected_stt_provider_id = await self.preferences.get_async(
-            key="curr_provider_stt",
-            default=self.provider_stt_settings.get("provider_id"),
-            scope="global",
-            scope_id="global",
-        )
-        selected_tts_provider_id = await self.preferences.get_async(
-            key="curr_provider_tts",
-            default=self.provider_tts_settings.get("provider_id"),
-            scope="global",
-            scope_id="global",
-        )
-
-        temp_provider = (
-            self.inst_map.get(selected_provider_id)
-            if isinstance(selected_provider_id, str)
-            else None
-        )
-        self.curr_provider_inst = (
-            temp_provider if isinstance(temp_provider, Provider) else None
-        )
-        if not self.curr_provider_inst and self.provider_insts:
-            self.curr_provider_inst = self.provider_insts[0]
-
-        temp_stt = (
-            self.inst_map.get(selected_stt_provider_id)
-            if isinstance(selected_stt_provider_id, str)
-            else None
-        )
-        self.curr_stt_provider_inst = (
-            temp_stt if isinstance(temp_stt, STTProvider) else None
-        )
-        if not self.curr_stt_provider_inst and self.stt_provider_insts:
-            self.curr_stt_provider_inst = self.stt_provider_insts[0]
-
-        temp_tts = (
-            self.inst_map.get(selected_tts_provider_id)
-            if isinstance(selected_tts_provider_id, str)
-            else None
-        )
-        self.curr_tts_provider_inst = (
-            temp_tts if isinstance(temp_tts, TTSProvider) else None
-        )
-        if not self.curr_tts_provider_inst and self.tts_provider_insts:
-            self.curr_tts_provider_inst = self.tts_provider_insts[0]
-
         async def _init_mcp_clients_bg() -> None:
             try:
                 await self.llm_tools.init_mcp_clients()
@@ -369,157 +302,9 @@ class ProviderManager:
         Raises:
             ImportError: 如果提供商类型未知或无法导入对应模块，则抛出异常。
         """
-        match type:
-            case "openai_chat_completions":
-                from .sources.openai_chat_completions_source import (
-                    ProviderOpenAIChatCompletions as ProviderOpenAIChatCompletions,
-                )
-            case "openai_responses":
-                from .sources.openai_responses_source import (
-                    ProviderOpenAIResponses as ProviderOpenAIResponses,
-                )
-            case "longcat_chat_completion":
-                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
-            case "minimax_token_plan":
-                from .sources.minimax_token_plan_source import (
-                    ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
-                )
-            case "xiaomi_chat_completion":
-                from .sources.xiaomi_source import ProviderXiaomi as ProviderXiaomi
-            case "xiaomi_token_plan":
-                from .sources.xiaomi_token_plan_source import (
-                    ProviderXiaomiTokenPlan as ProviderXiaomiTokenPlan,
-                )
-            case "zhipu_chat_completion":
-                from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
-            case "groq_chat_completion":
-                from .sources.groq_source import ProviderGroq as ProviderGroq
-            case "xai_chat_completion":
-                from .sources.xai_source import ProviderXAI as ProviderXAI
-            case "aihubmix_chat_completion":
-                from .sources.oai_aihubmix_source import (
-                    ProviderAIHubMix as ProviderAIHubMix,
-                )
-            case "openrouter_chat_completion":
-                from .sources.openrouter_source import (
-                    ProviderOpenRouter as ProviderOpenRouter,
-                )
-            case "anthropic_chat_completion":
-                from .sources.anthropic_source import (
-                    ProviderAnthropic as ProviderAnthropic,
-                )
-            case "kimi_code_chat_completion":
-                from .sources.kimi_code_source import (
-                    ProviderKimiCode as ProviderKimiCode,
-                )
-            case "googlegenai_chat_completion":
-                from .sources.gemini_source import (
-                    ProviderGoogleGenAI as ProviderGoogleGenAI,
-                )
-            case "sensevoice_stt_selfhost":
-                from .sources.sensevoice_selfhosted_source import (
-                    ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
-                )
-            case "openai_whisper_api":
-                from .sources.whisper_api_source import (
-                    ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
-                )
-            case "mimo_stt_api":
-                from .sources.mimo_stt_api_source import (
-                    ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
-                )
-            case "openai_whisper_selfhost":
-                from .sources.whisper_selfhosted_source import (
-                    ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
-                )
-            case "xinference_stt":
-                from .sources.xinference_stt_provider import (
-                    ProviderXinferenceSTT as ProviderXinferenceSTT,
-                )
-            case "openai_tts_api":
-                from .sources.openai_tts_api_source import (
-                    ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
-                )
-            case "mimo_tts_api":
-                from .sources.mimo_tts_api_source import (
-                    ProviderMiMoTTSAPI as ProviderMiMoTTSAPI,
-                )
-            case "genie_tts":
-                from .sources.genie_tts import (
-                    GenieTTSProvider as GenieTTSProvider,
-                )
-            case "edge_tts":
-                from .sources.edge_tts_source import (
-                    ProviderEdgeTTS as ProviderEdgeTTS,
-                )
-            case "gsv_tts_selfhost":
-                from .sources.gsv_selfhosted_source import (
-                    ProviderGSVTTS as ProviderGSVTTS,
-                )
-            case "gsvi_tts_api":
-                from .sources.gsvi_tts_source import (
-                    ProviderGSVITTS as ProviderGSVITTS,
-                )
-            case "fishaudio_tts_api":
-                from .sources.fishaudio_tts_api_source import (
-                    ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI,
-                )
-            case "dashscope_tts":
-                from .sources.dashscope_tts import (
-                    ProviderDashscopeTTSAPI as ProviderDashscopeTTSAPI,
-                )
-            case "azure_tts":
-                from .sources.azure_tts_source import (
-                    AzureTTSProvider as AzureTTSProvider,
-                )
-            case "minimax_tts_api":
-                from .sources.minimax_tts_api_source import (
-                    ProviderMiniMaxTTSAPI as ProviderMiniMaxTTSAPI,
-                )
-            case "volcengine_tts":
-                from .sources.volcengine_tts import (
-                    ProviderVolcengineTTS as ProviderVolcengineTTS,
-                )
-            case "gemini_tts":
-                from .sources.gemini_tts_source import (
-                    ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
-                )
-            case "elevenlabs_tts_api":
-                from .sources.elevenlabs_tts_source import (
-                    ProviderElevenLabsTTSAPI as ProviderElevenLabsTTSAPI,
-                )
-            case "openai_embedding":
-                from .sources.openai_embedding_source import (
-                    OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
-                )
-            case "gemini_embedding":
-                from .sources.gemini_embedding_source import (
-                    GeminiEmbeddingProvider as GeminiEmbeddingProvider,
-                )
-            case "nvidia_embedding":
-                from .sources.nvidia_embedding_source import (
-                    NvidiaEmbeddingProvider as NvidiaEmbeddingProvider,
-                )
-            case "ollama_embedding":
-                from .sources.ollama_embedding_source import (
-                    OllamaEmbeddingProvider as OllamaEmbeddingProvider,
-                )
-            case "vllm_rerank":
-                from .sources.vllm_rerank_source import (
-                    VLLMRerankProvider as VLLMRerankProvider,
-                )
-            case "xinference_rerank":
-                from .sources.xinference_rerank_source import (
-                    XinferenceRerankProvider as XinferenceRerankProvider,
-                )
-            case "bailian_rerank":
-                from .sources.bailian_rerank_source import (
-                    BailianRerankProvider as BailianRerankProvider,
-                )
-            case "nvidia_rerank":
-                from .sources.nvidia_rerank_source import (
-                    NvidiaRerankProvider as NvidiaRerankProvider,
-                )
+        module = PROVIDER_MODULES.get(type)
+        if module is not None:
+            importlib.import_module(module)
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果
@@ -656,16 +441,6 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.stt_provider_insts.append(inst)
-                    if (
-                        self.provider_stt_settings.get("provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_stt_provider_inst = inst
-                        logger.info(
-                            f"Selected {provider_config['type']}({provider_config['id']}) as default STT provider",
-                        )
-                    if not self.curr_stt_provider_inst:
-                        self.curr_stt_provider_inst = inst
 
                 case ProviderType.TEXT_TO_SPEECH:
                     # TTS 任务
@@ -679,16 +454,6 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.tts_provider_insts.append(inst)
-                    if (
-                        self.provider_tts_settings.get("provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_tts_provider_inst = inst
-                        logger.info(
-                            f"Selected {provider_config['type']}({provider_config['id']}) as default TTS provider",
-                        )
-                    if not self.curr_tts_provider_inst:
-                        self.curr_tts_provider_inst = inst
 
                 case ProviderType.CHAT_COMPLETION:
                     # 文本生成任务
@@ -705,16 +470,6 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.provider_insts.append(inst)
-                    if (
-                        self.provider_settings.get("default_provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_provider_inst = inst
-                        logger.info(
-                            f"Selected {provider_config['type']}({provider_config['id']}) as default chat model provider",
-                        )
-                    if not self.curr_provider_inst:
-                        self.curr_provider_inst = inst
 
                 case ProviderType.EMBEDDING:
                     if not issubclass(cls_type, EmbeddingProvider):
@@ -767,34 +522,6 @@ class ProviderManager:
                 if key not in config_ids:
                     await self.terminate_provider(key)
 
-            if len(self.provider_insts) == 0:
-                self.curr_provider_inst = None
-            elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
-                self.curr_provider_inst = self.provider_insts[0]
-                logger.info(
-                    f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。",
-                )
-
-            if len(self.stt_provider_insts) == 0:
-                self.curr_stt_provider_inst = None
-            elif (
-                self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0
-            ):
-                self.curr_stt_provider_inst = self.stt_provider_insts[0]
-                logger.info(
-                    f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。",
-                )
-
-            if len(self.tts_provider_insts) == 0:
-                self.curr_tts_provider_inst = None
-            elif (
-                self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0
-            ):
-                self.curr_tts_provider_inst = self.tts_provider_insts[0]
-                logger.info(
-                    f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
-                )
-
     def get_insts(self):
         return self.provider_insts
 
@@ -824,13 +551,6 @@ class ProviderManager:
                 prov_inst = self.inst_map[provider_id]
                 if isinstance(prov_inst, RerankProvider):
                     self.rerank_provider_insts.remove(prov_inst)
-
-            if self.inst_map[provider_id] == self.curr_provider_inst:
-                self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
-                self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
-                self.curr_tts_provider_inst = None
 
             if getattr(self.inst_map[provider_id], "terminate", None):
                 await self.inst_map[provider_id].terminate()  # type: ignore

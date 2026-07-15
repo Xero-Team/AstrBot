@@ -4,13 +4,13 @@ from typing import override
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.core import sp
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
 from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ...hooks import BaseAgentRunHooks
 from ...message import is_checkpoint_message
@@ -38,6 +38,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self.preferences: SharedPreferences = kwargs["preferences"]
 
         self.api_key = provider_config.get("coze_api_key", "")
         if not self.api_key:
@@ -131,7 +132,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         user_id = session_id
 
         # 获取或创建会话ID
-        conversation_id = await sp.get_async(
+        conversation_id = await self.preferences.get_async(
             scope="umo",
             scope_id=user_id,
             key="coze_conversation_id",
@@ -271,7 +272,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             if event_type == "conversation.chat.created":
                 if isinstance(data, dict) and "conversation_id" in data:
-                    await sp.put_async(
+                    await self.preferences.put_async(
                         scope="umo",
                         scope_id=user_id,
                         key="coze_conversation_id",

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from astrbot.core import logger
+from astrbot import logger
 
 from .parsers.url_parser import extract_text_from_url
 

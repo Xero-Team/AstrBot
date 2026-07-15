@@ -14,6 +14,7 @@ from astrbot.dashboard.services.live_chat_service import LiveChatService
 def _service() -> LiveChatService:
     core_lifecycle = SimpleNamespace(
         astrbot_config={"dashboard": {"jwt_secret": "test-secret"}},
+        services=SimpleNamespace(preferences=SimpleNamespace(temporary_cache={})),
         plugin_manager=SimpleNamespace(),
         platform_message_history_manager=SimpleNamespace(),
     )
@@ -188,15 +189,13 @@ async def test_run_websocket_session_logs_runtime_error_and_still_cleans_session
     assert service.sessions == {}
 
 
-def test_extract_web_search_refs_filters_supported_results_and_attaches_favicon(
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.sp.temporary_cache",
-        {"_ws_favicon": {"https://example.com/1": "favicon-data"}},
-    )
+def test_extract_web_search_refs_filters_supported_results_and_attaches_favicon():
+    service = _service()
+    service.preferences.temporary_cache = {
+        "_ws_favicon": {"https://example.com/1": "favicon-data"}
+    }
 
-    refs = LiveChatService.extract_web_search_refs(
+    refs = service.extract_web_search_refs(
         "answer <ref>1</ref> <ref>3</ref>",
         [
             {
@@ -245,13 +244,9 @@ def test_extract_web_search_refs_filters_supported_results_and_attaches_favicon(
     }
 
 
-def test_extract_web_search_refs_returns_empty_for_invalid_tool_payload(monkeypatch):
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.sp.temporary_cache",
-        {"_ws_favicon": {}},
-    )
-
-    refs = LiveChatService.extract_web_search_refs(
+def test_extract_web_search_refs_returns_empty_for_invalid_tool_payload():
+    service = _service()
+    refs = service.extract_web_search_refs(
         "answer <ref>1</ref>",
         [
             {
@@ -286,7 +281,9 @@ def test_authenticate_token_maps_invalid_and_expired_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_attachment_from_file_delegates_with_expected_paths(monkeypatch, tmp_path):
+async def test_create_attachment_from_file_delegates_with_expected_paths(
+    monkeypatch, tmp_path
+):
     service = _service()
     service.attachments_dir = str(tmp_path / "attachments")
     service.webchat_img_dir = str(tmp_path / "webchat" / "imgs")
@@ -771,6 +768,7 @@ async def test_handle_chat_message_send_rejects_empty_message_parts():
 @pytest.mark.asyncio
 async def test_handle_chat_message_send_reports_processing_failure_and_cleans_queue(
     monkeypatch,
+    caplog,
 ):
     service = _service()
     service.ensure_chat_subscription = AsyncMock(return_value="sub-err")
@@ -808,10 +806,12 @@ async def test_handle_chat_message_send_reports_processing_failure_and_cleans_qu
         {
             "ct": "chat",
             "t": "error",
-            "data": "处理失败: queue boom",
+            "data": "Unable to process the message.",
             "code": "PROCESSING_ERROR",
         }
     ]
+    assert "queue boom" in caplog.text
+    assert "queue boom" not in sent_payloads[0]["data"]
     assert removed_request_ids == ["msg-error"]
     assert session.is_processing is False
     assert session.should_interrupt is False
@@ -1198,7 +1198,9 @@ async def test_handle_chat_message_send_falls_back_when_extract_web_search_refs_
 
 
 @pytest.mark.asyncio
-async def test_handle_chat_message_send_persists_agent_stats_and_attachment(monkeypatch):
+async def test_handle_chat_message_send_persists_agent_stats_and_attachment(
+    monkeypatch,
+):
     service = _service()
     service.platform_history_mgr.insert = AsyncMock(return_value=_record(11))
     service.ensure_chat_subscription = AsyncMock(return_value="sub-2")
@@ -1276,7 +1278,8 @@ async def test_handle_chat_message_send_persists_agent_stats_and_attachment(monk
         service.save_bot_message.await_args.args[4],
     )
     assert any(
-        payload == {
+        payload
+        == {
             "ct": "chat",
             "type": "attachment_saved",
             "data": {"id": "att-1", "type": "image"},
@@ -1576,7 +1579,11 @@ async def test_process_audio_reports_error_when_stt_raises():
     assert sent_payloads == [
         {"t": "metrics", "data": {"wav_assemble_time": 0.3}},
         {"t": "metrics", "data": {"stt": "mock-stt"}},
-        {"t": "error", "data": "处理失败: stt boom"},
+        {
+            "t": "error",
+            "data": "Unable to process audio.",
+            "code": "PROCESSING_ERROR",
+        },
     ]
     assert session.is_processing is False
     assert session.should_interrupt is False
@@ -1685,7 +1692,9 @@ async def test_process_audio_ignores_mismatched_message_id_until_matching_result
     sent_payloads: list[dict] = []
     removed_request_ids: list[str] = []
 
-    back_queue.put_nowait({"message_id": "wrong-id", "type": "plain", "data": "skip me"})
+    back_queue.put_nowait(
+        {"message_id": "wrong-id", "type": "plain", "data": "skip me"}
+    )
     back_queue.put_nowait({"message_id": "reply-4", "type": "plain", "data": "kept"})
     back_queue.put_nowait({"message_id": "reply-4", "type": "end", "data": ""})
 
@@ -1811,7 +1820,9 @@ async def test_process_audio_audio_chunk_without_text_skips_bot_text_chunk(
     back_queue: asyncio.Queue = asyncio.Queue()
     sent_payloads: list[dict] = []
 
-    back_queue.put_nowait({"message_id": "reply-5", "type": "audio_chunk", "data": "pcm"})
+    back_queue.put_nowait(
+        {"message_id": "reply-5", "type": "audio_chunk", "data": "pcm"}
+    )
     back_queue.put_nowait({"message_id": "reply-5", "type": "end", "data": ""})
 
     monkeypatch.setattr(

@@ -1,8 +1,8 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from sqlmodel import select
-from unittest.mock import MagicMock
 
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.db.po import ProviderStat
@@ -15,7 +15,6 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(internal, "db_helper", temp_db)
 
     event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-42")
     req = ProviderRequest(
@@ -44,6 +43,7 @@ async def test_record_internal_agent_stats_persists_provider_stat(
         req,
         agent_runner,
         final_resp,
+        temp_db,
     )
 
     async with temp_db.get_db() as session:
@@ -71,7 +71,6 @@ async def test_record_internal_agent_stats_marks_aborted_and_falls_back_to_meta_
     temp_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(internal, "db_helper", temp_db)
 
     event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-aborted")
     stats = AgentStats(token_usage=TokenUsage(output=2))
@@ -91,6 +90,7 @@ async def test_record_internal_agent_stats_marks_aborted_and_falls_back_to_meta_
         req=None,
         agent_runner=agent_runner,
         final_resp=SimpleNamespace(role="assistant"),
+        db=temp_db,
     )
 
     async with temp_db.get_db() as session:
@@ -109,7 +109,6 @@ async def test_record_internal_agent_stats_marks_error_status_for_err_response(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(internal, "db_helper", temp_db)
 
     event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-error")
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-error"))
@@ -130,6 +129,7 @@ async def test_record_internal_agent_stats_marks_error_status_for_err_response(
         req=req,
         agent_runner=agent_runner,
         final_resp=SimpleNamespace(role="err"),
+        db=temp_db,
     )
 
     async with temp_db.get_db() as session:
@@ -150,11 +150,7 @@ async def test_record_internal_agent_stats_swallows_insert_failures(
     async def raise_insert(*args, **kwargs):
         raise RuntimeError("db write failed")
 
-    monkeypatch.setattr(
-        internal,
-        "db_helper",
-        SimpleNamespace(insert_provider_stat=raise_insert),
-    )
+    db = SimpleNamespace(insert_provider_stat=raise_insert)
 
     event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-warning")
     stats = AgentStats(token_usage=TokenUsage(output=1))
@@ -174,6 +170,7 @@ async def test_record_internal_agent_stats_swallows_insert_failures(
         req=None,
         agent_runner=agent_runner,
         final_resp=SimpleNamespace(role="assistant"),
+        db=db,
     )
 
     logger_warning.assert_called_once()

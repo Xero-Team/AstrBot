@@ -2,7 +2,8 @@ import os
 import uuid
 from typing import TypedDict, TypeVar
 
-from astrbot.core import AstrBotConfig, logger
+from astrbot import logger
+from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.platform.message_session import MessageSession

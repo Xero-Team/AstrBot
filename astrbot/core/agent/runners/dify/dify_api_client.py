@@ -5,7 +5,7 @@ from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, FormData
 
-from astrbot.core import logger
+from astrbot import logger
 
 
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict]:

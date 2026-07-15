@@ -8,7 +8,6 @@ import pytest
 import pytest_asyncio
 
 from astrbot.api.message_components import Image, Record
-from astrbot.core import db_helper
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.route_identity import PlatformRouteIdentity
@@ -50,7 +49,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 @pytest.mark.asyncio
@@ -406,7 +404,9 @@ async def test_discord_send_by_session_guesses_group_when_channel_id_is_invalid(
     adapter.create_event = fake_create_event
 
     await adapter.send_by_session(
-        MessageSession("discord", discord_platform_adapter.MessageType.GROUP_MESSAGE, "bad-channel"),
+        MessageSession(
+            "discord", discord_platform_adapter.MessageType.GROUP_MESSAGE, "bad-channel"
+        ),
         MessageChain(chain=[]).message("hello"),
     )
 
@@ -426,7 +426,9 @@ async def test_discord_send_by_session_returns_early_when_client_not_ready():
     adapter.create_event = MagicMock()
 
     await adapter.send_by_session(
-        MessageSession("discord", discord_platform_adapter.MessageType.FRIEND_MESSAGE, "123"),
+        MessageSession(
+            "discord", discord_platform_adapter.MessageType.FRIEND_MESSAGE, "123"
+        ),
         MessageChain(chain=[]).message("hello"),
     )
 
@@ -452,7 +454,9 @@ async def test_discord_send_by_session_uses_friend_message_for_dm_channel():
     adapter.create_event = fake_create_event
 
     await adapter.send_by_session(
-        MessageSession("discord", discord_platform_adapter.MessageType.FRIEND_MESSAGE, "321"),
+        MessageSession(
+            "discord", discord_platform_adapter.MessageType.FRIEND_MESSAGE, "321"
+        ),
         MessageChain(chain=[]).message("hello dm"),
     )
 
@@ -551,7 +555,11 @@ async def test_discord_event_send_skips_non_messageable_channel(monkeypatch):
     event.route_identity = _discord_route_identity("123")
     event._parse_to_discord = AsyncMock(return_value=("hello", [], None, [], None))
     event._get_channel = AsyncMock(return_value=channel)
-    monkeypatch.setattr(discord_platform_event.discord.abc, "Messageable", type("FakeMessageable", (), {}))
+    monkeypatch.setattr(
+        discord_platform_event.discord.abc,
+        "Messageable",
+        type("FakeMessageable", (), {}),
+    )
 
     with patch.object(
         discord_platform_event.AstrMessageEvent,
@@ -646,7 +654,9 @@ async def test_discord_event_send_streaming_aggregates_plain_segments_once():
 async def test_discord_event_send_swallow_followup_send_error_without_parent_success_side_effect(
     monkeypatch,
 ):
-    followup = SimpleNamespace(send=AsyncMock(side_effect=RuntimeError("followup failed")))
+    followup = SimpleNamespace(
+        send=AsyncMock(side_effect=RuntimeError("followup failed"))
+    )
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
     event._client = SimpleNamespace(get_message=MagicMock())
     event.interaction_followup_webhook = followup
@@ -686,7 +696,13 @@ async def test_discord_parse_to_discord_converts_remote_image_to_embed():
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
 
     try:
-        content, files, view, embeds, reference_message_id = await event._parse_to_discord(
+        (
+            content,
+            files,
+            view,
+            embeds,
+            reference_message_id,
+        ) = await event._parse_to_discord(
             MessageChain(chain=[Image(file="https://cdn.example/image.png")])
         )
     finally:
@@ -703,16 +719,22 @@ async def test_discord_parse_to_discord_converts_remote_image_to_embed():
 @pytest.mark.asyncio
 async def test_discord_parse_to_discord_skips_missing_file_path():
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
-    file_component = discord_platform_event.File(name="report.txt", url="https://cdn.example/report.txt")
+    file_component = discord_platform_event.File(
+        name="report.txt", url="https://cdn.example/report.txt"
+    )
 
     with patch.object(
         type(file_component),
         "get_file",
         AsyncMock(return_value=None),
     ):
-        content, files, view, embeds, reference_message_id = await event._parse_to_discord(
-            MessageChain(chain=[file_component])
-        )
+        (
+            content,
+            files,
+            view,
+            embeds,
+            reference_message_id,
+        ) = await event._parse_to_discord(MessageChain(chain=[file_component]))
 
     assert content == ""
     assert files == []

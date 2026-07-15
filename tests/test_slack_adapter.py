@@ -13,7 +13,6 @@ import pytest_asyncio
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import MessageType
-from astrbot.core import db_helper
 from astrbot.core.platform.sources.slack.client import (
     SlackSocketClient,
     SlackWebhookClient,
@@ -40,11 +39,14 @@ def _build_adapter(**overrides) -> SlackAdapter:
 
 def _slack_signature(secret: str, timestamp: str, body: bytes) -> str:
     sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
-    return "v0=" + hmac.new(
-        secret.encode("utf-8"),
-        sig_basestring.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    return (
+        "v0="
+        + hmac.new(
+            secret.encode("utf-8"),
+            sig_basestring.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
 
 @pytest_asyncio.fixture(scope="module", autouse=True)
@@ -54,7 +56,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 def test_slack_adapter_requires_required_tokens_by_mode():
@@ -653,13 +654,20 @@ async def test_slack_run_waits_on_unified_webhook_mode(monkeypatch):
 
     assert adapter.bot_self_id == "B1"
     assert len(webhook_clients) == 1
-    assert webhook_clients[0][:4] == ("secret", "0.0.0.0", 3000, "/astrbot-slack-webhook/callback")
+    assert webhook_clients[0][:4] == (
+        "secret",
+        "0.0.0.0",
+        3000,
+        "/astrbot-slack-webhook/callback",
+    )
     waiter.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_slack_run_starts_webhook_server_when_not_unified(monkeypatch):
-    adapter = _build_adapter(slack_connection_mode="webhook", unified_webhook_mode=False)
+    adapter = _build_adapter(
+        slack_connection_mode="webhook", unified_webhook_mode=False
+    )
     start = AsyncMock()
 
     class FakeWebhookClient:

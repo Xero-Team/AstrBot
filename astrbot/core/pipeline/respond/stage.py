@@ -4,7 +4,7 @@ import random
 from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -204,6 +204,11 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
+        Comp.bind_file_service(
+            result.chain,
+            str(self.ctx.astrbot_config.get("callback_api_base", "") or ""),
+            self.ctx.file_token_service,
+        )
         if event.get_extra("_streaming_finished", False):
             # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
             return

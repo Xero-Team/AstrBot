@@ -1,4 +1,4 @@
-from astrbot.core import logger
+from astrbot import logger
 
 
 def coerce_int_config(

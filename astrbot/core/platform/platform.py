@@ -75,6 +75,11 @@ class Platform(abc.ABC):
         super().__init__()
         # 平台配置
         self.config = config
+        # Runtime capabilities are injected by PlatformManager after adapter
+        # construction. Adapters that need them declare no module globals.
+        self.database: Any = None
+        self.runtime_config: Any = None
+        self.preferences: Any = None
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex

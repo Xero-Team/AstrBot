@@ -4,7 +4,7 @@ import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map

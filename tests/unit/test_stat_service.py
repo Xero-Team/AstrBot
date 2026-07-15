@@ -49,6 +49,7 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
     db_helper.get_platform_stats = _get_platform_stats
     core_lifecycle = SimpleNamespace(
         start_time=timestamp - 3600,
+        services=SimpleNamespace(demo_mode=False),
         star_context=SimpleNamespace(get_all_stars=lambda: []),
         platform_manager=SimpleNamespace(get_platform_count=lambda: 1),
     )

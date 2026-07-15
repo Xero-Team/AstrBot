@@ -433,7 +433,7 @@ class FunctionToolManager:
         ``_default_permission``."""
         try:
             if self.preferences is None:
-                return {}
+                return None
             perms_raw = await self.preferences.global_get("tool_permissions", {})
         except Exception:
             perms_raw = {}
@@ -993,7 +993,7 @@ class FunctionToolManager:
             func_tool.active = False
 
             if self.preferences is None:
-                return
+                return False
             inactivated_llm_tools = await self.preferences.global_get(
                 "inactivated_llm_tools", []
             )
@@ -1019,7 +1019,7 @@ class FunctionToolManager:
             func_tool.active = True
 
             if self.preferences is None:
-                return
+                return False
             inactivated_llm_tools = await self.preferences.global_get(
                 "inactivated_llm_tools", []
             )

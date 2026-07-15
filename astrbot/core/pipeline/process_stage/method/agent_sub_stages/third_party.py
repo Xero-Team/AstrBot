@@ -3,7 +3,7 @@ import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from astrbot.core import astrbot_config, logger
+from astrbot import logger
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
@@ -311,7 +311,7 @@ class ThirdPartyAgentSubStage(Stage):
             return
 
         self.prov_cfg: dict = next(
-            (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
+            (p for p in self.conf["provider"] if p["id"] == self.prov_id),
             {},
         )
         if not self.prov_id:
@@ -391,15 +391,20 @@ class ThirdPartyAgentSubStage(Stage):
                 stream_watchdog_task.cancel()
 
         try:
-            await runner.reset(
-                request=req,
-                run_context=AgentContextWrapper(
+            reset_kwargs = {
+                "request": req,
+                "run_context": AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                 ),
-                agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.prov_cfg,
-                streaming=streaming_response,
+                "agent_hooks": MAIN_AGENT_HOOKS,
+                "provider_config": self.prov_cfg,
+                "streaming": streaming_response,
+            }
+            if preferences := getattr(self.ctx, "preferences", None):
+                reset_kwargs["preferences"] = preferences
+            await runner.reset(
+                **reset_kwargs,
             )
 
             if streaming_used:

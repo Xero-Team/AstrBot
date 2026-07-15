@@ -41,7 +41,6 @@ from astrbot.dashboard.services.subagent_service import SubAgentService
 from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
 from astrbot.dashboard.services.update_service import (
-    DEMO_MODE,
     UpdateService,
     call_download_dashboard,
     call_extract_dashboard,
@@ -117,8 +116,10 @@ def create_dashboard_asgi_app(
             download_dashboard_func=call_download_dashboard,
             extract_dashboard_func=call_extract_dashboard,
             get_dashboard_version_func=call_get_dashboard_version,
-            pip_install_func=call_pip_install,
-            demo_mode=DEMO_MODE,
+            pip_install_func=lambda *args, **kwargs: call_pip_install(
+                core_lifecycle.services.pip_installer, *args, **kwargs
+            ),
+            demo_mode=core_lifecycle.services.demo_mode,
             clear_site_data_headers=CLEAR_SITE_DATA_HEADERS,
         ),
     )

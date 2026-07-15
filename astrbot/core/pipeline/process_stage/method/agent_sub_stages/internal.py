@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
-from astrbot.core import db_helper, logger
+from astrbot import logger
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -409,6 +409,7 @@ class InternalAgentSubStage(Stage):
                             req,
                             agent_runner,
                             final_resp,
+                            self.ctx.plugin_manager.context.database,
                         ),
                         name="record_internal_agent_stats",
                     )
@@ -598,6 +599,7 @@ async def _record_internal_agent_stats(
     req: ProviderRequest | None,
     agent_runner: AgentRunner | None,
     final_resp: LLMResponse | None,
+    db,
 ) -> None:
     """Persist internal agent stats without affecting the user response flow."""
     if agent_runner is None:
@@ -623,7 +625,7 @@ async def _record_internal_agent_stats(
         else:
             status = "completed"
 
-        await db_helper.insert_provider_stat(
+        await db.insert_provider_stat(
             umo=event.unified_msg_origin,
             conversation_id=conversation_id,
             provider_id=provider_config.get("id", "") or provider.meta().id,

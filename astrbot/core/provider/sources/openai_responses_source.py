@@ -11,6 +11,7 @@ import hashlib
 import json
 import random
 from collections.abc import AsyncGenerator, AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -41,6 +42,125 @@ def _value(item: Any, name: str, default: Any = None) -> Any:
         if isinstance(item, dict)
         else getattr(item, name, default)
     )
+
+
+@dataclass(slots=True)
+class _ResponsesStreamState:
+    """Mutable state accumulated while consuming a Responses stream."""
+
+    final: Response | None = None
+    response_id: str | None = None
+    last_sequence_number: int | None = None
+    function_deltas: dict[str, dict[str, str]] = field(default_factory=dict)
+    function_item_ids: dict[str, str] = field(default_factory=dict)
+
+
+def _merge_responses_stream_event(
+    state: _ResponsesStreamState,
+    event: Any,
+) -> list[LLMResponse]:
+    """Merge one Responses event and return its visible streaming deltas."""
+    sequence_number = _value(event, "sequence_number")
+    if isinstance(sequence_number, int):
+        state.last_sequence_number = sequence_number
+    event_type = _value(event, "type", "")
+    event_response = _value(event, "response")
+    if event_response is not None:
+        state.response_id = _value(event_response, "id", state.response_id)
+    if event_response_id := _value(event, "response_id"):
+        if isinstance(event_response_id, str):
+            state.response_id = event_response_id
+
+    if event_type == "response.output_item.added":
+        item = _value(event, "item", {})
+        if _value(item, "type") == "function_call":
+            item_id = _value(item, "id")
+            call_id = _value(item, "call_id") or item_id
+            if isinstance(call_id, str):
+                state.function_deltas.setdefault(
+                    call_id,
+                    {"name": _value(item, "name", ""), "arguments": ""},
+                )
+                if isinstance(item_id, str):
+                    state.function_item_ids[item_id] = call_id
+        return []
+    if event_type == "response.output_text.delta":
+        return [
+            LLMResponse(
+                "assistant",
+                completion_text=_value(event, "delta", ""),
+                is_chunk=True,
+            )
+        ]
+    if event_type == "response.refusal.delta":
+        delta = _value(event, "delta", "")
+        return [
+            LLMResponse(
+                "assistant", completion_text=delta, is_chunk=True, refusal=delta
+            )
+        ]
+    if event_type == "response.function_call_arguments.delta":
+        item_id = _value(event, "item_id")
+        call_id = (
+            state.function_item_ids.get(item_id) if isinstance(item_id, str) else None
+        ) or _value(event, "call_id")
+        if not isinstance(call_id, str):
+            call_id = str(_value(event, "output_index", "0"))
+        delta = _value(event, "delta", "")
+        state.function_deltas.setdefault(call_id, {"name": "", "arguments": ""})[
+            "arguments"
+        ] += delta
+        return [
+            LLMResponse(
+                "tool",
+                is_chunk=True,
+                tools_call_ids=[call_id],
+                tools_call_name=[state.function_deltas[call_id]["name"]],
+                tools_call_extra_content={call_id: {"arguments_delta": delta}},
+            )
+        ]
+    if event_type == "response.function_call_arguments.done":
+        item_id = _value(event, "item_id")
+        call_id = (
+            state.function_item_ids.get(item_id) if isinstance(item_id, str) else None
+        )
+        if not isinstance(call_id, str):
+            call_id = str(_value(event, "output_index", "0"))
+        state.function_deltas[call_id] = {
+            "name": _value(event, "name", ""),
+            "arguments": _value(event, "arguments", ""),
+        }
+        return []
+    if event_type == "response.output_item.done":
+        item = _value(event, "item", {})
+        if _value(item, "type") == "function_call":
+            item_id = _value(item, "id")
+            call_id = _value(item, "call_id") or item_id
+            if isinstance(call_id, str):
+                if isinstance(item_id, str):
+                    state.function_item_ids[item_id] = call_id
+                state.function_deltas[call_id] = {
+                    "name": _value(item, "name", ""),
+                    "arguments": _value(item, "arguments", ""),
+                }
+        return []
+    if "reasoning" in event_type and event_type.endswith(".delta"):
+        return [
+            LLMResponse(
+                "assistant",
+                reasoning_content=_value(event, "delta", ""),
+                is_chunk=True,
+            )
+        ]
+    if event_type == "response.completed":
+        state.final = event_response
+        return []
+    if event_type in {"response.failed", "response.incomplete", "error"}:
+        raise ProviderResponseError(
+            f"OpenAI Responses stream event {event_type}: "
+            f"{_value(event, 'error') or _value(event, 'response')}"
+        )
+    return []
 
 
 @register_provider_adapter("openai_responses", "OpenAI Responses API Provider Adapter")
@@ -958,11 +1078,7 @@ class ProviderOpenAIResponses(Provider):
                 kwargs.get("abort_signal"),
             ),
         )
-        final: Response | None = None
-        response_id: str | None = None
-        last_sequence_number: int | None = None
-        function_deltas: dict[str, dict[str, str]] = {}
-        function_item_ids: dict[str, str] = {}
+        state = _ResponsesStreamState()
         iterator = stream.__aiter__()
         while True:
             try:
@@ -985,19 +1101,23 @@ class ProviderOpenAIResponses(Provider):
                                     except StopAsyncIteration:
                                         created_event = None
                                     if created_event is not None:
-                                        response_id = _value(
-                                            created_event, "response_id", response_id
+                                        state.response_id = _value(
+                                            created_event,
+                                            "response_id",
+                                            state.response_id,
                                         )
                                         created_response = _value(
                                             created_event, "response"
                                         )
                                         if created_response is not None:
-                                            response_id = _value(
-                                                created_response, "id", response_id
+                                            state.response_id = _value(
+                                                created_response,
+                                                "id",
+                                                state.response_id,
                                             )
-                                if response_id:
+                                if state.response_id:
                                     await self._cancel_background_response(
-                                        client, response_id
+                                        client, state.response_id
                                     )
                                 if aclose := getattr(stream, "aclose", None):
                                     await aclose()
@@ -1012,106 +1132,8 @@ class ProviderOpenAIResponses(Provider):
                             await asyncio.gather(
                                 event_task, abort_task, return_exceptions=True
                             )
-                    sequence_number = _value(event, "sequence_number")
-                    if isinstance(sequence_number, int):
-                        last_sequence_number = sequence_number
-                    event_type = _value(event, "type", "")
-                    event_response = _value(event, "response")
-                    if event_response is not None:
-                        response_id = _value(event_response, "id", response_id)
-                    event_response_id = _value(event, "response_id")
-                    if isinstance(event_response_id, str) and event_response_id:
-                        response_id = event_response_id
-                    if event_type == "response.output_item.added":
-                        item = _value(event, "item", {})
-                        if _value(item, "type") == "function_call":
-                            item_id = _value(item, "id")
-                            call_id = _value(item, "call_id") or item_id
-                            if isinstance(call_id, str):
-                                function_deltas.setdefault(
-                                    call_id,
-                                    {"name": _value(item, "name", ""), "arguments": ""},
-                                )
-                                if isinstance(item_id, str):
-                                    function_item_ids[item_id] = call_id
-                    elif event_type == "response.output_text.delta":
-                        yield LLMResponse(
-                            "assistant",
-                            completion_text=_value(event, "delta", ""),
-                            is_chunk=True,
-                        )
-                    elif event_type == "response.refusal.delta":
-                        delta = _value(event, "delta", "")
-                        yield LLMResponse(
-                            "assistant",
-                            completion_text=delta,
-                            is_chunk=True,
-                            refusal=delta,
-                        )
-                    elif event_type == "response.function_call_arguments.delta":
-                        item_id = _value(event, "item_id")
-                        call_id = (
-                            function_item_ids.get(item_id)
-                            if isinstance(item_id, str)
-                            else None
-                        ) or _value(event, "call_id")
-                        if not isinstance(call_id, str):
-                            call_id = str(_value(event, "output_index", "0"))
-                        delta = _value(event, "delta", "")
-                        function_deltas.setdefault(
-                            call_id, {"name": "", "arguments": ""}
-                        )["arguments"] += delta
-                        yield LLMResponse(
-                            "tool",
-                            is_chunk=True,
-                            tools_call_ids=[call_id],
-                            tools_call_name=[function_deltas[call_id]["name"]],
-                            tools_call_extra_content={
-                                call_id: {"arguments_delta": delta}
-                            },
-                        )
-                    elif event_type == "response.function_call_arguments.done":
-                        item_id = _value(event, "item_id")
-                        call_id = (
-                            function_item_ids.get(item_id)
-                            if isinstance(item_id, str)
-                            else None
-                        )
-                        if not isinstance(call_id, str):
-                            call_id = str(_value(event, "output_index", "0"))
-                        function_deltas[call_id] = {
-                            "name": _value(event, "name", ""),
-                            "arguments": _value(event, "arguments", ""),
-                        }
-                    elif event_type == "response.output_item.done":
-                        item = _value(event, "item", {})
-                        if _value(item, "type") == "function_call":
-                            item_id = _value(item, "id")
-                            call_id = _value(item, "call_id") or item_id
-                            if isinstance(call_id, str):
-                                if isinstance(item_id, str):
-                                    function_item_ids[item_id] = call_id
-                                function_deltas[call_id] = {
-                                    "name": _value(item, "name", ""),
-                                    "arguments": _value(item, "arguments", ""),
-                                }
-                    elif "reasoning" in event_type and event_type.endswith(".delta"):
-                        yield LLMResponse(
-                            "assistant",
-                            reasoning_content=_value(event, "delta", ""),
-                            is_chunk=True,
-                        )
-                    elif event_type == "response.completed":
-                        final = event_response
-                    elif event_type in {
-                        "response.failed",
-                        "response.incomplete",
-                        "error",
-                    }:
-                        raise ProviderResponseError(
-                            f"OpenAI Responses stream event {event_type}: "
-                            f"{_value(event, 'error') or _value(event, 'response')}"
-                        )
+                    for delta in _merge_responses_stream_event(state, event):
+                        yield delta
             except StopAsyncIteration:
                 break
             except asyncio.CancelledError:
@@ -1121,13 +1143,13 @@ class ProviderOpenAIResponses(Provider):
             except Exception as exc:
                 if (
                     not options.get("background")
-                    or not isinstance(response_id, str)
-                    or not response_id
+                    or not isinstance(state.response_id, str)
+                    or not state.response_id
                 ):
                     raise ProviderResponseError(
                         "OpenAI Responses stream interrupted after output; it was not replayed."
                     ) from exc
-                replay_response_id = response_id
+                replay_response_id = state.response_id
                 stream = cast(
                     AsyncIterator[Any],
                     await retry_provider_request(
@@ -1136,8 +1158,8 @@ class ProviderOpenAIResponses(Provider):
                             replay_response_id,
                             stream=True,
                             starting_after=(
-                                last_sequence_number
-                                if last_sequence_number is not None
+                                state.last_sequence_number
+                                if state.last_sequence_number is not None
                                 else 0
                             ),
                         ),
@@ -1145,13 +1167,13 @@ class ProviderOpenAIResponses(Provider):
                     ),
                 )
                 iterator = stream.__aiter__()
-        if final is None:
+        if state.final is None:
             raise ProviderResponseError(
                 "OpenAI Responses stream ended without response.completed"
             )
-        result = self._parse(final, requested_model=model)
+        result = self._parse(state.final, requested_model=model)
         if result.provider_state:
-            result.provider_state.data["sequence_number"] = last_sequence_number
+            result.provider_state.data["sequence_number"] = state.last_sequence_number
             result.provider_state.data["context_fingerprint"] = self._fingerprint(
                 history
             )

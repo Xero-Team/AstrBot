@@ -13,7 +13,6 @@ from astrbot.api.platform import (
     MessageType,
     PlatformMetadata,
 )
-from astrbot.core import db_helper
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.sources.wecom.wecom_event import WecomPlatformEvent
 from astrbot.core.platform.sources.wecom.wecom_kf_message import WeChatKFMessage
@@ -26,7 +25,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 def _build_message() -> AstrBotMessage:
@@ -118,7 +116,9 @@ async def test_wecom_event_send_kf_text_falls_back_on_40096_for_each_split_chunk
     event = _build_event(client)
 
     with (
-        patch.object(event, "split_plain", AsyncMock(return_value=["part 1", "part 2"])),
+        patch.object(
+            event, "split_plain", AsyncMock(return_value=["part 1", "part 2"])
+        ),
         patch(
             "astrbot.core.platform.sources.wecom.wecom_event.asyncio.sleep",
             new_callable=AsyncMock,
@@ -143,14 +143,18 @@ async def test_wecom_event_send_kf_text_falls_back_on_40096_for_each_split_chunk
 
 
 @pytest.mark.asyncio
-async def test_wecom_event_send_kf_image_failure_sends_error_text(monkeypatch, tmp_path):
+async def test_wecom_event_send_kf_image_failure_sends_error_text(
+    monkeypatch, tmp_path
+):
     image_path = tmp_path / "image.png"
     image_path.write_bytes(b"png")
     image = Image(file=str(image_path))
     kf_message = FakeKFMessage()
     client = SimpleNamespace(
         kf_message=kf_message,
-        media=SimpleNamespace(upload=MagicMock(side_effect=RuntimeError("upload failed"))),
+        media=SimpleNamespace(
+            upload=MagicMock(side_effect=RuntimeError("upload failed"))
+        ),
     )
     event = _build_event(client)
 
@@ -189,7 +193,9 @@ async def test_wecom_event_send_plain_in_app_mode_splits_and_sends_chunks():
     event = _build_event(client)
 
     with (
-        patch.object(event, "split_plain", AsyncMock(return_value=["part 1", "part 2"])),
+        patch.object(
+            event, "split_plain", AsyncMock(return_value=["part 1", "part 2"])
+        ),
         patch(
             "astrbot.core.platform.sources.wecom.wecom_event.asyncio.sleep",
             new_callable=AsyncMock,
@@ -203,20 +209,24 @@ async def test_wecom_event_send_plain_in_app_mode_splits_and_sends_chunks():
         await event.send(MessageChain([Plain("long text")]))
 
     assert client.message.send_text.call_args_list == [
-        (( "bot-1", "user-1", "part 1"),),
-        (( "bot-1", "user-1", "part 2"),),
+        (("bot-1", "user-1", "part 1"),),
+        (("bot-1", "user-1", "part 2"),),
     ]
     parent_send.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_wecom_event_send_app_image_failure_sends_error_text(monkeypatch, tmp_path):
+async def test_wecom_event_send_app_image_failure_sends_error_text(
+    monkeypatch, tmp_path
+):
     image_path = tmp_path / "image.png"
     image_path.write_bytes(b"png")
     image = Image(file=str(image_path))
     client = SimpleNamespace(
         message=SimpleNamespace(send_image=MagicMock(), send_text=MagicMock()),
-        media=SimpleNamespace(upload=MagicMock(side_effect=RuntimeError("upload failed"))),
+        media=SimpleNamespace(
+            upload=MagicMock(side_effect=RuntimeError("upload failed"))
+        ),
     )
     event = _build_event(client)
 
@@ -296,13 +306,17 @@ async def test_wecom_event_send_kf_record_removes_temp_amr_and_warns_on_cleanup_
 
 
 @pytest.mark.asyncio
-async def test_wecom_event_send_app_file_failure_sends_error_text(monkeypatch, tmp_path):
+async def test_wecom_event_send_app_file_failure_sends_error_text(
+    monkeypatch, tmp_path
+):
     file_path = tmp_path / "report.txt"
     file_path.write_bytes(b"report")
     file_comp = File(name="report.txt", file=str(file_path))
     client = SimpleNamespace(
         message=SimpleNamespace(send_file=MagicMock(), send_text=MagicMock()),
-        media=SimpleNamespace(upload=MagicMock(side_effect=RuntimeError("upload failed"))),
+        media=SimpleNamespace(
+            upload=MagicMock(side_effect=RuntimeError("upload failed"))
+        ),
     )
     event = _build_event(client)
 
@@ -340,7 +354,9 @@ async def test_wecom_event_send_kf_file_failure_sends_error_text(monkeypatch, tm
     kf_message.send_file = MagicMock()
     client = SimpleNamespace(
         kf_message=kf_message,
-        media=SimpleNamespace(upload=MagicMock(side_effect=RuntimeError("upload failed"))),
+        media=SimpleNamespace(
+            upload=MagicMock(side_effect=RuntimeError("upload failed"))
+        ),
     )
     event = _build_event(client)
 
@@ -370,7 +386,9 @@ async def test_wecom_event_send_kf_file_failure_sends_error_text(monkeypatch, tm
 
 
 @pytest.mark.asyncio
-async def test_wecom_event_send_kf_video_failure_sends_error_text(monkeypatch, tmp_path):
+async def test_wecom_event_send_kf_video_failure_sends_error_text(
+    monkeypatch, tmp_path
+):
     video_path = tmp_path / "clip.mp4"
     video_path.write_bytes(b"video")
     video_comp = Video(file=str(video_path))
@@ -378,7 +396,9 @@ async def test_wecom_event_send_kf_video_failure_sends_error_text(monkeypatch, t
     kf_message.send_video = MagicMock()
     client = SimpleNamespace(
         kf_message=kf_message,
-        media=SimpleNamespace(upload=MagicMock(side_effect=RuntimeError("upload failed"))),
+        media=SimpleNamespace(
+            upload=MagicMock(side_effect=RuntimeError("upload failed"))
+        ),
     )
     event = _build_event(client)
 

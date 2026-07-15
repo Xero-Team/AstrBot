@@ -3,7 +3,6 @@ import json
 
 import pytest
 
-from astrbot.core import sp
 from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
@@ -12,6 +11,20 @@ from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
+
+
+class _MemoryPreferences:
+    def __init__(self) -> None:
+        self.values: dict[str, object] = {}
+
+    async def global_get(self, key: str, default: object = None) -> object:
+        return self.values.get(key, default)
+
+    async def global_put(self, key: str, value: object) -> None:
+        self.values[key] = value
+
+
+preferences = _MemoryPreferences()
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():
@@ -38,13 +51,16 @@ def test_get_builtin_poke_tool_by_class_returns_cached_instance():
 
 def test_builtin_tool_ignores_inactivated_llm_tools():
     manager = FunctionToolManager()
-    asyncio.run(sp.global_put("inactivated_llm_tools", ["send_message_to_user"]))
+    manager.bind_preferences(preferences)
+    asyncio.run(
+        preferences.global_put("inactivated_llm_tools", ["send_message_to_user"])
+    )
 
     try:
         tool = manager.get_builtin_tool(SendMessageToUserTool)
         assert tool.active is True
     finally:
-        asyncio.run(sp.global_put("inactivated_llm_tools", []))
+        asyncio.run(preferences.global_put("inactivated_llm_tools", []))
 
 
 def test_computer_tools_are_registered_as_builtin_tools():

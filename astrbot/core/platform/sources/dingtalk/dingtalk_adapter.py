@@ -22,7 +22,6 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
@@ -358,7 +357,7 @@ class DingtalkPlatformAdapter(Platform):
                             session_id=sender_id,
                         )
                     )
-                    await sp.put_async(
+                    await self.preferences.put_async(
                         "global",
                         umo,
                         "dingtalk_staffid",
@@ -447,7 +446,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def _get_sender_staff_id(self, session: MessageSession) -> str:
         try:
-            staff_id = await sp.get_async(
+            staff_id = await self.preferences.get_async(
                 "global",
                 str(session),
                 "dingtalk_staffid",

@@ -458,11 +458,11 @@ async def test_plugin_help_lists_command_signatures_and_aliases():
 async def test_llm_command_toggles_session_service_status(monkeypatch):
     calls: list[tuple[str, bool]] = []
 
-    async def fake_is_enabled(umo: str) -> bool:
+    async def fake_is_enabled(_self, umo: str) -> bool:
         assert umo == "napcat:FriendMessage:42"
         return True
 
-    async def fake_set_status(umo: str, enabled: bool) -> None:
+    async def fake_set_status(_self, umo: str, enabled: bool) -> None:
         calls.append((umo, enabled))
 
     monkeypatch.setattr(
@@ -474,7 +474,7 @@ async def test_llm_command_toggles_session_service_status(monkeypatch):
         fake_set_status,
     )
 
-    command = LLMCommands(SimpleNamespace())
+    command = LLMCommands(SimpleNamespace(preferences=SimpleNamespace()))
     event = DummyEvent(message_str="llm")
     await command.llm(event)
 

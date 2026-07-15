@@ -10,9 +10,10 @@ class LLMCommands:
     async def llm(self, event: AstrMessageEvent) -> None:
         """Toggle LLM chat for the current session."""
         umo = event.unified_msg_origin
-        enabled = await SessionServiceManager.is_llm_enabled_for_session(umo)
+        services = SessionServiceManager(self.context.preferences)
+        enabled = await services.is_llm_enabled_for_session(umo)
         new_enabled = not enabled
-        await SessionServiceManager.set_llm_status_for_session(umo, new_enabled)
+        await services.set_llm_status_for_session(umo, new_enabled)
         status = "enabled" if new_enabled else "disabled"
         event.set_result(
             MessageEventResult().message(

@@ -9,9 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from astrbot.core import DEMO_MODE as _DEMO_MODE
-from astrbot.core import logger
-from astrbot.core import pip_installer as _pip_installer
+from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.desktop_runtime import (
@@ -32,9 +30,8 @@ from astrbot.core.utils.io import (
 from astrbot.core.utils.io import (
     get_dashboard_version as _get_dashboard_version,
 )
+from astrbot.core.utils.pip_installer import PipInstaller
 
-DEMO_MODE = _DEMO_MODE
-pip_installer = _pip_installer
 download_dashboard = _download_dashboard
 extract_dashboard = _extract_dashboard
 get_dashboard_version = _get_dashboard_version
@@ -57,7 +54,7 @@ async def call_get_dashboard_version(*args, **kwargs):
     return await get_dashboard_version(*args, **kwargs)
 
 
-async def call_pip_install(*args, **kwargs):
+async def call_pip_install(pip_installer: PipInstaller, *args, **kwargs):
     result = pip_installer.install(*args, **kwargs)
     if inspect.isawaitable(result):
         return await cast(Awaitable[Any], result)

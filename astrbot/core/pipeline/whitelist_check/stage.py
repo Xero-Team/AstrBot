@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 

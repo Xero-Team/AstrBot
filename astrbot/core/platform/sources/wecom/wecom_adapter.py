@@ -14,6 +14,7 @@ from wechatpy.enterprise.messages import ImageMessage, TextMessage, VoiceMessage
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage
 
+from astrbot import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
@@ -24,7 +25,6 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path

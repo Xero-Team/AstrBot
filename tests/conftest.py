@@ -284,20 +284,6 @@ async def temp_db(temp_db_file: Path):
             temp_db_file.unlink()
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def _cleanup_global_core_resources():
-    yield
-    from astrbot.core import db_helper, sp
-
-    try:
-        await db_helper.close()
-    finally:
-        try:
-            sp._scheduler.shutdown(wait=False)  # noqa: SLF001
-        except Exception:
-            pass
-
-
 # ============================================================
 # Context Fixtures
 # ============================================================

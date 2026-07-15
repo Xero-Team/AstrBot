@@ -1,6 +1,6 @@
 import traceback
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 

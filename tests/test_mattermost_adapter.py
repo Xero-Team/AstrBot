@@ -9,7 +9,6 @@ import pytest_asyncio
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import MessageType
-from astrbot.core import db_helper
 from astrbot.core.platform.sources.mattermost.client import MattermostClient
 from astrbot.core.platform.sources.mattermost.mattermost_adapter import (
     MattermostPlatformAdapter,
@@ -45,7 +44,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 @pytest.mark.asyncio
@@ -93,7 +91,10 @@ async def test_mattermost_convert_message_returns_none_without_channel_id():
 async def test_mattermost_convert_message_dm_sets_friend_type_and_attachments():
     adapter = _build_adapter()
     adapter.client.parse_post_attachments = AsyncMock(
-        return_value=([Comp.File(name="note.txt", file="/tmp/note.txt")], ["/tmp/note.txt"])
+        return_value=(
+            [Comp.File(name="note.txt", file="/tmp/note.txt")],
+            ["/tmp/note.txt"],
+        )
     )
 
     result = await adapter.convert_message(
@@ -154,7 +155,9 @@ def test_mattermost_build_message_str_only_skips_leading_self_mention():
 
 
 def test_mattermost_parse_timestamp_handles_milliseconds_and_fallback():
-    assert MattermostPlatformAdapter._parse_timestamp(1_700_000_000_123) == 1_700_000_000
+    assert (
+        MattermostPlatformAdapter._parse_timestamp(1_700_000_000_123) == 1_700_000_000
+    )
 
     with patch(
         "astrbot.core.platform.sources.mattermost.mattermost_adapter.time.time",

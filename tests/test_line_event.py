@@ -12,7 +12,6 @@ from astrbot.api.platform import (
     MessageType,
     PlatformMetadata,
 )
-from astrbot.core import db_helper
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.sources.line.line_event import LineMessageEvent
 
@@ -24,14 +23,13 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
-def _build_event(*, group_id: str | None = None, reply_token: str = "reply-1") -> LineMessageEvent:
+def _build_event(
+    *, group_id: str | None = None, reply_token: str = "reply-1"
+) -> LineMessageEvent:
     message = AstrBotMessage()
-    message.type = (
-        MessageType.GROUP_MESSAGE if group_id else MessageType.FRIEND_MESSAGE
-    )
+    message.type = MessageType.GROUP_MESSAGE if group_id else MessageType.FRIEND_MESSAGE
     message.sender = MessageMember(user_id="user-1", nickname="Sender")
     message.self_id = "bot-1"
     message.session_id = group_id or "user-1"
@@ -122,7 +120,9 @@ async def test_line_send_skips_parent_send_when_no_message_objects(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_line_build_line_messages_drops_unsendable_segments_after_limit(monkeypatch):
+async def test_line_build_line_messages_drops_unsendable_segments_after_limit(
+    monkeypatch,
+):
     image = Image.fromURL("https://example.test/a.png")
     file = File(name="report.pdf", url="https://example.test/report.pdf")
     chain = MessageChain(
@@ -156,7 +156,13 @@ async def test_line_build_line_messages_drops_unsendable_segments_after_limit(mo
     messages = await LineMessageEvent.build_line_messages(chain)
 
     assert len(messages) == 5
-    assert [message["text"] for message in messages] == ["one", "two", "three", "four", "five"]
+    assert [message["text"] for message in messages] == [
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+    ]
 
 
 @pytest.mark.asyncio

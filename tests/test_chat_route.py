@@ -23,6 +23,7 @@ def chat_service_instance(monkeypatch, tmp_path):
         )
     )
     core_lifecycle = SimpleNamespace(
+        services=SimpleNamespace(preferences=SimpleNamespace(temporary_cache={})),
         conversation_manager=Mock(),
         platform_message_history_manager=platform_history_mgr,
         umop_config_router=Mock(),

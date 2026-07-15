@@ -1,13 +1,14 @@
 import os
 import uuid
+from typing import Any
 
-from astrbot.core import astrbot_config, logger
+from astrbot import logger
 from astrbot.core.config.default import WEBHOOK_SUPPORTED_PLATFORMS
 
 
 def _get_callback_api_base() -> str:
     try:
-        return astrbot_config.get("callback_api_base", "").rstrip("/")
+        return str(_config.get("callback_api_base", "") if _config else "").rstrip("/")
     except Exception as e:
         logger.error(f"获取 callback_api_base 失败: {e!s}")
         return ""
@@ -15,7 +16,7 @@ def _get_callback_api_base() -> str:
 
 def _get_dashboard_port() -> int:
     try:
-        return astrbot_config.get("dashboard", {}).get("port", 6185)
+        return _config.get("dashboard", {}).get("port", 6185) if _config else 6185
     except Exception as e:
         logger.error(f"获取 dashboard 端口失败: {e!s}")
         return 6185
@@ -29,7 +30,11 @@ def _is_dashboard_ssl_enabled() -> bool:
         return env_ssl.strip().lower() in {"1", "true", "yes", "on"}
 
     try:
-        return bool(astrbot_config.get("dashboard", {}).get("ssl", {}).get("enable"))
+        return bool(
+            _config.get("dashboard", {}).get("ssl", {}).get("enable")
+            if _config
+            else False
+        )
     except Exception as e:
         logger.error(f"获取 dashboard SSL 配置失败: {e!s}")
         return False
@@ -80,3 +85,12 @@ def ensure_platform_webhook_config(platform_cfg: dict) -> bool:
         platform_cfg["webhook_uuid"] = uuid.uuid4().hex[:16]
         return True
     return False
+
+
+_config: Any = None
+
+
+def configure_webhook_utils(config: Any) -> None:
+    """Bind runtime configuration for webhook display helpers."""
+    global _config
+    _config = config

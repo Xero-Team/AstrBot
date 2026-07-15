@@ -4,7 +4,7 @@ import os
 import subprocess
 import uuid
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType

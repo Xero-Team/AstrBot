@@ -13,7 +13,7 @@ import pytest_asyncio
 from fastapi import FastAPI, Request
 
 import astrbot.dashboard.services.config_service as config_service
-from astrbot.core import file_token_service
+from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.services.api_key_service import ApiKeyService
@@ -698,8 +698,30 @@ def fake_core_lifecycle():
     def validate_astrbot_version_specifier(version_spec: str):
         return True, f"supported: {version_spec}"
 
+    class FakePreferences:
+        def __init__(self) -> None:
+            self.values: dict[str, object] = {}
+
+        async def global_get(self, key: str, default: object = None) -> object:
+            return self.values.get(key, default)
+
+        async def global_put(self, key: str, value: object) -> None:
+            self.values[key] = value
+
+        async def session_get(self, *_args, **_kwargs) -> list:
+            return []
+
+        async def session_put(self, *_args, **_kwargs) -> None:
+            return None
+
     return SimpleNamespace(
         astrbot_config=config,
+        services=SimpleNamespace(
+            demo_mode=False,
+            preferences=FakePreferences(),
+            file_token_service=FileTokenService(),
+            pip_installer=SimpleNamespace(install=lambda *_args, **_kwargs: None),
+        ),
         astrbot_updator=FakeAstrBotUpdator(),
         start_time=1234567890,
         astrbot_config_mgr=SimpleNamespace(
@@ -2382,6 +2404,7 @@ async def test_v1_plugins_reject_legacy_plugin_id_query(
 @pytest.mark.asyncio
 async def test_v1_plugin_source_delete_uses_path_ids(
     asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
     source_id = "https://example.com/source"
@@ -2393,14 +2416,9 @@ async def test_v1_plugin_source_delete_uses_path_ids(
     async def fake_global_put(_key, value):
         sources[:] = value
 
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.plugin_service.sp.global_get",
-        fake_global_get,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.plugin_service.sp.global_put",
-        fake_global_put,
-    )
+    preferences = asgi_app.state.services.plugins.services.preferences
+    monkeypatch.setattr(preferences, "global_get", fake_global_get)
+    monkeypatch.setattr(preferences, "global_put", fake_global_put)
 
     response = await asgi_client.delete(
         "/api/v1/plugin-sources/https:%2F%2Fexample.com%2Fsource",
@@ -2477,11 +2495,14 @@ async def test_v1_bot_type_registration_uses_platform_service(
 @pytest.mark.asyncio
 async def test_v1_token_file_is_public(
     asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
     tmp_path: Path,
 ):
     token_file = tmp_path / "token-file.txt"
     token_file.write_text("token:demo-token", encoding="utf-8")
-    file_token = await file_token_service.register_file(str(token_file), ttl_seconds=60)
+    file_token = await asgi_app.state.services.files.file_token_service.register_file(
+        str(token_file), ttl_seconds=60
+    )
 
     response = await asgi_client.get(f"/api/v1/files/tokens/{file_token}")
 
@@ -2641,6 +2662,7 @@ async def test_v1_tool_toggle_uses_async_manager(
 @pytest.mark.asyncio
 async def test_v1_session_groups_use_async_shared_preferences(
     asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
     store: dict[str, dict] = {}
@@ -2651,14 +2673,9 @@ async def test_v1_session_groups_use_async_shared_preferences(
     async def fake_global_put(key: str, value):
         store[key] = copy.deepcopy(value)
 
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.session_management_service.sp.global_get",
-        fake_global_get,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.session_management_service.sp.global_put",
-        fake_global_put,
-    )
+    preferences = asgi_app.state.services.sessions.preferences
+    monkeypatch.setattr(preferences, "global_get", fake_global_get)
+    monkeypatch.setattr(preferences, "global_put", fake_global_put)
 
     headers = _jwt_headers()
     create_response = await asgi_client.post(
@@ -2698,6 +2715,7 @@ async def test_v1_session_groups_use_async_shared_preferences(
 @pytest.mark.asyncio
 async def test_v1_batch_session_service_uses_async_shared_preferences(
     asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
     store = {
@@ -2710,14 +2728,9 @@ async def test_v1_batch_session_service_uses_async_shared_preferences(
     async def fake_session_put(umo: str, key: str, value):
         store[(umo, key)] = copy.deepcopy(value)
 
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.session_management_service.sp.session_get",
-        fake_session_get,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.session_management_service.sp.session_put",
-        fake_session_put,
-    )
+    preferences = asgi_app.state.services.sessions.preferences
+    monkeypatch.setattr(preferences, "session_get", fake_session_get)
+    monkeypatch.setattr(preferences, "session_put", fake_session_put)
 
     response = await asgi_client.patch(
         "/api/v1/sessions/service",

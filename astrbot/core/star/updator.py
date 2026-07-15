@@ -3,7 +3,7 @@ import zipfile
 
 import yaml
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 from astrbot.core.utils.io import ensure_dir, extract_zip_safely, remove_dir
 

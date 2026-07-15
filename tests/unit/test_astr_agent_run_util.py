@@ -83,9 +83,7 @@ class FakeRunner:
 
 @pytest.mark.asyncio
 async def test_run_agent_forwards_streaming_provider_error():
-    error_text = (
-        "LLM response error: model was not found or permission was denied"
-    )
+    error_text = "LLM response error: model was not found or permission was denied"
     runner = FakeRunner(
         [
             SimpleNamespace(
@@ -258,6 +256,33 @@ async def test_run_agent_marks_user_aborted_without_buffered_output():
     assert event.get_extra("agent_stop_requested") is False
     assert event.result_history == []
     assert event.clear_result_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_run_agent_closing_generator_cancels_and_awaits_stop_watcher(
+    monkeypatch,
+):
+    watcher_cancelled = asyncio.Event()
+
+    async def fake_stop_watcher(_runner, _event):
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            watcher_cancelled.set()
+            raise
+
+    monkeypatch.setattr(util, "_watch_agent_stop_signal", fake_stop_watcher)
+    runner = FakeRunner(
+        [_response("llm_result", MessageChain().message("first"))],
+        event=FakeEvent(),
+    )
+
+    generator = util.run_agent(runner)
+    await anext(generator)
+    await asyncio.sleep(0)
+    await generator.aclose()
+
+    await asyncio.wait_for(watcher_cancelled.wait(), timeout=1)
 
 
 @pytest.mark.asyncio
@@ -696,7 +721,9 @@ async def test_run_agent_feeder_flushes_short_tail_and_ignores_none_chunks(monke
 
 
 @pytest.mark.asyncio
-async def test_run_agent_feeder_accumulates_short_sentences_until_threshold(monkeypatch):
+async def test_run_agent_feeder_accumulates_short_sentences_until_threshold(
+    monkeypatch,
+):
     async def fake_run_agent(*args, **kwargs):
         yield MessageChain().message("Hi.")
         yield MessageChain().message("Yo.")
@@ -749,7 +776,9 @@ async def test_safe_tts_stream_wrapper_preserves_generated_audio_before_sentinel
 
 
 @pytest.mark.asyncio
-async def test_simulated_stream_tts_tracks_files_and_skips_failed_chunks(tmp_path: Path):
+async def test_simulated_stream_tts_tracks_files_and_skips_failed_chunks(
+    tmp_path: Path,
+):
     good_audio = tmp_path / "good.wav"
     good_audio.write_bytes(b"audio-data")
 
@@ -820,7 +849,9 @@ async def test_simulated_stream_tts_continues_when_audio_file_read_fails(
     assert await audio_queue.get() is None
     event.track_temporary_local_file.assert_called_once_with(str(good_audio))
     logger_error.assert_called_once()
-    assert "[Live TTS Simulated] Error processing text" in logger_error.call_args.args[0]
+    assert (
+        "[Live TTS Simulated] Error processing text" in logger_error.call_args.args[0]
+    )
 
 
 @pytest.mark.asyncio
@@ -892,7 +923,9 @@ async def test_run_agent_non_streaming_webchat_sends_agent_stats_after_completio
 
 
 @pytest.mark.asyncio
-async def test_run_agent_webchat_stats_send_failure_reports_execution_error(monkeypatch):
+async def test_run_agent_webchat_stats_send_failure_reports_execution_error(
+    monkeypatch,
+):
     monkeypatch.setattr(
         util,
         "extract_persona_custom_error_message_from_event",
@@ -1127,7 +1160,9 @@ async def test_run_agent_ignores_hook_failure_when_step_raises(monkeypatch):
     )
     event = FakeEvent()
     runner = FakeRunner(RuntimeError("boom"), event=event)
-    runner.agent_hooks.on_agent_done = AsyncMock(side_effect=RuntimeError("hook failed"))
+    runner.agent_hooks.on_agent_done = AsyncMock(
+        side_effect=RuntimeError("hook failed")
+    )
 
     outputs = [chain async for chain in util.run_agent(runner)]
 
@@ -1239,7 +1274,9 @@ async def test_run_live_agent_non_stream_tts_uses_simulated_worker(monkeypatch):
     async def fake_feeder(*args, **kwargs):
         return None
 
-    async def fake_simulated_stream_tts(provider, text_queue, audio_queue, passed_event):
+    async def fake_simulated_stream_tts(
+        provider, text_queue, audio_queue, passed_event
+    ):
         captured["provider"] = provider
         captured["event"] = passed_event
         await audio_queue.put(("hello", b"\x01\x02"))
@@ -1412,7 +1449,9 @@ async def test_run_live_agent_swallows_tts_stats_send_failure(monkeypatch):
 async def test_run_live_agent_swallows_tts_stats_model_lookup_failure(monkeypatch):
     event = FakeEvent(platform_name="webchat")
     runner = FakeRunner([], event=event)
-    runner.provider = SimpleNamespace(get_model=MagicMock(side_effect=RuntimeError("model lookup failed")))
+    runner.provider = SimpleNamespace(
+        get_model=MagicMock(side_effect=RuntimeError("model lookup failed"))
+    )
 
     async def fake_feeder(*args, **kwargs):
         return None

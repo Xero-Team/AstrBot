@@ -8,11 +8,13 @@ from typing import Any
 
 import aiohttp
 
-from astrbot.core import db_helper, logger
+from astrbot import logger
 from astrbot.core.config import VERSION
 
 
 class Metric:
+    _config: Any = None
+    _db: Any = None
     _iid_cache = None
     _has_uploaded_once = False
     _upload_interval_seconds = 10 * 60
@@ -23,17 +25,18 @@ class Metric:
     _lock: asyncio.Lock | None = None
     _lock_loop: asyncio.AbstractEventLoop | None = None
 
+    @classmethod
+    def configure(cls, config: Any, db: Any) -> None:
+        """Bind runtime dependencies after services have been created."""
+        cls._config = config
+        cls._db = db
+
     @staticmethod
     def _is_disabled() -> bool:
         """检查是否禁用指标上传（配置或环境变量）"""
         if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
             return True
-        try:
-            from astrbot.core import astrbot_config
-
-            return astrbot_config.get("disable_metrics", False)
-        except ImportError, AttributeError, KeyError:
-            return False
+        return bool(Metric._config and Metric._config.get("disable_metrics", False))
 
     @staticmethod
     def get_installation_id():
@@ -107,8 +110,8 @@ class Metric:
     @staticmethod
     async def _save_platform_stats(kwargs: dict[str, Any]) -> None:
         try:
-            if "adapter_name" in kwargs:
-                await db_helper.insert_platform_stats(
+            if "adapter_name" in kwargs and Metric._db is not None:
+                await Metric._db.insert_platform_stats(
                     platform_id=kwargs["adapter_name"],
                     platform_type=kwargs.get("adapter_type", "unknown"),
                 )

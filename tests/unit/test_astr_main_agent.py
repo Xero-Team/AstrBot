@@ -2105,6 +2105,10 @@ class TestBuildMainAgent:
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
             patch("astrbot.core.astr_main_agent.AstrAgentContext"),
             patch("astrbot.core.astr_main_agent.logger") as mock_logger,
+            patch(
+                "astrbot.core.astr_main_agent.retrieve_knowledge_base",
+                AsyncMock(return_value=None),
+            ),
             patch.object(
                 Video,
                 "convert_to_file_path",
@@ -2246,11 +2250,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_db.get_platform_session_by_id.assert_called_once_with(
             "webchat-session-123"
@@ -2272,9 +2276,9 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            await module._handle_webchat(mock_event, req, prov)
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         prov.text_chat.assert_not_called()
 
@@ -2290,9 +2294,9 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            await module._handle_webchat(mock_event, req, prov)
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         prov.text_chat.assert_not_called()
 
@@ -2308,10 +2312,10 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = "Existing Title"
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         prov.text_chat.assert_not_called()
 
@@ -2324,10 +2328,10 @@ class TestHandleWebchat:
         req = ProviderRequest(prompt="What is AI?")
         prov = MagicMock(spec=Provider)
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=None)
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=None)
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         prov.text_chat.assert_not_called()
 
@@ -2346,11 +2350,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -2369,11 +2373,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -2390,11 +2394,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -2413,11 +2417,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_db.update_platform_session.assert_not_called()
 
@@ -2436,11 +2440,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with patch("astrbot.core.db_helper") as mock_db:
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
 
-            await module._handle_webchat(mock_event, req, prov)
+        await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_db.update_platform_session.assert_called_once_with(
             session_id="webchat-session-123",
@@ -2460,14 +2464,11 @@ class TestHandleWebchat:
         mock_session = MagicMock()
         mock_session.display_name = None
 
-        with (
-            patch("astrbot.core.db_helper") as mock_db,
-            patch("astrbot.core.astr_main_agent.logger") as mock_logger,
-        ):
-            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
-            mock_db.update_platform_session = AsyncMock()
-
-            await module._handle_webchat(mock_event, req, prov)
+        mock_db = MagicMock()
+        mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+        mock_db.update_platform_session = AsyncMock()
+        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+            await module._handle_webchat(mock_event, req, prov, mock_db)
 
         mock_logger.exception.assert_called_once()
         mock_db.update_platform_session.assert_not_called()

@@ -52,6 +52,33 @@ def _make_provider(overrides: dict | None = None) -> ProviderOpenAIChatCompletio
     )
 
 
+def test_request_payload_normalization_is_shared_and_protects_request_fields():
+    provider = _make_provider(
+        {
+            "custom_extra_body": {
+                "temperature": 0.2,
+                "messages": "blocked",
+                "model": "blocked",
+                "stream": True,
+                "stream_options": {"blocked": True},
+                "tools": "blocked",
+                "tool_choice": "blocked",
+            }
+        }
+    )
+    payload = {"model": "gpt-4o-mini", "messages": [], "custom_flag": "value"}
+    streaming_payload = dict(payload)
+
+    extra_body = provider._normalize_request_payload(payload)
+    streaming_extra_body = provider._normalize_request_payload(streaming_payload)
+
+    assert payload == streaming_payload == {"model": "gpt-4o-mini", "messages": []}
+    assert extra_body == streaming_extra_body == {
+        "custom_flag": "value",
+        "temperature": 0.2,
+    }
+
+
 def test_null_api_version_uses_regular_openai_client(monkeypatch):
     created = []
 

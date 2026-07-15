@@ -5,11 +5,17 @@ import uuid
 from typing import Any
 
 from astrbot import logger
-from astrbot.core import LogManager, astrbot_config
-from astrbot.core.log import LogQueueHandler
+from astrbot.core.log import LogManager, LogQueueHandler
 
 _cached_log_broker = None
 _trace_logger = None
+_config: Any = None
+
+
+def configure_trace(config: Any) -> None:
+    """Bind the explicit runtime configuration used by trace logging."""
+    global _config
+    _config = config
 
 
 def _get_log_broker():
@@ -29,7 +35,9 @@ def _get_trace_logger():
         return _trace_logger
 
     # 按配置初始化 trace 文件日志
-    LogManager.configure_trace_logger(astrbot_config)
+    if _config is None:
+        return None
+    LogManager.configure_trace_logger(_config)
     _trace_logger = logging.getLogger("astrbot.trace")
     return _trace_logger
 
@@ -51,7 +59,7 @@ class TraceSpan:
 
     def record(self, action: str, **fields: Any) -> None:
         # Check if trace recording is enabled
-        if not astrbot_config.get("trace_enable", True):
+        if _config is not None and not _config.get("trace_enable", True):
             return
 
         payload = {

@@ -3,8 +3,9 @@ import json
 import time
 from collections.abc import AsyncGenerator
 
-from astrbot.core import LogBroker, logger
+from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.log import LogBroker
 
 
 class LogServiceError(Exception):

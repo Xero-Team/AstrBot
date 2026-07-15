@@ -742,6 +742,203 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             for tool_name in llm_resp.tools_call_name
         ]
 
+    async def _prepare_step_request(self) -> None:
+        """Run begin hooks and compact the request context for one step."""
+        if self._state == AgentState.IDLE:
+            try:
+                await self.agent_hooks.on_agent_begin(self.run_context)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Error in on_agent_begin hook: %s", exc, exc_info=True)
+
+        self._transition_state(AgentState.RUNNING)
+        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        self._simple_print_message_role("[BefCompact]", self.run_context.messages)
+        self.run_context.messages = await self.request_context_manager.process(
+            self.run_context.messages,
+            trusted_token_usage=token_usage,
+        )
+        self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+
+    def _streaming_response_events(self, response: LLMResponse) -> list[AgentResponse]:
+        """Translate a provider stream chunk into agent output events."""
+        events: list[AgentResponse] = []
+        if response.reasoning_content:
+            events.append(
+                AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(
+                        chain=MessageChain(type="reasoning").message(
+                            response.reasoning_content,
+                        ),
+                    ),
+                )
+            )
+        if response.result_chain:
+            events.append(
+                AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(chain=response.result_chain),
+                )
+            )
+        elif response.completion_text:
+            events.append(
+                AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(response.completion_text),
+                    ),
+                )
+            )
+        return events
+
+    def _record_final_response_usage(self, response: LLMResponse) -> None:
+        """Update cumulative and current request usage from a final response."""
+        self.stats.current_context_tokens = 0
+        if response.usage:
+            self.stats.token_usage += response.usage
+            self.stats.current_context_tokens = response.usage.input
+            if self.req.conversation:
+                self.req.conversation.token_usage = response.usage.total
+
+    def _final_response_events(self, response: LLMResponse) -> list[AgentResponse]:
+        """Build source, reasoning, and final-content events for one response."""
+        events: list[AgentResponse] = []
+        if response.citations or response.sources:
+            events.append(
+                AgentResponse(
+                    type="llm_sources",
+                    data=AgentResponseData(
+                        chain=MessageChain(
+                            type="llm_sources",
+                            chain=[
+                                Json(
+                                    data={
+                                        "citations": [
+                                            citation.__dict__
+                                            for citation in response.citations
+                                        ],
+                                        "sources": [
+                                            source.__dict__
+                                            for source in response.sources
+                                        ],
+                                    }
+                                )
+                            ],
+                        )
+                    ),
+                )
+            )
+        if response.reasoning_content:
+            events.append(
+                AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(
+                        chain=MessageChain(type="reasoning").message(
+                            response.reasoning_content,
+                        ),
+                    ),
+                )
+            )
+        if response.result_chain:
+            events.append(
+                AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(chain=response.result_chain),
+                )
+            )
+        elif response.completion_text:
+            events.append(
+                AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(response.completion_text),
+                    ),
+                )
+            )
+        return events
+
+    def _append_tool_results_to_context(
+        self,
+        response: LLMResponse,
+        result_blocks: list[ToolCallMessageSegment],
+        cached_images: list[T.Any],
+    ) -> None:
+        """Record tool calls and their results for the next provider round."""
+        parts = []
+        if response.reasoning_content is not None or response.reasoning_signature:
+            parts.append(
+                ThinkPart(
+                    think=response.reasoning_content or "",
+                    encrypted=response.reasoning_signature,
+                )
+            )
+        if response.completion_text:
+            parts.append(TextPart(text=response.completion_text))
+        tool_calls_result = ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=response.to_function_tool_calls_model(),
+                content=parts or None,
+                provider_state=response.provider_state,
+            ),
+            tool_calls_result=result_blocks,
+        )
+        self.run_context.messages.extend(tool_calls_result.to_message_models())
+        self._append_cached_tool_images(cached_images)
+        self.req.append_tool_calls_result(tool_calls_result)
+
+    def _append_cached_tool_images(self, cached_images: list[T.Any]) -> None:
+        if not cached_images:
+            return
+        modalities = self.provider.provider_config.get("modalities", [])
+        if not isinstance(modalities, list) or "image" not in modalities:
+            return
+        image_parts = []
+        for cached_image in cached_images:
+            image_data = tool_image_cache.get_image_base64_by_path(
+                cached_image.file_path,
+                cached_image.mime_type,
+            )
+            if image_data is None:
+                continue
+            base64_data, mime_type = image_data
+            image_parts.append(
+                TextPart(
+                    text=(
+                        f"[Image from tool '{cached_image.tool_name}', "
+                        f"path='{cached_image.file_path}']"
+                    )
+                )
+            )
+            image_parts.append(
+                ImageURLPart(
+                    image_url=ImageURLPart.ImageURL(
+                        url=f"data:{mime_type};base64,{base64_data}",
+                        id=cached_image.file_path,
+                    )
+                )
+            )
+        if image_parts:
+            self.run_context.messages.append(Message(role="user", content=image_parts))
+            logger.debug(
+                "Appended %d cached image(s) to context for LLM review",
+                len(cached_images),
+            )
+
+    async def _resolve_skills_like_tool_call(
+        self,
+        response: LLMResponse,
+    ) -> tuple[LLMResponse, bool]:
+        """Resolve the second provider pass required by skills-like tools."""
+        if self.tool_schema_mode != "skills_like":
+            return response, True
+        requery_response, _ = await self._resolve_tool_exec(response)
+        if not requery_response.tools_call_name:
+            return requery_response, False
+        response.tools_call_name = requery_response.tools_call_name
+        response.tools_call_args = requery_response.tools_call_args
+        response.tools_call_ids = requery_response.tools_call_ids
+        return response, True
+
     @override
     async def step(self):
         """Process a single step of the agent.
@@ -750,50 +947,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
-        if self._state == AgentState.IDLE:
-            try:
-                await self.agent_hooks.on_agent_begin(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
-
-        # 开始处理，转换到运行状态
-        self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
-
-        # Process request-time context before sending it to the provider.
-        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
-        self._simple_print_message_role("[BefCompact]", self.run_context.messages)
-        self.run_context.messages = await self.request_context_manager.process(
-            self.run_context.messages, trusted_token_usage=token_usage
-        )
-        self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+        await self._prepare_step_request()
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
-                if llm_response.reasoning_content:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
-                            ),
-                        ),
-                    )
-                if llm_response.result_chain:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(chain=llm_response.result_chain),
-                    )
-                elif llm_response.completion_text:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain().message(llm_response.completion_text),
-                        ),
-                    )
+                for response_event in self._streaming_response_events(llm_response):
+                    yield response_event
                 if self._is_stop_requested():
                     llm_resp_result = LLMResponse(
                         role="assistant",
@@ -805,16 +968,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 continue
             llm_resp_result = llm_response
 
-            # Chunk responses have already continued above. A missing usage report
-            # means the latest context occupancy is unknown.
-            self.stats.current_context_tokens = 0
-            if llm_response.usage:
-                # Keep cumulative usage for billing and expose the latest request
-                # input separately for context-window occupancy displays.
-                self.stats.token_usage += llm_response.usage
-                self.stats.current_context_tokens = llm_response.usage.input
-                if self.req.conversation:
-                    self.req.conversation.token_usage = llm_response.usage.total
+            self._record_final_response_usage(llm_response)
             break  # got final response
 
         if not llm_resp_result:
@@ -851,88 +1005,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
 
-        if llm_resp.citations or llm_resp.sources:
-            yield AgentResponse(
-                type="llm_sources",
-                data=AgentResponseData(
-                    chain=MessageChain(
-                        type="llm_sources",
-                        chain=[
-                            Json(
-                                data={
-                                    "citations": [
-                                        citation.__dict__
-                                        for citation in llm_resp.citations
-                                    ],
-                                    "sources": [
-                                        source.__dict__ for source in llm_resp.sources
-                                    ],
-                                }
-                            )
-                        ],
-                    )
-                ),
-            )
-
-        # 返回 LLM 结果
-        if llm_resp.reasoning_content:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain(type="reasoning").message(
-                        llm_resp.reasoning_content,
-                    ),
-                ),
-            )
-        if llm_resp.result_chain:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(chain=llm_resp.result_chain),
-            )
-        elif llm_resp.completion_text:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.completion_text),
-                ),
-            )
+        for response_event in self._final_response_events(llm_resp):
+            yield response_event
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
-            if self.tool_schema_mode == "skills_like":
-                requery_resp, _ = await self._resolve_tool_exec(llm_resp)
-                if not requery_resp.tools_call_name:
-                    llm_resp = requery_resp
-                    logger.warning(
-                        "skills_like tool re-query returned no tool calls; fallback to assistant response."
-                    )
-                    if llm_resp.reasoning_content:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain(type="reasoning").message(
-                                    llm_resp.reasoning_content,
-                                ),
-                            ),
-                        )
-                    if llm_resp.result_chain:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(chain=llm_resp.result_chain),
-                        )
-                    elif llm_resp.completion_text:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain().message(llm_resp.completion_text),
-                            ),
-                        )
-
-                    await self._complete_with_assistant_response(llm_resp)
-                    return
-                else:
-                    llm_resp.tools_call_name = requery_resp.tools_call_name
-                    llm_resp.tools_call_args = requery_resp.tools_call_args
-                    llm_resp.tools_call_ids = requery_resp.tools_call_ids
+            (
+                resolved_response,
+                should_execute_tools,
+            ) = await self._resolve_skills_like_tool_call(llm_resp)
+            if not should_execute_tools:
+                logger.warning(
+                    "skills_like tool re-query returned no tool calls; fallback to assistant response."
+                )
+                for response_event in self._final_response_events(resolved_response):
+                    yield response_event
+                await self._complete_with_assistant_response(resolved_response)
+                return
+            llm_resp = resolved_response
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
@@ -962,66 +1051,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield await self._finalize_aborted_step(llm_resp)
                 return
 
-            # 将结果添加到上下文中
-            parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content or "",
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                parts = None
-            tool_calls_result = ToolCallsResult(
-                tool_calls_info=AssistantMessageSegment(
-                    tool_calls=llm_resp.to_function_tool_calls_model(),
-                    content=parts,
-                    provider_state=llm_resp.provider_state,
-                ),
-                tool_calls_result=tool_call_result_blocks,
+            self._append_tool_results_to_context(
+                llm_resp,
+                tool_call_result_blocks,
+                cached_images,
             )
-            # record the assistant message with tool calls
-            self.run_context.messages.extend(tool_calls_result.to_message_models())
-
-            # If there are cached images and the model supports image input,
-            # append a user message with images so LLM can see them
-            if cached_images:
-                modalities = self.provider.provider_config.get("modalities", [])
-                supports_image = isinstance(modalities, list) and "image" in modalities
-                if supports_image:
-                    # Build user message with images for LLM to review
-                    image_parts = []
-                    for cached_img in cached_images:
-                        img_data = tool_image_cache.get_image_base64_by_path(
-                            cached_img.file_path, cached_img.mime_type
-                        )
-                        if img_data:
-                            base64_data, mime_type = img_data
-                            image_parts.append(
-                                TextPart(
-                                    text=f"[Image from tool '{cached_img.tool_name}', path='{cached_img.file_path}']"
-                                )
-                            )
-                            image_parts.append(
-                                ImageURLPart(
-                                    image_url=ImageURLPart.ImageURL(
-                                        url=f"data:{mime_type};base64,{base64_data}",
-                                        id=cached_img.file_path,
-                                    )
-                                )
-                            )
-                    if image_parts:
-                        self.run_context.messages.append(
-                            Message(role="user", content=image_parts)
-                        )
-                        logger.debug(
-                            f"Appended {len(cached_images)} cached image(s) to context for LLM review"
-                        )
-
-            self.req.append_tool_calls_result(tool_calls_result)
 
     async def step_until_done(self, max_step: int) -> T.AsyncGenerator[AgentResponse]:
         """Process steps until the agent is done."""

@@ -1,6 +1,6 @@
+from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core import DEMO_MODE, logger
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
@@ -34,7 +34,7 @@ class PluginCommands:
 
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """Disable a plugin."""
-        if DEMO_MODE:
+        if self.context.demo_mode:
             event.set_result(
                 MessageEventResult().message("Cannot disable plugins in demo mode."),
             )
@@ -51,7 +51,7 @@ class PluginCommands:
 
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """Enable a plugin."""
-        if DEMO_MODE:
+        if self.context.demo_mode:
             event.set_result(
                 MessageEventResult().message("Cannot enable plugins in demo mode."),
             )
@@ -68,7 +68,7 @@ class PluginCommands:
 
     async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = "") -> None:
         """Install a plugin from a repo URL."""
-        if DEMO_MODE:
+        if self.context.demo_mode:
             event.set_result(
                 MessageEventResult().message("Cannot install plugins in demo mode."),
             )

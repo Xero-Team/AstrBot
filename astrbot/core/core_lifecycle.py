@@ -42,8 +42,10 @@ from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
 )
 from astrbot.core.utils.llm_metadata import update_llm_metadata
+from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
+from astrbot.core.utils.trace import configure_trace
 
 from .event_bus import EventBus
 
@@ -121,7 +123,7 @@ class AstrBotCoreLifecycle:
 
         provider_settings = getattr(pm, "provider_settings", None) or {}
         default_id = provider_settings.get("default_provider_id")
-        fallback = pm.curr_provider_inst or providers[0]
+        fallback = providers[0]
         fallback_id = fallback.provider_config.get("id") or "unknown"
 
         if not default_id:
@@ -165,6 +167,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        Metric.configure(self.astrbot_config, self.db)
+        configure_trace(self.astrbot_config)
 
         await self.services.html_renderer.initialize()
 
@@ -213,6 +217,8 @@ class AstrBotCoreLifecycle:
 
         # 初始化平台管理器
         self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
+        self.platform_manager.database = self.db
+        self.platform_manager.preferences = self.services.preferences
 
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(
@@ -249,6 +255,7 @@ class AstrBotCoreLifecycle:
             self.services.html_renderer,
             self.services.file_token_service,
             self.subagent_orchestrator,
+            demo_mode=self.services.demo_mode,
         )
         self.star_context.persona_runtime_manager = self.persona_runtime_manager
         self.star_context.memory_manager = self.memory_manager
@@ -470,6 +477,7 @@ class AstrBotCoreLifecycle:
                     conf_id,
                     self.services.html_renderer,
                     self.services.file_token_service,
+                    self.services.preferences,
                 ),
             )
             await scheduler.initialize()
@@ -493,6 +501,7 @@ class AstrBotCoreLifecycle:
                 conf_id,
                 self.services.html_renderer,
                 self.services.file_token_service,
+                self.services.preferences,
             ),
         )
         await scheduler.initialize()

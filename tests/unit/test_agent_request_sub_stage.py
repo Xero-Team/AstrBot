@@ -65,14 +65,16 @@ class FakeThirdPartyAgentSubStage:
 
 setattr(_stub_process_stage_module, "Stage", Stage)
 setattr(_stub_internal_module, "InternalAgentSubStage", FakeInternalAgentSubStage)
-setattr(_stub_third_party_module, "ThirdPartyAgentSubStage", FakeThirdPartyAgentSubStage)
+setattr(
+    _stub_third_party_module, "ThirdPartyAgentSubStage", FakeThirdPartyAgentSubStage
+)
 sys.modules["astrbot.core.pipeline.process_stage.stage"] = _stub_process_stage_module
 sys.modules["astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal"] = (
     _stub_internal_module
 )
-sys.modules["astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party"] = (
-    _stub_third_party_module
-)
+sys.modules[
+    "astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party"
+] = _stub_third_party_module
 agent_request = importlib.import_module(
     "astrbot.core.pipeline.process_stage.method.agent_request"
 )
@@ -134,6 +136,10 @@ def _ctx(
     wake_prefix: str = "/bot ask",
 ):
     return SimpleNamespace(
+        preferences=SimpleNamespace(
+            get_async=AsyncMock(return_value={}),
+            put_async=AsyncMock(),
+        ),
         astrbot_config={
             "wake_prefix": ["/bot ", "!"],
             "provider_settings": {
@@ -141,7 +147,7 @@ def _ctx(
                 "wake_prefix": wake_prefix,
                 "agent_runner_type": agent_runner_type,
             },
-        }
+        },
     )
 
 

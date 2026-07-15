@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
-from astrbot.core import db_helper
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -30,7 +29,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 class ConcreteAstrMessageEvent(AstrMessageEvent):
@@ -134,12 +132,21 @@ class TestUnifiedMsgOrigin:
 
     def test_route_origin_is_stable_after_session_mutation(self, astr_message_event):
         """Transport routing identity should not follow business-session rewrites."""
-        assert astr_message_event.route_origin == "test_platform_id:FriendMessage:session123"
+        assert (
+            astr_message_event.route_origin
+            == "test_platform_id:FriendMessage:session123"
+        )
 
         astr_message_event.session_id = "mutated-session"
 
-        assert astr_message_event.unified_msg_origin == "test_platform_id:FriendMessage:mutated-session"
-        assert astr_message_event.route_origin == "test_platform_id:FriendMessage:session123"
+        assert (
+            astr_message_event.unified_msg_origin
+            == "test_platform_id:FriendMessage:mutated-session"
+        )
+        assert (
+            astr_message_event.route_origin
+            == "test_platform_id:FriendMessage:session123"
+        )
 
 
 class TestSessionId:

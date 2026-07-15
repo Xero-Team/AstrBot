@@ -2,7 +2,7 @@ from typing import Literal, TypedDict
 
 import aiohttp
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.utils.http_ssl import build_tls_connector
 
 

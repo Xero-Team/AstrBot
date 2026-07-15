@@ -3,7 +3,7 @@ import importlib
 from functools import partial
 from typing import Any, cast
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ..entities import ProviderType

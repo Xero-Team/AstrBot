@@ -2,7 +2,7 @@ import asyncio
 import traceback
 from datetime import UTC, datetime
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 

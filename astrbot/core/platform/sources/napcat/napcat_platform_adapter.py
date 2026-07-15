@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import PurePosixPath
 from time import monotonic
 from typing import cast
@@ -120,6 +120,60 @@ from .generated.ob11_events import (
     OnlineFileSegment as OB11OnlineFileSegment,
 )
 from .message_event import NapCatMessageEvent
+
+
+class NapCatOutboundProtocol:
+    """Own the OneBot outbound transport protocol for an adapter instance."""
+
+    def __init__(
+        self,
+        client: NapCatForwardWebSocketClient,
+        build_message: Callable[[MessageChain], Awaitable[str | list[object]]],
+    ) -> None:
+        self.client = client
+        self._build_message = build_message
+
+    async def send_standard(
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
+    ) -> None:
+        payload = await self._build_message(message_chain)
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            await self.client.send_group_message(
+                group_id=session.session_id,
+                message=payload,
+            )
+            return
+        await self.client.send_private_message(
+            user_id=session.session_id,
+            message=payload,
+        )
+
+    async def send_forward(
+        self,
+        session: MessageSession,
+        component: Node | Nodes,
+    ) -> None:
+        node_payload = (
+            await component.to_dict()
+            if isinstance(component, Nodes)
+            else await Nodes([component]).to_dict()
+        )
+        messages = node_payload.get("messages", [])
+        if not isinstance(messages, list) or not messages:
+            raise ValueError("NapCat forward message payload did not contain nodes")
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            await self.client.send_group_forward_message(
+                group_id=session.session_id,
+                messages=messages,
+            )
+            return
+        await self.client.send_private_forward_message(
+            user_id=session.session_id,
+            messages=messages,
+        )
+
 
 NAPCAT_NOTICE_EVENT_TYPES = (
     OneBot11BotOffline,
@@ -300,6 +354,10 @@ class NapCatPlatformAdapter(Platform):
             ),
             max_size_bytes=max_size_mb * 1024 * 1024,
             on_event=self.handle_forward_ws_event,
+        )
+        self.outbound = NapCatOutboundProtocol(
+            self.client,
+            self._build_outbound_message,
         )
 
     def meta(self) -> PlatformMetadata:
@@ -575,18 +633,7 @@ class NapCatPlatformAdapter(Platform):
         session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
-        payload = await self._build_outbound_message(message_chain)
-        if session.message_type == MessageType.GROUP_MESSAGE:
-            await self.client.send_group_message(
-                group_id=session.session_id,
-                message=payload,
-            )
-            return
-
-        await self.client.send_private_message(
-            user_id=session.session_id,
-            message=payload,
-        )
+        await self.outbound.send_standard(session, message_chain)
 
     async def _send_mixed_outbound_message(
         self,
@@ -617,26 +664,7 @@ class NapCatPlatformAdapter(Platform):
         session: MessageSession,
         component: Node | Nodes,
     ) -> None:
-        node_payload = (
-            await component.to_dict()
-            if isinstance(component, Nodes)
-            else await Nodes([component]).to_dict()
-        )
-        messages = node_payload.get("messages", [])
-        if not isinstance(messages, list) or not messages:
-            raise ValueError("NapCat forward message payload did not contain nodes")
-
-        if session.message_type == MessageType.GROUP_MESSAGE:
-            await self.client.send_group_forward_message(
-                group_id=session.session_id,
-                messages=messages,
-            )
-            return
-
-        await self.client.send_private_forward_message(
-            user_id=session.session_id,
-            messages=messages,
-        )
+        await self.outbound.send_forward(session, component)
 
     async def _build_outbound_message(
         self, message_chain: MessageChain

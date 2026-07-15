@@ -537,6 +537,40 @@ class ProviderOpenAIChatCompletions(Provider):
         extra_body.pop("think", None)
         extra_body["reasoning_effort"] = "none"
 
+    def _normalize_request_payload(self, payloads: dict[str, Any]) -> dict[str, Any]:
+        """Move unsupported parameters into extra_body without allowing overrides.
+
+        Request-defining fields must remain owned by the provider, rather than by
+        a user-configured custom body.
+        """
+        extra_body = {
+            key: value
+            for key, value in payloads.items()
+            if key not in self.default_params
+        }
+        for key in extra_body:
+            del payloads[key]
+
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        protected_fields = {
+            "messages",
+            "model",
+            "stream",
+            "stream_options",
+            "tools",
+            "tool_choice",
+        }
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(
+                {
+                    key: value
+                    for key, value in custom_extra_body.items()
+                    if key not in protected_fields
+                }
+            )
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
+        return extra_body
+
     async def get_models(self):
         try:
             models_str = []
@@ -648,35 +682,7 @@ class ProviderOpenAIChatCompletions(Provider):
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
-        # 不在默认参数中的参数放在 extra_body 中
-        extra_body = {}
-        to_del = []
-        for key in payloads:
-            if key not in self.default_params:
-                extra_body[key] = payloads[key]
-                to_del.append(key)
-        for key in to_del:
-            del payloads[key]
-
-        # 读取并合并 custom_extra_body 配置
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(
-                {
-                    key: value
-                    for key, value in custom_extra_body.items()
-                    if key
-                    not in {
-                        "messages",
-                        "model",
-                        "stream",
-                        "stream_options",
-                        "tools",
-                        "tool_choice",
-                    }
-                }
-            )
-        self._apply_provider_specific_request_overrides(payloads, extra_body)
+        extra_body = self._normalize_request_payload(payloads)
 
         model = payloads.get("model", "").lower()
 
@@ -724,36 +730,7 @@ class ProviderOpenAIChatCompletions(Provider):
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
-        # 不在默认参数中的参数放在 extra_body 中
-        extra_body = {}
-
-        # 读取并合并 custom_extra_body 配置
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(
-                {
-                    key: value
-                    for key, value in custom_extra_body.items()
-                    if key
-                    not in {
-                        "messages",
-                        "model",
-                        "stream",
-                        "stream_options",
-                        "tools",
-                        "tool_choice",
-                    }
-                }
-            )
-
-        to_del = []
-        for key in payloads:
-            if key not in self.default_params:
-                extra_body[key] = payloads[key]
-                to_del.append(key)
-        for key in to_del:
-            del payloads[key]
-        self._apply_provider_specific_request_overrides(payloads, extra_body)
+        extra_body = self._normalize_request_payload(payloads)
 
         self._sanitize_assistant_messages(payloads)
 

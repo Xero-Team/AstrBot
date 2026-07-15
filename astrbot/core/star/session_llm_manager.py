@@ -1,18 +1,17 @@
 """会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态"""
 
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
 class SessionServiceManager:
     """管理会话级别的服务启停状态，包括LLM和TTS"""
 
-    # =============================================================================
-    # LLM 相关方法
-    # =============================================================================
+    def __init__(self, preferences: SharedPreferences) -> None:
+        self.preferences = preferences
 
-    @staticmethod
-    async def is_llm_enabled_for_session(session_id: str) -> bool:
+    async def is_llm_enabled_for_session(self, session_id: str) -> bool:
         """检查LLM是否在指定会话中启用
 
         Args:
@@ -23,7 +22,7 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = await sp.get_async(
+        session_services = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_service_config",
@@ -38,8 +37,7 @@ class SessionServiceManager:
         # 如果没有配置，默认为启用（兼容性考虑）
         return True
 
-    @staticmethod
-    async def set_llm_status_for_session(session_id: str, enabled: bool) -> None:
+    async def set_llm_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置LLM在指定会话中的启停状态
 
         Args:
@@ -48,7 +46,7 @@ class SessionServiceManager:
 
         """
         session_config = (
-            await sp.get_async(
+            await self.preferences.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
@@ -57,15 +55,14 @@ class SessionServiceManager:
             or {}
         )
         session_config["llm_enabled"] = enabled
-        await sp.put_async(
+        await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
             key="session_service_config",
             value=session_config,
         )
 
-    @staticmethod
-    async def should_process_llm_request(event: AstrMessageEvent) -> bool:
+    async def should_process_llm_request(self, event: AstrMessageEvent) -> bool:
         """检查是否应该处理LLM请求
 
         Args:
@@ -76,14 +73,13 @@ class SessionServiceManager:
 
         """
         session_id = event.unified_msg_origin
-        return await SessionServiceManager.is_llm_enabled_for_session(session_id)
+        return await self.is_llm_enabled_for_session(session_id)
 
     # =============================================================================
     # TTS 相关方法
     # =============================================================================
 
-    @staticmethod
-    async def is_tts_enabled_for_session(session_id: str) -> bool:
+    async def is_tts_enabled_for_session(self, session_id: str) -> bool:
         """检查TTS是否在指定会话中启用
 
         Args:
@@ -94,7 +90,7 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = await sp.get_async(
+        session_services = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_service_config",
@@ -109,8 +105,7 @@ class SessionServiceManager:
         # 如果没有配置，默认为启用（兼容性考虑）
         return True
 
-    @staticmethod
-    async def set_tts_status_for_session(session_id: str, enabled: bool) -> None:
+    async def set_tts_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置TTS在指定会话中的启停状态
 
         Args:
@@ -119,7 +114,7 @@ class SessionServiceManager:
 
         """
         session_config = (
-            await sp.get_async(
+            await self.preferences.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
@@ -128,7 +123,7 @@ class SessionServiceManager:
             or {}
         )
         session_config["tts_enabled"] = enabled
-        await sp.put_async(
+        await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
             key="session_service_config",
@@ -139,8 +134,7 @@ class SessionServiceManager:
             f"会话 {session_id} 的TTS状态已更新为: {'启用' if enabled else '禁用'}",
         )
 
-    @staticmethod
-    async def should_process_tts_request(event: AstrMessageEvent) -> bool:
+    async def should_process_tts_request(self, event: AstrMessageEvent) -> bool:
         """检查是否应该处理TTS请求
 
         Args:
@@ -151,14 +145,13 @@ class SessionServiceManager:
 
         """
         session_id = event.unified_msg_origin
-        return await SessionServiceManager.is_tts_enabled_for_session(session_id)
+        return await self.is_tts_enabled_for_session(session_id)
 
     # =============================================================================
     # 会话整体启停相关方法
     # =============================================================================
 
-    @staticmethod
-    async def is_session_enabled(session_id: str) -> bool:
+    async def is_session_enabled(self, session_id: str) -> bool:
         """检查会话是否整体启用
 
         Args:
@@ -169,7 +162,7 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = await sp.get_async(
+        session_services = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_service_config",

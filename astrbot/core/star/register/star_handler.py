@@ -4,7 +4,7 @@ from typing import Any
 
 import docstring_parser
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks

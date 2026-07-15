@@ -2,7 +2,7 @@ import secrets
 import string
 from typing import Any, Protocol, cast
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.dingtalk.app_registration import (
     poll_dingtalk_app_registration_once,

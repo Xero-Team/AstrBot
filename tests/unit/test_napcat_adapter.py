@@ -285,7 +285,9 @@ async def test_napcat_forward_ws_client_background_dispatch_allows_action_respon
 
     await asyncio.wait_for(action_finished.wait(), timeout=1.0)
     if adapter.client._payload_tasks:
-        await asyncio.gather(*list(adapter.client._payload_tasks), return_exceptions=True)
+        await asyncio.gather(
+            *list(adapter.client._payload_tasks), return_exceptions=True
+        )
 
 
 @pytest.mark.asyncio
@@ -709,10 +711,7 @@ async def test_napcat_forward_ws_client_keeps_group_string_at_targets_without_lo
     )
 
     queued = queue.get_nowait()
-    assert (
-        queued.get_message_str()
-        == "@999999  hi  @888888  @all  @inline-name"
-    )
+    assert queued.get_message_str() == "@999999  hi  @888888  @all  @inline-name"
     messages = queued.get_messages()
     assert [type(component).__name__ for component in messages] == [
         "At",
@@ -1804,7 +1803,8 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
                 },
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
-            }
+            },
+            preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
     monkeypatch.setattr(
@@ -1863,16 +1863,19 @@ async def test_napcat_notice_poke_event_is_queued_as_group_message():
         "group_id": 654321,
         "target_id": 123456,
     }
-    assert queued.get_extra("napcat_event").items() >= {
-        "group_id": 654321,
-        "notice_type": "notify",
-        "post_type": "notice",
-        "self_id": 123456,
-        "sub_type": "poke",
-        "target_id": 123456,
-        "time": 1720000000,
-        "user_id": 111222,
-    }.items()
+    assert (
+        queued.get_extra("napcat_event").items()
+        >= {
+            "group_id": 654321,
+            "notice_type": "notify",
+            "post_type": "notice",
+            "self_id": 123456,
+            "sub_type": "poke",
+            "target_id": 123456,
+            "time": 1720000000,
+            "user_id": 111222,
+        }.items()
+    )
     assert len(queued.get_messages()) == 1
     assert isinstance(queued.get_messages()[0], Poke)
     assert str(queued.get_messages()[0].id) == "123456"
@@ -1915,7 +1918,8 @@ async def test_napcat_group_notice_keeps_group_session_when_unique_session_enabl
                 },
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
-            }
+            },
+            preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
     monkeypatch.setattr(
@@ -1959,7 +1963,8 @@ async def test_napcat_group_message_route_identity_keeps_original_group_target_a
                 },
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
-            }
+            },
+            preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
     monkeypatch.setattr(
@@ -2032,7 +2037,8 @@ async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
                 },
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
-            }
+            },
+            preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
     monkeypatch.setattr(
@@ -2103,17 +2109,20 @@ async def test_napcat_forward_ws_accepts_private_poke_payload_with_sender_id_and
         "sender_id": 123456,
         "target_id": 445566,
     }
-    assert queued.get_extra("napcat_event").items() >= {
-        "notice_type": "notify",
-        "post_type": "notice",
-        "raw_info": [{"uid": "u_1"}, {"uid": "u_2"}],
-        "self_id": 123456,
-        "sender_id": 123456,
-        "sub_type": "poke",
-        "target_id": 445566,
-        "time": 1720000000,
-        "user_id": 445566,
-    }.items()
+    assert (
+        queued.get_extra("napcat_event").items()
+        >= {
+            "notice_type": "notify",
+            "post_type": "notice",
+            "raw_info": [{"uid": "u_1"}, {"uid": "u_2"}],
+            "self_id": 123456,
+            "sender_id": 123456,
+            "sub_type": "poke",
+            "target_id": 445566,
+            "time": 1720000000,
+            "user_id": 445566,
+        }.items()
+    )
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@ import aiohttp
 from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
@@ -49,6 +49,7 @@ _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.websearch_provider": "baidu_ai_search",
 }
 _DEFAULT_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=20, connect=10, sock_read=20)
+_favicon_cache: dict[str, str] = {}
 
 
 def _client_session() -> aiohttp.ClientSession:
@@ -177,7 +178,7 @@ def _get_runtime(context) -> tuple[dict, dict, str]:
 
 def _cache_favicon(url: str, favicon: str | None) -> None:
     if favicon:
-        sp.temporary_cache["_ws_favicon"][url] = favicon
+        _favicon_cache[url] = favicon
 
 
 def _search_result_payload(results: list[SearchResult]) -> str:

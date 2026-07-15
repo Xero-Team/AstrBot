@@ -9,7 +9,6 @@ import pytest_asyncio
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import MessageType
-from astrbot.core import db_helper
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
@@ -57,6 +56,10 @@ def _build_adapter() -> DingtalkPlatformAdapter:
     adapter.config = {"id": "test_dingtalk"}
     adapter.client_id = "robot-code"
     adapter.client_secret = "client-secret"
+    adapter.preferences = SimpleNamespace(
+        put_async=AsyncMock(),
+        get_async=AsyncMock(return_value=""),
+    )
     return adapter
 
 
@@ -67,7 +70,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 @pytest.mark.asyncio
@@ -189,7 +191,9 @@ async def test_dingtalk_callback_raw_process_wraps_ack_headers(monkeypatch):
 @pytest.mark.asyncio
 async def test_dingtalk_get_access_token_uses_http_timeout(monkeypatch):
     adapter = _build_adapter()
-    adapter.client_ = SimpleNamespace(get_access_token=MagicMock(side_effect=RuntimeError("no cached token")))
+    adapter.client_ = SimpleNamespace(
+        get_access_token=MagicMock(side_effect=RuntimeError("no cached token"))
+    )
     seen: dict[str, object] = {}
 
     class FakeResponse:
@@ -301,7 +305,7 @@ async def test_dingtalk_convert_msg_private_text_persists_staff_binding():
         sender_staff_id="staff-9",
     )
 
-    with patch.object(dingtalk_adapter.sp, "put_async", AsyncMock()) as put_async:
+    with patch.object(adapter.preferences, "put_async", AsyncMock()) as put_async:
         result = await adapter.convert_msg(message)
 
     assert result.type is MessageType.FRIEND_MESSAGE
@@ -536,7 +540,9 @@ async def test_dingtalk_file_resolves_download_lazily(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dingtalk_convert_msg_file_without_name_uses_downloaded_basename(tmp_path):
+async def test_dingtalk_convert_msg_file_without_name_uses_downloaded_basename(
+    tmp_path,
+):
     adapter = _build_adapter()
     downloaded = tmp_path / "downloaded.bin"
     downloaded.write_bytes(b"payload")
@@ -726,7 +732,9 @@ async def test_dingtalk_remember_sender_binding_swallows_storage_errors():
     )
     message = SimpleNamespace(sender_staff_id="staff-9")
 
-    with patch.object(dingtalk_adapter.sp, "put_async", AsyncMock(side_effect=RuntimeError("db down"))):
+    with patch.object(
+        adapter.preferences, "put_async", AsyncMock(side_effect=RuntimeError("db down"))
+    ):
         await adapter._remember_sender_binding(message, abm)
 
 
@@ -936,7 +944,9 @@ async def test_dingtalk_event_send_streaming_buffers_plain_segments_once():
 
 
 @pytest.mark.asyncio
-async def test_dingtalk_event_send_without_adapter_logs_and_skips_parent_send(monkeypatch):
+async def test_dingtalk_event_send_without_adapter_logs_and_skips_parent_send(
+    monkeypatch,
+):
     event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
     event._adapter = None
     event.platform_meta = _dingtalk_platform_meta()

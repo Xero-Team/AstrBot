@@ -24,7 +24,6 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -567,7 +566,7 @@ class WeixinOCAdapter(Platform):
         self.config["weixin_oc_base_url"] = self.base_url
         self.config["weixin_oc_context_tokens"] = normalized_context_tokens
 
-        for platform in astrbot_config.get("platform", []):
+        for platform in self.runtime_config.get("platform", []):
             if not isinstance(platform, dict):
                 continue
             if platform.get("id") != self.config.get("id"):
@@ -582,7 +581,7 @@ class WeixinOCAdapter(Platform):
             break
 
         self._sync_client_state()
-        astrbot_config.save_config()
+        self.runtime_config.save_config()
         self._context_tokens_dirty = False
 
     def _is_login_session_valid(

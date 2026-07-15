@@ -9,13 +9,13 @@ from uuid import uuid4
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.core import sp
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -269,6 +269,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self.preferences: SharedPreferences = kwargs["preferences"]
 
         await self._load_config_and_client(provider_config)
 
@@ -368,7 +369,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             state.seen_message_ids.discard(dropped)
 
     async def _ensure_thread_id(self, session_id: str) -> str:
-        thread_id = await sp.get_async(
+        thread_id = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key=DEERFLOW_THREAD_ID_KEY,
@@ -386,7 +387,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 f"DeerFlow create thread returned invalid payload: {thread}"
             )
 
-        await sp.put_async(
+        await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
             key=DEERFLOW_THREAD_ID_KEY,

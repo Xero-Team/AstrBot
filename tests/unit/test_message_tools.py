@@ -140,6 +140,10 @@ def _make_respond_stage() -> RespondStage:
     stage.config = {"provider_settings": {}}
     stage.platform_settings = {"path_mapping": []}
     stage.enable_seg = False
+    stage.ctx = SimpleNamespace(
+        astrbot_config={},
+        file_token_service=MagicMock(),
+    )
     return stage
 
 

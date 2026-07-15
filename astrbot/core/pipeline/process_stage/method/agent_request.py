@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
@@ -14,6 +14,7 @@ class AgentRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
+        self.session_services = SessionServiceManager(ctx.preferences)
 
         self.bot_wake_prefixs: list[str] = self.config["wake_prefix"]
         self.prov_wake_prefix: str = self.config["provider_settings"]["wake_prefix"]
@@ -38,7 +39,7 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        if not await SessionServiceManager.should_process_llm_request(event):
+        if not await self.session_services.should_process_llm_request(event):
             logger.debug(
                 f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing."
             )

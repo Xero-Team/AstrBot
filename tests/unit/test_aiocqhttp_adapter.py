@@ -307,7 +307,8 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
                 },
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
-            }
+            },
+            preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
     monkeypatch.setattr(

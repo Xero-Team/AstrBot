@@ -4,11 +4,11 @@ from collections.abc import Iterable
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
+from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.provider import ProviderRequest
-from astrbot.core import logger
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,

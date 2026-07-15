@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,10 +20,25 @@ def mock_log_broker():
 
 @pytest.fixture
 def mock_db():
-    """Create a mock database."""
+    """Create explicit lifecycle runtime services with a mock database."""
     db = MagicMock()
     db.initialize = AsyncMock()
-    return db
+    config = MagicMock()
+    config.get = MagicMock(return_value="")
+    config.__getitem__ = MagicMock(return_value={})
+    config.copy = MagicMock(return_value={})
+    renderer = MagicMock()
+    renderer.initialize = AsyncMock()
+    renderer.terminate = AsyncMock()
+    return SimpleNamespace(
+        config=config,
+        db=db,
+        preferences=MagicMock(),
+        html_renderer=renderer,
+        file_token_service=MagicMock(),
+        pip_installer=MagicMock(),
+        demo_mode=False,
+    )
 
 
 @pytest.fixture
@@ -43,7 +59,7 @@ class TestAstrBotCoreLifecycleInit:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         assert lifecycle.log_broker == mock_log_broker
-        assert lifecycle.db == mock_db
+        assert lifecycle.db == mock_db.db
         assert lifecycle.subagent_orchestrator is None
         assert lifecycle.cron_manager is None
         assert lifecycle.temp_dir_cleaner is None
@@ -66,16 +82,15 @@ class TestAstrBotCoreLifecycleInit:
         monkeypatch.delenv("https_proxy", raising=False)
         monkeypatch.delenv("no_proxy", raising=False)
 
-        with patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config):
-            lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        mock_db.config = mock_astrbot_config
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
-            assert lifecycle.log_broker == mock_log_broker
-            assert lifecycle.db == mock_db
-            # Verify proxy environment variables are set
-            assert os.environ.get("http_proxy") == "http://proxy.example.com:8080"
-            assert os.environ.get("https_proxy") == "http://proxy.example.com:8080"
-            assert "localhost" in os.environ.get("no_proxy", "")
-            assert "127.0.0.1" in os.environ.get("no_proxy", "")
+        assert lifecycle.log_broker == mock_log_broker
+        assert lifecycle.db == mock_db.db
+        assert os.environ.get("http_proxy") == "http://proxy.example.com:8080"
+        assert os.environ.get("https_proxy") == "http://proxy.example.com:8080"
+        assert "localhost" in os.environ.get("no_proxy", "")
+        assert "127.0.0.1" in os.environ.get("no_proxy", "")
 
     def test_init_clears_proxy(
         self,
@@ -90,13 +105,12 @@ class TestAstrBotCoreLifecycleInit:
         monkeypatch.setenv("http_proxy", "http://old-proxy:8080")
         monkeypatch.setenv("https_proxy", "http://old-proxy:8080")
 
-        with patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config):
-            lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        mock_db.config = mock_astrbot_config
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
-            assert lifecycle.log_broker == mock_log_broker
-            # Verify proxy environment variables are cleared
-            assert "http_proxy" not in os.environ
-            assert "https_proxy" not in os.environ
+        assert lifecycle.log_broker == mock_log_broker
+        assert "http_proxy" not in os.environ
+        assert "https_proxy" not in os.environ
 
 
 class TestAstrBotCoreLifecycleStop:
@@ -238,7 +252,6 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         lifecycle.provider_manager = MagicMock(
             provider_settings={"default_provider_id": ""},
             provider_insts=[provider_a, provider_b],
-            curr_provider_inst=provider_b,
         )
 
         with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
@@ -246,7 +259,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
 
         mock_logger.warning.assert_called_once()
         assert mock_logger.warning.call_args[0][1] == 2
-        assert mock_logger.warning.call_args[0][2] == "openai_source/model-b"
+        assert mock_logger.warning.call_args[0][2] == "openai_source/model-a"
 
     def test_warns_only_once_per_lifecycle(self, mock_log_broker, mock_db):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -327,7 +340,6 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
             ],
-            curr_provider_inst=self._make_provider("openai_source/model-b"),
         )
 
         with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
@@ -335,7 +347,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
 
         mock_logger.warning.assert_called_once()
         assert mock_logger.warning.call_args[0][1] == "non-existent-id"
-        assert mock_logger.warning.call_args[0][2] == "openai_source/model-b"
+        assert mock_logger.warning.call_args[0][2] == "openai_source/model-a"
 
 
 class TestAstrBotCoreLifecycleInitialize:
@@ -349,7 +361,8 @@ class TestAstrBotCoreLifecycleInitialize:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         # Mock all the dependencies
-        mock_db.initialize = AsyncMock()
+        mock_db.config = mock_astrbot_config
+        mock_db.db.initialize = AsyncMock()
         mock_html_renderer = MagicMock()
         mock_html_renderer.initialize = AsyncMock()
 
@@ -399,8 +412,6 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_event_bus = MagicMock()
 
         with (
-            patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config),
-            patch("astrbot.core.core_lifecycle.html_renderer", mock_html_renderer),
             patch(
                 "astrbot.core.core_lifecycle.UmopConfigRouter",
                 return_value=mock_umop_config_router,
@@ -469,10 +480,10 @@ class TestAstrBotCoreLifecycleInitialize:
             await lifecycle.initialize()
 
         # Verify database initialized
-        mock_db.initialize.assert_awaited_once()
+        mock_db.db.initialize.assert_awaited_once()
 
         # Verify html renderer initialized
-        mock_html_renderer.initialize.assert_awaited_once()
+        mock_db.html_renderer.initialize.assert_awaited_once()
 
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()
@@ -701,9 +712,8 @@ class TestAstrBotCoreLifecycleStopAdditional:
 
         mock_html_renderer = MagicMock()
         mock_html_renderer.terminate = AsyncMock()
-
-        with patch("astrbot.core.core_lifecycle.html_renderer", mock_html_renderer):
-            await lifecycle.stop()
+        mock_db.html_renderer = mock_html_renderer
+        await lifecycle.stop()
 
         # Verify all managers were terminated
         lifecycle.provider_manager.terminate.assert_awaited_once()
@@ -782,8 +792,8 @@ class TestAstrBotCoreLifecycleRestart:
 
         with (
             patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
-            patch("astrbot.core.core_lifecycle.html_renderer", mock_html_renderer),
         ):
+            mock_db.html_renderer = mock_html_renderer
             await lifecycle.restart()
 
             # Verify managers were terminated

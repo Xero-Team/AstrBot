@@ -45,6 +45,9 @@ def make_initialized_context() -> Context:
         MagicMock(),
         MagicMock(),
         MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
     )
 
 
@@ -235,6 +238,7 @@ async def test_send_message_returns_failure_when_adapter_rejects_payload():
     context._platform_manager.send_to_session.assert_awaited_once_with(
         session, message_chain
     )
+
 
 @pytest.mark.asyncio
 async def test_context_invoke_platform_action_delegates_to_platform_manager():

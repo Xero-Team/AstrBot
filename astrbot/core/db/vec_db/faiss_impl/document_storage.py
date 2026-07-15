@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     build_fts5_or_query,
     load_stopwords,

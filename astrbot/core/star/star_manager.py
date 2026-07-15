@@ -891,8 +891,184 @@ class PluginManager:
 
             return result
 
+    async def _load_preferences(self) -> tuple[list, list, dict]:
+        return (
+            await self.preferences.global_get("inactivated_plugins", []),
+            await self.preferences.global_get("inactivated_llm_tools", []),
+            await self.preferences.global_get("alter_cmd", {}),
+        )
+
+    def _apply_plugin_metadata(
+        self,
+        metadata: StarMetadata,
+        plugin_dir_path: str,
+        plugin_config: AstrBotConfig | None,
+        *,
+        ignore_version_check: bool,
+    ) -> tuple[str, str, str]:
+        metadata_yaml = self._load_plugin_metadata(plugin_path=plugin_dir_path)
+        metadata.name = metadata_yaml.name
+        metadata.author = metadata_yaml.author
+        metadata.desc = metadata_yaml.desc
+        metadata.short_desc = metadata_yaml.short_desc
+        metadata.version = metadata_yaml.version
+        metadata.repo = metadata_yaml.repo
+        metadata.display_name = metadata_yaml.display_name
+        metadata.support_platforms = metadata_yaml.support_platforms
+        metadata.astrbot_version = metadata_yaml.astrbot_version
+        metadata.pages = metadata_yaml.pages
+        metadata.i18n = metadata_yaml.i18n
+        if not ignore_version_check:
+            is_valid, error_message = self._validate_astrbot_version_specifier(
+                metadata.astrbot_version,
+            )
+            if not is_valid:
+                raise PluginVersionUnsupportedError(
+                    error_message
+                    or "The plugin does not support the current AstrBot version."
+                )
+
+        metadata.config = plugin_config
+        plugin_name = (metadata.name or "unknown").lower().replace("/", "_")
+        plugin_author = (metadata.author or "unknown").lower().replace("/", "_")
+        plugin_id = f"{plugin_author}/{plugin_name}"
+        if metadata.star_cls_type:
+            setattr(metadata.star_cls_type, "name", plugin_name)
+            setattr(metadata.star_cls_type, "author", plugin_author)
+            setattr(metadata.star_cls_type, "plugin_id", plugin_id)
+        return plugin_name, plugin_author, plugin_id
+
+    def _instantiate_plugin(
+        self,
+        metadata: StarMetadata,
+        plugin_config: AstrBotConfig | None,
+        plugin_name: str,
+        plugin_author: str,
+        plugin_id: str,
+    ) -> None:
+        if metadata.star_cls_type is None:
+            return
+        if plugin_config:
+            metadata.star_cls = metadata.star_cls_type(
+                context=self.context,
+                config=plugin_config,
+            )
+        else:
+            metadata.star_cls = metadata.star_cls_type(context=self.context)
+        if metadata.star_cls:
+            setattr(metadata.star_cls, "name", plugin_name)
+            setattr(metadata.star_cls, "author", plugin_author)
+            setattr(metadata.star_cls, "plugin_id", plugin_id)
+
+    def _bind_plugin_handlers(
+        self,
+        metadata: StarMetadata,
+        inactivated_llm_tools: list,
+    ) -> None:
+        assert metadata.module_path is not None, (
+            f"插件 {metadata.name} 的模块路径为空。"
+        )
+        for handler in star_handlers_registry.get_handlers_by_module_name(
+            metadata.module_path,
+        ):
+            handler.handler = functools.partial(handler.handler, metadata.star_cls)
+
+        for func_tool in llm_tools.func_list:
+            tools = (
+                [
+                    tool
+                    for tool in func_tool.agent.tools
+                    if isinstance(tool, FunctionTool)
+                ]
+                if isinstance(func_tool, HandoffTool) and func_tool.agent.tools
+                else [func_tool]
+            )
+            for tool in tools:
+                if tool.handler and tool.handler.__module__ == metadata.module_path:
+                    tool.handler_module_path = metadata.module_path
+                    tool.handler = functools.partial(tool.handler, metadata.star_cls)
+                if tool.name in inactivated_llm_tools:
+                    tool.active = False
+
+    def _apply_plugin_handler_permissions(
+        self,
+        metadata: StarMetadata,
+        alter_cmd: dict,
+    ) -> list[str]:
+        assert metadata.module_path is not None
+        full_names: list[str] = []
+        for handler in star_handlers_registry.get_handlers_by_module_name(
+            metadata.module_path,
+        ):
+            full_names.append(handler.handler_full_name)
+            command = alter_cmd.get(metadata.name, {}).get(handler.handler_name)
+            if not isinstance(command, dict):
+                continue
+            permission = command.get("permission", "member")
+            target_permission = (
+                PermissionType.ADMIN if permission == "admin" else PermissionType.MEMBER
+            )
+            for filter_ in handler.event_filters:
+                if isinstance(filter_, PermissionTypeFilter):
+                    filter_.permission_type = target_permission
+                    break
+            else:
+                handler.event_filters.append(PermissionTypeFilter(target_permission))
+            logger.debug(
+                "插入权限过滤器 %s 到 %s 的 %s 方法。",
+                permission,
+                metadata.name,
+                handler.handler_name,
+            )
+        return full_names
+
+    async def _initialize_plugin_and_run_hooks(self, metadata: StarMetadata) -> None:
+        if metadata.star_cls and hasattr(metadata.star_cls, "initialize"):
+            await metadata.star_cls.initialize()
+        for handler in star_handlers_registry.get_handlers_by_event_type(
+            EventType.OnPluginLoadedEvent,
+        ):
+            try:
+                logger.info(
+                    "hook(on_plugin_loaded) -> %s - %s",
+                    star_map[handler.handler_module_path].name,
+                    handler.handler_name,
+                )
+                await handler.handler(metadata)
+            except Exception:
+                logger.error(traceback.format_exc())
+
     async def load(
         self,
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check: bool = False,
+    ):
+        """Discover candidate plugins then load each selected module."""
+        plugin_modules = self._get_plugin_modules()
+        if not plugin_modules:
+            return False, "未找到任何插件模块"
+        (
+            inactivated_plugins,
+            inactivated_llm_tools,
+            alter_cmd,
+        ) = await self._load_preferences()
+        return await self._load_plugin_modules(
+            plugin_modules,
+            inactivated_plugins,
+            inactivated_llm_tools,
+            alter_cmd,
+            specified_module_path=specified_module_path,
+            specified_dir_name=specified_dir_name,
+            ignore_version_check=ignore_version_check,
+        )
+
+    async def _load_plugin_modules(
+        self,
+        plugin_modules: list[dict],
+        inactivated_plugins: list,
+        inactivated_llm_tools: list,
+        alter_cmd: dict,
         specified_module_path=None,
         specified_dir_name=None,
         ignore_version_check: bool = False,
@@ -910,18 +1086,6 @@ class PluginManager:
                 - error_message (str|None): 错误信息，成功时为 None
 
         """
-        inactivated_plugins = await self.preferences.global_get(
-            "inactivated_plugins", []
-        )
-        inactivated_llm_tools = await self.preferences.global_get(
-            "inactivated_llm_tools", []
-        )
-        alter_cmd = await self.preferences.global_get("alter_cmd", {})
-
-        plugin_modules = self._get_plugin_modules()
-        if plugin_modules is None:
-            return False, "未找到任何插件模块"
-
         has_load_error = False
 
         # 导入插件模块，并尝试实例化插件类
@@ -999,107 +1163,29 @@ class PluginManager:
                 if path in star_map:
                     # 通过 __init__subclass__ 注册插件
                     metadata = star_map[path]
-                    metadata_yaml = self._load_plugin_metadata(
-                        plugin_path=plugin_dir_path,
+                    p_name, p_author, plugin_id = self._apply_plugin_metadata(
+                        metadata,
+                        plugin_dir_path,
+                        plugin_config,
+                        ignore_version_check=ignore_version_check,
                     )
-                    metadata.name = metadata_yaml.name
-                    metadata.author = metadata_yaml.author
-                    metadata.desc = metadata_yaml.desc
-                    metadata.short_desc = metadata_yaml.short_desc
-                    metadata.version = metadata_yaml.version
-                    metadata.repo = metadata_yaml.repo
-                    metadata.display_name = metadata_yaml.display_name
-                    metadata.support_platforms = metadata_yaml.support_platforms
-                    metadata.astrbot_version = metadata_yaml.astrbot_version
-                    metadata.pages = metadata_yaml.pages
-                    metadata.i18n = metadata_yaml.i18n
-
-                    if not ignore_version_check:
-                        is_valid, error_message = (
-                            self._validate_astrbot_version_specifier(
-                                metadata.astrbot_version,
-                            )
-                        )
-                        if not is_valid:
-                            raise PluginVersionUnsupportedError(
-                                error_message
-                                or "The plugin does not support the current AstrBot version."
-                            )
-
                     logger.info(metadata)
-                    metadata.config = plugin_config
-                    p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                    p_author = (metadata.author or "unknown").lower().replace("/", "_")
-                    plugin_id = f"{p_author}/{p_name}"
-
-                    # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
-                    if metadata.star_cls_type:
-                        setattr(metadata.star_cls_type, "name", p_name)
-                        setattr(metadata.star_cls_type, "author", p_author)
-                        setattr(metadata.star_cls_type, "plugin_id", plugin_id)
 
                     if path not in inactivated_plugins:
-                        # 只有没有禁用插件时才实例化插件类
-                        if plugin_config and metadata.star_cls_type:
-                            metadata.star_cls = metadata.star_cls_type(
-                                context=self.context,
-                                config=plugin_config,
-                            )
-                        elif metadata.star_cls_type:
-                            metadata.star_cls = metadata.star_cls_type(
-                                context=self.context,
-                            )
-
-                        if metadata.star_cls:
-                            setattr(metadata.star_cls, "name", p_name)
-                            setattr(metadata.star_cls, "author", p_author)
-                            setattr(metadata.star_cls, "plugin_id", plugin_id)
+                        self._instantiate_plugin(
+                            metadata,
+                            plugin_config,
+                            p_name,
+                            p_author,
+                            plugin_id,
+                        )
                     else:
                         logger.info("Plugin %s is disabled.", metadata.name)
 
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
-
-                    assert metadata.module_path is not None, (
-                        f"插件 {metadata.name} 的模块路径为空。"
-                    )
-
-                    # 绑定 handler
-                    related_handlers = (
-                        star_handlers_registry.get_handlers_by_module_name(
-                            metadata.module_path,
-                        )
-                    )
-                    for handler in related_handlers:
-                        handler.handler = functools.partial(
-                            handler.handler,
-                            metadata.star_cls,  # type: ignore
-                        )
-                    # 绑定 llm_tool handler
-                    for func_tool in llm_tools.func_list:
-                        if isinstance(func_tool, HandoffTool):
-                            need_apply = []
-                            sub_tools = func_tool.agent.tools
-                            if sub_tools:
-                                for sub_tool in sub_tools:
-                                    if isinstance(sub_tool, FunctionTool):
-                                        need_apply.append(sub_tool)
-                        else:
-                            need_apply = [func_tool]
-
-                        for ft in need_apply:
-                            if (
-                                ft.handler
-                                and ft.handler.__module__ == metadata.module_path
-                            ):
-                                ft.handler_module_path = metadata.module_path
-                                ft.handler = functools.partial(
-                                    ft.handler,
-                                    metadata.star_cls,  # type: ignore
-                                )
-                            if ft.name in inactivated_llm_tools:
-                                ft.active = False
+                    self._bind_plugin_handlers(metadata, inactivated_llm_tools)
 
                 else:
                     raise Exception(
@@ -1116,61 +1202,10 @@ class PluginManager:
 
                 assert metadata.module_path, f"插件 {metadata.name} 模块路径为空"
 
-                full_names = []
-                for handler in star_handlers_registry.get_handlers_by_module_name(
-                    metadata.module_path,
-                ):
-                    full_names.append(handler.handler_full_name)
-
-                    # 检查并且植入自定义的权限过滤器（alter_cmd）
-                    if (
-                        metadata.name in alter_cmd
-                        and handler.handler_name in alter_cmd[metadata.name]
-                    ):
-                        cmd_type = alter_cmd[metadata.name][handler.handler_name].get(
-                            "permission",
-                            "member",
-                        )
-                        found_permission_filter = False
-                        for filter_ in handler.event_filters:
-                            if isinstance(filter_, PermissionTypeFilter):
-                                if cmd_type == "admin":
-                                    filter_.permission_type = PermissionType.ADMIN
-                                else:
-                                    filter_.permission_type = PermissionType.MEMBER
-                                found_permission_filter = True
-                                break
-                        if not found_permission_filter:
-                            handler.event_filters.append(
-                                PermissionTypeFilter(
-                                    PermissionType.ADMIN
-                                    if cmd_type == "admin"
-                                    else PermissionType.MEMBER,
-                                ),
-                            )
-
-                        logger.debug(
-                            f"插入权限过滤器 {cmd_type} 到 {metadata.name} 的 {handler.handler_name} 方法。",
-                        )
-
-                metadata.star_handler_full_names = full_names
-
-                # 执行 initialize() 方法
-                if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
-                    await metadata.star_cls.initialize()
-
-                # 触发插件加载事件
-                handlers = star_handlers_registry.get_handlers_by_event_type(
-                    EventType.OnPluginLoadedEvent,
+                metadata.star_handler_full_names = (
+                    self._apply_plugin_handler_permissions(metadata, alter_cmd)
                 )
-                for handler in handlers:
-                    try:
-                        logger.info(
-                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
-                        )
-                        await handler.handler(metadata)
-                    except Exception:
-                        logger.error(traceback.format_exc())
+                await self._initialize_plugin_and_run_hooks(metadata)
 
             except Exception as e:
                 logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")

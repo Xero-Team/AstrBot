@@ -11,16 +11,13 @@ from astrbot.api.platform import (
     MessageType,
     PlatformMetadata,
 )
-from astrbot.core import db_helper
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.sources.slack.slack_event import SlackMessageEvent
 
 
 def _build_event(*, group_id: str | None = None) -> SlackMessageEvent:
     message = AstrBotMessage()
-    message.type = (
-        MessageType.GROUP_MESSAGE if group_id else MessageType.FRIEND_MESSAGE
-    )
+    message.type = MessageType.GROUP_MESSAGE if group_id else MessageType.FRIEND_MESSAGE
     message.sender = MessageMember(user_id="U1", nickname="Sender")
     message.self_id = "B1"
     message.session_id = group_id or "U1"
@@ -51,7 +48,6 @@ async def _isolate_metrics_and_dispose_global_db_helper():
         AsyncMock(return_value=None),
     ):
         yield
-    await db_helper.close()
 
 
 @pytest.mark.asyncio
@@ -396,9 +392,7 @@ async def test_slack_get_group_uses_explicit_group_id_without_event_group_contex
     event.web_client.conversations_info = AsyncMock(
         return_value={"channel": {"name": "alerts", "creator": "owner-2"}}
     )
-    event.web_client.conversations_members = AsyncMock(
-        return_value={"members": ["U3"]}
-    )
+    event.web_client.conversations_members = AsyncMock(return_value={"members": ["U3"]})
     event.web_client.users_info = AsyncMock(
         return_value={"user": {"name": "botops-user"}}
     )

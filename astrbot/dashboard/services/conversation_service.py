@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from io import BytesIO
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias

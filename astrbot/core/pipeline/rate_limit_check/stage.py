@@ -3,7 +3,7 @@ from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.config.astrbot_config import RateLimitStrategy
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 

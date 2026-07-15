@@ -15,7 +15,7 @@ from hypercorn.config import Config as HyperConfig
 from hypercorn.logging import AccessLogAtoms
 from hypercorn.logging import Logger as HypercornLogger
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase

@@ -58,6 +58,13 @@ class FakeInternalProcessEvent(FakeEvent):
         return self._stopped
 
 
+def _internal_plugin_context(tts_provider=None) -> SimpleNamespace:
+    return SimpleNamespace(
+        get_using_tts_provider=lambda _umo: tts_provider,
+        database=SimpleNamespace(insert_provider_stat=AsyncMock()),
+    )
+
+
 class FakeThirdPartyRunner:
     def __init__(
         self,
@@ -881,11 +888,8 @@ async def test_third_party_process_returns_early_when_request_has_no_prompt_or_m
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(context=SimpleNamespace())
     )
+    stage.conf = {"provider": [{"id": "runner-1"}]}
     event = FakeInternalProcessEvent(message_str="ask", message_components=[])
-
-    monkeypatch.setattr(
-        third_party, "astrbot_config", {"provider": [{"id": "runner-1"}]}
-    )
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -905,13 +909,9 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(context=SimpleNamespace())
     )
+    stage.conf = {"provider": [{"id": "runner-1", "name": "Runner One"}]}
     event = FakeInternalProcessEvent(message_str="ask hello")
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -965,11 +965,7 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
         raise AssertionError("streaming path should not be used")
         yield
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1045,11 +1041,7 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
         raise AssertionError("streaming path should not be used")
         yield
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1119,11 +1111,7 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
         raise RuntimeError("stream setup failed")
         yield
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1185,11 +1173,7 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
         def __class_getitem__(cls, _item):
             return cls
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1253,11 +1237,7 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
         raise RuntimeError("non-streaming failed")
         yield
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1308,7 +1288,7 @@ async def test_third_party_process_returns_early_when_provider_id_missing(monkey
     event = FakeInternalProcessEvent(message_str="ask hello")
     logger_error = MagicMock()
 
-    monkeypatch.setattr(third_party, "astrbot_config", {"provider": []})
+    stage.conf["provider"] = []
     monkeypatch.setattr(third_party.logger, "error", logger_error)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -1336,7 +1316,7 @@ async def test_third_party_process_returns_early_when_provider_config_missing(
     event = FakeInternalProcessEvent(message_str="ask hello")
     logger_error = MagicMock()
 
-    monkeypatch.setattr(third_party, "astrbot_config", {"provider": []})
+    stage.conf["provider"] = []
     monkeypatch.setattr(third_party.logger, "error", logger_error)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -1370,11 +1350,7 @@ async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatc
         def __class_getitem__(cls, _item):
             return cls
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1430,11 +1406,7 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
         if False:
             yield MessageChain().message("unused")
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1511,11 +1483,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
         captured_calls.append(kwargs)
         yield
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     set_persona_error = MagicMock()
     monkeypatch.setattr(
@@ -1591,11 +1559,7 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
         def __class_getitem__(cls, _item):
             return cls
 
-    monkeypatch.setattr(
-        third_party,
-        "astrbot_config",
-        {"provider": [{"id": "runner-1", "name": "Runner One"}]},
-    )
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
@@ -1653,7 +1617,7 @@ async def test_internal_process_skips_empty_messages_without_provider_request(
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="   ", message_components=[])
@@ -1692,7 +1656,7 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(
@@ -1755,7 +1719,7 @@ async def test_internal_process_stops_when_follow_up_ticket_was_consumed(monkeyp
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="follow up")
@@ -1799,7 +1763,7 @@ async def test_internal_process_sends_error_message_and_finalizes_follow_up_on_e
     stage.main_agent_cfg = SimpleNamespace()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -1862,7 +1826,7 @@ async def test_internal_process_finalizes_follow_up_when_waiting_hook_blocks(
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -1908,7 +1872,7 @@ async def test_internal_process_sends_llm_error_message_when_build_returns_none(
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(
@@ -1950,7 +1914,7 @@ async def test_internal_process_build_none_finalizes_follow_up_capture(monkeypat
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(
@@ -2008,7 +1972,7 @@ async def test_internal_process_skips_send_when_build_returns_none_without_llm_e
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2048,7 +2012,7 @@ async def test_internal_process_closes_reset_coro_when_llm_request_hook_blocks(
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2099,7 +2063,7 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2163,7 +2127,7 @@ async def test_internal_process_stops_when_waiting_hook_blocks(monkeypatch):
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2195,7 +2159,7 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(
@@ -2241,7 +2205,7 @@ async def test_internal_process_swallows_stop_typing_failures(monkeypatch):
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2274,7 +2238,7 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2356,7 +2320,7 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2433,7 +2397,7 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2499,7 +2463,7 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -2567,7 +2531,7 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: "tts-provider")
+            context=_internal_plugin_context("tts-provider")
         )
     )
     event = FakeInternalProcessEvent(
@@ -2650,7 +2614,7 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(
@@ -2721,7 +2685,7 @@ async def test_internal_process_live_mode_skips_history_when_event_stopped_witho
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: "tts-provider")
+            context=_internal_plugin_context("tts-provider")
         )
     )
     event = FakeInternalProcessEvent(
@@ -2793,7 +2757,7 @@ async def test_internal_process_live_mode_saves_history_when_event_stopped_but_r
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: "tts-provider")
+            context=_internal_plugin_context("tts-provider")
         )
     )
     event = FakeInternalProcessEvent(
@@ -2867,7 +2831,7 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello", stopped=True)
@@ -2930,7 +2894,7 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello", stopped=True)
@@ -2993,7 +2957,7 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -3065,7 +3029,7 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -3141,7 +3105,7 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
     stage.main_agent_cfg = object()
     stage.ctx = SimpleNamespace(
         plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            context=_internal_plugin_context()
         )
     )
     event = FakeInternalProcessEvent(message_str="hello")
@@ -3226,15 +3190,13 @@ async def test_record_internal_agent_stats_persists_expected_status(
     expected_status,
 ):
     insert_provider_stat = AsyncMock()
-    monkeypatch.setattr(
-        internal.db_helper, "insert_provider_stat", insert_provider_stat
-    )
+    db = SimpleNamespace(insert_provider_stat=insert_provider_stat)
 
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-stats"))
     runner = FakeInternalRunner(aborted=aborted)
 
-    await internal._record_internal_agent_stats(event, req, runner, final_resp)
+    await internal._record_internal_agent_stats(event, req, runner, final_resp, db)
 
     insert_provider_stat.assert_awaited_once_with(
         umo=event.unified_msg_origin,
@@ -3252,9 +3214,7 @@ async def test_record_internal_agent_stats_falls_back_to_provider_meta_id_withou
     monkeypatch,
 ):
     insert_provider_stat = AsyncMock()
-    monkeypatch.setattr(
-        internal.db_helper, "insert_provider_stat", insert_provider_stat
-    )
+    db = SimpleNamespace(insert_provider_stat=insert_provider_stat)
 
     runner = FakeInternalRunner()
     runner.provider.provider_config = {}
@@ -3264,6 +3224,7 @@ async def test_record_internal_agent_stats_falls_back_to_provider_meta_id_withou
         None,
         runner,
         LLMResponse(role="assistant", completion_text="done"),
+        db,
     )
 
     insert_provider_stat.assert_awaited_once_with(
@@ -3282,9 +3243,7 @@ async def test_record_internal_agent_stats_skips_when_provider_or_stats_missing(
     monkeypatch,
 ):
     insert_provider_stat = AsyncMock()
-    monkeypatch.setattr(
-        internal.db_helper, "insert_provider_stat", insert_provider_stat
-    )
+    db = SimpleNamespace(insert_provider_stat=insert_provider_stat)
 
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-stats"))
@@ -3293,8 +3252,10 @@ async def test_record_internal_agent_stats_skips_when_provider_or_stats_missing(
     no_stats_runner = FakeInternalRunner()
     no_stats_runner.stats = None
 
-    await internal._record_internal_agent_stats(event, req, no_provider_runner, None)
-    await internal._record_internal_agent_stats(event, req, no_stats_runner, None)
+    await internal._record_internal_agent_stats(
+        event, req, no_provider_runner, None, db
+    )
+    await internal._record_internal_agent_stats(event, req, no_stats_runner, None, db)
 
     insert_provider_stat.assert_not_awaited()
 
@@ -3302,10 +3263,8 @@ async def test_record_internal_agent_stats_skips_when_provider_or_stats_missing(
 @pytest.mark.asyncio
 async def test_record_internal_agent_stats_swallows_persistence_failures(monkeypatch):
     warning = MagicMock()
-    monkeypatch.setattr(
-        internal.db_helper,
-        "insert_provider_stat",
-        AsyncMock(side_effect=RuntimeError("db write failed")),
+    db = SimpleNamespace(
+        insert_provider_stat=AsyncMock(side_effect=RuntimeError("db write failed"))
     )
     monkeypatch.setattr(internal.logger, "warning", warning)
 
@@ -3314,6 +3273,7 @@ async def test_record_internal_agent_stats_swallows_persistence_failures(monkeyp
         ProviderRequest(conversation=SimpleNamespace(cid="conv-stats")),
         FakeInternalRunner(),
         LLMResponse(role="assistant", completion_text="done"),
+        db,
     )
 
     warning.assert_called_once()

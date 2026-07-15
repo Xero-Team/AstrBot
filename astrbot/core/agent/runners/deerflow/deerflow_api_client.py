@@ -5,7 +5,7 @@ from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
 
-from astrbot.core import logger
+from astrbot import logger
 
 SSE_MAX_BUFFER_CHARS = 1_048_576
 

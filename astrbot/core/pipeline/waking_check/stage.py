@@ -53,6 +53,7 @@ class WakingCheckStage(Stage):
 
         """
         self.ctx = ctx
+        self.session_plugins = SessionPluginManager(ctx.preferences)
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
             "no_permission_reply",
             True,
@@ -80,7 +81,32 @@ class WakingCheckStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None]:
-        # apply unique session
+        self._apply_unique_session(event)
+        if self._is_bot_self_message(event):
+            event.stop_event()
+            return
+
+        event.message_str = event.message_str.strip()
+        self._assign_admin_role(event)
+        is_wake = await self._detect_wake(event)
+        (
+            activated_handlers,
+            handlers_parsed_params,
+            permission_denied,
+        ) = await self._collect_activated_handlers(event)
+        if permission_denied:
+            return
+
+        activated_handlers = await self.session_plugins.filter_handlers_by_session(
+            event,
+            activated_handlers,
+        )
+        event.set_extra("activated_handlers", activated_handlers)
+        event.set_extra("handlers_parsed_params", handlers_parsed_params)
+        if not (is_wake or event.is_wake):
+            event.stop_event()
+
+    def _apply_unique_session(self, event: AstrMessageEvent) -> None:
         onebot_post_type = event.get_extra("onebot_post_type")
         should_keep_group_session = onebot_post_type in {"notice", "request"}
         if (
@@ -92,112 +118,106 @@ class WakingCheckStage(Stage):
             if sid:
                 event.session_id = sid
 
-        # ignore bot self message
-        if (
-            self.ignore_bot_self_message
-            and event.get_self_id() == event.get_sender_id()
-        ):
-            event.stop_event()
-            return
+    def _is_bot_self_message(self, event: AstrMessageEvent) -> bool:
+        return self.ignore_bot_self_message and (
+            event.get_self_id() == event.get_sender_id()
+        )
 
-        # 设置 sender 身份
-        event.message_str = event.message_str.strip()
+    def _assign_admin_role(self, event: AstrMessageEvent) -> None:
         for admin_id in self.ctx.astrbot_config["admins_id"]:
             if str(event.get_sender_id()) == admin_id:
                 event.role = "admin"
                 break
 
-        # 检查 wake
+    async def _detect_wake(self, event: AstrMessageEvent) -> bool:
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()
         skip_private_wake = bool(event.get_extra("skip_private_wake", False))
-        is_wake = False
         for wake_prefix in wake_prefixes:
             if event.message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()
+                    and messages
                     and isinstance(messages[0], At)
                     and str(messages[0].qq) != str(event.get_self_id())
                     and str(messages[0].qq) != "all"
                 ):
                     # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
                     break
-                is_wake = True
                 event.is_at_or_wake_command = True
                 event.is_wake = True
                 event.message_str = event.message_str[len(wake_prefix) :].strip()
-                break
-        if not is_wake:
-            # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
-            unresolved_replies: list[Reply] = []
-            for message in messages:
-                reply_sender_id = ""
-                if isinstance(message, Reply) and message.sender_id not in (
-                    None,
-                    "",
-                    0,
-                    "0",
-                ):
-                    reply_sender_id = str(message.sender_id)
-                if (
-                    (
-                        isinstance(message, At)
-                        and (str(message.qq) == str(event.get_self_id()))
-                    )
-                    or (isinstance(message, AtAll) and not self.ignore_at_all)
-                    or (
-                        isinstance(message, Reply)
-                        and reply_sender_id == str(event.get_self_id())
-                    )
-                ):
-                    is_wake = True
-                    event.is_wake = True
-                    wake_prefix = ""
-                    event.is_at_or_wake_command = True
-                    break
-                if isinstance(message, Reply) and not reply_sender_id:
-                    unresolved_replies.append(message)
+                return True
 
-            if not is_wake and unresolved_replies:
-                onebot_client = OneBotClient(event)
-                for message in unresolved_replies:
-                    resolved_sender_id = await onebot_client.get_msg_sender_id(
-                        message.id
-                    )
-                    if not resolved_sender_id:
-                        continue
-                    message.sender_id = resolved_sender_id
-                    if resolved_sender_id == str(event.get_self_id()):
-                        is_wake = True
-                        event.is_wake = True
-                        event.is_at_or_wake_command = True
-                        wake_prefix = ""
-                        break
-            # 检查是否是私聊
-            if (
-                event.is_private_chat()
-                and not skip_private_wake
-                and (
-                    not self.friend_message_needs_wake_prefix
-                    or event.get_platform_name() == "webchat"
-                )
-            ):
-                is_wake = True
+        unresolved_replies: list[Reply] = []
+        for message in messages:
+            reply_sender_id = self._reply_sender_id(message)
+            if self._message_wakes_event(message, event, reply_sender_id):
                 event.is_wake = True
                 event.is_at_or_wake_command = True
-                wake_prefix = ""
+                return True
+            if isinstance(message, Reply) and not reply_sender_id:
+                unresolved_replies.append(message)
+        if await self._unresolved_reply_wakes_event(event, unresolved_replies):
+            return True
+        if (
+            event.is_private_chat()
+            and not skip_private_wake
+            and (
+                not self.friend_message_needs_wake_prefix
+                or event.get_platform_name() == "webchat"
+            )
+        ):
+            event.is_wake = True
+            event.is_at_or_wake_command = True
+            return True
+        return False
 
-        # 检查插件的 handler filter
+    @staticmethod
+    def _reply_sender_id(message: object) -> str:
+        if isinstance(message, Reply) and message.sender_id not in (None, "", 0, "0"):
+            return str(message.sender_id)
+        return ""
+
+    def _message_wakes_event(
+        self, message: object, event: AstrMessageEvent, reply_sender_id: str
+    ) -> bool:
+        return (
+            (isinstance(message, At) and str(message.qq) == str(event.get_self_id()))
+            or (isinstance(message, AtAll) and not self.ignore_at_all)
+            or (
+                isinstance(message, Reply)
+                and reply_sender_id == str(event.get_self_id())
+            )
+        )
+
+    async def _unresolved_reply_wakes_event(
+        self, event: AstrMessageEvent, replies: list[Reply]
+    ) -> bool:
+        if not replies:
+            return False
+        onebot_client = OneBotClient(event)
+        for reply in replies:
+            resolved_sender_id = await onebot_client.get_msg_sender_id(reply.id)
+            if not resolved_sender_id:
+                continue
+            reply.sender_id = resolved_sender_id
+            if resolved_sender_id == str(event.get_self_id()):
+                event.is_wake = True
+                event.is_at_or_wake_command = True
+                return True
+        return False
+
+    async def _collect_activated_handlers(
+        self, event: AstrMessageEvent
+    ) -> tuple[list, dict, bool]:
         activated_handlers = []
-        handlers_parsed_params = {}  # 注册了指令的 handler
+        handlers_parsed_params = {}
 
-        # 将 plugins_name 设置到 event 中
         enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
-        if enabled_plugins_name == ["*"]:
-            # 如果是 *，则表示所有插件都启用
-            event.plugins_name = None
-        else:
-            event.plugins_name = enabled_plugins_name
+        event.plugins_name = (
+            None if enabled_plugins_name == ["*"] else enabled_plugins_name
+        )
         logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
 
         for handler in star_handlers_registry.get_handlers_by_event_type(
@@ -251,9 +271,8 @@ class WakingCheckStage(Stage):
                         f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
                     )
                     event.stop_event()
-                    return
+                    return activated_handlers, handlers_parsed_params, True
 
-                is_wake = True
                 event.is_wake = True
 
                 is_group_cmd_handler = any(
@@ -267,15 +286,4 @@ class WakingCheckStage(Stage):
                         )
 
             event._extras.pop("parsed_params", None)
-
-        # 根据会话配置过滤插件处理器
-        activated_handlers = await SessionPluginManager.filter_handlers_by_session(
-            event,
-            activated_handlers,
-        )
-
-        event.set_extra("activated_handlers", activated_handlers)
-        event.set_extra("handlers_parsed_params", handlers_parsed_params)
-
-        if not is_wake:
-            event.stop_event()
+        return activated_handlers, handlers_parsed_params, False

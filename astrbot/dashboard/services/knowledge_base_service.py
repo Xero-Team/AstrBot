@@ -7,7 +7,7 @@ from typing import Any
 import aiofiles
 from starlette.datastructures import UploadFile
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path

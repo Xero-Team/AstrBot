@@ -5,10 +5,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypeVar, cast
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
-from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
+from astrbot.core.utils.webhook_utils import (
+    configure_webhook_utils,
+    ensure_platform_webhook_config,
+)
 
 from .astrbot_message import AstrBotMessage
 from .message_session import MessageSession
@@ -29,6 +32,7 @@ _T = TypeVar("_T")
 
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
+        configure_webhook_utils(config)
         self._platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
@@ -248,6 +252,9 @@ class PlatformManager:
             return
         cls_type = platform_cls_map[platform_config["type"]]
         inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        inst.database = getattr(self, "database", None)
+        inst.runtime_config = self.astrbot_config
+        inst.preferences = getattr(self, "preferences", None)
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
             "client_id": inst.client_self_id,

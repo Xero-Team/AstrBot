@@ -1,14 +1,18 @@
 """会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
 class SessionPluginManager:
     """管理会话级别的插件启停状态"""
 
-    @staticmethod
+    def __init__(self, preferences: SharedPreferences) -> None:
+        self.preferences = preferences
+
     async def is_plugin_enabled_for_session(
+        self,
         session_id: str,
         plugin_name: str,
     ) -> bool:
@@ -23,7 +27,7 @@ class SessionPluginManager:
 
         """
         # 获取会话插件配置
-        session_plugin_config = await sp.get_async(
+        session_plugin_config = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_plugin_config",
@@ -45,8 +49,8 @@ class SessionPluginManager:
         # 如果都没有配置，默认为启用（兼容性考虑）
         return True
 
-    @staticmethod
     async def filter_handlers_by_session(
+        self,
         event: AstrMessageEvent,
         handlers: list,
     ) -> list:
@@ -65,7 +69,7 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
-        session_plugin_config = await sp.get_async(
+        session_plugin_config = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_plugin_config",

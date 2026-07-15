@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import col, desc
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,

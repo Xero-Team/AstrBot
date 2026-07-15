@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_session import MessageSession

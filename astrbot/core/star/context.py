@@ -129,6 +129,7 @@ class Context:
         html_renderer: HtmlRenderer,
         file_token_service: FileTokenService,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
+        demo_mode: bool = False,
     ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -136,6 +137,8 @@ class Context:
         """AstrBot 默认配置"""
         self._db = db
         """AstrBot 数据库"""
+        self.database = db
+        """Database capability available to core and plugin services."""
         self.provider_manager = provider_manager
         """模型提供商管理器"""
         self._platform_manager = platform_manager
@@ -158,6 +161,7 @@ class Context:
         """HTML-to-image capability available to plugins."""
         self.file_token_service = file_token_service
         """Temporary file publication capability available to plugins."""
+        self.demo_mode = demo_mode
         self.subagent_orchestrator = subagent_orchestrator
         self.persona_runtime_manager: PersonaRuntimeManager | None = None
         self.memory_manager: MemoryManager | None = None

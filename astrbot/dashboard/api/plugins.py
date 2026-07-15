@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.schemas import (

@@ -2,7 +2,7 @@ import typing as T
 from typing import override
 
 import astrbot.core.message.components as Comp
-from astrbot.core import logger, sp
+from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -35,6 +35,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self.preferences = kwargs["preferences"]
 
         self.api_key = provider_config.get("dify_api_key", "")
         self.api_base = provider_config.get("dify_api_base", "https://api.dify.ai/v1")
@@ -151,7 +152,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         image_urls = self.req.image_urls or []
         system_prompt = self.req.system_prompt
 
-        conversation_id = await sp.get_async(
+        conversation_id = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="dify_conversation_id",
@@ -173,7 +174,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         # 获得会话变量
         payload_vars = self.variables.copy()
         # 动态变量
-        session_var = await sp.get_async(
+        session_var = await self.preferences.get_async(
             scope="umo",
             scope_id=session_id,
             key="session_variables",
@@ -202,7 +203,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     if chunk["event"] == "message" or chunk["event"] == "agent_message":
                         result += chunk["answer"]
                         if not conversation_id:
-                            await sp.put_async(
+                            await self.preferences.put_async(
                                 scope="umo",
                                 scope_id=session_id,
                                 key="dify_conversation_id",

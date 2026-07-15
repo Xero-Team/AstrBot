@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiofiles
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager

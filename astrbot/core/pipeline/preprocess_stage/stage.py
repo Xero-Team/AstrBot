@@ -4,7 +4,7 @@ import traceback
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path

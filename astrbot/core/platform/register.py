@@ -1,4 +1,4 @@
-from astrbot.core import logger
+from astrbot import logger
 
 from .platform_metadata import PlatformMetadata
 

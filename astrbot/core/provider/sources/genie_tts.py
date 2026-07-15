@@ -3,7 +3,7 @@ import os
 import uuid
 from typing import Protocol, cast
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter

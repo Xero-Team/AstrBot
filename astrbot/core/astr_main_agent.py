@@ -464,6 +464,166 @@ def _get_context_runtime_attr(plugin_context: Context, name: str):
     return getattr(plugin_context, "__dict__", {}).get(name)
 
 
+async def _inject_persona_runtime_and_memory(
+    req: ProviderRequest,
+    event: AstrMessageEvent,
+    plugin_context: Context,
+    persona_id: str | None,
+    memory_manager,
+) -> None:
+    if persona_id and persona_id != "[%None]":
+        event.set_extra("selected_persona_id", persona_id)
+        persona_runtime_manager = _get_context_runtime_attr(
+            plugin_context, "persona_runtime_manager"
+        )
+        if persona_runtime_manager is not None:
+            try:
+                await persona_runtime_manager.inject_context(
+                    req=req,
+                    persona_id=persona_id,
+                    umo=event.unified_msg_origin,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to inject persona runtime context: %s", exc)
+
+    if memory_manager is not None:
+        try:
+            await memory_manager.inject_context(
+                req=req,
+                event=event,
+                query=req.prompt,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to inject memory context: %s", exc)
+
+
+def _append_skills_prompt(
+    req: ProviderRequest,
+    cfg: dict,
+    persona: dict | None,
+    event: AstrMessageEvent,
+) -> None:
+    runtime = cfg.get("computer_use_runtime", "local")
+    skill_manager = SkillManager()
+    skills = _filter_skills_for_current_config(
+        skill_manager.list_skills(active_only=True, runtime=runtime),
+        cfg,
+    )
+    workspace_skills = (
+        skill_manager.list_workspace_skills(
+            _get_workspace_path_for_umo(event.unified_msg_origin)
+        )
+        if runtime == "local"
+        else []
+    )
+    if persona and persona.get("skills") is not None:
+        if not persona["skills"]:
+            skills = []
+        else:
+            allowed = set(persona["skills"])
+            skills = [skill for skill in skills if skill.name in allowed]
+    if workspace_skills and (not persona or persona.get("skills") != []):
+        skills_by_name = {skill.name: skill for skill in skills}
+        for skill in workspace_skills:
+            skills_by_name[skill.name] = skill
+        skills = [skills_by_name[name] for name in sorted(skills_by_name)]
+    if not skills:
+        return
+    req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
+    if runtime == "none":
+        req.system_prompt += (
+            "User has not enabled the Computer Use feature. "
+            "You cannot use shell or Python to perform skills. "
+            "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
+        )
+
+
+def _merge_persona_tools(
+    req: ProviderRequest,
+    persona: dict | None,
+    tool_manager,
+    memory_manager,
+) -> ToolSet:
+    if (persona and persona.get("tools") is None) or not persona:
+        persona_toolset = tool_manager.get_full_tool_set()
+        for tool in list(persona_toolset):
+            if not tool.active:
+                persona_toolset.remove_tool(tool.name)
+    else:
+        persona_toolset = ToolSet()
+        for tool_name in persona["tools"] or []:
+            if tool := tool_manager.get_tool(tool_name):
+                if tool.active:
+                    persona_toolset.add_tool(tool)
+    if req.func_tool:
+        req.func_tool.merge(persona_toolset)
+    else:
+        req.func_tool = persona_toolset
+
+    if memory_manager is not None and (not persona or persona.get("tools") is None):
+        for tool_cls in (
+            SearchMemoryTool,
+            GetPersonProfileTool,
+            QueryEpisodeTool,
+            MaintainMemoryTool,
+        ):
+            req.func_tool.add_tool(tool_manager.get_builtin_tool(tool_cls))
+    return persona_toolset
+
+
+def _add_subagent_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+    tool_manager,
+) -> None:
+    orchestrator_config = plugin_context.get_config().get("subagent_orchestrator", {})
+    orchestrator = plugin_context.subagent_orchestrator
+    if not orchestrator_config.get("main_enable", False) or not orchestrator:
+        return
+
+    assigned_tools: set[str] = set()
+    agents = orchestrator_config.get("agents", [])
+    if isinstance(agents, list):
+        for agent in agents:
+            if not isinstance(agent, dict) or agent.get("enabled", True) is False:
+                continue
+            persona_tools = None
+            if persona_id := agent.get("persona_id"):
+                persona = plugin_context.persona_manager.get_runtime_persona_by_id(
+                    persona_id
+                )
+                if persona is not None:
+                    persona_tools = persona.get("tools")
+            tools = (
+                persona_tools if persona_tools is not None else agent.get("tools", [])
+            )
+            if tools is None:
+                assigned_tools.update(
+                    tool.name
+                    for tool in tool_manager.func_list
+                    if not isinstance(tool, HandoffTool)
+                )
+            elif isinstance(tools, list):
+                assigned_tools.update(
+                    name for tool in tools if (name := str(tool).strip())
+                )
+
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+    for tool in orchestrator.handoffs:
+        req.func_tool.add_tool(tool)
+
+    if orchestrator_config.get("remove_main_duplicate_tools", False):
+        handoff_names = {tool.name for tool in orchestrator.handoffs}
+        for tool_name in assigned_tools - handoff_names:
+            req.func_tool.remove_tool(tool_name)
+
+    if router_prompt := str(
+        orchestrator_config.get("router_system_prompt", "")
+    ).strip():
+        req.system_prompt += f"\n{router_prompt}\n"
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -505,155 +665,20 @@ async def _ensure_persona_and_skills(
         selected_persona_id = "_chatui_default_"
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
-    if selected_persona_id and selected_persona_id != "[%None]":
-        event.set_extra("selected_persona_id", selected_persona_id)
-        persona_runtime_manager = _get_context_runtime_attr(
-            plugin_context, "persona_runtime_manager"
-        )
-        if persona_runtime_manager is not None:
-            try:
-                await persona_runtime_manager.inject_context(
-                    req=req,
-                    persona_id=selected_persona_id,
-                    umo=event.unified_msg_origin,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Failed to inject persona runtime context: %s", exc)
-
     memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
-    if memory_manager is not None:
-        try:
-            await memory_manager.inject_context(
-                req=req,
-                event=event,
-                query=req.prompt,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Failed to inject memory context: %s", exc)
-
-    # Inject skills prompt
-    runtime = cfg.get("computer_use_runtime", "local")
-    skill_manager = SkillManager()
-    skills = skill_manager.list_skills(active_only=True, runtime=runtime)
-    skills = _filter_skills_for_current_config(skills, cfg)
-    workspace_skills = (
-        skill_manager.list_workspace_skills(
-            _get_workspace_path_for_umo(event.unified_msg_origin)
-        )
-        if runtime == "local"
-        else []
+    await _inject_persona_runtime_and_memory(
+        req,
+        event,
+        plugin_context,
+        selected_persona_id,
+        memory_manager,
     )
 
-    if skills or workspace_skills:
-        if persona and persona.get("skills") is not None:
-            if not persona["skills"]:
-                skills = []
-            else:
-                allowed = set(persona["skills"])
-                skills = [skill for skill in skills if skill.name in allowed]
-        if workspace_skills and (not persona or persona.get("skills") != []):
-            skills_by_name = {skill.name: skill for skill in skills}
-            for skill in workspace_skills:
-                skills_by_name[skill.name] = skill
-            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
-        if skills:
-            req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
-            if runtime == "none":
-                req.system_prompt += (
-                    "User has not enabled the Computer Use feature. "
-                    "You cannot use shell or Python to perform skills. "
-                    "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
-                )
+    _append_skills_prompt(req, cfg, persona, event)
     tmgr = plugin_context.get_llm_tool_manager()
+    persona_toolset = _merge_persona_tools(req, persona, tmgr, memory_manager)
 
-    # inject toolset in the persona
-    if (persona and persona.get("tools") is None) or not persona:
-        persona_toolset = tmgr.get_full_tool_set()
-        for tool in list(persona_toolset):
-            if not tool.active:
-                persona_toolset.remove_tool(tool.name)
-    else:
-        persona_toolset = ToolSet()
-        if persona["tools"]:
-            for tool_name in persona["tools"]:
-                tool = tmgr.get_tool(tool_name)
-                if tool and tool.active:
-                    persona_toolset.add_tool(tool)
-    if not req.func_tool:
-        req.func_tool = persona_toolset
-    else:
-        req.func_tool.merge(persona_toolset)
-    if memory_manager is not None and (not persona or persona.get("tools") is None):
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(tmgr.get_builtin_tool(SearchMemoryTool))
-        req.func_tool.add_tool(tmgr.get_builtin_tool(GetPersonProfileTool))
-        req.func_tool.add_tool(tmgr.get_builtin_tool(QueryEpisodeTool))
-        req.func_tool.add_tool(tmgr.get_builtin_tool(MaintainMemoryTool))
-
-    # sub agents integration
-    orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
-    so = plugin_context.subagent_orchestrator
-    if orch_cfg.get("main_enable", False) and so:
-        remove_dup = bool(orch_cfg.get("remove_main_duplicate_tools", False))
-
-        assigned_tools: set[str] = set()
-        agents = orch_cfg.get("agents", [])
-        if isinstance(agents, list):
-            for a in agents:
-                if not isinstance(a, dict):
-                    continue
-                if a.get("enabled", True) is False:
-                    continue
-                persona_tools = None
-                pid = a.get("persona_id")
-                if pid:
-                    persona = plugin_context.persona_manager.get_runtime_persona_by_id(
-                        pid
-                    )
-                    if persona is not None:
-                        persona_tools = persona.get("tools")
-                tools = a.get("tools", [])
-                if persona_tools is not None:
-                    tools = persona_tools
-                if tools is None:
-                    assigned_tools.update(
-                        [
-                            tool.name
-                            for tool in tmgr.func_list
-                            if not isinstance(tool, HandoffTool)
-                        ]
-                    )
-                    continue
-                if not isinstance(tools, list):
-                    continue
-                for t in tools:
-                    name = str(t).strip()
-                    if name:
-                        assigned_tools.add(name)
-
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-
-        # add subagent handoff tools
-        for tool in so.handoffs:
-            req.func_tool.add_tool(tool)
-
-        # check duplicates
-        if remove_dup:
-            handoff_names = {tool.name for tool in so.handoffs}
-            for tool_name in assigned_tools:
-                if tool_name in handoff_names:
-                    continue
-                req.func_tool.remove_tool(tool_name)
-
-        router_prompt = (
-            plugin_context.get_config()
-            .get("subagent_orchestrator", {})
-            .get("router_system_prompt", "")
-        ).strip()
-        if router_prompt:
-            req.system_prompt += f"\n{router_prompt}\n"
+    _add_subagent_tools(req, plugin_context, tmgr)
     try:
         event.trace.record(
             "sel_persona",
@@ -1090,13 +1115,14 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
 
 
 async def _handle_webchat(
-    event: AstrMessageEvent, req: ProviderRequest, prov: Provider
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    prov: Provider,
+    db,
 ) -> None:
-    from astrbot.core import db_helper
-
     chatui_session_id = event.session_id.split("!")[-1]
     user_prompt = req.prompt
-    session = await db_helper.get_platform_session_by_id(chatui_session_id)
+    session = await db.get_platform_session_by_id(chatui_session_id)
 
     if not user_prompt or not chatui_session_id or not session or session.display_name:
         return
@@ -1127,7 +1153,7 @@ async def _handle_webchat(
         logger.info(
             "Generated chatui title for session %s: %s", chatui_session_id, title
         )
-        await db_helper.update_platform_session(
+        await db.update_platform_session(
             session_id=chatui_session_id,
             display_name=title,
         )
@@ -1382,6 +1408,232 @@ def _select_image_chat_provider(
     return provider
 
 
+async def _prepare_request_for_agent(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    plugin_context: Context,
+    config: MainAgentBuildConfig,
+    provider: Provider,
+) -> bool:
+    """Normalize a request and apply request-scoped capabilities."""
+    if isinstance(req.contexts, str):
+        req.contexts = json.loads(req.contexts)
+    if thread_selected_text := event.get_extra("thread_selected_text"):
+        if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=(
+                        "The user is asking in a side thread about this selected "
+                        "excerpt from the previous assistant answer:\n"
+                        f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+                    )
+                )
+            )
+    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
+    req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
+    if config.file_extract_enabled:
+        try:
+            await _apply_file_extract(event, req, config)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Error occurred while applying file extract: %s", exc)
+
+    has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
+    if not req.prompt and not req.image_urls and not req.audio_urls:
+        if has_reply or req.extra_user_content_parts:
+            req.prompt = "<attachment>"
+        else:
+            return False
+
+    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
+    await _apply_kb(event, req, plugin_context, config)
+    req.session_id = req.session_id or event.unified_msg_origin
+    _plugin_tool_fix(event, req)
+    await _apply_web_search_tools(event, req, plugin_context)
+    if config.llm_safety_mode:
+        _apply_llm_safety_mode(config, req)
+    if config.computer_use_runtime == "sandbox":
+        _apply_sandbox_tools(config, req, req.session_id)
+    elif config.computer_use_runtime == "local":
+        _apply_local_env_tools(req, plugin_context)
+    return True
+
+
+def _select_request_provider(
+    provider: Provider,
+    req: ProviderRequest,
+    plugin_context: Context,
+    config: MainAgentBuildConfig,
+) -> tuple[Provider, list[Provider]]:
+    """Select an image-capable provider and preserve ordered fallbacks."""
+    fallbacks = _get_fallback_chat_providers(
+        provider, plugin_context, config.provider_settings
+    )
+    selected = _select_image_chat_provider(provider, req, fallbacks)
+    if selected is provider:
+        return provider, fallbacks
+    if req.model:
+        req.model = None
+    return selected, [fallback for fallback in fallbacks if fallback is not selected]
+
+
+async def _append_direct_attachments(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    config: MainAgentBuildConfig,
+) -> None:
+    for component in event.message_obj.message:
+        if isinstance(component, Image):
+            path = await component.convert_to_file_path()
+            image_path = await _compress_image_for_provider(
+                path,
+                config.provider_settings,
+            )
+            if _is_generated_compressed_image_path(path, image_path):
+                event.track_temporary_local_file(image_path)
+            req.image_urls.append(image_path)
+            req.extra_user_content_parts.append(
+                TextPart(text=f"[Image Attachment: path {image_path}]")
+            )
+        elif isinstance(component, Record):
+            audio_path = await component.convert_to_file_path()
+            req.audio_urls.append(audio_path)
+            _append_audio_attachment(req, audio_path)
+        elif isinstance(component, File):
+            file_path = await component.get_file()
+            file_name = component.name or os.path.basename(file_path)
+            req.extra_user_content_parts.append(
+                TextPart(text=f"[File Attachment: name {file_name}, path {file_path}]")
+            )
+        elif isinstance(component, Video):
+            await _append_video_attachment(req, component)
+
+
+async def _append_quoted_reply_components(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    reply: Reply,
+    config: MainAgentBuildConfig,
+) -> bool:
+    """Append explicit media in a reply and report whether it contained an image."""
+    has_embedded_image = False
+    for component in reply.chain or []:
+        if isinstance(component, Image):
+            has_embedded_image = True
+            path = await component.convert_to_file_path()
+            image_path = await _compress_image_for_provider(
+                path,
+                config.provider_settings,
+            )
+            if _is_generated_compressed_image_path(path, image_path):
+                event.track_temporary_local_file(image_path)
+            req.image_urls.append(image_path)
+            _append_quoted_image_attachment(req, image_path)
+        elif isinstance(component, Record):
+            audio_path = await component.convert_to_file_path()
+            req.audio_urls.append(audio_path)
+            _append_quoted_audio_attachment(req, audio_path)
+        elif isinstance(component, File):
+            file_path = await component.get_file()
+            file_name = component.name or os.path.basename(file_path)
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=(
+                        "[File Attachment in quoted message: "
+                        f"name {file_name}, path {file_path}]"
+                    )
+                )
+            )
+        elif isinstance(component, Video):
+            await _append_video_attachment(req, component, quoted=True)
+    return has_embedded_image
+
+
+async def _append_quoted_fallback_images(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    reply: Reply,
+    settings: QuotedMessageParserSettings,
+    limit: int,
+) -> int:
+    """Append deduplicated fallback images for a reply-only payload."""
+    try:
+        images = normalize_and_dedupe_strings(
+            await extract_quoted_message_images(event, reply, settings=settings)
+        )
+        remaining = max(limit, 0)
+        if remaining <= 0 and images:
+            logger.warning(
+                "Skip quoted fallback images due to limit=%d for umo=%s",
+                limit,
+                event.unified_msg_origin,
+            )
+            return 0
+        if len(images) > remaining:
+            logger.warning(
+                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                event.unified_msg_origin,
+                getattr(reply, "id", None),
+                len(images),
+                remaining,
+            )
+            images = images[:remaining]
+        added = 0
+        for image_ref in images:
+            if image_ref in req.image_urls:
+                continue
+            req.image_urls.append(image_ref)
+            added += 1
+            _append_quoted_image_attachment(req, image_ref)
+        return added
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
+            event.unified_msg_origin,
+            getattr(reply, "id", None),
+            exc,
+            exc_info=True,
+        )
+        return 0
+
+
+def _create_main_runner_reset(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    provider: Provider,
+    plugin_context: Context,
+    config: MainAgentBuildConfig,
+    fallback_providers: list[Provider],
+) -> tuple[AgentRunner, Coroutine]:
+    agent_runner = AgentRunner()
+    read_tool = (
+        req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
+    )
+    reset_coro = agent_runner.reset(
+        provider=provider,
+        request=req,
+        run_context=AgentContextWrapper(
+            context=AstrAgentContext(context=plugin_context, event=event),
+            tool_call_timeout=config.tool_call_timeout,
+        ),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=MAIN_AGENT_HOOKS,
+        streaming=config.streaming_response,
+        llm_compress_instruction=config.llm_compress_instruction,
+        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
+        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
+        truncate_turns=config.dequeue_context_length,
+        enforce_max_turns=config.max_context_length,
+        tool_schema_mode=config.tool_schema_mode,
+        fallback_providers=fallback_providers,
+        request_max_retries=config.provider_settings.get("request_max_retries", 5),
+        tool_result_overflow_dir=(
+            get_astrbot_system_tmp_path() if read_tool is not None else None
+        ),
+        read_tool=read_tool,
+    )
+    return agent_runner, reset_coro
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1427,34 +1679,7 @@ async def build_main_agent(
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
 
-            # media files attachments
-            for comp in event.message_obj.message:
-                if isinstance(comp, Image):
-                    path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_for_provider(
-                        path,
-                        config.provider_settings,
-                    )
-                    if _is_generated_compressed_image_path(path, image_path):
-                        event.track_temporary_local_file(image_path)
-                    req.image_urls.append(image_path)
-                    req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: path {image_path}]")
-                    )
-                elif isinstance(comp, Record):
-                    audio_path = await comp.convert_to_file_path()
-                    req.audio_urls.append(audio_path)
-                    _append_audio_attachment(req, audio_path)
-                elif isinstance(comp, File):
-                    file_path = await comp.get_file()
-                    file_name = comp.name or os.path.basename(file_path)
-                    req.extra_user_content_parts.append(
-                        TextPart(
-                            text=f"[File Attachment: name {file_name}, path {file_path}]"
-                        )
-                    )
-                elif isinstance(comp, Video):
-                    await _append_video_attachment(req, comp)
+            await _append_direct_attachments(event, req, config)
             # quoted message attachments
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
@@ -1464,143 +1689,30 @@ async def build_main_agent(
             )
             fallback_quoted_image_count = 0
             for comp in reply_comps:
-                has_embedded_image = False
-                if comp.chain:
-                    for reply_comp in comp.chain:
-                        if isinstance(reply_comp, Image):
-                            has_embedded_image = True
-                            path = await reply_comp.convert_to_file_path()
-                            image_path = await _compress_image_for_provider(
-                                path,
-                                config.provider_settings,
-                            )
-                            if _is_generated_compressed_image_path(path, image_path):
-                                event.track_temporary_local_file(image_path)
-                            req.image_urls.append(image_path)
-                            _append_quoted_image_attachment(req, image_path)
-                        elif isinstance(reply_comp, Record):
-                            audio_path = await reply_comp.convert_to_file_path()
-                            req.audio_urls.append(audio_path)
-                            _append_quoted_audio_attachment(req, audio_path)
-                        elif isinstance(reply_comp, File):
-                            file_path = await reply_comp.get_file()
-                            file_name = reply_comp.name or os.path.basename(file_path)
-                            req.extra_user_content_parts.append(
-                                TextPart(
-                                    text=(
-                                        f"[File Attachment in quoted message: "
-                                        f"name {file_name}, path {file_path}]"
-                                    )
-                                )
-                            )
-                        elif isinstance(reply_comp, Video):
-                            await _append_video_attachment(req, reply_comp, quoted=True)
+                has_embedded_image = await _append_quoted_reply_components(
+                    event, req, comp, config
+                )
 
                 # Fallback quoted image extraction for reply-id-only payloads, or when
                 # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
                 if not has_embedded_image:
-                    try:
-                        fallback_images = normalize_and_dedupe_strings(
-                            await extract_quoted_message_images(
-                                event,
-                                comp,
-                                settings=quoted_message_settings,
-                            )
-                        )
-                        remaining_limit = max(
-                            config.max_quoted_fallback_images
-                            - fallback_quoted_image_count,
-                            0,
-                        )
-                        if remaining_limit <= 0 and fallback_images:
-                            logger.warning(
-                                "Skip quoted fallback images due to limit=%d for umo=%s",
-                                config.max_quoted_fallback_images,
-                                event.unified_msg_origin,
-                            )
-                            continue
-                        if len(fallback_images) > remaining_limit:
-                            logger.warning(
-                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
-                                event.unified_msg_origin,
-                                getattr(comp, "id", None),
-                                len(fallback_images),
-                                remaining_limit,
-                            )
-                            fallback_images = fallback_images[:remaining_limit]
-                        for image_ref in fallback_images:
-                            if image_ref in req.image_urls:
-                                continue
-                            req.image_urls.append(image_ref)
-                            fallback_quoted_image_count += 1
-                            _append_quoted_image_attachment(req, image_ref)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
-                            event.unified_msg_origin,
-                            getattr(comp, "id", None),
-                            exc,
-                            exc_info=True,
-                        )
+                    fallback_quoted_image_count += await _append_quoted_fallback_images(
+                        event,
+                        req,
+                        comp,
+                        quoted_message_settings,
+                        config.max_quoted_fallback_images - fallback_quoted_image_count,
+                    )
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
             event.set_extra("provider_request", req)
 
-    if isinstance(req.contexts, str):
-        req.contexts = json.loads(req.contexts)
-    thread_selected_text = event.get_extra("thread_selected_text")
-    if isinstance(thread_selected_text, str) and thread_selected_text.strip():
-        req.extra_user_content_parts.append(
-            TextPart(
-                text=(
-                    "The user is asking in a side thread about this selected "
-                    "excerpt from the previous assistant answer:\n"
-                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
-                )
-            )
-        )
-    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
-    req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
-
-    if config.file_extract_enabled:
-        try:
-            await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while applying file extract: %s", exc)
-
-    has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
-
-    if not req.prompt and not req.image_urls and not req.audio_urls:
-        if has_reply or req.extra_user_content_parts:
-            req.prompt = "<attachment>"
-        else:
-            return None
-
-    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
-
-    await _apply_kb(event, req, plugin_context, config)
-
-    if not req.session_id:
-        req.session_id = event.unified_msg_origin
-
-    _plugin_tool_fix(event, req)
-    await _apply_web_search_tools(event, req, plugin_context)
-
-    if config.llm_safety_mode:
-        _apply_llm_safety_mode(config, req)
-
-    if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
-    elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req, plugin_context)
-
-    agent_runner = AgentRunner()
-    astr_agent_ctx = AstrAgentContext(
-        context=plugin_context,
-        event=event,
-    )
+    if not await _prepare_request_for_agent(
+        event, req, plugin_context, config, provider
+    ):
+        return None
 
     if config.add_cron_tools:
         _proactive_cron_job_tools(req, plugin_context)
@@ -1614,15 +1726,9 @@ async def build_main_agent(
             )
         )
 
-    fallback_providers = _get_fallback_chat_providers(
-        provider, plugin_context, config.provider_settings
+    provider, fallback_providers = _select_request_provider(
+        provider, req, plugin_context, config
     )
-    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
-    if selected_provider is not provider:
-        provider = selected_provider
-        if req.model:
-            req.model = None
-        fallback_providers = [p for p in fallback_providers if p is not provider]
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
@@ -1639,7 +1745,7 @@ async def build_main_agent(
     if event.get_platform_name() == "webchat":
         create_tracked_task(
             _MAIN_AGENT_BACKGROUND_TASKS,
-            _handle_webchat(event, req, provider),
+            _handle_webchat(event, req, provider, plugin_context.database),
             name="handle_webchat",
         )
 
@@ -1666,32 +1772,13 @@ async def build_main_agent(
 
     _apply_web_search_citation_prompt(event, req)
 
-    reset_coro = agent_runner.reset(
-        provider=provider,
-        request=req,
-        run_context=AgentContextWrapper(
-            context=astr_agent_ctx,
-            tool_call_timeout=config.tool_call_timeout,
-        ),
-        tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
-        streaming=config.streaming_response,
-        llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
-        truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
-        tool_schema_mode=config.tool_schema_mode,
-        fallback_providers=fallback_providers,
-        request_max_retries=config.provider_settings.get("request_max_retries", 5),
-        tool_result_overflow_dir=(
-            get_astrbot_system_tmp_path()
-            if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
-            else None
-        ),
-        read_tool=(
-            req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
-        ),
+    agent_runner, reset_coro = _create_main_runner_reset(
+        event,
+        req,
+        provider,
+        plugin_context,
+        config,
+        fallback_providers,
     )
 
     if apply_reset:

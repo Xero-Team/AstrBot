@@ -1,6 +1,6 @@
 import os
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
 
 

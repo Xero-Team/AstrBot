@@ -5,13 +5,32 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from astrbot.core import sp
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
+
+
+class _MemoryPreferences:
+    def __init__(self) -> None:
+        self.values: dict[str, object] = {}
+
+    async def global_get(self, key: str, default: object = None) -> object:
+        return self.values.get(key, default)
+
+    async def global_put(self, key: str, value: object) -> None:
+        self.values[key] = value
+
+
+preferences = _MemoryPreferences()
+
+
+def _manager() -> FunctionToolManager:
+    manager = FunctionToolManager()
+    manager.bind_preferences(preferences)
+    return manager
 
 
 def _make_context(role: str = "member", sender_id: str = "user_123"):
@@ -50,11 +69,11 @@ def _dummy_tool(name: str = "test_tool") -> FunctionTool:
 
 
 def _clear_tool_permissions() -> None:
-    asyncio.run(sp.global_put("tool_permissions", {}))
+    asyncio.run(preferences.global_put("tool_permissions", {}))
 
 
 async def _clear_tool_permissions_async() -> None:
-    await sp.global_put("tool_permissions", {})
+    await preferences.global_put("tool_permissions", {})
 
 
 def _make_tools_service(
@@ -66,19 +85,20 @@ def _make_tools_service(
     service.core_lifecycle.astrbot_config_mgr = MagicMock()
     service.core_lifecycle.astrbot_config_mgr.get_conf_list.return_value = []
     service.core_lifecycle.astrbot_config_mgr.confs = {}
-    service.tool_mgr = tool_mgr or FunctionToolManager()
+    service.preferences = preferences
+    service.tool_mgr = tool_mgr or _manager()
     return service
 
 
 def test_default_permission_is_admin():
-    mgr = FunctionToolManager()
+    mgr = _manager()
     assert mgr._default_permission("any_mcp_tool") == "admin"
 
 
 @pytest.mark.asyncio
 async def test_check_permission_denies_member_when_no_config():
     await _clear_tool_permissions_async()
-    mgr = FunctionToolManager()
+    mgr = _manager()
     context = _make_context(role="member")
 
     error = await mgr._check_tool_permission("no_such_tool", context)
@@ -88,12 +108,12 @@ async def test_check_permission_denies_member_when_no_config():
 
 @pytest.mark.asyncio
 async def test_check_permission_passes_for_admin_with_admin_tool():
-    await sp.global_put(
+    await preferences.global_put(
         "tool_permissions",
         {"_default": {"dangerous_tool": "admin"}},
     )
     try:
-        mgr = FunctionToolManager()
+        mgr = _manager()
         context = _make_context(role="admin", sender_id="admin_001")
         error = await mgr._check_tool_permission("dangerous_tool", context)
         assert error is None
@@ -103,12 +123,12 @@ async def test_check_permission_passes_for_admin_with_admin_tool():
 
 @pytest.mark.asyncio
 async def test_check_permission_denies_member_for_admin_tool():
-    await sp.global_put(
+    await preferences.global_put(
         "tool_permissions",
         {"_default": {"dangerous_tool": "admin"}},
     )
     try:
-        mgr = FunctionToolManager()
+        mgr = _manager()
         context = _make_context(role="member", sender_id="user_999")
         error = await mgr._check_tool_permission("dangerous_tool", context)
         assert error is not None
@@ -121,12 +141,12 @@ async def test_check_permission_denies_member_for_admin_tool():
 
 @pytest.mark.asyncio
 async def test_check_permission_denies_when_no_event():
-    await sp.global_put(
+    await preferences.global_put(
         "tool_permissions",
         {"_default": {"dangerous_tool": "admin"}},
     )
     try:
-        mgr = FunctionToolManager()
+        mgr = _manager()
 
         class FakeWrapper:
             pass
@@ -140,12 +160,12 @@ async def test_check_permission_denies_when_no_event():
 
 @pytest.mark.asyncio
 async def test_check_permission_passes_for_member_when_configured_member():
-    await sp.global_put(
+    await preferences.global_put(
         "tool_permissions",
         {"_default": {"safe_tool": "member"}},
     )
     try:
-        mgr = FunctionToolManager()
+        mgr = _manager()
         context = _make_context(role="member")
         error = await mgr._check_tool_permission("safe_tool", context)
         assert error is None
@@ -155,8 +175,10 @@ async def test_check_permission_passes_for_member_when_configured_member():
 
 @pytest.mark.asyncio
 async def test_guarded_tool_delegates_handler_with_event_when_permission_passes():
-    await sp.global_put("tool_permissions", {"_default": {"delegated": "member"}})
-    mgr = FunctionToolManager()
+    await preferences.global_put(
+        "tool_permissions", {"_default": {"delegated": "member"}}
+    )
+    mgr = _manager()
 
     called = False
     received_event = None
@@ -185,12 +207,12 @@ async def test_guarded_tool_delegates_handler_with_event_when_permission_passes(
 
 @pytest.mark.asyncio
 async def test_guarded_tool_blocks_when_permission_denied():
-    await sp.global_put(
+    await preferences.global_put(
         "tool_permissions",
         {"_default": {"blocked_tool": "admin"}},
     )
     try:
-        mgr = FunctionToolManager()
+        mgr = _manager()
         called = False
 
         async def handler(ctx, **kw):
@@ -217,8 +239,10 @@ async def test_guarded_tool_blocks_when_permission_denied():
 
 @pytest.mark.asyncio
 async def test_guarded_tool_delegates_to_wrapped_call():
-    await sp.global_put("tool_permissions", {"_default": {"has_call": "member"}})
-    mgr = FunctionToolManager()
+    await preferences.global_put(
+        "tool_permissions", {"_default": {"has_call": "member"}}
+    )
+    mgr = _manager()
 
     class CallableTool(FunctionTool):
         async def call(self, context, **kwargs):
@@ -238,8 +262,10 @@ async def test_guarded_tool_delegates_to_wrapped_call():
 
 @pytest.mark.asyncio
 async def test_guarded_tool_rejects_legacy_run_only_tools():
-    await sp.global_put("tool_permissions", {"_default": {"has_run": "member"}})
-    mgr = FunctionToolManager()
+    await preferences.global_put(
+        "tool_permissions", {"_default": {"has_run": "member"}}
+    )
+    mgr = _manager()
 
     class RunnableTool(FunctionTool):
         async def run(self, event, **kwargs):
@@ -259,8 +285,10 @@ async def test_guarded_tool_rejects_legacy_run_only_tools():
 
 @pytest.mark.asyncio
 async def test_guarded_tool_handles_async_generator_handler():
-    await sp.global_put("tool_permissions", {"_default": {"gen_tool": "member"}})
-    mgr = FunctionToolManager()
+    await preferences.global_put(
+        "tool_permissions", {"_default": {"gen_tool": "member"}}
+    )
+    mgr = _manager()
 
     async def gen_handler(event, **kw):  # type: ignore[misc]
         assert event is context.context.event
@@ -283,7 +311,7 @@ async def test_guarded_tool_handles_async_generator_handler():
 
 def test_get_full_tool_set_excludes_builtin_tools():
     """Builtin tools are added separately by astr_main_agent.py, not here."""
-    mgr = FunctionToolManager()
+    mgr = _manager()
     tool_set = mgr.get_full_tool_set()
 
     names = {t.name for t in tool_set.tools}
@@ -291,7 +319,7 @@ def test_get_full_tool_set_excludes_builtin_tools():
 
 
 def test_get_full_tool_set_wraps_non_builtin():
-    mgr = FunctionToolManager()
+    mgr = _manager()
     _clear_tool_permissions()
 
     mgr.func_list.append(_dummy_tool("my_plugin_tool"))
@@ -306,7 +334,7 @@ class TestGetToolListPermission:
     @pytest.mark.asyncio
     async def test_list_includes_permission_fields_for_non_builtin(self):
         service = _make_tools_service()
-        await sp.global_put(
+        await preferences.global_put(
             "tool_permissions",
             {"_default": {"my_plugin_tool": "admin"}},
         )
@@ -355,7 +383,7 @@ class TestUpdateToolPermission:
         )
         assert "target_tool" in message
 
-        stored = await sp.global_get("tool_permissions", {})
+        stored = await preferences.global_get("tool_permissions", {})
         assert stored["_default"]["target_tool"] == "admin"
 
     @pytest.mark.asyncio

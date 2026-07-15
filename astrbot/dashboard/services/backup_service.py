@@ -15,7 +15,7 @@ from typing import Any
 
 import jwt
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import AstrBotImporter
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

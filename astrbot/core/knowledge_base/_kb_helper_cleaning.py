@@ -4,7 +4,7 @@ import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from astrbot.core import logger
+from astrbot import logger
 from astrbot.core.provider.provider import Provider as LLMProvider
 
 from .chunking.base import BaseChunker

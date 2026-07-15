@@ -808,6 +808,114 @@ class ProviderOpenAIResponses(Provider):
         await asyncio.gather(abort, return_exceptions=True)
         return await task
 
+    async def _prepare_state_continuation(
+        self,
+        client: Any,
+        history: list[dict],
+        model: str,
+        options: dict,
+    ) -> None:
+        """Attach valid stored Responses state and limit input to new history."""
+        mode = self.provider_config.get("responses_state_mode", "stateless")
+        use_incremental_input = False
+        matching_index: int | None = None
+        matching_state: ProviderMessageState | None = None
+        for index in range(len(history) - 1, -1, -1):
+            state = self._matching_state(history[index], model)
+            if state is not None:
+                matching_index = index
+                matching_state = state
+                break
+        if matching_state is not None and matching_index is not None:
+            if matching_state.data.get("context_fingerprint") != self._fingerprint(
+                history[:matching_index]
+            ):
+                matching_state = None
+                matching_index = None
+
+        if mode == "previous_response_id" and matching_state is not None:
+            response_id = matching_state.data.get("response_id")
+            if isinstance(response_id, str) and response_id:
+                options["previous_response_id"] = response_id
+                options["store"] = True
+                use_incremental_input = True
+        elif mode == "conversation":
+            conversation_id = (
+                matching_state.data.get("conversation_id") if matching_state else None
+            )
+            if not isinstance(conversation_id, str) or not conversation_id:
+                conversation = await client.conversations.create()
+                conversation_id = _value(conversation, "id")
+            options["conversation"] = conversation_id
+            options["store"] = True
+            use_incremental_input = matching_state is not None
+
+        if use_incremental_input and matching_index is not None:
+            options["input"], _ = await self._input_items_from_history(
+                history[matching_index + 1 :],
+                model,
+            )
+
+    @staticmethod
+    def _remember_stream_response_id(state: _ResponsesStreamState, event: Any) -> None:
+        """Remember a response ID from an event that will not be fully merged."""
+        response_id = _value(event, "response_id")
+        if isinstance(response_id, str):
+            state.response_id = response_id
+        response = _value(event, "response")
+        if response is not None:
+            response_id = _value(response, "id")
+            if isinstance(response_id, str):
+                state.response_id = response_id
+
+    async def _close_stream(self, stream: AsyncIterator[Any]) -> None:
+        """Close an SDK stream when it exposes an asynchronous close method."""
+        aclose = getattr(stream, "aclose", None)
+        if aclose is None:
+            return
+        try:
+            await aclose()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Unable to close OpenAI Responses stream", exc_info=True)
+
+    async def _next_abortable_stream_event(
+        self,
+        stream: AsyncIterator[Any],
+        iterator: AsyncIterator[Any],
+        state: _ResponsesStreamState,
+        client: Any,
+        abort_signal: asyncio.Event | None,
+    ) -> Any:
+        """Read one event while allowing an abort signal to stop pending I/O."""
+        if abort_signal is None:
+            return await anext(iterator)
+
+        event_task = asyncio.ensure_future(anext(iterator))
+        abort_task = asyncio.create_task(abort_signal.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {event_task, abort_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if abort_task in done:
+                if event_task in done:
+                    try:
+                        self._remember_stream_response_id(state, event_task.result())
+                    except StopAsyncIteration:
+                        pass
+                if state.response_id:
+                    await self._cancel_background_response(client, state.response_id)
+                await self._close_stream(stream)
+                raise asyncio.CancelledError("OpenAI Responses stream aborted")
+            return await event_task
+        finally:
+            for task in (event_task, abort_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(event_task, abort_task, return_exceptions=True)
+
     async def text_chat(
         self,
         prompt: str | None = None,
@@ -851,49 +959,7 @@ class ProviderOpenAIResponses(Provider):
         key = random.choice(self.api_keys or [self.chosen_api_key])
         client = self._client_for(key)
         mode = self.provider_config.get("responses_state_mode", "stateless")
-        matching_index: int | None = None
-        matching_state: ProviderMessageState | None = None
-        for index in range(len(history) - 1, -1, -1):
-            state = self._matching_state(history[index], model)
-            if state is not None:
-                matching_index = index
-                matching_state = state
-                break
-        if matching_state is not None and matching_index is not None:
-            checkpoint = matching_state.data.get("context_fingerprint")
-            prefix_fingerprint = self._fingerprint(history[:matching_index])
-            if checkpoint != prefix_fingerprint:
-                matching_state = None
-        if (
-            mode == "previous_response_id"
-            and matching_state is not None
-            and matching_index is not None
-        ):
-            response_id = matching_state.data.get("response_id")
-            if isinstance(response_id, str) and response_id:
-                options["previous_response_id"] = response_id
-                options["store"] = True
-                # Only submit the new input following the continued response.
-                items, _ = await self._input_items_from_history(
-                    history[matching_index + 1 :],
-                    model,
-                )
-                options["input"] = items
-        elif mode == "conversation":
-            conversation_id = (
-                matching_state.data.get("conversation_id") if matching_state else None
-            )
-            if not isinstance(conversation_id, str) or not conversation_id:
-                conversation = await client.conversations.create()
-                conversation_id = _value(conversation, "id")
-            options["conversation"] = conversation_id
-            options["store"] = True
-            if matching_index is not None and matching_state is not None:
-                items, _ = await self._input_items_from_history(
-                    history[matching_index + 1 :],
-                    model,
-                )
-                options["input"] = items
+        await self._prepare_state_continuation(client, history, model, options)
         response = await self._create(
             client,
             options,
@@ -1029,46 +1095,7 @@ class ProviderOpenAIResponses(Provider):
         options["stream"] = True
         client = self._client_for(random.choice(self.api_keys or [self.chosen_api_key]))
         mode = self.provider_config.get("responses_state_mode", "stateless")
-        matching_index: int | None = None
-        matching_state: ProviderMessageState | None = None
-        for index in range(len(history) - 1, -1, -1):
-            state = self._matching_state(history[index], model)
-            if state is not None:
-                matching_index = index
-                matching_state = state
-                break
-        if matching_state is not None and matching_index is not None:
-            if matching_state.data.get("context_fingerprint") != self._fingerprint(
-                history[:matching_index]
-            ):
-                matching_state = None
-        if (
-            mode == "previous_response_id"
-            and matching_state is not None
-            and matching_index is not None
-        ):
-            response_id = matching_state.data.get("response_id")
-            if isinstance(response_id, str) and response_id:
-                options["previous_response_id"] = response_id
-                options["store"] = True
-                options["input"], _ = await self._input_items_from_history(
-                    history[matching_index + 1 :],
-                    model,
-                )
-        elif mode == "conversation":
-            conversation_id = (
-                matching_state.data.get("conversation_id") if matching_state else None
-            )
-            if not isinstance(conversation_id, str) or not conversation_id:
-                conversation = await client.conversations.create()
-                conversation_id = _value(conversation, "id")
-            options["conversation"] = conversation_id
-            options["store"] = True
-            if matching_state is not None and matching_index is not None:
-                options["input"], _ = await self._input_items_from_history(
-                    history[matching_index + 1 :],
-                    model,
-                )
+        await self._prepare_state_continuation(client, history, model, options)
         stream = cast(
             AsyncIterator[Any],
             await self._create(
@@ -1083,55 +1110,13 @@ class ProviderOpenAIResponses(Provider):
         while True:
             try:
                 while True:
-                    signal = kwargs.get("abort_signal")
-                    if signal is None:
-                        event = await anext(iterator)
-                    else:
-                        event_task = asyncio.ensure_future(anext(iterator))
-                        abort_task = asyncio.create_task(signal.wait())
-                        try:
-                            done, _ = await asyncio.wait(
-                                {event_task, abort_task},
-                                return_when=asyncio.FIRST_COMPLETED,
-                            )
-                            if abort_task in done:
-                                if event_task in done:
-                                    try:
-                                        created_event = event_task.result()
-                                    except StopAsyncIteration:
-                                        created_event = None
-                                    if created_event is not None:
-                                        state.response_id = _value(
-                                            created_event,
-                                            "response_id",
-                                            state.response_id,
-                                        )
-                                        created_response = _value(
-                                            created_event, "response"
-                                        )
-                                        if created_response is not None:
-                                            state.response_id = _value(
-                                                created_response,
-                                                "id",
-                                                state.response_id,
-                                            )
-                                if state.response_id:
-                                    await self._cancel_background_response(
-                                        client, state.response_id
-                                    )
-                                if aclose := getattr(stream, "aclose", None):
-                                    await aclose()
-                                raise asyncio.CancelledError(
-                                    "OpenAI Responses stream aborted"
-                                )
-                            event = await event_task
-                        finally:
-                            for task in (event_task, abort_task):
-                                if not task.done():
-                                    task.cancel()
-                            await asyncio.gather(
-                                event_task, abort_task, return_exceptions=True
-                            )
+                    event = await self._next_abortable_stream_event(
+                        stream,
+                        iterator,
+                        state,
+                        client,
+                        kwargs.get("abort_signal"),
+                    )
                     for delta in _merge_responses_stream_event(state, event):
                         yield delta
             except StopAsyncIteration:
@@ -1146,10 +1131,12 @@ class ProviderOpenAIResponses(Provider):
                     or not isinstance(state.response_id, str)
                     or not state.response_id
                 ):
+                    await self._close_stream(stream)
                     raise ProviderResponseError(
                         "OpenAI Responses stream interrupted after output; it was not replayed."
                     ) from exc
                 replay_response_id = state.response_id
+                await self._close_stream(stream)
                 stream = cast(
                     AsyncIterator[Any],
                     await retry_provider_request(

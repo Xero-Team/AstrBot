@@ -492,9 +492,34 @@ class _EventStream:
 
     async def __anext__(self):
         try:
-            return next(self.events)
+            event = next(self.events)
         except StopIteration as exc:
             raise StopAsyncIteration from exc
+        if isinstance(event, BaseException):
+            raise event
+        return event
+
+
+class _BlockingEventStream:
+    def __init__(self, first_event):
+        self.first_event = first_event
+        self.first_sent = False
+        self.waiting = asyncio.Event()
+        self.closed = False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self.first_sent:
+            self.first_sent = True
+            return self.first_event
+        self.waiting.set()
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    async def aclose(self):
+        self.closed = True
 
 
 @pytest.mark.asyncio
@@ -558,3 +583,179 @@ async def test_stream_uses_call_id_for_function_argument_deltas_and_final_respon
     }
     assert responses[-1].tools_call_ids == ["call_1"]
     assert responses[-1].tools_call_args == [{"city": "Paris"}]
+
+
+@pytest.mark.asyncio
+async def test_stream_abort_waiting_for_event_cancels_response_and_closes_stream():
+    signal = asyncio.Event()
+    stream = _BlockingEventStream(
+        SimpleNamespace(
+            type="response.output_text.delta",
+            response_id="resp_abort",
+            sequence_number=1,
+            delta="visible",
+        )
+    )
+    client = _ResponsesClient(stream)
+    provider = _configured_provider({"responses_background": True}, client)
+    responses = provider.text_chat_stream(prompt="hello", abort_signal=signal)
+
+    first = await anext(responses)
+    assert first.completion_text == "visible"
+    waiting = asyncio.create_task(anext(responses))
+    await stream.waiting.wait()
+    signal.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await waiting
+    assert client.cancel_calls == ["resp_abort"]
+    assert stream.closed is True
+
+
+@pytest.mark.asyncio
+async def test_background_stream_recovers_from_last_sequence_without_replaying_delta():
+    final = _completed_response(response_id="resp_recover")
+    initial = _EventStream(
+        [
+            SimpleNamespace(
+                type="response.output_text.delta",
+                response_id="resp_recover",
+                sequence_number=7,
+                delta="once",
+            ),
+            RuntimeError("connection lost"),
+        ]
+    )
+    recovered = _EventStream(
+        [SimpleNamespace(type="response.completed", response=final, sequence_number=8)]
+    )
+
+    class Client(_ResponsesClient):
+        async def retrieve(self, response_id, **options):
+            self.retrieve_calls.append((response_id, options))
+            return recovered
+
+    client = Client(initial)
+    provider = _configured_provider({"responses_background": True}, client)
+
+    responses = [item async for item in provider.text_chat_stream(prompt="hello")]
+
+    assert [item.completion_text for item in responses[:-1]] == ["once"]
+    assert client.retrieve_calls == [
+        ("resp_recover", {"stream": True, "starting_after": 7})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_non_background_interruption_is_not_replayed():
+    stream = _EventStream(
+        [
+            SimpleNamespace(
+                type="response.output_text.delta",
+                response_id="resp_no_replay",
+                sequence_number=1,
+                delta="once",
+            ),
+            RuntimeError("connection lost"),
+        ]
+    )
+    client = _ResponsesClient(stream)
+    provider = _configured_provider({}, client)
+
+    with pytest.raises(ProviderResponseError, match="not replayed"):
+        _ = [item async for item in provider.text_chat_stream(prompt="hello")]
+    assert client.retrieve_calls == []
+
+
+@pytest.mark.asyncio
+async def test_stream_context_fingerprint_mismatch_uses_full_history():
+    final = _completed_response()
+    stream = _EventStream([SimpleNamespace(type="response.completed", response=final)])
+    client = _ResponsesClient(stream)
+    provider = _configured_provider(
+        {"responses_state_mode": "previous_response_id", "store": True}, client
+    )
+    previous_user = {"role": "user", "content": "original"}
+    stale_state = ProviderMessageState(
+        provider_type="openai_responses",
+        provider_id="responses",
+        model="gpt-test",
+        data={"response_id": "resp_stale", "context_fingerprint": "mismatch"},
+    )
+
+    _ = [
+        item
+        async for item in provider.text_chat_stream(
+            prompt="next",
+            contexts=[
+                previous_user,
+                {"role": "assistant", "content": "old", "provider_state": stale_state},
+            ],
+        )
+    ]
+
+    options = client.create_calls[0]
+    assert "previous_response_id" not in options
+    assert len(options["input"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_stream_conversation_creates_then_reuses_and_persists_state():
+    first = _completed_response(response_id="resp_first")
+    second = _completed_response(response_id="resp_second")
+    client = _ResponsesClient(
+        _EventStream([SimpleNamespace(type="response.completed", response=first)])
+    )
+    provider = _configured_provider(
+        {"responses_state_mode": "conversation", "store": True}, client
+    )
+
+    first_result = [item async for item in provider.text_chat_stream(prompt="first")][
+        -1
+    ]
+    client.response = _EventStream(
+        [SimpleNamespace(type="response.completed", response=second)]
+    )
+    second_result = [
+        item
+        async for item in provider.text_chat_stream(
+            prompt="second",
+            contexts=[
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "first"}],
+                },
+                {
+                    "role": "assistant",
+                    "content": "first",
+                    "provider_state": first_result.provider_state,
+                },
+            ],
+        )
+    ][-1]
+
+    assert client.conversation_creations == 1
+    assert (
+        client.create_calls[0]["conversation"] == client.create_calls[1]["conversation"]
+    )
+    assert second_result.provider_state.data["conversation_id"] == "conv_1"
+
+
+@pytest.mark.asyncio
+async def test_stream_requires_completed_event_and_preserves_cancellation():
+    client = _ResponsesClient(_EventStream([]))
+    provider = _configured_provider({}, client)
+
+    with pytest.raises(ProviderResponseError, match="without response.completed"):
+        _ = [item async for item in provider.text_chat_stream(prompt="hello")]
+
+    signal = asyncio.Event()
+    signal.set()
+    provider = _configured_provider({}, _ResponsesClient(_EventStream([])))
+    with pytest.raises(asyncio.CancelledError):
+        _ = [
+            item
+            async for item in provider.text_chat_stream(
+                prompt="hello", abort_signal=signal
+            )
+        ]

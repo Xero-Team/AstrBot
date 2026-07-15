@@ -1084,6 +1084,90 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
+    def _resolve_function_tool(
+        self,
+        req: ProviderRequest,
+        tool_name: str,
+        tool_args: dict[str, T.Any] | None,
+    ) -> tuple[FunctionTool | None, dict[str, T.Any], list[str]]:
+        """Resolve a tool and discard arguments outside its declared schema."""
+        tool_args = tool_args or {}
+        if self.tool_schema_mode == "skills_like" and self._skill_like_raw_tool_set:
+            tool_set = self._skill_like_raw_tool_set
+        else:
+            tool_set = req.func_tool
+        if not tool_set:
+            return None, tool_args, []
+
+        function_tool = tool_set.get_tool(tool_name)
+        available_tools = tool_set.names()
+        if not function_tool or not function_tool.handler:
+            return function_tool, tool_args, available_tools
+
+        properties = (function_tool.parameters or {}).get("properties", {})
+        valid_params = {
+            key: value for key, value in tool_args.items() if key in properties
+        }
+        ignored_params = set(tool_args) - set(valid_params)
+        if ignored_params:
+            logger.warning("工具 %s 忽略非期望参数: %s", tool_name, ignored_params)
+        return function_tool, valid_params, available_tools
+
+    async def _normalize_call_tool_result(
+        self,
+        result: CallToolResult,
+        *,
+        tool_call_id: str,
+        tool_name: str,
+    ) -> tuple[str, list[T.Any]]:
+        """Turn MCP result content into text and cached image records."""
+        result_parts: list[str] = []
+        cached_images: list[T.Any] = []
+        for index, content_item in enumerate(result.content or []):
+            image_data = None
+            mime_type = "image/png"
+            if isinstance(content_item, TextContent):
+                result_parts.append(content_item.text)
+                continue
+            if isinstance(content_item, ImageContent):
+                image_data = content_item.data
+                mime_type = content_item.mimeType or mime_type
+            elif isinstance(content_item, EmbeddedResource):
+                resource = content_item.resource
+                if isinstance(resource, TextResourceContents):
+                    result_parts.append(resource.text)
+                    continue
+                if isinstance(resource, BlobResourceContents) and (
+                    resource.mimeType or ""
+                ).startswith("image/"):
+                    image_data = resource.blob
+                    mime_type = resource.mimeType
+                else:
+                    result_parts.append(
+                        "The tool has returned a data type that is not supported."
+                    )
+                    continue
+            else:
+                result_parts.append(
+                    "The tool has returned a data type that is not supported."
+                )
+                continue
+
+            cached_image = tool_image_cache.save_image(
+                base64_data=image_data,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                index=index,
+                mime_type=mime_type,
+            )
+            cached_images.append(cached_image)
+            result_parts.append(
+                f"Image returned and cached at path='{cached_image.file_path}'. "
+                "Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                f"with type='image' and path='{cached_image.file_path}'."
+            )
+        return "\n\n".join(result_parts), cached_images
+
     async def _handle_function_tools(
         self,
         req: ProviderRequest,
@@ -1129,21 +1213,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if not req.func_tool:
                     return
 
-                if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
-                ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
-                    # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
-                    available_tools = self._skill_like_raw_tool_set.names()
-                else:
-                    func_tool = req.func_tool.get_tool(func_tool_name)
-                    available_tools = req.func_tool.names()
-
-                #  Some API may return None for tools with no parameters
-                if func_tool_args is None:
-                    func_tool_args = {}
+                func_tool, valid_params, available_tools = self._resolve_function_tool(
+                    req,
+                    func_tool_name,
+                    func_tool_args,
+                )
+                func_tool_args = func_tool_args or {}
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
@@ -1153,34 +1228,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
                     )
                     continue
-
-                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
-
-                # 获取实际的 handler 函数
-                if func_tool.handler:
-                    logger.debug(
-                        f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}",
-                    )
-                    if func_tool.parameters and func_tool.parameters.get("properties"):
-                        expected_params = set(func_tool.parameters["properties"].keys())
-
-                        valid_params = {
-                            k: v
-                            for k, v in func_tool_args.items()
-                            if k in expected_params
-                        }
-
-                    # 记录被忽略的参数
-                    ignored_params = set(func_tool_args.keys()) - set(
-                        valid_params.keys(),
-                    )
-                    if ignored_params:
-                        logger.warning(
-                            f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
-                        )
-                else:
-                    # 如果没有 handler（如 MCP 工具），使用所有参数
-                    valid_params = func_tool_args
 
                 try:
                     await self.agent_hooks.on_tool_start(
@@ -1209,60 +1256,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             )
                             continue
 
-                        result_parts: list[str] = []
-                        for index, content_item in enumerate(res.content):
-                            if isinstance(content_item, TextContent):
-                                result_parts.append(content_item.text)
-                            elif isinstance(content_item, ImageContent):
-                                # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=content_item.data,
-                                    tool_call_id=func_tool_id,
-                                    tool_name=func_tool_name,
-                                    index=index,
-                                    mime_type=content_item.mimeType or "image/png",
-                                )
-                                result_parts.append(
-                                    f"Image returned and cached at path='{cached_img.file_path}'. "
-                                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                    f"with type='image' and path='{cached_img.file_path}'."
-                                )
-                                # Yield image info for LLM visibility (will be handled in step())
-                                yield _HandleFunctionToolsResult.from_cached_image(
-                                    cached_img
-                                )
-                            elif isinstance(content_item, EmbeddedResource):
-                                resource = content_item.resource
-                                if isinstance(resource, TextResourceContents):
-                                    result_parts.append(resource.text)
-                                elif (
-                                    isinstance(resource, BlobResourceContents)
-                                    and resource.mimeType
-                                    and resource.mimeType.startswith("image/")
-                                ):
-                                    # Cache the image instead of sending directly
-                                    cached_img = tool_image_cache.save_image(
-                                        base64_data=resource.blob,
-                                        tool_call_id=func_tool_id,
-                                        tool_name=func_tool_name,
-                                        index=index,
-                                        mime_type=resource.mimeType,
-                                    )
-                                    result_parts.append(
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    )
-                                    # Yield image info for LLM visibility
-                                    yield _HandleFunctionToolsResult.from_cached_image(
-                                        cached_img
-                                    )
-                                else:
-                                    result_parts.append(
-                                        "The tool has returned a data type that is not supported."
-                                    )
-                        if result_parts:
-                            inline_result = "\n\n".join(result_parts)
+                        (
+                            inline_result,
+                            cached_images,
+                        ) = await self._normalize_call_tool_result(
+                            res,
+                            tool_call_id=func_tool_id,
+                            tool_name=func_tool_name,
+                        )
+                        for cached_image in cached_images:
+                            yield _HandleFunctionToolsResult.from_cached_image(
+                                cached_image
+                            )
+                        if inline_result:
                             inline_result = await self._materialize_large_tool_result(
                                 tool_call_id=func_tool_id,
                                 content=inline_result,

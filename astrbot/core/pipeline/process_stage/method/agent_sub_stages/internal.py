@@ -165,6 +165,56 @@ class InternalAgentSubStage(Stage):
     ) -> None:
         await event.send(MessageChain().message(str(message)))
 
+    async def _finalize_agent_response(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        agent_runner: AgentRunner,
+        *,
+        action_type: str | None,
+        history_saved: bool,
+    ) -> None:
+        """Record completion state and persist a completed ordinary response."""
+        final_resp = agent_runner.get_final_llm_resp()
+        event.trace.record(
+            "astr_agent_complete",
+            stats=agent_runner.stats.to_dict(),
+            resp=final_resp.completion_text if final_resp else None,
+        )
+        create_tracked_task(
+            _BACKGROUND_TASKS,
+            _record_internal_agent_stats(
+                event,
+                req,
+                agent_runner,
+                final_resp,
+                self.ctx.plugin_manager.context.database,
+            ),
+            name="record_internal_agent_stats",
+        )
+        if (
+            action_type != "live"
+            and not history_saved
+            and (not event.is_stopped() or agent_runner.was_aborted())
+        ):
+            await self._save_to_history(
+                event,
+                req,
+                final_resp,
+                agent_runner.run_context.messages,
+                agent_runner.stats,
+                user_aborted=agent_runner.was_aborted(),
+            )
+        create_tracked_task(
+            _BACKGROUND_TASKS,
+            Metric.upload(
+                llm_tick=1,
+                model_name=agent_runner.provider.get_model(),
+                provider_type=agent_runner.provider.meta().type,
+            ),
+            name="upload_agent_metric",
+        )
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None]:
@@ -394,49 +444,12 @@ class InternalAgentSubStage(Stage):
                         ):
                             yield
 
-                    final_resp = agent_runner.get_final_llm_resp()
-
-                    event.trace.record(
-                        "astr_agent_complete",
-                        stats=agent_runner.stats.to_dict(),
-                        resp=final_resp.completion_text if final_resp else None,
-                    )
-
-                    create_tracked_task(
-                        _BACKGROUND_TASKS,
-                        _record_internal_agent_stats(
-                            event,
-                            req,
-                            agent_runner,
-                            final_resp,
-                            self.ctx.plugin_manager.context.database,
-                        ),
-                        name="record_internal_agent_stats",
-                    )
-
-                    # 检查事件是否被停止，如果被停止则不保存历史记录
-                    if (
-                        action_type != "live"
-                        and not history_saved
-                        and (not event.is_stopped() or agent_runner.was_aborted())
-                    ):
-                        await self._save_to_history(
-                            event,
-                            req,
-                            final_resp,
-                            agent_runner.run_context.messages,
-                            agent_runner.stats,
-                            user_aborted=agent_runner.was_aborted(),
-                        )
-
-                    create_tracked_task(
-                        _BACKGROUND_TASKS,
-                        Metric.upload(
-                            llm_tick=1,
-                            model_name=agent_runner.provider.get_model(),
-                            provider_type=agent_runner.provider.meta().type,
-                        ),
-                        name="upload_agent_metric",
+                    await self._finalize_agent_response(
+                        event,
+                        req,
+                        agent_runner,
+                        action_type=action_type,
+                        history_saved=history_saved,
                     )
                 finally:
                     if runner_registered and agent_runner is not None:

@@ -1313,6 +1313,45 @@ class NapCatPlatformAdapter(Platform):
             first_at_self_processed=first_at_self_processed,
         )
 
+    @staticmethod
+    def _convert_media_segment(
+        payload: object,
+    ) -> list[BaseMessageComponent] | None:
+        """Convert inbound image, record, video, and file segments."""
+        if isinstance(payload, ImageSegment):
+            image_sub_type = getattr(payload.data, "sub_type", None) or getattr(
+                payload.data, "type", None
+            )
+            return [
+                Image(
+                    file=payload.data.file,
+                    url=payload.data.url or "",
+                    _type=str(image_sub_type) if image_sub_type is not None else "",
+                )
+            ]
+        if isinstance(payload, RecordSegment):
+            return [
+                Record(
+                    file=payload.data.file,
+                    url=payload.data.url or "",
+                    path=payload.data.path or None,
+                )
+            ]
+        if isinstance(payload, VideoSegment):
+            return [Video(file=payload.data.file, url=payload.data.url or "")]
+        if isinstance(payload, FileSegment):
+            file_name = (
+                PurePosixPath(payload.data.file.replace("\\", "/")).name or "file"
+            )
+            return [
+                File(
+                    name=file_name,
+                    file=payload.data.file,
+                    url=payload.data.url or "",
+                )
+            ]
+        return None
+
     def _convert_segment_payload(
         self,
         payload: object,
@@ -1349,64 +1388,9 @@ class NapCatPlatformAdapter(Platform):
                 (first_at_self_processed),
             )
 
-        if isinstance(payload, ImageSegment):
-            image_sub_type = getattr(payload.data, "sub_type", None) or getattr(
-                payload.data, "type", None
-            )
-            return (
-                [
-                    Image(
-                        file=payload.data.file,
-                        url=payload.data.url or "",
-                        _type=(
-                            str(image_sub_type) if image_sub_type is not None else ""
-                        ),
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, RecordSegment):
-            return (
-                [
-                    Record(
-                        file=payload.data.file,
-                        url=payload.data.url or "",
-                        path=payload.data.path or None,
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, VideoSegment):
-            return (
-                [
-                    Video(
-                        file=payload.data.file,
-                        url=payload.data.url or "",
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
-
-        if isinstance(payload, FileSegment):
-            file_name = (
-                PurePosixPath(payload.data.file.replace("\\", "/")).name or "file"
-            )
-            return (
-                [
-                    File(
-                        name=file_name,
-                        file=payload.data.file,
-                        url=payload.data.url or "",
-                    )
-                ],
-                [],
-                first_at_self_processed,
-            )
+        media_components = self._convert_media_segment(payload)
+        if media_components is not None:
+            return media_components, [], first_at_self_processed
 
         if isinstance(payload, FaceSegment):
             if payload.data.id.isdigit():

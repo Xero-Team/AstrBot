@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest # 运行环境
     steps:
       - name: checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.9
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
         with:
           version: 11.13.0
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24.15.0'
           cache: 'pnpm'
@@ -32,7 +32,7 @@ jobs:
         run: pnpm run docs:build
         working-directory: './docs'
       - name: scp
-        uses: appleboy/scp-action@v1.0.0
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
         with:
           host: ${{ secrets.HOST_NEKO }}
           username: ${{ secrets.USERNAME }}
@@ -40,7 +40,7 @@ jobs:
           source: 'docs/.vitepress/dist/*'
           target: '/tmp/'
       - name: script
-        uses: appleboy/ssh-action@v1.2.5
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.HOST_NEKO }}
           username: ${{ secrets.USERNAME }}

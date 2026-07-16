@@ -176,6 +176,27 @@ def test_napcat_adapter_configures_forward_ws_client() -> None:
     assert adapter.client.max_size_bytes == 8 * 1024 * 1024
 
 
+def test_napcat_forward_ws_client_exposes_message_segment_builders() -> None:
+    adapter = _make_adapter(asyncio.Queue())
+    client = adapter.client
+
+    assert client.text("hello").to_dict() == {
+        "type": "text",
+        "data": {"text": "hello"},
+    }
+    assert client.at_all().to_dict() == {"type": "at", "data": {"qq": "all"}}
+    assert client.file(file="stored.bin", name="shown.bin").to_dict() == {
+        "type": "file",
+        "data": {"file": "stored.bin", "name": "shown.bin"},
+    }
+    assert client.music(music_type="qq", music_id=1).to_dict() == {
+        "type": "music",
+        "data": {"type": "qq", "id": "1"},
+    }
+    with pytest.raises(ValueError, match="target_id or user_id"):
+        client.poke()
+
+
 @pytest.mark.asyncio
 async def test_napcat_adapter_run_and_terminate_manage_forward_ws_lifecycle():
     queue: asyncio.Queue = asyncio.Queue()

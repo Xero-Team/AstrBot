@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 from asyncio import Queue
+from collections.abc import Awaitable, Callable
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -38,6 +39,7 @@ from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
 )
@@ -69,8 +71,40 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
+        self.umop_config_router: UmopConfigRouter | None = None
+        self.astrbot_config_mgr: AstrBotConfigManager | None = None
+        self.persona_mgr: PersonaManager | None = None
+        self.persona_runtime_manager: PersonaRuntimeManager | None = None
+        self.memory_manager: MemoryManager | None = None
+        self.provider_manager: ProviderManager | None = None
+        self.platform_manager: PlatformManager | None = None
+        self.conversation_manager: ConversationManager | None = None
+        self.platform_message_history_manager: PlatformMessageHistoryManager | None = (
+            None
+        )
+        self.kb_manager: KnowledgeBaseManager | None = None
+        self.star_context: Context | None = None
+        self.plugin_manager: PluginManager | None = None
+        self.event_bus: EventBus | None = None
+        self.dashboard_shutdown_event: asyncio.Event | None = None
+        self.pipeline_scheduler_mapping: dict[str, PipelineScheduler] = {}
+        self.curr_tasks: list[asyncio.Task] = []
         self._default_chat_provider_warning_emitted = False
         self._background_tasks: set[asyncio.Task] = set()
+        self._stop_lock = asyncio.Lock()
+        self._initializing = False
+        self._initialized = False
+        self._stopped = False
+        self._db_initialization_started = False
+        self._html_renderer_initialization_started = False
+        self._memory_initialization_started = False
+        self._plugin_reload_started = False
+        self._provider_initialization_started = False
+        self._kb_initialization_started = False
+        self._platform_initialization_started = False
+        self._event_bus_started = False
+        self._cron_started = False
+        self._temp_dir_cleaner_started = False
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -107,7 +141,10 @@ class AstrBotCoreLifecycle:
                 self.astrbot_config.get("subagent_orchestrator", {}),
             )
         except Exception as e:
-            logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
+            logger.error(
+                "Subagent orchestrator init failed: %s",
+                safe_error("", e),
+            )
 
     def _warn_about_unset_default_chat_provider(self) -> None:
         if self._default_chat_provider_warning_emitted:
@@ -155,6 +192,25 @@ class AstrBotCoreLifecycle:
 
         负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
         """
+        if self._initialized:
+            return
+        if self._initializing:
+            raise RuntimeError(
+                "AstrBot core lifecycle initialization is already running"
+            )
+
+        self._initializing = True
+        try:
+            await self._initialize()
+        except BaseException:
+            await self.stop()
+            raise
+        finally:
+            self._initializing = False
+        self._initialized = True
+
+    async def _initialize(self) -> None:
+        """Initialize core resources in dependency order."""
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
@@ -166,10 +222,12 @@ class AstrBotCoreLifecycle:
             LogManager.configure_logger(logger, self.astrbot_config)
             LogManager.configure_trace_logger(self.astrbot_config)
 
+        self._db_initialization_started = True
         await self.db.initialize()
         Metric.configure(self.astrbot_config, self.db)
         configure_trace(self.astrbot_config)
 
+        self._html_renderer_initialization_started = True
         await self.services.html_renderer.initialize()
 
         # 初始化 UMOP 配置路由器
@@ -205,6 +263,7 @@ class AstrBotCoreLifecycle:
         await self.persona_runtime_manager.initialize()
 
         self.memory_manager = MemoryManager(self.db)
+        self._memory_initialization_started = True
         await self.memory_manager.initialize()
 
         # 初始化供应商管理器
@@ -269,13 +328,16 @@ class AstrBotCoreLifecycle:
         )
 
         # 扫描、注册插件、实例化插件类
+        self._plugin_reload_started = True
         await self.plugin_manager.reload()
 
         # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
+        self._provider_initialization_started = True
         await self.provider_manager.initialize()
         self._warn_about_unset_default_chat_provider()
 
+        self._kb_initialization_started = True
         await self.kb_manager.initialize()
 
         # 初始化消息事件流水线调度器
@@ -298,6 +360,7 @@ class AstrBotCoreLifecycle:
         self.curr_tasks: list[asyncio.Task] = []
 
         # 根据配置实例化各个平台适配器
+        self._platform_initialization_started = True
         await self.platform_manager.initialize()
 
         # 初始化关闭控制面板的事件
@@ -317,18 +380,21 @@ class AstrBotCoreLifecycle:
             self.event_bus.dispatch(),
             name="event_bus",
         )
+        self._event_bus_started = True
         cron_task = None
         if self.cron_manager:
             cron_task = asyncio.create_task(
                 self.cron_manager.start(self.star_context),
                 name="cron_manager",
             )
+            self._cron_started = True
         temp_dir_cleaner_task = None
         if self.temp_dir_cleaner:
             temp_dir_cleaner_task = asyncio.create_task(
                 self.temp_dir_cleaner.run(),
                 name="temp_dir_cleaner",
             )
+            self._temp_dir_cleaner_started = True
         diagnostic_tasks = create_event_loop_diagnostic_tasks()
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
@@ -399,54 +465,128 @@ class AstrBotCoreLifecycle:
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
     async def stop(self) -> None:
-        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
-        if self.temp_dir_cleaner:
-            await self.temp_dir_cleaner.stop()
+        """Stop initialized resources once, including partially initialized state."""
 
-        if hasattr(self, "event_bus"):
-            await self.event_bus.shutdown()
+        async with self._stop_lock:
+            if self._stopped:
+                return
 
-        # 请求停止所有正在运行的异步任务
-        for task in self.curr_tasks:
-            task.cancel()
+            async def cleanup_once(
+                flag_name: str,
+                label: str,
+                action: Callable[[], Awaitable[None]],
+            ) -> None:
+                if not getattr(self, flag_name):
+                    return
+                setattr(self, flag_name, False)
+                try:
+                    await action()
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to clean up %s: %s",
+                        label,
+                        safe_error("", exc),
+                    )
 
-        if self.cron_manager:
-            await self.cron_manager.shutdown()
+            tasks = self.curr_tasks
+            self.curr_tasks = []
+            for task in tasks:
+                task.cancel()
 
-        if hasattr(self, "memory_manager"):
-            await self.memory_manager.terminate()
+            await cleanup_once(
+                "_temp_dir_cleaner_started",
+                "temporary directory cleaner",
+                lambda: self.temp_dir_cleaner.stop(),  # type: ignore[union-attr]
+            )
+            await cleanup_once(
+                "_event_bus_started",
+                "event bus",
+                lambda: self.event_bus.shutdown(),  # type: ignore[union-attr]
+            )
+            await cleanup_once(
+                "_cron_started",
+                "cron manager",
+                lambda: self.cron_manager.shutdown(),  # type: ignore[union-attr]
+            )
 
-        for plugin in self.plugin_manager.context.get_all_stars():
+            for task in tasks:
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    logger.error(
+                        "Task %s failed during shutdown: %s",
+                        task.get_name(),
+                        safe_error("", exc),
+                    )
+
             try:
-                await self.plugin_manager._terminate_plugin(plugin)
-            except Exception as e:
-                logger.warning(traceback.format_exc())
+                await cancel_tracked_tasks(self._background_tasks)
+            except Exception as exc:
                 logger.warning(
-                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
+                    "Failed to cancel lifecycle background tasks: %s",
+                    safe_error("", exc),
                 )
 
-        await self.provider_manager.terminate()
-        await self.platform_manager.terminate()
-        await self.kb_manager.terminate()
-        await self.services.html_renderer.terminate()
-        self.dashboard_shutdown_event.set()
+            await cleanup_once(
+                "_platform_initialization_started",
+                "platform manager",
+                lambda: self.platform_manager.terminate(),  # type: ignore[union-attr]
+            )
+            await cleanup_once(
+                "_kb_initialization_started",
+                "knowledge base manager",
+                lambda: self.kb_manager.terminate(),  # type: ignore[union-attr]
+            )
+            await cleanup_once(
+                "_provider_initialization_started",
+                "provider manager",
+                lambda: self.provider_manager.terminate(),  # type: ignore[union-attr]
+            )
 
-        # 再次遍历curr_tasks等待每个任务真正结束
-        for task in self.curr_tasks:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+            if self._plugin_reload_started:
+                self._plugin_reload_started = False
+                plugin_manager = self.plugin_manager
+                if plugin_manager is not None:
+                    try:
+                        plugins = list(plugin_manager.context.get_all_stars())
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to enumerate plugins during shutdown: %s",
+                            safe_error("", exc),
+                        )
+                        plugins = []
+                    for plugin in plugins:
+                        try:
+                            await plugin_manager._terminate_plugin(plugin)
+                        except Exception as exc:
+                            logger.warning(
+                                "Plugin %s failed to terminate: %s",
+                                plugin.name,
+                                safe_error("", exc),
+                            )
 
-        await cancel_tracked_tasks(self._background_tasks)
+            await cleanup_once(
+                "_memory_initialization_started",
+                "memory manager",
+                lambda: self.memory_manager.terminate(),  # type: ignore[union-attr]
+            )
+            await cleanup_once(
+                "_html_renderer_initialization_started",
+                "HTML renderer",
+                self.services.html_renderer.terminate,
+            )
+            await cleanup_once(
+                "_db_initialization_started",
+                "database",
+                self.db.close,
+            )
 
-        # 释放数据库引擎连接池
-        try:
-            await self.db.close()
-        except Exception as e:
-            logger.warning(f"释放数据库引擎失败: {e}")
+            if self.dashboard_shutdown_event is not None:
+                self.dashboard_shutdown_event.set()
+            self._initialized = False
+            self._stopped = True
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""

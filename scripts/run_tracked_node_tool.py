@@ -29,6 +29,21 @@ def parse_args() -> tuple[str, list[str], list[str]]:
     return tool, patterns, tool_args
 
 
+def tracked_files(repo_root: Path, patterns: list[str]) -> list[str]:
+    """Return existing tracked files that match the requested patterns."""
+    files = subprocess.run(
+        ["git", "ls-files", "-z", "--", *patterns],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    return [
+        path.decode()
+        for path in files
+        if path and (repo_root / path.decode()).is_file()
+    ]
+
+
 def main() -> None:
     tool, patterns, tool_args = parse_args()
     repo_root = Path(__file__).resolve().parents[1]
@@ -39,16 +54,10 @@ def main() -> None:
             f"Node tool '{tool}' is not installed. Run 'make bootstrap' first."
         )
 
-    files = subprocess.run(
-        ["git", "ls-files", "-z", "--", *patterns],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-    ).stdout.split(b"\0")
-    tracked_files = [path.decode() for path in files if path]
-    for index in range(0, len(tracked_files), 64):
+    files = tracked_files(repo_root, patterns)
+    for index in range(0, len(files), 64):
         subprocess.run(
-            [str(tool_path), *tool_args, *tracked_files[index : index + 64]],
+            [str(tool_path), *tool_args, *files[index : index + 64]],
             cwd=repo_root,
             check=True,
         )

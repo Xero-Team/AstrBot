@@ -19,9 +19,15 @@ class Check:
 
 
 def version(command: tuple[str, ...], cwd: Path) -> str | None:
-    if shutil.which(command[0]) is None:
+    executable = shutil.which(command[0])
+    if executable is None:
         return None
-    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True)
+    try:
+        result = subprocess.run(
+            (executable, *command[1:]), cwd=cwd, text=True, capture_output=True
+        )
+    except OSError:
+        return None
     if result.returncode:
         return None
     output = (result.stdout or result.stderr).strip()

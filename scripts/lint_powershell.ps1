@@ -21,7 +21,9 @@ if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
 }
 
 $settings = Join-Path (Split-Path -Parent $PSScriptRoot) 'PSScriptAnalyzerSettings.psd1'
-$files = git ls-files '*.ps1'
+$files = @(git ls-files '*.ps1' | Where-Object {
+        Test-Path -LiteralPath $_ -PathType Leaf
+    })
 
 if (-not $files) {
     Write-Host '==> [ps] no PowerShell files'

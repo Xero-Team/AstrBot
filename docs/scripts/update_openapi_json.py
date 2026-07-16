@@ -25,6 +25,8 @@ PUBLIC_OPEN_API_TAGS = {
     "Plugin Sources",
     "MCP",
     "Skills",
+    "Knowledge Base",
+    "Memory",
     "Personas",
     "Sessions",
     "Conversations",

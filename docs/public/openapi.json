@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, kb, memory, data, file, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
   },
   "servers": [
     {
@@ -58,6 +58,12 @@
     },
     {
       "name": "Skills"
+    },
+    {
+      "name": "Knowledge Base"
+    },
+    {
+      "name": "Memory"
     },
     {
       "name": "Personas"
@@ -555,6 +561,34 @@
             "$ref": "#/components/parameters/BotId"
           }
         ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/bots/{bot_id}/actions": {
+      "post": {
+        "tags": ["Bots"],
+        "summary": "Invoke a supported bot platform action",
+        "operationId": "invokeBotAction",
+        "x-astrbot-scope": "bot",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BotId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotActionRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
@@ -1252,7 +1286,7 @@
         "tags": ["Chat"],
         "summary": "List chat-selectable configuration profiles",
         "operationId": "listChatConfigs",
-        "x-astrbot-scope": "config",
+        "x-astrbot-scope": "chat",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
@@ -3080,6 +3114,689 @@
         }
       }
     },
+    "/api/v1/knowledge-bases": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "List knowledge bases",
+        "operationId": "listKnowledgeBases",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "refresh_stats",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Knowledge Base"],
+        "summary": "Create a knowledge base",
+        "operationId": "createKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "Get a knowledge base",
+        "operationId": "getKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Knowledge Base"],
+        "summary": "Update a knowledge base",
+        "operationId": "updateKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Knowledge Base"],
+        "summary": "Delete a knowledge base",
+        "operationId": "deleteKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/stats": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "Get knowledge base stats",
+        "operationId": "getKnowledgeBaseStats",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "List knowledge base documents",
+        "operationId": "listKnowledgeDocuments",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter documents by name (case-insensitive partial match)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Knowledge Base"],
+        "summary": "Upload a document to a knowledge base",
+        "operationId": "uploadKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/import": {
+      "post": {
+        "tags": ["Knowledge Base"],
+        "summary": "Import documents already available on the server",
+        "operationId": "importKnowledgeDocuments",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/import-url": {
+      "post": {
+        "tags": ["Knowledge Base"],
+        "summary": "Import a document from URL",
+        "operationId": "importKnowledgeDocumentFromUrl",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentUrlImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{document_id}": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "Get a knowledge base document",
+        "operationId": "getKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Knowledge Base"],
+        "summary": "Delete a knowledge base document",
+        "operationId": "deleteKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/chunks": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "List document chunks",
+        "operationId": "listKnowledgeChunks",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}": {
+      "delete": {
+        "tags": ["Knowledge Base"],
+        "summary": "Delete a document chunk",
+        "operationId": "deleteKnowledgeChunk",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/ChunkId"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/retrieve": {
+      "post": {
+        "tags": ["Knowledge Base"],
+        "summary": "Retrieve knowledge base chunks",
+        "operationId": "retrieveKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeRetrieveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/tasks/{task_id}": {
+      "get": {
+        "tags": ["Knowledge Base"],
+        "summary": "Get knowledge base import task progress",
+        "operationId": "getKnowledgeTask",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/facts": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "List long-term memory facts",
+        "operationId": "listMemoryFacts",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chat_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "deleted", "all"],
+              "default": "active"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Memory"],
+        "summary": "Create a long-term memory fact",
+        "operationId": "createMemoryFact",
+        "x-astrbot-scope": "memory",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryFactCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/facts/{fact_id}": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "Get a memory fact with operation logs",
+        "operationId": "getMemoryFact",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FactId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Memory"],
+        "summary": "Update editable memory fact fields",
+        "operationId": "updateMemoryFact",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FactId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryFactPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/facts/{fact_id}/delete": {
+      "post": {
+        "tags": ["Memory"],
+        "summary": "Soft-delete a memory fact",
+        "operationId": "deleteMemoryFact",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FactId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryFactActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/facts/{fact_id}/restore": {
+      "post": {
+        "tags": ["Memory"],
+        "summary": "Restore a soft-deleted memory fact",
+        "operationId": "restoreMemoryFact",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FactId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryFactActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/profiles": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "List aggregated memory profiles",
+        "operationId": "listMemoryProfiles",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chat_scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/profiles/{person_id}/refresh": {
+      "post": {
+        "tags": ["Memory"],
+        "summary": "Refresh a memory profile asynchronously",
+        "operationId": "refreshMemoryProfile",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryProfileRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/operations": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "List memory operation audit logs",
+        "operationId": "listMemoryOperations",
+        "x-astrbot-scope": "memory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "target_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/memory/stats": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "Get memory subsystem stats",
+        "operationId": "getMemoryStats",
+        "x-astrbot-scope": "memory",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/personas/tree": {
       "get": {
         "tags": ["Personas"],
@@ -4075,6 +4792,14 @@
           "type": "string"
         }
       },
+      "ChunkId": {
+        "name": "chunk_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "ConfigId": {
         "name": "config_id",
         "in": "path",
@@ -4091,6 +4816,14 @@
           "type": "string"
         }
       },
+      "DocumentId": {
+        "name": "document_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "FilePath": {
         "name": "file_path",
         "in": "path",
@@ -4098,6 +4831,14 @@
         "description": "URL-encoded relative file path.",
         "schema": {
           "type": "string"
+        }
+      },
+      "FactId": {
+        "name": "fact_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer"
         }
       },
       "FolderId": {
@@ -4110,6 +4851,14 @@
       },
       "GroupId": {
         "name": "group_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "KbId": {
+        "name": "kb_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -4193,6 +4942,14 @@
       },
       "SourceId": {
         "name": "source_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "TaskId": {
+        "name": "task_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -4290,6 +5047,19 @@
         "required": ["config"],
         "properties": {
           "config": {
+            "$ref": "#/components/schemas/DynamicConfig"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BotActionRequest": {
+        "type": "object",
+        "required": ["action_name"],
+        "properties": {
+          "action_name": {
+            "type": "string"
+          },
+          "payload": {
             "$ref": "#/components/schemas/DynamicConfig"
           }
         },
@@ -4562,6 +5332,9 @@
           "filename": {
             "type": "string"
           },
+          "stored_filename": {
+            "type": "string"
+          },
           "mime_type": {
             "type": "string"
           }
@@ -4831,6 +5604,201 @@
         "required": ["release_id"],
         "properties": {
           "release_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "KnowledgeBaseRequest": {
+        "type": "object",
+        "properties": {
+          "kb_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "embedding_provider_id": {
+            "type": ["string", "null"]
+          },
+          "rerank_provider_id": {
+            "type": ["string", "null"]
+          },
+          "chunk_size": {
+            "type": "integer"
+          },
+          "chunk_overlap": {
+            "type": "integer"
+          },
+          "top_k_dense": {
+            "type": "integer"
+          },
+          "top_k_sparse": {
+            "type": "integer"
+          },
+          "top_m_final": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeBaseCreateRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/KnowledgeBaseRequest"
+          },
+          {
+            "type": "object",
+            "required": ["kb_name", "embedding_provider_id"],
+            "properties": {
+              "kb_name": {
+                "type": "string"
+              },
+              "embedding_provider_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "KnowledgeDocumentUploadRequest": {
+        "type": "object",
+        "required": ["file"],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "KnowledgeDocumentImportRequest": {
+        "type": "object",
+        "required": ["paths"],
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parser": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeDocumentUrlImportRequest": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "parser": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeRetrieveRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "top_k": {
+            "type": "integer",
+            "default": 5
+          },
+          "score_threshold": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MemoryFactCreateRequest": {
+        "type": "object",
+        "required": ["person_id", "chat_id", "fact_text"],
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "chat_id": {
+            "type": "string"
+          },
+          "scope_id": {
+            "type": "string"
+          },
+          "fact_text": {
+            "type": "string"
+          },
+          "fact_type": {
+            "type": "string"
+          },
+          "source_message_id": {
+            "type": "string"
+          },
+          "evidence_message_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "MemoryFactPatchRequest": {
+        "type": "object",
+        "properties": {
+          "fact_text": {
+            "type": "string"
+          },
+          "fact_type": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "MemoryFactActionRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "MemoryProfileRefreshRequest": {
+        "type": "object",
+        "properties": {
+          "chat_scope": {
+            "type": "string"
+          },
+          "scope_id": {
+            "type": "string"
+          },
+          "chat_id": {
             "type": "string"
           }
         },

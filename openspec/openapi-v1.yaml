@@ -1018,7 +1018,7 @@ paths:
       tags: [Chat]
       summary: List chat-selectable configuration profiles
       operationId: listChatConfigs
-      x-astrbot-scope: config
+      x-astrbot-scope: chat
       responses:
         '200':
           $ref: '#/components/responses/Ok'

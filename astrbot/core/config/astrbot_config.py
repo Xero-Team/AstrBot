@@ -296,6 +296,7 @@ class AstrBotConfig(dict):
         if replace_config:
             self.update(replace_config)
         directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        os.makedirs(directory, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
             dir=directory,
             prefix=f".{os.path.basename(self.config_path)}.",

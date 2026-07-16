@@ -626,6 +626,17 @@ class TestConfigHotReload:
             if entry.name != os.path.basename(temp_config_path)
         ] == []
 
+    def test_save_config_creates_missing_parent_directory(
+        self, tmp_path, minimal_default_config
+    ):
+        config_path = tmp_path / "missing" / "config.json"
+
+        AstrBotConfig(
+            config_path=str(config_path), default_config=minimal_default_config
+        )
+
+        assert config_path.is_file()
+
     def test_modification_persists_after_reload(
         self, temp_config_path, minimal_default_config
     ):

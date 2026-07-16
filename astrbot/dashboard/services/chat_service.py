@@ -904,6 +904,7 @@ class ChatService:
         display_accumulator = BotMessageAccumulator()
         pending_agent_stats = {}
         pending_refs = {}
+        cancellation: asyncio.CancelledError | None = None
 
         async def flush_pending_bot_message():
             nonlocal pending_accumulator, pending_agent_stats, pending_refs
@@ -1043,8 +1044,9 @@ class ChatService:
                 if msg_type == "end":
                     run.status = "completed"
                     break
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
             run.status = "stopped"
+            cancellation = exc
         except Exception as exc:
             run.status = "failed"
             logger.exception(f"WebChat run unexpected error: {exc}", exc_info=True)
@@ -1053,40 +1055,57 @@ class ChatService:
                 {"type": "error", "data": "WebChat run failed"},
             )
         finally:
-            try:
-                saved_record = await asyncio.shield(flush_pending_bot_message())
-                if saved_record:
-                    self._publish_chat_run(
-                        run,
-                        {
-                            "type": "message_saved",
-                            "data": {
-                                "id": saved_record.id,
-                                "created_at": to_utc_isoformat(saved_record.created_at),
-                                "llm_checkpoint_id": run.llm_checkpoint_id,
-                            },
-                        },
-                    )
-            except Exception as exc:
-                logger.exception(
-                    f"Failed to persist pending webchat message: {exc}",
-                    exc_info=True,
-                )
 
-            webchat_queue_mgr.remove_back_queue(run.run_id)
-            if self.chat_runs.get(run.run_id) is run:
-                self.chat_runs.pop(run.run_id, None)
-            run_ids = self.chat_runs_by_session.get(run.session_id)
-            if run_ids is not None:
-                run_ids.discard(run.run_id)
-                if not run_ids:
-                    self.chat_runs_by_session.pop(run.session_id, None)
-                    self.running_convs.pop(run.session_id, None)
-            for subscriber in list(run.subscribers):
-                while not subscriber.empty():
-                    subscriber.get_nowait()
-                subscriber.put_nowait(None)
-            run.subscribers.clear()
+            async def finalize_run() -> None:
+                try:
+                    saved_record = await flush_pending_bot_message()
+                    if saved_record:
+                        self._publish_chat_run(
+                            run,
+                            {
+                                "type": "message_saved",
+                                "data": {
+                                    "id": saved_record.id,
+                                    "created_at": to_utc_isoformat(
+                                        saved_record.created_at
+                                    ),
+                                    "llm_checkpoint_id": run.llm_checkpoint_id,
+                                },
+                            },
+                        )
+                except Exception as exc:
+                    logger.exception(
+                        f"Failed to persist pending webchat message: {exc}",
+                        exc_info=True,
+                    )
+                finally:
+                    webchat_queue_mgr.remove_back_queue(run.run_id)
+                    if self.chat_runs.get(run.run_id) is run:
+                        self.chat_runs.pop(run.run_id, None)
+                    run_ids = self.chat_runs_by_session.get(run.session_id)
+                    if run_ids is not None:
+                        run_ids.discard(run.run_id)
+                        if not run_ids:
+                            self.chat_runs_by_session.pop(run.session_id, None)
+                            self.running_convs.pop(run.session_id, None)
+                    for subscriber in list(run.subscribers):
+                        while not subscriber.empty():
+                            subscriber.get_nowait()
+                        subscriber.put_nowait(None)
+                    run.subscribers.clear()
+
+            cleanup_task = asyncio.create_task(
+                finalize_run(),
+                name=f"webchat_run_cleanup:{run.run_id}",
+            )
+            try:
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError as exc:
+                cancellation = cancellation or exc
+                await cleanup_task
+
+        if cancellation is not None:
+            raise cancellation
 
     async def build_chat_stream(
         self,

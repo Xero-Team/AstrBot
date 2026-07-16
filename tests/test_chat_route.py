@@ -129,6 +129,69 @@ async def test_chat_stream_disconnect_does_not_own_run_lifecycle(
 
 
 @pytest.mark.asyncio
+async def test_chat_run_cancellation_persists_and_cleans_before_propagating(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    session_id = "cancelled-run-session"
+    persistence_started = asyncio.Event()
+    release_persistence = asyncio.Event()
+
+    async def save_bot_message(*_args, **_kwargs):
+        persistence_started.set()
+        await release_persistence.wait()
+        return SimpleNamespace(id=3, created_at=datetime.now(UTC))
+
+    service.save_bot_message = AsyncMock(side_effect=save_bot_message)
+    stream = await service.build_chat_stream(
+        "alice",
+        {"message": "hello", "session_id": session_id},
+    )
+    run = next(iter(service.chat_runs.values()))
+    subscriber = next(iter(run.subscribers))
+
+    try:
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            {
+                "type": "plain",
+                "data": "partial answer",
+                "streaming": True,
+                "message_id": run.run_id,
+            },
+        )
+        for _ in range(20):
+            if run.message_parts:
+                break
+            await asyncio.sleep(0)
+
+        assert run.task is not None
+        run.task.cancel()
+        await asyncio.wait_for(persistence_started.wait(), timeout=1)
+        assert not run.task.done()
+
+        release_persistence.set()
+        with pytest.raises(asyncio.CancelledError):
+            await run.task
+
+        assert run.task.cancelled()
+        assert run.status == "stopped"
+        service.save_bot_message.assert_awaited_once()
+        assert run.run_id not in service.chat_runs
+        assert run.run_id not in chat_service.webchat_queue_mgr.back_queues
+        assert session_id not in service.running_convs
+        assert not run.subscribers
+        assert await subscriber.get() is None
+    finally:
+        release_persistence.set()
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
 async def test_resumed_stream_starts_with_full_snapshot(chat_service_instance):
     service = chat_service_instance
     session_id = "resume-session"

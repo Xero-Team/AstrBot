@@ -12,7 +12,6 @@ export const useCustomizerStore = defineStore('customizer', {
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
-    fontTheme: 'Noto Sans SC',
     themeMode: config.themeMode,
     systemPrefersDark: getInitialSystemPrefersDark(),
     inputBg: config.inputBg,
@@ -38,10 +37,6 @@ export const useCustomizerStore = defineStore('customizer', {
     SET_MINI_SIDEBAR(payload: boolean) {
       this.mini_sidebar = payload;
     },
-    SET_FONT(payload: string) {
-      this.fontTheme = payload;
-    },
-
     SET_THEME_MODE(mode: ThemeMode) {
       this.themeMode = mode;
       localStorage.setItem('themeMode', mode);

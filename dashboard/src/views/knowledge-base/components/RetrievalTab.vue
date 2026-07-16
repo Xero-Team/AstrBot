@@ -295,7 +295,7 @@ const getScoreColor = (score: number) => {
   padding: 16px;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: var(--astrbot-font-mono);
   font-size: 0.9rem;
   line-height: 1.6;
   height: 120px;

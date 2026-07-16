@@ -1522,18 +1522,7 @@ function toggleTheme() {
   overflow: hidden;
   background: var(--chat-page-bg);
   color: rgb(var(--v-theme-on-surface));
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Open Sans',
-    'Helvetica Neue',
-    sans-serif;
+  font-family: var(--astrbot-font-ui);
 }
 
 .chat-ui.is-dark {

@@ -405,9 +405,7 @@ onBeforeUnmount(() => {
 :deep(.console-log-line) {
   display: block;
   margin: 0 0 2px;
-  font-family:
-    SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono),
-    monospace;
+  font-family: var(--astrbot-font-mono);
   font-size: 12px;
   white-space: pre-wrap;
 }

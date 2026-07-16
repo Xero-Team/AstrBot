@@ -570,9 +570,7 @@ const isProviderSaving = (providerId) =>
 }
 
 .provider-model-row__title--mono {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+  font-family: var(--astrbot-font-mono);
 }
 
 .provider-model-row__subtitle {

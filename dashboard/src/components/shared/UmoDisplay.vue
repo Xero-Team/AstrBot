@@ -162,9 +162,7 @@ const platformColor = computed(() => getPlatformColor(resolvedPlatform.value));
 
 .umo-display__name--umo {
   color: rgba(var(--v-theme-on-surface), 0.78);
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    monospace;
+  font-family: var(--astrbot-font-mono);
   font-size: 12px;
 }
 
@@ -193,9 +191,7 @@ const platformColor = computed(() => getPlatformColor(resolvedPlatform.value));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    monospace;
+  font-family: var(--astrbot-font-mono);
 }
 
 .umo-display--compact .umo-display__name {

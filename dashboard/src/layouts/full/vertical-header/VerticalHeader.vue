@@ -1059,7 +1059,7 @@ onMounted(async () => {
       }"
       @click="handleLogoClick"
     >
-      <span class="logo-text Outfit"
+      <span class="logo-text"
         >Astr<span class="logo-text bot-text-wrapper"
           >Bot
           <img
@@ -1071,7 +1071,7 @@ onMounted(async () => {
       ></span>
       <span
         v-if="isChatPath"
-        class="logo-text logo-text-light Outfit"
+        class="logo-text logo-text-light"
         style="color: grey"
         >ChatUI</span
       >

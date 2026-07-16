@@ -78,14 +78,6 @@ $sizes: (
   color: rgb(255, 255, 255) !important;
 }
 
-// font family
-
-body {
-  .Outfit {
-    font-family: $body-font-family !important;
-  }
-}
-
 @keyframes blink {
   50% {
     opacity: 0;

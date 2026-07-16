@@ -7,6 +7,7 @@ import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
 import { setupI18n } from './i18n/composables';
 import '@/scss/style.scss';
+import '@/assets/fonts/fonts.css';
 import { setupHttpClient } from './api/http';
 import { waitForRouterReadyInBackground } from './utils/routerReadiness';
 

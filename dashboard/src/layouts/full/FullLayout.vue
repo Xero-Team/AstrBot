@@ -88,7 +88,6 @@ onMounted(() => {
   <v-locale-provider>
     <v-app
       :class="[
-        customizer.fontTheme,
         customizer.mini_sidebar ? 'mini-sidebar' : '',
         customizer.inputBg ? 'inputWithbg' : '',
       ]"

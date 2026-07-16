@@ -515,7 +515,7 @@ function closeImage() {
 }
 
 .welcome-title {
-  font-family: 'Outfit', 'Noto Sans', sans-serif;
+  font-family: var(--astrbot-font-ui);
   font-size: 24px;
   font-weight: 700;
 }

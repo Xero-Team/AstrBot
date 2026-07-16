@@ -544,7 +544,7 @@ onMounted(() => {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--astrbot-font-mono);
 }
 
 .gap-2 {

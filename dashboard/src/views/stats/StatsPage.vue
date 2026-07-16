@@ -603,8 +603,7 @@ const messageChartOptions = computed<ApexOptions>(() => ({
     background: 'transparent',
     toolbar: { show: false },
     zoom: { enabled: false },
-    fontFamily:
-      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'AstrBot UI, AstrBot Noto Sans SC, system-ui, sans-serif',
   },
   theme: {
     mode: isDark.value ? 'dark' : 'light',
@@ -660,8 +659,7 @@ const providerChartOptions = computed<ApexOptions>(() => ({
     toolbar: { show: false },
     zoom: { enabled: false },
     stacked: true,
-    fontFamily:
-      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'AstrBot UI, AstrBot Noto Sans SC, system-ui, sans-serif',
   },
   theme: {
     mode: isDark.value ? 'dark' : 'light',
@@ -765,13 +763,7 @@ onBeforeUnmount(() => {
   max-width: 1560px;
   margin: 0 auto;
   color: var(--stats-text);
-  font-family:
-    'SF Pro Display',
-    'SF Pro Text',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--astrbot-font-ui);
 }
 
 .stats-header {

@@ -539,8 +539,7 @@ const showActionArea = computed(() => {
 
 :deep(.markdown-body) {
   --markdown-border: rgba(128, 128, 128, 0.3);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: var(--astrbot-font-ui);
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
@@ -626,7 +625,7 @@ const showActionArea = computed(() => {
   background-color: rgba(110, 118, 129, 0.2);
   border-radius: 6px;
   font-size: 85%;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: var(--astrbot-font-mono);
 }
 
 :deep(.markdown-body pre.shiki) {

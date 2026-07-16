@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
   height: 100%;
   overflow-y: auto;
   color: #2b3340;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--astrbot-font-mono);
 }
 
 .trace-row {

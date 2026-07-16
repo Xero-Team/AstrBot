@@ -233,7 +233,7 @@ onUnmounted(() => {
 }
 
 .detail-json {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--astrbot-font-mono);
   white-space: pre-wrap;
   max-height: 200px;
   overflow-y: auto;

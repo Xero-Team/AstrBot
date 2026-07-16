@@ -6,6 +6,8 @@
   "author": "CodedThemes",
   "scripts": {
     "dev": "node scripts/subset-mdi-font.mjs && vite --host",
+    "fonts:update": "node scripts/update-fonts.mjs",
+    "fonts:check": "node scripts/check-fonts.mjs",
     "build:t2i-shiki-runtime": "node scripts/build-t2i-shiki-runtime.mjs",
     "build": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build && node scripts/write-dashboard-version.mjs",
     "build-stage": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build --base=/vue/free/stage/ && node scripts/write-dashboard-version.mjs",
@@ -72,7 +74,6 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.64.0",
     "vite": "8.1.4",
-    "vite-plugin-webfont-dl": "3.12.0",
     "vitest": "4.1.10",
     "vue-eslint-parser": "10.4.1",
     "vue-tsc": "3.3.7"

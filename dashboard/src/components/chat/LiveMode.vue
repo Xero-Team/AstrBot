@@ -687,7 +687,7 @@ onBeforeUnmount(() => {
   font-size: 24px;
   color: var(--v-theme-on-surface);
   margin-bottom: 40px;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--astrbot-font-ui);
 }
 
 .messages-container {

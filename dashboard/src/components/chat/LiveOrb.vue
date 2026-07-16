@@ -490,7 +490,7 @@ const styleVars = computed(() => {
   position: absolute;
   top: 0;
   color: rgba(180, 255, 255, 0.9);
-  font-family: 'Courier New', monospace;
+  font-family: var(--astrbot-font-mono);
   font-weight: bold;
   line-height: 1.2;
   white-space: pre;

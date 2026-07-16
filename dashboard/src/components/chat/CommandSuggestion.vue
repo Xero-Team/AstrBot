@@ -184,7 +184,7 @@ function handleMouseLeave() {
 }
 
 .command-name {
-  font-family: 'Fira Code', 'Consolas', monospace;
+  font-family: var(--astrbot-font-mono);
   font-size: 13px;
   font-weight: 600;
   color: rgb(var(--v-theme-primary));

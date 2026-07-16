@@ -5,9 +5,9 @@ from datetime import datetime
 from io import BytesIO
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class ConversationServiceError(Exception):
@@ -25,7 +25,7 @@ class ConversationService:
     def __init__(
         self,
         db_helper: BaseDatabase,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
     ) -> None:
         self.db_helper = db_helper
         self.conv_mgr = core_lifecycle.conversation_manager

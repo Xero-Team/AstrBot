@@ -13,7 +13,6 @@ import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
@@ -28,6 +27,7 @@ from astrbot.dashboard.services.chat_service import (
     build_bot_history_content,
     collect_plain_text_from_message_parts,
 )
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 SendJson = Callable[[dict], Awaitable[None]]
 ReceiveJson = Callable[[], Awaitable[dict]]
@@ -115,7 +115,7 @@ class LiveChatService:
     def __init__(
         self,
         db: Any,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
     ) -> None:
         self.db = db
         self.core_lifecycle = core_lifecycle

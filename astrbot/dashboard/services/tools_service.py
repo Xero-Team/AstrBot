@@ -3,9 +3,9 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class ToolsServiceError(Exception):
@@ -13,7 +13,7 @@ class ToolsServiceError(Exception):
 
 
 class ToolsService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.tool_mgr = core_lifecycle.provider_manager.llm_tools
         self.preferences = core_lifecycle.services.preferences

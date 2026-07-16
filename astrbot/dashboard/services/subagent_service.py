@@ -2,7 +2,7 @@ import traceback
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class SubAgentServiceError(Exception):
@@ -10,7 +10,7 @@ class SubAgentServiceError(Exception):
 
 
 class SubAgentService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
 
     def get_config(self) -> dict:

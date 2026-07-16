@@ -6,7 +6,6 @@ from typing import Any
 from uuid import uuid4
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
@@ -22,6 +21,7 @@ from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
 )
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 SendJson = Callable[[dict], Awaitable[None]]
 ReceiveJson = Callable[[], Awaitable[Any]]
@@ -45,7 +45,7 @@ class OpenApiService:
     def __init__(
         self,
         db: BaseDatabase,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
     ) -> None:
         self.db = db
         self.core_lifecycle = core_lifecycle

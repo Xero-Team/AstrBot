@@ -8,11 +8,11 @@ import aiofiles
 from starlette.datastructures import UploadFile
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.task_utils import create_tracked_task
 from astrbot.dashboard.schemas import KnowledgeBaseRequest
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
 
@@ -22,7 +22,7 @@ class KnowledgeBaseServiceError(Exception):
 
 
 class KnowledgeBaseService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.upload_progress: dict[str, dict[str, Any]] = {}
         self.upload_tasks: dict[str, dict[str, Any]] = {}

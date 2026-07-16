@@ -17,7 +17,6 @@ from astrbot.core.config.default import (
     DEFAULT_VALUE_MAP,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
@@ -33,6 +32,7 @@ from astrbot.core.utils.totp import (
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.dashboard.upload_utils import save_upload_to_path
 
 PROTECTED_2FA_CONFIG_PATHS = (
@@ -588,7 +588,7 @@ def save_config(
 class ConfigProfileService:
     def __init__(
         self,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
         db: BaseDatabase | None = None,
     ) -> None:
         self.core_lifecycle = core_lifecycle
@@ -706,7 +706,7 @@ class ConfigProfileService:
 
 
 class ConfigRoutingService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.ucr = core_lifecycle.umop_config_router
 
     def list_routes(self) -> dict:
@@ -728,7 +728,7 @@ class ConfigRoutingService:
 
 
 class ConfigDisplayService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self._logo_token_cache: dict[str, str] = {}
@@ -913,7 +913,7 @@ class ConfigDisplayService:
 
 
 class ConfigFileService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
 
     def get_plugin_metadata_by_name(self, plugin_name: str):
@@ -1114,7 +1114,7 @@ class ConfigFileService:
 
 
 class BotConfigService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
 
@@ -1211,7 +1211,7 @@ class BotConfigService:
 
 
 class ProviderConfigService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.provider_manager = core_lifecycle.provider_manager

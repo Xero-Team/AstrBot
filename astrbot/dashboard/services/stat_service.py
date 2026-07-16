@@ -17,7 +17,6 @@ from sqlmodel import col, select
 from astrbot import logger
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.desktop_runtime import (
@@ -36,6 +35,7 @@ from astrbot.dashboard.password_state import (
     is_password_change_required,
     is_password_storage_upgraded,
 )
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.utils.version_comparator import VersionComparator
 
 
@@ -47,7 +47,7 @@ class StatService:
     def __init__(
         self,
         db_helper: BaseDatabase,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
         config: AstrBotConfig,
     ) -> None:
         self.db_helper = db_helper

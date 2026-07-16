@@ -15,7 +15,6 @@ from starlette.datastructures import UploadFile
 
 from astrbot import logger
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
@@ -32,6 +31,7 @@ from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
 )
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.dashboard.upload_utils import save_upload_to_path
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
@@ -502,7 +502,7 @@ class ChatService:
     def __init__(
         self,
         db: BaseDatabase,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
     ) -> None:
         self.db = db
         self.core_lifecycle = core_lifecycle

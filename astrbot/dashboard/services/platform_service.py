@@ -3,7 +3,6 @@ import string
 from typing import Any, Protocol, cast
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.dingtalk.app_registration import (
     poll_dingtalk_app_registration_once,
     request_dingtalk_app_registration,
@@ -21,6 +20,7 @@ from astrbot.core.platform.sources.weixin_oc.login_registration import (
     poll_weixin_oc_login_once,
     request_weixin_oc_login_qr,
 )
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class PlatformServiceError(Exception):
@@ -42,7 +42,7 @@ class WebhookPlatformAdapter(Protocol):
 
 
 class PlatformService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
         self.platform_manager = core_lifecycle.platform_manager
 
     async def handle_webhook_callback(self, webhook_uuid: str, request_obj):

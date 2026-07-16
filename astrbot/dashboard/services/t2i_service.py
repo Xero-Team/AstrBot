@@ -1,6 +1,6 @@
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.utils.t2i.template_manager import TemplateManager
+from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class T2iServiceError(Exception):
@@ -12,7 +12,7 @@ class T2iServiceError(Exception):
 class T2iService:
     def __init__(
         self,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_lifecycle: DashboardCoreLifecycle,
         manager: TemplateManager | None = None,
     ) -> None:
         self.core_lifecycle = core_lifecycle

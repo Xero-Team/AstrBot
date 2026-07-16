@@ -22,6 +22,7 @@ from astrbot.dashboard.services.config_service import (
     ProviderConfigService,
 )
 from astrbot.dashboard.services.conversation_service import ConversationService
+from astrbot.dashboard.services.core_lifecycle import require_dashboard_core
 from astrbot.dashboard.services.cron_service import CronService
 from astrbot.dashboard.services.file_service import FileService
 from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
@@ -69,6 +70,7 @@ def create_dashboard_asgi_app(
         docs_url=f"{API_V1_PREFIX}/docs",
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
+    core_lifecycle = require_dashboard_core(core_lifecycle)
     app.state.core_lifecycle = core_lifecycle
     app.state.db = db
     app.state.jwt_secret = jwt_secret

@@ -214,6 +214,41 @@ class InternalAgentSubStage(Stage):
             name="upload_agent_metric",
         )
 
+    async def _build_checked_agent_runner(
+        self,
+        event: AstrMessageEvent,
+        provider_wake_prefix: str,
+        streaming_response: bool,
+    ) -> MainAgentBuildResult | None:
+        """Build a runner and reject configured provider endpoints unsafe for use."""
+        build_cfg = replace(
+            self.main_agent_cfg,
+            provider_wake_prefix=provider_wake_prefix,
+            streaming_response=streaming_response,
+        )
+        build_result = await build_main_agent(
+            event=event,
+            plugin_context=self.ctx.plugin_manager.context,
+            config=build_cfg,
+            apply_reset=False,
+        )
+        if build_result is None:
+            if event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
+                await self._send_llm_error_message(event)
+            return None
+
+        api_base = build_result.provider.provider_config.get("api_base", "")
+        for host in BLOCKED_PROVIDER_HOSTS:
+            if host in api_base:
+                logger.warning(
+                    "Blocked provider API base for safety policy. api_base=%s, blocked_host=%s",
+                    safe_error("", api_base),
+                    host,
+                )
+                await self._send_llm_error_message(event)
+                return None
+        return build_result
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None]:
@@ -274,39 +309,18 @@ class InternalAgentSubStage(Stage):
                 runner_registered = False
                 history_saved = False
                 try:
-                    build_cfg = replace(
-                        self.main_agent_cfg,
-                        provider_wake_prefix=provider_wake_prefix,
-                        streaming_response=streaming_response,
+                    build_result = await self._build_checked_agent_runner(
+                        event,
+                        provider_wake_prefix,
+                        streaming_response,
                     )
-
-                    build_result: MainAgentBuildResult | None = await build_main_agent(
-                        event=event,
-                        plugin_context=self.ctx.plugin_manager.context,
-                        config=build_cfg,
-                        apply_reset=False,
-                    )
-
                     if build_result is None:
-                        if event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
-                            await self._send_llm_error_message(event)
                         return
 
                     agent_runner = build_result.agent_runner
                     req = build_result.provider_request
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
-
-                    api_base = provider.provider_config.get("api_base", "")
-                    for host in BLOCKED_PROVIDER_HOSTS:
-                        if host in api_base:
-                            logger.warning(
-                                "Blocked provider API base for safety policy. api_base=%s, blocked_host=%s",
-                                safe_error("", api_base),
-                                host,
-                            )
-                            await self._send_llm_error_message(event)
-                            return
 
                     stream_to_general = (
                         self.unsupported_streaming_strategy == "turn_off"

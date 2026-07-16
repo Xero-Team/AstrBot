@@ -16,7 +16,7 @@ class ContractRunner(BaseAgentRunner[None]):
         self.steps += 1
         if self.complete:
             self.complete = False
-        yield AgentResponse(type="text", data={"chain": None})
+        yield AgentResponse(type="llm_result", data={"chain": None})
 
     def done(self) -> bool:
         return not self.complete

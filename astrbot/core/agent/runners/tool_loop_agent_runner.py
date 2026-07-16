@@ -7,7 +7,7 @@ import uuid
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import override
+from typing import cast, override
 
 from mcp.types import (
     BlobResourceContents,
@@ -58,7 +58,7 @@ from ..message import (
     ToolCallMessageSegment,
     bind_checkpoint_messages,
 )
-from ..response import AgentResponseData, AgentStats
+from ..response import AgentResponseData, AgentResponseType, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
@@ -1039,10 +1039,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if chain is None or chain.type is None:
                             # should not happen
                             continue
-                        if chain.type == "tool_direct_result":
-                            ar_type = "tool_call_result"
-                        else:
-                            ar_type = chain.type
+                        ar_type: AgentResponseType = (
+                            "tool_call_result"
+                            if chain.type == "tool_direct_result"
+                            else cast(AgentResponseType, chain.type)
+                        )
                         yield AgentResponse(
                             type=ar_type,
                             data=AgentResponseData(chain=chain),

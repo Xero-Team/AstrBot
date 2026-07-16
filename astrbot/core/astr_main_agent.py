@@ -39,8 +39,8 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.provider import Provider
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import (
     SkillInfo,

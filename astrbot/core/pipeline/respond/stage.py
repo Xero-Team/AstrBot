@@ -197,6 +197,125 @@ class RespondStage(Stage):
 
         return extracted
 
+    async def _send_streaming_result(self, event: AstrMessageEvent, result) -> None:
+        """Deliver a streaming result using the platform's configured strategy."""
+        if result.async_stream is None:
+            logger.warning("async_stream 为空，跳过发送。")
+            return
+        realtime_segmenting = (
+            self.config.get("provider_settings", {}).get(
+                "unsupported_streaming_strategy",
+                "realtime_segmenting",
+            )
+            == "realtime_segmenting"
+        )
+        logger.info("应用流式输出(%s)", event.get_platform_id())
+        await self._stop_typing_before_send(event)
+        send_result = await event.send_streaming(
+            result.async_stream,
+            realtime_segmenting,
+        )
+        self._log_send_result(send_result)
+
+    async def _prepare_result_chain(self, result) -> bool:
+        """Map files and remove empty content before ordinary delivery."""
+        if mappings := self.platform_settings.get("path_mapping", []):
+            for idx, component in enumerate(result.chain):
+                if isinstance(component, Comp.File) and component.file:
+                    component.file = path_Mapping(mappings, component.file)
+                    result.chain[idx] = component
+        try:
+            if await self._is_empty_message_chain(result.chain):
+                logger.info("消息为空，跳过发送阶段")
+                return False
+        except Exception as exc:
+            logger.warning("空内容检查异常: %s", exc)
+        result.chain = [
+            comp
+            for comp in result.chain
+            if not (
+                isinstance(comp, Comp.Plain)
+                and (not comp.text or not comp.text.strip())
+            )
+        ]
+        return True
+
+    async def _send_segmented_result(self, event: AstrMessageEvent, result) -> bool:
+        """Deliver a result component by component, retaining reply headers once."""
+        header_comps = self._extract_comp(
+            result.chain,
+            {ComponentType.Reply, ComponentType.At},
+            modify_raw_chain=True,
+        )
+        if not result.chain:
+            logger.warning(
+                "实际消息链为空, 跳过发送阶段。header_chain: %s, actual_chain: %s",
+                header_comps,
+                result.chain,
+            )
+            return False
+        for comp in result.chain:
+            await asyncio.sleep(await self._calc_comp_interval(comp))
+            try:
+                await self._stop_typing_before_send(event)
+                if comp.type == ComponentType.Record:
+                    send_result = await event.send(result.derive([comp]))
+                else:
+                    send_result = await event.send(result.derive([*header_comps, comp]))
+                    header_comps.clear()
+                self._log_send_result(send_result, chain=MessageChain([comp]))
+            except Exception as exc:
+                logger.error(
+                    "发送消息链失败: chain = %s, error = %s",
+                    MessageChain([comp]),
+                    exc,
+                    exc_info=True,
+                )
+        return True
+
+    async def _send_standard_result(self, event: AstrMessageEvent, result) -> bool:
+        """Deliver records separately, then the remaining ordinary message chain."""
+        if all(
+            comp.type in {ComponentType.Reply, ComponentType.At}
+            for comp in result.chain
+        ):
+            logger.warning(
+                "消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: %s",
+                result.chain,
+            )
+            return False
+        separate_components = self._extract_comp(
+            result.chain,
+            {ComponentType.Record},
+            modify_raw_chain=True,
+        )
+        for comp in separate_components:
+            chain = result.derive([comp])
+            try:
+                await self._stop_typing_before_send(event)
+                self._log_send_result(await event.send(chain), chain=chain)
+            except Exception as exc:
+                logger.error(
+                    "发送消息链失败: chain = %s, error = %s",
+                    chain,
+                    exc,
+                    exc_info=True,
+                )
+        if not result.chain:
+            return True
+        chain = result.derive(result.chain)
+        try:
+            await self._stop_typing_before_send(event)
+            self._log_send_result(await event.send(chain), chain=chain)
+        except Exception as exc:
+            logger.error(
+                "发送消息链失败: chain = %s, error = %s",
+                chain,
+                exc,
+                exc_info=True,
+            )
+        return True
+
     async def process(
         self,
         event: AstrMessageEvent,
@@ -244,125 +363,17 @@ class RespondStage(Stage):
         )
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
-            if result.async_stream is None:
-                logger.warning("async_stream 为空，跳过发送。")
-                return
-            # 流式结果直接交付平台适配器处理
-            realtime_segmenting = (
-                self.config.get("provider_settings", {}).get(
-                    "unsupported_streaming_strategy",
-                    "realtime_segmenting",
-                )
-                == "realtime_segmenting"
-            )
-            logger.info(f"应用流式输出({event.get_platform_id()})")
-            await self._stop_typing_before_send(event)
-            send_result = await event.send_streaming(
-                result.async_stream,
-                realtime_segmenting,
-            )
-            self._log_send_result(send_result)
+            await self._send_streaming_result(event, result)
             return
         if len(result.chain) > 0:
-            # 检查路径映射
-            if mappings := self.platform_settings.get("path_mapping", []):
-                for idx, component in enumerate(result.chain):
-                    if isinstance(component, Comp.File) and component.file:
-                        # 支持 File 消息段的路径映射。
-                        component.file = path_Mapping(mappings, component.file)
-                        result.chain[idx] = component
+            if not await self._prepare_result_chain(result):
+                return
 
-            # 检查消息链是否为空
-            try:
-                if await self._is_empty_message_chain(result.chain):
-                    logger.info("消息为空，跳过发送阶段")
-                    return
-            except Exception as e:
-                logger.warning(f"空内容检查异常: {e}")
-
-            # 将 Plain 为空的消息段移除
-            result.chain = [
-                comp
-                for comp in result.chain
-                if not (
-                    isinstance(comp, Comp.Plain)
-                    and (not comp.text or not comp.text.strip())
-                )
-            ]
-
-            # 发送消息链
-            # Record 需要强制单独发送
-            need_separately = {ComponentType.Record}
             if self.is_seg_reply_required(event):
-                header_comps = self._extract_comp(
-                    result.chain,
-                    {ComponentType.Reply, ComponentType.At},
-                    modify_raw_chain=True,
-                )
-                if not result.chain or len(result.chain) == 0:
-                    # may fix #2670
-                    logger.warning(
-                        f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
-                    )
+                if not await self._send_segmented_result(event, result):
                     return
-                for comp in result.chain:
-                    i = await self._calc_comp_interval(comp)
-                    await asyncio.sleep(i)
-                    try:
-                        await self._stop_typing_before_send(event)
-                        if comp.type in need_separately:
-                            send_result = await event.send(result.derive([comp]))
-                        else:
-                            send_result = await event.send(
-                                result.derive([*header_comps, comp])
-                            )
-                            header_comps.clear()
-                        self._log_send_result(
-                            send_result,
-                            chain=MessageChain([comp]),
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
-                            exc_info=True,
-                        )
-            else:
-                if all(
-                    comp.type in {ComponentType.Reply, ComponentType.At}
-                    for comp in result.chain
-                ):
-                    # may fix #2670
-                    logger.warning(
-                        f"消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: {result.chain}",
-                    )
-                    return
-                sep_comps = self._extract_comp(
-                    result.chain,
-                    need_separately,
-                    modify_raw_chain=True,
-                )
-                for comp in sep_comps:
-                    chain = result.derive([comp])
-                    try:
-                        await self._stop_typing_before_send(event)
-                        send_result = await event.send(chain)
-                        self._log_send_result(send_result, chain=chain)
-                    except Exception as e:
-                        logger.error(
-                            f"发送消息链失败: chain = {chain}, error = {e}",
-                            exc_info=True,
-                        )
-                chain = result.derive(result.chain)
-                if result.chain and len(result.chain) > 0:
-                    try:
-                        await self._stop_typing_before_send(event)
-                        send_result = await event.send(chain)
-                        self._log_send_result(send_result, chain=chain)
-                    except Exception as e:
-                        logger.error(
-                            f"发送消息链失败: chain = {chain}, error = {e}",
-                            exc_info=True,
-                        )
+            elif not await self._send_standard_result(event, result):
+                return
 
         if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
             return

@@ -9,9 +9,20 @@ class AgentResponseData(T.TypedDict):
     chain: MessageChain
 
 
+type AgentResponseType = T.Literal[
+    "streaming_delta",
+    "llm_result",
+    "llm_sources",
+    "tool_call",
+    "tool_call_result",
+    "aborted",
+    "err",
+]
+
+
 @dataclass
 class AgentResponse:
-    type: str
+    type: AgentResponseType
     data: AgentResponseData
 
 

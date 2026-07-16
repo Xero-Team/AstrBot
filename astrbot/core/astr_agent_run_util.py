@@ -169,6 +169,135 @@ def _get_streaming_error_chain(
     return MessageChain().message(get_agent_error_message(astr_event))
 
 
+async def _emit_agent_response(
+    resp,
+    *,
+    agent_runner: AgentRunner,
+    astr_event,
+    tool_name_by_call_id: dict[str, str],
+    show_tool_use: bool,
+    show_tool_call_result: bool,
+    stream_to_general: bool,
+    show_reasoning: bool,
+    can_buffer_llm_result: bool,
+    buffered_llm_chains: list[MessageChain],
+) -> AsyncGenerator[MessageChain | None]:
+    """Handle one non-aborted runner response in its original delivery order."""
+    if resp.type == "tool_call" and agent_runner.streaming and show_tool_use:
+        yield MessageChain(chain=[], type="break")
+
+    if await _handle_tool_event(
+        resp,
+        astr_event,
+        tool_name_by_call_id,
+        show_tool_use,
+        show_tool_call_result,
+    ):
+        return
+
+    if resp.type == "llm_sources":
+        if astr_event.get_platform_name() == "webchat":
+            await astr_event.send(resp.data["chain"])
+        return
+
+    if resp.type == "llm_result" and resp.data["chain"].type == "reasoning":
+        return
+    if stream_to_general and resp.type == "streaming_delta":
+        return
+
+    error_chain = _get_streaming_error_chain(
+        resp,
+        agent_runner,
+        stream_to_general,
+        astr_event,
+    )
+    if error_chain:
+        yield error_chain
+        return
+
+    if stream_to_general or not agent_runner.streaming:
+        response_chain = (
+            MessageChain().message(get_agent_error_message(astr_event))
+            if resp.type == "err"
+            else resp.data["chain"]
+        )
+        if can_buffer_llm_result and resp.type == "llm_result":
+            buffered_llm_chains.append(response_chain)
+            return
+        result_content_type = (
+            ResultContentType.LLM_RESULT
+            if resp.type == "llm_result"
+            else ResultContentType.GENERAL_RESULT
+        )
+        astr_event.set_result(
+            MessageEventResult(
+                chain=response_chain.chain,
+                result_content_type=result_content_type,
+            ),
+        )
+        yield response_chain
+        astr_event.clear_result()
+        return
+
+    if resp.type == "streaming_delta":
+        chain = resp.data["chain"]
+        if chain.type != "reasoning" or show_reasoning:
+            yield chain
+
+
+async def _emit_buffered_llm_result(
+    buffered_llm_chains: list[MessageChain], astr_event
+) -> AsyncGenerator[MessageChain]:
+    """Emit buffered ordinary LLM output as a single durable result."""
+    merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+    if merged_chain is None:
+        return
+    astr_event.set_result(
+        MessageEventResult(
+            chain=merged_chain.chain,
+            result_content_type=ResultContentType.LLM_RESULT,
+        ),
+    )
+    yield merged_chain
+    astr_event.clear_result()
+
+
+def _prepare_forced_final_step(
+    agent_runner: AgentRunner, step_idx: int, max_step: int
+) -> None:
+    """Disable tools and append the final-summary prompt at the step limit."""
+    if step_idx != max_step + 1:
+        return
+    logger.warning(
+        "Agent reached max steps (%s), forcing a final response.",
+        max_step,
+    )
+    if agent_runner.done():
+        return
+    if agent_runner.req:
+        agent_runner.req.func_tool = None
+    agent_runner.run_context.messages.append(
+        Message(
+            role="user",
+            content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+        )
+    )
+
+
+async def _complete_agent_step(agent_runner: AgentRunner, astr_event) -> bool:
+    """Send final WebChat stats and report whether the runner is complete."""
+    if not agent_runner.done():
+        return False
+    if astr_event.get_platform_name() == "webchat":
+        await astr_event.send(
+            MessageChain(
+                type="agent_stats",
+                chain=[Json(data=agent_runner.stats.to_dict())],
+            )
+        )
+    return True
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -190,19 +319,7 @@ async def run_agent(
     try:
         while step_idx < max_step + 1:
             step_idx += 1
-            if step_idx == max_step + 1:
-                logger.warning(
-                    f"Agent reached max steps ({max_step}), forcing a final response."
-                )
-                if not agent_runner.done():
-                    if agent_runner.req:
-                        agent_runner.req.func_tool = None
-                    agent_runner.run_context.messages.append(
-                        Message(
-                            role="user",
-                            content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
-                        )
-                    )
+            _prepare_forced_final_step(agent_runner, step_idx, max_step)
 
             stop_watcher = asyncio.create_task(
                 _watch_agent_stop_signal(agent_runner, astr_event),
@@ -212,104 +329,36 @@ async def run_agent(
                     if _should_stop_agent(astr_event):
                         agent_runner.request_stop()
                     if resp.type == "aborted":
-                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                        if merged_chain:
-                            astr_event.set_result(
-                                MessageEventResult(
-                                    chain=merged_chain.chain,
-                                    result_content_type=ResultContentType.LLM_RESULT,
-                                ),
-                            )
-                            yield merged_chain
-                            astr_event.clear_result()
+                        async for chain in _emit_buffered_llm_result(
+                            buffered_llm_chains, astr_event
+                        ):
+                            yield chain
                         astr_event.set_extra("agent_user_aborted", True)
                         astr_event.set_extra("agent_stop_requested", False)
                         return
                     if _should_stop_agent(astr_event):
                         continue
 
-                    if (
-                        resp.type == "tool_call"
-                        and agent_runner.streaming
-                        and show_tool_use
-                    ):
-                        yield MessageChain(chain=[], type="break")
-
-                    handled = await _handle_tool_event(
+                    async for chain in _emit_agent_response(
                         resp,
-                        astr_event,
-                        tool_name_by_call_id,
-                        show_tool_use,
-                        show_tool_call_result,
-                    )
-                    if handled:
-                        continue
-                    if resp.type == "llm_sources":
-                        if astr_event.get_platform_name() == "webchat":
-                            await astr_event.send(resp.data["chain"])
-                        continue
-                    if (
-                        resp.type == "llm_result"
-                        and resp.data["chain"].type == "reasoning"
+                        agent_runner=agent_runner,
+                        astr_event=astr_event,
+                        tool_name_by_call_id=tool_name_by_call_id,
+                        show_tool_use=show_tool_use,
+                        show_tool_call_result=show_tool_call_result,
+                        stream_to_general=stream_to_general,
+                        show_reasoning=show_reasoning,
+                        can_buffer_llm_result=can_buffer_llm_result,
+                        buffered_llm_chains=buffered_llm_chains,
                     ):
-                        continue
-                    if stream_to_general and resp.type == "streaming_delta":
-                        continue
-                    error_chain = _get_streaming_error_chain(
-                        resp,
-                        agent_runner,
-                        stream_to_general,
-                        astr_event,
-                    )
-                    if error_chain:
-                        yield error_chain
-                        continue
-                    if stream_to_general or not agent_runner.streaming:
-                        response_chain = (
-                            MessageChain().message(get_agent_error_message(astr_event))
-                            if resp.type == "err"
-                            else resp.data["chain"]
-                        )
-                        if can_buffer_llm_result and resp.type == "llm_result":
-                            buffered_llm_chains.append(response_chain)
-                            continue
-                        content_typ = (
-                            ResultContentType.LLM_RESULT
-                            if resp.type == "llm_result"
-                            else ResultContentType.GENERAL_RESULT
-                        )
-                        astr_event.set_result(
-                            MessageEventResult(
-                                chain=response_chain.chain,
-                                result_content_type=content_typ,
-                            ),
-                        )
-                        yield response_chain
-                        astr_event.clear_result()
-                    elif resp.type == "streaming_delta":
-                        chain = resp.data["chain"]
-                        if chain.type != "reasoning" or show_reasoning:
-                            yield chain
+                        yield chain
 
                 if can_buffer_llm_result and agent_runner.done():
-                    merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                    if merged_chain:
-                        astr_event.set_result(
-                            MessageEventResult(
-                                chain=merged_chain.chain,
-                                result_content_type=ResultContentType.LLM_RESULT,
-                            ),
-                        )
-                        yield merged_chain
-                        astr_event.clear_result()
-                if agent_runner.done():
-                    if astr_event.get_platform_name() == "webchat":
-                        await astr_event.send(
-                            MessageChain(
-                                type="agent_stats",
-                                chain=[Json(data=agent_runner.stats.to_dict())],
-                            )
-                        )
+                    async for chain in _emit_buffered_llm_result(
+                        buffered_llm_chains, astr_event
+                    ):
+                        yield chain
+                if await _complete_agent_step(agent_runner, astr_event):
                     break
             finally:
                 if not stop_watcher.done():

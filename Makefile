@@ -24,8 +24,9 @@ NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
 NAPCAT_MODELS_SOURCE_PATH ?= astrbot/core/platform/sources/napcat/generated/ob11_events.py
 PS ?= pwsh -NoProfile -NonInteractive -File
 PNPM := corepack pnpm
-NPM := corepack npm
-NPX := $(NPM) exec --no --
+ROOT_NODE_BIN := ./node_modules/.bin
+PRETTIER := $(ROOT_NODE_BIN)/prettier
+TAPLO := $(ROOT_NODE_BIN)/taplo
 QUALITY_TYPE_TARGETS := astrbot
 QUALITY_SECURITY_TARGETS := astrbot
 CHECK_TARGETS := check-py check-web check-data check-md check-toml check-yaml check-shell check-ps check-docker
@@ -267,11 +268,11 @@ check-web-smoke:
 
 check-web-prettier:
 	@echo "==> [web] prettier --check"
-	$(NPX) prettier --check "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
+	$(PRETTIER) --check "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
 
 format-web:
 	@echo "==> [web] prettier + eslint --fix"
-	$(NPX) prettier --write "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
+	$(PRETTIER) --write "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
 	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --concurrency=auto --fix
 
 check-data:
@@ -320,20 +321,20 @@ check-toml-all: $(CHECK_TOML_TARGETS)
 check-toml-format:
 	@echo "==> [toml] taplo fmt --check"
 	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
-		$(NPX) @taplo/cli fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
+		$(TAPLO) fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
 	done
 
 check-toml-lint:
 	@echo "==> [toml] taplo lint"
 	@for f in $$(git ls-files '*.toml'); do \
-		$(NPX) @taplo/cli lint - < "$$f" || exit 1; \
+		$(TAPLO) lint - < "$$f" || exit 1; \
 	done
 
 format-toml:
 	@echo "==> [toml] taplo fmt"
 	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
 		tmp=$$(mktemp); \
-		$(NPX) @taplo/cli fmt --stdin-filepath "$$f" - < "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
+		$(TAPLO) fmt --stdin-filepath "$$f" - < "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
 	done
 
 check-yaml:

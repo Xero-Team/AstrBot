@@ -313,11 +313,18 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> None:
         """Upload rich media in the established image-to-file priority order."""
         if media.image_base64:
-            uploaded = await self.upload_group_and_c2c_image(
-                media.image_base64,
-                self.IMAGE_FILE_TYPE,
-                **upload_target,
-            )
+            if group_openid := upload_target.get("group_openid"):
+                uploaded = await self.upload_group_and_c2c_image(
+                    media.image_base64,
+                    self.IMAGE_FILE_TYPE,
+                    group_openid=group_openid,
+                )
+            else:
+                uploaded = await self.upload_group_and_c2c_image(
+                    media.image_base64,
+                    self.IMAGE_FILE_TYPE,
+                    openid=upload_target["openid"],
+                )
             self._write_media_payload(payload, uploaded, plain_text)
 
         for source, file_type, file_name in (
@@ -327,12 +334,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             if not source:
                 continue
-            uploaded = await self.upload_group_and_c2c_media(
-                source,
-                file_type,
-                file_name=file_name,
-                **upload_target,
-            )
+            if group_openid := upload_target.get("group_openid"):
+                uploaded = await self.upload_group_and_c2c_media(
+                    source,
+                    file_type,
+                    file_name=file_name,
+                    group_openid=group_openid,
+                )
+            else:
+                uploaded = await self.upload_group_and_c2c_media(
+                    source,
+                    file_type,
+                    file_name=file_name,
+                    openid=upload_target["openid"],
+                )
             if uploaded:
                 self._write_media_payload(payload, uploaded, plain_text)
 
@@ -422,9 +437,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 upload_target,
             )
             if isinstance(source, botpy.message.GroupMessage):
+                group_openid = upload_target["group_openid"]
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self._bot.api.post_group_message(
-                        group_openid=source.group_openid,
+                        group_openid=group_openid,
                         **retry_payload,
                     ),
                     payload=payload,

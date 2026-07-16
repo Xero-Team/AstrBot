@@ -197,6 +197,213 @@ class LarkPlatformAdapter(Platform):
 
         return at_map
 
+    @staticmethod
+    def _parse_text_message_components(
+        content: dict[str, Any],
+        at_map: dict[str, Comp.At],
+    ) -> list[Comp.BaseMessageComponent]:
+        components: list[Comp.BaseMessageComponent] = []
+        parts = re.split(r"(@_user_\d+)", str(content.get("text", "")))
+        for part in parts:
+            segment = part.strip()
+            if not segment:
+                continue
+            components.append(at_map.get(segment, Comp.Plain(segment)))
+        return components
+
+    async def _parse_post_or_image_message_components(
+        self,
+        *,
+        message_id: str | None,
+        message_type: str,
+        content: dict[str, Any],
+        at_map: dict[str, Comp.At],
+        tracked_paths: list[str],
+    ) -> list[Comp.BaseMessageComponent]:
+        components: list[Comp.BaseMessageComponent] = []
+        if message_type == "image":
+            comp_list = [{"tag": "img", "image_key": content.get("image_key")}]
+        else:
+            comp_list = self._parse_post_content(content)
+
+        for comp in comp_list:
+            tag = comp.get("tag")
+            if tag == "at":
+                user_key = str(comp.get("user_id", ""))
+                if mention := at_map.get(user_key):
+                    components.append(mention)
+                continue
+            if tag == "text":
+                if text := str(comp.get("text", "")).strip():
+                    components.append(Comp.Plain(text))
+                continue
+            if tag == "a":
+                text = str(comp.get("text", "")).strip()
+                href = str(comp.get("href", "")).strip()
+                if text:
+                    components.append(Comp.Plain(f"{text}({href})" if href else text))
+                continue
+            if tag == "img":
+                image_key = str(comp.get("image_key", "")).strip()
+                if not image_key:
+                    continue
+                if not message_id:
+                    logger.error("[Lark] 图片消息缺少 message_id")
+                    continue
+                image = Comp.Image(file="")
+
+                async def resolve_image_source(
+                    *,
+                    message_id: str = message_id,
+                    image_key: str = image_key,
+                ) -> str | None:
+                    image_bytes = await self._download_message_resource(
+                        message_id=message_id,
+                        file_key=image_key,
+                        resource_type="image",
+                    )
+                    if image_bytes is None:
+                        return None
+                    image_base64 = base64.b64encode(image_bytes).decode()
+                    return f"base64://{image_base64}"
+
+                image.set_source_resolver(resolve_image_source)
+                components.append(image)
+                continue
+            if tag != "media":
+                continue
+
+            file_key = str(comp.get("file_key", "")).strip()
+            file_name = str(comp.get("file_name", "")).strip() or "lark_media.mp4"
+            if not file_key:
+                continue
+            if not message_id:
+                logger.error("[Lark] 富文本视频消息缺少 message_id")
+                continue
+            video = Comp.Video(file="")
+
+            async def resolve_post_media_source(
+                *,
+                message_id: str = message_id,
+                file_key: str = file_key,
+                file_name: str = file_name,
+            ) -> str | None:
+                file_path = await self._download_file_resource_to_temp(
+                    message_id=message_id,
+                    file_key=file_key,
+                    message_type="post_media",
+                    file_name=file_name,
+                    default_suffix=".mp4",
+                )
+                if file_path:
+                    tracked_paths.append(file_path)
+                return file_path
+
+            video.set_source_resolver(resolve_post_media_source)
+            components.append(video)
+
+        return components
+
+    async def _parse_file_message_components(
+        self,
+        *,
+        message_id: str | None,
+        content: dict[str, Any],
+        tracked_paths: list[str],
+    ) -> list[Comp.BaseMessageComponent]:
+        file_key = str(content.get("file_key", "")).strip()
+        file_name = str(content.get("file_name", "")).strip() or "lark_file"
+        if not message_id:
+            logger.error("[Lark] 文件消息缺少 message_id")
+            return []
+        if not file_key:
+            logger.error("[Lark] 文件消息缺少 file_key")
+            return []
+        file_component = Comp.File(name=file_name)
+
+        async def resolve_file_path() -> str | None:
+            file_path = await self._download_file_resource_to_temp(
+                message_id=message_id,
+                file_key=file_key,
+                message_type="file",
+                file_name=file_name,
+            )
+            if file_path:
+                tracked_paths.append(file_path)
+            return file_path
+
+        file_component.set_file_resolver(resolve_file_path)
+        return [file_component]
+
+    async def _parse_audio_message_components(
+        self,
+        *,
+        message_id: str | None,
+        content: dict[str, Any],
+        tracked_paths: list[str],
+    ) -> list[Comp.BaseMessageComponent]:
+        file_key = str(content.get("file_key", "")).strip()
+        if not message_id:
+            logger.error("[Lark] 音频消息缺少 message_id")
+            return []
+        if not file_key:
+            logger.error("[Lark] 音频消息缺少 file_key")
+            return []
+        record = Comp.Record(file="")
+
+        async def resolve_audio_source() -> str | None:
+            file_path = await self._download_file_resource_to_temp(
+                message_id=message_id,
+                file_key=file_key,
+                message_type="audio",
+                default_suffix=".opus",
+            )
+            if not file_path:
+                return None
+            tracked_paths.append(file_path)
+            path_wav = await MediaResolver(
+                file_path,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            tracked_paths.append(path_wav)
+            return path_wav
+
+        record.set_source_resolver(resolve_audio_source)
+        return [record]
+
+    async def _parse_media_message_components(
+        self,
+        *,
+        message_id: str | None,
+        content: dict[str, Any],
+        tracked_paths: list[str],
+    ) -> list[Comp.BaseMessageComponent]:
+        file_key = str(content.get("file_key", "")).strip()
+        file_name = str(content.get("file_name", "")).strip() or "lark_media.mp4"
+        if not message_id:
+            logger.error("[Lark] 视频消息缺少 message_id")
+            return []
+        if not file_key:
+            logger.error("[Lark] 视频消息缺少 file_key")
+            return []
+        video = Comp.Video(file="")
+
+        async def resolve_media_source() -> str | None:
+            file_path = await self._download_file_resource_to_temp(
+                message_id=message_id,
+                file_key=file_key,
+                message_type="media",
+                file_name=file_name,
+                default_suffix=".mp4",
+            )
+            if file_path:
+                tracked_paths.append(file_path)
+            return file_path
+
+        video.set_source_resolver(resolve_media_source)
+        return [video]
+
     async def _parse_message_components(
         self,
         *,
@@ -206,197 +413,42 @@ class LarkPlatformAdapter(Platform):
         at_map: dict[str, Comp.At],
         temporary_file_paths: list[str] | None = None,
     ) -> list[Comp.BaseMessageComponent]:
-        components: list[Comp.BaseMessageComponent] = []
         tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
 
         if message_type == "text":
-            message_str_raw = str(content.get("text", ""))
-            at_pattern = r"(@_user_\d+)"
-            parts = re.split(at_pattern, message_str_raw)
-            for part in parts:
-                segment = part.strip()
-                if not segment:
-                    continue
-                if segment in at_map:
-                    components.append(at_map[segment])
-                else:
-                    components.append(Comp.Plain(segment))
-            return components
+            return self._parse_text_message_components(content, at_map)
 
         if message_type in ("post", "image"):
-            if message_type == "image":
-                comp_list = [
-                    {
-                        "tag": "img",
-                        "image_key": content.get("image_key"),
-                    },
-                ]
-            else:
-                comp_list = self._parse_post_content(content)
-
-            for comp in comp_list:
-                tag = comp.get("tag")
-                if tag == "at":
-                    user_key = str(comp.get("user_id", ""))
-                    if user_key in at_map:
-                        components.append(at_map[user_key])
-                elif tag == "text":
-                    text = str(comp.get("text", "")).strip()
-                    if text:
-                        components.append(Comp.Plain(text))
-                elif tag == "a":
-                    text = str(comp.get("text", "")).strip()
-                    href = str(comp.get("href", "")).strip()
-                    if text and href:
-                        components.append(Comp.Plain(f"{text}({href})"))
-                    elif text:
-                        components.append(Comp.Plain(text))
-                elif tag == "img":
-                    image_key = str(comp.get("image_key", "")).strip()
-                    if not image_key:
-                        continue
-                    if not message_id:
-                        logger.error("[Lark] 图片消息缺少 message_id")
-                        continue
-                    image = Comp.Image(file="")
-
-                    async def _resolve_image_source(
-                        *,
-                        message_id: str = message_id,
-                        image_key: str = image_key,
-                    ) -> str | None:
-                        image_bytes = await self._download_message_resource(
-                            message_id=message_id,
-                            file_key=image_key,
-                            resource_type="image",
-                        )
-                        if image_bytes is None:
-                            return None
-                        image_base64 = base64.b64encode(image_bytes).decode()
-                        return f"base64://{image_base64}"
-
-                    image.set_source_resolver(_resolve_image_source)
-                    components.append(image)
-                elif tag == "media":
-                    file_key = str(comp.get("file_key", "")).strip()
-                    file_name = (
-                        str(comp.get("file_name", "")).strip() or "lark_media.mp4"
-                    )
-                    if not file_key:
-                        continue
-                    if not message_id:
-                        logger.error("[Lark] 富文本视频消息缺少 message_id")
-                        continue
-                    video = Comp.Video(file="")
-
-                    async def _resolve_post_media_source(
-                        *,
-                        message_id: str = message_id,
-                        file_key: str = file_key,
-                        file_name: str = file_name,
-                    ) -> str | None:
-                        file_path = await self._download_file_resource_to_temp(
-                            message_id=message_id,
-                            file_key=file_key,
-                            message_type="post_media",
-                            file_name=file_name,
-                            default_suffix=".mp4",
-                        )
-                        if file_path:
-                            tracked_paths.append(file_path)
-                        return file_path
-
-                    video.set_source_resolver(_resolve_post_media_source)
-                    components.append(video)
-
-            return components
+            return await self._parse_post_or_image_message_components(
+                message_id=message_id,
+                message_type=message_type,
+                content=content,
+                at_map=at_map,
+                tracked_paths=tracked_paths,
+            )
 
         if message_type == "file":
-            file_key = str(content.get("file_key", "")).strip()
-            file_name = str(content.get("file_name", "")).strip() or "lark_file"
-            if not message_id:
-                logger.error("[Lark] 文件消息缺少 message_id")
-                return components
-            if not file_key:
-                logger.error("[Lark] 文件消息缺少 file_key")
-                return components
-            file_component = Comp.File(name=file_name)
-
-            async def _resolve_file_path() -> str | None:
-                file_path = await self._download_file_resource_to_temp(
-                    message_id=message_id,
-                    file_key=file_key,
-                    message_type="file",
-                    file_name=file_name,
-                )
-                if file_path:
-                    tracked_paths.append(file_path)
-                return file_path
-
-            file_component.set_file_resolver(_resolve_file_path)
-            components.append(file_component)
-            return components
+            return await self._parse_file_message_components(
+                message_id=message_id,
+                content=content,
+                tracked_paths=tracked_paths,
+            )
 
         if message_type == "audio":
-            file_key = str(content.get("file_key", "")).strip()
-            if not message_id:
-                logger.error("[Lark] 音频消息缺少 message_id")
-                return components
-            if not file_key:
-                logger.error("[Lark] 音频消息缺少 file_key")
-                return components
-            record = Comp.Record(file="")
-
-            async def _resolve_audio_source() -> str | None:
-                file_path = await self._download_file_resource_to_temp(
-                    message_id=message_id,
-                    file_key=file_key,
-                    message_type="audio",
-                    default_suffix=".opus",
-                )
-                if not file_path:
-                    return None
-                tracked_paths.append(file_path)
-                path_wav = await MediaResolver(
-                    file_path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                tracked_paths.append(path_wav)
-                return path_wav
-
-            record.set_source_resolver(_resolve_audio_source)
-            components.append(record)
-            return components
+            return await self._parse_audio_message_components(
+                message_id=message_id,
+                content=content,
+                tracked_paths=tracked_paths,
+            )
 
         if message_type == "media":
-            file_key = str(content.get("file_key", "")).strip()
-            file_name = str(content.get("file_name", "")).strip() or "lark_media.mp4"
-            if not message_id:
-                logger.error("[Lark] 视频消息缺少 message_id")
-                return components
-            if not file_key:
-                logger.error("[Lark] 视频消息缺少 file_key")
-                return components
-            video = Comp.Video(file="")
+            return await self._parse_media_message_components(
+                message_id=message_id,
+                content=content,
+                tracked_paths=tracked_paths,
+            )
 
-            async def _resolve_media_source() -> str | None:
-                file_path = await self._download_file_resource_to_temp(
-                    message_id=message_id,
-                    file_key=file_key,
-                    message_type="media",
-                    file_name=file_name,
-                    default_suffix=".mp4",
-                )
-                if file_path:
-                    tracked_paths.append(file_path)
-                return file_path
-
-            video.set_source_resolver(_resolve_media_source)
-            components.append(video)
-            return components
-
-        return components
+        return []
 
     async def _build_reply_from_parent_id(
         self,

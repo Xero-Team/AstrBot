@@ -74,9 +74,12 @@ async def test_line_audio_component_resolves_media_lazily_for_external_url(monke
 
 
 @pytest.mark.asyncio
-async def test_lark_audio_component_uses_media_resolver_after_lazy_download(monkeypatch):
+async def test_lark_audio_component_uses_media_resolver_after_lazy_download(
+    monkeypatch,
+):
     _patch_resolver(monkeypatch, lark_adapter)
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
+    tracked_paths: list[str] = []
 
     async def fake_download_file_resource_to_temp(**kwargs):
         assert kwargs["message_type"] == "audio"
@@ -93,6 +96,7 @@ async def test_lark_audio_component_uses_media_resolver_after_lazy_download(monk
         message_type="audio",
         content={"file_key": "file-key"},
         at_map={},
+        temporary_file_paths=tracked_paths,
     )
 
     assert len(records) == 1
@@ -112,6 +116,7 @@ async def test_lark_audio_component_uses_media_resolver_after_lazy_download(monk
             {"target_format": "wav"},
         )
     ]
+    assert tracked_paths == ["/tmp/lark-source.opus", WAV_PATH]
 
 
 @pytest.mark.asyncio

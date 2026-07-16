@@ -47,6 +47,27 @@ def test_lark_parse_post_content_flattens_nested_and_mixed_components():
 
 
 @pytest.mark.asyncio
+async def test_lark_parse_message_components_text_dispatches_mentions_and_plain_text():
+    adapter = _adapter()
+
+    components = await adapter._parse_message_components(
+        message_id="msg-text",
+        message_type="text",
+        content={"text": " hello @_user_1 world "},
+        at_map={"@_user_1": Comp.At(qq="ou_1", name="Alice")},
+    )
+
+    assert [type(component) for component in components] == [
+        Comp.Plain,
+        Comp.At,
+        Comp.Plain,
+    ]
+    assert adapter._build_message_str_from_components(components) == (
+        "hello @Alice world"
+    )
+
+
+@pytest.mark.asyncio
 async def test_lark_parse_message_components_post_parses_mentions_links_and_images():
     adapter = _adapter()
 
@@ -122,6 +143,30 @@ async def test_lark_parse_message_components_file_requires_message_id_and_file_k
 
 
 @pytest.mark.asyncio
+async def test_lark_parse_message_components_file_resolves_lazily_and_tracks_path():
+    adapter = _adapter()
+    adapter._download_file_resource_to_temp = AsyncMock(
+        return_value="C:/tmp/report.pdf"
+    )
+    tracked_paths: list[str] = []
+
+    components = await adapter._parse_message_components(
+        message_id="msg-file",
+        message_type="file",
+        content={"file_key": "file-1", "file_name": "report.pdf"},
+        at_map={},
+        temporary_file_paths=tracked_paths,
+    )
+
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.File)
+    adapter._download_file_resource_to_temp.assert_not_awaited()
+    await components[0]._resolve_file_if_needed()
+    assert components[0].file_ == "C:/tmp/report.pdf"
+    assert tracked_paths == ["C:/tmp/report.pdf"]
+
+
+@pytest.mark.asyncio
 async def test_lark_parse_message_components_audio_keeps_lazy_record():
     adapter = _adapter()
     adapter._download_file_resource_to_temp = AsyncMock(return_value="/tmp/audio.opus")
@@ -136,6 +181,22 @@ async def test_lark_parse_message_components_audio_keeps_lazy_record():
     assert len(components) == 1
     assert isinstance(components[0], Comp.Record)
     assert components[0].file == ""
+    adapter._download_file_resource_to_temp.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_lark_parse_message_components_audio_requires_file_key():
+    adapter = _adapter()
+    adapter._download_file_resource_to_temp = AsyncMock()
+
+    components = await adapter._parse_message_components(
+        message_id="msg-audio",
+        message_type="audio",
+        content={},
+        at_map={},
+    )
+
+    assert components == []
     adapter._download_file_resource_to_temp.assert_not_awaited()
 
 
@@ -167,6 +228,101 @@ async def test_lark_parse_message_components_image_and_media_require_message_id(
     adapter._download_message_resource.assert_not_awaited()
     adapter._download_file_resource_to_temp.assert_not_awaited()
     assert logger_error.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_lark_parse_standalone_image_keeps_lazy_failure_as_empty_source():
+    adapter = _adapter()
+    adapter._download_message_resource = AsyncMock(return_value=None)
+
+    components = await adapter._parse_message_components(
+        message_id="msg-image",
+        message_type="image",
+        content={"image_key": "image-1"},
+        at_map={},
+    )
+
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.Image)
+    adapter._download_message_resource.assert_not_awaited()
+    await components[0]._resolve_deferred_source()
+    assert components[0].file == ""
+
+
+@pytest.mark.asyncio
+async def test_lark_parse_post_media_resolves_lazily_and_tracks_path():
+    adapter = _adapter()
+    adapter._download_file_resource_to_temp = AsyncMock(
+        return_value="C:/tmp/post-video.mp4"
+    )
+    tracked_paths: list[str] = []
+
+    components = await adapter._parse_message_components(
+        message_id="msg-post",
+        message_type="post",
+        content={
+            "content": [
+                [
+                    {
+                        "tag": "media",
+                        "file_key": "media-1",
+                        "file_name": "clip.mp4",
+                    }
+                ]
+            ]
+        },
+        at_map={},
+        temporary_file_paths=tracked_paths,
+    )
+
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.Video)
+    adapter._download_file_resource_to_temp.assert_not_awaited()
+    await components[0]._resolve_deferred_source()
+    assert components[0].file == "C:/tmp/post-video.mp4"
+    assert tracked_paths == ["C:/tmp/post-video.mp4"]
+
+
+@pytest.mark.asyncio
+async def test_lark_parse_media_resolves_lazily_and_requires_file_key():
+    adapter = _adapter()
+    adapter._download_file_resource_to_temp = AsyncMock(return_value="C:/tmp/video.mp4")
+    tracked_paths: list[str] = []
+
+    missing_key = await adapter._parse_message_components(
+        message_id="msg-media",
+        message_type="media",
+        content={"file_name": "clip.mp4"},
+        at_map={},
+    )
+    components = await adapter._parse_message_components(
+        message_id="msg-media",
+        message_type="media",
+        content={"file_key": "media-1", "file_name": "clip.mp4"},
+        at_map={},
+        temporary_file_paths=tracked_paths,
+    )
+
+    assert missing_key == []
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.Video)
+    await components[0]._resolve_deferred_source()
+    assert components[0].file == "C:/tmp/video.mp4"
+    assert tracked_paths == ["C:/tmp/video.mp4"]
+
+
+@pytest.mark.asyncio
+async def test_lark_parse_unknown_message_type_returns_empty_components():
+    adapter = _adapter()
+
+    components = await adapter._parse_message_components(
+        message_id="msg-unknown",
+        message_type="unsupported",
+        content={"text": "ignored"},
+        at_map={},
+    )
+
+    assert components == []
 
 
 @pytest.mark.asyncio

@@ -129,6 +129,49 @@ describe('chat component smokes', () => {
     ).toBe(false);
   });
 
+  it('does not oscillate between single-line and multiline input layouts', async () => {
+    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(
+      function (this: Element) {
+        return this instanceof HTMLInputElement ? 40 : 100;
+      },
+    );
+    vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(
+      function (this: Element) {
+        return this instanceof HTMLInputElement ? 80 : 100;
+      },
+    );
+
+    const wrapper = mountWithVuetify(ChatInput, {
+      props: {
+        prompt: '',
+        stagedImagesUrl: [],
+        stagedAudioUrl: '',
+        disabled: false,
+        enableStreaming: true,
+        isRecording: false,
+        isRunning: false,
+      },
+    });
+
+    await flushPromises();
+    expect(wrapper.find('.chat-text-input').exists()).toBe(true);
+    expect(wrapper.find('.chat-textarea').exists()).toBe(false);
+
+    await wrapper.setProps({ prompt: 'content that overflows' });
+    await flushPromises();
+    expect(wrapper.find('.chat-text-input').exists()).toBe(false);
+    expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+
+    await wrapper.setProps({ prompt: 'short' });
+    await flushPromises();
+    expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+
+    await wrapper.setProps({ prompt: '' });
+    await flushPromises();
+    expect(wrapper.find('.chat-text-input').exists()).toBe(true);
+    expect(wrapper.find('.chat-textarea').exists()).toBe(false);
+  });
+
   it('renders ReasoningBlock streaming preview and expands inline timeline', async () => {
     const wrapper = mountWithVuetify(ReasoningBlock, {
       props: {

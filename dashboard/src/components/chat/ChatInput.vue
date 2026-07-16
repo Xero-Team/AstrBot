@@ -614,6 +614,8 @@ function autoResize() {
   const el = inputField.value;
   if (!el) return;
   if (!(el instanceof HTMLTextAreaElement)) {
+    if (!localPrompt.value) return;
+
     const shouldExpand =
       localPrompt.value.includes('\n') ||
       (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 4);
@@ -639,36 +641,19 @@ function autoResize() {
     : Math.min(420, Math.round(viewportHeight * 0.48));
   if (!localPrompt.value) {
     inputIsMultiline.value = false;
-    el.style.height = `${minHeight}px`;
     return;
   }
+
+  // Keep the expanded layout until the prompt is cleared. The single-line
+  // layout is narrower, so shrinking based on textarea height can oscillate.
   el.style.height = 'auto';
   el.style.setProperty('min-height', '0', 'important');
   const measuredHeight = el.scrollHeight;
   el.style.removeProperty('min-height');
-  const computed = getComputedStyle(el);
-  let lineHeight = parseFloat(computed.lineHeight);
-  if (!Number.isFinite(lineHeight)) {
-    lineHeight = parseFloat(computed.fontSize) * 1.2;
-  }
-  const paddingVertical =
-    parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
-  const shouldUseMultiline =
-    localPrompt.value.includes('\n') ||
-    measuredHeight > lineHeight + paddingVertical + 0.5;
-  if (inputIsMultiline.value !== shouldUseMultiline) {
-    const cursor = el.selectionStart ?? localPrompt.value.length;
-    inputIsMultiline.value = shouldUseMultiline;
-    void nextTick(() => {
-      inputField.value?.focus();
-      inputField.value?.setSelectionRange(cursor, cursor);
-      autoResize();
-    });
-    return;
-  }
-  el.style.height = shouldUseMultiline
-    ? `${Math.min(Math.max(measuredHeight, minHeight), maxHeight)}px`
-    : `${minHeight}px`;
+  el.style.height = `${Math.min(
+    Math.max(measuredHeight, minHeight),
+    maxHeight,
+  )}px`;
 }
 
 watch(
@@ -680,10 +665,6 @@ watch(
     void nextTick(autoResize);
   },
 );
-
-watch(inputIsMultiline, () => {
-  void nextTick(autoResize);
-});
 
 function handleKeyDown(e: KeyboardEvent) {
   // 命令提示激活时，拦截方向键和 Enter/Esc

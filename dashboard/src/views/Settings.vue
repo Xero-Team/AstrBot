@@ -164,6 +164,8 @@
               </div>
             </div>
 
+            <DashboardAppearanceSettings />
+
             <template v-if="!systemConfigLoading">
               <div
                 v-for="group in appearanceSystemConfigGroups"
@@ -538,6 +540,7 @@ import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
+import DashboardAppearanceSettings from '@/components/appearance/DashboardAppearanceSettings.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';

@@ -83,6 +83,56 @@
       "reset": "恢复默认"
     }
   },
+  "appearance": {
+    "title": "壁纸与界面",
+    "subtitle": "壁纸资源保存在服务器；当前选择和显示效果仅保存在此浏览器。",
+    "enable": "启用 Dashboard 壁纸",
+    "preview": "实时预览",
+    "sampleAction": "示例按钮",
+    "upload": "上传壁纸",
+    "loading": "正在加载壁纸图库…",
+    "select": "选择壁纸",
+    "delete": "删除壁纸",
+    "reset": "重置外观",
+    "wallpaperAlt": "Dashboard 壁纸缩略图",
+    "blur": "背景模糊",
+    "brightness": "背景亮度",
+    "dim": "背景遮罩",
+    "surfaceOpacity": "页面表面透明度",
+    "confirmDelete": "确定删除这张壁纸吗？已选择它的设备将自动取消选择。",
+    "fit": {
+      "label": "填充方式",
+      "cover": "覆盖",
+      "contain": "完整显示"
+    },
+    "position": {
+      "label": "背景位置",
+      "center": "居中",
+      "top": "顶部居中",
+      "bottom": "底部居中",
+      "left": "左侧居中",
+      "right": "右侧居中"
+    },
+    "gallery": {
+      "empty": "尚未上传壁纸。",
+      "landscape": {
+        "title": "横屏壁纸",
+        "subtitle": "桌面和横向视口优先使用。"
+      },
+      "portrait": {
+        "title": "竖屏壁纸",
+        "subtitle": "手机和纵向视口优先使用；没有时回退到横屏壁纸。"
+      }
+    },
+    "messages": {
+      "loadFailed": "加载壁纸图库失败",
+      "uploadSuccess": "壁纸已上传并应用",
+      "uploadFailed": "上传壁纸失败",
+      "deleteSuccess": "壁纸已删除",
+      "deleteFailed": "删除壁纸失败",
+      "resetSuccess": "外观设置已重置"
+    }
+  },
   "system": {
     "title": "系统",
     "restart": {

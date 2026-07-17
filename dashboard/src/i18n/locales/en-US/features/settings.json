@@ -83,6 +83,56 @@
       "reset": "Reset to Default"
     }
   },
+  "appearance": {
+    "title": "Wallpaper & Surfaces",
+    "subtitle": "Wallpaper assets are kept on the server; your selection and display settings stay in this browser.",
+    "enable": "Enable Dashboard wallpaper",
+    "preview": "Live preview",
+    "sampleAction": "Sample action",
+    "upload": "Upload wallpaper",
+    "loading": "Loading wallpaper library…",
+    "select": "Select wallpaper",
+    "delete": "Delete wallpaper",
+    "reset": "Reset appearance",
+    "wallpaperAlt": "Dashboard wallpaper thumbnail",
+    "blur": "Background blur",
+    "brightness": "Background brightness",
+    "dim": "Background dimming",
+    "surfaceOpacity": "Page surface opacity",
+    "confirmDelete": "Delete this wallpaper? Browsers that selected it will fall back to no wallpaper.",
+    "fit": {
+      "label": "Image fit",
+      "cover": "Cover",
+      "contain": "Contain"
+    },
+    "position": {
+      "label": "Background position",
+      "center": "Center",
+      "top": "Top center",
+      "bottom": "Bottom center",
+      "left": "Left center",
+      "right": "Right center"
+    },
+    "gallery": {
+      "empty": "No wallpapers have been uploaded.",
+      "landscape": {
+        "title": "Landscape wallpapers",
+        "subtitle": "Preferred on desktop and landscape viewports."
+      },
+      "portrait": {
+        "title": "Portrait wallpapers",
+        "subtitle": "Preferred on phones and portrait viewports; falls back to landscape."
+      }
+    },
+    "messages": {
+      "loadFailed": "Failed to load wallpaper library",
+      "uploadSuccess": "Wallpaper uploaded and applied",
+      "uploadFailed": "Failed to upload wallpaper",
+      "deleteSuccess": "Wallpaper deleted",
+      "deleteFailed": "Failed to delete wallpaper",
+      "resetSuccess": "Appearance settings reset"
+    }
+  },
   "system": {
     "title": "System",
     "restart": {

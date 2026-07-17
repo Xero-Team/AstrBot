@@ -6,8 +6,10 @@ import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
 import { useCommonStore } from '@/stores/common';
+import { useAppearanceStore } from '@/stores/appearance';
 import { statsApi } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
+import DashboardWallpaperLayer from '@/components/appearance/DashboardWallpaperLayer.vue';
 
 const FIRST_NOTICE_SEEN_KEY = 'astrbot:first_notice_seen:v1';
 const ReadmeDialog = defineAsyncComponent(
@@ -16,6 +18,7 @@ const ReadmeDialog = defineAsyncComponent(
 const Chat = defineAsyncComponent(() => import('@/components/chat/Chat.vue'));
 
 const customizer = useCustomizerStore();
+const appearance = useAppearanceStore();
 const commonStore = useCommonStore();
 const { locale } = useI18n();
 const route = useRoute();
@@ -90,8 +93,11 @@ onMounted(() => {
       :class="[
         customizer.mini_sidebar ? 'mini-sidebar' : '',
         customizer.inputBg ? 'inputWithbg' : '',
+        appearance.active ? 'dashboard-appearance-active' : '',
       ]"
+      :style="appearance.rootStyle"
     >
+      <DashboardWallpaperLayer />
       <v-progress-linear
         v-if="routerLoadingStore.isLoading"
         :model-value="routerLoadingStore.progress"

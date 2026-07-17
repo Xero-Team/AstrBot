@@ -48,6 +48,7 @@ from astrbot.core.platform.platform import Platform
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.register import register_platform_adapter
 
+from ..aiocqhttp.forward_node_splitter import split_long_text_node
 from .codec import (
     build_notice_message,
     build_request_message,
@@ -55,7 +56,7 @@ from .codec import (
     coerce_numeric_value,
     decode_cq_text,
 )
-from .exceptions import NapCatError
+from .exceptions import NapCatApiError, NapCatError
 from .forward_ws_client import NapCatForwardWebSocketClient
 from .generated.ob11_events import (
     AnonymousSegment,
@@ -136,9 +137,13 @@ class NapCatOutboundProtocol:
         self,
         client: NapCatForwardWebSocketClient,
         build_message: Callable[[MessageChain], Awaitable[str | list[object]]],
+        forward_message_max_retries: int = 3,
+        forward_message_fallback_enabled: bool = True,
     ) -> None:
         self.client = client
         self._build_message = build_message
+        self.forward_message_max_retries = forward_message_max_retries
+        self.forward_message_fallback_enabled = forward_message_fallback_enabled
 
     async def send_standard(
         self,
@@ -170,6 +175,26 @@ class NapCatOutboundProtocol:
         messages = node_payload.get("messages", [])
         if not isinstance(messages, list) or not messages:
             raise ValueError("NapCat forward message payload did not contain nodes")
+        if self.forward_message_fallback_enabled:
+            await self._send_forward_with_fallback(
+                session, messages, self.forward_message_max_retries
+            )
+        else:
+            await self._send_forward_chunk(session, messages)
+
+    @staticmethod
+    def _is_forward_size_error(exc: NapCatApiError) -> bool:
+        detail = " ".join(
+            value for value in (exc.message, exc.wording, str(exc)) if value
+        ).lower()
+        return any(
+            marker in detail
+            for marker in ("resid", "message too long", "content too long", "too large")
+        )
+
+    async def _send_forward_chunk(
+        self, session: MessageSession, messages: list[object]
+    ) -> None:
         if session.message_type == MessageType.GROUP_MESSAGE:
             await self.client.send_group_forward_message(
                 group_id=session.session_id,
@@ -180,6 +205,61 @@ class NapCatOutboundProtocol:
             user_id=session.session_id,
             messages=messages,
         )
+
+    @staticmethod
+    def _plain_text(messages: list[object]) -> str | None:
+        parts: list[str] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                return None
+            data = message.get("data")
+            content = data.get("content") if isinstance(data, dict) else None
+            if not isinstance(content, list):
+                return None
+            for segment in content:
+                if not isinstance(segment, dict) or segment.get("type") != "text":
+                    return None
+                segment_data = segment.get("data")
+                if not isinstance(segment_data, dict):
+                    return None
+                text = segment_data.get("text")
+                if not isinstance(text, str):
+                    return None
+                parts.append(text)
+        return "".join(parts)
+
+    async def _send_forward_with_fallback(
+        self, session: MessageSession, messages: list[object], max_retries: int = 3
+    ) -> None:
+        try:
+            await self._send_forward_chunk(session, messages)
+            return
+        except NapCatApiError as exc:
+            if not self._is_forward_size_error(exc):
+                raise
+
+        pending = [messages]
+        retries = 0
+        while pending:
+            chunk = pending.pop(0)
+            try:
+                await self._send_forward_chunk(session, chunk)
+                continue
+            except NapCatApiError as exc:
+                if not self._is_forward_size_error(exc):
+                    raise
+                retries += 1
+                if len(chunk) > 1 and retries <= max_retries:
+                    midpoint = len(chunk) // 2
+                    pending[:0] = [chunk[:midpoint], chunk[midpoint:]]
+                    continue
+                text = self._plain_text(chunk)
+                if text is None:
+                    raise
+                for segment in split_long_text_node(
+                    text, 1500, r"[^。？！~…]+[。？！~…]+"
+                ):
+                    await self.send_standard(session, MessageChain().message(segment))
 
 
 NAPCAT_NOTICE_EVENT_TYPES = (
@@ -365,6 +445,8 @@ class NapCatPlatformAdapter(Platform):
         self.outbound = NapCatOutboundProtocol(
             self.client,
             self._build_outbound_message,
+            int(platform_config.get("forward_message_max_retries", 3)),
+            bool(platform_config.get("forward_message_fallback_enabled", True)),
         )
 
     def meta(self) -> PlatformMetadata:

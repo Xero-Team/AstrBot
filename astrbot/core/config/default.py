@@ -356,6 +356,8 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_host": "127.0.0.1",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
+                        "forward_message_max_retries": 3,
+                        "forward_message_fallback_enabled": True,
                     },
                     "微信公众平台": {
                         "id": "weixin_official_account",

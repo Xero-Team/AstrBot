@@ -3,6 +3,7 @@ import re
 from collections.abc import AsyncGenerator
 
 from aiocqhttp import CQHttp, Event
+from aiocqhttp.exceptions import ActionFailed
 
 from astrbot.core.message.components import (
     At,
@@ -19,6 +20,8 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
+from .forward_node_splitter import split_long_text_node
+
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
@@ -28,9 +31,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: CQHttp,
+        forward_message_max_retries: int = 3,
+        forward_message_fallback_enabled: bool = True,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self._bot = bot
+        self.forward_message_max_retries = forward_message_max_retries
+        self.forward_message_fallback_enabled = forward_message_fallback_enabled
 
     @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
@@ -124,6 +131,94 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             )
 
     @classmethod
+    def _is_forward_size_error(cls, exc: ActionFailed) -> bool:
+        detail = str(exc).lower()
+        return any(
+            marker in detail
+            for marker in ("resid", "message too long", "content too long", "too large")
+        )
+
+    @staticmethod
+    def _forward_plain_text(messages: list[object]) -> str | None:
+        parts: list[str] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                return None
+            data = message.get("data")
+            content = data.get("content") if isinstance(data, dict) else None
+            if not isinstance(content, list):
+                return None
+            for segment in content:
+                if not isinstance(segment, dict) or segment.get("type") != "text":
+                    return None
+                segment_data = segment.get("data")
+                text = (
+                    segment_data.get("text") if isinstance(segment_data, dict) else None
+                )
+                if not isinstance(text, str):
+                    return None
+                parts.append(text)
+        return "".join(parts)
+
+    @classmethod
+    async def _send_forward_with_fallback(
+        cls,
+        bot: CQHttp,
+        payload: dict,
+        event: Event | None,
+        is_group: bool,
+        session_id: str | None,
+        max_retries: int = 3,
+    ) -> None:
+        action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
+        id_field = "group_id" if is_group else "user_id"
+
+        async def send_chunk(messages: list[object]) -> None:
+            chunk_payload = {id_field: session_id, "messages": messages}
+            if isinstance(event, Event) and event.get("self_id"):
+                chunk_payload["self_id"] = event["self_id"]
+            await bot.call_action(action, **chunk_payload)
+
+        messages = payload.get("messages", [])
+        if not isinstance(messages, list):
+            raise ValueError("Forward message payload did not contain nodes")
+        try:
+            await send_chunk(messages)
+            return
+        except ActionFailed as exc:
+            if not cls._is_forward_size_error(exc):
+                raise
+
+        pending = [messages]
+        retries = 0
+        while pending:
+            chunk = pending.pop(0)
+            try:
+                await send_chunk(chunk)
+                continue
+            except ActionFailed as exc:
+                if not cls._is_forward_size_error(exc):
+                    raise
+                retries += 1
+                if len(chunk) > 1 and retries <= max_retries:
+                    midpoint = len(chunk) // 2
+                    pending[:0] = [chunk[:midpoint], chunk[midpoint:]]
+                    continue
+                text = cls._forward_plain_text(chunk)
+                if text is None:
+                    raise
+                for segment in split_long_text_node(
+                    text, 1500, r"[^。？！~…]+[。？！~…]+"
+                ):
+                    await cls._dispatch_send(
+                        bot,
+                        event,
+                        is_group,
+                        session_id,
+                        [{"type": "text", "data": {"text": segment}}],
+                    )
+
+    @classmethod
     async def send_message(
         cls,
         bot: CQHttp,
@@ -131,6 +226,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         event: Event | None = None,
         is_group: bool = False,
         session_id: str | None = None,
+        forward_message_max_retries: int = 3,
+        forward_message_fallback_enabled: bool = True,
     ) -> None:
         """发送消息至 QQ 协议端（aiocqhttp）。
 
@@ -161,16 +258,23 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
                 payload = await seg.to_dict()
 
-                if is_group:
-                    payload["group_id"] = session_id
-                    if isinstance(event, Event) and event.get("self_id"):
-                        payload["self_id"] = event["self_id"]
-                    await bot.call_action("send_group_forward_msg", **payload)
+                if forward_message_fallback_enabled:
+                    await cls._send_forward_with_fallback(
+                        bot,
+                        payload,
+                        event,
+                        is_group,
+                        session_id,
+                        forward_message_max_retries,
+                    )
                 else:
-                    payload["user_id"] = session_id
-                    if isinstance(event, Event) and event.get("self_id"):
-                        payload["self_id"] = event["self_id"]
-                    await bot.call_action("send_private_forward_msg", **payload)
+                    action = (
+                        "send_group_forward_msg"
+                        if is_group
+                        else "send_private_forward_msg"
+                    )
+                    payload["group_id" if is_group else "user_id"] = session_id
+                    await bot.call_action(action, **payload)
             elif isinstance(seg, File):
                 d = await cls._from_segment_to_dict(seg)
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
@@ -194,6 +298,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             event=event,  # 不强制要求一定是 Event
             is_group=is_group,
             session_id=session_id,
+            forward_message_max_retries=self.forward_message_max_retries,
+            forward_message_fallback_enabled=self.forward_message_fallback_enabled,
         )
         await super().send(message)
 

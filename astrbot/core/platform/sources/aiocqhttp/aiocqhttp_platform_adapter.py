@@ -44,6 +44,12 @@ class AiocqhttpAdapter(Platform):
         self.settings = platform_settings
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
+        self.forward_message_max_retries = int(
+            platform_config.get("forward_message_max_retries", 3)
+        )
+        self.forward_message_fallback_enabled = bool(
+            platform_config.get("forward_message_fallback_enabled", True)
+        )
 
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
@@ -126,6 +132,8 @@ class AiocqhttpAdapter(Platform):
             event=None,  # 这里不需要 event，因为是通过 session 发送的
             is_group=is_group,
             session_id=session_id,
+            forward_message_max_retries=self.forward_message_max_retries,
+            forward_message_fallback_enabled=self.forward_message_fallback_enabled,
         )
         return await super().send_by_session(session, message_chain)
 
@@ -461,6 +469,8 @@ class AiocqhttpAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             bot=self.bot,
+            forward_message_max_retries=self.forward_message_max_retries,
+            forward_message_fallback_enabled=self.forward_message_fallback_enabled,
         )
 
     async def handle_msg(self, message: AstrBotMessage) -> None:

@@ -61,6 +61,7 @@ from ..message import (
 from ..response import AgentResponseData, AgentResponseType, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
+from ..tool_history_compactor import compact_consumed_tool_history
 from .base import AgentResponse, AgentState, BaseAgentRunner
 
 
@@ -304,7 +305,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.req.func_tool = light_set
 
         # append existing messages in the run context
-        messages = bind_checkpoint_messages(request.contexts or [])
+        contexts = request.contexts or []
+        if request.tool_history_mode == "compact_consumed":
+            contexts = compact_consumed_tool_history(
+                contexts,
+                request.tool_history_placeholder
+                or "[已消费的历史工具结果已省略，需要时请重新调用工具]",
+            )
+        messages = bind_checkpoint_messages(contexts)
         if (
             request.prompt is not None
             or request.image_urls

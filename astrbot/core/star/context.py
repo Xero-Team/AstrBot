@@ -264,6 +264,10 @@ class Context:
             AstrAgentContext,
         )
         from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+        from astrbot.core.astr_main_agent import (
+            MainAgentBuildConfig,
+            prepare_event_attachments,
+        )
 
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -286,6 +290,17 @@ class Context:
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
+        )
+        config_data = self.get_config(umo=event.unified_msg_origin) or {}
+        provider_settings = config_data.get("provider_settings") or {}
+        await prepare_event_attachments(
+            event,
+            request,
+            MainAgentBuildConfig(
+                tool_call_timeout=tool_call_timeout,
+                provider_settings=provider_settings,
+            ),
+            self,
         )
         if agent_context is None:
             agent_context = AstrAgentContext(

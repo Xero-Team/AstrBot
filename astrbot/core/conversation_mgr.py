@@ -9,11 +9,26 @@ import json
 from collections.abc import Awaitable, Callable
 
 from astrbot import logger
+from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 from astrbot.core.utils.shared_preferences import SharedPreferences
+
+
+def load_sanitized_history(history_json: str | None) -> list[dict]:
+    """Deserialize provider history while removing legacy base64 image data.
+
+    Args:
+        history_json: Serialized conversation history.
+
+    Returns:
+        Provider-safe message history, or an empty list for empty history.
+    """
+    if not history_json:
+        return []
+    return sanitize_history_for_storage(json.loads(history_json))
 
 
 class ConversationManager:

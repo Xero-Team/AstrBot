@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot import logger
+from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -528,6 +529,8 @@ class InternalAgentSubStage(Stage):
                     content=CheckpointData(id=checkpoint_id),
                 ).model_dump()
             )
+
+        message_to_save = sanitize_history_for_storage(message_to_save)
 
         # if user_aborted:
         #     message_to_save.append(

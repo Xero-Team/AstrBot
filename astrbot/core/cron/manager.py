@@ -12,6 +12,7 @@ from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
@@ -430,7 +431,7 @@ class CronJobManager:
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
         # finetine the messages
-        context = json.loads(conv.history)
+        context = load_sanitized_history(conv.history)
         if context:
             req.contexts = context
             context_dump = req._print_friendly_context()

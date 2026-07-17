@@ -144,6 +144,10 @@ DEFAULT_CONFIG = {
         "buffer_intermediate_messages": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
+        "tool_history_policy": {
+            "mode": "full",
+            "placeholder": "[已消费的历史工具结果已省略，需要时请重新调用工具]",
+        },
         "quoted_message_parser": {
             "max_component_chain_depth": 4,
             "max_forward_node_depth": 6,

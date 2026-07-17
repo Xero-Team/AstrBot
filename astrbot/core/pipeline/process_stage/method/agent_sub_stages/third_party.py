@@ -17,7 +17,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.message.components import Image, Record
+from astrbot.core.astr_main_agent import MainAgentBuildConfig, prepare_event_attachments
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -344,15 +344,23 @@ class ThirdPartyAgentSubStage(Stage):
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str[len(provider_wake_prefix) :]
-        for comp in event.message_obj.message:
-            if isinstance(comp, Image):
-                image_path = await comp.convert_to_base64()
-                req.image_urls.append(image_path)
-            elif isinstance(comp, Record):
-                audio_path = await comp.convert_to_file_path()
-                req.audio_urls.append(audio_path)
+        settings = self.conf.get("provider_settings", {})
+        await prepare_event_attachments(
+            event,
+            req,
+            MainAgentBuildConfig(
+                tool_call_timeout=int(settings.get("tool_call_timeout", 120)),
+                provider_settings=settings,
+            ),
+            self.ctx.plugin_manager.context,
+        )
 
-        if not req.prompt and not req.image_urls and not req.audio_urls:
+        if (
+            not req.prompt
+            and not req.image_urls
+            and not req.audio_urls
+            and not req.extra_user_content_parts
+        ):
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)

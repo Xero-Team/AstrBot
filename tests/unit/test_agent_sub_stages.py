@@ -209,6 +209,38 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
 
 
 @pytest.mark.asyncio
+async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_messages():
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    event = FakeEvent()
+    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-1"))
+    image_data = "data:image/png;base64,aGVsbG8="
+    message = Message.model_validate(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_data},
+                }
+            ],
+        }
+    )
+
+    await stage._save_to_history(
+        event,
+        req,
+        LLMResponse(role="assistant", completion_text="answer"),
+        [message],
+        runner_stats=None,
+    )
+
+    saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
+    assert "data:image" not in str(saved_history)
+    assert message.content[0].image_url.url == image_data
+
+
+@pytest.mark.asyncio
 async def test_internal_save_to_history_keeps_aborted_error_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
@@ -1509,7 +1541,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     )
     stage.conf = {"provider_settings": {}}
     image = MagicMock(spec=Image)
-    image.convert_to_base64 = AsyncMock(return_value="data:image/png;base64,abc")
+    image.convert_to_file_path = AsyncMock(return_value="/tmp/image.png")
     record = MagicMock(spec=Record)
     record.convert_to_file_path = AsyncMock(return_value="/tmp/audio.wav")
     event = FakeInternalProcessEvent(
@@ -1567,7 +1599,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     assert len(captured_calls) == 1
     req = runner.reset.await_args.kwargs["request"]
     assert req.prompt == ""
-    assert req.image_urls == ["data:image/png;base64,abc"]
+    assert req.image_urls == ["/tmp/image.png"]
     assert req.audio_urls == ["/tmp/audio.wav"]
     set_persona_error.assert_called_once_with(event, None)
     assert runner.close.await_count == 1

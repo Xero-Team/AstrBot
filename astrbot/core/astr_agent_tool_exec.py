@@ -21,6 +21,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -565,7 +566,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
-        context = json.loads(conv.history)
+        context = load_sanitized_history(conv.history)
         if context:
             req.contexts = context
             context_dump = req._print_friendly_context()

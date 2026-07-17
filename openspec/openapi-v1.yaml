@@ -30,6 +30,7 @@ tags:
   - name: Chat
   - name: IM
   - name: Files
+  - name: Appearance
   - name: Plugins
   - name: Plugin Dashboard
   - name: Plugin Sources
@@ -1252,6 +1253,102 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Ok'
+
+  /api/v1/appearance/wallpapers:
+    get:
+      tags: [Appearance]
+      summary: List Dashboard wallpaper assets
+      operationId: listAppearanceWallpapers
+      x-astrbot-scope: config
+      responses:
+        '200':
+          description: Dashboard wallpaper library
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppearanceWallpaperListResponse'
+    post:
+      tags: [Appearance]
+      summary: Upload a Dashboard wallpaper asset
+      operationId: uploadAppearanceWallpaper
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppearanceWallpaperUploadRequest'
+      responses:
+        '200':
+          description: Uploaded Dashboard wallpaper
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppearanceWallpaperResponse'
+        '422':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/appearance/wallpapers/{wallpaper_id}:
+    get:
+      tags: [Appearance]
+      summary: Get a Dashboard wallpaper image
+      operationId: getAppearanceWallpaper
+      x-astrbot-scope: config
+      parameters:
+        - $ref: '#/components/parameters/AppearanceWallpaperId'
+      responses:
+        '200':
+          description: Wallpaper image bytes
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Appearance]
+      summary: Delete a Dashboard wallpaper asset
+      operationId: deleteAppearanceWallpaper
+      x-astrbot-scope: config
+      parameters:
+        - $ref: '#/components/parameters/AppearanceWallpaperId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/appearance/wallpapers/{wallpaper_id}/thumbnail:
+    get:
+      tags: [Appearance]
+      summary: Get a Dashboard wallpaper thumbnail
+      operationId: getAppearanceWallpaperThumbnail
+      x-astrbot-scope: config
+      parameters:
+        - $ref: '#/components/parameters/AppearanceWallpaperId'
+      responses:
+        '200':
+          description: WebP wallpaper thumbnail bytes
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/Error'
 
   /api/v1/file:
     post:
@@ -4241,6 +4338,13 @@ components:
             type: string
 
   parameters:
+    AppearanceWallpaperId:
+      name: wallpaper_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
     ExtensionId:
       name: extension_id
       in: path
@@ -5120,6 +5224,72 @@ components:
         file:
           type: string
           format: binary
+
+    AppearanceWallpaperUploadRequest:
+      type: object
+      required: [file]
+      additionalProperties: false
+      properties:
+        file:
+          type: string
+          format: binary
+
+    AppearanceWallpaper:
+      type: object
+      additionalProperties: false
+      required: [id, content_type, width, height, image_url, thumbnail_url]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/gif]
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        image_url:
+          type: string
+        thumbnail_url:
+          type: string
+
+    AppearanceWallpaperResponse:
+      type: object
+      additionalProperties: false
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        message:
+          type: string
+          nullable: true
+        data:
+          $ref: '#/components/schemas/AppearanceWallpaper'
+
+    AppearanceWallpaperListResponse:
+      type: object
+      additionalProperties: false
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        message:
+          type: string
+          nullable: true
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AppearanceWallpaper'
 
     PluginUpdateRequest:
       type: object

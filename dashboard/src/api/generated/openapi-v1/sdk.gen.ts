@@ -76,6 +76,9 @@ import type {
   CreateT2iTemplateResponses,
   DeleteApiKeyData,
   DeleteApiKeyResponses,
+  DeleteAppearanceWallpaperData,
+  DeleteAppearanceWallpaperErrors,
+  DeleteAppearanceWallpaperResponses,
   DeleteAttachmentData,
   DeleteAttachmentResponses,
   DeleteBackupData,
@@ -144,6 +147,12 @@ import type {
   ExportConversationsResponses,
   GetActiveT2iTemplateData,
   GetActiveT2iTemplateResponses,
+  GetAppearanceWallpaperData,
+  GetAppearanceWallpaperErrors,
+  GetAppearanceWallpaperResponses,
+  GetAppearanceWallpaperThumbnailData,
+  GetAppearanceWallpaperThumbnailErrors,
+  GetAppearanceWallpaperThumbnailResponses,
   GetAttachmentData,
   GetAttachmentResponses,
   GetAuthSetupStatusData,
@@ -273,6 +282,8 @@ import type {
   ListActiveUmosResponses,
   ListApiKeysData,
   ListApiKeysResponses,
+  ListAppearanceWallpapersData,
+  ListAppearanceWallpapersResponses,
   ListBackupsData,
   ListBackupsResponses,
   ListBotsData,
@@ -520,6 +531,9 @@ import type {
   UpdateT2iTemplateResponses,
   UpdateTraceSettingsData,
   UpdateTraceSettingsResponses,
+  UploadAppearanceWallpaperData,
+  UploadAppearanceWallpaperErrors,
+  UploadAppearanceWallpaperResponses,
   UploadBackupChunkData,
   UploadBackupChunkResponses,
   UploadBackupData,
@@ -2046,6 +2060,114 @@ export const uploadFile = <ThrowOnError extends boolean = false>(
       'Content-Type': null,
       ...options.headers,
     },
+  });
+
+/**
+ * List Dashboard wallpaper assets
+ */
+export const listAppearanceWallpapers = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAppearanceWallpapersData, ThrowOnError>,
+): RequestResult<ListAppearanceWallpapersResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListAppearanceWallpapersResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/appearance/wallpapers',
+    ...options,
+  });
+
+/**
+ * Upload a Dashboard wallpaper asset
+ */
+export const uploadAppearanceWallpaper = <ThrowOnError extends boolean = false>(
+  options: Options<UploadAppearanceWallpaperData, ThrowOnError>,
+): RequestResult<
+  UploadAppearanceWallpaperResponses,
+  UploadAppearanceWallpaperErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    UploadAppearanceWallpaperResponses,
+    UploadAppearanceWallpaperErrors,
+    ThrowOnError
+  >({
+    ...formDataBodySerializer,
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/appearance/wallpapers',
+    ...options,
+    headers: {
+      'Content-Type': null,
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete a Dashboard wallpaper asset
+ */
+export const deleteAppearanceWallpaper = <ThrowOnError extends boolean = false>(
+  options: Options<DeleteAppearanceWallpaperData, ThrowOnError>,
+): RequestResult<
+  DeleteAppearanceWallpaperResponses,
+  DeleteAppearanceWallpaperErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    DeleteAppearanceWallpaperResponses,
+    DeleteAppearanceWallpaperErrors,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/appearance/wallpapers/{wallpaper_id}',
+    ...options,
+  });
+
+/**
+ * Get a Dashboard wallpaper image
+ */
+export const getAppearanceWallpaper = <ThrowOnError extends boolean = false>(
+  options: Options<GetAppearanceWallpaperData, ThrowOnError>,
+): RequestResult<
+  GetAppearanceWallpaperResponses,
+  GetAppearanceWallpaperErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    GetAppearanceWallpaperResponses,
+    GetAppearanceWallpaperErrors,
+    ThrowOnError
+  >({
+    responseType: 'blob',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/appearance/wallpapers/{wallpaper_id}',
+    ...options,
+  });
+
+/**
+ * Get a Dashboard wallpaper thumbnail
+ */
+export const getAppearanceWallpaperThumbnail = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GetAppearanceWallpaperThumbnailData, ThrowOnError>,
+): RequestResult<
+  GetAppearanceWallpaperThumbnailResponses,
+  GetAppearanceWallpaperThumbnailErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    GetAppearanceWallpaperThumbnailResponses,
+    GetAppearanceWallpaperThumbnailErrors,
+    ThrowOnError
+  >({
+    responseType: 'blob',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/appearance/wallpapers/{wallpaper_id}/thumbnail',
+    ...options,
   });
 
 /**

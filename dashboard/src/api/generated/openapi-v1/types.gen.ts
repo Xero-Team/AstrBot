@@ -331,6 +331,33 @@ export type FileUploadRequest = {
   file: Blob | File;
 };
 
+export type AppearanceWallpaperUploadRequest = {
+  file: Blob | File;
+};
+
+export type AppearanceWallpaper = {
+  id: string;
+  content_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+  width: number;
+  height: number;
+  image_url: string;
+  thumbnail_url: string;
+};
+
+export type AppearanceWallpaperResponse = {
+  status: 'ok';
+  message?: string;
+  data: AppearanceWallpaper;
+};
+
+export type AppearanceWallpaperListResponse = {
+  status: 'ok';
+  message?: string;
+  data: {
+    items: Array<AppearanceWallpaper>;
+  };
+};
+
 export type PluginUpdateRequest = {
   proxy?: string;
 };
@@ -746,6 +773,8 @@ export type SubAgentConfigRequest = {
     [key: string]: unknown;
   }>;
 };
+
+export type AppearanceWallpaperId = string;
 
 export type ExtensionId = string;
 
@@ -2324,6 +2353,137 @@ export type UploadFileResponses = {
 };
 
 export type UploadFileResponse = UploadFileResponses[keyof UploadFileResponses];
+
+export type ListAppearanceWallpapersData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/appearance/wallpapers';
+};
+
+export type ListAppearanceWallpapersResponses = {
+  /**
+   * Dashboard wallpaper library
+   */
+  200: AppearanceWallpaperListResponse;
+};
+
+export type ListAppearanceWallpapersResponse =
+  ListAppearanceWallpapersResponses[keyof ListAppearanceWallpapersResponses];
+
+export type UploadAppearanceWallpaperData = {
+  body: AppearanceWallpaperUploadRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/appearance/wallpapers';
+};
+
+export type UploadAppearanceWallpaperErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  422: ErrorEnvelope;
+};
+
+export type UploadAppearanceWallpaperError =
+  UploadAppearanceWallpaperErrors[keyof UploadAppearanceWallpaperErrors];
+
+export type UploadAppearanceWallpaperResponses = {
+  /**
+   * Uploaded Dashboard wallpaper
+   */
+  200: AppearanceWallpaperResponse;
+};
+
+export type UploadAppearanceWallpaperResponse =
+  UploadAppearanceWallpaperResponses[keyof UploadAppearanceWallpaperResponses];
+
+export type DeleteAppearanceWallpaperData = {
+  body?: never;
+  path: {
+    wallpaper_id: string;
+  };
+  query?: never;
+  url: '/api/v1/appearance/wallpapers/{wallpaper_id}';
+};
+
+export type DeleteAppearanceWallpaperErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  404: ErrorEnvelope;
+};
+
+export type DeleteAppearanceWallpaperError =
+  DeleteAppearanceWallpaperErrors[keyof DeleteAppearanceWallpaperErrors];
+
+export type DeleteAppearanceWallpaperResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type DeleteAppearanceWallpaperResponse =
+  DeleteAppearanceWallpaperResponses[keyof DeleteAppearanceWallpaperResponses];
+
+export type GetAppearanceWallpaperData = {
+  body?: never;
+  path: {
+    wallpaper_id: string;
+  };
+  query?: never;
+  url: '/api/v1/appearance/wallpapers/{wallpaper_id}';
+};
+
+export type GetAppearanceWallpaperErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  404: ErrorEnvelope;
+};
+
+export type GetAppearanceWallpaperError =
+  GetAppearanceWallpaperErrors[keyof GetAppearanceWallpaperErrors];
+
+export type GetAppearanceWallpaperResponses = {
+  /**
+   * Wallpaper image bytes
+   */
+  200: Blob | File;
+};
+
+export type GetAppearanceWallpaperResponse =
+  GetAppearanceWallpaperResponses[keyof GetAppearanceWallpaperResponses];
+
+export type GetAppearanceWallpaperThumbnailData = {
+  body?: never;
+  path: {
+    wallpaper_id: string;
+  };
+  query?: never;
+  url: '/api/v1/appearance/wallpapers/{wallpaper_id}/thumbnail';
+};
+
+export type GetAppearanceWallpaperThumbnailErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  404: ErrorEnvelope;
+};
+
+export type GetAppearanceWallpaperThumbnailError =
+  GetAppearanceWallpaperThumbnailErrors[keyof GetAppearanceWallpaperThumbnailErrors];
+
+export type GetAppearanceWallpaperThumbnailResponses = {
+  /**
+   * WebP wallpaper thumbnail bytes
+   */
+  200: Blob | File;
+};
+
+export type GetAppearanceWallpaperThumbnailResponse =
+  GetAppearanceWallpaperThumbnailResponses[keyof GetAppearanceWallpaperThumbnailResponses];
 
 export type DownloadOpenApiFileData = {
   body?: never;

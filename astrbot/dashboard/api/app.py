@@ -10,6 +10,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogBroker
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
+from astrbot.dashboard.services.appearance_service import AppearanceService
 from astrbot.dashboard.services.auth_service import (
     DASHBOARD_JWT_COOKIE_NAME,
     AuthService,
@@ -103,6 +104,7 @@ def create_dashboard_asgi_app(
         plugin_file_tickets,
     )
     app.state.services = SimpleNamespace(
+        appearance=AppearanceService(),
         config_profiles=ConfigProfileService(dashboard_core, db),
         config_display=ConfigDisplayService(dashboard_core),
         config_files=ConfigFileService(dashboard_core),

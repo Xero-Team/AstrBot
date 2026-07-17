@@ -163,6 +163,9 @@ onBeforeUnmount(() => {
 }
 
 .dashboard-appearance-active {
+  --dashboard-wallpaper-surface: rgb(
+    var(--v-theme-surface) / var(--dashboard-surface-opacity, 1)
+  );
   background: transparent;
   isolation: isolate;
 }
@@ -183,8 +186,6 @@ onBeforeUnmount(() => {
 .dashboard-appearance-active .v-app-bar,
 .dashboard-appearance-active .top-header,
 .dashboard-appearance-active .v-navigation-drawer {
-  background-color: rgb(
-    var(--v-theme-surface) / var(--dashboard-surface-opacity, 1)
-  );
+  background-color: var(--dashboard-wallpaper-surface);
 }
 </style>

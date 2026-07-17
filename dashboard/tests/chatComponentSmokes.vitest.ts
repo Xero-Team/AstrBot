@@ -119,6 +119,9 @@ describe('chat component smokes', () => {
 
     expect(wrapper.find('.reply-preview').exists()).toBe(true);
     expect(wrapper.find('.attachments-preview').exists()).toBe(true);
+    expect(wrapper.find('.input-container').attributes('style')).not.toContain(
+      'background-color',
+    );
     expect(wrapper.text()).toContain('quoted message');
     expect(
       warnSpy.mock.calls.some((args) =>

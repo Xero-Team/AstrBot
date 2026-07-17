@@ -19,7 +19,6 @@
         border: isDark ? 'none' : '1px solid #e0e0e0',
         borderRadius: '24px',
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        backgroundColor: isDark ? '#2d2d2d' : '#fff',
         position: 'relative',
         transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
@@ -1111,7 +1110,7 @@ defineExpose({
   padding: 6px 12px 6px 14px !important;
   border-color: #f0f0f0 !important;
   border-radius: 999px !important;
-  background: #fff !important;
+  background: rgb(var(--v-theme-surface)) !important;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08) !important;
 }
 
@@ -1130,8 +1129,11 @@ defineExpose({
 
 .input-area.is-dark .input-container {
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  background: #2d2d2d !important;
   box-shadow: none !important;
+}
+
+:global(.dashboard-appearance-active .input-container) {
+  background: var(--dashboard-wallpaper-surface) !important;
 }
 
 .reply-preview,
@@ -1568,7 +1570,6 @@ defineExpose({
     overflow: hidden;
     border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
     border-radius: 999px !important;
-    background: #fff !important;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
   }
 
@@ -1588,7 +1589,6 @@ defineExpose({
 
   .input-area.is-dark .input-container {
     border-color: rgba(255, 255, 255, 0.16) !important;
-    background: #2d2d2d !important;
     box-shadow: none !important;
   }
 

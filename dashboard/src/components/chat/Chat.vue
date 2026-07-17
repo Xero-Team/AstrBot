@@ -1531,6 +1531,11 @@ function toggleTheme() {
   --chat-border: rgba(255, 255, 255, 0.1);
 }
 
+:global(.dashboard-appearance-active .chat-ui) {
+  --chat-page-bg: transparent;
+  --chat-sidebar-bg: var(--dashboard-wallpaper-surface);
+}
+
 .chat-sidebar {
   height: 100%;
   background: var(--chat-sidebar-bg);

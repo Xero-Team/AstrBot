@@ -3,7 +3,9 @@
 from copy import deepcopy
 from typing import Any
 
-DEFAULT_TOOL_HISTORY_PLACEHOLDER = "[stale tool result omitted, re-invoke tool if needed]"
+DEFAULT_TOOL_HISTORY_PLACEHOLDER = (
+    "[stale tool result omitted, re-invoke tool if needed]"
+)
 
 
 def compact_consumed_tool_history(

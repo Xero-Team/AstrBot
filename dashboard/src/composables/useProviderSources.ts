@@ -161,6 +161,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const modelSearch = ref('');
 
   let suppressSourceWatch = false;
+  const unsavedProviderSourceIds = new Set<string>();
 
   const providerTypes = computed(() => [
     {
@@ -560,6 +561,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return candidate;
   }
 
+  function removeProviderSourceFromLocalState(sourceId: string) {
+    providers.value = providers.value.filter(
+      (provider) =>
+        provider.provider_source_id === null ||
+        String(provider.provider_source_id) !== sourceId,
+    );
+    providerSources.value = providerSources.value.filter(
+      (providerSource) =>
+        providerSource.id === null || String(providerSource.id) !== sourceId,
+    );
+
+    if (String(selectedProviderSource.value?.id || '') === sourceId) {
+      selectedProviderSource.value = null;
+      selectedProviderSourceOriginalId.value = null;
+      editableProviderSource.value = null;
+      availableModels.value = [];
+      modelMetadata.value = {};
+      isSourceModified.value = false;
+    }
+  }
+
   function addProviderSource(templateKey: string) {
     const template = providerTemplates.value[templateKey];
     if (!template) {
@@ -580,6 +602,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return;
     }
 
+    unsavedProviderSourceIds.add(newId);
     providerSources.value.push(newSource);
     selectedProviderSource.value = newSource;
     selectedProviderSourceOriginalId.value = newId;
@@ -601,30 +624,23 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     );
     if (!confirmed) return;
 
-    try {
-      await providerApi.deleteSource(source.id);
-
-      providers.value = providers.value.filter(
-        (p) => p.provider_source_id !== source.id,
-      );
-      providerSources.value = providerSources.value.filter(
-        (s) => s.id !== source.id,
-      );
-
-      if (selectedProviderSource.value?.id === source.id) {
-        selectedProviderSource.value = null;
-        selectedProviderSourceOriginalId.value = null;
-        editableProviderSource.value = null;
-      }
-
+    const sourceId = String(source.id);
+    if (unsavedProviderSourceIds.delete(sourceId)) {
+      removeProviderSourceFromLocalState(sourceId);
       showMessage(tm('providerSources.deleteSuccess'));
+      return;
+    }
+
+    try {
+      await providerApi.deleteSource(sourceId);
+      removeProviderSourceFromLocalState(sourceId);
+      showMessage(tm('providerSources.deleteSuccess'));
+      await loadConfig();
     } catch (error: unknown) {
       showMessage(
         resolveErrorMessage(error, tm('providerSources.deleteError')),
         'error',
       );
-    } finally {
-      await loadConfig();
     }
   }
 
@@ -643,10 +659,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     savingSource.value = true;
+    const sourceBeingSaved = selectedProviderSource.value;
     const originalId = String(
-      selectedProviderSourceOriginalId.value ||
-        selectedProviderSource.value.id ||
-        '',
+      selectedProviderSourceOriginalId.value || sourceBeingSaved.id || '',
     );
     const editableSource = editableProviderSource.value;
     try {
@@ -668,6 +683,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
             : p,
         );
         selectedProviderSourceOriginalId.value = editableSource.id || null;
+      }
+
+      unsavedProviderSourceIds.delete(originalId);
+      if (editableSource.id) {
+        unsavedProviderSourceIds.delete(String(editableSource.id));
       }
 
       const idx = providerSources.value.findIndex((ps) => ps.id === originalId);

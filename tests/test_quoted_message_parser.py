@@ -325,7 +325,7 @@ async def test_extract_quoted_message_text_multimsg_malformed_config_does_not_ra
     )
 
     text = await extract_quoted_message_text(event)
-    assert text == "still works"
+    assert text == "[JSON]still works"
 
 
 @pytest.mark.asyncio
@@ -654,7 +654,6 @@ async def test_extract_quoted_message_prefers_embedded_napcat_nested_forward_con
     assert "Mock Inner Sender: mock nested text[Image]" in text
     assert images == [nested_image]
     assert event.adapter.client.forward_requests == [
-        "mock-outer-forward",
         "mock-outer-forward",
     ]
 

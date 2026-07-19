@@ -280,6 +280,10 @@ def _parse_onebot_segments(
             text = seg_data.get("text")
             if isinstance(text, str) and text:
                 text_parts.append(text)
+        elif seg_type == "at":
+            target = seg_data.get("name") or seg_data.get("qq")
+            if target is not None:
+                text_parts.append(f"@{target}")
         elif seg_type == "image":
             text_parts.append("[Image]")
             candidate = seg_data.get("url") or seg_data.get("file")
@@ -287,6 +291,8 @@ def _parse_onebot_segments(
                 image_refs.append(candidate.strip())
         elif seg_type == "video":
             text_parts.append("[Video]")
+        elif seg_type in ("record", "voice"):
+            text_parts.append("[Audio]")
         elif seg_type == "file":
             file_name = (
                 seg_data.get("name")
@@ -311,6 +317,74 @@ def _parse_onebot_segments(
                 )
             ):
                 image_refs.append(candidate_file.strip())
+        elif seg_type == "face":
+            text_parts.append(f"[Face:{seg_data.get('id', '')}]")
+        elif seg_type == "mface":
+            summary = seg_data.get("summary")
+            text_parts.append(summary if isinstance(summary, str) else "[Market Face]")
+        elif seg_type == "poke":
+            text_parts.append(f"[Poke:{seg_data.get('id', '')}]")
+        elif seg_type == "dice":
+            text_parts.append("[Dice]")
+        elif seg_type == "rps":
+            text_parts.append("[Rock Paper Scissors]")
+        elif seg_type == "shake":
+            text_parts.append("[Window Shake]")
+        elif seg_type == "share":
+            text_parts.append(
+                f"[Share:{seg_data.get('title', '')} {seg_data.get('url', '')}]"
+            )
+        elif seg_type == "contact":
+            text_parts.append(
+                f"[Contact:{seg_data.get('type', '')} {seg_data.get('id', '')}]"
+            )
+        elif seg_type == "location":
+            text_parts.append(
+                f"[Location:{seg_data.get('title', '')} "
+                f"({seg_data.get('lat', '')}, {seg_data.get('lon', '')})]"
+            )
+        elif seg_type == "music":
+            text_parts.append(
+                f"[Music:{seg_data.get('title') or seg_data.get('type') or seg_data.get('id', '')}]"
+            )
+        elif seg_type == "markdown":
+            content = seg_data.get("content")
+            text_parts.append(
+                f"[Markdown]{content}" if isinstance(content, str) else "[Markdown]"
+            )
+        elif seg_type == "miniapp":
+            text_parts.append("[MiniApp]")
+        elif seg_type == "xml":
+            text_parts.append("[XML]")
+        elif seg_type == "reply":
+            text_parts.append("[Quoted Message]")
+        elif seg_type == "onlinefile":
+            text_parts.append(f"[Online File:{seg_data.get('fileName', '')}]")
+        elif seg_type == "flashtransfer":
+            text_parts.append("[Flash Transfer]")
+        elif seg_type == "node":
+            raw_content = seg_data.get("content") or seg_data.get("message") or []
+            nested_text, nested_forward_ids, nested_images = (
+                _extract_text_forward_ids_and_images_from_forward_nodes(
+                    [
+                        {
+                            "sender": {
+                                "nickname": seg_data.get("nickname")
+                                or seg_data.get("name"),
+                                "user_id": seg_data.get("user_id")
+                                or seg_data.get("uin"),
+                            },
+                            "message": raw_content,
+                        }
+                    ],
+                    depth=forward_depth + 1,
+                    settings=settings,
+                )
+            )
+            if nested_text:
+                text_parts.append(nested_text)
+            forward_ids.extend(nested_forward_ids)
+            image_refs.extend(nested_images)
         elif seg_type in ("forward", "forward_msg", "nodes"):
             nested_nodes = seg_data.get("content")
             fid = seg_data.get("id") or seg_data.get("message_id")
@@ -337,6 +411,8 @@ def _parse_onebot_segments(
                 multimsg_text = _extract_text_from_multimsg_json(raw_json)
                 if multimsg_text:
                     text_parts.append(multimsg_text)
+                else:
+                    text_parts.append("[JSON]")
 
     return _build_parsed_payload(
         _join_text_parts(text_parts),

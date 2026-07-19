@@ -84,6 +84,14 @@ class QuotedMessageExtractor:
         self._client = OneBotClient(event, settings=settings)
         self._image_resolver = ImageResolver(event, self._client)
 
+    def _remote_content_cache(self) -> dict[tuple[object, ...], QuotedMessageContent]:
+        cache = getattr(self._event, "_quoted_message_remote_content_cache", None)
+        if isinstance(cache, dict):
+            return cache
+        cache = {}
+        setattr(self._event, "_quoted_message_remote_content_cache", cache)
+        return cache
+
     async def _fetch_quoted_content(
         self,
         reply_component: Reply | None = None,
@@ -114,9 +122,20 @@ class QuotedMessageExtractor:
                 forward_image_refs=[],
             )
 
+        cache_key = (
+            id(reply),
+            reply_id_str,
+            self._settings.max_component_chain_depth,
+            self._settings.max_forward_node_depth,
+            self._settings.max_forward_fetch,
+        )
+        cached = self._remote_content_cache().get(cache_key)
+        if cached is not None:
+            return cached
+
         msg_payload = await self._client.get_msg(reply_id_str)
         if not msg_payload:
-            return QuotedMessageContent(
+            content = QuotedMessageContent(
                 embedded_text=embedded_text,
                 embedded_image_refs=embedded_image_refs,
                 reply_id=reply_id_str,
@@ -125,6 +144,8 @@ class QuotedMessageExtractor:
                 forward_texts=[],
                 forward_image_refs=[],
             )
+            self._remote_content_cache()[cache_key] = content
+            return content
 
         parsed = self._payload_parser.parse_get_msg_payload(msg_payload)
         forward_texts, forward_images = await _collect_text_and_images_from_forward_ids(
@@ -133,7 +154,7 @@ class QuotedMessageExtractor:
             parsed["forward_ids"],
             max_fetch=self._settings.max_forward_fetch,
         )
-        return QuotedMessageContent(
+        content = QuotedMessageContent(
             embedded_text=embedded_text,
             embedded_image_refs=embedded_image_refs,
             reply_id=reply_id_str,
@@ -142,6 +163,8 @@ class QuotedMessageExtractor:
             forward_texts=forward_texts,
             forward_image_refs=forward_images,
         )
+        self._remote_content_cache()[cache_key] = content
+        return content
 
     async def text(self, reply_component: Reply | None = None) -> str | None:
         embedded_content = await self._fetch_quoted_content(

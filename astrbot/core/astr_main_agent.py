@@ -107,6 +107,7 @@ from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_QUALITY,
     compress_image,
 )
+from astrbot.core.utils.message_context import MessageContextRenderer
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -802,36 +803,40 @@ async def _append_video_attachment(
     video: Video,
     *,
     quoted: bool = False,
+    forwarded: bool = False,
 ) -> None:
     try:
         video_path = await video.convert_to_file_path()
         video_path = video_path.replace("\\", "/")
     except Exception as exc:  # noqa: BLE001
-        if quoted:
+        if quoted or forwarded:
+            scope = "forwarded message" if forwarded else "quoted message"
             logger.debug(
-                "Quoted video attachment is not locally resolvable, preserving ref: %s",
-                exc,
+                "%s video attachment is not locally resolvable: %s",
+                scope.capitalize(),
+                type(exc).__name__,
             )
             video_ref = video.path or video.url or video.file or ""
             ref_name = os.path.basename(video_ref.split("?", 1)[0].rstrip("/"))
             req.extra_user_content_parts.append(
                 TextPart(
                     text=(
-                        "[Video Attachment in quoted message: "
+                        f"[Video Attachment in {scope}: "
                         f"name {ref_name or 'video'}, ref {video_ref}]"
                     )
                 )
             )
         else:
-            logger.error("Error processing video attachment: %s", exc)
+            logger.error(
+                "Error processing video attachment: %s",
+                type(exc).__name__,
+            )
         return
 
     video_name = os.path.basename(video_path)
-    if quoted:
-        text = (
-            f"[Video Attachment in quoted message: "
-            f"name {video_name}, path {video_path}]"
-        )
+    if quoted or forwarded:
+        scope = "forwarded message" if forwarded else "quoted message"
+        text = f"[Video Attachment in {scope}: name {video_name}, path {video_path}]"
     else:
         text = f"[Video Attachment: name {video_name}, path {video_path}]"
 
@@ -1542,6 +1547,84 @@ async def _append_direct_attachments(
             await _append_video_attachment(req, component)
 
 
+async def _append_message_component_context(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    config: MainAgentBuildConfig,
+) -> None:
+    renderer = MessageContextRenderer(
+        event,
+        settings=_get_quoted_message_parser_settings(config.provider_settings),
+    )
+    rendered = await renderer.render_event_components()
+    if rendered.text:
+        req.extra_user_content_parts.append(
+            TextPart(
+                text=(f"<Message Components>\n{rendered.text}\n</Message Components>")
+            )
+        )
+
+    for image_ref in rendered.image_refs:
+        if image_ref in req.image_urls:
+            continue
+        req.image_urls.append(image_ref)
+        req.extra_user_content_parts.append(
+            TextPart(text=f"[Image Attachment in forwarded message: path {image_ref}]")
+        )
+
+    for component in rendered.nested_media:
+        try:
+            if isinstance(component, Image):
+                path = await component.convert_to_file_path()
+                image_path = await _compress_image_for_provider(
+                    path,
+                    config.provider_settings,
+                )
+                if _is_generated_compressed_image_path(path, image_path):
+                    event.track_temporary_local_file(image_path)
+                req.image_urls.append(image_path)
+                req.extra_user_content_parts.append(
+                    TextPart(
+                        text=(
+                            "[Image Attachment in forwarded message: "
+                            f"path {image_path}]"
+                        )
+                    )
+                )
+            elif isinstance(component, Record):
+                audio_path = await component.convert_to_file_path()
+                req.audio_urls.append(audio_path)
+                req.extra_user_content_parts.append(
+                    TextPart(
+                        text=(
+                            "[Audio Attachment in forwarded message: "
+                            f"path {audio_path}]"
+                        )
+                    )
+                )
+            elif isinstance(component, File):
+                file_path = await component.get_file()
+                file_name = component.name or os.path.basename(file_path)
+                req.extra_user_content_parts.append(
+                    TextPart(
+                        text=(
+                            "[File Attachment in forwarded message: "
+                            f"name {file_name}, path {file_path}]"
+                        )
+                    )
+                )
+            elif isinstance(component, Video):
+                await _append_video_attachment(req, component, forwarded=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to prepare forwarded %s attachment: %s",
+                component.__class__.__name__,
+                type(exc).__name__,
+            )
+
+
 async def _append_quoted_reply_components(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -1642,6 +1725,7 @@ async def prepare_event_attachments(
         return
 
     await _append_direct_attachments(event, req, config)
+    await _append_message_component_context(event, req, config)
     replies = [
         component
         for component in event.message_obj.message

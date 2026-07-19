@@ -416,6 +416,70 @@ def test_normalize_ob11_event_schema_augments_napcat_nonstandard_segments():
     )
 
 
+def test_normalize_ob11_event_schema_adds_embedded_forward_content():
+    module = _load_module(
+        "normalize_ob11_event_schema",
+        "scripts/napcat/normalize_ob11_event_schema.py",
+    )
+    schema = {
+        "$defs": {
+            "OB11Segment": {"anyOf": []},
+            "ForwardSegment": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "forward", "type": "string"},
+                    "data": {
+                        "type": "object",
+                        "properties": {"id": {"type": "string"}},
+                    },
+                },
+            },
+        }
+    }
+
+    fixed_count = module._augment_napcat_segment_schema(schema)
+
+    assert fixed_count == 11
+    assert schema["$defs"]["ForwardSegment"]["properties"]["data"]["properties"][
+        "content"
+    ] == {
+        "type": "array",
+        "items": {},
+        "description": "已展开的合并转发消息内容",
+    }
+
+
+def test_normalize_ob11_event_schema_adds_runtime_node_metadata():
+    module = _load_module(
+        "normalize_ob11_event_schema",
+        "scripts/napcat/normalize_ob11_event_schema.py",
+    )
+    schema = {
+        "$defs": {
+            "OB11Segment": {"anyOf": []},
+            "CustomNodeSegments": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "node", "type": "string"},
+                    "data": {"type": "object", "properties": {}},
+                },
+            },
+        }
+    }
+
+    fixed_count = module._augment_napcat_segment_schema(schema)
+
+    assert fixed_count == 12
+    properties = schema["$defs"]["CustomNodeSegments"]["properties"]["data"][
+        "properties"
+    ]
+    assert properties["news"]["items"]["properties"] == {"text": {"type": "string"}}
+    assert properties["time"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "string"},
+    ]
+
+
 def test_normalize_ob11_event_schema_aligns_napcat_real_file_like_segment_fields():
     module = _load_module(
         "normalize_ob11_event_schema",
@@ -716,3 +780,15 @@ def test_generated_napcat_modules_import() -> None:
     assert "raw_info" in events_module.OneBot11Poke.model_fields
     assert "is_add" in events_module.OneBot11GroupMessageReaction.model_fields
     assert events_module.OneBot11GroupRequest.model_fields["sub_type"].annotation is str
+    assert (
+        "content"
+        in events_module.ForwardSegment.model_fields["data"].annotation.model_fields
+    )
+    assert (
+        "news"
+        in events_module.CustomNodeSegments.model_fields["data"].annotation.model_fields
+    )
+    assert (
+        "time"
+        in events_module.CustomNodeSegments.model_fields["data"].annotation.model_fields
+    )

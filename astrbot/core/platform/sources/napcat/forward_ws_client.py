@@ -15,8 +15,7 @@ from websockets.exceptions import ConnectionClosed
 from astrbot import logger
 
 from .exceptions import NapCatApiError, NapCatTransportError
-from .generated.ob11_events import OB11AllEvent
-from .inbound_events import dispatch_inbound_event
+from .inbound_events import NapCatInboundEvent, dispatch_inbound_event
 from .types import (
     NapCatFetchedMessage,
     NapCatLoginInfo,
@@ -69,7 +68,7 @@ class NapCatForwardWebSocketClient:
         reconnect_interval_seconds: float = 5.0,
         verify_ssl: bool = True,
         max_size_bytes: int = 50 * 1024 * 1024,
-        on_event: Callable[[OB11AllEvent], Awaitable[None]],
+        on_event: Callable[[NapCatInboundEvent], Awaitable[None]],
     ) -> None:
         self.ws_url = ws_url.strip()
         self.token = token.strip() if token else ""

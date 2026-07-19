@@ -525,6 +525,51 @@ def _augment_napcat_segment_schema(raw_schema: dict[str, Any]) -> int:
             existing_refs.add(ref)
             fixed_count += 1
 
+    forward_segment = defs.get("ForwardSegment")
+    if isinstance(forward_segment, dict):
+        forward_properties = forward_segment.get("properties")
+        if isinstance(forward_properties, dict):
+            forward_data = forward_properties.get("data")
+            if isinstance(forward_data, dict):
+                forward_data_properties = forward_data.get("properties")
+                if (
+                    isinstance(forward_data_properties, dict)
+                    and "content" not in forward_data_properties
+                ):
+                    forward_data_properties["content"] = {
+                        "type": "array",
+                        "items": {},
+                        "description": "已展开的合并转发消息内容",
+                    }
+                    fixed_count += 1
+
+    custom_node_segment = defs.get("CustomNodeSegments")
+    if isinstance(custom_node_segment, dict):
+        node_properties = custom_node_segment.get("properties")
+        if isinstance(node_properties, dict):
+            node_data = node_properties.get("data")
+            if isinstance(node_data, dict):
+                node_data_properties = node_data.get("properties")
+                if isinstance(node_data_properties, dict):
+                    if "news" not in node_data_properties:
+                        node_data_properties["news"] = {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {"text": {"type": "string"}},
+                                "required": ["text"],
+                            },
+                            "description": "转发卡片预览文本",
+                        }
+                        fixed_count += 1
+                    if "time" not in node_data_properties:
+                        node_data_properties["time"] = {
+                            "anyOf": [{"type": "integer"}, {"type": "string"}],
+                            "description": "转发节点时间",
+                        }
+                        fixed_count += 1
+
     return fixed_count
 
 

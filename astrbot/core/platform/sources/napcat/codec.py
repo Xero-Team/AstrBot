@@ -35,6 +35,15 @@ def coerce_bool_value(value: object) -> object:
     return value
 
 
+def sanitize_segment_type(value: object) -> str:
+    """Return a bounded label safe for logs and user-facing placeholders."""
+    text = str(value or "unknown").strip()[:64]
+    sanitized = "".join(
+        char if char.isalnum() or char in "_-" else "_" for char in text
+    )
+    return sanitized or "unknown"
+
+
 def build_notice_message(event: object) -> str:
     """Format a OneBot notice event without depending on adapter state."""
     notice_type = _stringify(getattr(event, "notice_type", None))
@@ -70,13 +79,27 @@ def build_notice_message(event: object) -> str:
     if (duration := getattr(event, "duration", None)) is not None:
         parts.append(f"duration {duration}s")
     if isinstance(likes := getattr(event, "likes", None), list):
-        parts.append(f"likes {len(likes)}")
+        like_parts: list[str] = []
+        for like in likes:
+            emoji_id = _stringify(getattr(like, "emoji_id", None))
+            count = _stringify(getattr(like, "count", None))
+            if emoji_id:
+                like_parts.append(f"{emoji_id}={count or '0'}")
+        parts.append(f"likes {','.join(like_parts) if like_parts else len(likes)}")
+    if (is_add := getattr(event, "is_add", None)) is not None:
+        parts.append(f"action {'add' if bool(is_add) else 'remove'}")
     event_message = _stringify(getattr(event, "message", None))
     if event_message and event_message != values["message_id"]:
         parts.append(f"message {event_message}")
     if file_info := getattr(event, "file", None):
         if file_name := _stringify(getattr(file_info, "name", None)):
             parts.append(f"file {file_name}")
+        if file_id := _stringify(getattr(file_info, "id", None)):
+            parts.append(f"file_id {file_id}")
+        if file_size := _stringify(getattr(file_info, "size", None)):
+            parts.append(f"file_size {file_size}")
+        if file_busid := _stringify(getattr(file_info, "busid", None)):
+            parts.append(f"busid {file_busid}")
     if card_old := _stringify(getattr(event, "card_old", None)):
         parts.append(f"old_card {card_old}")
     if card_new := _stringify(getattr(event, "card_new", None)):
@@ -94,6 +117,7 @@ def build_request_message(event: object) -> str:
         ("user", "user_id"),
         ("group", "group_id"),
         ("comment", "comment"),
+        ("flag", "flag"),
     ):
         if value := _stringify(getattr(event, field, None)):
             parts.append(f"{label} {value}")

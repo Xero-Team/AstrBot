@@ -37,6 +37,7 @@ from astrbot.core.message.components import (
     Reply,
     Shake,
     Share,
+    Unknown,
     Video,
     Xml,
 )
@@ -55,6 +56,7 @@ from .codec import (
     coerce_bool_value,
     coerce_numeric_value,
     decode_cq_text,
+    sanitize_segment_type,
 )
 from .exceptions import NapCatApiError, NapCatError
 from .forward_ws_client import NapCatForwardWebSocketClient
@@ -127,6 +129,7 @@ from .generated.ob11_events import (
 from .generated.ob11_events import (
     OnlineFileSegment as OB11OnlineFileSegment,
 )
+from .inbound_events import NapCatGenericEvent, NapCatInboundEvent
 from .message_event import NapCatMessageEvent
 
 
@@ -412,6 +415,7 @@ NAPCAT_I18N_RESOURCES = {
 )
 class NapCatPlatformAdapter(Platform):
     _MESSAGE_EVENT_HANDLE_SLOW_LOG_THRESHOLD_S = 0.2
+    _MAX_INBOUND_COMPONENT_DEPTH = 8
 
     def __init__(
         self,
@@ -1035,8 +1039,8 @@ class NapCatPlatformAdapter(Platform):
         self._populate_event_extras(event, raw_event)
         return event
 
-    async def handle_forward_ws_event(self, event: OB11AllEvent) -> None:
-        payload = event.root
+    async def handle_forward_ws_event(self, event: NapCatInboundEvent) -> None:
+        payload = event.root if isinstance(event, OB11AllEvent) else event
         if isinstance(payload, OB11GroupMessage | OB11PrivateMessage):
             ignore_reason = self._get_ignored_forward_ws_message_reason(payload)
             if ignore_reason is not None:
@@ -1074,7 +1078,9 @@ class NapCatPlatformAdapter(Platform):
                 )
             return
 
-        if isinstance(payload, NAPCAT_NOTICE_EVENT_TYPES):
+        if isinstance(payload, NAPCAT_NOTICE_EVENT_TYPES) or (
+            isinstance(payload, NapCatGenericEvent) and payload.post_type == "notice"
+        ):
             ignore_reason = self._get_ignored_notice_event_reason(payload)
             if ignore_reason is not None:
                 logger.debug(
@@ -1094,7 +1100,9 @@ class NapCatPlatformAdapter(Platform):
             self.commit_event(self.create_event(message))
             return
 
-        if isinstance(payload, NAPCAT_REQUEST_EVENT_TYPES):
+        if isinstance(payload, NAPCAT_REQUEST_EVENT_TYPES) or (
+            isinstance(payload, NapCatGenericEvent) and payload.post_type == "request"
+        ):
             message = self._convert_request_event(payload)
             logger.info(
                 "[NapCat] Received request event: platform_id=%s session=%s summary=%s",
@@ -1196,11 +1204,17 @@ class NapCatPlatformAdapter(Platform):
                 try:
                     segment = OB11Segment.model_validate(item)
                 except Exception as exc:
+                    segment_type = sanitize_segment_type(item.get("type"))
+                    placeholder = f"[Unsupported NapCat segment: {segment_type}]"
                     logger.warning(
-                        "[NapCat] Failed to validate inbound string message segment %s: %s",
-                        item,
-                        exc,
+                        "[NapCat] Failed to validate inbound string message segment type=%s error=%s",
+                        segment_type,
+                        type(exc).__name__,
                     )
+                    message.message.append(
+                        Unknown(text=placeholder, segment_type=segment_type)
+                    )
+                    message_parts.append(placeholder)
                     continue
 
                 (
@@ -1376,18 +1390,195 @@ class NapCatPlatformAdapter(Platform):
     def _coerce_bool_segment_value(self, value: object) -> object:
         return coerce_bool_value(value)
 
+    async def _convert_nested_segment_dict(
+        self,
+        payload: Mapping[str, object],
+        *,
+        first_at_self_processed: bool,
+        depth: int,
+    ) -> tuple[list[BaseMessageComponent], list[str], bool]:
+        try:
+            segment = OB11Segment.model_validate(payload, extra="ignore")
+        except Exception as exc:
+            segment_type = sanitize_segment_type(payload.get("type"))
+            placeholder = f"[Unsupported NapCat segment: {segment_type}]"
+            logger.warning(
+                "[NapCat] Failed to validate nested message segment type=%s error=%s",
+                segment_type,
+                type(exc).__name__,
+            )
+            return (
+                [Unknown(text=placeholder, segment_type=segment_type)],
+                [placeholder],
+                first_at_self_processed,
+            )
+
+        return await self._convert_segment_payload_async(
+            segment.root,
+            self_id="",
+            first_at_self_processed=first_at_self_processed,
+            depth=depth,
+        )
+
+    async def _convert_forward_content(
+        self,
+        content: list[object],
+        *,
+        depth: int,
+    ) -> list[Node]:
+        if depth > self._MAX_INBOUND_COMPONENT_DEPTH:
+            return []
+        nodes: list[Node] = []
+        for raw_node in content:
+            if not isinstance(raw_node, Mapping):
+                continue
+
+            if raw_node.get("type") == "node":
+                components, _, _ = await self._convert_nested_segment_dict(
+                    raw_node,
+                    first_at_self_processed=False,
+                    depth=depth,
+                )
+                nodes.extend(
+                    component for component in components if isinstance(component, Node)
+                )
+                continue
+
+            sender = raw_node.get("sender")
+            sender_data = sender if isinstance(sender, Mapping) else {}
+            sender_name = str(
+                sender_data.get("card")
+                or sender_data.get("nickname")
+                or sender_data.get("user_id")
+                or raw_node.get("user_id")
+                or "Unknown User"
+            )
+            sender_id = str(
+                sender_data.get("user_id") or raw_node.get("user_id") or "0"
+            )
+
+            raw_chain = raw_node.get("message") or raw_node.get("content") or []
+            if isinstance(raw_chain, str):
+                try:
+                    decoded_chain = self._decode_cq_message_string(raw_chain)
+                except Exception:
+                    decoded_chain = []
+                raw_chain = decoded_chain or [
+                    {"type": "text", "data": {"text": raw_chain}}
+                ]
+
+            nested_components: list[BaseMessageComponent] = []
+            nested_first_at_self_processed = False
+            if isinstance(raw_chain, list):
+                for raw_segment in raw_chain:
+                    if isinstance(raw_segment, str):
+                        if raw_segment:
+                            nested_components.append(Plain(text=raw_segment))
+                        continue
+                    if not isinstance(raw_segment, Mapping):
+                        continue
+                    (
+                        converted_components,
+                        _,
+                        nested_first_at_self_processed,
+                    ) = await self._convert_nested_segment_dict(
+                        raw_segment,
+                        first_at_self_processed=nested_first_at_self_processed,
+                        depth=depth,
+                    )
+                    nested_components.extend(converted_components)
+
+            node_time = raw_node.get("time")
+            node_time_text = str(node_time or "")
+            nodes.append(
+                Node(
+                    id=raw_node.get("message_id", raw_node.get("id", 0)),
+                    uin=sender_id,
+                    name=sender_name,
+                    content=nested_components,
+                    time=int(node_time_text) if node_time_text.isdigit() else 0,
+                )
+            )
+        return nodes
+
     async def _convert_segment_payload_async(
         self,
         payload: object,
         *,
         self_id: str,
         first_at_self_processed: bool,
+        depth: int = 0,
     ) -> tuple[list[BaseMessageComponent], list[str], bool]:
+        if depth > self._MAX_INBOUND_COMPONENT_DEPTH:
+            placeholder = "[NapCat message component depth limit reached]"
+            return (
+                [Unknown(text=placeholder, segment_type="depth_limit")],
+                [placeholder],
+                first_at_self_processed,
+            )
         if isinstance(payload, ReplySegment):
             reply_id = payload.data.id or payload.data.seq
             if reply_id is None:
                 return [], [], first_at_self_processed
             return [Reply(id=str(reply_id))], [], first_at_self_processed
+
+        if isinstance(payload, ForwardSegment):
+            nodes = await self._convert_forward_content(
+                payload.data.content or [],
+                depth=depth + 1,
+            )
+            return (
+                [Forward(id=payload.data.id, content=[*nodes] or None)],
+                [],
+                first_at_self_processed,
+            )
+
+        if isinstance(payload, CustomNodeSegments):
+            nested_components: list[BaseMessageComponent] = []
+            nested_message_parts: list[str] = []
+            nested_first_at_self_processed = False
+            for nested_segment in payload.data.content:
+                (
+                    converted_components,
+                    converted_parts,
+                    nested_first_at_self_processed,
+                ) = await self._convert_segment_payload_async(
+                    nested_segment.root,
+                    self_id="",
+                    first_at_self_processed=nested_first_at_self_processed,
+                    depth=depth + 1,
+                )
+                nested_components.extend(converted_components)
+                nested_message_parts.extend(converted_parts)
+            raw_news = getattr(payload.data, "news", None)
+            news = None
+            if isinstance(raw_news, list):
+                news = []
+                for item in raw_news:
+                    model_dump = getattr(item, "model_dump", None)
+                    if callable(model_dump):
+                        news.append(model_dump(mode="json"))
+                    elif isinstance(item, Mapping):
+                        news.append(dict(item))
+            raw_time = getattr(payload.data, "time", None)
+            raw_time_text = str(raw_time or "")
+            return (
+                [
+                    Node(
+                        id=0,
+                        uin=payload.data.user_id,
+                        name=payload.data.nickname,
+                        content=nested_components,
+                        source=payload.data.source,
+                        news=news,
+                        summary=payload.data.summary,
+                        prompt=payload.data.prompt,
+                        time=int(raw_time_text) if raw_time_text.isdigit() else 0,
+                    )
+                ],
+                ["".join(nested_message_parts)] if nested_message_parts else [],
+                first_at_self_processed,
+            )
 
         return self._convert_segment_payload(
             payload,
@@ -1520,8 +1711,6 @@ class NapCatPlatformAdapter(Platform):
                     image=payload.data.image or "",
                 )
             ]
-        if isinstance(payload, ForwardSegment):
-            return [Forward(id=payload.data.id)]
         if isinstance(payload, DirectNodeSegment):
             node_id: int | str = payload.data.id
             if payload.data.id.isdigit():
@@ -1576,35 +1765,6 @@ class NapCatPlatformAdapter(Platform):
         scalar_components = self._convert_scalar_segment(payload)
         if scalar_components is not None:
             return scalar_components, [], first_at_self_processed
-
-        if isinstance(payload, CustomNodeSegments):
-            nested_components: list[BaseMessageComponent] = []
-            nested_message_parts: list[str] = []
-            nested_first_at_self_processed = False
-            for nested_segment in payload.data.content:
-                (
-                    converted_components,
-                    converted_parts,
-                    nested_first_at_self_processed,
-                ) = self._convert_segment_payload(
-                    nested_segment.root,
-                    self_id="",
-                    first_at_self_processed=nested_first_at_self_processed,
-                )
-                nested_components.extend(converted_components)
-                nested_message_parts.extend(converted_parts)
-            return (
-                [
-                    Node(
-                        id=0,
-                        uin=payload.data.user_id,
-                        name=payload.data.nickname,
-                        content=nested_components,
-                    )
-                ],
-                ["".join(nested_message_parts)] if nested_message_parts else [],
-                first_at_self_processed,
-            )
 
         logger.debug("[NapCat] Ignored inbound message segment: %s", payload)
         return [], [], first_at_self_processed

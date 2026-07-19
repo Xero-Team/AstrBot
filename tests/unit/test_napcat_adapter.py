@@ -27,8 +27,10 @@ from astrbot.core.message.components import (
     Plain,
     Poke,
     Record,
+    Reply,
     Shake,
     Share,
+    Unknown,
     Video,
     Xml,
 )
@@ -343,6 +345,115 @@ async def test_napcat_forward_ws_client_ignores_extra_event_fields():
 
     queued = queue.get_nowait()
     assert queued.get_message_str() == "/sid"
+
+
+@pytest.mark.asyncio
+async def test_napcat_unknown_array_segment_degrades_without_dropping_message():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "message",
+          "message_type": "private",
+          "sub_type": "friend",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "message_id": 779,
+          "font": 14,
+          "raw_message": "before unknown after",
+          "sender": {"user_id": 111222, "nickname": "tester"},
+          "message": [
+            {"type": "text", "data": {"text": "before "}},
+            {"type": "future_segment", "data": {"value": "mock"}},
+            {"type": "text", "data": {"text": " after"}}
+          ]
+        }
+        """
+    )
+
+    queued = queue.get_nowait()
+    assert queued.get_message_str() == (
+        "before [Unsupported NapCat segment: future_segment] after"
+    )
+    assert [type(component).__name__ for component in queued.get_messages()] == [
+        "Plain",
+        "Plain",
+        "Plain",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_unknown_notice_is_queued_as_generic_event():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "notice",
+          "notice_type": "future_notice",
+          "sub_type": "mock",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "future_value": "preserved"
+        }
+        """
+    )
+
+    queued = queue.get_nowait()
+    assert queued.get_message_str() == "[notice:future_notice:mock] user 111222"
+    assert queued.get_extra("onebot_notice_type") == "future_notice"
+    assert queued.get_extra("napcat_event")["future_value"] == "preserved"
+
+
+@pytest.mark.asyncio
+async def test_napcat_unknown_request_is_queued_as_generic_event():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "request",
+          "request_type": "future_request",
+          "sub_type": "mock",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "comment": "mock request",
+          "flag": "mock-flag"
+        }
+        """
+    )
+
+    queued = queue.get_nowait()
+    assert queued.get_message_str() == (
+        "[request:future_request:mock] user 111222 comment mock request flag mock-flag"
+    )
+    assert queued.get_extra("onebot_request_type") == "future_request"
+
+
+@pytest.mark.asyncio
+async def test_napcat_unknown_meta_event_is_ignored():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "meta_event",
+          "meta_event_type": "future_meta",
+          "time": 1720000000,
+          "self_id": 123456
+        }
+        """
+    )
+
+    assert queue.empty()
 
 
 @pytest.mark.asyncio
@@ -835,6 +946,39 @@ async def test_napcat_forward_ws_client_parses_string_nonstandard_and_forward_se
     assert queued.get_messages()[1].is_dir is False
     assert queued.get_messages()[2].file_set_id == "flash-set-1"
     assert queued.get_messages()[3].id == "forward-1"
+
+
+@pytest.mark.asyncio
+async def test_napcat_unknown_string_segment_becomes_unknown_component():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "message",
+          "message_type": "private",
+          "sub_type": "friend",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "message_id": 790,
+          "font": 14,
+          "message_format": "string",
+          "raw_message": "[CQ:future_segment,value=mock]tail",
+          "sender": {"user_id": 111222, "nickname": "tester"},
+          "message": "[CQ:future_segment,value=mock]tail"
+        }
+        """
+    )
+
+    queued = queue.get_nowait()
+    assert queued.get_message_str() == (
+        "[Unsupported NapCat segment: future_segment]tail"
+    )
+    assert isinstance(queued.get_messages()[0], Unknown)
+    assert queued.get_messages()[0].segment_type == "future_segment"
+    assert isinstance(queued.get_messages()[1], Plain)
 
 
 @pytest.mark.asyncio
@@ -1603,6 +1747,120 @@ async def test_napcat_group_message_event_supports_custom_node_segments():
         "Plain",
         "Face",
     ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_custom_node_recursively_preserves_reply_segments():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    event = OB11AllEvent.model_validate(
+        {
+            "post_type": "message",
+            "message_type": "group",
+            "sub_type": "normal",
+            "time": 1720000000,
+            "self_id": 123456,
+            "group_id": 654321,
+            "user_id": 111222,
+            "message_id": 782,
+            "font": 14,
+            "raw_message": "",
+            "sender": {
+                "user_id": 111222,
+                "nickname": "tester",
+                "role": "member",
+            },
+            "message": [
+                {
+                    "type": "node",
+                    "data": {
+                        "user_id": "10001",
+                        "nickname": "Mock Node Sender",
+                        "source": "Mock Source",
+                        "summary": "Mock Summary",
+                        "prompt": "Mock Prompt",
+                        "news": [{"text": "Mock Preview"}],
+                        "time": "1720000001",
+                        "content": [
+                            {"type": "reply", "data": {"id": "9001"}},
+                            {"type": "text", "data": {"text": "nested"}},
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    await adapter.handle_forward_ws_event(event)
+
+    node = queue.get_nowait().get_messages()[0]
+    assert isinstance(node, Node)
+    assert isinstance(node.content[0], Reply)
+    assert node.content[0].id == "9001"
+    assert node.source == "Mock Source"
+    assert node.summary == "Mock Summary"
+    assert node.prompt == "Mock Prompt"
+    assert node.news == [{"text": "Mock Preview"}]
+    assert node.time == 1720000001
+
+
+@pytest.mark.asyncio
+async def test_napcat_embedded_forward_content_becomes_structured_nodes():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    event = OB11AllEvent.model_validate(
+        {
+            "post_type": "message",
+            "message_type": "group",
+            "sub_type": "normal",
+            "time": 1720000000,
+            "self_id": 123456,
+            "group_id": 654321,
+            "user_id": 111222,
+            "message_id": 783,
+            "font": 14,
+            "raw_message": "[CQ:forward,id=9000000000000000001]",
+            "sender": {
+                "user_id": 111222,
+                "nickname": "tester",
+                "role": "member",
+            },
+            "message": [
+                {
+                    "type": "forward",
+                    "data": {
+                        "id": "9000000000000000001",
+                        "content": [
+                            {
+                                "user_id": 10001,
+                                "sender": {
+                                    "user_id": 10001,
+                                    "nickname": "Mock Forward Sender",
+                                },
+                                "message": [
+                                    {
+                                        "type": "text",
+                                        "data": {"text": "forwarded text"},
+                                    },
+                                    {"type": "reply", "data": {"id": "9002"}},
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    await adapter.handle_forward_ws_event(event)
+
+    forward = queue.get_nowait().get_messages()[0]
+    assert isinstance(forward, Forward)
+    assert forward.id == "9000000000000000001"
+    assert forward.content
+    assert isinstance(forward.content[0], Node)
+    assert forward.content[0].name == "Mock Forward Sender"
+    assert isinstance(forward.content[0].content[1], Reply)
 
 
 @pytest.mark.asyncio
@@ -2590,6 +2848,10 @@ async def test_napcat_group_upload_notice_exposes_upload_helper():
 
     queued = queue.get_nowait()
     assert queued.is_notice_type("group_upload")
+    assert queued.get_message_str() == (
+        "[notice:group_upload] user 111222 group 654321 file demo.zip "
+        "file_id file-id file_size 2048 busid 102"
+    )
     assert queued.get_upload_info() == {
         "notice_type": "group_upload",
         "group_id": 654321,
@@ -2658,6 +2920,10 @@ async def test_napcat_group_reaction_notice_exposes_reaction_helper():
     await adapter.handle_forward_ws_event(event)
 
     queued = queue.get_nowait()
+    assert queued.get_message_str() == (
+        "[notice:group_msg_emoji_like] user 111222 message 777 group 654321 "
+        "likes 128077=2,128293=1 action add"
+    )
     assert queued.get_reaction_info() == {
         "notice_type": "group_msg_emoji_like",
         "group_id": 654321,
@@ -2910,7 +3176,8 @@ async def test_napcat_group_request_event_is_queued_with_group_session():
     queued = queue.get_nowait()
     assert (
         queued.get_message_str()
-        == "[request:group:add] user 111222 group 654321 comment let me in"
+        == "[request:group:add] user 111222 group 654321 comment let me in "
+        "flag request-flag"
     )
     assert queued.get_message_type() == MessageType.GROUP_MESSAGE
     assert queued.session.session_id == "654321"
@@ -2979,7 +3246,9 @@ async def test_napcat_friend_request_event_can_be_approved_or_rejected():
 
     queued = queue.get_nowait()
     assert queued.get_message_type() == MessageType.FRIEND_MESSAGE
-    assert queued.get_message_str() == "[request:friend] user 111222 comment hello"
+    assert queued.get_message_str() == (
+        "[request:friend] user 111222 comment hello flag friend-request-flag"
+    )
     assert queued.get_request_info() == {
         "request_type": "friend",
         "user_id": 111222,

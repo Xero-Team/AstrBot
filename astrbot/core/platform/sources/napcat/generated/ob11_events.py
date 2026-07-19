@@ -103,6 +103,13 @@ class CustomMusicSegment(BaseModel):
     type: Literal["music"]
 
 
+class News(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    text: str
+
+
 class DiceSegment(BaseModel):
     """
     掷骰子魔法表情消息段
@@ -168,6 +175,7 @@ class Data8(BaseModel):
         extra="forbid",
     )
     id: str
+    content: list[Any] | None = Field(None, description="已展开的合并转发消息内容")
 
 
 class ForwardSegment(BaseModel):
@@ -1237,6 +1245,8 @@ class Data4(BaseModel):
     source: str | None = None
     summary: str | None = None
     user_id: str
+    news: list[News] | None = Field(None, description="转发卡片预览文本")
+    time: int | str | None = Field(None, description="转发节点时间")
 
 
 class CustomNodeSegments(BaseModel):

@@ -741,6 +741,7 @@ class Poke(BaseMessageComponent):
 class Forward(BaseMessageComponent):
     type: ComponentType = ComponentType.Forward
     id: str
+    content: list[BaseMessageComponent] | None = None
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
@@ -759,6 +760,10 @@ class Node(BaseMessageComponent):
     content: list[BaseMessageComponent] = []
     seq: str | list | None = ""  # 忽略
     time: int | None = 0  # 忽略
+    source: str | None = None
+    news: list[dict[str, object]] | None = None
+    summary: str | None = None
+    prompt: str | None = None
 
     def __init__(self, content: list[BaseMessageComponent], **_) -> None:
         if isinstance(content, Node):
@@ -859,6 +864,7 @@ class FlashTransfer(BaseMessageComponent):
 class Unknown(BaseMessageComponent):
     type: ComponentType = ComponentType.Unknown
     text: str
+    segment_type: str = "unknown"
 
 
 def _sanitize_file_component_name(name: str | None) -> str:

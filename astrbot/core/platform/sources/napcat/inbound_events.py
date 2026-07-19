@@ -5,14 +5,32 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from time import monotonic
-from typing import Any, cast
+from typing import Any, Literal, cast
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from astrbot import logger
 
+from .codec import sanitize_segment_type
 from .generated import ob11_events as ob11_models
 from .generated.ob11_events import OB11AllEvent
+
+
+class NapCatGenericEvent(BaseModel):
+    """Forward-compatible representation for unknown non-message events."""
+
+    model_config = ConfigDict(extra="allow")
+
+    post_type: Literal["notice", "request", "meta_event"]
+    self_id: int | str = 0
+    time: int = 0
+    notice_type: str | None = None
+    request_type: str | None = None
+    meta_event_type: str | None = None
+    sub_type: str | None = None
+
+
+NapCatInboundEvent = OB11AllEvent | NapCatGenericEvent
 
 MESSAGE_EVENT_MODELS: dict[str, type[ob11_models.BaseModel]] = {
     "private": ob11_models.OB11PrivateMessage,
@@ -61,6 +79,36 @@ GROUP_SENDER_KEYS = frozenset(
 NONSTANDARD_MESSAGE_SEGMENT_FALLBACK_TEXT: dict[str, str] = {
     "flash": "[FlashTransfer]",
 }
+KNOWN_MESSAGE_SEGMENT_TYPES = frozenset(
+    {
+        "anonymous",
+        "at",
+        "contact",
+        "dice",
+        "face",
+        "file",
+        "flashtransfer",
+        "forward",
+        "image",
+        "json",
+        "location",
+        "markdown",
+        "mface",
+        "miniapp",
+        "music",
+        "node",
+        "onlinefile",
+        "poke",
+        "record",
+        "reply",
+        "rps",
+        "shake",
+        "share",
+        "text",
+        "video",
+        "xml",
+    }
+)
 
 
 def _string_or_none(value: Any) -> str | None:
@@ -74,12 +122,25 @@ def _normalize_message_segment_for_validation(
     segment: Mapping[str, Any],
 ) -> tuple[dict[str, Any], str | None]:
     normalized_segment = dict(segment)
-    segment_type = _string_or_none(normalized_segment.get("type"))
+    raw_segment_type = _string_or_none(normalized_segment.get("type"))
+    segment_type = (
+        sanitize_segment_type(raw_segment_type)
+        if raw_segment_type is not None
+        else None
+    )
     if not segment_type:
         return normalized_segment, None
     fallback_text = NONSTANDARD_MESSAGE_SEGMENT_FALLBACK_TEXT.get(segment_type)
     if fallback_text is None:
-        return normalized_segment, None
+        if segment_type in KNOWN_MESSAGE_SEGMENT_TYPES:
+            return normalized_segment, None
+        return (
+            {
+                "type": "text",
+                "data": {"text": f"[Unsupported NapCat segment: {segment_type}]"},
+            },
+            segment_type,
+        )
     raw_data = normalized_segment.get("data")
     data = dict(raw_data) if isinstance(raw_data, Mapping) else {}
     if segment_type == "markdown":
@@ -182,10 +243,19 @@ def _select_event_model(
     return None
 
 
-def _validate_event(payload: Mapping[str, Any]) -> tuple[OB11AllEvent, str]:
+def _validate_event(payload: Mapping[str, Any]) -> tuple[NapCatInboundEvent, str]:
     payload_dict = dict(payload)
     model_class = _select_event_model(payload_dict)
     if model_class is None:
+        if _string_or_none(payload_dict.get("post_type")) in {
+            "notice",
+            "request",
+            "meta_event",
+        }:
+            return (
+                NapCatGenericEvent.model_validate(payload_dict),
+                "NapCatGenericEvent",
+            )
         return OB11AllEvent.model_validate(payload_dict, extra="ignore"), "OB11AllEvent"
     typed_event = cast(Any, model_class.model_validate(payload_dict, extra="ignore"))
     return OB11AllEvent(root=typed_event), model_class.__name__
@@ -193,7 +263,7 @@ def _validate_event(payload: Mapping[str, Any]) -> tuple[OB11AllEvent, str]:
 
 async def dispatch_inbound_event(
     payload: Mapping[str, Any],
-    on_event: Callable[[OB11AllEvent], Awaitable[None]],
+    on_event: Callable[[NapCatInboundEvent], Awaitable[None]],
     *,
     started_at: float,
     validation_slow_log_threshold_s: float,

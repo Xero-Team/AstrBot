@@ -5,8 +5,8 @@ upstream:
   branch: master
 
 last_synced:
-  commit: d98a296000e76ddcebf82f6a425cdb0af66afa0f
-  synced_at_utc: 2026-07-14T08:22:37.1075804Z
+  commit: fed29848ca0b3912ab6a8200a10cd0f2cb080f85
+  synced_at_utc: 2026-07-19T09:00:35.7843560Z
   sync_method: cherry-pick
-  source_pr: '9255, 9259, 4532, 9273'
-  note: "Cherry-picked all four upstream/master commits from cc0ec5e5c5bb065dc63f3114f93ff4654122ae35 through d98a296000e76ddcebf82f6a425cdb0af66afa0f. Conflicts were adapted to the fork's modern typed dashboard and composition-based persona UI; no upstream commits were skipped."
+  source_pr: '9260, 9263, 9264, 9270, 9271, 9274, 9246, 9245, 9233, 9291, 9300, 9285, 9267, 9309, 9244, 9310, 8712, 9311, 9312, 9314, 9313, 9223, 9316, 9318, 9317'
+  note: "Processed 26 upstream/master commits through fed29848ca0b3912ab6a8200a10cd0f2cb080f85. Hand-ported or retained equivalent fixes for agent stats, configured model limits, provider sources and embedding dimensions, skill archives, dashboard errors, KB/config/tool-loop/ChatUI behavior, copy/tooltip/schema/binding fixes, and fork-specific sidebar rail UX. Skipped optional TEI rerank, GenUI security/legacy paths, platform-log product removal, the Python <3.14 ripgrep path, the QQ Official net-zero pair, plugin URL search behavior, log translation, and upstream version bump. Sidebar was reimplemented for the fork without adopting upstream repository ownership links."

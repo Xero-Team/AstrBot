@@ -18,6 +18,7 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses.response import Response
 
 from astrbot import logger
+from astrbot.core.agent.history_sanitizer import IMAGE_HISTORY_PLACEHOLDER
 from astrbot.core.agent.message import ContentPart, Message, ProviderMessageState
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import MalformedToolCallError, ProviderResponseError
@@ -331,6 +332,9 @@ class ProviderOpenAIResponses(Provider):
                 url = _value(part.get("image_url"), "url")
                 if not isinstance(url, str):
                     raise ProviderResponseError("Responses image part is missing a URL")
+                if url == IMAGE_HISTORY_PLACEHOLDER:
+                    parts.append({"type": "input_text", "text": url})
+                    continue
                 if not url.startswith(("http://", "https://", "data:")):
                     data = await resolve_media_ref_to_base64_data(
                         url, media_type="image", strict=True

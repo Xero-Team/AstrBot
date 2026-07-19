@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import astrbot.core.provider.sources.openai_responses_source as openai_responses_module
+from astrbot.core.agent.history_sanitizer import IMAGE_HISTORY_PLACEHOLDER
 from astrbot.core.agent.message import ProviderMessageState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.exceptions import ProviderResponseError
@@ -27,6 +28,34 @@ def test_responses_provider_is_direct_provider_subclass():
     from astrbot.core.provider.provider import Provider
 
     assert ProviderOpenAIResponses.__bases__ == (Provider,)
+
+
+@pytest.mark.asyncio
+async def test_responses_history_keeps_omitted_images_as_text() -> None:
+    provider = _provider()
+
+    items, instructions = await provider._input_items_from_history(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": IMAGE_HISTORY_PLACEHOLDER},
+                    },
+                ],
+            },
+        ],
+        "gpt-test",
+    )
+
+    assert instructions == ""
+    assert items == [
+        {
+            "role": "user",
+            "content": [{"type": "input_text", "text": IMAGE_HISTORY_PLACEHOLDER}],
+        },
+    ]
 
 
 def test_null_api_version_uses_regular_openai_client(monkeypatch):

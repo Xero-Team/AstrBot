@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import hashlib
 import json
 import os
@@ -14,6 +15,12 @@ from pydantic import BaseModel, ConfigDict
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.dashboard_extension import (
     DashboardJsonAction,
+)
+from astrbot.core.star.star import StarMetadata
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    StarHandlerRegistry,
 )
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -556,6 +563,66 @@ def _clear_star_runtime_state():
     star_manager_module.star_map.clear()
     star_manager_module.star_registry.clear()
     star_manager_module.star_handlers_registry.clear()
+
+
+def test_bind_plugin_handlers_is_idempotent(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+) -> None:
+    module_path = "data.plugins.test_plugin.main"
+    plugin_instance = object()
+    metadata = StarMetadata(
+        name="test_plugin",
+        module_path=module_path,
+        star_cls=cast(Any, plugin_instance),
+    )
+
+    async def raw_event_handler(plugin, event):
+        return plugin, event
+
+    async def raw_tool_handler(plugin, query):
+        return plugin, query
+
+    raw_event_handler.__module__ = module_path
+    raw_tool_handler.__module__ = module_path
+    registry = StarHandlerRegistry()
+    event_handler = StarHandlerMetadata(
+        event_type=EventType.AdapterMessageEvent,
+        handler_full_name=f"{module_path}.raw_event_handler",
+        handler_name="raw_event_handler",
+        handler_module_path=module_path,
+        handler=raw_event_handler,
+        event_filters=[],
+    )
+    registry.append(event_handler)
+    monkeypatch.setattr(star_manager_module, "star_handlers_registry", registry)
+
+    tool = star_manager_module.FunctionTool(
+        name="test_plugin_tool",
+        description="test tool",
+        parameters={"type": "object", "properties": {}},
+        handler=raw_tool_handler,
+    )
+    original_func_list = star_manager_module.llm_tools.func_list
+    monkeypatch.setattr(star_manager_module.llm_tools, "func_list", [tool])
+
+    plugin_manager_pm._bind_plugin_handlers(metadata, [])
+    plugin_manager_pm._bind_plugin_handlers(metadata, [])
+
+    assert isinstance(event_handler.handler, functools.partial)
+    assert event_handler.handler.func is raw_event_handler
+    assert event_handler.handler.args == (plugin_instance,)
+    assert isinstance(tool.handler, functools.partial)
+    assert tool.handler.func is raw_tool_handler
+    assert tool.handler.args == (plugin_instance,)
+
+    metadata.star_cls = None
+    plugin_manager_pm._bind_plugin_handlers(metadata, [])
+    assert event_handler.handler is raw_event_handler
+    assert tool.handler is raw_tool_handler
+    assert tool.active is False
+
+    monkeypatch.setattr(star_manager_module.llm_tools, "func_list", original_func_list)
 
 
 def _build_load_mock(events):

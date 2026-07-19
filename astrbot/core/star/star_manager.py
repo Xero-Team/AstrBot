@@ -989,10 +989,18 @@ class PluginManager:
         assert metadata.module_path is not None, (
             f"插件 {metadata.name} 的模块路径为空。"
         )
+        plugin_disabled = metadata.star_cls is None
         for handler in star_handlers_registry.get_handlers_by_module_name(
             metadata.module_path,
         ):
-            handler.handler = functools.partial(handler.handler, metadata.star_cls)
+            raw_handler = (
+                handler.handler.func
+                if isinstance(handler.handler, functools.partial)
+                else handler.handler
+            )
+            handler.handler = raw_handler
+            if not plugin_disabled and metadata.star_cls is not None:
+                handler.handler = functools.partial(raw_handler, metadata.star_cls)
 
         for func_tool in llm_tools.func_list:
             tools = (
@@ -1005,9 +1013,24 @@ class PluginManager:
                 else [func_tool]
             )
             for tool in tools:
-                if tool.handler and tool.handler.__module__ == metadata.module_path:
+                handler_module_path = getattr(tool.handler, "__module__", None)
+                if tool.handler and (
+                    handler_module_path == metadata.module_path
+                    or (
+                        isinstance(tool.handler, functools.partial)
+                        and tool.handler_module_path == metadata.module_path
+                    )
+                ):
+                    raw_handler = (
+                        tool.handler.func
+                        if isinstance(tool.handler, functools.partial)
+                        else tool.handler
+                    )
                     tool.handler_module_path = metadata.module_path
-                    tool.handler = functools.partial(tool.handler, metadata.star_cls)
+                    tool.handler = raw_handler
+                    tool.active = not plugin_disabled
+                    if not plugin_disabled and metadata.star_cls is not None:
+                        tool.handler = functools.partial(raw_handler, metadata.star_cls)
                 if tool.name in inactivated_llm_tools:
                     tool.active = False
 
@@ -1223,6 +1246,7 @@ class PluginManager:
                             plugin_id,
                         )
                     else:
+                        metadata.star_cls = None
                         logger.info("Plugin %s is disabled.", metadata.name)
                     self._bind_plugin_handlers(metadata, inactivated_llm_tools)
 

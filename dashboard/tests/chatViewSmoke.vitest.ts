@@ -56,6 +56,11 @@ vi.mock('@/api/v1', () => ({
     createThread: vi.fn(),
     deleteThread: vi.fn(),
   },
+  providerApi: {
+    listByProviderType: vi.fn().mockResolvedValue({
+      data: { status: 'ok', model_metadata: {} },
+    }),
+  },
 }));
 
 vi.mock('@/composables/useSessions', () => ({
@@ -173,7 +178,8 @@ vi.mock('@/utils/toast', () => ({
 
 vi.mock('@/components/shared/StyledMenu.vue', () => ({
   default: {
-    template: '<div class="styled-menu-stub"><slot name="activator" :props="{}" /><slot /></div>',
+    template:
+      '<div class="styled-menu-stub"><slot name="activator" :props="{}" /><slot /></div>',
   },
 }));
 

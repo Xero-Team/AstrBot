@@ -241,7 +241,8 @@ export function useMessages(options: UseMessagesOptions) {
         connection.sessionId === sessionId &&
         connection.botVisible !== false &&
         (connection.botRecord === msg ||
-          (connection.botRecord?.id != null &&
+          (connection.botRecord?.id !== null &&
+            connection.botRecord?.id !== undefined &&
             String(connection.botRecord.id) === String(msg.id))),
     );
   }
@@ -953,7 +954,9 @@ export function useMessages(options: UseMessagesOptions) {
     try {
       const payload = JSON.parse(event.data);
       const payloadMessageId =
-        payload?.message_id == null ? '' : String(payload.message_id);
+        payload?.message_id === null || payload?.message_id === undefined
+          ? ''
+          : String(payload.message_id);
       let connection = payloadMessageId
         ? activeConnections[payloadMessageId]
         : undefined;

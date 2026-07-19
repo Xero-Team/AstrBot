@@ -323,9 +323,14 @@ class CapturingToolLoopProvider(MockProvider):
 
 
 class SequentialToolProvider(MockProvider):
-    def __init__(self, tool_sequence: list[str]):
+    def __init__(
+        self,
+        tool_sequence: list[str],
+        tool_arguments: list[dict[str, str]] | None = None,
+    ):
         super().__init__()
         self.tool_sequence = tool_sequence
+        self.tool_arguments = tool_arguments
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -338,11 +343,16 @@ class SequentialToolProvider(MockProvider):
             )
 
         tool_name = self.tool_sequence[self.call_count - 1]
+        tool_args = (
+            self.tool_arguments[self.call_count - 1]
+            if self.tool_arguments is not None
+            else {"query": f"step-{self.call_count}"}
+        )
         return LLMResponse(
             role="assistant",
             completion_text="",
             tools_call_name=[tool_name],
-            tools_call_args=[{"query": f"step-{self.call_count}"}],
+            tools_call_args=[tool_args],
             tools_call_ids=[f"call_{self.call_count}"],
             usage=TokenUsage(input_other=10, output=5),
         )
@@ -917,7 +927,10 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 ):
     runner_cls = type(runner)
     total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
-    provider = SequentialToolProvider(["test_tool"] * total_calls)
+    provider = SequentialToolProvider(
+        ["test_tool"] * total_calls,
+        [{"query": "same"}] * total_calls,
+    )
     tool = FunctionTool(
         name="test_tool",
         description="测试工具",
@@ -987,7 +1000,12 @@ async def test_same_tool_streak_resets_after_switching_tools(
     runner_cls = type(runner)
     repeated_after_reset = runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD
     provider = SequentialToolProvider(
-        ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)]
+        ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)],
+        [
+            {"query": "same"},
+            {"query": "other"},
+            *([{"query": "same"}] * repeated_after_reset),
+        ],
     )
     tool_a = FunctionTool(
         name="test_tool",

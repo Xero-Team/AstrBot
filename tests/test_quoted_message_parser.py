@@ -50,6 +50,7 @@ class _NapCatClient:
         self._message_payloads = message_payloads or {}
         self._forward_payloads = forward_payloads or {}
         self._image_payloads = image_payloads or {}
+        self.forward_requests: list[str] = []
 
     async def get_message(self, message_id: str | int):
         key = str(message_id)
@@ -69,6 +70,7 @@ class _NapCatClient:
 
     async def get_forward_message(self, forward_id: str | int):
         key = str(forward_id)
+        self.forward_requests.append(key)
         if key not in self._forward_payloads:
             raise RuntimeError(f"no mock get_forward_message payload for {key}")
         return self._forward_payloads[key]
@@ -592,6 +594,69 @@ async def test_extract_quoted_message_nested_forward_id_is_resolved():
 
     images = await extract_quoted_message_images(event)
     assert images == [nested_image]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_prefers_embedded_napcat_nested_forward_content():
+    nested_image = "https://img.example.com/mock-nested-forward.jpg"
+    reply = Reply(id="700", chain=[Plain(text="[Forward Message]")], message_str="")
+    event = _make_napcat_event(
+        reply,
+        message_payloads={
+            "700": [{"type": "forward", "data": {"id": "mock-outer-forward"}}]
+        },
+        forward_payloads={
+            "mock-outer-forward": {
+                "status": "ok",
+                "retcode": 0,
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Mock Outer Sender"},
+                            "message": [
+                                {
+                                    "type": "forward",
+                                    "data": {
+                                        "id": "mock-inner-unfetchable",
+                                        "content": [
+                                            {
+                                                "sender": {
+                                                    "nickname": "Mock Inner Sender"
+                                                },
+                                                "message": [
+                                                    {
+                                                        "type": "text",
+                                                        "data": {
+                                                            "text": "mock nested text"
+                                                        },
+                                                    },
+                                                    {
+                                                        "type": "image",
+                                                        "data": {"url": nested_image},
+                                                    },
+                                                ],
+                                            }
+                                        ],
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    images = await extract_quoted_message_images(event)
+
+    assert text is not None
+    assert "Mock Inner Sender: mock nested text[Image]" in text
+    assert images == [nested_image]
+    assert event.adapter.client.forward_requests == [
+        "mock-outer-forward",
+        "mock-outer-forward",
+    ]
 
 
 @pytest.mark.asyncio

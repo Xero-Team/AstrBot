@@ -262,6 +262,7 @@ def _extract_text_from_multimsg_json(raw_json: str) -> str | None:
 def _parse_onebot_segments(
     segments: list[Any],
     *,
+    forward_depth: int = 0,
     settings: QuotedMessageParserSettings = SETTINGS,
 ) -> ParsedOneBotPayload:
     text_parts: list[str] = []
@@ -311,15 +312,13 @@ def _parse_onebot_segments(
             ):
                 image_refs.append(candidate_file.strip())
         elif seg_type in ("forward", "forward_msg", "nodes"):
+            nested_nodes = seg_data.get("content")
             fid = seg_data.get("id") or seg_data.get("message_id")
-            if isinstance(fid, (str, int)) and str(fid):
-                forward_ids.append(str(fid))
-            else:
-                nested_nodes = seg_data.get("content")
+            if isinstance(nested_nodes, list) and nested_nodes:
                 nested_text, nested_forward_ids, nested_images = (
                     _extract_text_forward_ids_and_images_from_forward_nodes(
-                        nested_nodes if isinstance(nested_nodes, list) else [],
-                        depth=1,
+                        nested_nodes,
+                        depth=forward_depth + 1,
                         settings=settings,
                     )
                 )
@@ -329,6 +328,8 @@ def _parse_onebot_segments(
                     forward_ids.extend(nested_forward_ids)
                 if nested_images:
                     image_refs.extend(nested_images)
+            elif isinstance(fid, (str, int)) and str(fid):
+                forward_ids.append(str(fid))
         elif seg_type == "json":
             raw_json = seg_data.get("data")
             if isinstance(raw_json, str) and raw_json.strip():
@@ -388,7 +389,11 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
                 else:
                     chain = [{"type": "text", "data": {"text": raw_content}}]
 
-        parsed_segments = _parse_onebot_segments(chain, settings=settings)
+        parsed_segments = _parse_onebot_segments(
+            chain,
+            forward_depth=depth,
+            settings=settings,
+        )
         node_text = parsed_segments["text"]
         node_forward_ids = parsed_segments["forward_ids"]
         node_images = parsed_segments["image_refs"]

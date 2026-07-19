@@ -183,6 +183,11 @@ async def _emit_agent_response(
     buffered_llm_chains: list[MessageChain],
 ) -> AsyncGenerator[MessageChain | None]:
     """Handle one non-aborted runner response in its original delivery order."""
+    if resp.type == "agent_stats":
+        if astr_event.get_platform_name() == "webchat":
+            await astr_event.send(resp.data["chain"])
+        return
+
     if resp.type == "tool_call" and agent_runner.streaming and show_tool_use:
         yield MessageChain(chain=[], type="break")
 
@@ -285,17 +290,8 @@ def _prepare_forced_final_step(
 
 
 async def _complete_agent_step(agent_runner: AgentRunner, astr_event) -> bool:
-    """Send final WebChat stats and report whether the runner is complete."""
-    if not agent_runner.done():
-        return False
-    if astr_event.get_platform_name() == "webchat":
-        await astr_event.send(
-            MessageChain(
-                type="agent_stats",
-                chain=[Json(data=agent_runner.stats.to_dict())],
-            )
-        )
-    return True
+    """Report whether the runner is complete."""
+    return agent_runner.done()
 
 
 async def run_agent(

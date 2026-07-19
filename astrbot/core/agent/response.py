@@ -13,6 +13,7 @@ type AgentResponseType = T.Literal[
     "streaming_delta",
     "llm_result",
     "llm_sources",
+    "agent_stats",
     "tool_call",
     "tool_call_result",
     "aborted",
@@ -41,7 +42,7 @@ class AgentStats:
 
     def to_dict(self) -> dict:
         return {
-            "token_usage": self.token_usage.__dict__,
+            "token_usage": self.token_usage.__dict__.copy(),
             "current_context_tokens": self.current_context_tokens,
             "start_time": self.start_time,
             "end_time": self.end_time,

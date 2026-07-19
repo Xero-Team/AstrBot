@@ -990,6 +990,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_resp_result = llm_response
 
             self._record_final_response_usage(llm_response)
+            yield AgentResponse(
+                type="agent_stats",
+                data=AgentResponseData(
+                    chain=MessageChain(
+                        type="agent_stats",
+                        chain=[Json(data=self.stats.to_dict())],
+                    )
+                ),
+            )
             break  # got final response
 
         if not llm_resp_result:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
@@ -824,6 +825,28 @@ async def test_public_versions_route_uses_static_folder(
     assert data["data"]["webui_version"] == "v9.8.7"
     assert data["data"]["astrbot_version"]
     assert "astrbot_code_version" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_unhandled_errors_use_the_standard_error_envelope(
+    asgi_app: FastAPI,
+):
+    handler = asgi_app.exception_handlers[Exception]
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/test-unhandled-error",
+            "headers": [],
+        }
+    )
+    response = await handler(request, RuntimeError("api_key=secret-value"))
+
+    assert response.status_code == 500
+    assert json.loads(response.body) == {
+        "status": "error",
+        "message": "Internal server error",
+    }
 
 
 @pytest.mark.asyncio

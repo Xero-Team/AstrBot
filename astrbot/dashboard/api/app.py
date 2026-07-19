@@ -1,13 +1,16 @@
 from types import SimpleNamespace
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogBroker
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.appearance_service import AppearanceService
@@ -175,10 +178,19 @@ def create_dashboard_asgi_app(
     async def value_error_handler(_request: Request, exc: ValueError):
         return JSONResponse(error(str(exc)), status_code=400)
 
-    @app.exception_handler(HTTPException)
-    async def http_error_handler(_request: Request, exc: HTTPException):
-        detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
-        return JSONResponse(error(detail), status_code=exc.status_code)
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(_request: Request, exc: StarletteHTTPException):
+        if isinstance(exc.detail, str):
+            return JSONResponse(
+                error(exc.detail),
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        return JSONResponse(
+            error("Request failed"),
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(
@@ -186,6 +198,11 @@ def create_dashboard_asgi_app(
         _exc: RequestValidationError,
     ):
         return JSONResponse(error("Invalid request payload"), status_code=422)
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(_request: Request, exc: Exception):
+        logger.error("Unhandled dashboard API exception: %s", safe_error("", exc))
+        return JSONResponse(error("Internal server error"), status_code=500)
 
     app.include_router(build_api_router())
     app.include_router(plugin_page_assets_router)

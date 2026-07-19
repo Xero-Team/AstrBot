@@ -1,5 +1,9 @@
 <template>
-  <MarkdownCodeBlockNode :key="themeRenderKey" v-bind="forwardedBindings">
+  <MarkdownCodeBlockNode
+    :key="themeRenderKey"
+    v-bind="forwardedBindings"
+    @copy="handleCopy"
+  >
     <template v-for="(_, slotName) in $slots" #[slotName]="slotProps">
       <slot :name="slotName" v-bind="slotProps || {}" />
     </template>
@@ -7,9 +11,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, type Ref } from 'vue';
+import { computed, inject, type Ref, useAttrs } from 'vue';
 import { MarkdownCodeBlockNode } from 'markstream-vue';
-import { useAttrs } from 'vue';
+import { copyToClipboard } from '@/utils/clipboard';
 
 defineOptions({
   inheritAttrs: false,
@@ -19,6 +23,23 @@ const props = defineProps<{
   node: Record<string, unknown>;
   isDark?: boolean;
 }>();
+
+const emit = defineEmits<{
+  copy: [payload: string];
+}>();
+
+function handleCopy(payload: string) {
+  if (typeof payload !== 'string') return;
+
+  if (
+    typeof window === 'undefined' ||
+    !window.isSecureContext ||
+    !navigator.clipboard?.writeText
+  ) {
+    void copyToClipboard(payload);
+  }
+  emit('copy', payload);
+}
 
 const injectedIsDark = inject<Ref<boolean> | boolean>('isDark');
 const effectiveIsDark = computed(

@@ -38,6 +38,26 @@
           </section>
         </div>
 
+        <section class="stat-card t2i-runtime-card">
+          <div class="card-head">
+            <div>
+              <div class="section-title">{{ t('t2i.title') }}</div>
+              <div class="section-subtitle">{{ t('t2i.subtitle') }}</div>
+            </div>
+          </div>
+          <div class="t2i-runtime-grid">
+            <div
+              v-for="metric in t2iRuntimeMetrics"
+              :key="metric.label"
+              class="t2i-runtime-metric"
+            >
+              <span class="metric-label">{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+              <span class="card-note">{{ metric.note }}</span>
+            </div>
+          </div>
+        </section>
+
         <div class="section-toolbar">
           <div>
             <div class="section-title">{{ t('messageOverview.title') }}</div>
@@ -241,7 +261,7 @@ import type { ApexOptions } from 'apexcharts';
 import VueApexCharts from 'vue3-apexcharts';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useTheme } from 'vuetify';
-import { statsApi } from '@/api/v1';
+import { statsApi, type T2iRuntimeStatsData } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
 type TokenRange = 1 | 3 | 7;
@@ -317,6 +337,7 @@ const loading = ref(true);
 const errorMessage = ref('');
 const baseStats = ref<BaseStatsResponse | null>(null);
 const providerStats = ref<ProviderTokenStatsResponse | null>(null);
+const t2iRuntimeStats = ref<T2iRuntimeStatsData | null>(null);
 const selectedRange = ref<TokenRange>(1);
 const lastUpdatedAt = ref<Date | null>(null);
 const isDark = computed(() => theme.global.current.value.dark);
@@ -355,6 +376,17 @@ function formatMemory(memoryMb: number): string {
     return `${(memoryMb / 1024).toFixed(1)} ${t('units.gb')}`;
   }
   return `${formatNumber(memoryMb)} ${t('units.mb')}`;
+}
+
+function formatBytes(value: number): string {
+  if (!value) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const exponent = Math.min(
+    Math.floor(Math.log(value) / Math.log(1024)),
+    units.length - 1,
+  );
+  const scaled = value / 1024 ** exponent;
+  return `${scaled >= 10 || exponent === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[exponent]}`;
 }
 
 function formatDurationMs(value: number): string {
@@ -443,10 +475,19 @@ async function fetchProviderStats(): Promise<void> {
   providerStats.value = response.data.data;
 }
 
+async function fetchT2iRuntimeStats(): Promise<void> {
+  const response = await statsApi.t2iRuntime();
+  t2iRuntimeStats.value = response.data.data;
+}
+
 async function refreshStats(): Promise<void> {
   try {
     errorMessage.value = '';
-    await Promise.all([fetchBaseStats(), fetchProviderStats()]);
+    await Promise.all([
+      fetchBaseStats(),
+      fetchProviderStats(),
+      fetchT2iRuntimeStats(),
+    ]);
     lastUpdatedAt.value = new Date();
   } catch (error) {
     console.error('Failed to load stats page data:', error);
@@ -517,6 +558,54 @@ const overviewCards = computed(() => [
     icon: 'mdi-timer-outline',
   },
 ]);
+
+const t2iRuntimeMetrics = computed(() => {
+  const stats = t2iRuntimeStats.value;
+  return [
+    {
+      label: t('t2i.browser.label'),
+      value: stats?.browser_connected
+        ? t('t2i.browser.connected')
+        : t('t2i.browser.disconnected'),
+      note: t('t2i.browser.note', {
+        starts: formatNumber(stats?.browser_starts ?? 0),
+        restarts: formatNumber(stats?.browser_restarts ?? 0),
+      }),
+    },
+    {
+      label: t('t2i.renders.label'),
+      value: formatNumber(stats?.successful_renders ?? 0),
+      note: t('t2i.renders.note', {
+        failed: formatNumber(stats?.failed_renders ?? 0),
+        cancelled: formatNumber(stats?.cancelled_renders ?? 0),
+      }),
+    },
+    {
+      label: t('t2i.pages.label'),
+      value: `${formatNumber(stats?.active_pages ?? 0)} / ${formatNumber(stats?.peak_active_pages ?? 0)}`,
+      note: t('t2i.pages.note'),
+    },
+    {
+      label: t('t2i.lastDuration.label'),
+      value: formatDurationMs(stats?.last_render_duration_ms ?? 0),
+      note: t('t2i.lastDuration.note', {
+        average: formatDurationMs(stats?.average_render_duration_ms ?? 0),
+      }),
+    },
+    {
+      label: t('t2i.maxDuration.label'),
+      value: formatDurationMs(stats?.max_render_duration_ms ?? 0),
+      note: t('t2i.maxDuration.note'),
+    },
+    {
+      label: t('t2i.contexts.label'),
+      value: formatNumber(stats?.context_count ?? 0),
+      note: t('t2i.contexts.note', {
+        output: formatBytes(stats?.output_bytes ?? 0),
+      }),
+    },
+  ];
+});
 
 const messageChartSeries = computed<ChartSeries>(() => [
   {
@@ -830,6 +919,35 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.t2i-runtime-card {
+  margin-bottom: 20px;
+  padding: 20px;
+}
+
+.t2i-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.t2i-runtime-metric {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--stats-border);
+  border-radius: 12px;
+  background: var(--stats-soft);
+}
+
+.t2i-runtime-metric strong {
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 1.1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-grid,
@@ -1173,7 +1291,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1400px) {
-  .overview-grid {
+  .overview-grid,
+  .t2i-runtime-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
@@ -1186,7 +1305,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
-  .overview-grid {
+  .overview-grid,
+  .t2i-runtime-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1210,7 +1330,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
-  .overview-grid {
+  .overview-grid,
+  .t2i-runtime-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1222,7 +1343,8 @@ onBeforeUnmount(() => {
   .chart-card,
   .system-card,
   .provider-list-card,
-  .token-total-card {
+  .token-total-card,
+  .t2i-runtime-card {
     padding: 18px;
     border-radius: 14px;
   }

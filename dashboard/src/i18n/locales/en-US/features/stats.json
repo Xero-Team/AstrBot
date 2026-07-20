@@ -41,6 +41,36 @@
       "note": "Started at {startTime}"
     }
   },
+  "t2i": {
+    "title": "Local Text-to-Image Runtime",
+    "subtitle": "Aggregate state for the in-process Playwright renderer. Templates and user content are never included.",
+    "browser": {
+      "label": "Chromium",
+      "connected": "Connected",
+      "disconnected": "Not started",
+      "note": "{starts} starts, {restarts} restarts"
+    },
+    "renders": {
+      "label": "Successful renders",
+      "note": "{failed} failed, {cancelled} cancelled"
+    },
+    "pages": {
+      "label": "Active pages",
+      "note": "Current / peak"
+    },
+    "lastDuration": {
+      "label": "Latest duration",
+      "note": "Average {average}"
+    },
+    "maxDuration": {
+      "label": "Longest duration",
+      "note": "Since this process started"
+    },
+    "contexts": {
+      "label": "Browser contexts",
+      "note": "Total output {output}"
+    }
+  },
   "messageOverview": {
     "title": "Message Overview",
     "subtitle": "Robot message statistics"

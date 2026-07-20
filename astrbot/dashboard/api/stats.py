@@ -121,6 +121,14 @@ async def get_start_time(
     return await _run(service.get_start_time)
 
 
+@router.get("/stats/t2i")
+async def get_t2i_runtime_stats(
+    _auth: AuthContext = Depends(require_system_scope),
+    service: StatService = Depends(get_service),
+):
+    return await _run(service.get_t2i_runtime_stats)
+
+
 @router.get("/stats/storage")
 async def get_storage_status(
     _auth: AuthContext = Depends(require_system_scope),

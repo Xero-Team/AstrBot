@@ -176,6 +176,10 @@ class StatService:
     def get_start_time(self) -> dict:
         return {"start_time": self.core_lifecycle.start_time}
 
+    def get_t2i_runtime_stats(self) -> dict[str, int | float | bool]:
+        """Return the current non-sensitive local T2I renderer statistics."""
+        return self.core_lifecycle.services.html_renderer.get_runtime_stats()
+
     async def get_storage_status(self) -> dict:
         try:
             return await asyncio.to_thread(self.storage_cleaner.get_status)

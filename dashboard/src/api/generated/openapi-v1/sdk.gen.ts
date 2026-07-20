@@ -243,6 +243,8 @@ import type {
   GetSystemConfigRuntimeResponses,
   GetSystemConfigSchemaData,
   GetSystemConfigSchemaResponses,
+  GetT2iRuntimeStatsData,
+  GetT2iRuntimeStatsResponses,
   GetT2iTemplateData,
   GetT2iTemplateResponses,
   GetTokenFileData,
@@ -4802,6 +4804,23 @@ export const getStartTime = <ThrowOnError extends boolean = false>(
       ...options,
     },
   );
+
+/**
+ * Get local text-to-image renderer statistics
+ */
+export const getT2iRuntimeStats = <ThrowOnError extends boolean = false>(
+  options?: Options<GetT2iRuntimeStatsData, ThrowOnError>,
+): RequestResult<GetT2iRuntimeStatsResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    GetT2iRuntimeStatsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/stats/t2i',
+    ...options,
+  });
 
 /**
  * Get storage status

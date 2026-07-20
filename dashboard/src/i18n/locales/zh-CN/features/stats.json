@@ -41,6 +41,36 @@
       "note": "启动于 {startTime}"
     }
   },
+  "t2i": {
+    "title": "本地文转图运行状态",
+    "subtitle": "当前进程内 Playwright 渲染器的聚合状态，不包含模板或用户内容。",
+    "browser": {
+      "label": "Chromium",
+      "connected": "已连接",
+      "disconnected": "未启动",
+      "note": "启动 {starts} 次，重启 {restarts} 次"
+    },
+    "renders": {
+      "label": "成功渲染",
+      "note": "失败 {failed} 次，取消 {cancelled} 次"
+    },
+    "pages": {
+      "label": "活动页面",
+      "note": "当前 / 历史峰值"
+    },
+    "lastDuration": {
+      "label": "最近耗时",
+      "note": "平均 {average}"
+    },
+    "maxDuration": {
+      "label": "最长耗时",
+      "note": "自本次进程启动以来"
+    },
+    "contexts": {
+      "label": "浏览器上下文",
+      "note": "累计输出 {output}"
+    }
+  },
   "messageOverview": {
     "title": "消息概览",
     "subtitle": "机器人消息数据统计"

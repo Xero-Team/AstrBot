@@ -3701,6 +3701,16 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/stats/t2i:
+    get:
+      tags: [Stats]
+      summary: Get local text-to-image renderer statistics
+      operationId: getT2iRuntimeStats
+      x-astrbot-scope: system
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/stats/storage:
     get:
       tags: [Stats]

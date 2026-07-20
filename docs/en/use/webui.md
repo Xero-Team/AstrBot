@@ -56,6 +56,10 @@ System-wide settings have moved from the old Config → System Config route to *
 
 Config profiles still control routed Agent, model, message-processing, and plugin behavior. Do not confuse profile settings with the system-level network and security controls under Settings.
 
+## Runtime Statistics
+
+The **Statistics** page includes a local text-to-image section. It shows the in-process Chromium connection, render successes and failures, active pages, timing, reusable browser contexts, and aggregate output size. These values reset when AstrBot restarts and never include templates, rendered content, file paths, or user data.
+
 ## ChatUI
 
 AstrBot includes a built-in ChatUI for talking to configured models directly in your browser.

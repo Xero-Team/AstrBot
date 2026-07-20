@@ -184,6 +184,24 @@ export interface PublicVersionData {
   [key: string]: unknown;
 }
 
+export interface T2iRuntimeStatsData {
+  render_in_progress: number;
+  active_pages: number;
+  peak_active_pages: number;
+  successful_renders: number;
+  failed_renders: number;
+  cancelled_renders: number;
+  total_render_duration_ms: number;
+  last_render_duration_ms: number;
+  average_render_duration_ms: number;
+  max_render_duration_ms: number;
+  output_bytes: number;
+  browser_starts: number;
+  browser_restarts: number;
+  browser_connected: boolean;
+  context_count: number;
+}
+
 type StartTimeData = {
   start_time?: number | string | null;
 };
@@ -2453,6 +2471,9 @@ export const statsApi = {
     return typed<StartTimeData>(
       openApiV1.getStartTime(generatedOptions({}, requestConfig)),
     );
+  },
+  t2iRuntime() {
+    return typed<T2iRuntimeStatsData>(openApiV1.getT2iRuntimeStats());
   },
   restart(requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(

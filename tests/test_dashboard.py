@@ -1784,6 +1784,27 @@ async def test_get_stat(
 
 
 @pytest.mark.asyncio
+async def test_get_t2i_runtime_stats_requires_system_scope(
+    app: FastAPI,
+    authenticated_header: dict,
+):
+    test_client = DashboardTestClient(app)
+
+    unauthorized = await test_client.get("/api/v1/stats/t2i")
+    response = await test_client.get(
+        "/api/v1/stats/t2i",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["successful_renders"] >= 0
+    assert data["data"]["active_pages"] >= 0
+
+
+@pytest.mark.asyncio
 async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,

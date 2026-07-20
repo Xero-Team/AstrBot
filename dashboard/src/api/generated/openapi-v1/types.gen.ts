@@ -5326,6 +5326,23 @@ export type GetStartTimeResponses = {
 export type GetStartTimeResponse =
   GetStartTimeResponses[keyof GetStartTimeResponses];
 
+export type GetT2iRuntimeStatsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/stats/t2i';
+};
+
+export type GetT2iRuntimeStatsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetT2iRuntimeStatsResponse =
+  GetT2iRuntimeStatsResponses[keyof GetT2iRuntimeStatsResponses];
+
 export type GetStorageStatusData = {
   body?: never;
   path?: never;

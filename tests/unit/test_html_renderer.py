@@ -112,12 +112,44 @@ async def test_local_strategy_serializes_browser_initialization(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_local_strategy_discards_contexts_when_browser_restarts(monkeypatch):
+    strategy = LocalRenderStrategy()
+    stale_context = MagicMock()
+    stale_context.close = AsyncMock()
+    stale_browser = MagicMock()
+    stale_browser.is_connected.return_value = False
+    stale_browser.close = AsyncMock()
+    fresh_context = MagicMock()
+    fresh_browser = MagicMock()
+    fresh_browser.new_context = AsyncMock(return_value=fresh_context)
+    playwright = MagicMock()
+    playwright.chromium.launch = AsyncMock(return_value=fresh_browser)
+    strategy.browser = stale_browser
+    strategy.contexts = {"normal": stale_context}
+
+    class PlaywrightFactory:
+        async def start(self):
+            return playwright
+
+    monkeypatch.setattr(local_strategy, "async_playwright", PlaywrightFactory)
+
+    context = await strategy._ensure_context()
+
+    assert context is fresh_context
+    stale_context.close.assert_awaited_once()
+    stale_browser.close.assert_awaited_once()
+    fresh_browser.new_context.assert_awaited_once_with(device_scale_factor=1.0)
+    assert strategy.get_runtime_stats()["browser_restarts"] == 1
+
+
+@pytest.mark.asyncio
 async def test_local_strategy_removes_intermediate_html_file(tmp_path):
     strategy = LocalRenderStrategy()
     strategy.temp_dir = tmp_path
     page = MagicMock()
     page.route = AsyncMock()
     page.goto = AsyncMock()
+    page.set_viewport_size = AsyncMock()
     page.close = AsyncMock()
 
     async def screenshot(**kwargs):
@@ -136,6 +168,7 @@ async def test_local_strategy_removes_intermediate_html_file(tmp_path):
     assert Path(image_path).exists()
     assert not list(tmp_path.glob("*.html"))
     page.close.assert_awaited_once()
+    page.set_viewport_size.assert_awaited_once_with({"width": 1280, "height": 720})
 
 
 @pytest.mark.asyncio
@@ -145,6 +178,7 @@ async def test_local_strategy_removes_partial_files_on_render_failure(tmp_path):
     page = MagicMock()
     page.route = AsyncMock()
     page.goto = AsyncMock()
+    page.set_viewport_size = AsyncMock()
     page.screenshot = AsyncMock(side_effect=RuntimeError("screenshot failed"))
     page.close = AsyncMock()
     context = MagicMock()
@@ -158,6 +192,151 @@ async def test_local_strategy_removes_partial_files_on_render_failure(tmp_path):
         )
 
     assert not list(tmp_path.iterdir())
+    assert strategy.get_runtime_stats()["failed_renders"] == 1
+
+
+@pytest.mark.asyncio
+async def test_local_strategy_records_cancelled_renders(tmp_path):
+    strategy = LocalRenderStrategy()
+    strategy.temp_dir = tmp_path
+    page = MagicMock()
+    page.route = AsyncMock()
+    page.set_viewport_size = AsyncMock()
+    page.goto = AsyncMock(side_effect=asyncio.CancelledError())
+    page.close = AsyncMock()
+    context = MagicMock()
+    context.new_page = AsyncMock(return_value=page)
+    strategy._ensure_context = AsyncMock(return_value=context)
+
+    with pytest.raises(asyncio.CancelledError):
+        await strategy._render_html_to_image(
+            "<html><body>test</body></html>",
+            ScreenshotOptions(type="png"),
+        )
+
+    stats = strategy.get_runtime_stats()
+    assert stats["cancelled_renders"] == 1
+    assert stats["render_in_progress"] == 0
+    assert stats["active_pages"] == 0
+
+
+@pytest.mark.asyncio
+async def test_local_strategy_uses_html_meta_viewport_and_blocks_remote_requests(
+    tmp_path,
+):
+    strategy = LocalRenderStrategy()
+    strategy.temp_dir = tmp_path
+    page = MagicMock()
+    page.route = AsyncMock()
+    page.goto = AsyncMock()
+    page.set_viewport_size = AsyncMock()
+    page.close = AsyncMock()
+
+    async def screenshot(**kwargs):
+        Path(kwargs["path"]).write_bytes(b"png")
+
+    page.screenshot = AsyncMock(side_effect=screenshot)
+    context = MagicMock()
+    context.new_page = AsyncMock(return_value=page)
+    strategy._ensure_context = AsyncMock(return_value=context)
+
+    image_path = await strategy._render_html_to_image(
+        '<meta name="viewport" content="width=640; height=360">',
+        ScreenshotOptions(type="png", viewport_width=None),
+    )
+
+    route_handler = page.route.await_args.args[1]
+    remote_route = MagicMock()
+    remote_route.request.url = "https://example.com/style.css"
+    remote_route.abort = AsyncMock()
+    remote_route.continue_ = AsyncMock()
+    await route_handler(remote_route)
+
+    local_route = MagicMock()
+    local_route.request.url = "file:///tmp/local.css"
+    local_route.abort = AsyncMock()
+    local_route.continue_ = AsyncMock()
+    await route_handler(local_route)
+
+    assert Path(image_path).exists()
+    page.set_viewport_size.assert_awaited_once_with({"width": 640, "height": 360})
+    remote_route.abort.assert_awaited_once()
+    remote_route.continue_.assert_not_awaited()
+    local_route.abort.assert_not_awaited()
+    local_route.continue_.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_local_strategy_recreates_closed_context_once(monkeypatch, tmp_path):
+    class ClosedContextError(Exception):
+        pass
+
+    monkeypatch.setattr(local_strategy, "TargetClosedError", ClosedContextError)
+    strategy = LocalRenderStrategy()
+    strategy.temp_dir = tmp_path
+    closed_context = MagicMock()
+    closed_context.close = AsyncMock()
+    replacement_context = MagicMock()
+    page = MagicMock()
+    page.route = AsyncMock()
+    page.goto = AsyncMock()
+    page.set_viewport_size = AsyncMock()
+    page.close = AsyncMock()
+
+    async def screenshot(**kwargs):
+        Path(kwargs["path"]).write_bytes(b"png")
+
+    page.screenshot = AsyncMock(side_effect=screenshot)
+    closed_context.new_page = AsyncMock(side_effect=ClosedContextError("closed"))
+    replacement_context.new_page = AsyncMock(return_value=page)
+    strategy.contexts = {"normal": closed_context}
+    strategy._ensure_context = AsyncMock(
+        side_effect=[closed_context, replacement_context],
+    )
+
+    image_path = await strategy._render_html_to_image(
+        "<html><body>test</body></html>",
+        ScreenshotOptions(type="png"),
+    )
+
+    assert Path(image_path).exists()
+    closed_context.close.assert_awaited_once()
+    replacement_context.new_page.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_local_strategy_records_non_sensitive_runtime_statistics(tmp_path):
+    strategy = LocalRenderStrategy()
+    strategy.temp_dir = tmp_path
+    page = MagicMock()
+    page.route = AsyncMock()
+    page.goto = AsyncMock()
+    page.set_viewport_size = AsyncMock()
+    page.close = AsyncMock()
+
+    async def screenshot(**kwargs):
+        Path(kwargs["path"]).write_bytes(b"png")
+
+    page.screenshot = AsyncMock(side_effect=screenshot)
+    context = MagicMock()
+    context.new_page = AsyncMock(return_value=page)
+    strategy._ensure_context = AsyncMock(return_value=context)
+
+    image_path = await strategy._render_html_to_image(
+        "<html><body>test</body></html>",
+        ScreenshotOptions(type="png"),
+    )
+
+    stats = strategy.get_runtime_stats()
+
+    assert Path(image_path).exists()
+    assert stats["successful_renders"] == 1
+    assert stats["failed_renders"] == 0
+    assert stats["render_in_progress"] == 0
+    assert stats["active_pages"] == 0
+    assert stats["output_bytes"] == 3
+    assert "template" not in stats
+    assert "path" not in stats
 
 
 def test_render_markdown_escapes_raw_html():

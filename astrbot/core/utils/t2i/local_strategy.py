@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -13,6 +14,7 @@ from astrbot.core.config import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from . import RenderStrategy
+from .runtime_stats import RenderResult, T2iRuntimeStats
 from .template_manager import TemplateManager
 from .template_runtime import (
     SHIKI_RUNTIME_TEMPLATE_PATTERN,
@@ -29,6 +31,7 @@ except ImportError:  # pragma: no cover - exercised indirectly in runtime setups
     async_playwright = None
 
 logger = logging.getLogger("astrbot")
+RENDERED_HTML_TEMPLATE_PATTERN = re.compile(r"\brendered_html\b")
 
 
 class FloatRect(TypedDict):
@@ -54,14 +57,17 @@ class ScreenshotOptions(BaseModel):
 
 
 class LocalRenderStrategy(RenderStrategy):
+    DEFAULT_VIEWPORT_WIDTH = 1280
+    DEFAULT_VIEWPORT_HEIGHT = 720
     SCALE_FACTOR_MAP = {
         "normal": 1.0,
         "high": 1.3,
         "ultra": 1.8,
     }
 
-    def __init__(self) -> None:
+    def __init__(self, runtime_stats: T2iRuntimeStats | None = None) -> None:
         self.template_manager = TemplateManager()
+        self.runtime_stats = runtime_stats or T2iRuntimeStats()
         self.playwright: Any | None = None
         self.browser: Any | None = None
         self.contexts: dict[str, Any] = {}
@@ -74,12 +80,7 @@ class LocalRenderStrategy(RenderStrategy):
 
     async def terminate(self) -> None:
         async with self._browser_lock:
-            for context in self.contexts.values():
-                try:
-                    await context.close()
-                except Exception as exc:
-                    logger.debug("Failed to close local T2I browser context: %s", exc)
-            self.contexts.clear()
+            await self._close_contexts_locked()
 
             if self.browser is not None:
                 try:
@@ -87,6 +88,7 @@ class LocalRenderStrategy(RenderStrategy):
                 except Exception as exc:
                     logger.debug("Failed to close local T2I browser: %s", exc)
                 self.browser = None
+            self.runtime_stats.set_browser_connected(False)
 
             if self.playwright is not None:
                 try:
@@ -94,6 +96,28 @@ class LocalRenderStrategy(RenderStrategy):
                 except Exception as exc:
                     logger.debug("Failed to stop local T2I Playwright: %s", exc)
                 self.playwright = None
+
+    async def _close_contexts_locked(self) -> None:
+        """Close every cached context while the browser lock is held."""
+        for context in self.contexts.values():
+            try:
+                await context.close()
+            except Exception as exc:
+                logger.debug("Failed to close local T2I browser context: %s", exc)
+        self.contexts.clear()
+        self.runtime_stats.set_context_count(0)
+
+    async def _discard_context(self, level: str, context: Any) -> None:
+        """Discard a closed context without racing another renderer."""
+        async with self._browser_lock:
+            if self.contexts.get(level) is not context:
+                return
+            self.contexts.pop(level, None)
+            try:
+                await context.close()
+            except Exception as exc:
+                logger.debug("Failed to close stale local T2I context: %s", exc)
+            self.runtime_stats.set_context_count(len(self.contexts))
 
     async def _ensure_context(self, level: str = "normal"):
         if async_playwright is None:
@@ -108,6 +132,8 @@ class LocalRenderStrategy(RenderStrategy):
 
             browser = self.browser
             if browser is None or not browser.is_connected():
+                restarted = browser is not None
+                await self._close_contexts_locked()
                 if browser is not None:
                     try:
                         await browser.close()
@@ -115,12 +141,14 @@ class LocalRenderStrategy(RenderStrategy):
                         logger.debug("Failed to close stale local T2I browser: %s", exc)
                 browser = await playwright.chromium.launch(headless=True)
                 self.browser = browser
+                self.runtime_stats.record_browser_started(restarted=restarted)
 
             context = self.contexts.get(level)
             if context is None:
                 scale_factor = self.SCALE_FACTOR_MAP.get(level, 1.0)
                 context = await browser.new_context(device_scale_factor=scale_factor)
                 self.contexts[level] = context
+                self.runtime_stats.set_context_count(len(self.contexts))
 
             return context
 
@@ -128,19 +156,27 @@ class LocalRenderStrategy(RenderStrategy):
     def _prepare_template_sync(tmpl_str: str, tmpl_data: dict) -> tuple[str, dict]:
         if SHIKI_RUNTIME_TEMPLATE_PATTERN.search(tmpl_str):
             tmpl_data = {"shiki_runtime": get_shiki_runtime()} | tmpl_data
-        if "text" in tmpl_data and "rendered_html" not in tmpl_data:
+        if (
+            "text" in tmpl_data
+            and "rendered_html" not in tmpl_data
+            and RENDERED_HTML_TEMPLATE_PATTERN.search(tmpl_str)
+        ):
             tmpl_data = {
                 "rendered_html": render_markdown(str(tmpl_data["text"])),
             } | tmpl_data
         tmpl_str = inject_shiki_runtime(tmpl_str)
         return tmpl_str, tmpl_data
 
+    @staticmethod
+    def _render_template_sync(tmpl_str: str, tmpl_data: dict) -> str:
+        return SandboxedEnvironment().from_string(tmpl_str).render(tmpl_data)
+
     def _create_temp_path(self, suffix: str) -> Path:
         return self.temp_dir / f"t2i_{uuid.uuid4().hex}.{suffix}"
 
     def _resolve_viewport_size(
         self,
-        html_file_path: Path,
+        html: str,
         screenshot_options: ScreenshotOptions,
     ) -> tuple[int | None, int | None]:
         viewport_width = screenshot_options.viewport_width
@@ -150,7 +186,7 @@ class LocalRenderStrategy(RenderStrategy):
             return viewport_width, viewport_height
 
         try:
-            head_snippet = html_file_path.read_text(encoding="utf-8")[:4096]
+            head_snippet = html[:4096]
             if viewport_width is None:
                 pattern = (
                     r'<meta\s+[^>]*name=["\']viewport["\'][^>]*'
@@ -166,7 +202,7 @@ class LocalRenderStrategy(RenderStrategy):
                 )
                 if match := re.search(pattern, head_snippet, re.IGNORECASE):
                     viewport_height = int(match[1])
-        except (OSError, UnicodeDecodeError, ValueError, re.error) as exc:
+        except (ValueError, re.error) as exc:
             logger.debug("Failed to resolve local T2I viewport size: %s", exc)
 
         return viewport_width, viewport_height
@@ -177,24 +213,27 @@ class LocalRenderStrategy(RenderStrategy):
         screenshot_options: ScreenshotOptions,
     ) -> str:
         level = screenshot_options.device_scale_factor_level or "normal"
-        context = await self._ensure_context(level)
-
         html_path = self._create_temp_path("html")
-        html_path.write_text(html, encoding="utf-8")
         image_path = self._create_temp_path(screenshot_options.type or "png")
         page = None
+        page_opened = False
         rendered = False
+        output_bytes = 0
+        result: RenderResult = "failed"
+        started = time.perf_counter()
+        self.runtime_stats.record_render_started()
         try:
+            await asyncio.to_thread(html_path.write_text, html, encoding="utf-8")
+            context = await self._ensure_context(level)
             try:
                 page = await context.new_page()
-            except TargetClosedError:
-                try:
-                    await context.close()
-                except Exception:
-                    pass
-                self.contexts.pop(level, None)
+            except TargetClosedError as exc:
+                logger.warning("Local T2I context closed while creating a page: %s", exc)
+                await self._discard_context(level, context)
                 context = await self._ensure_context(level)
                 page = await context.new_page()
+            page_opened = True
+            self.runtime_stats.record_page_opened()
 
             async def block_remote_requests(route) -> None:
                 if route.request.url.startswith(("http://", "https://")):
@@ -204,16 +243,19 @@ class LocalRenderStrategy(RenderStrategy):
 
             await page.route("**/*", block_remote_requests)
             viewport_width, viewport_height = self._resolve_viewport_size(
-                html_path,
+                html,
                 screenshot_options,
             )
-            if viewport_width is not None or viewport_height is not None:
-                await page.set_viewport_size(
-                    {
-                        "width": viewport_width or 800,
-                        "height": viewport_height or 720,
-                    },
-                )
+            await page.set_viewport_size(
+                {
+                    "width": viewport_width
+                    if viewport_width is not None
+                    else self.DEFAULT_VIEWPORT_WIDTH,
+                    "height": viewport_height
+                    if viewport_height is not None
+                    else self.DEFAULT_VIEWPORT_HEIGHT,
+                },
+            )
 
             await page.goto(html_path.as_uri(), timeout=screenshot_options.timeout)
             screenshot_kwargs = screenshot_options.model_dump(exclude_none=True)
@@ -224,17 +266,30 @@ class LocalRenderStrategy(RenderStrategy):
                 screenshot_kwargs.pop("quality", None)
             screenshot_kwargs["path"] = str(image_path)
             await page.screenshot(**screenshot_kwargs)
+            output_bytes = (await asyncio.to_thread(image_path.stat)).st_size
             rendered = True
+            result = "success"
             return str(image_path)
+        except asyncio.CancelledError:
+            result = "cancelled"
+            raise
         finally:
             if page is not None:
                 try:
                     await page.close()
                 except Exception as exc:
                     logger.debug("Failed to close local T2I page: %s", exc)
+                finally:
+                    if page_opened:
+                        self.runtime_stats.record_page_closed()
             html_path.unlink(missing_ok=True)
             if not rendered:
                 image_path.unlink(missing_ok=True)
+            self.runtime_stats.record_render_finished(
+                result,
+                (time.perf_counter() - started) * 1000,
+                output_bytes,
+            )
 
     async def render_custom_template(
         self,
@@ -251,14 +306,16 @@ class LocalRenderStrategy(RenderStrategy):
         if options:
             default_options |= options
 
-        loop = asyncio.get_running_loop()
-        tmpl_str, tmpl_data = await loop.run_in_executor(
-            None,
+        tmpl_str, tmpl_data = await asyncio.to_thread(
             self._prepare_template_sync,
             tmpl_str,
             tmpl_data,
         )
-        html = SandboxedEnvironment().from_string(tmpl_str).render(tmpl_data)
+        html = await asyncio.to_thread(
+            self._render_template_sync,
+            tmpl_str,
+            tmpl_data,
+        )
         return await self._render_html_to_image(
             html,
             ScreenshotOptions(**default_options),
@@ -279,3 +336,15 @@ class LocalRenderStrategy(RenderStrategy):
                 "version": f"v{VERSION}",
             },
         )
+
+    def get_runtime_stats(self) -> dict[str, int | float | bool]:
+        """Return a non-sensitive snapshot of the local renderer state."""
+        try:
+            connected = bool(
+                self.browser is not None and self.browser.is_connected(),
+            )
+        except Exception as exc:
+            logger.debug("Failed to inspect local T2I browser state: %s", exc)
+            connected = False
+        self.runtime_stats.set_browser_connected(connected)
+        return self.runtime_stats.snapshot()

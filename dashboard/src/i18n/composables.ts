@@ -110,7 +110,7 @@ export function useI18n() {
   const locale = computed(() => currentLocale.value);
 
   // 获取可用语言列表
-  const availableLocales: Locale[] = ['zh-CN', 'en-US', 'ru-RU'];
+  const availableLocales: Locale[] = ['zh-CN', 'en-US'];
 
   // 检查是否已加载
   const isLoaded = computed(() => Object.keys(translations.value).length > 0);
@@ -169,7 +169,6 @@ export function useLanguageSwitcher() {
   const languageOptions = computed(() => [
     { value: 'zh-CN', label: '简体中文', flag: '🇨🇳' },
     { value: 'en-US', label: 'English', flag: '🇺🇸' },
-    { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' },
   ]);
 
   const currentLanguage = computed(() => {
@@ -239,7 +238,7 @@ export async function setupI18n() {
   // 从localStorage获取保存的语言设置
   const savedLocale = localStorage.getItem('astrbot-locale') as Locale;
   const initialLocale =
-    savedLocale && ['zh-CN', 'en-US', 'ru-RU'].includes(savedLocale)
+    savedLocale && ['zh-CN', 'en-US'].includes(savedLocale)
       ? savedLocale
       : 'zh-CN';
 

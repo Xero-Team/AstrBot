@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import cmp_to_key
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import aiohttp
 import psutil
@@ -597,28 +597,16 @@ class StatService:
             logger.error(traceback.format_exc())
             raise StatServiceError(f"Error: {exc!s}") from exc
 
-    def get_first_notice(self, locale: str | None) -> dict:
+    def get_first_notice(self, locale: Literal["zh-CN", "en-US"] | None) -> dict:
         try:
-            locale = (locale or "").strip()
-            if not re.match(r"^[A-Za-z0-9_-]*$", locale):
-                locale = ""
-
             base_path = Path(get_astrbot_path())
-            candidates: list[Path] = []
-
-            if locale:
-                candidates.append(base_path / f"FIRST_NOTICE.{locale}.md")
-                if locale.lower().startswith("zh"):
-                    candidates.append(base_path / "FIRST_NOTICE.md")
-                    candidates.append(base_path / "FIRST_NOTICE.zh-CN.md")
-                elif locale.lower().startswith("en"):
-                    candidates.append(base_path / "FIRST_NOTICE.en-US.md")
-
-            candidates.extend(
-                [
+            candidates = (
+                [base_path / "FIRST_NOTICE.en-US.md", base_path / "FIRST_NOTICE.md"]
+                if locale == "en-US"
+                else [
                     base_path / "FIRST_NOTICE.md",
                     base_path / "FIRST_NOTICE.en-US.md",
-                ],
+                ]
             )
 
             for notice_path in candidates:

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -81,7 +83,7 @@ async def get_public_versions(
 
 @router.get("/stats/first-notice")
 async def get_first_notice(
-    locale: str | None = None,
+    locale: Literal["zh-CN", "en-US"] | None = None,
     _auth: AuthContext = Depends(require_system_scope),
     service: StatService = Depends(get_service),
 ):

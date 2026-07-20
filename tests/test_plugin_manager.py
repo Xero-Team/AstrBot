@@ -124,7 +124,7 @@ def _write_dashboard_extension_metadata(plugin_path: Path, plugin_name: str) -> 
     )
 
 
-def test_load_plugin_i18n_reads_locale_files(tmp_path: Path):
+def test_load_plugin_i18n_reads_supported_locale_files(tmp_path: Path):
     plugin_path = tmp_path / "plugin"
     i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
     i18n_path.mkdir(parents=True)
@@ -134,6 +134,10 @@ def test_load_plugin_i18n_reads_locale_files(tmp_path: Path):
     )
     (i18n_path / "en-US.json").write_text(
         json.dumps({"metadata": {"desc": "English description"}}),
+        encoding="utf-8",
+    )
+    (i18n_path / "ru-RU.json").write_text(
+        json.dumps({"metadata": {"desc": "Russian description"}}),
         encoding="utf-8",
     )
     (i18n_path / "README.md").write_text("ignored", encoding="utf-8")

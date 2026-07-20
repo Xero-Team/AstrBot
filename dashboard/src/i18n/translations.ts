@@ -83,47 +83,6 @@ import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
 import enUSValidation from './locales/en-US/messages/validation.json';
 
-// Russian translation
-import ruRUCommon from './locales/ru-RU/core/common.json';
-import ruRUActions from './locales/ru-RU/core/actions.json';
-import ruRUStatus from './locales/ru-RU/core/status.json';
-import ruRUNavigation from './locales/ru-RU/core/navigation.json';
-import ruRUHeader from './locales/ru-RU/core/header.json';
-import ruRUShared from './locales/ru-RU/core/shared.json';
-
-import ruRUChat from './locales/ru-RU/features/chat.json';
-import ruRUExtension from './locales/ru-RU/features/extension.json';
-import ruRUConversation from './locales/ru-RU/features/conversation.json';
-import ruRUSessionManagement from './locales/ru-RU/features/session-management.json';
-import ruRUToolUse from './locales/ru-RU/features/tool-use.json';
-import ruRUProvider from './locales/ru-RU/features/provider.json';
-import ruRUPlatform from './locales/ru-RU/features/platform.json';
-import ruRUConfig from './locales/ru-RU/features/config.json';
-import ruRUConfigMetadata from './locales/ru-RU/features/config-metadata.json';
-import ruRUConsole from './locales/ru-RU/features/console.json';
-import ruRUTrace from './locales/ru-RU/features/trace.json';
-import ruRUAbout from './locales/ru-RU/features/about.json';
-import ruRUSettings from './locales/ru-RU/features/settings.json';
-import ruRUAuth from './locales/ru-RU/features/auth.json';
-import ruRUChart from './locales/ru-RU/features/chart.json';
-import ruRUDashboard from './locales/ru-RU/features/dashboard.json';
-import ruRUCron from './locales/ru-RU/features/cron.json';
-import ruRUStats from './locales/ru-RU/features/stats.json';
-import ruRUAlkaidIndex from './locales/ru-RU/features/alkaid/index.json';
-import ruRUAlkaidKnowledgeBase from './locales/ru-RU/features/alkaid/knowledge-base.json';
-import ruRUAlkaidMemory from './locales/ru-RU/features/alkaid/memory.json';
-import ruRUKnowledgeBaseIndex from './locales/ru-RU/features/knowledge-base/index.json';
-import ruRUKnowledgeBaseDetail from './locales/ru-RU/features/knowledge-base/detail.json';
-import ruRUKnowledgeBaseDocument from './locales/ru-RU/features/knowledge-base/document.json';
-import ruRUPersona from './locales/ru-RU/features/persona.json';
-import ruRUCommand from './locales/ru-RU/features/command.json';
-import ruRUSubagent from './locales/ru-RU/features/subagent.json';
-import ruRUWelcome from './locales/ru-RU/features/welcome.json';
-
-import ruRUErrors from './locales/ru-RU/messages/errors.json';
-import ruRUSuccess from './locales/ru-RU/messages/success.json';
-import ruRUValidation from './locales/ru-RU/messages/validation.json';
-
 // 组装翻译对象
 export const translations = {
   'zh-CN': {
@@ -222,55 +181,6 @@ export const translations = {
       errors: enUSErrors,
       success: enUSSuccess,
       validation: enUSValidation,
-    },
-  },
-  'ru-RU': {
-    core: {
-      common: ruRUCommon,
-      actions: ruRUActions,
-      status: ruRUStatus,
-      navigation: ruRUNavigation,
-      header: ruRUHeader,
-      shared: ruRUShared,
-    },
-    features: {
-      chat: ruRUChat,
-      extension: ruRUExtension,
-      conversation: ruRUConversation,
-      'session-management': ruRUSessionManagement,
-      tooluse: ruRUToolUse,
-      provider: ruRUProvider,
-      platform: ruRUPlatform,
-      config: ruRUConfig,
-      'config-metadata': ruRUConfigMetadata,
-      console: ruRUConsole,
-      trace: ruRUTrace,
-      about: ruRUAbout,
-      settings: ruRUSettings,
-      auth: ruRUAuth,
-      chart: ruRUChart,
-      dashboard: ruRUDashboard,
-      cron: ruRUCron,
-      stats: ruRUStats,
-      alkaid: {
-        index: ruRUAlkaidIndex,
-        'knowledge-base': ruRUAlkaidKnowledgeBase,
-        memory: ruRUAlkaidMemory,
-      },
-      'knowledge-base': {
-        index: ruRUKnowledgeBaseIndex,
-        detail: ruRUKnowledgeBaseDetail,
-        document: ruRUKnowledgeBaseDocument,
-      },
-      persona: ruRUPersona,
-      command: ruRUCommand,
-      subagent: ruRUSubagent,
-      welcome: ruRUWelcome,
-    },
-    messages: {
-      errors: ruRUErrors,
-      success: ruRUSuccess,
-      validation: ruRUValidation,
     },
   },
 };

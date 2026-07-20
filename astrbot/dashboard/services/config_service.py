@@ -898,6 +898,8 @@ class ConfigDisplayService:
             i18n_prefix = f"platform_group.platform.{platform.name}"
 
             for lang, lang_data in platform.i18n_resources.items():
+                if lang not in {"zh-CN", "en-US"}:
+                    continue
                 platform_i18n_translations.setdefault(lang, {}).setdefault(
                     "platform_group", {}
                 ).setdefault("platform", {})[platform.name] = lang_data

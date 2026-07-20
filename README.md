@@ -2,12 +2,8 @@
 
 <div align="center">
 
-<a href="./README_zh.md">简体中文</a> ｜
-<a href="./README_zh-TW.md">繁體中文</a> ｜
-<a href="./README_ja.md">日本語</a> ｜
-<a href="./README_fr.md">Français</a> ｜
-<a href="./README_es.md">Español</a> ｜
-<a href="./README_ru.md">Русский</a>
+<a href="./README.md">English</a> ｜
+<a href="./README_zh.md">简体中文</a>
 
 <br>
 
@@ -40,7 +36,7 @@ This repository is a modernized fork of AstrBot. The code, commands, deployment 
 6. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) for isolated, safe execution of code, shell calls, and session-level resource reuse.
 7. 💻 WebUI Support.
 8. 🌈 Web ChatUI Support with built-in agent sandbox and web search.
-9. 🌐 Internationalization (i18n) Support.
+9. 🌐 Bilingual WebUI: Simplified Chinese and English.
 
 <br>
 

@@ -14,7 +14,7 @@ your_plugin/
       en-US.json
 ```
 
-Locale file names use WebUI locales, such as `zh-CN.json` and `en-US.json`. Each file must contain a JSON object.
+AstrBot supports only `zh-CN.json` and `en-US.json`. Each file must contain a JSON object.
 
 When the current locale has no translation, a field is missing, or the locale file does not exist, AstrBot falls back to the default text:
 
@@ -156,6 +156,6 @@ Here is an English translation example for a real configuration:
 
 ## Constraints
 
-Plugin internationalization reads only `.astrbot-plugin/i18n`. Locale files must use nested JSON objects; dot-key flat entries are not supported. The runtime skips a locale file when it exceeds 1 MiB, has an empty or longer-than-32-character locale name, contains invalid JSON, or has a non-object root.
+Plugin internationalization reads only `.astrbot-plugin/i18n`. Locale files must use nested JSON objects; dot-key flat entries are not supported. The runtime skips a locale file unless its name is `zh-CN` or `en-US`, or when it exceeds 1 MiB, has an empty or longer-than-32-character locale name, contains invalid JSON, or has a non-object root.
 
 Use strings for translated leaf values. Arrays and objects are not stable WebUI translation values today; in particular, do not override a `labels` array in a locale file.

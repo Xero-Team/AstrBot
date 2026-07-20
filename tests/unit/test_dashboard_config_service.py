@@ -189,7 +189,13 @@ def test_inject_platform_metadata_with_i18n_rewrites_field_labels() -> None:
                     "description": "最大帧大小(MB)",
                     "hint": "允许接收的单个 WebSocket 帧的最大大小，单位 MB。",
                 },
-            }
+            },
+            "ru-RU": {
+                "ws_url": {
+                    "description": "Russian URL",
+                    "hint": "Russian hint",
+                }
+            },
         },
     )
 
@@ -220,6 +226,7 @@ def test_inject_platform_metadata_with_i18n_rewrites_field_labels() -> None:
             "hint": "允许接收的单个 WebSocket 帧的最大大小，单位 MB。",
         },
     }
+    assert "ru-RU" not in translations
 
 
 def test_list_bot_types_includes_supported_actions(

@@ -14,7 +14,7 @@ your_plugin/
       en-US.json
 ```
 
-语言文件名使用 WebUI 的 locale，例如 `zh-CN.json`、`en-US.json`。文件内容必须是 JSON object。
+AstrBot 仅支持 `zh-CN.json` 和 `en-US.json`。文件内容必须是 JSON object。
 
 当当前语言没有对应翻译、某个字段缺失，或语言文件不存在时，AstrBot 会回退到默认文案：
 
@@ -156,6 +156,6 @@ your_plugin/
 
 ## 约束
 
-插件国际化只读取 `.astrbot-plugin/i18n` 目录。语言文件必须使用嵌套 JSON object，不支持点号扁平 key。单个 locale 文件超过 1 MiB、文件名 locale 为空或超过 32 个字符、JSON 无效或顶层不是 object 时，运行时会跳过该文件。
+插件国际化只读取 `.astrbot-plugin/i18n` 目录。语言文件必须使用嵌套 JSON object，不支持点号扁平 key。只有 `zh-CN`、`en-US` 两种 locale；其他 locale，或单个文件超过 1 MiB、文件名 locale 为空或超过 32 个字符、JSON 无效或顶层不是 object 时，运行时会跳过该文件。
 
 翻译叶子值应使用字符串。数组和对象不是当前 WebUI 的稳定翻译值；尤其不要在 locale 文件中覆盖 `labels` 数组。

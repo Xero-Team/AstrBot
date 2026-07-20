@@ -5232,7 +5232,7 @@ export type GetFirstNoticeData = {
   body?: never;
   path?: never;
   query?: {
-    locale?: string;
+    locale?: 'zh-CN' | 'en-US';
   };
   url: '/api/v1/stats/first-notice';
 };

@@ -3643,6 +3643,7 @@ paths:
           in: query
           schema:
             type: string
+            enum: [zh-CN, en-US]
       responses:
         '200':
           $ref: '#/components/responses/Ok'

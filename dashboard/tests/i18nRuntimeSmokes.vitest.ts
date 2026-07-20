@@ -26,14 +26,14 @@ vi.mock('@/api/v1', () => ({
 
 describe('i18n runtime smokes', () => {
   beforeEach(async () => {
-    await initI18n('ru-RU');
+    await initI18n('en-US');
   });
 
   afterEach(async () => {
     await initI18n('en-US');
   });
 
-  it('renders TemplateListEditor in ru-RU without missing expand/collapse warnings', async () => {
+  it('renders TemplateListEditor in en-US without missing expand/collapse warnings', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mountWithVuetify(TemplateListEditor, {
@@ -80,7 +80,7 @@ describe('i18n runtime smokes', () => {
     ).toBe(false);
   });
 
-  it('resolves PersonaSelector edit label in ru-RU without missing-key warnings', async () => {
+  it('resolves PersonaSelector edit label in en-US without missing-key warnings', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const wrapper = mountWithVuetify(PersonaSelector, {
@@ -91,7 +91,8 @@ describe('i18n runtime smokes', () => {
         stubs: {
           BaseFolderItemSelector: {
             props: ['labels'],
-            template: '<div class="persona-selector-stub">{{ labels.editButton }}</div>',
+            template:
+              '<div class="persona-selector-stub">{{ labels.editButton }}</div>',
           },
           PersonaForm: {
             template: '<div class="persona-form-stub"></div>',
@@ -103,7 +104,7 @@ describe('i18n runtime smokes', () => {
     await flushPromises();
 
     expect(wrapper.find('.persona-selector-stub').text()).toBe(
-      'Изменить текущего персонажа',
+      'Edit current persona',
     );
     expect(
       warnSpy.mock.calls.some((args) =>

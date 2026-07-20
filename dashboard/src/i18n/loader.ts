@@ -1,3 +1,5 @@
+import type { Locale } from './types';
+
 /**
  * Dynamic I18n Loader
  * 动态国际化加载器，支持按需加载和缓存机制
@@ -87,7 +89,7 @@ export class I18nLoader {
   /**
    * 加载单个模块
    */
-  async loadModule(locale: string, moduleName: string): Promise<LoaderCache> {
+  async loadModule(locale: Locale, moduleName: string): Promise<LoaderCache> {
     const cacheKey = `${locale}:${moduleName}`;
 
     // 检查缓存
@@ -148,7 +150,7 @@ export class I18nLoader {
    * 通用模块加载器 - 减少重复代码，提高可维护性
    */
   private async loadModules(
-    locale: string,
+    locale: Locale,
     prefix: string,
     overrideList: string[] = [],
   ): Promise<LoaderCache> {
@@ -170,7 +172,7 @@ export class I18nLoader {
   /**
    * 加载核心模块（最高优先级）
    */
-  async loadCoreModules(locale: string): Promise<LoaderCache> {
+  async loadCoreModules(locale: Locale): Promise<LoaderCache> {
     return this.loadModules(locale, 'core');
   }
 
@@ -178,7 +180,7 @@ export class I18nLoader {
    * 加载功能模块
    */
   async loadFeatureModules(
-    locale: string,
+    locale: Locale,
     features?: string[],
   ): Promise<LoaderCache> {
     return this.loadModules(locale, 'features', features || []);
@@ -187,14 +189,14 @@ export class I18nLoader {
   /**
    * 加载消息模块
    */
-  async loadMessageModules(locale: string): Promise<LoaderCache> {
+  async loadMessageModules(locale: Locale): Promise<LoaderCache> {
     return this.loadModules(locale, 'messages');
   }
 
   /**
    * 加载所有模块
    */
-  async loadAllModules(locale: string): Promise<LoaderCache> {
+  async loadAllModules(locale: Locale): Promise<LoaderCache> {
     const [core, features, messages] = await Promise.all([
       this.loadCoreModules(locale),
       this.loadFeatureModules(locale),
@@ -211,7 +213,7 @@ export class I18nLoader {
   /**
    * 加载完整语言包（所有模块合并）
    */
-  async loadLocale(locale: string): Promise<LoaderCache> {
+  async loadLocale(locale: Locale): Promise<LoaderCache> {
     return this.loadAllModules(locale);
   }
 
@@ -265,7 +267,7 @@ export class I18nLoader {
   /**
    * 预加载关键模块
    */
-  async preloadEssentials(locale: string): Promise<void> {
+  async preloadEssentials(locale: Locale): Promise<void> {
     const essentials = ['core/common', 'core/navigation', 'features/chat'];
 
     await Promise.all(
@@ -276,7 +278,7 @@ export class I18nLoader {
   /**
    * 清理缓存
    */
-  clearCache(locale?: string): void {
+  clearCache(locale?: Locale): void {
     if (locale) {
       // 清理特定语言的缓存
       const keys = Array.from(this.cache.keys()).filter((key: string) =>
@@ -306,7 +308,7 @@ export class I18nLoader {
   /**
    * 热重载模块
    */
-  async reloadModule(locale: string, moduleName: string): Promise<LoaderCache> {
+  async reloadModule(locale: Locale, moduleName: string): Promise<LoaderCache> {
     const cacheKey = `${locale}:${moduleName}`;
     this.cache.delete(cacheKey);
 

@@ -3,11 +3,7 @@
 <div align="center">
 
 <a href="./README.md">English</a> ｜
-<a href="./README_zh-TW.md">繁體中文</a> ｜
-<a href="./README_ja.md">日本語</a> ｜
-<a href="./README_fr.md">Français</a> ｜
-<a href="./README_es.md">Español</a> ｜
-<a href="./README_ru.md">Русский</a>
+<a href="./README_zh.md">简体中文</a>
 
 <div>
 <img src="https://img.shields.io/github/v/release/Xero-Team/AstrBot?color=76bad9" href="https://github.com/Xero-Team/AstrBot/releases/latest">
@@ -39,7 +35,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 6. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) 隔离化环境，安全地执行任何代码、调用 Shell、会话级资源复用。
 7. 💻 WebUI 支持。
 8. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
-9. 🌐 国际化（i18n）支持。
+9. 🌐 WebUI 双语：简体中文和英文。
 
 <br>
 

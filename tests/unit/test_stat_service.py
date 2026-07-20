@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.db.po import PlatformStat
+from astrbot.dashboard.services import stat_service
 from astrbot.dashboard.services.stat_service import StatService
 
 
@@ -81,3 +82,17 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
             "timestamp": timestamp,
         }
     ]
+
+
+def test_stat_service_get_first_notice_uses_only_supported_locales(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    (tmp_path / "FIRST_NOTICE.md").write_text("Chinese notice", encoding="utf-8")
+    (tmp_path / "FIRST_NOTICE.en-US.md").write_text("English notice", encoding="utf-8")
+    monkeypatch.setattr(stat_service, "get_astrbot_path", lambda: str(tmp_path))
+
+    service = object.__new__(StatService)
+
+    assert service.get_first_notice("zh-CN") == {"content": "Chinese notice"}
+    assert service.get_first_notice("en-US") == {"content": "English notice"}
+    assert service.get_first_notice(None) == {"content": "Chinese notice"}

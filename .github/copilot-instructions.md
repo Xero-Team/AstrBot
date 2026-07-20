@@ -63,10 +63,10 @@ Always reference these instructions first and fallback to search or bash command
 - Exposes ports: 6185 (WebUI), 6195 (WeChat), 6199 (QQ), etc.
 - Volume mount required: `./data:/AstrBot/data`
 
-## Multi-language Support
+## Bilingual Support
 
-- Documentation in Chinese (README.md), English (README_en.md), Japanese (README_ja.md)
-- UI supports internationalization
-- Default language is Chinese
+- Documentation in Simplified Chinese (README_zh.md) and English (README.md)
+- UI supports Simplified Chinese and English
+- Default language is Simplified Chinese
 
 Remember: This is a production chatbot framework with real users. Always test thoroughly and ensure changes don't break existing functionality.

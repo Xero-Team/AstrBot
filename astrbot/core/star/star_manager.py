@@ -552,6 +552,9 @@ class PluginManager:
                 locale = file_path.stem
                 if not locale or len(locale) > 32:
                     continue
+                if locale not in {"zh-CN", "en-US"}:
+                    logger.warning("不支持的插件 i18n locale，已跳过: %s", file_path)
+                    continue
                 if not file_path.is_file():
                     continue
                 if file_path.stat().st_size > 1024 * 1024:

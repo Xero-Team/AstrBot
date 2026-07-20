@@ -1,5 +1,7 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
+import type { Locale } from '@/i18n/types';
+
 import * as openApiV1 from './generated/openapi-v1';
 import type {
   BackupChunkUploadRequest,
@@ -2455,7 +2457,7 @@ export const statsApi = {
       openApiV1.getVersion(generatedOptions({}, requestConfig)),
     );
   },
-  firstNotice(locale?: string) {
+  firstNotice(locale?: Locale) {
     return typed<{ content?: string | null }>(
       openApiV1.getFirstNotice({
         query: locale ? { locale } : undefined,

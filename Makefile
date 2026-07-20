@@ -27,7 +27,7 @@ PNPM := corepack pnpm
 ROOT_NODE_BIN := ./node_modules/.bin
 PRETTIER := $(ROOT_NODE_BIN)/prettier
 TAPLO := $(ROOT_NODE_BIN)/taplo
-PYTHON ?= python3
+PYTHON ?= uv run python
 QUALITY_TYPE_TARGETS := astrbot
 QUALITY_SECURITY_TARGETS := astrbot
 QUALITY_TARGETS := quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi
@@ -50,7 +50,6 @@ DEV_RUNNER := $(PS) scripts/make_dev.ps1
 PR_TEST_NEO := $(PS) scripts/pr_test_env.ps1 -TestProfile neo
 PR_TEST_FULL := $(PS) scripts/pr_test_env.ps1 -TestProfile full
 PR_TEST_FULL_FAST := $(PS) scripts/pr_test_env.ps1 -TestProfile full -SkipSync -NoDashboard
-PYTHON := python
 else
 CHECK_TARGETS := check-py check-web check-data check-md check-toml check-yaml check-shell check-docker
 FORMAT_TARGETS := format-py format-web format-data format-md format-toml format-yaml format-shell

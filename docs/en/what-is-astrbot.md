@@ -27,6 +27,17 @@ This documentation is divided into the following sections:
 - Connect to IM platforms: Follow the instructions to connect AstrBot to your preferred IM platforms such as Discord, Telegram, Slack, etc.
 - Configure AI models: AstrBot supports various AI models. See [Connecting Model Services](/en/providers/start)
 
+## Distribution Boundary
+
+This fork currently publishes no independent PyPI package, GitHub release assets, desktop build, or container image. The following install sources belong to upstream AstrBot or third parties and are not builds of this branch:
+
+- `uv tool install astrbot` and `uv tool upgrade astrbot`;
+- AUR packages named after AstrBot;
+- images such as `soulter/astrbot`;
+- Dashboard assets downloaded from upstream releases.
+
+Use the current checkout for source deployments, or build the root `Dockerfile` through `compose.yml` or `compose-with-napcat.yml`. The WebUI generates a random initial password and binds to `127.0.0.1:6185` by default; remote or container access requires an explicit bind-address change plus firewall and reverse-proxy protection.
+
 ## How It Works
 
 Platform adapters normalize inbound messages into `AstrMessageEvent`. `EventBus` selects a Pipeline from the matching config profile, then executes wake, whitelist, session-state, rate-limit, safety, preprocessing, plugin/Agent, result-decoration, and response stages in order. See [Project Architecture](/en/dev/architecture) for the startup flow, ownership boundaries, and change map.

@@ -6,16 +6,15 @@
 <a href="./README_zh.md">简体中文</a>
 
 <div>
-<img src="https://img.shields.io/github/v/release/Xero-Team/AstrBot?color=76bad9" href="https://github.com/Xero-Team/AstrBot/releases/latest">
 <img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="python">
+<img src="https://img.shields.io/badge/deployment-source%20build-76bad9" alt="source build">
 </div>
 
 <br>
 
-<a href="https://astrbot.app/">主页</a> ｜
-<a href="https://astrbot.app/">文档</a> ｜
+<a href="./docs/zh/index.md">文档</a> ｜
 <a href="https://github.com/Xero-Team/AstrBot/issues">问题提交</a> ｜
-<a href="mailto:community@astrbot.app">Email</a>
+<a href="./docs/zh/dev/development.md">开发指南</a>
 
 </div>
 
@@ -31,8 +30,8 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 2. ✨ AI 大模型对话，多模态，Agent，MCP，Skills，知识库，人格设定，自动压缩对话。
 3. 🤖 支持接入 Dify、阿里云百炼、Coze 等智能体平台。
 4. 🌐 多平台，支持 QQ、企业微信、飞书、钉钉、微信公众号、Telegram、Slack 以及[更多](#支持的消息平台)。
-5. 📦 插件扩展，已有 1000+ 个插件可一键安装。
-6. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) 隔离化环境，安全地执行任何代码、调用 Shell、会话级资源复用。
+5. 📦 插件扩展，提供社区插件市场和沙箱化的 Dashboard Extension Protocol。
+6. 🛡️ [Agent Sandbox](docs/zh/use/astrbot-agent-sandbox.md) 隔离化环境，安全地执行代码、调用 Shell、复用会话级资源。
 7. 💻 WebUI 支持。
 8. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
 9. 🌐 WebUI 双语：简体中文和英文。
@@ -44,7 +43,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
     <th>💙 角色扮演 & 情感陪伴</th>
     <th>✨ 主动式 Agent</th>
     <th>🚀 通用 Agentic 能力</th>
-    <th>🧩 1000+ 社区插件</th>
+    <th>🧩 社区插件</th>
   </tr>
   <tr>
     <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
@@ -56,39 +55,43 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 ## 快速开始
 
-### `uv` 安装
+### 从源码运行
 
-如需直接在本机安装运行，使用 `uv`：
-
-```bash
-uv tool install astrbot --python 3.14
-astrbot init # 仅首次执行此命令以初始化环境
-astrbot run
-```
-
-> 需要安装 [uv](https://docs.astral.sh/uv/)。
-> AstrBot 需要 Python 3.14 或更高版本。`--python 3.14` 会确保 `uv` 使用 Python 3.14 创建 tool 环境。
-
-> [!NOTE]
-> 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
-
-更新 `astrbot`：
+当前 fork 不发布 PyPI 包或预构建 Release。PyPI 上名为 `astrbot` 的包、AUR 包和上游容器镜像都不代表本分支。请从当前仓库 checkout 运行：
 
 ```bash
-uv tool upgrade astrbot --python 3.14
+git clone https://github.com/Xero-Team/AstrBot.git
+cd AstrBot
+uv sync --locked
+cd dashboard
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+cd ..
+uv run python scripts/sync_dashboard_dist.py
+uv run main.py
 ```
 
-> [!WARNING]
-> 通过 `uv` 部署的 AstrBot **不支持在 WebUI 中进行版本升级**。如需更新，请通过命令行执行上述命令。
+请先安装 [uv](https://docs.astral.sh/uv/)、Node.js 24.15.0 和 Corepack。仓库固定使用 Python 3.14.6 和对应的 pnpm 版本。首次启动后访问 `http://localhost:6185`，默认用户名为 `astrbot`，随机初始密码会打印在日志中。
+
+如果启用本地文转图或插件 HTML 渲染，还需执行一次 `uv run astrbot install-browser`。更新、远程访问和安全配置请参阅[从源码部署 AstrBot](docs/zh/deploy/astrbot/cli.md)。
 
 ### Docker 部署
 
-当前 fork 不提供官方预构建镜像，请直接使用仓库内的 Compose 文件本地构建并启动：
+当前 fork 不提供官方预构建镜像，请从当前 checkout 本地构建。Dashboard 默认只监听 `127.0.0.1`；如果宿主机需要访问容器中的 WebUI，请先在所选 Compose 文件的 `astrbot.environment` 下显式加入：
+
+```yaml
+environment:
+  - TZ=Asia/Shanghai
+  - ASTRBOT_DASHBOARD_HOST=0.0.0.0
+```
+
+然后构建并启动：
 
 ```bash
 git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 docker compose up -d --build
+docker compose logs -f astrbot
 ```
 
 如果希望一并拉起 AstrBot 和 NapCat：
@@ -97,56 +100,39 @@ docker compose up -d --build
 docker compose -f compose-with-napcat.yml up -d --build
 ```
 
-更多细节请参考 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
-
-### AUR
-
-AUR 方式面向 Arch Linux 用户，适合希望通过系统包管理器安装 AstrBot 的场景。
-
-在终端执行下方命令安装 `astrbot-git` 包，安装完成后即可启动使用。
-
-```bash
-yay -S astrbot-git
-```
-
-如果你要从源码本地开发，请看下面的开发环境章节。
+绑定到 `0.0.0.0` 是显式扩大暴露面的选择，请同时限制防火墙来源，并优先使用 HTTPS 反向代理。更多细节请参考[使用 Docker 部署 AstrBot](docs/zh/deploy/astrbot/docker.md)。
 
 ## 支持的消息平台
 
 将 AstrBot 连接到你常用的聊天平台。
 
-| 平台                                                                                  | 维护方   |
-| ------------------------------------------------------------------------------------- | -------- |
-| **QQ**                                                                                | 官方维护 |
-| **OneBot v11**                                                                        | 官方维护 |
-| **Telegram**                                                                          | 官方维护 |
-| **企微应用 & 企微智能机器人**                                                         | 官方维护 |
-| **微信客服 & 微信公众号**                                                             | 官方维护 |
-| **个人微信**                                                                          | 官方维护 |
-| **飞书**                                                                              | 官方维护 |
-| **钉钉**                                                                              | 官方维护 |
-| **Slack**                                                                             | 官方维护 |
-| **Discord**                                                                           | 官方维护 |
-| **LINE**                                                                              | 官方维护 |
-| **Satori**                                                                            | 官方维护 |
-| **KOOK**                                                                              | 官方维护 |
-| **Misskey**                                                                           | 官方维护 |
-| **Mattermost**                                                                        | 官方维护 |
-| **WhatsApp（将支持）**                                                                | 官方维护 |
-| [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter)               | 社区维护 |
-| [**Rocket.Chat**](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社区维护 |
-| [**VoceChat**](https://github.com/HikariFroya/astrbot_plugin_vocechat)                | 社区维护 |
+| 内置接入                      | 适配器类型                             |
+| ----------------------------- | -------------------------------------- |
+| QQ 官方机器人                 | `qq_official`、`qq_official_webhook`   |
+| OneBot v11                    | `aiocqhttp`                            |
+| NapCat                        | `napcat`                               |
+| Telegram                      | `telegram`                             |
+| 企业微信 / 企业微信智能机器人 | `wecom`、`wecom_ai_bot`                |
+| 微信公众号 / 个人微信         | `weixin_official_account`、`weixin_oc` |
+| 飞书 / 钉钉                   | `lark`、`dingtalk`                     |
+| Slack / Discord               | `slack`、`discord`                     |
+| LINE / Satori / KOOK          | `line`、`satori`、`kook`               |
+| Misskey / Mattermost          | `misskey`、`mattermost`                |
+| 内置浏览器聊天                | `webchat`                              |
+
+本表来自当前代码中的内置适配器发现表。插件还可以注册其他适配器；运行中 WebUI 的 **机器人 → 创建机器人** 列表才是最终依据。详见[接入消息平台](docs/zh/platform/start.md)。
 
 ## 支持的模型提供商
 
-| 服务类型              | 内置选项                                                                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 对话 / LLM            | OpenAI 兼容服务、OpenAI、Anthropic、Gemini、Moonshot、智谱、DeepSeek                                                          |
-| 本地 LLM              | Ollama、LM Studio                                                                                                             |
-| Agent 执行器          | Dify、Coze、阿里云百炼应用、DeerFlow                                                                                          |
-| 语音转文本            | OpenAI Whisper、SenseVoice、Xiaomi MiMo Omni                                                                                  |
-| 文本转语音            | OpenAI TTS、Gemini TTS、GPT-SoVITS、FishAudio、Edge TTS、Azure TTS、Minimax TTS、火山引擎 TTS、ElevenLabs TTS、阿里云百炼 TTS |
-| Embedding / Rerank 等 | 以 WebUI 中当前可选提供商列表为准                                                                                             |
+| 服务类型           | 当前内置范围                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| 对话模型           | OpenAI Chat Completions/Responses 与兼容接口、Anthropic、Gemini、智谱、小米、MiniMax、Kimi Code、xAI、Groq、OpenRouter 等 |
+| 本地模型           | 通过受支持接口接入 Ollama、LM Studio                                                                                      |
+| Agent 执行器       | 内置本地 Agent，以及 Dify、Coze、阿里云百炼应用、DeerFlow                                                                 |
+| 语音               | Whisper、SenseVoice、小米 MiMo、Xinference、OpenAI/Gemini/Edge/Azure/ElevenLabs TTS、GPT-SoVITS、FishAudio、DashScope 等  |
+| Embedding / Rerank | OpenAI、Gemini、NVIDIA、Ollama、vLLM、Xinference、阿里云百炼                                                              |
+
+Provider 模板来自代码注册表，后续版本可能变化；请以运行中 WebUI 的 **提供商 → 新增 Provider 来源** 为准。详见[模型 Provider](docs/zh/providers/start.md)。
 
 ## ❤️ 贡献
 
@@ -158,52 +144,21 @@ yay -S astrbot-git
 
 ### 开发环境
 
-AstrBot 使用 `ruff` 进行代码格式化和检查。
+请使用仓库定义的可复现工具链和检查入口：
 
 ```bash
 git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 make doctor
 make bootstrap
-pip install pre-commit
-pre-commit install
 ```
 
 Linux 下完整的工具安装、开发服务、日志、检查与 NapCat 代码生成流程请参阅
 [Linux 开发环境](docs/zh/dev/linux.md)。
 
-## 🌍 社区
-
-### QQ 群组
-
-- 1 群：322154837 (人满)
-- 3 群：630166526 (人满)
-- 4 群：1077826412 (人满)
-- 5 群：822130018 (人满)
-- 6 群：753075035 (人满)
-- 7 群：743746109 (人满)
-- 8 群：1030353265 (人满)
-- 9 群：1076659624 (人满)
-- 10 群：1078079676 (人满)
-- 11 群：704659519 (人满)
-- 12 群：916228568 (人满)
-- 13 群：1092185289
-- 14 群：1103419483
-
-- 开发者群（偏闲聊吹水）：975206796
-- 开发者群（正式）：1039761811
-
-### Discord 频道
-
-- [Discord](https://discord.gg/hAVk6tgV36)
-
 ## ❤️ Special Thanks
 
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
-
-<a href="https://github.com/Xero-Team/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Xero-Team/AstrBot&max=300&columns=15" />
-</a>
 
 此外，本项目的诞生离不开以下开源项目的帮助：
 
@@ -223,14 +178,6 @@ Linux 下完整的工具安装、开发服务、日志、检查与 NapCat 代码
 
 > [!TIP]
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我们维护这个开源项目的动力 <3
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=begoniahe/astrbot&type=Date)](https://star-history.com/#begoniahe/astrbot&Date)
-
-</div>
-
-<div align="center">
 
 _陪伴与能力从来不应该是对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人。_
 

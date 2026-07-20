@@ -27,6 +27,17 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 - 连接 IM 平台：按照说明将 AstrBot 连接到您喜欢的 IM 平台，如 Discord、Telegram、Slack 等。
 - 配置 AI 模型：AstrBot 支持各种 AI 模型。请参阅 [连接模型服务](/providers/start)
 
+## 发行边界
+
+当前 fork 不发布独立 PyPI 包、GitHub Release 资产、桌面端安装包或容器镜像。以下安装源属于 AstrBot 上游或第三方，并不是当前分支的构建产物：
+
+- `uv tool install astrbot` 与 `uv tool upgrade astrbot`；
+- 以 AstrBot 命名的 AUR 包；
+- `soulter/astrbot` 等上游镜像；
+- 从上游 Release 自动下载的 Dashboard 静态资源。
+
+源码部署应直接使用当前 checkout；容器部署应通过 `compose.yml` 或 `compose-with-napcat.yml` 构建仓库根目录的 `Dockerfile`。WebUI 首次启动会生成随机密码，并且默认只监听 `127.0.0.1:6185`；远程或容器外访问需要显式修改监听地址，同时配置防火墙和反向代理保护。
+
 ## 它是如何实现的？
 
 平台适配器把入站消息统一为 `AstrMessageEvent`，`EventBus` 根据配置文件选择 Pipeline，依次执行唤醒、白名单、会话状态、限流、安全、预处理、插件/Agent、结果装饰和发送阶段。完整的启动流程、所有权边界和修改位置请参阅[项目架构](/dev/architecture)。

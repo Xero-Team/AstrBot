@@ -8,15 +8,15 @@
 <br>
 
 <div>
-<img src="https://img.shields.io/github/v/release/Xero-Team/AstrBot?color=76bad9" href="https://github.com/Xero-Team/AstrBot/releases/latest">
 <img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="python">
+<img src="https://img.shields.io/badge/deployment-source%20build-76bad9" alt="source build">
 </div>
 
 <br>
 
-<a href="https://astrbot.app/">Documentation</a> ｜
+<a href="./docs/en/index.md">Documentation</a> ｜
 <a href="https://github.com/Xero-Team/AstrBot/issues">Issue Tracker</a> ｜
-<a href="mailto:community@astrbot.app">Email Support</a>
+<a href="./docs/en/dev/development.md">Development Guide</a>
 
 </div>
 
@@ -32,8 +32,8 @@ This repository is a modernized fork of AstrBot. The code, commands, deployment 
 2. ✨ AI LLM Conversations, Multimodal, Agent, MCP, Skills, Knowledge Base, Persona Settings, Auto Context Compression.
 3. 🤖 Supports integration with Dify, Alibaba Cloud Bailian, Coze, and other agent platforms.
 4. 🌐 Multi-Platform: QQ, WeChat Work, Feishu, DingTalk, WeChat Official Accounts, Telegram, Slack, and [more](#supported-messaging-platforms).
-5. 📦 Plugin Extensions with 1000+ plugins available for one-click installation.
-6. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) for isolated, safe execution of code, shell calls, and session-level resource reuse.
+5. 📦 Plugin extensions with a community marketplace and a sandboxed Dashboard Extension Protocol.
+6. 🛡️ [Agent Sandbox](docs/en/use/astrbot-agent-sandbox.md) for isolated, safe execution of code, shell calls, and session-level resource reuse.
 7. 💻 WebUI Support.
 8. 🌈 Web ChatUI Support with built-in agent sandbox and web search.
 9. 🌐 Bilingual WebUI: Simplified Chinese and English.
@@ -45,7 +45,7 @@ This repository is a modernized fork of AstrBot. The code, commands, deployment 
     <th>💙 Role-playing & Emotional Companionship</th>
     <th>✨ Proactive Agent</th>
     <th>🚀 General Agentic Capabilities</th>
-    <th>🧩 1000+ Community Plugins</th>
+    <th>🧩 Community Plugins</th>
   </tr>
   <tr>
     <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
@@ -57,39 +57,43 @@ This repository is a modernized fork of AstrBot. The code, commands, deployment 
 
 ## Quick Start
 
-### `uv` Install
+### Run from Source
 
-For a direct local install, use `uv`:
-
-```bash
-uv tool install astrbot --python 3.14
-astrbot init # Only execute this command for the first time to initialize the environment
-astrbot run
-```
-
-> Requires [uv](https://docs.astral.sh/uv/) to be installed.
-> AstrBot requires Python 3.14 or later. The `--python 3.14` option ensures that `uv` creates the tool environment with Python 3.14.
-
-> [!NOTE]
-> For macOS users: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
-
-Update `astrbot`:
+This fork currently publishes neither a PyPI package nor prebuilt release assets. The package named `astrbot` on PyPI, AUR packages, and upstream container images do not represent this branch. Run the current code from a checkout:
 
 ```bash
-uv tool upgrade astrbot --python 3.14
+git clone https://github.com/Xero-Team/AstrBot.git
+cd AstrBot
+uv sync --locked
+cd dashboard
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+cd ..
+uv run python scripts/sync_dashboard_dist.py
+uv run main.py
 ```
 
-> [!WARNING]
-> AstrBot deployed via `uv` **does not support upgrading through the WebUI**. To update, please run the command above from the command line.
+Install [uv](https://docs.astral.sh/uv/), Node.js 24.15.0, and Corepack first. The checkout pins Python 3.14.6 and the required pnpm version. On first startup, open `http://localhost:6185` and use the random password printed in the log; the default username is `astrbot`.
+
+If you enable local text-to-image or plugin HTML rendering, also run `uv run astrbot install-browser` once. See [Deploy AstrBot from Source](docs/en/deploy/astrbot/cli.md) for updates, remote access, and security guidance.
 
 ### Docker Deployment
 
-This fork does not publish an official prebuilt image. Build and run from the compose files in this repository:
+This fork does not publish an official prebuilt image. Build from the current checkout. Because the Dashboard securely binds to `127.0.0.1` by default, first add `ASTRBOT_DASHBOARD_HOST=0.0.0.0` under the `astrbot` service's `environment` section if the host must access the containerized WebUI:
+
+```yaml
+environment:
+  - TZ=Asia/Shanghai
+  - ASTRBOT_DASHBOARD_HOST=0.0.0.0
+```
+
+Then build and start it:
 
 ```bash
 git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 docker compose up -d --build
+docker compose logs -f astrbot
 ```
 
 If you want to start AstrBot and NapCat together from this repository:
@@ -98,56 +102,39 @@ If you want to start AstrBot and NapCat together from this repository:
 docker compose -f compose-with-napcat.yml up -d --build
 ```
 
-More details: [Deploy AstrBot with Docker](https://docs.astrbot.app/deploy/astrbot/docker.html).
-
-### AUR
-
-AUR deployment targets Arch Linux users who prefer installing AstrBot through the system package workflow.
-
-Run the command below to install `astrbot-git`, then start AstrBot in your local environment.
-
-```bash
-yay -S astrbot-git
-```
-
-For source-based local development, see the development environment section below.
+Binding to `0.0.0.0` is an explicit exposure choice. Restrict access with a firewall and preferably an HTTPS reverse proxy. More details: [Deploy AstrBot with Docker](docs/en/deploy/astrbot/docker.md).
 
 ## Supported Messaging Platforms
 
 Connect AstrBot to your favorite chat platform.
 
-| Platform                                                                          | Maintainer |
-| --------------------------------------------------------------------------------- | ---------- |
-| QQ                                                                                | Official   |
-| OneBot v11 protocol implementation                                                | Official   |
-| Telegram                                                                          | Official   |
-| Wecom & Wecom AI Bot                                                              | Official   |
-| WeChat Official Accounts                                                          | Official   |
-| Personal WeChat                                                                   | Official   |
-| Feishu (Lark)                                                                     | Official   |
-| DingTalk                                                                          | Official   |
-| Slack                                                                             | Official   |
-| Discord                                                                           | Official   |
-| LINE                                                                              | Official   |
-| Satori                                                                            | Official   |
-| KOOK                                                                              | Official   |
-| Misskey                                                                           | Official   |
-| Mattermost                                                                        | Official   |
-| WhatsApp (Coming Soon)                                                            | Official   |
-| [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)               | Community  |
-| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Community  |
-| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)                | Community  |
+| Built-in integration               | Adapter type(s)                        |
+| ---------------------------------- | -------------------------------------- |
+| QQ Official Bot                    | `qq_official`, `qq_official_webhook`   |
+| OneBot v11                         | `aiocqhttp`                            |
+| NapCat                             | `napcat`                               |
+| Telegram                           | `telegram`                             |
+| WeCom / WeCom AI Bot               | `wecom`, `wecom_ai_bot`                |
+| WeChat Official Account / Personal | `weixin_official_account`, `weixin_oc` |
+| Lark / DingTalk                    | `lark`, `dingtalk`                     |
+| Slack / Discord                    | `slack`, `discord`                     |
+| LINE / Satori / KOOK               | `line`, `satori`, `kook`               |
+| Misskey / Mattermost               | `misskey`, `mattermost`                |
+| Built-in browser chat              | `webchat`                              |
+
+This table reflects the current built-in adapter discovery map. Plugins can add more adapters; the **Bots → Create Bot** list in the running WebUI is authoritative. See [Messaging Platforms](docs/en/platform/start.md).
 
 ## Supported Model Services
 
-| Service Type                | Built-in Options                                                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Conversation / LLM          | OpenAI-compatible services, OpenAI, Anthropic, Gemini, Moonshot, Zhipu, DeepSeek                                               |
-| Local LLM                   | Ollama, LM Studio                                                                                                              |
-| Agent Runners               | Dify, Coze, Alibaba Cloud Bailian applications, DeerFlow                                                                       |
-| Speech-to-Text              | OpenAI Whisper, SenseVoice, Xiaomi MiMo Omni                                                                                   |
-| Text-to-Speech              | OpenAI TTS, Gemini TTS, GPT-SoVITS, FishAudio, Edge TTS, Azure TTS, Minimax TTS, Volcengine TTS, ElevenLabs TTS, Dashscope TTS |
-| Embedding / Rerank / Others | See the provider list in WebUI for the current built-in set                                                                    |
+| Service type       | Current built-in range                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat models        | OpenAI Chat Completions/Responses and compatible APIs, Anthropic, Gemini, Zhipu, Xiaomi, MiniMax, Kimi Code, xAI, Groq, OpenRouter, and others |
+| Local models       | Ollama and LM Studio through their supported APIs                                                                                              |
+| Agent Runners      | Built-in local Agent plus Dify, Coze, Alibaba Cloud Bailian applications, and DeerFlow                                                         |
+| Speech             | Whisper, SenseVoice, Xiaomi MiMo, Xinference, OpenAI/Gemini/Edge/Azure/ElevenLabs TTS, GPT-SoVITS, FishAudio, DashScope, and others            |
+| Embedding / Rerank | OpenAI, Gemini, NVIDIA, Ollama, vLLM, Xinference, and Alibaba Cloud Bailian                                                                    |
+
+Provider templates come from the code registry and evolve over time. Treat **Providers → Add Provider Source** in the running WebUI as authoritative; see [Model Providers](docs/en/providers/start.md).
 
 ## ❤️ Contributing
 
@@ -159,52 +146,21 @@ You can contribute by reviewing issues or helping with pull request reviews. Any
 
 ### Development Environment
 
-AstrBot uses `ruff` for code formatting and linting.
+Use the repository's reproducible toolchain and checks:
 
 ```bash
 git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 make doctor
 make bootstrap
-pip install pre-commit
-pre-commit install
 ```
 
 For the complete Linux workflow, including tool installation, development
 servers, logs, checks, and NapCat code generation, see [Linux Development](docs/en/dev/linux.md).
 
-## 🌍 Community
-
-### QQ Groups
-
-- Group 1: 322154837 (Full)
-- Group 3: 630166526 (Full)
-- Group 4: 1077826412 (Full)
-- Group 5: 822130018 (Full)
-- Group 6: 753075035 (Full)
-- Group 7: 743746109 (Full)
-- Group 8: 1030353265 (Full)
-- Group 9: 1076659624 (Full)
-- Group 10: 1078079676 (Full)
-- Group 11: 704659519 (Full)
-- Group 12: 916228568 (Full)
-- Group 13: 1092185289
-- Group 14: 1103419483
-
-- Developer Group(Chit-chat): 975206796
-- Developer Group(Formal): 1039761811
-
-### Discord Server
-
-<a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-
 ## ❤️ Special Thanks
 
 Special thanks to all Contributors and plugin developers for their contributions to AstrBot ❤️
-
-<a href="https://github.com/Xero-Team/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Xero-Team/AstrBot&max=300&columns=15" />
-</a>
 
 Additionally, the birth of this project would not have been possible without the help of the following open-source projects:
 
@@ -214,14 +170,6 @@ Additionally, the birth of this project would not have been possible without the
 
 > [!TIP]
 > If this project has helped you in your life or work, or if you're interested in its future development, please give the project a Star. It's the driving force behind maintaining this open-source project <3
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=begoniahe/astrbot&type=Date)](https://star-history.com/#begoniahe/astrbot&Date)
-
-</div>
-
-<div align="center">
 
 _Companionship and capability should never be at odds. What we aim to create is a robot that can understand emotions, provide genuine companionship, and reliably accomplish tasks._
 

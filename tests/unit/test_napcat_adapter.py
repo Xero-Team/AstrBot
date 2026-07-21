@@ -231,31 +231,7 @@ async def test_napcat_adapter_run_and_terminate_manage_forward_ws_lifecycle():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("failing_method", "failure"),
-    [
-        (
-            "start",
-            NapCatTransportError(
-                "start", "forward websocket did not connect within 5.0s"
-            ),
-        ),
-        (
-            "get_version_info",
-            NapCatApiError(
-                "get_version_info",
-                status="failed",
-                retcode=1403,
-                message="token验证失败",
-                wording="token验证失败",
-            ),
-        ),
-    ],
-)
-async def test_napcat_adapter_startup_failure_closes_forward_ws_client(
-    failing_method: str,
-    failure: Exception,
-):
+async def test_napcat_adapter_startup_failure_closes_forward_ws_client():
     adapter = _make_forward_ws_adapter(asyncio.Queue())
     adapter.client.start = AsyncMock()
     adapter.client.get_version_info = AsyncMock(
@@ -267,11 +243,57 @@ async def test_napcat_adapter_startup_failure_closes_forward_ws_client(
     adapter.client.get_login_info = AsyncMock(
         return_value=SimpleNamespace(user_id=123456, nickname="tester")
     )
-    setattr(adapter.client, failing_method, AsyncMock(side_effect=failure))
+    failure = NapCatApiError(
+        "get_version_info",
+        status="failed",
+        retcode=1403,
+        message="token验证失败",
+        wording="token验证失败",
+    )
+    adapter.client.get_version_info = AsyncMock(side_effect=failure)
     adapter.client.close = AsyncMock()
 
-    with pytest.raises(type(failure), match=str(failure)):
+    with pytest.raises(NapCatApiError, match=str(failure)):
         await adapter.run()
+
+    adapter.client.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_napcat_adapter_retries_transient_startup_transport_failure():
+    adapter = _make_forward_ws_adapter(asyncio.Queue())
+    adapter.client.reconnect_interval_seconds = 0
+    adapter.client.start = AsyncMock(
+        side_effect=[
+            NapCatTransportError(
+                "start", "forward websocket did not connect within 5.0s"
+            ),
+            None,
+        ]
+    )
+    adapter.client.get_version_info = AsyncMock(
+        return_value=SimpleNamespace(app_name="NapCat", app_version="4.18.7")
+    )
+    adapter.client.get_status = AsyncMock(
+        return_value=SimpleNamespace(online=True, good=True)
+    )
+    adapter.client.get_login_info = AsyncMock(
+        return_value=SimpleNamespace(user_id=123456, nickname="tester")
+    )
+    adapter.client.close = AsyncMock()
+
+    run_task = asyncio.create_task(adapter.run())
+    for _ in range(10):
+        if adapter.client.get_login_info.await_count == 1:
+            break
+        await asyncio.sleep(0)
+
+    assert run_task.done() is False
+    assert adapter.client.start.await_count == 2
+    adapter.client.close.assert_not_awaited()
+
+    await adapter.terminate()
+    await run_task
 
     adapter.client.close.assert_awaited_once_with()
 

@@ -58,7 +58,7 @@ from .codec import (
     decode_cq_text,
     sanitize_segment_type,
 )
-from .exceptions import NapCatApiError, NapCatError
+from .exceptions import NapCatApiError, NapCatTransportError
 from .forward_ws_client import NapCatForwardWebSocketClient
 from .generated.ob11_events import (
     AnonymousSegment,
@@ -683,11 +683,32 @@ class NapCatPlatformAdapter(Platform):
         )
 
     async def run(self) -> None:
-        try:
-            await self.client.start()
-            version = await self.client.get_version_info()
-            status = await self.client.get_status()
-            login_info = await self.client.get_login_info()
+        while not self.shutdown_event.is_set():
+            try:
+                await self.client.start()
+                version = await self.client.get_version_info()
+                status = await self.client.get_status()
+                login_info = await self.client.get_login_info()
+            except NapCatApiError as exc:
+                self.record_error(str(exc))
+                logger.error("[NapCat] startup check failed: %s", exc)
+                await self.client.close()
+                raise
+            except NapCatTransportError as exc:
+                logger.warning(
+                    "[NapCat] startup transport unavailable: %s. Retrying in %.1fs.",
+                    exc,
+                    self.client.reconnect_interval_seconds,
+                )
+                try:
+                    await asyncio.wait_for(
+                        self.shutdown_event.wait(),
+                        timeout=self.client.reconnect_interval_seconds,
+                    )
+                except TimeoutError:
+                    continue
+                return
+
             logger.info(
                 "[NapCat] Forward WebSocket adapter ready: user_id=%s nickname=%s app=%s version=%s online=%s good=%s",
                 login_info.user_id,
@@ -697,11 +718,7 @@ class NapCatPlatformAdapter(Platform):
                 status.online,
                 status.good,
             )
-        except NapCatError as exc:
-            self.record_error(str(exc))
-            logger.error("[NapCat] startup check failed: %s", exc)
-            await self.client.close()
-            raise
+            break
 
         await self.shutdown_event.wait()
 

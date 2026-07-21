@@ -103,7 +103,9 @@ class NapCatForwardWebSocketClient:
 
     async def start(self) -> None:
         if self._runner_task is not None:
-            return
+            if not self._runner_task.done():
+                return
+            self._runner_task = None
         if not self.ws_url.startswith(("ws://", "wss://")):
             raise ValueError(
                 f"NapCat forward WebSocket URL must start with ws:// or wss://: {self.ws_url}"

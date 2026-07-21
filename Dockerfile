@@ -241,6 +241,7 @@ RUN arch="$(dpkg --print-architecture)" \
     && chmod +x /usr/local/bin/yq \
     && yq --version
 
+# GitHub release downloads can occasionally terminate TLS connections early.
 RUN arch="$(dpkg --print-architecture)" \
     && case "${arch}" in \
         amd64) typst_arch="x86_64-unknown-linux-musl" ;; \
@@ -248,7 +249,7 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-${typst_arch}.tar.xz" \
         -o "${tmpdir}/typst.tar.xz" \
     && tar -xJf "${tmpdir}/typst.tar.xz" -C "${tmpdir}" \

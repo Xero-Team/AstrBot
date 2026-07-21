@@ -1,5 +1,8 @@
 # Connect a OneBot v11 Implementation
 
+> [!TIP]
+> If you plan to connect AstrBot to QQ, we recommend using [QQ Official Bot (WebSockets)](/en/platform/qqofficial/websockets). It is officially provided by QQ, offers greater stability, and supports one-click login by scanning a QR code.
+
 AstrBot's `OneBot v11` (`aiocqhttp`) platform uses a **reverse WebSocket**: AstrBot starts the WebSocket server, and the OneBot implementation connects to it as a client.
 
 > [!TIP]

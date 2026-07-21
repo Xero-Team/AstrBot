@@ -1,5 +1,8 @@
 # 接入 OneBot v11 协议实现
 
+> [!TIP]
+> 如果您打算将 AstrBot 接入 QQ，推荐使用 [QQ 官方机器人（WebSockets）](/platform/qqofficial/websockets)，由 QQ 官方推出，更稳定，支持一键扫码登录。
+
 AstrBot 的 `OneBot v11`（`aiocqhttp`）平台使用**反向 WebSocket**：AstrBot 启动 WebSocket 服务，OneBot 实现作为客户端连接 AstrBot。
 
 > [!TIP]

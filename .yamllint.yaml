@@ -26,6 +26,7 @@ rules:
     max-spaces-inside: 1
 
 ignore: |
+  .codex/
   .tmp/
   .venv*/
   node_modules/

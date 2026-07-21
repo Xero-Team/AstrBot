@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.command import CommandCatalogStore
 from astrbot.core.message.components import Plain, Reply
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
@@ -312,6 +313,10 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                get_command_catalog=lambda *_args: CommandCatalogStore(),
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )

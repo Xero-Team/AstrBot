@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.command import CommandCatalogStore
 from astrbot.core.message.components import (
     RPS,
     Anonymous,
@@ -2176,6 +2177,10 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                get_command_catalog=lambda *_args: CommandCatalogStore(),
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
@@ -2291,6 +2296,10 @@ async def test_napcat_group_notice_keeps_group_session_when_unique_session_enabl
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                get_command_catalog=lambda *_args: CommandCatalogStore(),
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
@@ -2336,6 +2345,10 @@ async def test_napcat_group_message_route_identity_keeps_original_group_target_a
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                get_command_catalog=lambda *_args: CommandCatalogStore(),
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
@@ -2414,6 +2427,10 @@ async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
                 "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                get_command_catalog=lambda *_args: CommandCatalogStore(),
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )

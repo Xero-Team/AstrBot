@@ -245,6 +245,57 @@ async def test_platform_manager_terminate_platform_clears_platform_limit():
     assert manager.get_platform_concurrency_limit("telegram") is None
 
 
+@pytest.mark.asyncio
+async def test_platform_manager_serializes_disable_then_enable_reload(monkeypatch):
+    manager = _make_manager()
+    first_termination_started = asyncio.Event()
+    allow_first_termination = asyncio.Event()
+    events: list[str] = []
+    termination_count = 0
+
+    async def terminate_platform_unlocked(platform_id: str) -> None:
+        nonlocal termination_count
+        termination_count += 1
+        events.append(f"terminate:{platform_id}:{termination_count}")
+        if termination_count == 1:
+            first_termination_started.set()
+            await allow_first_termination.wait()
+
+    async def load_platform_unlocked(platform_config: dict) -> None:
+        events.append(f"load:{platform_config['id']}")
+
+    monkeypatch.setattr(
+        manager,
+        "_terminate_platform_unlocked",
+        terminate_platform_unlocked,
+    )
+    monkeypatch.setattr(
+        manager,
+        "_load_platform_unlocked",
+        load_platform_unlocked,
+    )
+
+    disable_task = asyncio.create_task(
+        manager.reload({"enable": False, "id": "napcat", "type": "napcat"})
+    )
+    await first_termination_started.wait()
+    enable_task = asyncio.create_task(
+        manager.reload({"enable": True, "id": "napcat", "type": "napcat"})
+    )
+    await asyncio.sleep(0)
+
+    assert events == ["terminate:napcat:1"]
+
+    allow_first_termination.set()
+    await asyncio.gather(disable_task, enable_task)
+
+    assert events == [
+        "terminate:napcat:1",
+        "terminate:napcat:2",
+        "load:napcat",
+    ]
+
+
 def test_platform_manager_create_event_falls_back_to_platform_name() -> None:
     manager = _make_manager()
     platform = MagicMock()

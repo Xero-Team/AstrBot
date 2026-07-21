@@ -40,7 +40,10 @@ from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import PlatformSendResult
-from astrbot.core.platform.sources.napcat.exceptions import NapCatApiError
+from astrbot.core.platform.sources.napcat.exceptions import (
+    NapCatApiError,
+    NapCatTransportError,
+)
 from astrbot.core.platform.sources.napcat.generated.ob11_events import OB11AllEvent
 from astrbot.core.platform.sources.napcat.napcat_platform_adapter import (
     NapCatPlatformAdapter,
@@ -228,9 +231,69 @@ async def test_napcat_adapter_run_and_terminate_manage_forward_ws_lifecycle():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failing_method", "failure"),
+    [
+        (
+            "start",
+            NapCatTransportError(
+                "start", "forward websocket did not connect within 5.0s"
+            ),
+        ),
+        (
+            "get_version_info",
+            NapCatApiError(
+                "get_version_info",
+                status="failed",
+                retcode=1403,
+                message="token验证失败",
+                wording="token验证失败",
+            ),
+        ),
+    ],
+)
+async def test_napcat_adapter_startup_failure_closes_forward_ws_client(
+    failing_method: str,
+    failure: Exception,
+):
+    adapter = _make_forward_ws_adapter(asyncio.Queue())
+    adapter.client.start = AsyncMock()
+    adapter.client.get_version_info = AsyncMock(
+        return_value=SimpleNamespace(app_name="NapCat", app_version="4.18.7")
+    )
+    adapter.client.get_status = AsyncMock(
+        return_value=SimpleNamespace(online=True, good=True)
+    )
+    adapter.client.get_login_info = AsyncMock(
+        return_value=SimpleNamespace(user_id=123456, nickname="tester")
+    )
+    setattr(adapter.client, failing_method, AsyncMock(side_effect=failure))
+    adapter.client.close = AsyncMock()
+
+    with pytest.raises(type(failure), match=str(failure)):
+        await adapter.run()
+
+    adapter.client.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_napcat_forward_ws_client_close_cancels_connecting_runner():
+    adapter = _make_adapter(asyncio.Queue())
+    runner_task = asyncio.create_task(asyncio.Event().wait())
+    adapter.client._runner_task = runner_task
+
+    await adapter.client.close()
+
+    assert runner_task.cancelled() is True
+    assert adapter.client._runner_task is None
+
+
+@pytest.mark.asyncio
 async def test_napcat_forward_ws_client_surfaces_failed_response_without_echo():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
+    socket = SimpleNamespace(close=AsyncMock())
+    adapter.client._socket = socket
     future: asyncio.Future[dict] = asyncio.get_running_loop().create_future()
     adapter.client._pending["echo-1"] = future
 
@@ -240,6 +303,10 @@ async def test_napcat_forward_ws_client_surfaces_failed_response_without_echo():
 
     with pytest.raises(NapCatApiError, match="token验证失败"):
         await future
+    socket.close.assert_awaited_once_with(
+        code=1008,
+        reason="NapCat WebSocket authentication failed",
+    )
 
 
 @pytest.mark.asyncio

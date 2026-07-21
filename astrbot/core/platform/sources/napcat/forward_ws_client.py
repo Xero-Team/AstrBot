@@ -116,11 +116,20 @@ class NapCatForwardWebSocketClient:
     async def close(self) -> None:
         self._stop_event.set()
         socket = self._socket
-        if socket is not None:
-            await socket.close(code=1000, reason="Adapter shutdown")
-        if self._runner_task is not None:
-            await self._runner_task
-            self._runner_task = None
+        runner_task = self._runner_task
+        try:
+            if socket is not None:
+                await socket.close(code=1000, reason="Adapter shutdown")
+        finally:
+            if runner_task is not None:
+                if not runner_task.done():
+                    runner_task.cancel()
+                try:
+                    await runner_task
+                except asyncio.CancelledError:
+                    pass
+                if self._runner_task is runner_task:
+                    self._runner_task = None
         payload_tasks = list(self._payload_tasks)
         if payload_tasks:
             await asyncio.gather(*payload_tasks, return_exceptions=True)
@@ -182,7 +191,9 @@ class NapCatForwardWebSocketClient:
         ) as websocket:
             self._socket = websocket
             self._connected_event.set()
-            logger.info("[NapCat] Forward WebSocket connected to %s", self.ws_url)
+            logger.info(
+                "[NapCat] Forward WebSocket transport connected to %s", self.ws_url
+            )
 
             try:
                 async for payload in websocket:
@@ -258,6 +269,12 @@ class NapCatForwardWebSocketClient:
                     error,
                 )
                 self._fail_pending_with_exception(error)
+                socket = self._socket
+                if error.retcode == 1403 and socket is not None:
+                    await socket.close(
+                        code=1008,
+                        reason="NapCat WebSocket authentication failed",
+                    )
                 return
             logger.debug(
                 "[NapCat] Forward WebSocket ignored response without echo: %s", parsed

@@ -39,6 +39,8 @@ class PlatformManager:
         self._platform_tasks: dict[str, PlatformTasks] = {}
         self._platform_limiters: dict[str, asyncio.Semaphore] = {}
         self._platform_limit_settings: dict[str, int] = {}
+        # Keep an old shutdown from cancelling a replacement with the same client ID.
+        self._platform_lifecycle_lock = asyncio.Lock()
 
         self.astrbot_config = config
         self.platforms_config = config["platform"]
@@ -143,6 +145,10 @@ class PlatformManager:
 
     async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""
+        async with self._platform_lifecycle_lock:
+            await self._load_platform_unlocked(platform_config)
+
+    async def _load_platform_unlocked(self, platform_config: dict) -> None:
         # 动态导入
         cls_type: type | None = None
         try:
@@ -233,17 +239,22 @@ class PlatformManager:
                 platform.record_error(error_msg, tb_str)
 
     async def reload(self, platform_config: dict) -> None:
-        await self.terminate_platform(platform_config["id"])
-        if platform_config["enable"]:
-            await self.load_platform(platform_config)
+        async with self._platform_lifecycle_lock:
+            await self._terminate_platform_unlocked(platform_config["id"])
+            if platform_config["enable"]:
+                await self._load_platform_unlocked(platform_config)
 
-        # 和配置文件保持同步
-        config_ids = [provider["id"] for provider in self.platforms_config]
-        for key in list(self._inst_map.keys()):
-            if key not in config_ids:
-                await self.terminate_platform(key)
+            # 和配置文件保持同步
+            config_ids = [provider["id"] for provider in self.platforms_config]
+            for key in list(self._inst_map.keys()):
+                if key not in config_ids:
+                    await self._terminate_platform_unlocked(key)
 
     async def terminate_platform(self, platform_id: str) -> None:
+        async with self._platform_lifecycle_lock:
+            await self._terminate_platform_unlocked(platform_id)
+
+    async def _terminate_platform_unlocked(self, platform_id: str) -> None:
         self._platform_limiters.pop(platform_id, None)
         self._platform_limit_settings.pop(platform_id, None)
         if platform_id in self._inst_map:

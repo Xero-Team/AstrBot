@@ -700,6 +700,7 @@ class NapCatPlatformAdapter(Platform):
         except NapCatError as exc:
             self.record_error(str(exc))
             logger.error("[NapCat] startup check failed: %s", exc)
+            await self.client.close()
             raise
 
         await self.shutdown_event.wait()

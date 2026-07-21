@@ -2,6 +2,7 @@ import asyncio
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any, Protocol
 
 from astrbot import logger
 from astrbot.api import star
@@ -15,6 +16,10 @@ MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND = 16
 MODEL_LIST_CACHE_TTL_KEY = "model_list_cache_ttl_seconds"
 MODEL_LOOKUP_MAX_CONCURRENCY_KEY = "model_lookup_max_concurrency"
 MODEL_CACHE_MAX_ENTRIES = 512
+
+
+class _SwitchableProvider(Protocol):
+    def meta(self) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -411,144 +416,119 @@ class ProviderCommands:
 
         return display_data
 
-    async def provider(
-        self,
-        event: AstrMessageEvent,
-        idx: str | int | None = None,
-        idx2: int | None = None,
-    ) -> None:
-        """View or switch the current provider."""
+    async def list_providers(self, event: AstrMessageEvent) -> None:
+        """List configured LLM, TTS, and STT providers."""
         umo = event.unified_msg_origin
         cfg = self.context.get_config(umo).get("provider_settings", {})
         reachability_check_enabled = cfg.get("reachability_check", True)
 
-        if idx is None:
-            parts = ["## LLM Providers\n"]
+        parts = ["LLM Providers\n"]
+        llms = list(self.context.get_all_providers())
+        ttss = self.context.get_all_tts_providers()
+        stts = self.context.get_all_stt_providers()
 
-            llms = list(self.context.get_all_providers())
-            ttss = self.context.get_all_tts_providers()
-            stts = self.context.get_all_stt_providers()
-
-            if reachability_check_enabled and (llms or ttss or stts):
-                await event.send(
-                    MessageEventResult().message("👀 Testing provider reachability...")
-                )
-
-            llm_data, tts_data, stt_data = await asyncio.gather(
-                self._build_provider_display_data(
-                    llms,
-                    "llm",
-                    reachability_check_enabled,
-                ),
-                self._build_provider_display_data(
-                    ttss,
-                    "tts",
-                    reachability_check_enabled,
-                ),
-                self._build_provider_display_data(
-                    stts,
-                    "stt",
-                    reachability_check_enabled,
-                ),
+        if reachability_check_enabled and (llms or ttss or stts):
+            await event.send(
+                MessageEventResult().message("👀 Testing provider reachability...")
             )
 
-            provider_using = self.context.get_using_provider(umo=umo)
-            for index, data in enumerate(llm_data):
+        llm_data, tts_data, stt_data = await asyncio.gather(
+            self._build_provider_display_data(
+                llms,
+                "llm",
+                reachability_check_enabled,
+            ),
+            self._build_provider_display_data(
+                ttss,
+                "tts",
+                reachability_check_enabled,
+            ),
+            self._build_provider_display_data(
+                stts,
+                "stt",
+                reachability_check_enabled,
+            ),
+        )
+
+        provider_using = self.context.get_using_provider(umo=umo)
+        for index, data in enumerate(llm_data):
+            line = f"{index + 1}. {data['info']}{data['mark']}"
+            if (
+                provider_using
+                and provider_using.meta().id == data["provider"].meta().id
+            ):
+                line += " 👈"
+            parts.append(line + "\n")
+
+        if tts_data:
+            parts.append("\n## TTS Providers\n")
+            tts_using = self.context.get_using_tts_provider(umo=umo)
+            for index, data in enumerate(tts_data):
                 line = f"{index + 1}. {data['info']}{data['mark']}"
-                if (
-                    provider_using
-                    and provider_using.meta().id == data["provider"].meta().id
-                ):
+                if tts_using and tts_using.meta().id == data["provider"].meta().id:
                     line += " 👈"
                 parts.append(line + "\n")
 
-            if tts_data:
-                parts.append("\n## TTS Providers\n")
-                tts_using = self.context.get_using_tts_provider(umo=umo)
-                for index, data in enumerate(tts_data):
-                    line = f"{index + 1}. {data['info']}{data['mark']}"
-                    if tts_using and tts_using.meta().id == data["provider"].meta().id:
-                        line += " 👈"
-                    parts.append(line + "\n")
+        if stt_data:
+            parts.append("\n## STT Providers\n")
+            stt_using = self.context.get_using_stt_provider(umo=umo)
+            for index, data in enumerate(stt_data):
+                line = f"{index + 1}. {data['info']}{data['mark']}"
+                if stt_using and stt_using.meta().id == data["provider"].meta().id:
+                    line += " 👈"
+                parts.append(line + "\n")
 
-            if stt_data:
-                parts.append("\n## STT Providers\n")
-                stt_using = self.context.get_using_stt_provider(umo=umo)
-                for index, data in enumerate(stt_data):
-                    line = f"{index + 1}. {data['info']}{data['mark']}"
-                    if stt_using and stt_using.meta().id == data["provider"].meta().id:
-                        line += " 👈"
-                    parts.append(line + "\n")
+        parts.append("\nUse /provider set llm <index> to switch LLM providers.")
+        if ttss:
+            parts.append("\nUse /provider set tts <index> to switch TTS providers.")
+        if stts:
+            parts.append("\nUse /provider set stt <index> to switch STT providers.")
+        event.set_result(MessageEventResult().message("".join(parts)))
 
-            parts.append("\nUse /provider <idx> to switch LLM providers.")
-            ret = "".join(parts)
+    async def set_llm_provider(self, event: AstrMessageEvent, index: int) -> None:
+        await self._set_provider_by_index(
+            event,
+            index,
+            list(self.context.get_all_providers()),
+            ProviderType.CHAT_COMPLETION,
+        )
 
-            if ttss:
-                ret += "\nUse /provider tts <idx> to switch TTS providers."
-            if stts:
-                ret += "\nUse /provider stt <idx> to switch STT providers."
+    async def set_tts_provider(self, event: AstrMessageEvent, index: int) -> None:
+        await self._set_provider_by_index(
+            event,
+            index,
+            self.context.get_all_tts_providers(),
+            ProviderType.TEXT_TO_SPEECH,
+        )
 
-            event.set_result(MessageEventResult().message(ret))
-        elif idx == "tts":
-            if idx2 is None:
-                event.set_result(
-                    MessageEventResult().message("Please enter the index."),
-                )
-                return
-            if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index."),
-                )
-                return
-            provider = self.context.get_all_tts_providers()[idx2 - 1]
-            id_ = provider.meta().id
-            await self.context.provider_manager.set_provider(
-                provider_id=id_,
-                provider_type=ProviderType.TEXT_TO_SPEECH,
-                umo=umo,
-            )
-            event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}."),
-            )
-        elif idx == "stt":
-            if idx2 is None:
-                event.set_result(
-                    MessageEventResult().message("Please enter the index."),
-                )
-                return
-            if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index."),
-                )
-                return
-            provider = self.context.get_all_stt_providers()[idx2 - 1]
-            id_ = provider.meta().id
-            await self.context.provider_manager.set_provider(
-                provider_id=id_,
-                provider_type=ProviderType.SPEECH_TO_TEXT,
-                umo=umo,
-            )
-            event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}."),
-            )
-        elif isinstance(idx, int):
-            if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index."),
-                )
-                return
-            provider = self.context.get_all_providers()[idx - 1]
-            id_ = provider.meta().id
-            await self.context.provider_manager.set_provider(
-                provider_id=id_,
-                provider_type=ProviderType.CHAT_COMPLETION,
-                umo=umo,
-            )
-            event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}."),
-            )
-        else:
-            event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+    async def set_stt_provider(self, event: AstrMessageEvent, index: int) -> None:
+        await self._set_provider_by_index(
+            event,
+            index,
+            self.context.get_all_stt_providers(),
+            ProviderType.SPEECH_TO_TEXT,
+        )
+
+    async def _set_provider_by_index(
+        self,
+        event: AstrMessageEvent,
+        index: int,
+        providers: Sequence[_SwitchableProvider],
+        provider_type: ProviderType,
+    ) -> None:
+        if index < 1 or index > len(providers):
+            event.set_result(MessageEventResult().message("❌ Invalid provider index."))
+            return
+        provider = providers[index - 1]
+        provider_id = provider.meta().id
+        await self.context.provider_manager.set_provider(
+            provider_id=provider_id,
+            provider_type=provider_type,
+            umo=event.unified_msg_origin,
+        )
+        event.set_result(
+            MessageEventResult().message(f"✅ Successfully switched to {provider_id}.")
+        )
 
     async def _switch_model_by_name(
         self,
@@ -624,12 +604,8 @@ class ProviderCommands:
                 ),
             )
 
-    async def model_ls(
-        self,
-        event: AstrMessageEvent,
-        idx_or_name: int | str | None = None,
-    ) -> None:
-        """View or switch the current chat model."""
+    async def list_models(self, event: AstrMessageEvent) -> None:
+        """List models for the current chat provider."""
         provider = self.context.get_using_provider(event.unified_msg_origin)
         if not provider:
             event.set_result(
@@ -640,31 +616,41 @@ class ProviderCommands:
             return
 
         config = self._get_model_lookup_config(event.unified_msg_origin)
-        if idx_or_name is None:
-            models = await self._get_models_or_reply_error(
-                event,
-                provider,
-                config,
-                error_prefix="Failed to fetch model list: ",
-                disable_t2i=True,
-            )
-            if models is None:
-                return
+        models = await self._get_models_or_reply_error(
+            event,
+            provider,
+            config,
+            error_prefix="Failed to fetch model list: ",
+            disable_t2i=True,
+        )
+        if models is None:
+            return
 
-            parts = ["Available models for the current provider:"]
-            for index, model in enumerate(models, 1):
-                parts.append(f"\n{index}. {model}")
-            current_model = provider.get_model() or "(empty)"
-            parts.append(f"\nCurrent model: {current_model}")
-            parts.append(
-                "\nUse /model <name|index> to switch models. Model names can be resolved across configured providers.",
-            )
+        parts = ["Available models for the current provider:"]
+        for index, model in enumerate(models, 1):
+            parts.append(f"\n{index}. {model}")
+        current_model = provider.get_model() or "(empty)"
+        parts.append(f"\nCurrent model: {current_model}")
+        parts.append(
+            "\nUse /model set <name-or-index> to switch models. Model names can "
+            "be resolved across configured providers."
+        )
+        event.set_result(MessageEventResult().message("".join(parts)).use_t2i(False))
+
+    async def set_model(self, event: AstrMessageEvent, name_or_index: str) -> None:
+        """Switch the current chat model by name or list index."""
+        provider = self.context.get_using_provider(event.unified_msg_origin)
+        if not provider:
             event.set_result(
-                MessageEventResult().message("".join(parts)).use_t2i(False),
+                MessageEventResult().message(
+                    "❌ Cannot find any LLM provider. Configure one first."
+                )
             )
             return
 
-        if isinstance(idx_or_name, int):
+        config = self._get_model_lookup_config(event.unified_msg_origin)
+        if name_or_index.isdecimal():
+            model_index = int(name_or_index)
             models = await self._get_models_or_reply_error(
                 event,
                 provider,
@@ -673,14 +659,14 @@ class ProviderCommands:
             )
             if models is None:
                 return
-            if idx_or_name < 1 or idx_or_name > len(models):
+            if model_index < 1 or model_index > len(models):
                 event.set_result(
                     MessageEventResult().message("❌ Invalid model index."),
                 )
                 return
 
             try:
-                new_model = models[idx_or_name - 1]
+                new_model = models[model_index - 1]
                 event.set_result(
                     MessageEventResult().message(
                         self._apply_model(
@@ -698,4 +684,4 @@ class ProviderCommands:
                 )
             return
 
-        await self._switch_model_by_name(event, idx_or_name, provider)
+        await self._switch_model_by_name(event, name_or_index, provider)

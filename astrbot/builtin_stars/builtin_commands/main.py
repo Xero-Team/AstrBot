@@ -2,19 +2,18 @@ from typing import Annotated
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.core.star.filter.command import GreedyStr, option
+from astrbot.api.event.filter import GreedyStr, option
 
 from .commands import (
     AdminCommands,
+    ChatCommands,
     ConversationCommands,
     HelpCommand,
-    LLMCommands,
-    NameCommand,
     PersonaCommands,
     PluginCommands,
     ProviderCommands,
-    SetUnsetCommands,
-    SIDCommand,
+    SessionCommands,
+    VariableCommands,
 )
 
 
@@ -23,15 +22,14 @@ class Main(star.Star):
         self.context = context
 
         self.admin_c = AdminCommands(self.context)
+        self.chat_c = ChatCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
         self.help_c = HelpCommand(self.context)
-        self.llm_c = LLMCommands(self.context)
-        self.name_c = NameCommand(self.context)
         self.persona_c = PersonaCommands(self.context)
         self.plugin_c = PluginCommands(self.context)
         self.provider_c = ProviderCommands(self.context)
-        self.setunset_c = SetUnsetCommands(self.context)
-        self.sid_c = SIDCommand(self.context)
+        self.session_c = SessionCommands(self.context)
+        self.variable_c = VariableCommands(self.context)
 
     @filter.command("help")
     async def help(
@@ -42,166 +40,266 @@ class Main(star.Star):
         """Show help message"""
         await self.help_c.help(event, image=image)
 
-    @filter.command("sid")
+    @filter.command_group("session")
+    def session(self) -> None:
+        """Manage the current message session"""
+
+    @session.command("info")
     async def sid(self, event: AstrMessageEvent) -> None:
-        """Get session ID and other related information"""
-        await self.sid_c.sid(event)
+        """Show IDs and metadata for the current session"""
+        await self.session_c.info(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("name")
-    async def name(self, event: AstrMessageEvent, alias: GreedyStr = "") -> None:
-        """Set display name for current UMO"""
-        await self.name_c.name(event, alias)
+    @session.command("name")
+    async def name(
+        self, event: AstrMessageEvent, alias: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Show or set the display name for the current session"""
+        await self.session_c.name(event, alias)
 
-    @filter.command("reset")
+    @filter.command_group("conversation")
+    def conversation(self) -> None:
+        """Manage conversations"""
+
+    @conversation.command("reset")
     async def reset(self, message: AstrMessageEvent) -> None:
         """Reset conversation history"""
         await self.conversation_c.reset(message)
 
-    @filter.command("stop")
+    @filter.command_group("task")
+    def task(self) -> None:
+        """Manage running tasks"""
+
+    @task.command("stop")
     async def stop(self, message: AstrMessageEvent) -> None:
-        """Stop agent execution"""
+        """Stop running tasks in the current session"""
         await self.conversation_c.stop(message)
 
-    @filter.command("new")
+    @conversation.command("create")
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """Create new conversation"""
-        await self.conversation_c.new_conv(message)
+        await self.conversation_c.create(message)
 
-    @filter.command("stats")
+    @conversation.command("stats")
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation"""
         await self.conversation_c.stats(message)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("provider")
-    async def provider(
+    @conversation.command("history")
+    async def history(
         self,
         event: AstrMessageEvent,
-        idx: str | int | None = None,
-        idx2: int | None = None,
+        page: Annotated[int, option("--page", "-p")] = 1,
     ) -> None:
-        """View or switch LLM Provider"""
-        await self.provider_c.provider(event, idx, idx2)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("model")
-    async def model(
-        self,
-        event: AstrMessageEvent,
-        idx_or_name: int | str | None = None,
-    ) -> None:
-        """View or switch the current model"""
-        await self.provider_c.model_ls(event, idx_or_name)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("dashboard_update")
-    async def update_dashboard(self, event: AstrMessageEvent) -> None:
-        """Update AstrBot WebUI"""
-        await self.admin_c.update_dashboard(event)
-
-    @filter.command("set")
-    async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
-        """Set session variable"""
-        await self.setunset_c.set_variable(event, key, value)
-
-    @filter.command("unset")
-    async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
-        """Unset session variable"""
-        await self.setunset_c.unset_variable(event, key)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("llm")
-    async def llm(self, event: AstrMessageEvent) -> None:
-        """Enable or disable LLM chat for the current session"""
-        await self.llm_c.llm(event)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("op")
-    async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
-        """Grant admin permission"""
-        await self.admin_c.op(event, admin_id)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("deop")
-    async def deop(self, event: AstrMessageEvent, admin_id: str = "") -> None:
-        """Revoke admin permission"""
-        await self.admin_c.deop(event, admin_id)
-
-    @filter.command("history")
-    async def history(self, event: AstrMessageEvent, page: int = 1) -> None:
         """Show conversation history"""
-        await self.conversation_c.his(event, page)
+        await self.conversation_c.history(event, page)
 
-    @filter.command("ls")
-    async def convs(self, event: AstrMessageEvent, page: int = 1) -> None:
-        """Show conversation list"""
-        await self.conversation_c.convs(event, page)
+    @conversation.command("list")
+    async def convs(
+        self,
+        event: AstrMessageEvent,
+        page: Annotated[int, option("--page", "-p")] = 1,
+    ) -> None:
+        """List conversations"""
+        await self.conversation_c.list_conversations(event, page)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("groupnew")
-    async def groupnew(self, event: AstrMessageEvent, sid: str = "") -> None:
-        """Create a new conversation for a target group"""
-        await self.conversation_c.groupnew_conv(event, sid)
+    @conversation.command("create-for")
+    async def groupnew(self, event: AstrMessageEvent, session_id: str) -> None:
+        """Create a conversation for a target group session"""
+        await self.conversation_c.create_for(event, session_id)
 
-    @filter.command("switch")
-    async def switch(self, event: AstrMessageEvent, index: int | None = None) -> None:
+    @conversation.command("switch")
+    async def switch(self, event: AstrMessageEvent, index: int) -> None:
         """Switch to a listed conversation"""
-        await self.conversation_c.switch_conv(event, index)
+        await self.conversation_c.switch(event, index)
 
-    @filter.command("rename")
+    @conversation.command("rename")
     async def rename(
         self,
         event: AstrMessageEvent,
-        title: GreedyStr = "",
+        title: GreedyStr,
     ) -> None:
         """Rename the current conversation"""
-        await self.conversation_c.rename_conv(event, title)
+        await self.conversation_c.rename(event, title)
 
-    @filter.command("del")
+    @conversation.command("delete")
     async def delete(self, event: AstrMessageEvent) -> None:
         """Delete the current conversation"""
-        await self.conversation_c.del_conv(event)
+        await self.conversation_c.delete(event)
+
+    @filter.command_group("provider")
+    def provider(self) -> None:
+        """Manage providers"""
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("persona")
-    async def persona(
-        self,
-        event: AstrMessageEvent,
-        action: str = "",
-        persona_id: GreedyStr = "",
+    @provider.command("list")
+    async def provider_list(self, event: AstrMessageEvent) -> None:
+        """List configured providers"""
+        await self.provider_c.list_providers(event)
+
+    @provider.group("set")
+    def provider_set(self) -> None:
+        """Select a provider by capability"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @provider_set.command("llm")
+    async def provider_llm(self, event: AstrMessageEvent, index: int) -> None:
+        """Switch the LLM provider"""
+        await self.provider_c.set_llm_provider(event, index)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @provider_set.command("tts")
+    async def provider_tts(self, event: AstrMessageEvent, index: int) -> None:
+        """Switch the TTS provider"""
+        await self.provider_c.set_tts_provider(event, index)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @provider_set.command("stt")
+    async def provider_stt(self, event: AstrMessageEvent, index: int) -> None:
+        """Switch the STT provider"""
+        await self.provider_c.set_stt_provider(event, index)
+
+    @filter.command_group("model")
+    def model(self) -> None:
+        """Manage models"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @model.command("list")
+    async def model_list(self, event: AstrMessageEvent) -> None:
+        """List models for the current provider"""
+        await self.provider_c.list_models(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @model.command("set")
+    async def model_set(
+        self, event: AstrMessageEvent, model_or_index: GreedyStr
     ) -> None:
-        """View or switch persona"""
-        await self.persona_c.persona(event, action, persona_id)
+        """Switch the current model"""
+        await self.provider_c.set_model(event, model_or_index)
+
+    @filter.command_group("variable")
+    def variable(self) -> None:
+        """Manage session variables"""
+
+    @variable.command("set")
+    async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
+        """Set session variable"""
+        await self.variable_c.set_variable(event, key, value)
+
+    @variable.command("unset")
+    async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
+        """Unset session variable"""
+        await self.variable_c.unset_variable(event, key)
+
+    @filter.command_group("chat")
+    def chat(self) -> None:
+        """Manage LLM chat for the current session"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @chat.command("status")
+    async def chat_status(self, event: AstrMessageEvent) -> None:
+        """Show whether LLM chat is enabled"""
+        await self.chat_c.status(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @chat.command("enable")
+    async def chat_enable(self, event: AstrMessageEvent) -> None:
+        """Enable LLM chat for the current session"""
+        await self.chat_c.set_enabled(event, True)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @chat.command("disable")
+    async def chat_disable(self, event: AstrMessageEvent) -> None:
+        """Disable LLM chat for the current session"""
+        await self.chat_c.set_enabled(event, False)
+
+    @filter.command_group("admin")
+    def admin(self) -> None:
+        """Manage administrators"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @admin.command("list")
+    async def admin_list(self, event: AstrMessageEvent) -> None:
+        """List administrator IDs"""
+        await self.admin_c.list_admins(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @admin.command("grant")
+    async def op(self, event: AstrMessageEvent, user_id: str) -> None:
+        """Grant administrator permission"""
+        await self.admin_c.grant(event, user_id)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @admin.command("revoke")
+    async def deop(self, event: AstrMessageEvent, user_id: str) -> None:
+        """Revoke administrator permission"""
+        await self.admin_c.revoke(event, user_id)
+
+    @filter.command_group("persona")
+    def persona(self) -> None:
+        """Manage personas"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @persona.command("status")
+    async def persona_status(self, event: AstrMessageEvent) -> None:
+        """Show the current persona"""
+        await self.persona_c.status(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @persona.command("list")
+    async def persona_list(self, event: AstrMessageEvent) -> None:
+        """List personas"""
+        await self.persona_c.list_personas(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @persona.command("set")
+    async def persona_set(self, event: AstrMessageEvent, persona_id: GreedyStr) -> None:
+        """Set the current conversation persona"""
+        await self.persona_c.set_persona(event, persona_id)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @persona.command("show")
+    async def persona_view(
+        self, event: AstrMessageEvent, persona_id: GreedyStr
+    ) -> None:
+        """View persona details"""
+        await self.persona_c.show(event, persona_id)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @persona.command("unset")
+    async def persona_unset(self, event: AstrMessageEvent) -> None:
+        """Unset the current conversation persona"""
+        await self.persona_c.unset(event)
 
     @filter.command_group("plugin")
     def plugin(self) -> None:
         """Plugin management"""
 
-    @plugin.command("ls")
+    @plugin.command("list")
     async def plugin_ls(self, event: AstrMessageEvent) -> None:
         """List loaded plugins"""
-        await self.plugin_c.plugin_ls(event)
+        await self.plugin_c.list_plugins(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @plugin.command("off")
-    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
+    @plugin.command("disable")
+    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Disable a plugin"""
-        await self.plugin_c.plugin_off(event, plugin_name)
+        await self.plugin_c.disable(event, plugin_name)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @plugin.command("on")
-    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
+    @plugin.command("enable")
+    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Enable a plugin"""
-        await self.plugin_c.plugin_on(event, plugin_name)
+        await self.plugin_c.enable(event, plugin_name)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @plugin.command("get")
-    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = "") -> None:
+    @plugin.command("install")
+    async def plugin_get(self, event: AstrMessageEvent, repository_url: str) -> None:
         """Install a plugin"""
-        await self.plugin_c.plugin_get(event, plugin_repo)
+        await self.plugin_c.install(event, repository_url)
 
-    @plugin.command("help")
-    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
+    @plugin.command("show")
+    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Show plugin help"""
-        await self.plugin_c.plugin_help(event, plugin_name)
+        await self.plugin_c.show(event, plugin_name)

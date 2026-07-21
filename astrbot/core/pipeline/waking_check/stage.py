@@ -3,15 +3,27 @@ from dataclasses import dataclass
 from enum import Enum
 
 from astrbot import logger
+from astrbot.core.command import (
+    CommandEngine,
+    CommandError,
+    CommandResolution,
+    CommandResolutionKind,
+    render_diagnostic,
+)
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
-from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 from astrbot.core.utils.quoted_message.onebot_client import OneBotClient
 
 from ..context import PipelineContext
@@ -72,6 +84,8 @@ class WakingCheckStage(Stage):
 
         """
         self.ctx = ctx
+        if ctx.preferences is None:
+            raise RuntimeError("WakingCheckStage requires shared preferences")
         self.session_plugins = SessionPluginManager(ctx.preferences)
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
             "no_permission_reply",
@@ -97,6 +111,12 @@ class WakingCheckStage(Stage):
         self.group_wake_reply_to_bot = bool(
             group_wake_policy.get("reply_to_bot", False)
         )
+        enabled_plugins = self.ctx.astrbot_config.get("plugin_set", ["*"])
+        plugin_names = None if enabled_plugins == ["*"] else enabled_plugins
+        self.command_catalog = ctx.plugin_manager.get_command_catalog(
+            ctx.astrbot_config_id,
+            plugin_names,
+        )
 
     async def process(
         self,
@@ -107,7 +127,7 @@ class WakingCheckStage(Stage):
             event.stop_event()
             return
 
-        event.message_str = event.message_str.strip()
+        event.message_str = event.message_str.strip(" \t")
         self._assign_admin_role(event)
         wake_decision = await self._detect_wake(event)
         event.set_extra(
@@ -173,7 +193,7 @@ class WakingCheckStage(Stage):
                     break
                 event.is_at_or_wake_command = True
                 event.is_wake = True
-                event.message_str = event.message_str[len(wake_prefix) :].strip()
+                event.message_str = event.message_str[len(wake_prefix) :].strip(" \t")
                 return WakeDecision(True, {WakeReason.PREFIX})
 
         unresolved_replies: list[Reply] = []
@@ -257,12 +277,83 @@ class WakingCheckStage(Stage):
         )
         logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
 
-        for handler in star_handlers_registry.get_handlers_by_event_type(
+        handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
-        ):
+        )
+        engine = self._command_engine()
+        group_handlers = {
+            id(filter_ref): (filter_ref, handler)
+            for handler in handlers
+            for filter_ref in handler.event_filters
+            if isinstance(filter_ref, CommandGroupFilter)
+        }
+        group_gate_cache: dict[int, tuple[bool, bool]] = {}
+        catalog_resolution = (
+            engine.catalog.resolve(event.message_str)
+            if event.is_at_or_wake_command
+            else None
+        )
+        if catalog_resolution and catalog_resolution.kind in {
+            CommandResolutionKind.INCOMPLETE_GROUP,
+            CommandResolutionKind.UNKNOWN_SUBCOMMAND,
+        }:
+            relevant_groups = self._groups_for_resolution(
+                group_handlers,
+                catalog_resolution,
+            )
+            any_allowed = not relevant_groups
+            for group_filter in relevant_groups:
+                allowed, fatal = await self._check_group_filter_chain(
+                    event,
+                    group_filter,
+                    group_handlers,
+                    group_gate_cache,
+                )
+                if fatal:
+                    return activated_handlers, handlers_parsed_params, True
+                any_allowed = any_allowed or allowed
+            if not any_allowed:
+                return activated_handlers, handlers_parsed_params, False
+        try:
+            resolved_command = (
+                engine.resolve(event.message_str)
+                if event.is_at_or_wake_command
+                else None
+            )
+        except CommandError as exc:
+            logger.info("Command input rejected: %s", exc.diagnostic.code.value)
+            await event.send(
+                MessageEventResult().message(
+                    render_diagnostic(exc.diagnostic, event.message_str, "zh-CN")
+                )
+            )
+            event.stop_event()
+            return activated_handlers, handlers_parsed_params, True
+
+        matched_entries = (
+            resolved_command.resolution.entries
+            if resolved_command
+            and resolved_command.resolution.kind is CommandResolutionKind.MATCHED
+            else ()
+        )
+        matched_filter_ids = {
+            id(entry.filter_ref) for entry in matched_entries if entry.filter_ref
+        }
+        event.set_extra(
+            "command_handler_ids",
+            tuple(entry.handler_id for entry in matched_entries),
+        )
+        entries_by_filter = {
+            id(entry.filter_ref): entry
+            for entry in matched_entries
+            if entry.filter_ref is not None
+        }
+
+        for handler in handlers:
             # filter 需满足 AND 逻辑关系
             passed = True
+            bound_params: dict | None = None
             permission_not_pass = False
             permission_filter_raise_error = False
             if len(handler.event_filters) == 0:
@@ -270,13 +361,50 @@ class WakingCheckStage(Stage):
 
             for filter in handler.event_filters:
                 try:
-                    if isinstance(filter, PermissionTypeFilter):
+                    if isinstance(filter, CommandGroupFilter):
+                        passed = False
+                        break
+                    if isinstance(filter, CommandFilter):
+                        if id(filter) not in matched_filter_ids:
+                            passed = False
+                            break
+                        group_allowed, fatal = await self._check_parent_group_filters(
+                            event,
+                            filter,
+                            group_handlers,
+                            group_gate_cache,
+                        )
+                        if fatal:
+                            return activated_handlers, handlers_parsed_params, True
+                        if not group_allowed:
+                            passed = False
+                            break
+                        if not filter.filter(event, self.ctx.astrbot_config):
+                            passed = False
+                            break
+                        assert resolved_command is not None
+                        bound = engine.bind(
+                            entries_by_filter[id(filter)], resolved_command
+                        )
+                        bound_params = dict(bound.values)
+                    elif isinstance(filter, PermissionTypeFilter):
                         if not filter.filter(event, self.ctx.astrbot_config):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
                     elif not filter.filter(event, self.ctx.astrbot_config):
                         passed = False
                         break
+                except CommandError as exc:
+                    logger.info("Command input rejected: %s", exc.diagnostic.code.value)
+                    await event.send(
+                        MessageEventResult().message(
+                            render_diagnostic(
+                                exc.diagnostic, event.message_str, "zh-CN"
+                            )
+                        )
+                    )
+                    event.stop_event()
+                    return activated_handlers, handlers_parsed_params, True
                 except Exception as e:
                     await event.send(
                         MessageEventResult().message(
@@ -294,7 +422,7 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /session info 获取 ID 并请管理员添加。",
                             ),
                         )
                     logger.info(
@@ -310,15 +438,155 @@ class WakingCheckStage(Stage):
                 wake_reasons.add(WakeReason.PLUGIN_HANDLER.value)
                 event.set_extra("wake_reasons", wake_reasons)
 
-                is_group_cmd_handler = any(
-                    isinstance(f, CommandGroupFilter) for f in handler.event_filters
-                )
-                if not is_group_cmd_handler:
-                    activated_handlers.append(handler)
-                    if "parsed_params" in event.get_extra(default={}):
-                        handlers_parsed_params[handler.handler_full_name] = (
-                            event.get_extra("parsed_params")
-                        )
-
-            event._extras.pop("parsed_params", None)
+                activated_handlers.append(handler)
+                if bound_params is not None:
+                    handlers_parsed_params[handler.handler_full_name] = bound_params
         return activated_handlers, handlers_parsed_params, False
+
+    @staticmethod
+    def _groups_for_resolution(
+        group_handlers: dict[int, tuple[CommandGroupFilter, StarHandlerMetadata]],
+        resolution: CommandResolution,
+    ) -> list[CommandGroupFilter]:
+        group_path = resolution.group_path
+        return [
+            group_filter
+            for group_filter, _handler in group_handlers.values()
+            if group_path
+            in {
+                tuple(name.split(" "))
+                for name in group_filter.get_complete_command_names()
+            }
+        ]
+
+    async def _check_parent_group_filters(
+        self,
+        event: AstrMessageEvent,
+        command_filter: CommandFilter,
+        group_handlers: dict[int, tuple[CommandGroupFilter, StarHandlerMetadata]],
+        cache: dict[int, tuple[bool, bool]],
+    ) -> tuple[bool, bool]:
+        groups: list[CommandGroupFilter] = []
+        group = command_filter.parent_group
+        while group is not None:
+            groups.append(group)
+            group = group.parent_group
+
+        for group_filter in reversed(groups):
+            allowed, fatal = await self._check_group_filter(
+                event,
+                group_filter,
+                group_handlers,
+                cache,
+            )
+            if fatal or not allowed:
+                return allowed, fatal
+        return True, False
+
+    async def _check_group_filter_chain(
+        self,
+        event: AstrMessageEvent,
+        group_filter: CommandGroupFilter,
+        group_handlers: dict[int, tuple[CommandGroupFilter, StarHandlerMetadata]],
+        cache: dict[int, tuple[bool, bool]],
+    ) -> tuple[bool, bool]:
+        groups: list[CommandGroupFilter] = []
+        group: CommandGroupFilter | None = group_filter
+        while group is not None:
+            groups.append(group)
+            group = group.parent_group
+
+        for current in reversed(groups):
+            allowed, fatal = await self._check_group_filter(
+                event,
+                current,
+                group_handlers,
+                cache,
+            )
+            if fatal or not allowed:
+                return allowed, fatal
+        return True, False
+
+    async def _check_group_filter(
+        self,
+        event: AstrMessageEvent,
+        group_filter: CommandGroupFilter,
+        group_handlers: dict[int, tuple[CommandGroupFilter, StarHandlerMetadata]],
+        cache: dict[int, tuple[bool, bool]],
+    ) -> tuple[bool, bool]:
+        cached = cache.get(id(group_filter))
+        if cached is not None:
+            return cached
+
+        handler_entry = group_handlers.get(id(group_filter))
+        handler = handler_entry[1] if handler_entry else None
+        try:
+            if not group_filter.custom_filter_ok(event, self.ctx.astrbot_config):
+                cache[id(group_filter)] = (False, False)
+                return False, False
+
+            permission_not_pass = False
+            permission_filter_raise_error = False
+            if handler is not None:
+                for filter_ref in handler.event_filters:
+                    if isinstance(filter_ref, CommandGroupFilter):
+                        continue
+                    if isinstance(filter_ref, PermissionTypeFilter):
+                        if not filter_ref.filter(event, self.ctx.astrbot_config):
+                            permission_not_pass = True
+                            permission_filter_raise_error = filter_ref.raise_error
+                    elif not filter_ref.filter(event, self.ctx.astrbot_config):
+                        cache[id(group_filter)] = (False, False)
+                        return False, False
+
+            if permission_not_pass:
+                if not permission_filter_raise_error:
+                    cache[id(group_filter)] = (False, False)
+                    return False, False
+                await self._send_permission_denied(event, handler)
+                cache[id(group_filter)] = (False, True)
+                return False, True
+        except Exception as exc:
+            await self._send_filter_error(event, handler, exc)
+            cache[id(group_filter)] = (False, True)
+            return False, True
+
+        cache[id(group_filter)] = (True, False)
+        return True, False
+
+    async def _send_permission_denied(
+        self,
+        event: AstrMessageEvent,
+        handler: StarHandlerMetadata | None,
+    ) -> None:
+        if self.no_permission_reply:
+            await event.send(
+                MessageChain().message(
+                    f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。"
+                    "通过 /session info 获取 ID 并请管理员添加。",
+                ),
+            )
+        plugin = star_map.get(handler.handler_module_path) if handler else None
+        logger.info(
+            "触发 %s 时, 用户(ID=%s) 权限不足。",
+            plugin.name if plugin else "unknown plugin",
+            event.get_sender_id(),
+        )
+        event.stop_event()
+
+    @staticmethod
+    async def _send_filter_error(
+        event: AstrMessageEvent,
+        handler: StarHandlerMetadata | None,
+        exc: Exception,
+    ) -> None:
+        plugin = star_map.get(handler.handler_module_path) if handler else None
+        await event.send(
+            MessageEventResult().message(
+                f"插件 {plugin.name if plugin else 'unknown plugin'}: {exc}",
+            ),
+        )
+        event.stop_event()
+
+    def _command_engine(self) -> CommandEngine:
+        return CommandEngine(self.command_catalog.snapshot)

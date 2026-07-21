@@ -5,6 +5,7 @@ import aiohttp
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.star import command_management
 from astrbot.core.utils.io import get_dashboard_version
@@ -51,12 +52,7 @@ class HelpCommand:
                     or item.get("original_command")
                     or item.get("handler_name")
                 )
-                if not effective or effective in [
-                    "set",
-                    "unset",
-                    "help",
-                    "dashboard_update",
-                ]:
+                if not effective or effective in {"help", "variable"}:
                     continue
 
                 description = item.get("description") or ""
@@ -148,7 +144,7 @@ class HelpCommand:
             )
         return "\n".join(lines)
 
-    def _get_event_config(self, event: AstrMessageEvent):
+    def _get_event_config(self, event: AstrMessageEvent) -> AstrBotConfig | None:
         try:
             return self.context.get_config(umo=event.unified_msg_origin)
         except Exception:
@@ -156,7 +152,7 @@ class HelpCommand:
 
     def _get_callback_base(self, event: AstrMessageEvent) -> str:
         config = self._get_event_config(event)
-        if hasattr(config, "get"):
+        if config is not None:
             try:
                 callback_api_base = str(
                     config.get("callback_api_base", "") or ""

@@ -4,8 +4,17 @@ from unittest.mock import AsyncMock
 import pytest
 
 import astrbot.core.pipeline.waking_check.stage as waking
+from astrbot.core.command import (
+    CommandCatalogStore,
+    CommandLexer,
+    build_command_catalog,
+)
 from astrbot.core.message.components import At, AtAll, Plain, Reply
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 
 
 class FakeEvent:
@@ -93,9 +102,14 @@ async def make_stage(**settings):
         },
     }
     stage = waking.WakingCheckStage()
+    command_catalog = CommandCatalogStore()
     await stage.initialize(
         SimpleNamespace(
             astrbot_config=config,
+            astrbot_config_id="default",
+            plugin_manager=SimpleNamespace(
+                get_command_catalog=lambda *_args: command_catalog,
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
         )
     )
@@ -103,6 +117,30 @@ async def make_stage(**settings):
         side_effect=lambda _, h: h
     )
     return stage
+
+
+def install_handlers(stage, monkeypatch, handlers) -> None:
+    monkeypatch.setattr(
+        waking.star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *_args, **_kwargs: handlers,
+    )
+    stage.command_catalog.replace(build_command_catalog(handlers))
+
+
+def make_command_handler(name: str, handler, *extra_filters):
+    metadata = StarHandlerMetadata(
+        event_type=EventType.AdapterMessageEvent,
+        handler_full_name=f"test.plugin_{handler.__name__}_{id(handler)}",
+        handler_name=handler.__name__,
+        handler_module_path="test.plugin",
+        handler=handler,
+        event_filters=[],
+    )
+    command_filter = CommandFilter(name)
+    command_filter.init_handler_md(metadata)
+    metadata.event_filters.extend((command_filter, *extra_filters))
+    return metadata, command_filter
 
 
 @pytest.mark.asyncio
@@ -162,11 +200,7 @@ async def test_detect_wake_resolves_unknown_reply_sender(monkeypatch):
 @pytest.mark.asyncio
 async def test_group_wake_policy_does_not_mutate_at_component(monkeypatch):
     stage = await make_stage()
-    monkeypatch.setattr(
-        waking.star_handlers_registry,
-        "get_handlers_by_event_type",
-        lambda *_args, **_kwargs: [],
-    )
+    install_handlers(stage, monkeypatch, [])
     mention = At(qq="bot")
     event = FakeEvent([mention, Plain("hello")])
 
@@ -179,11 +213,7 @@ async def test_group_wake_policy_does_not_mutate_at_component(monkeypatch):
 @pytest.mark.asyncio
 async def test_adapter_preconfigured_wake_bypasses_group_wake_policy(monkeypatch):
     stage = await make_stage()
-    monkeypatch.setattr(
-        waking.star_handlers_registry,
-        "get_handlers_by_event_type",
-        lambda *_args, **_kwargs: [],
-    )
+    install_handlers(stage, monkeypatch, [])
     event = FakeEvent([At(qq="bot")])
     event.is_wake = True
 
@@ -196,11 +226,7 @@ async def test_adapter_preconfigured_wake_bypasses_group_wake_policy(monkeypatch
 @pytest.mark.asyncio
 async def test_process_applies_admin_self_message_and_unique_session_rules(monkeypatch):
     stage = await make_stage(unique_session=True, ignore_bot_self_message=True)
-    monkeypatch.setattr(
-        waking.star_handlers_registry,
-        "get_handlers_by_event_type",
-        lambda *_args, **_: [],
-    )
+    install_handlers(stage, monkeypatch, [])
 
     self_event = FakeEvent([Plain("hello")], sender_id="bot")
     await stage.process(self_event)
@@ -226,11 +252,7 @@ async def test_process_filters_handlers_by_session(monkeypatch):
         handler_full_name="test.handler",
         event_filters=[SimpleNamespace(filter=lambda *_: True)],
     )
-    monkeypatch.setattr(
-        waking.star_handlers_registry,
-        "get_handlers_by_event_type",
-        lambda *_args, **_: [handler],
-    )
+    install_handlers(stage, monkeypatch, [handler])
     stage.session_plugins.filter_handlers_by_session = AsyncMock(return_value=[])
     event = FakeEvent([Plain("hello")])
 
@@ -241,3 +263,362 @@ async def test_process_filters_handlers_by_session(monkeypatch):
     stage.session_plugins.filter_handlers_by_session.assert_awaited_once_with(
         event, [handler]
     )
+
+
+@pytest.mark.asyncio
+async def test_command_is_lexed_once_and_params_stay_handler_scoped(monkeypatch):
+    stage = await make_stage()
+
+    async def first(self, event, value: int) -> None: ...
+
+    async def second(self, event, value: str) -> None: ...
+
+    first_md, _ = make_command_handler("demo", first)
+    second_md, _ = make_command_handler("demo", second)
+    install_handlers(stage, monkeypatch, [first_md, second_md])
+    calls = 0
+    original_lex = CommandLexer.lex
+
+    def counted_lex(self, source, *, offset=0):
+        nonlocal calls
+        calls += 1
+        return original_lex(self, source, offset=offset)
+
+    monkeypatch.setattr(CommandLexer, "lex", counted_lex)
+    event = FakeEvent([Plain("/demo 3")], message_text="/demo 3")
+
+    await stage.process(event)
+
+    assert calls == 1
+    assert event.get_extra("activated_handlers") == [first_md, second_md]
+    assert event.get_extra("handlers_parsed_params") == {
+        first_md.handler_full_name: {"value": 3},
+        second_md.handler_full_name: {"value": "3"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_command_permission_denial_keeps_existing_behavior(monkeypatch):
+    stage = await make_stage()
+
+    async def admin_only(self, event) -> None: ...
+
+    handler, _ = make_command_handler(
+        "admin", admin_only, PermissionTypeFilter(PermissionType.ADMIN)
+    )
+    install_handlers(stage, monkeypatch, [handler])
+    monkeypatch.setitem(waking.star_map, "test.plugin", SimpleNamespace(name="Test"))
+    event = FakeEvent([Plain("/admin")], message_text="/admin")
+
+    await stage.process(event)
+
+    assert event.stopped is True
+    assert event.get_extra("activated_handlers", []) == []
+    assert "权限不足" in event.sent[0].get_plain_text()
+
+
+@pytest.mark.asyncio
+async def test_command_group_permission_applies_to_subcommands(monkeypatch):
+    stage = await make_stage()
+    group = CommandGroupFilter("admin")
+
+    def group_handler(self) -> None: ...
+
+    group_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_admin_group",
+        "admin",
+        "test.plugin",
+        group_handler,
+        [group, PermissionTypeFilter(PermissionType.ADMIN)],
+    )
+
+    async def run(self, event) -> None: ...
+
+    child_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_admin_run",
+        "run",
+        "test.plugin",
+        run,
+        [],
+        extras_configs={"sub_command": True},
+    )
+    child = CommandFilter("run", parent_command_names=["admin"])
+    child.init_handler_md(child_md)
+    child_md.event_filters.append(child)
+    group.add_sub_command_filter(child)
+    install_handlers(stage, monkeypatch, [group_md, child_md])
+    event = FakeEvent([Plain("/admin run")], message_text="/admin run")
+
+    await stage.process(event)
+
+    assert event.stopped is True
+    assert event.get_extra("activated_handlers", []) == []
+    assert "权限不足" in event.sent[0].get_plain_text()
+
+
+@pytest.mark.asyncio
+async def test_command_group_custom_filter_blocks_subcommands(monkeypatch):
+    stage = await make_stage()
+    group = CommandGroupFilter("restricted")
+    group.add_custom_filter(SimpleNamespace(filter=lambda *_args: False))
+
+    def group_handler(self) -> None: ...
+
+    group_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_restricted_group",
+        "restricted",
+        "test.plugin",
+        group_handler,
+        [group],
+    )
+
+    async def run(self, event) -> None: ...
+
+    child_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_restricted_run",
+        "run",
+        "test.plugin",
+        run,
+        [],
+        extras_configs={"sub_command": True},
+    )
+    child = CommandFilter("run", parent_command_names=["restricted"])
+    child.init_handler_md(child_md)
+    child_md.event_filters.append(child)
+    group.add_sub_command_filter(child)
+    install_handlers(stage, monkeypatch, [group_md, child_md])
+    event = FakeEvent(
+        [Plain("/restricted run")],
+        message_text="/restricted run",
+    )
+
+    await stage.process(event)
+
+    assert event.stopped is False
+    assert event.get_extra("activated_handlers", []) == []
+
+
+@pytest.mark.asyncio
+async def test_command_group_permission_precedes_group_diagnostics(monkeypatch):
+    stage = await make_stage()
+    group = CommandGroupFilter("admin")
+
+    def group_handler(self) -> None: ...
+
+    group_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_admin_group_diagnostic",
+        "admin",
+        "test.plugin",
+        group_handler,
+        [PermissionTypeFilter(PermissionType.ADMIN), group],
+    )
+
+    async def run(self, event) -> None: ...
+
+    child_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_admin_run_diagnostic",
+        "run",
+        "test.plugin",
+        run,
+        [],
+        extras_configs={"sub_command": True},
+    )
+    child = CommandFilter("run", parent_command_names=["admin"])
+    child.init_handler_md(child_md)
+    child_md.event_filters.append(child)
+    group.add_sub_command_filter(child)
+    install_handlers(stage, monkeypatch, [group_md, child_md])
+    event = FakeEvent([Plain("/admin")], message_text="/admin")
+
+    await stage.process(event)
+
+    text = event.sent[0].get_plain_text()
+    assert event.stopped is True
+    assert "权限不足" in text
+    assert "可用子指令" not in text
+
+
+@pytest.mark.asyncio
+async def test_command_syntax_error_is_not_attributed_to_plugin(monkeypatch):
+    stage = await make_stage()
+
+    async def name(self, event, value: str) -> None: ...
+
+    handler, _ = make_command_handler("name", name)
+    install_handlers(stage, monkeypatch, [handler])
+    event = FakeEvent([Plain("/name $HOME")], message_text="/name $HOME")
+
+    await stage.process(event)
+
+    text = event.sent[0].get_plain_text()
+    assert event.stopped is True
+    assert "参数展开" in text
+    assert "插件" not in text
+
+
+@pytest.mark.asyncio
+async def test_command_preserves_non_ascii_space_and_rejects_trailing_newline(
+    monkeypatch,
+):
+    stage = await make_stage()
+
+    async def name(self, event, value: str) -> None: ...
+
+    handler, _ = make_command_handler("name", name)
+    install_handlers(stage, monkeypatch, [handler])
+
+    unicode_space = FakeEvent([Plain("/name a\u00a0b")], message_text="/name a\u00a0b")
+    await stage.process(unicode_space)
+    assert unicode_space.get_extra("handlers_parsed_params") == {
+        handler.handler_full_name: {"value": "a\u00a0b"}
+    }
+
+    newline = FakeEvent([Plain("/name value\n")], message_text="/name value\n")
+    await stage.process(newline)
+    assert newline.stopped is True
+    assert "未引用的换行" in newline.sent[0].get_plain_text()
+
+
+@pytest.mark.asyncio
+async def test_failed_and_filter_does_not_leave_bound_params(monkeypatch):
+    stage = await make_stage()
+
+    async def demo(self, event, value: str) -> None: ...
+
+    rejecting_filter = SimpleNamespace(filter=lambda *_args: False)
+    handler, command_filter = make_command_handler("demo", demo)
+    command_filter.add_custom_filter(rejecting_filter)
+    install_handlers(stage, monkeypatch, [handler])
+    event = FakeEvent([Plain("/demo value")], message_text="/demo value")
+
+    await stage.process(event)
+
+    assert event.get_extra("activated_handlers") == []
+    assert event.get_extra("handlers_parsed_params") == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "/请解释 $HOME",
+        "/请读取 https://example.com?a=1&b=2#readme",
+        "/请解释 '未闭合的引号",
+    ],
+)
+async def test_unknown_root_prompts_bypass_orbit(monkeypatch, message):
+    stage = await make_stage()
+
+    async def known(self, event, value: str) -> None: ...
+
+    handler, _ = make_command_handler("name", known)
+    install_handlers(stage, monkeypatch, [handler])
+    event = FakeEvent([Plain(message)], message_text=message)
+
+    await stage.process(event)
+
+    assert event.stopped is False
+    assert event.sent == []
+    assert event.get_extra("activated_handlers") == []
+
+
+@pytest.mark.asyncio
+async def test_known_group_rejects_unknown_subcommand(monkeypatch):
+    stage = await make_stage()
+    group = CommandGroupFilter("plugin")
+
+    def group_handler(self) -> None: ...
+
+    group_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_group",
+        "group",
+        "test.plugin",
+        group_handler,
+        [group],
+    )
+
+    async def get(self, event, url: str) -> None: ...
+
+    child_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_get",
+        "get",
+        "test.plugin",
+        get,
+        [],
+        extras_configs={"sub_command": True},
+    )
+    child = CommandFilter("get", parent_command_names=["plugin"])
+    child.init_handler_md(child_md)
+    child_md.event_filters.append(child)
+    group.add_sub_command_filter(child)
+    install_handlers(stage, monkeypatch, [group_md, child_md])
+    event = FakeEvent([Plain("/plugin remove")], message_text="/plugin remove")
+
+    await stage.process(event)
+
+    assert event.stopped is True
+    assert "不存在子指令" in event.sent[0].get_plain_text()
+    assert "get" in event.sent[0].get_plain_text()
+
+
+@pytest.mark.asyncio
+async def test_catalog_snapshot_replacement_handles_rename_alias_and_disable():
+    stage = await make_stage()
+    group = CommandGroupFilter("plugin", alias={"p"})
+
+    def group_handler(self) -> None: ...
+
+    group_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_group_rebuild",
+        "group",
+        "test.plugin",
+        group_handler,
+        [group],
+    )
+
+    async def get(self, event, value: str = "") -> None: ...
+
+    child_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_get_rebuild",
+        "get",
+        "test.plugin",
+        get,
+        [],
+        extras_configs={"sub_command": True},
+    )
+    child = CommandFilter("get", alias={"install"}, parent_command_names=["plugin"])
+    child.init_handler_md(child_md)
+    child_md.event_filters.append(child)
+    group.add_sub_command_filter(child)
+
+    stage.command_catalog.replace(build_command_catalog([group_md, child_md]))
+    initial = stage._command_engine()
+    assert initial.resolve("p install value").invocation.argv == ("value",)
+
+    group.group_name = "extension"
+    group.alias = {"ext"}
+    child.command_name = "add"
+    child.alias = {"install"}
+    stage.command_catalog.replace(build_command_catalog([group_md, child_md]))
+    rebuilt = stage._command_engine()
+    assert rebuilt.resolve("ext add value").invocation.argv == ("value",)
+    assert (
+        rebuilt.resolve("plugin get value").resolution.kind
+        is waking.CommandResolutionKind.UNKNOWN_ROOT
+    )
+
+    stage.command_catalog.replace(build_command_catalog([group_md]))
+    disabled = stage._command_engine()
+    with pytest.raises(waking.CommandError) as caught:
+        disabled.resolve("extension add value")
+    assert caught.value.diagnostic.code.value == "resolution.unknown_subcommand"

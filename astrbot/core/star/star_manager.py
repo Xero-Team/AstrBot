@@ -22,6 +22,7 @@ from packaging.version import InvalidVersion, Version
 
 from astrbot import logger
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
+from astrbot.core.command import CommandCatalogStore, build_command_catalog
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
@@ -216,6 +217,8 @@ class PluginManager:
         """插件配置 Schema 文件名"""
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
+        self._command_catalogs: dict[str, CommandCatalogStore] = {}
+        self._command_catalog_scopes: dict[str, tuple[str, ...] | None] = {}
 
         self.failed_plugin_dict = {}
         """加载失败插件的信息，用于后续可能的热重载"""
@@ -228,6 +231,47 @@ class PluginManager:
                 self._watch_plugins_changes(),
                 name="plugin-watch",
             )
+
+    def get_command_catalog(
+        self,
+        config_id: str,
+        plugin_names: list[str] | None,
+    ) -> CommandCatalogStore:
+        """Return the lifecycle-owned catalog for one pipeline configuration."""
+        scope = tuple(sorted(plugin_names)) if plugin_names is not None else None
+        store = self._command_catalogs.setdefault(config_id, CommandCatalogStore())
+        if (
+            config_id not in self._command_catalog_scopes
+            or self._command_catalog_scopes[config_id] != scope
+        ):
+            self._command_catalog_scopes[config_id] = scope
+            self._replace_command_catalog(store, scope)
+        return store
+
+    def refresh_command_catalogs(self) -> None:
+        """Atomically rebuild every registered pipeline catalog snapshot."""
+        for config_id, store in self._command_catalogs.items():
+            self._replace_command_catalog(
+                store,
+                self._command_catalog_scopes.get(config_id),
+            )
+
+    @staticmethod
+    def _replace_command_catalog(
+        store: CommandCatalogStore,
+        plugin_names: tuple[str, ...] | None,
+    ) -> None:
+        handlers = star_handlers_registry.get_handlers_by_event_type(
+            EventType.AdapterMessageEvent,
+            plugins_name=list(plugin_names) if plugin_names is not None else None,
+        )
+        store.replace(build_command_catalog(handlers))
+
+    async def _refresh_command_surfaces(self) -> None:
+        self.refresh_command_catalogs()
+        platform_manager = getattr(self.context, "_platform_manager", None)
+        if platform_manager is not None:
+            await platform_manager.refresh_registered_commands()
 
     async def _watch_plugins_changes(self) -> None:
         """监视插件文件变化"""
@@ -1114,7 +1158,7 @@ class PluginManager:
             inactivated_llm_tools,
             alter_cmd,
         ) = await self._load_preferences()
-        return await self._load_plugin_modules(
+        result = await self._load_plugin_modules(
             plugin_modules,
             inactivated_plugins,
             inactivated_llm_tools,
@@ -1123,6 +1167,8 @@ class PluginManager:
             specified_dir_name=specified_dir_name,
             ignore_version_check=ignore_version_check,
         )
+        await self._refresh_command_surfaces()
+        return result
 
     async def _load_plugin_modules(
         self,
@@ -1618,6 +1664,7 @@ class PluginManager:
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
+            await self._refresh_command_surfaces()
 
     async def uninstall_failed_plugin(
         self,
@@ -1810,6 +1857,7 @@ class PluginManager:
             )
 
             plugin.activated = False
+            await self._refresh_command_surfaces()
 
     async def deactivate_plugin_extension(
         self,

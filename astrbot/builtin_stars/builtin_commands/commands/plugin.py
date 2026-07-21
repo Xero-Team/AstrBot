@@ -1,3 +1,5 @@
+from typing import Protocol, cast
+
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -6,11 +8,19 @@ from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 
 
+class _PluginManager(Protocol):
+    async def turn_off_plugin(self, plugin_name: str) -> None: ...
+
+    async def turn_on_plugin(self, plugin_name: str) -> None: ...
+
+    async def install_plugin(self, repo_url: str) -> None: ...
+
+
 class PluginCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def plugin_ls(self, event: AstrMessageEvent) -> None:
+    async def list_plugins(self, event: AstrMessageEvent) -> None:
         """List loaded plugins."""
         parts = ["Loaded plugins:\n"]
         for plugin in self.context.get_all_stars():
@@ -25,64 +35,58 @@ class PluginCommands:
             plugin_list_info = "".join(parts)
 
         plugin_list_info += (
-            "\nUse /plugin help <plugin> to inspect commands.\n"
-            "Use /plugin on/off <plugin> to enable or disable a plugin."
+            "\nUse /plugin show <plugin> to inspect commands.\n"
+            "Use /plugin enable <plugin> or /plugin disable <plugin> to change its state."
         )
         event.set_result(
             MessageEventResult().message(plugin_list_info).use_t2i(False),
         )
 
-    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
+    async def disable(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Disable a plugin."""
         if self.context.demo_mode:
             event.set_result(
                 MessageEventResult().message("Cannot disable plugins in demo mode."),
             )
             return
-        if not plugin_name:
+        star_manager = cast(_PluginManager | None, self.context._star_manager)
+        if star_manager is None:
             event.set_result(
-                MessageEventResult().message("Usage: /plugin off <plugin>."),
+                MessageEventResult().message("Plugin manager is not available."),
             )
             return
-        await self.context._star_manager.turn_off_plugin(plugin_name)  # type: ignore[attr-defined]
+        await star_manager.turn_off_plugin(plugin_name)
         event.set_result(
             MessageEventResult().message(f"✅ Plugin `{plugin_name}` disabled."),
         )
 
-    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
+    async def enable(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Enable a plugin."""
         if self.context.demo_mode:
             event.set_result(
                 MessageEventResult().message("Cannot enable plugins in demo mode."),
             )
             return
-        if not plugin_name:
+        star_manager = cast(_PluginManager | None, self.context._star_manager)
+        if star_manager is None:
             event.set_result(
-                MessageEventResult().message("Usage: /plugin on <plugin>."),
+                MessageEventResult().message("Plugin manager is not available."),
             )
             return
-        await self.context._star_manager.turn_on_plugin(plugin_name)  # type: ignore[attr-defined]
+        await star_manager.turn_on_plugin(plugin_name)
         event.set_result(
             MessageEventResult().message(f"✅ Plugin `{plugin_name}` enabled."),
         )
 
-    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = "") -> None:
+    async def install(self, event: AstrMessageEvent, plugin_repo: str) -> None:
         """Install a plugin from a repo URL."""
         if self.context.demo_mode:
             event.set_result(
                 MessageEventResult().message("Cannot install plugins in demo mode."),
             )
             return
-        if not plugin_repo:
-            event.set_result(
-                MessageEventResult().message(
-                    "Usage: /plugin get <plugin repository URL>.",
-                ),
-            )
-            return
-
         logger.info("Preparing to install plugin from %s", plugin_repo)
-        star_mgr = self.context._star_manager
+        star_mgr = cast(_PluginManager | None, self.context._star_manager)
         if star_mgr is None:
             event.set_result(
                 MessageEventResult().message("Plugin manager is not available."),
@@ -102,18 +106,12 @@ class PluginCommands:
             MessageEventResult().message("✅ Plugin installed successfully."),
         )
 
-    async def plugin_help(
+    async def show(
         self,
         event: AstrMessageEvent,
-        plugin_name: str = "",
+        plugin_name: str,
     ) -> None:
         """Show plugin metadata and commands."""
-        if not plugin_name:
-            event.set_result(
-                MessageEventResult().message("Usage: /plugin help <plugin>."),
-            )
-            return
-
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             event.set_result(MessageEventResult().message("Plugin not found."))

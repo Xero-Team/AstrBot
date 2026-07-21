@@ -1,6 +1,5 @@
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.utils.command_parser import tokenize_command_args
 
 from . import HandlerFilter
 from .command import CommandFilter
@@ -29,6 +28,7 @@ class CommandGroupFilter(HandlerFilter):
         self,
         sub_command_filter: CommandFilter | CommandGroupFilter,
     ) -> None:
+        sub_command_filter.parent_group = self
         self.sub_command_filters.append(sub_command_filter)
 
     def add_custom_filter(self, custom_filter: CustomFilter) -> None:
@@ -51,7 +51,7 @@ class CommandGroupFilter(HandlerFilter):
 
         新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。
         """
-        if self._cmpl_cmd_names is not None:
+        if self.parent_group is None and self._cmpl_cmd_names is not None:
             return self._cmpl_cmd_names
 
         parent_cmd_names = (
@@ -60,14 +60,14 @@ class CommandGroupFilter(HandlerFilter):
 
         if not parent_cmd_names:
             # 根节点
-            return [self.group_name] + list(self.alias)
+            self._cmpl_cmd_names = [self.group_name, *sorted(self.alias)]
+            return self._cmpl_cmd_names
 
         result = []
-        candidates = [self.group_name] + list(self.alias)
+        candidates = [self.group_name, *sorted(self.alias)]
         for parent_cmd_name in parent_cmd_names:
             for candidate in candidates:
                 result.append(parent_cmd_name + " " + candidate)
-        self._cmpl_cmd_names = result
         return result
 
     # 以树的形式打印出来
@@ -118,38 +118,5 @@ class CommandGroupFilter(HandlerFilter):
                 return False
         return True
 
-    def startswith(self, message_str: str) -> bool:
-        message_tokens = tokenize_command_args(message_str.strip())
-        for full_cmd in self.get_complete_command_names():
-            command_tokens = full_cmd.split(" ")
-            if message_tokens[: len(command_tokens)] == command_tokens:
-                return True
-        return False
-
-    def equals(self, message_str: str) -> bool:
-        message_tokens = tokenize_command_args(message_str.strip())
-        for full_cmd in self.get_complete_command_names():
-            if message_tokens == full_cmd.split(" "):
-                return True
-        return False
-
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
-        if not event.is_at_or_wake_command:
-            return False
-
-        # 判断当前指令组的自定义过滤器
-        if not self.custom_filter_ok(event, cfg):
-            return False
-
-        message_str = event.message_str.strip()
-        if self.equals(message_str):
-            tree = (
-                self.group_name
-                + "\n"
-                + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
-            )
-            raise ValueError(
-                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree,
-            )
-
-        return self.startswith(message_str)
+        return False

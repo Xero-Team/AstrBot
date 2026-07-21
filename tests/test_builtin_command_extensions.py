@@ -4,13 +4,23 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.api.event.filter import option
+from astrbot.builtin_stars.builtin_commands.commands.admin import AdminCommands
+from astrbot.builtin_stars.builtin_commands.commands.chat import ChatCommands
 from astrbot.builtin_stars.builtin_commands.commands.help import HelpCommand
-from astrbot.builtin_stars.builtin_commands.commands.llm import LLMCommands
 from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaCommands
 from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
+from astrbot.builtin_stars.builtin_commands.main import Main
+from astrbot.core.command import (
+    CommandEngine,
+    CommandError,
+    CommandErrorCode,
+    build_command_catalog,
+)
+from astrbot.core.command.schema import compile_command_schema
 from astrbot.core.provider.entities import ProviderType
-from astrbot.core.star.filter.command import CommandFilter, option
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import StarMetadata, star_map
 from astrbot.core.star.star_handler import (
@@ -74,6 +84,88 @@ class DummyEvent:
 
 def _plain_text(result) -> str:
     return result.chain[0].text
+
+
+def test_all_builtin_extension_commands_use_native_command_schemas():
+    expected_handlers = {
+        "admin_list",
+        "delete",
+        "deop",
+        "groupnew",
+        "help",
+        "history",
+        "chat_disable",
+        "chat_enable",
+        "chat_status",
+        "model_list",
+        "model_set",
+        "name",
+        "new_conv",
+        "op",
+        "persona_list",
+        "persona_set",
+        "persona_status",
+        "persona_unset",
+        "persona_view",
+        "plugin_get",
+        "plugin_help",
+        "plugin_ls",
+        "plugin_off",
+        "plugin_on",
+        "provider_list",
+        "provider_llm",
+        "provider_stt",
+        "provider_tts",
+        "rename",
+        "reset",
+        "set_variable",
+        "sid",
+        "stats",
+        "stop",
+        "switch",
+        "unset_variable",
+    }
+    assert expected_handlers <= vars(Main).keys()
+
+    required_params = {
+        "deop": ("user_id",),
+        "groupnew": ("session_id",),
+        "model_set": ("model_or_index",),
+        "op": ("user_id",),
+        "persona_set": ("persona_id",),
+        "persona_view": ("persona_id",),
+        "plugin_get": ("repository_url",),
+        "plugin_help": ("plugin_name",),
+        "plugin_off": ("plugin_name",),
+        "plugin_on": ("plugin_name",),
+        "provider_llm": ("index",),
+        "provider_stt": ("index",),
+        "provider_tts": ("index",),
+        "rename": ("title",),
+        "set_variable": ("key", "value"),
+        "switch": ("index",),
+        "unset_variable": ("key",),
+    }
+    for handler_name, names in required_params.items():
+        params = compile_command_schema(getattr(Main, handler_name)).params
+        assert tuple(param.name for param in params) == names
+    assert all(param.is_required for param in params)
+
+
+@pytest.mark.asyncio
+async def test_admin_list_reports_configured_ids_and_empty_state():
+    config = {"admins_id": ["42", 7]}
+    context = SimpleNamespace(get_config=lambda **_kwargs: config)
+    command = AdminCommands(context)
+
+    event = DummyEvent(message_str="admin list")
+    await command.list_admins(event)
+    assert _plain_text(event.result) == "✅ Administrator IDs:\n- 42\n- 7"
+
+    config["admins_id"] = []
+    empty_event = DummyEvent(message_str="admin list")
+    await command.list_admins(empty_event)
+    assert _plain_text(empty_event.result) == "✅ No administrator IDs are configured."
 
 
 @pytest.mark.asyncio
@@ -375,7 +467,7 @@ async def test_help_command_uses_file_token_for_local_image_when_callback_is_ava
 
 
 @pytest.mark.asyncio
-async def test_plugin_help_lists_command_signatures_and_aliases():
+async def test_plugin_show_lists_command_signatures_and_aliases():
     original_handlers = list(star_handlers_registry)
     original_star_map = dict(star_map)
 
@@ -435,9 +527,9 @@ async def test_plugin_help_lists_command_signatures_and_aliases():
             )
         )
         command = PluginCommands(context)
-        event = DummyEvent(message_str="plugin help demo")
+        event = DummyEvent(message_str="plugin show demo")
 
-        await command.plugin_help(event, "demo")
+        await command.show(event, "demo")
 
         text = _plain_text(event.result)
         assert (
@@ -455,7 +547,7 @@ async def test_plugin_help_lists_command_signatures_and_aliases():
 
 
 @pytest.mark.asyncio
-async def test_llm_command_toggles_session_service_status(monkeypatch):
+async def test_chat_commands_report_and_set_session_service_status(monkeypatch):
     calls: list[tuple[str, bool]] = []
 
     async def fake_is_enabled(_self, umo: str) -> bool:
@@ -466,20 +558,30 @@ async def test_llm_command_toggles_session_service_status(monkeypatch):
         calls.append((umo, enabled))
 
     monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.llm.SessionServiceManager.is_llm_enabled_for_session",
+        "astrbot.builtin_stars.builtin_commands.commands.chat.SessionServiceManager.is_llm_enabled_for_session",
         fake_is_enabled,
     )
     monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.llm.SessionServiceManager.set_llm_status_for_session",
+        "astrbot.builtin_stars.builtin_commands.commands.chat.SessionServiceManager.set_llm_status_for_session",
         fake_set_status,
     )
 
-    command = LLMCommands(SimpleNamespace(preferences=SimpleNamespace()))
-    event = DummyEvent(message_str="llm")
-    await command.llm(event)
+    command = ChatCommands(SimpleNamespace(preferences=SimpleNamespace()))
+    status_event = DummyEvent(message_str="chat status")
+    await command.status(status_event)
+    assert "enabled" in _plain_text(status_event.result)
 
-    assert calls == [("napcat:FriendMessage:42", False)]
-    assert "disabled" in _plain_text(event.result)
+    disable_event = DummyEvent(message_str="chat disable")
+    await command.set_enabled(disable_event, False)
+    enable_event = DummyEvent(message_str="chat enable")
+    await command.set_enabled(enable_event, True)
+
+    assert calls == [
+        ("napcat:FriendMessage:42", False),
+        ("napcat:FriendMessage:42", True),
+    ]
+    assert "disabled" in _plain_text(disable_event.result)
+    assert "enabled" in _plain_text(enable_event.result)
 
 
 @pytest.mark.asyncio
@@ -528,11 +630,145 @@ async def test_persona_command_switches_current_conversation_persona():
     )
 
     command = PersonaCommands(context)
-    event = DummyEvent(message_str="persona assistant")
-    await command.persona(event, "assistant")
+    event = DummyEvent(message_str="persona set assistant")
+    await command.set_persona(event, "assistant")
 
     assert updates == [("napcat:FriendMessage:42", "assistant")]
     assert "Persona updated" in _plain_text(event.result)
+
+
+def test_persona_operations_are_registered_as_native_subcommands():
+    persona_group = Main.persona.parent_group
+    subcommands = {
+        filter_ref.command_name: filter_ref
+        for filter_ref in persona_group.sub_command_filters
+        if isinstance(filter_ref, CommandFilter)
+    }
+
+    assert persona_group.group_name == "persona"
+    assert set(subcommands) == {"list", "set", "show", "status", "unset"}
+    assert subcommands["status"].alias == set()
+    assert subcommands["set"].handler_params[0].is_greedy is True
+    assert subcommands["set"].handler_params[0].is_required is True
+    assert subcommands["show"].handler_params[0].is_required is True
+
+
+def test_provider_operations_are_registered_as_native_subcommands():
+    provider_group = Main.provider.parent_group
+    root_subcommands = {
+        filter_ref.command_name: filter_ref
+        for filter_ref in provider_group.sub_command_filters
+        if isinstance(filter_ref, CommandFilter)
+    }
+    set_group = next(
+        filter_ref
+        for filter_ref in provider_group.sub_command_filters
+        if isinstance(filter_ref, CommandGroupFilter) and filter_ref.group_name == "set"
+    )
+    set_subcommands = {
+        filter_ref.command_name: filter_ref
+        for filter_ref in set_group.sub_command_filters
+        if isinstance(filter_ref, CommandFilter)
+    }
+
+    assert provider_group.group_name == "provider"
+    assert set(root_subcommands) == {"list"}
+    assert set(set_subcommands) == {"llm", "stt", "tts"}
+    for name in ("llm", "stt", "tts"):
+        assert set_subcommands[name].handler_params[0].value_type is int
+        assert set_subcommands[name].handler_params[0].is_required is True
+
+
+def test_model_operations_are_registered_as_native_subcommands():
+    model_group = Main.model.parent_group
+    subcommands = {
+        filter_ref.command_name: filter_ref
+        for filter_ref in model_group.sub_command_filters
+        if isinstance(filter_ref, CommandFilter)
+    }
+
+    assert model_group.group_name == "model"
+    assert set(subcommands) == {"list", "set"}
+    assert subcommands["set"].handler_params[0].is_greedy is True
+    assert subcommands["set"].handler_params[0].is_required is True
+
+
+def test_builtin_command_names_follow_grouped_cli_conventions():
+    def command_names(group: CommandGroupFilter) -> set[str]:
+        return {
+            filter_ref.command_name
+            for filter_ref in group.sub_command_filters
+            if isinstance(filter_ref, CommandFilter)
+        }
+
+    expected_groups = {
+        "session": {"info", "name"},
+        "conversation": {
+            "create",
+            "create-for",
+            "delete",
+            "history",
+            "list",
+            "rename",
+            "reset",
+            "stats",
+            "switch",
+        },
+        "task": {"stop"},
+        "model": {"list", "set"},
+        "variable": {"set", "unset"},
+        "chat": {"disable", "enable", "status"},
+        "admin": {"grant", "list", "revoke"},
+        "persona": {"list", "set", "show", "status", "unset"},
+        "plugin": {"disable", "enable", "install", "list", "show"},
+    }
+    for attribute, expected in expected_groups.items():
+        group = getattr(Main, attribute).parent_group
+        assert group.group_name == attribute
+        assert command_names(group) == expected
+
+    history_param = compile_command_schema(Main.history).params[0]
+    list_param = compile_command_schema(Main.convs).params[0]
+    assert history_param.option.names == ("--page", "-p")
+    assert list_param.option.names == ("--page", "-p")
+    assert history_param.default == 1
+    assert list_param.default == 1
+
+
+def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
+    handlers = []
+    seen_groups: set[int] = set()
+    stack = [
+        Main.plugin.parent_group,
+        Main.provider.parent_group,
+        Main.conversation.parent_group,
+    ]
+    while stack:
+        group = stack.pop()
+        if id(group) in seen_groups:
+            continue
+        seen_groups.add(id(group))
+        handlers.append(SimpleNamespace(event_filters=[group]))
+        for child in group.sub_command_filters:
+            if isinstance(child, CommandGroupFilter):
+                stack.append(child)
+            elif child.handler_md is not None:
+                handlers.append(child.handler_md)
+    engine = CommandEngine(build_command_catalog(handlers))
+
+    plugin = engine.resolve("plugin list")
+    provider = engine.resolve("provider set llm 2")
+    conversations = engine.resolve("conversation list --page 3")
+
+    assert plugin.resolution.command_path == ("plugin", "list")
+    assert provider.resolution.command_path == ("provider", "set", "llm")
+    assert conversations.resolution.command_path == ("conversation", "list")
+    entry = conversations.resolution.entries[0]
+    assert dict(engine.bind(entry, conversations).values) == {"page": 3}
+
+    with pytest.raises(CommandError) as legacy:
+        engine.resolve("plugin ls")
+    assert legacy.value.diagnostic.code is CommandErrorCode.UNKNOWN_SUBCOMMAND
 
 
 class DummyProvider:
@@ -557,7 +793,38 @@ class DummyProvider:
 
 
 @pytest.mark.asyncio
-async def test_provider_model_ls_lists_and_switches_by_index():
+async def test_provider_native_switch_methods_use_explicit_provider_types():
+    provider = DummyProvider()
+    calls = []
+
+    async def set_provider(**kwargs):
+        calls.append(kwargs)
+
+    context = SimpleNamespace(
+        provider_manager=SimpleNamespace(
+            register_provider_change_hook=lambda hook: None,
+            set_provider=set_provider,
+        ),
+        get_all_providers=lambda: [provider],
+        get_all_tts_providers=lambda: [provider],
+        get_all_stt_providers=lambda: [provider],
+    )
+    command = ProviderCommands(context)
+
+    await command.set_llm_provider(DummyEvent(message_str="provider set llm 1"), 1)
+    await command.set_tts_provider(DummyEvent(message_str="provider set tts 1"), 1)
+    await command.set_stt_provider(DummyEvent(message_str="provider set stt 1"), 1)
+
+    assert [call["provider_type"] for call in calls] == [
+        ProviderType.CHAT_COMPLETION,
+        ProviderType.TEXT_TO_SPEECH,
+        ProviderType.SPEECH_TO_TEXT,
+    ]
+    assert all(call["provider_id"] == "demo" for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_provider_model_commands_list_and_switch_by_index():
     provider = DummyProvider()
 
     async def set_provider(**kwargs):
@@ -581,11 +848,11 @@ async def test_provider_model_ls_lists_and_switches_by_index():
     command = ProviderCommands(context)
 
     list_event = DummyEvent(message_str="model")
-    await command.model_ls(list_event)
+    await command.list_models(list_event)
     assert "Available models" in _plain_text(list_event.result)
     assert "model-b" in _plain_text(list_event.result)
 
     switch_event = DummyEvent(message_str="model 2")
-    await command.model_ls(switch_event, 2)
+    await command.set_model(switch_event, "2")
     assert provider.model == "model-b"
     assert "Switched model successfully" in _plain_text(switch_event.result)

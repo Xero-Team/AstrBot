@@ -1,7 +1,6 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
-from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
 from .star import StarMetadata, star_map, star_registry
@@ -12,7 +11,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("astrbot")
 
 
-class Star(CommandParserMixin, PluginKVStoreMixin):
+class Star(PluginKVStoreMixin):
     """所有插件（Star）的父类，所有插件都应该继承于这个类"""
 
     author: str

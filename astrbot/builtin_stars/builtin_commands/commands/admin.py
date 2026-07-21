@@ -1,29 +1,25 @@
 from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageChain, MessageEventResult
-from astrbot.core.config.default import VERSION
-from astrbot.core.utils.io import download_dashboard
+from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 
 class AdminCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def update_dashboard(self, event: AstrMessageEvent) -> None:
-        """更新管理面板"""
-        await event.send(MessageChain().message("⏳ Updating dashboard..."))
-        await download_dashboard(version=f"v{VERSION}", latest=False)
-        await event.send(MessageChain().message("✅ Dashboard updated successfully."))
+    async def list_admins(self, event: AstrMessageEvent) -> None:
+        """List configured administrator IDs."""
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        admin_ids = [str(admin_id) for admin_id in cfg.get("admins_id", [])]
+        if not admin_ids:
+            message = "✅ No administrator IDs are configured."
+        else:
+            entries = "\n".join(f"- {admin_id}" for admin_id in admin_ids)
+            message = f"✅ Administrator IDs:\n{entries}"
 
-    async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
+        event.set_result(MessageEventResult().message(message).use_t2i(False))
+
+    async def grant(self, event: AstrMessageEvent, admin_id: str) -> None:
         """Grant admin permission."""
-        if not admin_id:
-            event.set_result(
-                MessageEventResult().message(
-                    "Usage: /op <id>. Use /sid to inspect the target user ID.",
-                ),
-            )
-            return
-
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         admin_ids = cfg.setdefault("admins_id", [])
         admin_id = str(admin_id)
@@ -35,16 +31,8 @@ class AdminCommands:
             MessageEventResult().message(f"✅ Added {admin_id} to admin IDs."),
         )
 
-    async def deop(self, event: AstrMessageEvent, admin_id: str = "") -> None:
+    async def revoke(self, event: AstrMessageEvent, admin_id: str) -> None:
         """Revoke admin permission."""
-        if not admin_id:
-            event.set_result(
-                MessageEventResult().message(
-                    "Usage: /deop <id>. Use /sid to inspect the target user ID.",
-                ),
-            )
-            return
-
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         admin_ids = cfg.setdefault("admins_id", [])
         admin_id = str(admin_id)

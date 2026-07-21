@@ -12,10 +12,12 @@ import pytest
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from astrbot.core.command import CommandEngine, CommandResolutionKind
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.dashboard_extension import (
     DashboardJsonAction,
 )
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import (
     EventType,
@@ -741,6 +743,8 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     class MockContext:
         def __init__(self):
             self.stars = []
+            self._platform_manager = MagicMock()
+            self._platform_manager.refresh_registered_commands = AsyncMock()
 
         def get_all_stars(self):
             return self.stars
@@ -771,6 +775,57 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     )
 
     return pm
+
+
+def test_plugin_manager_atomically_replaces_owned_command_catalog(
+    plugin_manager_pm: PluginManager,
+):
+    _clear_star_runtime_state()
+    module_path = "plugin.catalog_demo"
+    plugin = StarMetadata(
+        name="catalog_demo",
+        module_path=module_path,
+        activated=True,
+    )
+    star_manager_module.star_map[module_path] = plugin
+
+    async def handler(self, event, value: str) -> None: ...
+
+    metadata = StarHandlerMetadata(
+        event_type=EventType.AdapterMessageEvent,
+        handler_full_name="plugin.catalog_demo_handler",
+        handler_name="handler",
+        handler_module_path=module_path,
+        handler=handler,
+        event_filters=[],
+    )
+    command_filter = CommandFilter("demo")
+    command_filter.init_handler_md(metadata)
+    metadata.event_filters.append(command_filter)
+    star_manager_module.star_handlers_registry.append(metadata)
+
+    try:
+        store = plugin_manager_pm.get_command_catalog("default", None)
+        first_snapshot = store.snapshot
+        assert CommandEngine(first_snapshot).resolve("demo value").invocation.argv == (
+            "value",
+        )
+
+        command_filter.command_name = "renamed"
+        command_filter._cmpl_cmd_names = None
+        plugin_manager_pm.refresh_command_catalogs()
+
+        assert plugin_manager_pm.get_command_catalog("default", None) is store
+        assert store.snapshot is not first_snapshot
+        assert (
+            CommandEngine(store.snapshot).resolve("demo value").resolution.kind
+            is CommandResolutionKind.UNKNOWN_ROOT
+        )
+        assert CommandEngine(store.snapshot).resolve(
+            "renamed value"
+        ).invocation.argv == ("value",)
+    finally:
+        _clear_star_runtime_state()
 
 
 @pytest.fixture
@@ -1099,6 +1154,10 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
         assert preferences["inactivated_llm_tools"] == [plugin_tool.name]
         assert plugin.activated is False
         assert transition_order == ["drain", "terminate"]
+        cast(
+            Any,
+            plugin_manager_pm.context,
+        )._platform_manager.refresh_registered_commands.assert_awaited_once()
 
         await plugin_manager_pm.turn_on_plugin(plugin.root_dir_name)
 

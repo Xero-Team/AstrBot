@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from astrbot.builtin_stars.builtin_commands.commands.name import NameCommand
+from astrbot.builtin_stars.builtin_commands.commands.session import SessionCommands
 from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.umo_alias import (
@@ -59,11 +59,11 @@ async def test_umo_alias_upsert_updates_existing_record(temp_db):
 
 
 @pytest.mark.asyncio
-async def test_name_command_saves_group_alias_with_auto_name(temp_db):
+async def test_session_name_saves_group_alias_with_auto_name(temp_db):
     context = SimpleNamespace(get_db=lambda: temp_db)
     event = make_group_event()
 
-    await NameCommand(context).name(event, "Backend Room")
+    await SessionCommands(context).name(event, "Backend Room")
 
     alias = await temp_db.get_umo_alias("qq:GroupMessage:1000")
     assert alias is not None
@@ -79,7 +79,7 @@ async def test_name_command_saves_group_alias_with_auto_name(temp_db):
 
 
 @pytest.mark.asyncio
-async def test_name_command_without_alias_shows_current_names(temp_db):
+async def test_session_name_without_alias_shows_current_names(temp_db):
     await temp_db.upsert_umo_alias(
         umo="qq:GroupMessage:1000",
         creator_sender_id="sender-1",
@@ -89,13 +89,13 @@ async def test_name_command_without_alias_shows_current_names(temp_db):
     context = SimpleNamespace(get_db=lambda: temp_db)
     event = make_group_event()
 
-    await NameCommand(context).name(event, "")
+    await SessionCommands(context).name(event, "")
 
     result = event.set_result.call_args.args[0]
     assert result.use_t2i_ is False
     assert result.chain[0].text == "\n".join(
         [
-            "Usage: /name <name>",
+            "Usage: /session name <name>",
             "UMO: qq:GroupMessage:1000",
             "Auto name: Engineering Group",
             "Alias: Backend Room",
@@ -103,7 +103,7 @@ async def test_name_command_without_alias_shows_current_names(temp_db):
     )
 
 
-def test_name_command_requires_admin_permission():
+def test_session_name_requires_admin_permission():
     missing_package_attr = object()
     original_handlers = list(star_handlers_registry)
     original_module = sys.modules.get(BUILTIN_MAIN_MODULE)

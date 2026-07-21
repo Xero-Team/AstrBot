@@ -100,12 +100,28 @@ def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
 
 
 class PlatformManagerProtocol(Protocol):
-    create_event: Callable[[str, object], None]
-    invoke_action: Callable[..., Awaitable[dict[str, object]]]
-    send_to_session: Callable[
-        [MessageSession, MessageChain],
-        Awaitable[PlatformSendResult],
-    ]
+    def create_event(
+        self,
+        platform: str,
+        event_message: object,
+        *,
+        is_wake: bool = True,
+    ) -> None: ...
+
+    async def invoke_action(
+        self,
+        platform_id: str,
+        action_name: str,
+        **kwargs,
+    ) -> dict[str, object]: ...
+
+    async def refresh_registered_commands(self) -> None: ...
+
+    async def send_to_session(
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
+    ) -> PlatformSendResult: ...
 
 
 class Context:

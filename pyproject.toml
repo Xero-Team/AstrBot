@@ -88,6 +88,7 @@ dev = [
   "radon>=6.0.1",
   "ruff>=0.15.20",
   "yamllint>=1.38.0",
+  "hypothesis>=6.158.0",
 ]
 
 [project.scripts]

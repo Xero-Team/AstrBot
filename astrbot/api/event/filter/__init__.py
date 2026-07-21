@@ -1,4 +1,4 @@
-from astrbot.core.star.filter.command import option
+from astrbot.core.command.schema import GreedyStr, option
 from astrbot.core.star.filter.custom_filter import CustomFilter
 from astrbot.core.star.filter.event_message_type import (
     EventMessageType,
@@ -44,6 +44,7 @@ __all__ = [
     "CustomFilter",
     "EventMessageType",
     "EventMessageTypeFilter",
+    "GreedyStr",
     "PermissionType",
     "PermissionTypeFilter",
     "PlatformAdapterType",

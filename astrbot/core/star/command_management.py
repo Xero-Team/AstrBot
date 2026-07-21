@@ -48,8 +48,41 @@ class CommandDescriptor:
 
 async def sync_command_configs(db: BaseDatabase) -> None:
     """同步指令配置，清理过期配置。"""
-    descriptors = _collect_descriptors(include_sub_commands=False)
+    descriptors = _collect_descriptors(include_sub_commands=True)
     config_records = await db.get_command_configs()
+    descriptor_map = {desc.handler_full_name: desc for desc in descriptors}
+    migrated_records: list[CommandConfig] = []
+    for config in config_records:
+        descriptor = descriptor_map.get(config.handler_full_name)
+        desired_fragment = descriptor.raw_command_name if descriptor else None
+        desired_original = descriptor.original_command if descriptor else None
+        if (
+            descriptor is not None
+            and descriptor.module_path == "astrbot.builtin_stars.builtin_commands.main"
+            and config.resolution_strategy != "manual_rename"
+            and desired_fragment
+            and desired_original
+            and (
+                config.resolved_command != desired_fragment
+                or config.original_command != desired_original
+            )
+        ):
+            config = await db.upsert_command_config(
+                handler_full_name=config.handler_full_name,
+                plugin_name=descriptor.plugin_name or config.plugin_name,
+                module_path=descriptor.module_path,
+                original_command=desired_original,
+                resolved_command=desired_fragment,
+                enabled=config.enabled,
+                keep_original_alias=False,
+                conflict_key=desired_original,
+                resolution_strategy=config.resolution_strategy,
+                note=config.note,
+                extra_data=config.extra_data,
+                auto_managed=config.auto_managed,
+            )
+        migrated_records.append(config)
+    config_records = migrated_records
     config_map = _bind_configs_to_descriptors(descriptors, config_records)
     live_handlers = {desc.handler_full_name for desc in descriptors}
 
@@ -293,7 +326,13 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
             filter_ref, "_original_command_name", filter_ref.command_name
         )
         current_fragment = filter_ref.command_name
-        parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
+        parent_names = (
+            filter_ref.parent_group.get_complete_command_names()
+            if filter_ref.parent_group is not None
+            else filter_ref.parent_command_names
+        )
+        parent_signature = (parent_names or [""])[0].strip()
+        original_parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
         # 如果是子指令，尝试找到父指令组的 handler_full_name
         if is_sub_command and parent_signature:
             parent_group_handler = _find_parent_group_handler(
@@ -305,8 +344,12 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         )
         current_fragment = filter_ref.group_name
         parent_signature = _resolve_group_parent_signature(filter_ref)
+        original_parent_signature = _resolve_group_parent_signature(
+            filter_ref,
+            original=True,
+        )
 
-    original_command = _compose_command(parent_signature, raw_fragment)
+    original_command = _compose_command(original_parent_signature, raw_fragment)
     effective_command = _compose_command(parent_signature, current_fragment)
 
     # 确定 command_type
@@ -376,11 +419,19 @@ def _determine_permission(handler: StarHandlerMetadata) -> str:
     return "everyone"
 
 
-def _resolve_group_parent_signature(group_filter: CommandGroupFilter) -> str:
+def _resolve_group_parent_signature(
+    group_filter: CommandGroupFilter,
+    *,
+    original: bool = False,
+) -> str:
     signatures: list[str] = []
     parent = group_filter.parent_group
     while parent:
-        signatures.append(getattr(parent, "_original_group_name", parent.group_name))
+        signatures.append(
+            getattr(parent, "_original_group_name", parent.group_name)
+            if original
+            else parent.group_name
+        )
         parent = parent.parent_group
     return " ".join(reversed(signatures)).strip()
 
@@ -495,7 +546,15 @@ def _bind_configs_to_descriptors(
     config_map = {cfg.handler_full_name: cfg for cfg in config_records}
     for desc in descriptors:
         if cfg := config_map.get(desc.handler_full_name):
-            _bind_descriptor_with_config(desc, cfg)
+            _apply_config_to_runtime(desc, cfg)
+
+    for index, desc in enumerate(descriptors):
+        rebuilt = _build_descriptor(desc.handler)
+        if rebuilt is None:
+            continue
+        if cfg := config_map.get(rebuilt.handler_full_name):
+            _apply_config_to_descriptor(rebuilt, cfg)
+        descriptors[index] = rebuilt
     return config_map
 
 

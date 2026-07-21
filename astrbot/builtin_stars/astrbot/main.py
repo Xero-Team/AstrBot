@@ -169,8 +169,8 @@ class Main(star.Star):
                 "provider_ltm_settings"
             ]["group_icl_enable"]
             if group_icl_enable:
-                # Skip recording if a command handler matched (e.g. /reset,
-                # /help, /new). Slash commands are bot instructions, not group
+                # Skip recording if a command handler matched (e.g. /conversation reset,
+                # /help, /conversation create). Slash commands are bot instructions, not group
                 # chat context that should be injected into future LLM requests.
                 if not event.get_extra("handlers_parsed_params", {}):
                     try:
@@ -190,7 +190,7 @@ class Main(star.Star):
 
                     if not session_curr_cid:
                         logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /new 创建一个会话。",
+                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /conversation create 创建一个会话。",
                         )
                         return
 

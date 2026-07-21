@@ -17,7 +17,7 @@ from astrbot.core.db.po import ProviderStat
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.active_event_registry import active_event_registry
 
-from .utils.rst_scene import RstScene
+from .utils.reset_scene import ResetScene
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
@@ -132,7 +132,7 @@ class ConversationCommands:
         is_unique_session = cfg["platform_settings"]["unique_session"]
         is_group = bool(message.get_group_id())
 
-        scene = RstScene.get_scene(is_group, is_unique_session)
+        scene = ResetScene.get_scene(is_group, is_unique_session)
 
         alter_cmd_cfg = await self.context.preferences.get_async(
             "global", "global", "alter_cmd", {}
@@ -180,7 +180,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "😕 You are not in a conversation. Use /new to create one.",
+                    "😕 You are not in a conversation. Use /conversation create to create one.",
                 ),
             )
             return
@@ -225,7 +225,7 @@ class ConversationCommands:
             MessageEventResult().message("✅ No running tasks in the current session.")
         )
 
-    async def new_conv(self, message: AstrMessageEvent) -> None:
+    async def create(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
@@ -265,7 +265,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "❌ You are not in a conversation. Use /new to create one."
+                    "❌ You are not in a conversation. Use /conversation create to create one."
                 ),
             )
             return
@@ -316,7 +316,7 @@ class ConversationCommands:
 
         message.set_result(MessageEventResult().message(ret))
 
-    async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
+    async def history(self, message: AstrMessageEvent, page: int = 1) -> None:
         """Show conversation history."""
         size_per_page = 6
         umo = message.unified_msg_origin
@@ -347,11 +347,15 @@ class ConversationCommands:
             "Conversation history:\n"
             f"{history or 'No history yet.'}\n\n"
             f"Page {page} / {total_pages}\n"
-            "*Use /history <page> to jump to another page."
+            "*Use /conversation history --page <page> to jump to another page."
         )
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
-    async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
+    async def list_conversations(
+        self,
+        message: AstrMessageEvent,
+        page: int = 1,
+    ) -> None:
         """Show conversation list."""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
@@ -437,22 +441,16 @@ class ConversationCommands:
             else "\nSession isolation: group"
         )
         ret += f"\nPage {page} / {total_pages}"
-        ret += "\n*Use /ls <page> to jump to another page."
+        ret += "\n*Use /conversation list --page <page> to jump to another page."
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
-    async def groupnew_conv(self, message: AstrMessageEvent, sid: str = "") -> None:
+    async def create_for(self, message: AstrMessageEvent, session_id: str) -> None:
         """Create a new conversation for a target group session."""
-        if not sid:
-            message.set_result(
-                MessageEventResult().message("Usage: /groupnew <group_id>."),
-            )
-            return
-
         session = str(
             MessageSession(
                 platform_name=message.get_platform_id(),
                 message_type=MessageType.GROUP_MESSAGE,
-                session_id=str(sid),
+                session_id=str(session_id),
             ),
         )
         current_persona = await self._get_current_persona_id(session)
@@ -467,27 +465,19 @@ class ConversationCommands:
             ),
         )
 
-    async def switch_conv(
+    async def switch(
         self,
         message: AstrMessageEvent,
-        index: int | None = None,
+        index: int,
     ) -> None:
-        """Switch to a conversation listed by /ls."""
-        if not isinstance(index, int):
-            message.set_result(
-                MessageEventResult().message(
-                    "Usage: /switch <index>. Use /ls to inspect conversation indexes.",
-                ),
-            )
-            return
-
+        """Switch to a conversation returned by /conversation list."""
         conversations = await self.context.conversation_manager.get_conversations(
             message.unified_msg_origin,
         )
         if index < 1 or index > len(conversations):
             message.set_result(
                 MessageEventResult().message(
-                    "❌ Invalid conversation index. Use /ls to inspect available conversations.",
+                    "❌ Invalid conversation index. Use /conversation list to inspect available conversations.",
                 ),
             )
             return
@@ -504,12 +494,12 @@ class ConversationCommands:
             ),
         )
 
-    async def rename_conv(self, message: AstrMessageEvent, title: str) -> None:
+    async def rename(self, message: AstrMessageEvent, title: str) -> None:
         """Rename the current conversation."""
         new_name = title.strip()
         if not new_name:
             message.set_result(
-                MessageEventResult().message("Usage: /rename <new title>."),
+                MessageEventResult().message("The conversation title cannot be empty."),
             )
             return
 
@@ -521,7 +511,7 @@ class ConversationCommands:
             MessageEventResult().message("✅ Conversation renamed successfully."),
         )
 
-    async def del_conv(self, message: AstrMessageEvent) -> None:
+    async def delete(self, message: AstrMessageEvent) -> None:
         """Delete the current conversation."""
         umo = message.unified_msg_origin
         cfg = self.context.get_config(umo=umo)
@@ -554,7 +544,7 @@ class ConversationCommands:
         if not current_cid:
             message.set_result(
                 MessageEventResult().message(
-                    "There is no active conversation. Use /new to create one or /switch to enter another conversation.",
+                    "There is no active conversation. Use /conversation create to create one or /conversation switch to enter another conversation.",
                 ),
             )
             return
@@ -567,6 +557,6 @@ class ConversationCommands:
         message.set_extra("_clean_group_context_session", True)
         message.set_result(
             MessageEventResult().message(
-                "✅ Deleted the current conversation. Use /new to create one or /switch to enter another conversation.",
+                "✅ Deleted the current conversation. Use /conversation create to create one or /conversation switch to enter another conversation.",
             ),
         )

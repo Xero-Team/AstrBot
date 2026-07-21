@@ -68,12 +68,12 @@ def main() -> None:
             failures.append(check.name)
 
     dashboard_pnpm = version(("corepack", "pnpm", "--version"), root / "dashboard")
-    pnpm_ok = dashboard_pnpm is not None and dashboard_pnpm.startswith("11.13.")
+    pnpm_ok = dashboard_pnpm is not None and dashboard_pnpm.startswith("11.15.")
     print(
         f"{'pnpm':12} {'ok' if pnpm_ok else 'missing/unexpected':18} {dashboard_pnpm or ''}"
     )
     if not pnpm_ok:
-        failures.append("pnpm 11.13")
+        failures.append("pnpm 11.15")
 
     if failures:
         print(

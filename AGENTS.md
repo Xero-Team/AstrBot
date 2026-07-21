@@ -28,7 +28,7 @@ The reproducible development/CI baseline is:
 | Python              | 3.14.6 in `.python-version`, CI, and `Dockerfile`; project floor is `>=3.14` |
 | Node.js             | 24.15.0 in CI and `Dockerfile`                                               |
 | root npm            | 12.0.1 in the root `package.json` `packageManager` field                     |
-| Dashboard/docs pnpm | 11.13.0 in their `package.json` `packageManager` fields                      |
+| Dashboard/docs pnpm | 11.15.1 in their `package.json` `packageManager` fields                      |
 | Python manager      | `uv` (required, currently not patch-pinned)                                  |
 
 Use Corepack for local npm/pnpm commands. Workflows may instead use a
@@ -44,7 +44,7 @@ make bootstrap
 ```
 
 `make doctor` is strict. It checks Python 3.14.x, `uv`, Node 24.x, Corepack, and
-pnpm 11.13.x; on POSIX it also requires `shellcheck`, `shfmt`, and `hadolint`.
+pnpm 11.15.x; on POSIX it also requires `shellcheck`, `shfmt`, and `hadolint`.
 Docker is optional. Windows additionally needs GNU Make and PowerShell 7, while
 `check-ps` needs PSScriptAnalyzer; `doctor` does not currently validate those
 three items. `make bootstrap` installs the locked Python development

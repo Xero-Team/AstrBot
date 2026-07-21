@@ -3,9 +3,11 @@ FROM node:24.15.0-alpine AS builder
 
 WORKDIR /src
 
-RUN npm install --global corepack \
+# hadolint ignore=DL3018
+RUN apk add --no-cache git \
+    && npm install --global npm@12.0.1 corepack \
     && corepack enable \
-    && corepack prepare pnpm@11.13.0 --activate
+    && corepack prepare pnpm@11.15.1 --activate
 
 COPY docs/package.json docs/pnpm-lock.yaml ./
 

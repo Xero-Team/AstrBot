@@ -172,9 +172,9 @@ RUN touch "${BASH_ENV}" \
     && source "${BASH_ENV}" \
     && nvm install 24.15.0 \
     && nvm alias default 24.15.0 \
-    && npm install -g corepack \
+    && npm install -g npm@12.0.1 corepack \
     && corepack enable \
-    && corepack prepare pnpm@11.13.0 --activate \
+    && corepack prepare pnpm@11.15.1 --activate \
     && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
     && for tool in node npm npx corepack pnpm; do \
         if [[ -x "${current_node_dir}/bin/${tool}" ]]; then \

@@ -60,9 +60,6 @@ from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
 from astrbot.dashboard.services.update_service import (
     UpdateService,
-    call_download_dashboard,
-    call_extract_dashboard,
-    call_get_dashboard_version,
     call_pip_install,
 )
 
@@ -156,9 +153,6 @@ def create_dashboard_asgi_app(
         updates=UpdateService(
             core_lifecycle.astrbot_updator,
             core_lifecycle,
-            download_dashboard_func=call_download_dashboard,
-            extract_dashboard_func=call_extract_dashboard,
-            get_dashboard_version_func=call_get_dashboard_version,
             pip_install_func=lambda *args, **kwargs: call_pip_install(
                 dashboard_core.services.pip_installer, *args, **kwargs
             ),

@@ -233,7 +233,6 @@ export interface TotpSetupData {
 
 export interface UpdateCheckData {
   has_new_version: boolean;
-  dashboard_has_new_version: boolean;
   [key: string]: unknown;
 }
 
@@ -1187,18 +1186,11 @@ export const updatesApi = {
   check() {
     return typed<UpdateCheckData>(openApiV1.checkUpdate());
   },
-  releases(type?: 'core' | 'dashboard') {
-    return typed<ReleaseItemData[]>(
-      openApiV1.listReleases({
-        query: type ? { type } : undefined,
-      }),
-    );
+  releases() {
+    return typed<ReleaseItemData[]>(openApiV1.listReleases());
   },
   core(payload?: UpdateRequest) {
     return typed<OpenConfig>(openApiV1.updateCore({ body: payload }));
-  },
-  dashboard(payload?: UpdateRequest) {
-    return typed<OpenConfig>(openApiV1.updateDashboard({ body: payload }));
   },
   progress(taskId: string) {
     return typed<UpdateProgressData>(

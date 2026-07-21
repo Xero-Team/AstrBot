@@ -73,7 +73,7 @@
     },
     "allSessions": "All sessions",
     "configMissing": "Config file not found",
-    "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /sid to get the session ID. If none match, the default config file is used.",
+    "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /session info to get the session ID. If none match, the default config file is used.",
     "warningContinue": "Ignore warning and continue",
     "warningEditAgain": "Edit again",
     "configDrawerTitle": "Config File Management",

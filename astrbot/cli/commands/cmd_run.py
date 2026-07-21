@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 from filelock import FileLock, Timeout
 
-from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
+from ..utils import check_astrbot_root, get_astrbot_root
 
 DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
 
@@ -18,8 +18,6 @@ async def run_astrbot(astrbot_root: Path) -> None:
     from astrbot.core.initial_loader import InitialLoader
     from astrbot.core.log import LogBroker, LogManager
     from astrbot.core.runtime_services import create_runtime_services
-
-    await check_dashboard(astrbot_root / "data")
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)

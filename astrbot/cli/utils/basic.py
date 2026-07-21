@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import click
-
 
 def check_astrbot_root(path: str | Path) -> bool:
     """Check if the path is an AstrBot root directory"""
@@ -17,58 +15,3 @@ def check_astrbot_root(path: str | Path) -> bool:
 def get_astrbot_root() -> Path:
     """Get the AstrBot root directory path"""
     return Path.cwd()
-
-
-async def check_dashboard(astrbot_root: Path) -> None:
-    """Check if the dashboard is installed"""
-    from astrbot.core.config.default import VERSION
-    from astrbot.core.utils.io import download_dashboard, get_dashboard_version
-    from astrbot.utils.version_comparator import VersionComparator
-
-    try:
-        dashboard_version = await get_dashboard_version()
-        match dashboard_version:
-            case None:
-                click.echo("Dashboard is not installed")
-                if click.confirm(
-                    "Install dashboard?",
-                    default=True,
-                ):
-                    click.echo("Installing dashboard...")
-                    await download_dashboard(
-                        path="data/dashboard.zip",
-                        extract_path=str(astrbot_root),
-                        version=f"v{VERSION}",
-                        latest=False,
-                    )
-                    click.echo("Dashboard installed successfully")
-
-            case str():
-                if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
-                    click.echo("Dashboard is already up to date")
-                    return
-                try:
-                    version = dashboard_version.split("v")[1]
-                    click.echo(f"Dashboard version: {version}")
-                    await download_dashboard(
-                        path="data/dashboard.zip",
-                        extract_path=str(astrbot_root),
-                        version=f"v{VERSION}",
-                        latest=False,
-                    )
-                except Exception as e:
-                    click.echo(f"Failed to download dashboard: {e}")
-                    return
-    except FileNotFoundError:
-        click.echo("Initializing dashboard directory...")
-        try:
-            await download_dashboard(
-                path=str(astrbot_root / "dashboard.zip"),
-                extract_path=str(astrbot_root),
-                version=f"v{VERSION}",
-                latest=False,
-            )
-            click.echo("Dashboard initialized successfully")
-        except Exception as e:
-            click.echo(f"Failed to download dashboard: {e}")
-            return

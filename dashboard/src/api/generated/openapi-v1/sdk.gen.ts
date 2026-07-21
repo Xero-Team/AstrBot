@@ -501,8 +501,6 @@ import type {
   UpdateCoreResponses,
   UpdateCronJobData,
   UpdateCronJobResponses,
-  UpdateDashboardData,
-  UpdateDashboardResponses,
   UpdateKnowledgeBaseData,
   UpdateKnowledgeBaseResponses,
   UpdateMcpServerData,
@@ -5155,27 +5153,6 @@ export const updateCore = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/updates/core',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-/**
- * Update dashboard assets
- */
-export const updateDashboard = <ThrowOnError extends boolean = false>(
-  options?: Options<UpdateDashboardData, ThrowOnError>,
-): RequestResult<UpdateDashboardResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).post<
-    UpdateDashboardResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/dashboard',
     ...options,
     headers: {
       'Content-Type': 'application/json',

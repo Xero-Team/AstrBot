@@ -47,12 +47,10 @@ from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import (  # noqa: E402
-    download_dashboard,
     get_bundled_dashboard_dist_path,
     get_dashboard_dist_version,
     get_repo_dashboard_dist_path,
     is_dashboard_dist_compatible,
-    is_dashboard_version_compatible,
     remove_dir,
     should_use_bundled_dashboard_dist,
 )
@@ -146,61 +144,21 @@ async def check_dashboard_files(webui_dir: str | None = None):
                 )
                 return str(bundled_dist)
 
-        if is_dashboard_version_compatible(v, VERSION):
-            logger.warning(
-                "WebUI files are incomplete for v%s. Re-downloading WebUI.",
-                VERSION,
-            )
-        elif v is not None:
-            logger.warning(
-                "WebUI version mismatch: %s, expected v%s. Re-downloading WebUI.",
-                v,
-                VERSION,
-            )
-        else:
-            logger.warning(
-                "WebUI version file is missing. Re-downloading WebUI v%s.",
-                VERSION,
-            )
-
-        try:
-            await download_dashboard(
-                version=f"v{VERSION}",
-                latest=False,
-            )
-        except Exception as e:
-            logger.critical(f"下载管理面板文件失败: {e}。")
-            if (data_dist_path / "index.html").is_file():
-                logger.warning(
-                    "Falling back to existing data/dist WebUI %s even though core expects v%s. "
-                    "Some dashboard features may not work until the matching WebUI is available.",
-                    v or "unknown",
-                    VERSION,
-                )
-                return str(data_dist_path)
-            return None
-        logger.info("管理面板下载完成。")
-        return str(data_dist_path)
+        logger.warning(
+            "Ignoring incompatible data/dist WebUI %s; core requires v%s.",
+            v or "unknown",
+            VERSION,
+        )
 
     if is_dashboard_dist_compatible(bundled_dist, VERSION):
         logger.info("Using bundled WebUI %s.", get_dashboard_dist_version(bundled_dist))
         return str(bundled_dist)
 
-    logger.info(
-        "Downloading WebUI. If it fails, download dist.zip from https://github.com/AstrBotDevs/AstrBot/releases/latest and extract dist to data/.",
+    logger.critical(
+        "No compatible WebUI build is available. Build dashboard/dist from this "
+        "checkout and run scripts/sync_dashboard_dist.py, or pass --webui-dir.",
     )
-
-    try:
-        await download_dashboard(
-            version=f"v{VERSION}",
-            latest=False,
-        )
-    except Exception as e:
-        logger.critical(f"下载管理面板文件失败: {e}。")
-        return None
-
-    logger.info("管理面板下载完成。")
-    return str(data_dist_path)
+    return None
 
 
 async def main_async(webui_dir_arg: str | None) -> None:
@@ -210,7 +168,8 @@ async def main_async(webui_dir_arg: str | None) -> None:
     if webui_dir is None:
         logger.warning(
             "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请检查网络连接或手动指定 --webui-dir 参数。"
+            "请构建当前 checkout 的 dashboard/dist，运行 "
+            "scripts/sync_dashboard_dist.py，或手动指定 --webui-dir。"
         )
 
     services = create_runtime_services()

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from astrbot import logger
@@ -77,11 +77,10 @@ async def _run(operation) -> JSONResponse:
 
 @router.get("/updates/check")
 async def check_updates(
-    update_type: str | None = Query(default=None, alias="type"),
     _auth: AuthContext = Depends(require_system_scope),
     service: UpdateService = Depends(get_service),
 ):
-    return await _run(lambda: service.check_update(update_type))
+    return await _run(service.check_update)
 
 
 @router.get("/updates/releases")
@@ -108,14 +107,6 @@ async def update_core(
     service: UpdateService = Depends(get_service),
 ):
     return await _run(lambda: service.update_project(_model_dict(payload)))
-
-
-@router.post("/updates/dashboard")
-async def update_dashboard(
-    _auth: AuthContext = Depends(require_system_scope),
-    service: UpdateService = Depends(get_service),
-):
-    return await _run(service.update_dashboard)
 
 
 @router.post("/pip/install")

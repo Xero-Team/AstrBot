@@ -177,7 +177,7 @@ def test_version_info_comparisons():
 
 @pytest.mark.asyncio
 async def test_check_dashboard_files_not_exists(tmp_path):
-    """Tests dashboard download when files do not exist."""
+    """Tests startup disables WebUI when no local build exists."""
     data_dir = tmp_path / "data"
     bundled_dist = tmp_path / "bundled-dist"
 
@@ -190,17 +190,9 @@ async def test_check_dashboard_files_not_exists(tmp_path):
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
+                result = await check_dashboard_files()
 
-        from main import VERSION
-
-        assert result == str(data_dir / "dist")
-        mock_download.assert_called_once()
-        mock_download.assert_called_once_with(
-            version=f"v{VERSION}",
-            latest=False,
-        )
+    assert result is None
 
 
 @pytest.mark.asyncio
@@ -223,11 +215,9 @@ async def test_check_dashboard_files_uses_bundled_dist_without_download(tmp_path
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
+                result = await check_dashboard_files()
 
     assert result == str(bundled_dist)
-    mock_download.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -246,59 +236,18 @@ async def test_check_dashboard_files_exists_and_version_match(tmp_path):
             "main.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
         ):
-            with mock.patch("main.download_dashboard") as mock_download:
-                result = await check_dashboard_files()
-                assert result == str(data_dist)
-                mock_download.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_check_dashboard_files_exists_but_version_mismatch_downloads(tmp_path):
-    """Tests that a mismatched dashboard is downloaded on startup."""
-    from main import VERSION
-
-    data_dir = tmp_path / "data"
-    data_dist = data_dir / "dist"
-    bundled_dist = tmp_path / "bundled-dist"
-    (data_dist / "assets").mkdir(parents=True)
-    (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
-
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch(
-            "main.get_repo_dashboard_dist_path",
-            return_value=tmp_path / "repo-dist",
-        ):
-            with mock.patch(
-                "main.get_bundled_dashboard_dist_path",
-                return_value=bundled_dist,
-            ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    with mock.patch("main.logger.warning") as mock_logger_warning:
-                        result = await check_dashboard_files()
-
+            result = await check_dashboard_files()
             assert result == str(data_dist)
-            mock_download.assert_called_once_with(
-                version=f"v{VERSION}",
-                latest=False,
-            )
-            mock_logger_warning.assert_called_once()
-            call_args, _ = mock_logger_warning.call_args
-            assert "WebUI version mismatch" in call_args[0]
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_falls_back_to_stale_dist_when_download_fails(
-    tmp_path,
-):
-    """Tests stale dashboard fallback when the matching WebUI cannot be downloaded."""
-    from main import VERSION
-
+async def test_check_dashboard_files_rejects_version_mismatch(tmp_path):
+    """Tests that startup rejects a mismatched local dashboard."""
     data_dir = tmp_path / "data"
     data_dist = data_dir / "dist"
     bundled_dist = tmp_path / "bundled-dist"
     (data_dist / "assets").mkdir(parents=True)
     (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
-    (data_dist / "index.html").write_text("stale", encoding="utf-8")
 
     with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
         with mock.patch(
@@ -309,26 +258,18 @@ async def test_check_dashboard_files_falls_back_to_stale_dist_when_download_fail
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch(
-                    "main.download_dashboard",
-                    side_effect=RuntimeError("missing dashboard asset"),
-                ) as mock_download:
-                    with mock.patch("main.logger.warning") as mock_logger_warning:
-                        result = await check_dashboard_files()
+                with mock.patch("main.logger.warning") as mock_logger_warning:
+                    result = await check_dashboard_files()
 
-    assert result == str(data_dist)
-    mock_download.assert_called_once_with(
-        version=f"v{VERSION}",
-        latest=False,
-    )
+    assert result is None
     assert any(
-        "Falling back to existing data/dist WebUI" in call.args[0]
+        "Ignoring incompatible data/dist WebUI" in call.args[0]
         for call in mock_logger_warning.call_args_list
     )
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_downloads_when_matching_dist_is_incomplete(
+async def test_check_dashboard_files_rejects_incomplete_matching_dist(
     tmp_path,
 ):
     """Tests that a version match alone is not enough to serve WebUI."""
@@ -349,14 +290,9 @@ async def test_check_dashboard_files_downloads_when_matching_dist_is_incomplete(
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
+                result = await check_dashboard_files()
 
-    assert result == str(data_dist)
-    mock_download.assert_called_once_with(
-        version=f"v{VERSION}",
-        latest=False,
-    )
+    assert result is None
 
 
 def test_should_use_bundled_dashboard_dist_when_data_dist_is_stale(tmp_path):
@@ -526,8 +462,7 @@ async def test_check_dashboard_files_replaces_stale_data_dist_with_bundled_dist(
                     "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
                     return_value=Path(bundled_dist),
                 ):
-                    with mock.patch("main.download_dashboard") as mock_download:
-                        result = await check_dashboard_files()
+                    result = await check_dashboard_files()
 
     assert result == str(data_dist)
     assert (data_dist / "assets" / "version").read_text(
@@ -535,7 +470,6 @@ async def test_check_dashboard_files_replaces_stale_data_dist_with_bundled_dist(
     ) == f"v{VERSION}"
     assert (data_dist / "index.html").read_text(encoding="utf-8") == "bundled"
     assert not (data_dist / "old.txt").exists()
-    mock_download.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -561,11 +495,9 @@ async def test_check_dashboard_files_uses_repo_dist_when_data_dist_is_missing(
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
+                result = await check_dashboard_files()
 
     assert result == str(repo_dist)
-    mock_download.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -595,11 +527,9 @@ async def test_check_dashboard_files_uses_repo_dist_when_data_dist_is_stale(
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
+                result = await check_dashboard_files()
 
     assert result == str(repo_dist)
-    mock_download.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -629,11 +559,9 @@ async def test_check_dashboard_files_prefers_repo_dist_when_data_dist_matches(
                 "main.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
+                result = await check_dashboard_files()
 
     assert result == str(repo_dist)
-    mock_download.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -642,9 +570,7 @@ async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch):
     valid_dir = "/tmp/my-custom-webui"
     monkeypatch.setattr(os.path, "exists", lambda path: path == valid_dir)
 
-    with mock.patch("main.download_dashboard") as mock_download:
-        with mock.patch("main.get_dashboard_dist_version") as mock_get_version:
-            result = await check_dashboard_files(webui_dir=valid_dir)
-            assert result == valid_dir
-            mock_download.assert_not_called()
-            mock_get_version.assert_not_called()
+    with mock.patch("main.get_dashboard_dist_version") as mock_get_version:
+        result = await check_dashboard_files(webui_dir=valid_dir)
+        assert result == valid_dir
+        mock_get_version.assert_not_called()

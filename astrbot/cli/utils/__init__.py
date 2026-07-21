@@ -2,7 +2,6 @@ from astrbot.utils.version_comparator import VersionComparator
 
 from .basic import (
     check_astrbot_root,
-    check_dashboard,
     get_astrbot_root,
 )
 from .plugin import (
@@ -18,7 +17,6 @@ __all__ = [
     "VersionComparator",
     "build_plug_list",
     "check_astrbot_root",
-    "check_dashboard",
     "get_astrbot_root",
     "get_git_repo",
     "install_local_plugin",

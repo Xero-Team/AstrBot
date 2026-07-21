@@ -49,8 +49,6 @@ let updateStatus = ref('');
 let releaseMessage = ref('');
 let hasNewVersion = ref(false);
 let botCurrVersion = ref('');
-let dashboardHasNewVersion = ref(false);
-let dashboardCurrentVersion = ref('');
 type ReleaseItem = {
   tag_name: string;
   published_at: string;
@@ -63,9 +61,7 @@ const showPreReleases = ref(
     ? false
     : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === 'true',
 );
-let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
-let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -108,7 +104,6 @@ const createEmptyUpdateProgress = (): UpdateProgress => ({
   message: '',
   overall_percent: 0,
   stages: {
-    dashboard: createEmptyDownloadStage(),
     core: createEmptyDownloadStage(),
   },
 });
@@ -166,12 +161,6 @@ const firstReleasePageHasPreRelease = computed(() =>
   firstReleasePageItems.value.some((item) => isPreRelease(item.tag_name)),
 );
 const updateStageItems = computed(() => [
-  {
-    key: 'dashboard',
-    title: t('core.header.updateDialog.progress.dashboard'),
-    progress:
-      updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
-  },
   {
     key: 'core',
     title: t('core.header.updateDialog.progress.core'),
@@ -412,7 +401,6 @@ function getVersion() {
     .version()
     .then((res) => {
       botCurrVersion.value = `v${res.data.data.version || ''}`;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version || '';
       commonStore.setAstrBotVersion(
         res.data.data.version || '',
         res.data.data?.dashboard_version || undefined,
@@ -481,9 +469,6 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message || '';
       }
-      dashboardHasNewVersion.value = isDesktopReleaseMode.value
-        ? false
-        : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
       if (err.response?.status === 401) {
@@ -815,28 +800,6 @@ async function switchVersion(targetVersion: string) {
     });
 }
 
-function updateDashboard() {
-  updatingDashboardLoading.value = true;
-  updateStatus.value = t('core.header.updateDialog.status.updating');
-  updatesApi
-    .dashboard()
-    .then((res) => {
-      updateStatus.value = res.data.message || '';
-      if (res.data.status === 'ok') {
-        setTimeout(() => {
-          reloadWithCacheBuster();
-        }, 1000);
-      }
-    })
-    .catch((err) => {
-      console.log(err);
-      updateStatus.value = err;
-    })
-    .finally(() => {
-      updatingDashboardLoading.value = false;
-    });
-}
-
 // 主题选项配置
 const themeOptions = [
   {
@@ -1007,9 +970,6 @@ const changeLanguage = async (langCode: string) => {
 onMounted(async () => {
   const runtimeInfo = await getDesktopRuntimeInfo();
   isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
-  if (isDesktopReleaseMode.value) {
-    dashboardHasNewVersion.value = false;
-  }
 });
 </script>
 
@@ -1084,9 +1044,6 @@ onMounted(async () => {
     <div class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
         {{ t('core.header.version.hasNewVersion') }}
-      </small>
-      <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
-        {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
 
@@ -1288,12 +1245,7 @@ onMounted(async () => {
         <v-list-item-title>{{
           t('core.header.updateDialog.title')
         }}</v-list-item-title>
-        <template
-          v-if="
-            hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
-          "
-          #append
-        >
+        <template v-if="hasNewVersion" #append>
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
             >!</v-chip
           >
@@ -1591,68 +1543,6 @@ onMounted(async () => {
                   </v-btn>
                 </template>
               </v-data-table>
-            </div>
-
-            <div v-if="!installLoading" class="advanced-update-settings mt-5">
-              <button
-                class="advanced-settings-toggle"
-                type="button"
-                @click="
-                  showAdvancedUpdateSettings = !showAdvancedUpdateSettings
-                "
-              >
-                <span>{{
-                  t('core.header.updateDialog.advancedSettings')
-                }}</span>
-                <v-icon
-                  :icon="
-                    showAdvancedUpdateSettings
-                      ? 'mdi-chevron-down'
-                      : 'mdi-chevron-right'
-                  "
-                  size="20"
-                ></v-icon>
-              </button>
-
-              <div
-                v-if="showAdvancedUpdateSettings"
-                class="dashboard-update-banner mt-3"
-              >
-                <div>
-                  <div class="font-weight-medium">
-                    {{ t('core.header.updateDialog.dashboardUpdate.title') }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis">
-                    {{
-                      t(
-                        'core.header.updateDialog.dashboardUpdate.currentVersion',
-                      )
-                    }}
-                    {{ dashboardCurrentVersion }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis">
-                    {{
-                      dashboardHasNewVersion
-                        ? t(
-                            'core.header.updateDialog.dashboardUpdate.hasNewVersion',
-                          )
-                        : t('core.header.updateDialog.dashboardUpdate.fallback')
-                    }}
-                  </div>
-                </div>
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  :loading="updatingDashboardLoading"
-                  @click="updateDashboard()"
-                >
-                  {{
-                    t(
-                      'core.header.updateDialog.dashboardUpdate.downloadAndUpdate',
-                    )
-                  }}
-                </v-btn>
-              </div>
             </div>
           </v-container>
         </v-card-text>
@@ -2137,7 +2027,6 @@ onMounted(async () => {
 }
 
 .update-progress-panel,
-.dashboard-update-banner,
 .release-message-preview {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
@@ -2192,13 +2081,6 @@ onMounted(async () => {
   pointer-events: none;
 }
 
-.dashboard-update-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 .update-progress-panel--success {
   border-color: rgba(var(--v-theme-success), 0.48);
   box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.08);
@@ -2244,25 +2126,6 @@ onMounted(async () => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.advanced-settings-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: rgb(var(--v-theme-on-surface));
-  cursor: pointer;
-  font: inherit;
-  font-weight: 500;
-  padding: 8px 0;
-  text-align: left;
-}
-
-.advanced-settings-toggle:hover {
-  color: rgb(var(--v-theme-primary));
 }
 
 .update-stage-list {
@@ -2330,8 +2193,7 @@ onMounted(async () => {
     font-size: 16px;
   }
 
-  .update-summary,
-  .dashboard-update-banner {
+  .update-summary {
     align-items: stretch;
     flex-direction: column;
   }

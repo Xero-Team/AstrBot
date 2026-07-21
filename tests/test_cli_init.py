@@ -11,11 +11,7 @@ async def test_init_without_initial_password_env_does_not_create_config(
     monkeypatch,
     tmp_path,
 ):
-    async def fake_check_dashboard(_data_path):
-        return None
-
     monkeypatch.delenv(cmd_init.DASHBOARD_INITIAL_PASSWORD_ENV, raising=False)
-    monkeypatch.setattr(cmd_init, "check_dashboard", fake_check_dashboard)
     (tmp_path / ".astrbot").touch()
 
     await cmd_init.initialize_astrbot(tmp_path)
@@ -28,12 +24,8 @@ async def test_init_uses_initial_password_env_to_create_config(
     monkeypatch,
     tmp_path,
 ):
-    async def fake_check_dashboard(_data_path):
-        return None
-
     initial_password = "AstrBotInitialPassword123"
     monkeypatch.setenv(cmd_init.DASHBOARD_INITIAL_PASSWORD_ENV, initial_password)
-    monkeypatch.setattr(cmd_init, "check_dashboard", fake_check_dashboard)
     (tmp_path / ".astrbot").touch()
 
     await cmd_init.initialize_astrbot(tmp_path)

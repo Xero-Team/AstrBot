@@ -5647,9 +5647,7 @@ export type CheckUpdateResponse =
 export type ListReleasesData = {
   body?: never;
   path?: never;
-  query?: {
-    type?: 'core' | 'dashboard';
-  };
+  query?: never;
   url: '/api/v1/updates/releases';
 };
 
@@ -5678,23 +5676,6 @@ export type UpdateCoreResponses = {
 };
 
 export type UpdateCoreResponse = UpdateCoreResponses[keyof UpdateCoreResponses];
-
-export type UpdateDashboardData = {
-  body?: UpdateRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/dashboard';
-};
-
-export type UpdateDashboardResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type UpdateDashboardResponse =
-  UpdateDashboardResponses[keyof UpdateDashboardResponses];
 
 export type GetUpdateProgressData = {
   body?: never;

@@ -172,7 +172,7 @@
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /session info 指令查看管理员 ID。"
         },
         "sandbox": {
           "booter": {
@@ -773,7 +773,7 @@
         },
         "id_whitelist": {
           "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
+          "hint": "使用 /session info 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
         "id_whitelist_log": {
           "description": "输出日志",
@@ -982,7 +982,7 @@
           },
           "whitelist": {
             "description": "主动回复白名单",
-            "hint": "为空时不启用白名单过滤。使用 /sid 获取 ID。"
+            "hint": "为空时不启用白名单过滤。使用 /session info 获取 ID。"
           }
         }
       }
@@ -1574,7 +1574,7 @@
       },
       "variables": {
         "description": "工作流固定输入变量",
-        "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。"
+        "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /variable set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。"
       },
       "dashscope_app_type": {
         "description": "应用类型",

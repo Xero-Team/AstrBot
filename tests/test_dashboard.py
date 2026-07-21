@@ -104,7 +104,7 @@ async def _wait_for_update_progress(
     authenticated_header: dict,
     progress_id: str,
 ) -> dict:
-    """Wait until a dashboard update task reaches a terminal status.
+    """Wait until a core update task reaches a terminal status.
 
     Args:
         test_client: Quart/FastAPI adapter test client.
@@ -2455,27 +2455,16 @@ async def test_check_update(
     """Tests the update-check endpoint with mocked network calls."""
     test_client = DashboardTestClient(app)
 
-    # Mock update check and dashboard version lookup.
+    # Mock the release check.
     async def mock_check_update(*args, **kwargs):
         """Mock the updater returning no release."""
         return None
-
-    async def mock_get_dashboard_version(*args, **kwargs):
-        """Mock the dashboard version call."""
-        from astrbot.core.config.default import VERSION
-
-        return f"v{VERSION}"
 
     monkeypatch.setattr(
         core_lifecycle_td.astrbot_updator,
         "check_update",
         mock_check_update,
     )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.get_dashboard_version",
-        mock_get_dashboard_version,
-    )
-
     response = await test_client.get(
         "/api/v1/updates/check", headers=authenticated_header
     )
@@ -2544,19 +2533,6 @@ async def test_do_update(
         calls.append("apply-core")
         os.makedirs(release_path, exist_ok=True)
 
-    async def mock_download_dashboard(*args, **kwargs):
-        calls.append("download-dashboard")
-        callback = kwargs.get("progress_callback")
-        if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-        with zipfile.ZipFile(kwargs["path"], "w") as zf:
-            zf.writestr("dist/index.html", "dashboard")
-        return
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
-
     async def mock_pip_install(*args, **kwargs):
         """Mocks pip install to prevent actual installation."""
         return
@@ -2570,14 +2546,6 @@ async def test_do_update(
         core_lifecycle_td.astrbot_updator,
         "apply_update_package",
         mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
     )
     app.state.services.updates.pip_install = mock_pip_install
 
@@ -2597,12 +2565,7 @@ async def test_do_update(
         "test-progress",
     )
     assert os.path.exists(release_path)
-    assert calls[:4] == [
-        "download-dashboard",
-        "download-core",
-        "apply-core",
-        "apply-dashboard",
-    ]
+    assert calls[:2] == ["download-core", "apply-core"]
 
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "success"
@@ -2619,12 +2582,6 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     test_client = DashboardTestClient(app)
     calls = []
 
-    async def mock_download_dashboard(*args, **kwargs):
-        calls.append("download-dashboard")
-        callback = kwargs.get("progress_callback")
-        if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-
     async def mock_download_core(*args, **kwargs):
         del args, kwargs
         calls.append("download-core")
@@ -2633,10 +2590,6 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     def mock_apply_core(*args, **kwargs):
         del args, kwargs
         calls.append("apply-core")
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
 
     monkeypatch.setattr(
         core_lifecycle_td.astrbot_updator,
@@ -2648,15 +2601,6 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
         "apply_update_package",
         mock_apply_core,
     )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
-    )
-
     response = await test_client.post(
         "/api/v1/updates/core",
         headers=authenticated_header,
@@ -2672,7 +2616,7 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
         "atomic-fail",
     )
     assert progress_data["data"]["status"] == "error"
-    assert calls == ["download-dashboard", "download-core"]
+    assert calls == ["download-core"]
 
 
 @pytest.mark.asyncio
@@ -2723,26 +2667,16 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     test_client = DashboardTestClient(app)
     calls = []
 
-    async def mock_download_dashboard(*args, **kwargs):
-        del args
-        calls.append("download-dashboard")
-        Path(kwargs["path"]).write_bytes(b"not a zip")
-
     async def mock_download_core(*args, **kwargs):
         del args
         calls.append("download-core")
         zip_path = kwargs["path"]
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("AstrBot-main/README.md", "core")
+        Path(zip_path).write_bytes(b"not a zip")
         return zip_path
 
     def mock_apply_core(*args, **kwargs):
         del args, kwargs
         calls.append("apply-core")
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
 
     monkeypatch.setattr(
         core_lifecycle_td.astrbot_updator,
@@ -2754,15 +2688,6 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
         "apply_update_package",
         mock_apply_core,
     )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
-    )
-
     response = await test_client.post(
         "/api/v1/updates/core",
         headers=authenticated_header,
@@ -2778,21 +2703,7 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
         "invalid-zip",
     )
     assert progress_data["data"]["status"] == "error"
-    assert calls == ["download-dashboard", "download-core"]
-
-
-def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
-    from astrbot.core.utils.io import extract_dashboard
-
-    archive_path = tmp_path / "dashboard.zip"
-    extract_path = tmp_path / "data"
-    with zipfile.ZipFile(archive_path, "w") as zf:
-        zf.writestr("../evil.txt", "unsafe")
-
-    with pytest.raises(ValueError, match="Unsafe dashboard archive path"):
-        extract_dashboard(archive_path, extract_path)
-
-    assert not (tmp_path / "evil.txt").exists()
+    assert calls == ["download-core"]
 
 
 @pytest.mark.asyncio
@@ -2803,13 +2714,14 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
 ):
     test_client = DashboardTestClient(app)
 
-    async def mock_download_dashboard(*args, **kwargs):
+    async def mock_download_core(*args, **kwargs):
         del args, kwargs
         raise RuntimeError("secret stack trace")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
+        app.state.core_lifecycle.astrbot_updator,
+        "download_update_package",
+        mock_download_core,
     )
 
     response = await test_client.post(

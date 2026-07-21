@@ -176,7 +176,7 @@
         },
         "computer_use_require_admin": {
           "description": "Require AstrBot Admin Permission",
-          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use /session info to view admin IDs."
         },
         "sandbox": {
           "booter": {
@@ -777,7 +777,7 @@
         },
         "id_whitelist": {
           "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
+          "hint": "Use /session info to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
         },
         "id_whitelist_log": {
           "description": "Output Logs",
@@ -986,7 +986,7 @@
           },
           "whitelist": {
             "description": "Active Reply Whitelist",
-            "hint": "Whitelist filtering is disabled when empty. Use /sid to get IDs."
+            "hint": "Whitelist filtering is disabled when empty. Use /session info to get IDs."
           }
         }
       }
@@ -1582,7 +1582,7 @@
       },
       "variables": {
         "description": "Workflow fixed input variables",
-        "hint": "Optional. Fixed workflow input variables are used as workflow inputs. You can also set variables dynamically with /set during a chat. If names conflict, dynamic settings take precedence."
+        "hint": "Optional. Fixed workflow input variables are used as workflow inputs. You can also set variables dynamically with /variable set during a chat. If names conflict, dynamic settings take precedence."
       },
       "dashscope_app_type": {
         "description": "App type",

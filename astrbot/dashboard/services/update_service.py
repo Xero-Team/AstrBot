@@ -10,48 +10,14 @@ from pathlib import Path
 from typing import Any, cast
 
 from astrbot import logger
-from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
 )
 from astrbot.core.updator import AstrBotUpdator
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_data_path,
-    get_astrbot_temp_path,
-)
-from astrbot.core.utils.io import (
-    download_dashboard as _download_dashboard,
-)
-from astrbot.core.utils.io import (
-    extract_dashboard as _extract_dashboard,
-)
-from astrbot.core.utils.io import (
-    get_dashboard_version as _get_dashboard_version,
-)
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.pip_installer import PipInstaller
-
-download_dashboard = _download_dashboard
-extract_dashboard = _extract_dashboard
-get_dashboard_version = _get_dashboard_version
-
-
-async def call_download_dashboard(*args, **kwargs):
-    return await download_dashboard(*args, **kwargs)
-
-
-async def call_extract_dashboard(*args, **kwargs):
-    if inspect.iscoroutinefunction(extract_dashboard):
-        return await extract_dashboard(*args, **kwargs)
-    result = await asyncio.to_thread(extract_dashboard, *args, **kwargs)
-    if inspect.isawaitable(result):
-        return await cast(Awaitable[Any], result)
-    return result
-
-
-async def call_get_dashboard_version(*args, **kwargs):
-    return await get_dashboard_version(*args, **kwargs)
 
 
 async def call_pip_install(pip_installer: PipInstaller, *args, **kwargs):
@@ -81,18 +47,12 @@ class UpdateService:
         astrbot_updator: AstrBotUpdator,
         core_lifecycle: AstrBotCoreLifecycle,
         *,
-        download_dashboard_func: Callable[..., Awaitable[Any]],
-        extract_dashboard_func: Callable[..., Any],
-        get_dashboard_version_func: Callable[..., Awaitable[str | None]],
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
         clear_site_data_headers: dict,
     ) -> None:
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
-        self.download_dashboard = download_dashboard_func
-        self.extract_dashboard = extract_dashboard_func
-        self.get_dashboard_version = get_dashboard_version_func
         self.pip_install = pip_install_func
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
@@ -110,16 +70,8 @@ class UpdateService:
             )
         return UpdateServiceResult(data=progress)
 
-    async def check_update(self, update_type: str | None) -> UpdateServiceResult:
+    async def check_update(self) -> UpdateServiceResult:
         try:
-            dashboard_version = await self.get_dashboard_version()
-            if update_type == "dashboard":
-                return UpdateServiceResult(
-                    data={
-                        "has_new_version": dashboard_version != f"v{VERSION}",
-                        "current_version": dashboard_version,
-                    }
-                )
             update_result = await self.astrbot_updator.check_update(None, None, False)
             return UpdateServiceResult(
                 status="success",
@@ -127,12 +79,7 @@ class UpdateService:
                 if update_result is not None
                 else "已经是最新版本了。",
                 data={
-                    "version": f"v{VERSION}",
                     "has_new_version": update_result is not None,
-                    "dashboard_version": dashboard_version,
-                    "dashboard_has_new_version": bool(
-                        dashboard_version and dashboard_version != f"v{VERSION}"
-                    ),
                 },
             )
         except Exception as exc:
@@ -217,42 +164,13 @@ class UpdateService:
             ) as update_temp_dir_name:
                 update_temp_dir = Path(update_temp_dir_name)
                 update_token = uuid.uuid4().hex
-                dashboard_zip_path = update_temp_dir / f"{update_token}-dashboard.zip"
                 core_zip_path = update_temp_dir / f"{update_token}-core.zip"
-                self._set_update_stage(
-                    progress_id,
-                    "dashboard",
-                    "running",
-                    "正在下载 WebUI...",
-                    0,
-                )
-                await self.download_dashboard(
-                    path=str(dashboard_zip_path),
-                    latest=latest,
-                    version=version,
-                    proxy=proxy or "",
-                    progress_callback=self._make_progress_callback(
-                        progress_id,
-                        "dashboard",
-                        0,
-                        45,
-                    ),
-                    extract=False,
-                )
-                self._set_update_stage(
-                    progress_id,
-                    "dashboard",
-                    "done",
-                    "WebUI 下载完成。",
-                    45,
-                )
-
                 self._set_update_stage(
                     progress_id,
                     "core",
                     "running",
                     "正在下载 AstrBot 项目代码...",
-                    45,
+                    0,
                 )
                 core_zip_path = Path(
                     await self.astrbot_updator.download_update_package(
@@ -263,8 +181,8 @@ class UpdateService:
                         progress_callback=self._make_progress_callback(
                             progress_id,
                             "core",
-                            45,
-                            45,
+                            0,
+                            90,
                         ),
                     )
                 )
@@ -285,13 +203,10 @@ class UpdateService:
                 )
 
                 def _verify_update_packages() -> None:
-                    for zip_path in (dashboard_zip_path, core_zip_path):
-                        with zipfile.ZipFile(zip_path, "r") as archive:
-                            corrupt_member = archive.testzip()
-                        if corrupt_member:
-                            raise UpdateServiceError(
-                                f"更新包校验失败: {corrupt_member}"
-                            )
+                    with zipfile.ZipFile(core_zip_path, "r") as archive:
+                        corrupt_member = archive.testzip()
+                    if corrupt_member:
+                        raise UpdateServiceError(f"更新包校验失败: {corrupt_member}")
 
                 await asyncio.to_thread(_verify_update_packages)
                 self._set_update_stage(
@@ -312,10 +227,6 @@ class UpdateService:
                 await asyncio.to_thread(
                     self.astrbot_updator.apply_update_package,
                     core_zip_path,
-                )
-                await self.extract_dashboard(
-                    dashboard_zip_path,
-                    Path(get_astrbot_data_path()),
                 )
                 self._set_update_stage(
                     progress_id,
@@ -386,23 +297,6 @@ class UpdateService:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
             logger.debug(f"Update task failed: {exc!s}")
 
-    async def update_dashboard(self) -> UpdateServiceResult:
-        try:
-            try:
-                await self.download_dashboard(version=f"v{VERSION}", latest=False)
-            except Exception as exc:
-                logger.error(f"下载管理面板文件失败: {exc}。")
-                raise UpdateServiceError(f"下载管理面板文件失败: {exc}") from exc
-            return UpdateServiceResult(
-                message="更新成功。刷新页面即可应用新版本面板。",
-                headers=self.clear_site_data_headers,
-            )
-        except UpdateServiceError:
-            raise
-        except Exception as exc:
-            logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
-            raise UpdateServiceError(exc.__str__()) from exc
-
     async def install_pip_package(self, data: object) -> UpdateServiceResult:
         if self.demo_mode:
             raise UpdateServiceError(
@@ -430,7 +324,6 @@ class UpdateService:
             "message": "正在准备更新...",
             "overall_percent": 0,
             "stages": {
-                "dashboard": self._empty_stage("pending"),
                 "core": self._empty_stage("pending"),
             },
         }

@@ -208,40 +208,12 @@ class CommandLexer:
                 index += 1
                 continue
 
-            if char == "$":
-                self._unsupported_dollar(source, index, offset)
-            if char == "`":
-                self._raise(
-                    CommandErrorCode.UNSUPPORTED_COMMAND_SUBSTITUTION,
-                    offset + index,
-                    offset + index + 1,
-                )
-            if char == "~" and len(value_parts) == 0:
-                self._raise(
-                    CommandErrorCode.UNSUPPORTED_TILDE_EXPANSION,
-                    offset + index,
-                    offset + index + 1,
-                )
-            if char in _GLOB_CHARS:
-                self._raise(
-                    CommandErrorCode.UNSUPPORTED_PATHNAME_EXPANSION,
-                    offset + index,
-                    offset + index + 1,
-                    hint=CommandHintCode.QUOTE_LITERAL,
-                )
-            if char in _OPERATORS:
-                self._raise(
-                    CommandErrorCode.UNSUPPORTED_OPERATOR,
-                    offset + index,
-                    offset + index + 1,
-                    hint=CommandHintCode.QUOTE_LITERAL,
-                )
-            if char == "#" and len(value_parts) == 0:
-                self._raise(
-                    CommandErrorCode.UNSUPPORTED_COMMENT,
-                    offset + index,
-                    offset + index + 1,
-                )
+            self._validate_unquoted_start(
+                source,
+                index,
+                offset,
+                has_fragments=bool(value_parts),
+            )
 
             start = index
             while index < len(source):
@@ -261,6 +233,50 @@ class CommandLexer:
 
         finish_word(len(source))
         return CommandInvocation(source, tuple(words))
+
+    def _validate_unquoted_start(
+        self,
+        source: str,
+        index: int,
+        offset: int,
+        *,
+        has_fragments: bool,
+    ) -> None:
+        char = source[index]
+        if char == "$":
+            self._unsupported_dollar(source, index, offset)
+        if char == "`":
+            self._raise(
+                CommandErrorCode.UNSUPPORTED_COMMAND_SUBSTITUTION,
+                offset + index,
+                offset + index + 1,
+            )
+        if char == "~" and not has_fragments:
+            self._raise(
+                CommandErrorCode.UNSUPPORTED_TILDE_EXPANSION,
+                offset + index,
+                offset + index + 1,
+            )
+        if char in _GLOB_CHARS:
+            self._raise(
+                CommandErrorCode.UNSUPPORTED_PATHNAME_EXPANSION,
+                offset + index,
+                offset + index + 1,
+                hint=CommandHintCode.QUOTE_LITERAL,
+            )
+        if char in _OPERATORS:
+            self._raise(
+                CommandErrorCode.UNSUPPORTED_OPERATOR,
+                offset + index,
+                offset + index + 1,
+                hint=CommandHintCode.QUOTE_LITERAL,
+            )
+        if char == "#" and not has_fragments:
+            self._raise(
+                CommandErrorCode.UNSUPPORTED_COMMENT,
+                offset + index,
+                offset + index + 1,
+            )
 
     def _unsupported_dollar(self, source: str, index: int, offset: int) -> None:
         code = CommandErrorCode.UNSUPPORTED_PARAMETER_EXPANSION

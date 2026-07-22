@@ -399,15 +399,17 @@ class ThirdPartyAgentSubStage(Stage):
         streaming_used = streaming_response and not stream_to_general
 
         runner_closed = False
+        runner_close_lock = asyncio.Lock()
         stream_consumed = False
         stream_watchdog_task: asyncio.Task[None] | None = None
 
         async def close_runner_once() -> None:
             nonlocal runner_closed
-            if runner_closed:
-                return
-            runner_closed = True
-            await _close_runner_if_supported(runner)
+            async with runner_close_lock:
+                if runner_closed:
+                    return
+                await _close_runner_if_supported(runner)
+                runner_closed = True
 
         def mark_stream_consumed() -> None:
             nonlocal stream_consumed
@@ -455,14 +457,13 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield
         finally:
-            if (
-                stream_watchdog_task
-                and not stream_watchdog_task.done()
-                and (stream_consumed or runner_closed)
-            ):
-                stream_watchdog_task.cancel()
-            if not streaming_used or not stream_consumed:
-                await close_runner_once()
+            try:
+                if not streaming_used or not stream_consumed:
+                    await close_runner_once()
+            finally:
+                if stream_watchdog_task and not stream_watchdog_task.done():
+                    stream_watchdog_task.cancel()
+                    await asyncio.gather(stream_watchdog_task, return_exceptions=True)
 
         create_tracked_task(
             _BACKGROUND_TASKS,

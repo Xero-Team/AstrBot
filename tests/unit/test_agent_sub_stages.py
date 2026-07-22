@@ -1179,6 +1179,9 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
     event = FakeInternalProcessEvent(message_str="ask hello")
     runner = FakeThirdPartyRunner()
     metric_upload = AsyncMock()
+    watchdog_started = asyncio.Event()
+    watchdog_cancelled = asyncio.Event()
+    watchdog_tasks: list[asyncio.Task[None]] = []
 
     class FakeDifyRunner:
         def __new__(cls):
@@ -1189,8 +1192,22 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
             return cls
 
     async def fake_streaming_response(**kwargs):
+        await watchdog_started.wait()
         raise RuntimeError("stream setup failed")
         yield
+
+    async def pending_watchdog():
+        watchdog_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            watchdog_cancelled.set()
+            raise
+
+    def fake_start_stream_watchdog(**kwargs):
+        task = asyncio.create_task(pending_watchdog(), name="test:stream-watchdog")
+        watchdog_tasks.append(task)
+        return task
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
     stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
@@ -1215,6 +1232,11 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
         ),
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
+    monkeypatch.setattr(
+        third_party,
+        "_start_stream_watchdog",
+        fake_start_stream_watchdog,
+    )
     monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
 
     with pytest.raises(RuntimeError, match="stream setup failed"):
@@ -1223,6 +1245,8 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
 
     assert runner.close.await_count == 1
     assert metric_upload.await_count == 0
+    assert watchdog_cancelled.is_set()
+    assert watchdog_tasks[0].done()
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,11 @@
 import asyncio
-import functools
-import queue
 import re
-import threading
 import typing as T
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import override
 
 from dashscope import Application
+from dashscope.api_entities.api_request_factory import _build_api_request
 from dashscope.app.application_response import ApplicationResponse
 
 import astrbot.core.message.components as Comp
@@ -16,12 +15,15 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
+
+_DASHSCOPE_REQUEST_FAILURE = "阿里云百炼请求失败，请稍后重试。"
 
 
 class DashscopeAgentRunner(BaseAgentRunner[TContext]):
@@ -46,23 +48,44 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
-            raise Exception("阿里云百炼 API Key 不能为空。")
+            raise ValueError("阿里云百炼 API Key 不能为空。")
         self.app_id = provider_config.get("dashscope_app_id", "")
         if not self.app_id:
-            raise Exception("阿里云百炼 APP ID 不能为空。")
+            raise ValueError("阿里云百炼 APP ID 不能为空。")
         self.dashscope_app_type = provider_config.get("dashscope_app_type", "")
         if not self.dashscope_app_type:
-            raise Exception("阿里云百炼 APP 类型不能为空。")
+            raise ValueError("阿里云百炼 APP 类型不能为空。")
 
-        self.variables: dict = provider_config.get("variables", {}) or {}
-        self.rag_options: dict = provider_config.get("rag_options", {})
+        variables = provider_config.get("variables", {})
+        if variables is None:
+            variables = {}
+        if not isinstance(variables, dict):
+            raise ValueError("阿里云百炼 variables 必须为对象。")
+        self.variables = variables.copy()
+
+        rag_options = provider_config.get("rag_options", {})
+        if rag_options is None:
+            rag_options = {}
+        if not isinstance(rag_options, dict):
+            raise ValueError("阿里云百炼 rag_options 必须为对象。")
+        self.rag_options = rag_options.copy()
         self.output_reference = self.rag_options.get("output_reference", False)
-        self.rag_options = self.rag_options.copy()
         self.rag_options.pop("output_reference", None)
 
-        self.timeout = provider_config.get("timeout", 120)
-        if isinstance(self.timeout, str):
-            self.timeout = int(self.timeout)
+        raw_timeout = provider_config.get("timeout", 120)
+        if isinstance(raw_timeout, bool):
+            raise ValueError("阿里云百炼 timeout 必须为正整数。")
+        if isinstance(raw_timeout, int):
+            self.timeout = raw_timeout
+        elif isinstance(raw_timeout, str):
+            try:
+                self.timeout = int(raw_timeout)
+            except ValueError as exc:
+                raise ValueError("阿里云百炼 timeout 必须为正整数。") from exc
+        else:
+            raise ValueError("阿里云百炼 timeout 必须为正整数。")
+        if self.timeout <= 0:
+            raise ValueError("阿里云百炼 timeout 必须为正整数。")
 
     def has_rag_options(self) -> bool:
         """判断是否有 RAG 选项
@@ -89,8 +112,13 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         if self._state == AgentState.IDLE:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
-            except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(
+                    "Dashscope on_agent_begin hook failed: %s",
+                    safe_error("", exc),
+                )
 
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
@@ -99,39 +127,22 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             # 执行 Dashscope 请求并处理结果
             async for response in self._execute_dashscope_request():
                 yield response
-        except Exception as e:
-            logger.error(f"阿里云百炼请求失败：{str(e)}")
-            self._transition_state(AgentState.ERROR)
-            self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"阿里云百炼请求失败：{str(e)}"
-            )
-            yield AgentResponse(
-                type="err",
-                data=AgentResponseData(
-                    chain=MessageChain().message(f"阿里云百炼请求失败：{str(e)}")
-                ),
-            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("Dashscope request failed: %s", safe_error("", exc))
+            yield self._failure_response()
 
-    def _consume_sync_generator(
-        self, response: T.Any, response_queue: queue.Queue
-    ) -> None:
-        """在线程中消费同步generator,将结果放入队列
-
-        Args:
-            response: 同步generator对象
-            response_queue: 用于传递数据的队列
-
-        """
-        try:
-            if self.streaming:
-                for chunk in response:
-                    response_queue.put(("data", chunk))
-            else:
-                response_queue.put(("data", response))
-        except Exception as e:
-            response_queue.put(("error", e))
-        finally:
-            response_queue.put(("done", None))
+    def _failure_response(self) -> AgentResponse:
+        """Record and return the stable public Dashscope failure response."""
+        chain = MessageChain().message(_DASHSCOPE_REQUEST_FAILURE)
+        self._transition_state(AgentState.ERROR)
+        self.final_llm_resp = LLMResponse(
+            role="err",
+            completion_text=_DASHSCOPE_REQUEST_FAILURE,
+            result_chain=chain,
+        )
+        return AgentResponse(type="err", data=AgentResponseData(chain=chain))
 
     async def _process_stream_chunk(
         self, chunk: ApplicationResponse, output_text: str
@@ -146,28 +157,16 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             (更新后的output_text, doc_references, AgentResponse或None)
 
         """
-        logger.debug(f"dashscope stream chunk: {chunk}")
+        logger.debug("Dashscope stream chunk: %s", safe_error("", str(chunk)))
 
         if chunk.status_code != 200:
             logger.error(
-                f"阿里云百炼请求失败: request_id={chunk.request_id}, code={chunk.status_code}, message={chunk.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code",
+                "Dashscope request failed: request_id=%s, code=%s, message=%s",
+                safe_error("", str(chunk.request_id)),
+                chunk.status_code,
+                safe_error("", chunk.message),
             )
-            self._transition_state(AgentState.ERROR)
-            error_msg = (
-                f"阿里云百炼请求失败: message={chunk.message} code={chunk.status_code}"
-            )
-            self.final_llm_resp = LLMResponse(
-                role="err",
-                result_chain=MessageChain().message(error_msg),
-            )
-            return (
-                output_text,
-                None,
-                AgentResponse(
-                    type="err",
-                    data=AgentResponseData(chain=MessageChain().message(error_msg)),
-                ),
-            )
+            return output_text, None, self._failure_response()
 
         chunk_text = chunk.output.get("text", "") or ""
         # RAG 引用脚标格式化
@@ -176,10 +175,11 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         response = None
         if chunk_text:
             output_text += chunk_text
-            response = AgentResponse(
-                type="streaming_delta",
-                data=AgentResponseData(chain=MessageChain().message(chunk_text)),
-            )
+            if self.streaming:
+                response = AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(chain=MessageChain().message(chunk_text)),
+                )
 
         # 获取文档引用
         doc_references = chunk.output.get("doc_references", None)
@@ -234,7 +234,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             key="session_variables",
             default={},
         )
-        payload_vars.update(session_var)
+        if isinstance(session_var, dict):
+            payload_vars.update(session_var)
+        elif session_var:
+            logger.warning("Dashscope session variables are malformed; ignoring.")
 
         if (
             self.dashscope_app_type in ["agent", "dialog-workflow"]
@@ -248,6 +251,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 "biz_params": payload_vars or None,
                 "stream": self.streaming,
                 "incremental_output": True,
+                "request_timeout": self.timeout,
             }
             if conversation_id:
                 p["session_id"] = conversation_id
@@ -261,50 +265,101 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 "biz_params": payload_vars or None,
                 "stream": self.streaming,
                 "incremental_output": True,
+                "request_timeout": self.timeout,
             }
             if self.rag_options:
                 payload["rag_options"] = self.rag_options
             return payload
 
-    async def _handle_streaming_response(
-        self, response: T.Any, session_id: str
-    ) -> T.AsyncGenerator[AgentResponse]:
-        """处理流式响应
+    async def _iter_application_responses(
+        self, payload: dict
+    ) -> T.AsyncGenerator[ApplicationResponse]:
+        """Yield application responses through Dashscope's asynchronous transport.
+
+        `Application.call` is synchronous, while its request implementation also
+        exposes an aiohttp-based transport. Building the equivalent request here
+        keeps a cancellation or timeout in the owning event loop instead of
+        orphaning an executor worker or a synchronous stream-consumer thread.
 
         Args:
-            response: Dashscope 流式响应 generator
+            payload: The Dashscope application call payload.
 
         Yields:
-            AgentResponse 对象
-
+            Parsed Dashscope application responses.
         """
-        response_queue = queue.Queue()
-        consumer_thread = threading.Thread(
-            target=self._consume_sync_generator,
-            args=(response, response_queue),
-            daemon=True,
-        )
-        consumer_thread.start()
+        request_kwargs = payload.copy()
+        app_id = request_kwargs.pop("app_id")
+        api_key = request_kwargs.pop("api_key")
+        prompt = request_kwargs.pop("prompt")
+        workspace = request_kwargs.pop("workspace", None)
+        api_key, app_id = Application._validate_params(api_key, app_id)
 
+        if workspace:
+            headers = request_kwargs.pop("headers", {})
+            headers["X-DashScope-WorkSpace"] = workspace
+            request_kwargs["headers"] = headers
+
+        request_input, parameters = Application._build_input_parameters(
+            prompt,
+            None,
+            None,
+            **request_kwargs,
+        )
+        request = _build_api_request(
+            model="",
+            input=request_input,
+            task_group=Application.task_group,
+            task=app_id,
+            function=Application.function,
+            workspace=workspace,
+            api_key=api_key,
+            is_service=False,
+            **parameters,
+        )
+
+        if self.streaming:
+            response_stream = await request.aio_call()
+            if not isinstance(response_stream, AsyncGenerator):
+                raise TypeError(
+                    "Dashscope stream request returned a non-stream response."
+                )
+            try:
+                async for raw_response in response_stream:
+                    if isinstance(raw_response, ApplicationResponse):
+                        yield raw_response
+                    else:
+                        yield ApplicationResponse.from_api_response(raw_response)
+            finally:
+                await response_stream.aclose()
+            return
+
+        raw_response = await request.aio_call()
+        if isinstance(raw_response, AsyncIterator):
+            raise TypeError("Dashscope non-stream request returned a response stream.")
+        if isinstance(raw_response, ApplicationResponse):
+            yield raw_response
+        else:
+            yield ApplicationResponse.from_api_response(raw_response)
+
+    async def _handle_streaming_response(
+        self,
+        response_stream: T.AsyncGenerator[ApplicationResponse],
+        session_id: str,
+    ) -> T.AsyncGenerator[AgentResponse]:
+        """Convert asynchronous Dashscope responses to AstrBot agent responses.
+
+        Args:
+            response_stream: Asynchronous Dashscope response stream.
+            session_id: AstrBot session identifier used for conversation storage.
+
+        Yields:
+            Agent responses in the configured streaming mode.
+        """
         output_text = ""
         doc_references = None
 
-        while True:
-            try:
-                item_type, item_data = await asyncio.get_running_loop().run_in_executor(
-                    None, response_queue.get, True, 1
-                )
-            except queue.Empty:
-                continue
-
-            if item_type == "done":
-                break
-            elif item_type == "error":
-                raise item_data
-            elif item_type == "data":
-                chunk = item_data
-                assert isinstance(chunk, ApplicationResponse)
-
+        try:
+            async for chunk in response_stream:
                 (
                     output_text,
                     chunk_doc_refs,
@@ -320,40 +375,47 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 if chunk_doc_refs:
                     doc_references = chunk_doc_refs
 
-                if chunk.output.session_id:
+                chunk_session_id = getattr(chunk.output, "session_id", None)
+                if chunk_session_id:
                     await self.preferences.put_async(
                         scope="umo",
                         scope_id=session_id,
                         key="dashscope_conversation_id",
-                        value=chunk.output.session_id,
+                        value=chunk_session_id,
                     )
 
-        # 添加 RAG 引用
-        if self.output_reference and doc_references:
-            ref_text = self._format_doc_references(doc_references)
-            output_text += ref_text
+            if self.output_reference and doc_references:
+                ref_text = self._format_doc_references(doc_references)
+                output_text += ref_text
 
-            if self.streaming:
-                yield AgentResponse(
-                    type="streaming_delta",
-                    data=AgentResponseData(chain=MessageChain().message(ref_text)),
+                if self.streaming:
+                    yield AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(chain=MessageChain().message(ref_text)),
+                    )
+
+            chain = MessageChain(chain=[Comp.Plain(output_text)])
+            self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
+            self._transition_state(AgentState.DONE)
+
+            try:
+                await self.agent_hooks.on_agent_done(
+                    self.run_context, self.final_llm_resp
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(
+                    "Dashscope on_agent_done hook failed: %s",
+                    safe_error("", exc),
                 )
 
-        # 创建最终响应
-        chain = MessageChain(chain=[Comp.Plain(output_text)])
-        self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
-        self._transition_state(AgentState.DONE)
-
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-
-        # 返回最终结果
-        yield AgentResponse(
-            type="llm_result",
-            data=AgentResponseData(chain=chain),
-        )
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(chain=chain),
+            )
+        finally:
+            await response_stream.aclose()
 
     async def _execute_dashscope_request(self):
         """执行 Dashscope 请求的核心逻辑"""
@@ -375,12 +437,15 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         if not self.streaming:
             payload["incremental_output"] = False
 
-        # 发起请求
-        partial = functools.partial(Application.call, **payload)
-        response = await asyncio.get_running_loop().run_in_executor(None, partial)
-
-        async for resp in self._handle_streaming_response(response, session_id):
-            yield resp
+        # The SDK-level request timeout limits socket operations. The outer
+        # deadline also bounds a continuously active stream and promptly closes
+        # the aiohttp generator on cancellation.
+        async with asyncio.timeout(self.timeout):
+            async for resp in self._handle_streaming_response(
+                self._iter_application_responses(payload),
+                session_id,
+            ):
+                yield resp
 
     @override
     def done(self) -> bool:

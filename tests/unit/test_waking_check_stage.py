@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -460,6 +460,44 @@ async def test_command_syntax_error_is_not_attributed_to_plugin(monkeypatch):
     assert event.stopped is True
     assert "参数展开" in text
     assert "插件" not in text
+
+
+@pytest.mark.asyncio
+async def test_command_filter_internal_error_is_redacted_from_response_and_logs(
+    monkeypatch,
+):
+    stage = await make_stage()
+    secret = "api_key=super-secret Bearer provider-token https://internal.example/path"
+
+    class ExplodingFilter:
+        def filter(self, event, cfg):
+            raise RuntimeError(secret)
+
+    async def demo(self, event) -> None: ...
+
+    handler, _ = make_command_handler("demo", demo, ExplodingFilter())
+    install_handlers(stage, monkeypatch, [handler])
+    monkeypatch.setitem(waking.star_map, "test.plugin", SimpleNamespace(name="Test"))
+    fake_logger = Mock()
+    monkeypatch.setattr(waking, "logger", fake_logger)
+    event = FakeEvent([Plain("/demo")], message_text="/demo")
+
+    await stage.process(event)
+
+    assert event.stopped is True
+    assert event.sent[0].get_plain_text() == "指令处理失败，请稍后重试。"
+    assert secret not in event.sent[0].get_plain_text()
+    assert fake_logger.error.call_count == 1
+    logged = " ".join(
+        str(argument)
+        for call in fake_logger.error.call_args_list
+        for argument in call.args
+    )
+    assert "super-secret" not in logged
+    assert "provider-token" not in logged
+    assert "internal.example" not in logged
+    assert "[REDACTED]" in logged
+    assert "[REDACTED_URL]" in logged
 
 
 @pytest.mark.asyncio

@@ -24,6 +24,7 @@ from astrbot.core.star.star_handler import (
     StarHandlerMetadata,
     star_handlers_registry,
 )
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.quoted_message.onebot_client import OneBotClient
 
 from ..context import PipelineContext
@@ -405,11 +406,12 @@ class WakingCheckStage(Stage):
                     )
                     event.stop_event()
                     return activated_handlers, handlers_parsed_params, True
-                except Exception as e:
+                except Exception as exc:
+                    logger.error(
+                        "Command handler filter failed: %s", safe_error("", exc)
+                    )
                     await event.send(
-                        MessageEventResult().message(
-                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
-                        ),
+                        MessageEventResult().message("指令处理失败，请稍后重试。"),
                     )
                     event.stop_event()
                     passed = False

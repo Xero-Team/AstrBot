@@ -21,6 +21,11 @@ _AUTH_HEADER_PATTERN = re.compile(
 )
 _BEARER_PATTERN = re.compile(r"(?i)(?P<prefix>\bbearer\s+)(?P<token>[A-Za-z0-9._\-]+)")
 _SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
+_URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+")
+_WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|\\\\)[^\s'\"<>]+"
+)
+_UNIX_ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![A-Za-z0-9_])/[^\s'\"<>]+")
 
 
 def _redact_json_field(match: re.Match[str]) -> str:
@@ -57,11 +62,16 @@ def _redact_tokens(text: str) -> str:
     return _SK_PATTERN.sub("[REDACTED]", text)
 
 
+def _redact_locations(text: str) -> str:
+    text = _URL_PATTERN.sub("[REDACTED_URL]", text)
+    text = _WINDOWS_ABSOLUTE_PATH_PATTERN.sub("[REDACTED_PATH]", text)
+    return _UNIX_ABSOLUTE_PATH_PATTERN.sub("[REDACTED_PATH]", text)
+
+
 def redact_sensitive_text(text: str) -> str:
     text = _redact_json_like(text)
     text = _redact_query_like(text)
-    text = _redact_tokens(text)
-    return text
+    return _redact_locations(_redact_tokens(text))
 
 
 def safe_error(

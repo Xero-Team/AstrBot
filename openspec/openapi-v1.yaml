@@ -798,7 +798,11 @@ paths:
               $ref: '#/components/schemas/ChatRequest'
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: Server-sent chat stream or an error envelope
+          content:
+            text/event-stream:
+              schema:
+                type: string
 
   /api/v1/chat/ws:
     get:
@@ -968,6 +972,10 @@ paths:
       responses:
         '200':
           description: Resumed server-sent chat stream or an error envelope
+          content:
+            text/event-stream:
+              schema:
+                type: string
 
   /api/v1/chat/sessions/{session_id}/messages/{message_id}:
     patch:
@@ -1014,6 +1022,10 @@ paths:
       responses:
         '200':
           description: Server-sent chat stream or an error envelope
+          content:
+            text/event-stream:
+              schema:
+                type: string
 
   /api/v1/chat/configs:
     get:
@@ -1092,6 +1104,10 @@ paths:
       responses:
         '200':
           description: Server-sent chat stream or an error envelope
+          content:
+            text/event-stream:
+              schema:
+                type: string
 
   /api/v1/chat/projects:
     get:
@@ -1426,14 +1442,19 @@ paths:
   /api/v1/files/{attachment_id}:
     get:
       tags: [Files]
-      summary: Get attachment metadata
+      summary: Download attachment content
       operationId: getAttachment
       x-astrbot-scope: file
       parameters:
         - $ref: '#/components/parameters/AttachmentId'
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
     delete:
       tags: [Files]
       summary: Delete an attachment
@@ -3579,6 +3600,11 @@ paths:
       responses:
         '200':
           description: Exported conversation data
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+                format: binary
 
   /api/v1/stats:
     get:
@@ -3882,6 +3908,11 @@ paths:
       responses:
         '200':
           description: Backup archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
     patch:
       tags: [Backups]
       summary: Rename a backup

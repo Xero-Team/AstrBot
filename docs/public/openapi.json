@@ -999,7 +999,14 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "description": "Server-sent chat stream or an error envelope",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1204,7 +1211,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Resumed server-sent chat stream or an error envelope"
+            "description": "Resumed server-sent chat stream or an error envelope",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1276,7 +1290,14 @@
         },
         "responses": {
           "200": {
-            "description": "Server-sent chat stream or an error envelope"
+            "description": "Server-sent chat stream or an error envelope",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1389,7 +1410,14 @@
         },
         "responses": {
           "200": {
-            "description": "Server-sent chat stream or an error envelope"
+            "description": "Server-sent chat stream or an error envelope",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1741,7 +1769,7 @@
     "/api/v1/files/{attachment_id}": {
       "get": {
         "tags": ["Files"],
-        "summary": "Get attachment metadata",
+        "summary": "Download attachment content",
         "operationId": "getAttachment",
         "x-astrbot-scope": "file",
         "parameters": [
@@ -1751,7 +1779,15 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "description": "File content",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
           }
         }
       },
@@ -4533,7 +4569,15 @@
         },
         "responses": {
           "200": {
-            "description": "Exported conversation data"
+            "description": "Exported conversation data",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
           }
         }
       }

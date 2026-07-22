@@ -1850,9 +1850,9 @@ export type SendChatMessageData = {
 
 export type SendChatMessageResponses = {
   /**
-   * Standard AstrBot success response
+   * Server-sent chat stream or an error envelope
    */
-  200: SuccessEnvelope;
+  200: string;
 };
 
 export type SendChatMessageResponse =
@@ -2032,8 +2032,11 @@ export type ResumeChatRunResponses = {
   /**
    * Resumed server-sent chat stream or an error envelope
    */
-  200: unknown;
+  200: string;
 };
+
+export type ResumeChatRunResponse =
+  ResumeChatRunResponses[keyof ResumeChatRunResponses];
 
 export type UpdateChatMessageData = {
   body: ChatMessagePatchRequest;
@@ -2069,8 +2072,11 @@ export type RegenerateChatMessageResponses = {
   /**
    * Server-sent chat stream or an error envelope
    */
-  200: unknown;
+  200: string;
 };
+
+export type RegenerateChatMessageResponse =
+  RegenerateChatMessageResponses[keyof RegenerateChatMessageResponses];
 
 export type ListChatConfigsData = {
   body?: never;
@@ -2157,8 +2163,11 @@ export type SendChatThreadMessageResponses = {
   /**
    * Server-sent chat stream or an error envelope
    */
-  200: unknown;
+  200: string;
 };
+
+export type SendChatThreadMessageResponse =
+  SendChatThreadMessageResponses[keyof SendChatThreadMessageResponses];
 
 export type ListChatProjectsData = {
   body?: never;
@@ -2593,9 +2602,9 @@ export type GetAttachmentData = {
 
 export type GetAttachmentResponses = {
   /**
-   * Standard AstrBot success response
+   * File content
    */
-  200: SuccessEnvelope;
+  200: Blob | File;
 };
 
 export type GetAttachmentResponse =
@@ -5155,8 +5164,11 @@ export type ExportConversationsResponses = {
   /**
    * Exported conversation data
    */
-  200: unknown;
+  200: Blob | File;
 };
+
+export type ExportConversationsResponse =
+  ExportConversationsResponses[keyof ExportConversationsResponses];
 
 export type GetStatsData = {
   body?: never;
@@ -5567,8 +5579,11 @@ export type DownloadBackupResponses = {
   /**
    * Backup archive
    */
-  200: unknown;
+  200: Blob | File;
 };
+
+export type DownloadBackupResponse =
+  DownloadBackupResponses[keyof DownloadBackupResponses];
 
 export type RenameBackupData = {
   body: BackupRenameRequest;

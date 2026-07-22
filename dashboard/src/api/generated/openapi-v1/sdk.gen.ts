@@ -399,6 +399,7 @@ import type {
   RefreshMemoryProfileData,
   RefreshMemoryProfileResponses,
   RegenerateChatMessageData,
+  RegenerateChatMessageResponse,
   RegenerateChatMessageResponses,
   RegisterBotTypeData,
   RegisterBotTypeResponses,
@@ -427,6 +428,7 @@ import type {
   RestoreMemoryFactData,
   RestoreMemoryFactResponses,
   ResumeChatRunData,
+  ResumeChatRunResponse,
   ResumeChatRunResponses,
   RetrieveKnowledgeBaseData,
   RetrieveKnowledgeBaseResponses,
@@ -437,8 +439,10 @@ import type {
   RunCronJobData,
   RunCronJobResponses,
   SendChatMessageData,
+  SendChatMessageResponse,
   SendChatMessageResponses,
   SendChatThreadMessageData,
+  SendChatThreadMessageResponse,
   SendChatThreadMessageResponses,
   SendImMessageData,
   SendImMessageResponses,
@@ -1543,14 +1547,14 @@ export const getProviderEmbeddingDimension = <
  * Send a webchat message
  */
 export const sendChatMessage = <ThrowOnError extends boolean = false>(
-  options: Options<SendChatMessageData, ThrowOnError>,
-): RequestResult<SendChatMessageResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
+  options: Options<SendChatMessageData, ThrowOnError, SendChatMessageResponse>,
+): Promise<ServerSentEventsResult<SendChatMessageResponses>> =>
+  (options.client ?? client).sse.post<
     SendChatMessageResponses,
     unknown,
     ThrowOnError
   >({
-    responseType: 'json',
+    responseType: 'text',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/chat',
     ...options,
@@ -1727,15 +1731,18 @@ export const stopChatSession = <ThrowOnError extends boolean = false>(
  * Resume an active webchat run as an SSE stream
  */
 export const resumeChatRun = <ThrowOnError extends boolean = false>(
-  options: Options<ResumeChatRunData, ThrowOnError>,
-): RequestResult<ResumeChatRunResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).get<ResumeChatRunResponses, unknown, ThrowOnError>(
-    {
-      security: [{ name: 'X-API-Key', type: 'apiKey' }],
-      url: '/api/v1/chat/runs/{run_id}/stream',
-      ...options,
-    },
-  );
+  options: Options<ResumeChatRunData, ThrowOnError, ResumeChatRunResponse>,
+): Promise<ServerSentEventsResult<ResumeChatRunResponses>> =>
+  (options.client ?? client).sse.get<
+    ResumeChatRunResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'text',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/runs/{run_id}/stream',
+    ...options,
+  });
 
 /**
  * Update the latest user message in a webchat session
@@ -1762,13 +1769,18 @@ export const updateChatMessage = <ThrowOnError extends boolean = false>(
  * Regenerate a bot message in a webchat session
  */
 export const regenerateChatMessage = <ThrowOnError extends boolean = false>(
-  options: Options<RegenerateChatMessageData, ThrowOnError>,
-): RequestResult<RegenerateChatMessageResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
+  options: Options<
+    RegenerateChatMessageData,
+    ThrowOnError,
+    RegenerateChatMessageResponse
+  >,
+): Promise<ServerSentEventsResult<RegenerateChatMessageResponses>> =>
+  (options.client ?? client).sse.post<
     RegenerateChatMessageResponses,
     unknown,
     ThrowOnError
   >({
+    responseType: 'text',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate',
     ...options,
@@ -1852,13 +1864,18 @@ export const getChatThread = <ThrowOnError extends boolean = false>(
  * Send a message inside a webchat side thread
  */
 export const sendChatThreadMessage = <ThrowOnError extends boolean = false>(
-  options: Options<SendChatThreadMessageData, ThrowOnError>,
-): RequestResult<SendChatThreadMessageResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
+  options: Options<
+    SendChatThreadMessageData,
+    ThrowOnError,
+    SendChatThreadMessageResponse
+  >,
+): Promise<ServerSentEventsResult<SendChatThreadMessageResponses>> =>
+  (options.client ?? client).sse.post<
     SendChatThreadMessageResponses,
     unknown,
     ThrowOnError
   >({
+    responseType: 'text',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/chat/threads/{thread_id}/messages',
     ...options,
@@ -2257,14 +2274,14 @@ export const deleteAttachment = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Get attachment metadata
+ * Download attachment content
  */
 export const getAttachment = <ThrowOnError extends boolean = false>(
   options: Options<GetAttachmentData, ThrowOnError>,
 ): RequestResult<GetAttachmentResponses, unknown, ThrowOnError> =>
   (options.client ?? client).get<GetAttachmentResponses, unknown, ThrowOnError>(
     {
-      responseType: 'json',
+      responseType: 'blob',
       security: [{ name: 'X-API-Key', type: 'apiKey' }],
       url: '/api/v1/files/{attachment_id}',
       ...options,
@@ -4649,6 +4666,7 @@ export const exportConversations = <ThrowOnError extends boolean = false>(
     unknown,
     ThrowOnError
   >({
+    responseType: 'blob',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/conversations/export',
     ...options,
@@ -5057,6 +5075,7 @@ export const downloadBackup = <ThrowOnError extends boolean = false>(
     unknown,
     ThrowOnError
   >({
+    responseType: 'blob',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/backups/{filename}',
     ...options,

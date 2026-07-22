@@ -245,6 +245,7 @@ def create_dashboard_asgi_app(
     app.openapi = dashboard_openapi
 
     async def shutdown_plugin_dashboard_services() -> None:
+        await app.state.services.updates.shutdown()
         await plugin_page_sessions.shutdown()
         await plugin_file_tickets.shutdown()
 

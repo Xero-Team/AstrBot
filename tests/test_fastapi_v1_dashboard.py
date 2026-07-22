@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import httpx
 import jwt
 import pytest
@@ -799,6 +800,31 @@ async def asgi_client(asgi_app):
         base_url="http://testserver",
     ) as client:
         yield client
+
+
+@pytest.mark.asyncio
+async def test_dashboard_shutdown_owns_update_service(asgi_app: FastAPI, monkeypatch):
+    update_shutdown = AsyncMock()
+    page_shutdown = AsyncMock()
+    ticket_shutdown = AsyncMock()
+    monkeypatch.setattr(asgi_app.state.services.updates, "shutdown", update_shutdown)
+    monkeypatch.setattr(
+        asgi_app.state.services.plugin_page_sessions,
+        "shutdown",
+        page_shutdown,
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.plugin_file_tickets,
+        "shutdown",
+        ticket_shutdown,
+    )
+
+    for handler in asgi_app.router.on_shutdown:
+        await handler()
+
+    update_shutdown.assert_awaited_once()
+    page_shutdown.assert_awaited_once()
+    ticket_shutdown.assert_awaited_once()
 
 
 def _jwt_headers() -> dict[str, str]:

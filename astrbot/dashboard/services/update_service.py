@@ -17,7 +17,10 @@ from astrbot.core.desktop_runtime import (
 )
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.pip_installer import PipInstaller
+
+DEFAULT_MAX_PROGRESS_RECORDS = 100
 
 
 async def call_pip_install(pip_installer: PipInstaller, *args, **kwargs):
@@ -50,7 +53,10 @@ class UpdateService:
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
         clear_site_data_headers: dict,
+        max_progress_records: int = DEFAULT_MAX_PROGRESS_RECORDS,
     ) -> None:
+        if max_progress_records < 1:
+            raise ValueError("max_progress_records must be >= 1")
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
         self.pip_install = pip_install_func
@@ -58,6 +64,9 @@ class UpdateService:
         self.clear_site_data_headers = clear_site_data_headers
         self.update_progress: dict[str, dict] = {}
         self._update_tasks: dict[str, asyncio.Task] = {}
+        self._max_progress_records = max_progress_records
+        self._closed = False
+        self._shutdown_lock = asyncio.Lock()
 
     def get_update_progress(self, progress_id: str) -> UpdateServiceResult:
         if not progress_id:
@@ -83,16 +92,22 @@ class UpdateService:
                 },
             )
         except Exception as exc:
-            logger.warning(f"检查更新失败: {exc!s} (不影响除项目更新外的正常使用)")
-            raise UpdateServiceError(exc.__str__()) from exc
+            logger.warning(
+                "检查更新失败: %s (不影响除项目更新外的正常使用)",
+                safe_error("", exc),
+            )
+            raise UpdateServiceError("检查更新失败。") from exc
 
     async def get_releases(self) -> UpdateServiceResult:
         try:
             releases = await self.astrbot_updator.get_releases()
             return UpdateServiceResult(data=releases)
         except Exception as exc:
-            logger.error(f"/api/update/releases: {traceback.format_exc()}")
-            raise UpdateServiceError(exc.__str__()) from exc
+            logger.error(
+                "/api/update/releases: %s",
+                redact_sensitive_text(traceback.format_exc()),
+            )
+            raise UpdateServiceError("获取更新版本失败。") from exc
 
     async def update_project(self, data: object) -> UpdateServiceResult:
         if is_desktop_managed_backend():
@@ -100,6 +115,8 @@ class UpdateService:
                 DESKTOP_MANAGED_RESTART_MESSAGE,
                 code="desktop_managed",
             )
+        if self._closed:
+            raise UpdateServiceError("更新服务已关闭。")
 
         payload = data if isinstance(data, dict) else {}
         version = payload.get("version", "")
@@ -125,15 +142,48 @@ class UpdateService:
 
         self._init_update_progress(progress_id, version)
         task = asyncio.create_task(
-            self._run_update_project(progress_id, version, latest, reboot, proxy)
+            self._run_update_project(progress_id, version, latest, reboot, proxy),
+            name=f"dashboard-update:{progress_id}",
         )
         self._update_tasks[progress_id] = task
-        task.add_done_callback(lambda _task: self._update_tasks.pop(progress_id, None))
+        task.add_done_callback(
+            lambda completed_task: self._discard_update_task(
+                progress_id,
+                completed_task,
+            )
+        )
         return UpdateServiceResult(
             data={"id": progress_id, "status": "running"},
             message="更新任务已开始。",
             headers=self.clear_site_data_headers,
         )
+
+    def _discard_update_task(self, progress_id: str, task: asyncio.Task) -> None:
+        """Drop a completed task only when it is still the current task for its ID."""
+
+        if self._update_tasks.get(progress_id) is task:
+            self._update_tasks.pop(progress_id, None)
+
+    async def shutdown(self) -> None:
+        """Cancel and await update work owned by this Dashboard service."""
+
+        async with self._shutdown_lock:
+            self._closed = True
+            owned_tasks = list(self._update_tasks.items())
+            cancelled_progress_ids: list[str] = []
+            for progress_id, task in owned_tasks:
+                if not task.done() and task.cancel():
+                    cancelled_progress_ids.append(progress_id)
+            if owned_tasks:
+                await asyncio.gather(
+                    *(task for _, task in owned_tasks),
+                    return_exceptions=True,
+                )
+            for progress_id in cancelled_progress_ids:
+                progress = self.update_progress.get(progress_id)
+                if progress and progress.get("status") == "running":
+                    self._mark_update_cancelled(progress_id)
+            self._update_tasks.clear()
 
     async def _run_update_project(
         self,
@@ -208,7 +258,7 @@ class UpdateService:
                     if corrupt_member:
                         raise UpdateServiceError(f"更新包校验失败: {corrupt_member}")
 
-                await asyncio.to_thread(_verify_update_packages)
+                await self._run_threaded(_verify_update_packages)
                 self._set_update_stage(
                     progress_id,
                     "verify",
@@ -224,7 +274,7 @@ class UpdateService:
                     "下载完成，正在应用更新...",
                     91,
                 )
-                await asyncio.to_thread(
+                await self._run_threaded(
                     self.astrbot_updator.apply_update_package,
                     core_zip_path,
                 )
@@ -246,8 +296,15 @@ class UpdateService:
                 logger.info("更新依赖中...")
                 try:
                     await self.pip_install(requirements_path="requirements.txt")
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
-                    logger.error(f"更新依赖失败: {exc}")
+                    logger.error("更新依赖失败: %s", safe_error("", exc))
+                    self._mark_update_error(
+                        progress_id,
+                        "依赖更新失败，未执行重启。",
+                    )
+                    return
                 self._set_update_stage(
                     progress_id,
                     "dependencies",
@@ -265,37 +322,42 @@ class UpdateService:
                         98,
                     )
                     await self.core_lifecycle.restart()
+                    self._set_update_stage(
+                        progress_id,
+                        "restart",
+                        "done",
+                        "重启请求已提交。",
+                        99,
+                    )
                     message = "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。"
                 else:
                     message = "更新成功，AstrBot 将在下次启动时应用新的代码。"
 
-                self.update_progress[progress_id].update(
-                    {
-                        "status": "success",
-                        "stage": "done",
-                        "message": message,
-                        "overall_percent": 100,
-                    },
-                )
+                progress = self.update_progress.get(progress_id)
+                if progress:
+                    progress.update(
+                        {
+                            "status": "success",
+                            "stage": "done",
+                            "message": message,
+                            "overall_percent": 100,
+                        },
+                    )
                 logger.info(message)
         except asyncio.CancelledError:
-            self.update_progress[progress_id].update(
-                {
-                    "status": "error",
-                    "message": "更新任务已取消。",
-                },
+            self._mark_update_cancelled(progress_id)
+            logger.warning(
+                "Update task was cancelled: %s",
+                redact_sensitive_text(progress_id),
             )
-            logger.warning(f"Update task was cancelled: {progress_id}")
             raise
         except Exception as exc:
-            self.update_progress[progress_id].update(
-                {
-                    "status": "error",
-                    "message": "更新失败，请查看服务端日志。",
-                },
+            self._mark_update_error(progress_id, "更新失败，请查看服务端日志。")
+            logger.error(
+                "/api/update_project: %s",
+                redact_sensitive_text(traceback.format_exc()),
             )
-            logger.error(f"/api/update_project: {traceback.format_exc()}")
-            logger.debug(f"Update task failed: {exc!s}")
+            logger.debug("Update task failed: %s", safe_error("", exc))
 
     async def install_pip_package(self, data: object) -> UpdateServiceResult:
         if self.demo_mode:
@@ -312,10 +374,15 @@ class UpdateService:
             await self.pip_install(package, mirror=mirror)
             return UpdateServiceResult(message="安装成功。")
         except Exception as exc:
-            logger.error(f"/api/update_pip: {traceback.format_exc()}")
-            raise UpdateServiceError(exc.__str__()) from exc
+            logger.error(
+                "/api/update_pip: %s",
+                redact_sensitive_text(traceback.format_exc()),
+            )
+            raise UpdateServiceError("安装依赖失败。") from exc
 
     def _init_update_progress(self, progress_id: str, version: str) -> None:
+        self._prune_update_progress(progress_id)
+        self.update_progress.pop(progress_id, None)
         self.update_progress[progress_id] = {
             "id": progress_id,
             "status": "running",
@@ -327,6 +394,67 @@ class UpdateService:
                 "core": self._empty_stage("pending"),
             },
         }
+
+    def _prune_update_progress(self, incoming_progress_id: str) -> None:
+        """Keep terminal progress records bounded without dropping running updates."""
+
+        if incoming_progress_id in self.update_progress:
+            return
+        while len(self.update_progress) >= self._max_progress_records:
+            terminal_progress_id = next(
+                (
+                    progress_id
+                    for progress_id, progress in self.update_progress.items()
+                    if progress.get("status") != "running"
+                ),
+                None,
+            )
+            if terminal_progress_id is None:
+                raise UpdateServiceError("更新任务过多，请稍后重试。")
+            self.update_progress.pop(terminal_progress_id, None)
+
+    async def _run_threaded(self, func: Callable[..., Any], *args: Any) -> Any:
+        """Await executor work through cancellation so it cannot outlive its update task."""
+
+        thread_task = asyncio.create_task(asyncio.to_thread(func, *args))
+        try:
+            return await asyncio.shield(thread_task)
+        except asyncio.CancelledError:
+            current_task = asyncio.current_task()
+            while not thread_task.done():
+                try:
+                    await asyncio.shield(thread_task)
+                except asyncio.CancelledError:
+                    # Keep the executor work owned even when shutdown itself is
+                    # cancelled again. Preserve the original cancellation below.
+                    if current_task is not None:
+                        current_task.uncancel()
+            try:
+                thread_task.result()
+            except Exception as exc:
+                logger.debug(
+                    "Update thread failed during cancellation: %s", safe_error("", exc)
+                )
+            raise
+
+    def _mark_update_stage_error(self, progress_id: str) -> None:
+        progress = self.update_progress.get(progress_id)
+        if not progress:
+            return
+        stage = str(progress.get("stage") or "preparing")
+        stages = progress.setdefault("stages", {})
+        stages.setdefault(stage, self._empty_stage())
+        stages[stage]["status"] = "error"
+
+    def _mark_update_error(self, progress_id: str, message: str) -> None:
+        progress = self.update_progress.get(progress_id)
+        if not progress:
+            return
+        self._mark_update_stage_error(progress_id)
+        progress.update({"status": "error", "message": message})
+
+    def _mark_update_cancelled(self, progress_id: str) -> None:
+        self._mark_update_error(progress_id, "更新任务已取消。")
 
     @staticmethod
     def _empty_stage(status: str = "pending") -> dict:

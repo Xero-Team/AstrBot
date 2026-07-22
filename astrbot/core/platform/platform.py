@@ -11,7 +11,7 @@ from typing import Any
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
-from astrbot.core.utils.task_utils import create_tracked_task
+from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 
 from .astr_message_event import AstrMessageEvent
 from .astrbot_message import AstrBotMessage
@@ -35,7 +35,6 @@ PLATFORM_ACTION_METHOD_NAMES = (
     "send_poke",
 )
 
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 logger = logging.getLogger("astrbot")
 
 
@@ -83,6 +82,10 @@ class Platform(abc.ABC):
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
+        # Auxiliary work triggered by this adapter cannot outlive the adapter
+        # instance. PlatformManager tears it down even if an adapter's own
+        # terminate() implementation does not call super().
+        self._background_tasks: set[asyncio.Task] = set()
 
         # 平台运行状态
         self._status: PlatformStatus = PlatformStatus.PENDING
@@ -167,6 +170,10 @@ class Platform(abc.ABC):
     async def terminate(self) -> None:
         """终止一个平台的运行实例。"""
 
+    async def _cancel_background_tasks(self) -> None:
+        """Cancel auxiliary tasks owned by this platform instance."""
+        await cancel_tracked_tasks(self._background_tasks)
+
     async def refresh_registered_commands(self) -> None:
         """Refresh platform-native command registrations when supported."""
 
@@ -185,7 +192,7 @@ class Platform(abc.ABC):
         异步方法。
         """
         create_tracked_task(
-            _BACKGROUND_TASKS,
+            self._background_tasks,
             Metric.upload(msg_event_tick=1, adapter_name=self.meta().name),
             name=f"metric:send-by-session:{self.meta().name}",
         )

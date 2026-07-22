@@ -8,6 +8,7 @@ from typing import TypeVar, cast
 from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.webhook_utils import (
     configure_webhook_utils,
     ensure_platform_webhook_config,
@@ -22,6 +23,7 @@ from .send_result import PlatformSendResult
 
 @dataclass
 class PlatformTasks:
+    platform: Platform
     run: asyncio.Task
     wrapper: asyncio.Task
 
@@ -36,10 +38,13 @@ class PlatformManager:
         """加载的 Platform 的实例"""
 
         self._inst_map: dict[str, dict] = {}
-        self._platform_tasks: dict[str, PlatformTasks] = {}
+        # Tasks are owned by an adapter instance, not its transport-facing client
+        # ID. Different configured adapters can legitimately expose the same
+        # client ID, especially while a platform is being reconfigured.
+        self._platform_tasks: dict[int, PlatformTasks] = {}
         self._platform_limiters: dict[str, asyncio.Semaphore] = {}
         self._platform_limit_settings: dict[str, int] = {}
-        # Keep an old shutdown from cancelling a replacement with the same client ID.
+        # Serialize all replacement and shutdown transitions.
         self._platform_lifecycle_lock = asyncio.Lock()
 
         self.astrbot_config = config
@@ -61,19 +66,27 @@ class PlatformManager:
         sanitized = platform_id.replace(":", "_").replace("!", "_")
         return sanitized, sanitized != platform_id
 
+    def _configure_platform_instance(self, inst: Platform) -> None:
+        """Inject manager-owned runtime services into an adapter instance."""
+
+        inst.database = getattr(self, "database", None)
+        inst.runtime_config = self.astrbot_config
+        inst.preferences = getattr(self, "preferences", None)
+
     def _start_platform_task(self, task_name: str, inst: Platform) -> None:
         run_task = asyncio.create_task(inst.run(), name=task_name)
         wrapper_task = asyncio.create_task(
             self._task_wrapper(run_task, platform=inst),
             name=f"{task_name}_wrapper",
         )
-        self._platform_tasks[inst.client_self_id] = PlatformTasks(
+        self._platform_tasks[id(inst)] = PlatformTasks(
+            platform=inst,
             run=run_task,
             wrapper=wrapper_task,
         )
 
-    async def _stop_platform_task(self, client_id: str) -> None:
-        tasks = self._platform_tasks.pop(client_id, None)
+    async def _stop_platform_task(self, inst: Platform) -> None:
+        tasks = self._platform_tasks.pop(id(inst), None)
         if not tasks:
             return
         for task in (tasks.run, tasks.wrapper):
@@ -93,11 +106,20 @@ class PlatformManager:
                     logger.error(
                         "终止平台适配器失败: client_id=%s, error=%s",
                         client_id,
-                        e,
+                        safe_error("", e),
                     )
-                    logger.error(traceback.format_exc())
+                    logger.error(redact_sensitive_text(traceback.format_exc()))
         finally:
-            await self._stop_platform_task(client_id)
+            try:
+                await inst._cancel_background_tasks()
+            finally:
+                try:
+                    await self._stop_platform_task(inst)
+                finally:
+                    # The run task may register its own final cleanup work when
+                    # cancellation reaches the adapter. Sweep once more only
+                    # after it has fully stopped.
+                    await inst._cancel_background_tasks()
 
     def set_platform_concurrency_limit(
         self, platform_id: str, limit: int | None
@@ -133,13 +155,18 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 await self.load_platform(platform)
             except Exception as e:
-                logger.error(f"初始化 {platform} 平台适配器失败: {e}")
+                logger.error(
+                    "初始化 %s 平台适配器失败: %s",
+                    redact_sensitive_text(str(platform)),
+                    safe_error("", e),
+                )
 
         # 网页聊天 is built-in but follows the same lazy discovery boundary.
         webchat_cls = discover_platform_adapter("webchat")
         if webchat_cls is None:
             raise RuntimeError("Built-in webchat platform adapter was not registered")
         webchat_inst = webchat_cls({}, self.settings, self.event_queue)
+        self._configure_platform_instance(webchat_inst)
         self._platform_insts.append(webchat_inst)
         self._start_platform_task("webchat", webchat_inst)
 
@@ -179,10 +206,16 @@ class PlatformManager:
             cls_type = discover_platform_adapter(platform_config["type"])
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
+                "加载平台适配器 %s 失败，原因：%s。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
+                platform_config["type"],
+                safe_error("", e),
             )
         except Exception as e:
-            logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
+            logger.error(
+                "加载平台适配器 %s 失败，原因：%s。",
+                platform_config["type"],
+                safe_error("", e),
+            )
 
         if cls_type is None:
             logger.error(
@@ -190,9 +223,7 @@ class PlatformManager:
             )
             return
         inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
-        inst.database = getattr(self, "database", None)
-        inst.runtime_config = self.astrbot_config
-        inst.preferences = getattr(self, "preferences", None)
+        self._configure_platform_instance(inst)
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
             "client_id": inst.client_self_id,
@@ -212,7 +243,7 @@ class PlatformManager:
                 )
                 await handler.handler()
             except Exception:
-                logger.error(traceback.format_exc())
+                logger.error(redact_sensitive_text(traceback.format_exc()))
 
     async def _task_wrapper(
         self, task: asyncio.Task, platform: Platform | None = None
@@ -226,10 +257,11 @@ class PlatformManager:
         except asyncio.CancelledError:
             if platform:
                 platform.status = PlatformStatus.STOPPED
+            raise
         except Exception as e:
-            error_msg = str(e)
-            tb_str = traceback.format_exc()
-            logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
+            error_msg = safe_error("", e)
+            tb_str = redact_sensitive_text(traceback.format_exc())
+            logger.error("------- 任务 %s 发生错误: %s", task.get_name(), error_msg)
             for line in tb_str.split("\n"):
                 logger.error(f"|    {line}")
             logger.error("-------")
@@ -262,40 +294,37 @@ class PlatformManager:
 
             # client_id = self._inst_map.pop(platform_id, None)
             info = self._inst_map.pop(platform_id)
-            client_id = info["client_id"]
             inst: Platform = info["inst"]
-            try:
-                self._platform_insts.remove(
-                    next(
-                        inst
-                        for inst in self._platform_insts
-                        if inst.client_self_id == client_id
-                    ),
-                )
-            except Exception:
+            if not any(candidate is inst for candidate in self._platform_insts):
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
+            else:
+                self._platform_insts = [
+                    candidate
+                    for candidate in self._platform_insts
+                    if candidate is not inst
+                ]
 
             await self._terminate_inst_and_tasks(inst)
 
     async def terminate(self) -> None:
-        terminated_client_ids: set[str] = set()
-        for platform_id in list(self._inst_map.keys()):
-            info = self._inst_map.get(platform_id)
-            if info:
-                terminated_client_ids.add(info["client_id"])
-            await self.terminate_platform(platform_id)
+        async with self._platform_lifecycle_lock:
+            terminated_instances: set[int] = set()
+            for platform_id in list(self._inst_map.keys()):
+                info = self._inst_map.get(platform_id)
+                if info:
+                    terminated_instances.add(id(info["inst"]))
+                await self._terminate_platform_unlocked(platform_id)
 
-        for inst in list(self._platform_insts):
-            client_id = inst.client_self_id
-            if client_id in terminated_client_ids:
-                continue
-            await self._terminate_inst_and_tasks(inst)
+            for inst in list(self._platform_insts):
+                if id(inst) in terminated_instances:
+                    continue
+                await self._terminate_inst_and_tasks(inst)
 
-        self._platform_insts.clear()
-        self._inst_map.clear()
-        self._platform_tasks.clear()
-        self._platform_limiters.clear()
-        self._platform_limit_settings.clear()
+            self._platform_insts.clear()
+            self._inst_map.clear()
+            self._platform_tasks.clear()
+            self._platform_limiters.clear()
+            self._platform_limit_settings.clear()
 
     def get_platform_count(self) -> int:
         return len(self._platform_insts)
@@ -347,12 +376,17 @@ class PlatformManager:
                 lambda: inst.send_by_session(session, message_chain),
             )
         except Exception as exc:
+            logger.warning(
+                "Failed to send message through platform %s: %s",
+                session.platform_id,
+                safe_error("", exc),
+            )
             return PlatformSendResult(
                 platform_id=session.platform_id,
                 success=False,
                 target=session.session_id,
                 message_count=len(message_chain.chain),
-                error_message=str(exc),
+                error_message="message delivery failed",
             )
         if isinstance(result, PlatformSendResult):
             return result
@@ -400,7 +434,7 @@ class PlatformManager:
                 logger.warning(
                     "Failed to refresh native commands for platform %s: %s",
                     inst.meta().name,
-                    exc,
+                    safe_error("", exc),
                 )
 
         await asyncio.gather(*(refresh(inst) for inst in self._platform_insts))
@@ -444,7 +478,7 @@ class PlatformManager:
                     error_count += 1
             except Exception as e:
                 # 如果获取统计信息失败，记录基本信息
-                logger.warning(f"获取平台统计信息失败: {e}")
+                logger.warning("获取平台统计信息失败: %s", safe_error("", e))
                 stats_list.append(
                     {
                         "id": getattr(inst, "config", {}).get("id", "unknown"),

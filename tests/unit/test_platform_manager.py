@@ -1,14 +1,18 @@
 import asyncio
+from collections.abc import Coroutine
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import discovery
+from astrbot.core.platform import Platform, PlatformMetadata, discovery
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.send_result import PlatformSendResult
+
+pytestmark = pytest.mark.platform
 
 
 def _make_manager() -> PlatformManager:
@@ -18,6 +22,148 @@ def _make_manager() -> PlatformManager:
             "platform_settings": {},
         },
         asyncio.Queue(),
+    )
+
+
+class _LifecycleFakeAdapter(Platform):
+    """Controllable adapter used to exercise PlatformManager's real task paths."""
+
+    instances: list[_LifecycleFakeAdapter] = []
+    client_ids: list[str] = []
+
+    @classmethod
+    def reset(cls, client_ids: list[str] | None = None) -> None:
+        cls.instances = []
+        cls.client_ids = list(client_ids or [])
+
+    def __init__(
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
+    ) -> None:
+        super().__init__(platform_config, event_queue)
+        del platform_settings
+        self.client_self_id = (
+            type(self).client_ids.pop(0)
+            if type(self).client_ids
+            else f"client-{len(type(self).instances)}"
+        )
+        self.run_started = asyncio.Event()
+        self.run_cancelled = asyncio.Event()
+        self.run_finished = asyncio.Event()
+        self.allow_run_exit = asyncio.Event()
+        self.terminate_started = asyncio.Event()
+        self.allow_terminate = asyncio.Event()
+        self.allow_terminate.set()
+        self.background_started = asyncio.Event()
+        self.background_cancelled = asyncio.Event()
+        self.allow_background_exit = asyncio.Event()
+        self.spawn_background_on_run_cancel = False
+        self.late_background_started = asyncio.Event()
+        self.late_background_cancelled = asyncio.Event()
+        self.allow_late_background_exit = asyncio.Event()
+        self.run_error: Exception | None = None
+        self.terminate_error: Exception | None = None
+        type(self).instances.append(self)
+
+    async def _run(self) -> None:
+        self.run_started.set()
+        try:
+            await self.allow_run_exit.wait()
+            if self.run_error is not None:
+                raise self.run_error
+        except asyncio.CancelledError:
+            self.run_cancelled.set()
+            if self.spawn_background_on_run_cancel:
+                self.start_late_background_task()
+            raise
+        finally:
+            self.run_finished.set()
+
+    def run(self) -> Coroutine[Any, Any, None]:
+        return self._run()
+
+    def meta(self) -> PlatformMetadata:
+        return PlatformMetadata(
+            name="lifecycle-fake",
+            description="lifecycle fake adapter",
+            id=self.config.get("id", "webchat"),
+        )
+
+    async def terminate(self) -> None:
+        self.terminate_started.set()
+        await self.allow_terminate.wait()
+        if self.terminate_error is not None:
+            raise self.terminate_error
+
+    def start_background_task(self) -> asyncio.Task[None]:
+        """Start auxiliary work without asking ``terminate`` to clean it up."""
+
+        async def wait_in_background() -> None:
+            self.background_started.set()
+            try:
+                await self.allow_background_exit.wait()
+            except asyncio.CancelledError:
+                self.background_cancelled.set()
+                raise
+
+        task = asyncio.create_task(wait_in_background(), name="lifecycle-background")
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
+    def start_late_background_task(self) -> asyncio.Task[None]:
+        """Create tracked work from the run task's cancellation path."""
+
+        async def wait_in_background() -> None:
+            self.late_background_started.set()
+            try:
+                await self.allow_late_background_exit.wait()
+            except asyncio.CancelledError:
+                self.late_background_cancelled.set()
+                raise
+
+        task = asyncio.create_task(
+            wait_in_background(),
+            name="lifecycle-late-background",
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
+
+def _install_lifecycle_adapter(monkeypatch, *, client_ids: list[str] | None = None):
+    _LifecycleFakeAdapter.reset(client_ids)
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.discover_platform_adapter",
+        lambda _adapter_type: _LifecycleFakeAdapter,
+    )
+    return _LifecycleFakeAdapter.instances
+
+
+async def _cleanup_lifecycle_manager(
+    manager: PlatformManager,
+    instances: list[_LifecycleFakeAdapter],
+) -> None:
+    """Release every fake, including one an intentionally broken manager orphaned."""
+
+    for inst in instances:
+        inst.allow_terminate.set()
+        inst.allow_run_exit.set()
+        inst.allow_background_exit.set()
+        inst.allow_late_background_exit.set()
+        inst.run_error = None
+        inst.terminate_error = None
+    await manager.terminate()
+    background_tasks = [
+        task for inst in instances for task in list(inst._background_tasks)
+    ]
+    for task in background_tasks:
+        task.cancel()
+    await asyncio.gather(*background_tasks, return_exceptions=True)
+    await asyncio.gather(
+        *(inst.run_finished.wait() for inst in instances if inst.run_started.is_set())
     )
 
 
@@ -109,10 +255,14 @@ async def test_platform_manager_invoke_action_uses_registered_platform_limit():
     manager = _make_manager()
     manager.set_platform_concurrency_limit("telegram", 1)
     events: list[str] = []
+    first_started = asyncio.Event()
+    second_submitted = asyncio.Event()
     release = asyncio.Event()
 
     async def action_handler(*, value: str) -> dict[str, object]:
         events.append(f"start:{value}")
+        if value == "first":
+            first_started.set()
         await release.wait()
         events.append(f"end:{value}")
         return {"value": value}
@@ -125,11 +275,14 @@ async def test_platform_manager_invoke_action_uses_registered_platform_limit():
     first = asyncio.create_task(
         manager.invoke_action("telegram", "some_action", value="first")
     )
-    await asyncio.sleep(0)
-    second = asyncio.create_task(
-        manager.invoke_action("telegram", "some_action", value="second")
-    )
-    await asyncio.sleep(0)
+    await first_started.wait()
+
+    async def invoke_second() -> dict[str, object]:
+        second_submitted.set()
+        return await manager.invoke_action("telegram", "some_action", value="second")
+
+    second = asyncio.create_task(invoke_second())
+    await second_submitted.wait()
 
     assert events == ["start:first"]
 
@@ -152,12 +305,16 @@ async def test_platform_manager_send_to_session_uses_registered_platform_limit()
     manager = _make_manager()
     manager.set_platform_concurrency_limit("telegram", 1)
     events: list[str] = []
+    first_started = asyncio.Event()
+    second_submitted = asyncio.Event()
     release = asyncio.Event()
     session = MessageSession.from_str("telegram:FriendMessage:chat-1")
     chain = MessageChain(chain=[Plain("hello")])
 
     async def send_by_session(_session, _chain) -> PlatformSendResult:
         events.append("start")
+        if len(events) == 1:
+            first_started.set()
         await release.wait()
         events.append("end")
         return PlatformSendResult(
@@ -172,9 +329,14 @@ async def test_platform_manager_send_to_session_uses_registered_platform_limit()
     manager._find_inst_by_id = MagicMock(return_value=platform)
 
     first = asyncio.create_task(manager.send_to_session(session, chain))
-    await asyncio.sleep(0)
-    second = asyncio.create_task(manager.send_to_session(session, chain))
-    await asyncio.sleep(0)
+    await first_started.wait()
+
+    async def send_second() -> PlatformSendResult:
+        second_submitted.set()
+        return await manager.send_to_session(session, chain)
+
+    second = asyncio.create_task(send_second())
+    await second_submitted.wait()
 
     assert events == ["start"]
 
@@ -225,13 +387,16 @@ async def test_platform_manager_send_to_session_normalizes_legacy_none_result():
 
 
 @pytest.mark.asyncio
-async def test_platform_manager_send_to_session_returns_failure_when_adapter_raises():
+async def test_platform_manager_send_to_session_hides_adapter_failure_details(caplog):
     manager = _make_manager()
     session = MessageSession.from_str("telegram:FriendMessage:chat-1")
     chain = MessageChain(chain=[Plain("hello")])
     platform = MagicMock()
     platform.send_by_session = AsyncMock(
-        side_effect=RuntimeError("adapter rejected payload")
+        side_effect=RuntimeError(
+            "adapter rejected api_key=top-secret Bearer token-123 "
+            "https://internal.example/send C:\\private\\secret.txt"
+        )
     )
     manager._find_inst_by_id = MagicMock(return_value=platform)
 
@@ -242,8 +407,12 @@ async def test_platform_manager_send_to_session_returns_failure_when_adapter_rai
         success=False,
         target="chat-1",
         message_count=1,
-        error_message="adapter rejected payload",
+        error_message="message delivery failed",
     )
+    assert "top-secret" not in caplog.text
+    assert "token-123" not in caplog.text
+    assert "internal.example" not in caplog.text
+    assert "C:\\private\\secret.txt" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -264,11 +433,37 @@ async def test_platform_manager_terminate_platform_clears_platform_limit():
     assert manager.get_platform_concurrency_limit("telegram") is None
 
 
+def test_platform_manager_get_all_stats_redacts_adapter_failure(caplog):
+    manager = _make_manager()
+    platform = MagicMock()
+    platform.config = {"id": "bot"}
+    platform.get_stats.side_effect = RuntimeError(
+        "password=very-secret https://internal.example/stats C:\\private\\stats.txt"
+    )
+    manager._platform_insts = [platform]
+
+    stats = manager.get_all_stats()
+
+    assert stats["platforms"] == [
+        {
+            "id": "bot",
+            "type": "unknown",
+            "status": "unknown",
+            "error_count": 0,
+            "last_error": None,
+        }
+    ]
+    assert "very-secret" not in caplog.text
+    assert "internal.example" not in caplog.text
+    assert "C:\\private\\stats.txt" not in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_platform_manager_serializes_disable_then_enable_reload(monkeypatch):
     manager = _make_manager()
     first_termination_started = asyncio.Event()
     allow_first_termination = asyncio.Event()
+    enable_reload_entered = asyncio.Event()
     events: list[str] = []
     termination_count = 0
 
@@ -298,10 +493,13 @@ async def test_platform_manager_serializes_disable_then_enable_reload(monkeypatc
         manager.reload({"enable": False, "id": "napcat", "type": "napcat"})
     )
     await first_termination_started.wait()
-    enable_task = asyncio.create_task(
-        manager.reload({"enable": True, "id": "napcat", "type": "napcat"})
-    )
-    await asyncio.sleep(0)
+
+    async def enable_reload() -> None:
+        enable_reload_entered.set()
+        await manager.reload({"enable": True, "id": "napcat", "type": "napcat"})
+
+    enable_task = asyncio.create_task(enable_reload())
+    await enable_reload_entered.wait()
 
     assert events == ["terminate:napcat:1"]
 
@@ -365,3 +563,416 @@ async def test_platform_manager_skips_disabled_and_unknown_platform(monkeypatch)
 
     assert discover.call_args_list == [(("x",), {})]
     assert manager._platform_insts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_injects_runtime_dependencies_into_owned_webchat(
+    monkeypatch,
+):
+    manager = _make_manager()
+    manager.database = object()
+    manager.preferences = object()
+    instances = _install_lifecycle_adapter(monkeypatch)
+
+    try:
+        await manager.initialize()
+
+        assert len(instances) == 1
+        webchat = instances[0]
+        await webchat.run_started.wait()
+        assert webchat.config == {}
+        assert webchat.database is manager.database
+        assert webchat.runtime_config is manager.astrbot_config
+        assert webchat.preferences is manager.preferences
+        assert manager._inst_map == {}
+        assert manager._platform_insts == [webchat]
+        assert len(manager._platform_tasks) == 1
+
+        await manager.terminate()
+
+        assert webchat.terminate_started.is_set()
+        assert webchat.run_cancelled.is_set()
+        assert manager._platform_insts == []
+        assert manager._platform_tasks == {}
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_terminate_owns_webchat_on_client_id_collision(
+    monkeypatch,
+):
+    """Configured adapters cannot make the built-in WebChat task disappear."""
+    manager = PlatformManager(
+        {
+            "platform": [{"enable": True, "id": "bot", "type": "lifecycle-fake"}],
+            "platform_settings": {},
+        },
+        asyncio.Queue(),
+    )
+    instances = _install_lifecycle_adapter(monkeypatch, client_ids=["same", "same"])
+
+    try:
+        await manager.initialize()
+        configured, webchat = instances
+        await asyncio.gather(configured.run_started.wait(), webchat.run_started.wait())
+
+        await manager.terminate()
+
+        assert configured.terminate_started.is_set()
+        assert webchat.terminate_started.is_set()
+        assert configured.run_cancelled.is_set()
+        assert webchat.run_cancelled.is_set()
+        assert manager._platform_insts == []
+        assert manager._platform_tasks == {}
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_task_wrapper_propagates_direct_cancellation(
+    monkeypatch,
+):
+    """A direct wrapper cancellation must remain observable to its owner."""
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch)
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+
+    try:
+        await manager.load_platform(config)
+        inst = instances[0]
+        await inst.run_started.wait()
+        tasks = next(iter(manager._platform_tasks.values()))
+
+        tasks.wrapper.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tasks.wrapper
+
+        await inst.run_finished.wait()
+        assert tasks.run.cancelled()
+        assert inst.run_cancelled.is_set()
+        assert inst.status.value == "stopped"
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_terminates_adapter_owned_background_tasks(
+    monkeypatch,
+):
+    """Manager cleanup owns work an adapter leaves behind in ``terminate``."""
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch)
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+
+    try:
+        await manager.load_platform(config)
+        inst = instances[0]
+        await inst.run_started.wait()
+        background_task = inst.start_background_task()
+        await inst.background_started.wait()
+
+        await manager.terminate_platform("bot")
+
+        assert inst.terminate_started.is_set()
+        assert background_task.cancelled()
+        assert inst.background_cancelled.is_set()
+        assert inst._background_tasks == set()
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+@pytest.mark.parametrize("attempt", range(3))
+async def test_platform_manager_reclaims_tasks_created_during_run_cancellation(
+    monkeypatch,
+    attempt: int,
+):
+    """A run coroutine cannot register background work after its final cleanup."""
+    del attempt
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch)
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+
+    try:
+        await manager.load_platform(config)
+        inst = instances[0]
+        await inst.run_started.wait()
+        inst.spawn_background_on_run_cancel = True
+
+        await manager.terminate_platform("bot")
+        await inst.late_background_started.wait()
+
+        assert inst.run_cancelled.is_set()
+        assert inst.late_background_cancelled.is_set()
+        assert inst._background_tasks == set()
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+@pytest.mark.parametrize("attempt", range(3))
+async def test_platform_manager_serializes_real_same_id_reload_and_reclaims_old_tasks(
+    monkeypatch,
+    attempt: int,
+):
+    del attempt
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(
+        monkeypatch,
+        client_ids=["shared", "shared", "shared"],
+    )
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+    manager.platforms_config.append(config)
+
+    first_reload: asyncio.Task | None = None
+    second_reload: asyncio.Task | None = None
+    try:
+        await manager.load_platform(config)
+        old = instances[0]
+        await old.run_started.wait()
+        old.allow_terminate.clear()
+
+        first_reload = asyncio.create_task(
+            manager.reload(config), name="lifecycle-first-reload"
+        )
+        await old.terminate_started.wait()
+
+        second_reload_entered = asyncio.Event()
+
+        async def reload_again() -> None:
+            second_reload_entered.set()
+            await manager.reload(config)
+
+        second_reload = asyncio.create_task(
+            reload_again(), name="lifecycle-second-reload"
+        )
+        await second_reload_entered.wait()
+
+        # The first reload owns the lifecycle lock until it has reclaimed old.
+        assert instances == [old]
+
+        old.allow_terminate.set()
+        await asyncio.gather(first_reload, second_reload)
+
+        replacement, current = instances[1:]
+        await current.run_started.wait()
+        assert old.run_cancelled.is_set()
+        assert replacement.run_cancelled.is_set()
+        assert manager._inst_map["bot"]["inst"] is current
+        assert manager._platform_insts == [current]
+        assert len(manager._platform_tasks) == 1
+        assert next(iter(manager._platform_tasks.values())).platform is current
+    finally:
+        for task in (first_reload, second_reload):
+            if task is not None and not task.done():
+                task.cancel()
+        await asyncio.gather(
+            *(task for task in (first_reload, second_reload) if task is not None),
+            return_exceptions=True,
+        )
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+@pytest.mark.parametrize("attempt", range(3))
+async def test_platform_manager_terminate_and_reload_keep_new_instance_owned(
+    monkeypatch,
+    attempt: int,
+):
+    del attempt
+    manager = PlatformManager(
+        {
+            "platform": [{"enable": True, "id": "bot", "type": "lifecycle-fake"}],
+            "platform_settings": {},
+        },
+        asyncio.Queue(),
+    )
+    instances = _install_lifecycle_adapter(
+        monkeypatch,
+        client_ids=["shared", "webchat", "shared"],
+    )
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+    shutdown: asyncio.Task | None = None
+    reload_task: asyncio.Task | None = None
+    try:
+        await manager.initialize()
+        old, webchat = instances
+        await asyncio.gather(old.run_started.wait(), webchat.run_started.wait())
+        webchat.allow_terminate.clear()
+
+        shutdown = asyncio.create_task(manager.terminate(), name="lifecycle-shutdown")
+        await webchat.terminate_started.wait()
+        assert old.run_cancelled.is_set()
+
+        reload_entered = asyncio.Event()
+
+        async def reload_after_shutdown_started() -> None:
+            reload_entered.set()
+            await manager.reload(config)
+
+        reload_task = asyncio.create_task(
+            reload_after_shutdown_started(), name="lifecycle-reload-during-shutdown"
+        )
+        await reload_entered.wait()
+
+        # A shutdown in progress must retain exclusive ownership until cleanup ends.
+        assert instances == [old, webchat]
+
+        webchat.allow_terminate.set()
+        await asyncio.gather(shutdown, reload_task)
+
+        current = instances[2]
+        await current.run_started.wait()
+        assert manager._inst_map["bot"]["inst"] is current
+        assert manager._platform_insts == [current]
+        assert len(manager._platform_tasks) == 1
+        assert next(iter(manager._platform_tasks.values())).platform is current
+    finally:
+        for task in (shutdown, reload_task):
+            if task is not None and not task.done():
+                task.cancel()
+        await asyncio.gather(
+            *(task for task in (shutdown, reload_task) if task is not None),
+            return_exceptions=True,
+        )
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_keeps_task_ownership_by_instance_on_client_id_collision(
+    monkeypatch,
+):
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch, client_ids=["same", "same"])
+    first_config = {"enable": True, "id": "first", "type": "lifecycle-fake"}
+    second_config = {"enable": True, "id": "second", "type": "lifecycle-fake"}
+
+    try:
+        await manager.load_platform(first_config)
+        first = instances[0]
+        await first.run_started.wait()
+        await manager.load_platform(second_config)
+        second = instances[1]
+        await second.run_started.wait()
+
+        await manager.terminate_platform("second")
+
+        assert second.run_cancelled.is_set()
+        assert not first.run_finished.is_set()
+        assert manager._inst_map == {"first": {"inst": first, "client_id": "same"}}
+        assert manager._platform_insts == [first]
+        assert len(manager._platform_tasks) == 1
+        assert next(iter(manager._platform_tasks.values())).platform is first
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_reclaims_run_task_when_adapter_terminate_fails(
+    monkeypatch,
+    caplog,
+):
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch)
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+
+    try:
+        await manager.load_platform(config)
+        inst = instances[0]
+        await inst.run_started.wait()
+        inst.terminate_error = RuntimeError(
+            "api_key=top-secret Bearer token-123 "
+            "https://internal.example/path C:\\private\\secret.txt"
+        )
+
+        await manager.terminate_platform("bot")
+
+        assert inst.terminate_started.is_set()
+        assert inst.run_cancelled.is_set()
+        assert manager._inst_map == {}
+        assert manager._platform_insts == []
+        assert manager._platform_tasks == {}
+        assert "top-secret" not in caplog.text
+        assert "token-123" not in caplog.text
+        assert "internal.example" not in caplog.text
+        assert "C:\\private\\secret.txt" not in caplog.text
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_redacts_adapter_task_failures_before_stats_and_logs(
+    monkeypatch,
+    caplog,
+):
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch)
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+
+    try:
+        await manager.load_platform(config)
+        inst = instances[0]
+        await inst.run_started.wait()
+        inst.run_error = RuntimeError(
+            "password=very-secret https://internal.example/adapter"
+        )
+        tasks = next(iter(manager._platform_tasks.values()))
+        inst.allow_run_exit.set()
+        await tasks.wrapper
+
+        assert inst.last_error is not None
+        assert "very-secret" not in inst.last_error.message
+        assert "internal.example" not in inst.last_error.message
+        assert "very-secret" not in (inst.last_error.traceback or "")
+        assert "internal.example" not in (inst.last_error.traceback or "")
+        assert "very-secret" not in caplog.text
+        assert "internal.example" not in caplog.text
+    finally:
+        await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+@pytest.mark.blocking
+async def test_platform_manager_cancellation_still_reclaims_adapter_run_task(
+    monkeypatch,
+):
+    manager = _make_manager()
+    instances = _install_lifecycle_adapter(monkeypatch)
+    config = {"enable": True, "id": "bot", "type": "lifecycle-fake"}
+    termination: asyncio.Task | None = None
+
+    try:
+        await manager.load_platform(config)
+        inst = instances[0]
+        await inst.run_started.wait()
+        inst.allow_terminate.clear()
+
+        termination = asyncio.create_task(
+            manager.terminate_platform("bot"), name="lifecycle-cancel-terminate"
+        )
+        await inst.terminate_started.wait()
+        termination.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await termination
+
+        assert inst.run_cancelled.is_set()
+        assert manager._inst_map == {}
+        assert manager._platform_insts == []
+        assert manager._platform_tasks == {}
+    finally:
+        if termination is not None and not termination.done():
+            termination.cancel()
+        if termination is not None:
+            await asyncio.gather(termination, return_exceptions=True)
+        await _cleanup_lifecycle_manager(manager, instances)

@@ -383,7 +383,7 @@ class TestIssue5464:
         """
         manager = SessionLockManager()
         session_id = "shared-session-id"
-        lock_ids: set[int] = set()
+        locks: list[asyncio.Lock] = []
         lock_id_lock = threading.Lock()
 
         def get_lock_in_new_loop():
@@ -394,11 +394,13 @@ class TestIssue5464:
                 async def acquire_and_capture():
                     # Get the per-loop manager
                     per_loop_mgr = manager._get_loop_manager()
-                    # Capture the lock object id before acquiring
+                    # Keep every lock alive until the final identity check.
+                    # Otherwise a closed loop can release a lock and let Python
+                    # reuse its address for a later lock.
                     async with per_loop_mgr._access_lock:
                         lock = per_loop_mgr._locks[session_id]
                         with lock_id_lock:
-                            lock_ids.add(id(lock))
+                            locks.append(lock)
                     async with manager.acquire_lock(session_id):
                         pass
 
@@ -414,9 +416,9 @@ class TestIssue5464:
         for t in threads:
             t.join()
 
-        # Each loop should have its own Lock object
-        # If locks were shared, we'd only have 1 lock_id
-        assert len(lock_ids) == 5, "Each event loop should have its own Lock object"
+        # Each loop should have its own live Lock object.
+        assert len(locks) == 5
+        assert len({id(lock) for lock in locks}) == 5
 
     @pytest.mark.asyncio
     async def test_concurrent_access_same_session_different_loops(self):

@@ -22,9 +22,8 @@ def load_platform_stats_invalid_count_warn_limit() -> int:
 
     if value < 0:
         logger.warning(
-            "Invalid env %s=%r, fallback to default %d",
+            "Invalid %s, fallback to default %d",
             PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
-            raw_value,
             DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
         )
         return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
@@ -47,8 +46,8 @@ class InvalidCountWarnLimiter:
         """Record a warning for an invalid count value.
 
         Args:
-            value: Raw invalid count value.
-            key_for_log: Normalized key used in the warning log message.
+            value: Raw invalid count value. It is intentionally not logged.
+            key_for_log: Normalized row key. It is intentionally not logged.
         """
 
         if self.limit <= 0:
@@ -58,11 +57,7 @@ class InvalidCountWarnLimiter:
         if self._count >= self.limit:
             return
 
-        logger.warning(
-            "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
-            value,
-            key_for_log,
-        )
+        logger.warning("platform_stats count 非法，已按 0 处理")
         self._count += 1
         if self._count == self.limit:
             self._warn_suppressed()

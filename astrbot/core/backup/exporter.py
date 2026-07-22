@@ -4,6 +4,7 @@
 导出格式为 JSON，这是数据库无关的方案，支持未来向 MySQL/PostgreSQL 迁移。
 """
 
+import asyncio
 import hashlib
 import json
 import os
@@ -21,6 +22,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.error_redaction import safe_error
 
 # 从共享常量模块导入
 from .constants import (
@@ -233,7 +235,7 @@ class AstrBotExporter:
         zip_filename = f"astrbot_backup_{timestamp}.zip"
         zip_path = os.path.join(output_dir, zip_filename)
 
-        logger.info(f"开始导出备份到 {zip_path}")
+        logger.info("开始导出备份")
 
         try:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -252,15 +254,24 @@ class AstrBotExporter:
                     progress_callback,
                 )
 
-            logger.info(f"备份导出完成: {zip_path}")
+            logger.info("备份导出完成")
             return zip_path
 
-        except Exception as e:
-            logger.error(f"备份导出失败: {e}")
-            # 清理失败的文件
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
+        except asyncio.CancelledError:
+            self._remove_partial_backup(zip_path)
             raise
+        except Exception as exc:
+            logger.error("备份导出失败: %s", safe_error("", exc))
+            self._remove_partial_backup(zip_path)
+            raise
+
+    @staticmethod
+    def _remove_partial_backup(zip_path: str) -> None:
+        """Remove an archive that could not be completed without masking the cause."""
+        try:
+            Path(zip_path).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("清理失败的备份文件失败: %s", safe_error("", exc))
 
     async def _export_main_database(self) -> dict[str, list[dict]]:
         """导出主数据库所有表"""
@@ -277,8 +288,14 @@ class AstrBotExporter:
                     logger.debug(
                         f"导出表 {table_name}: {len(export_data[table_name])} 条记录"
                     )
-                except Exception as e:
-                    logger.warning(f"导出表 {table_name} 失败: {e}")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "导出表 %s 失败: %s",
+                        table_name,
+                        safe_error("", exc),
+                    )
                     export_data[table_name] = []
 
         return export_data
@@ -301,8 +318,14 @@ class AstrBotExporter:
                     logger.debug(
                         f"导出知识库表 {table_name}: {len(export_data[table_name])} 条记录"
                     )
-                except Exception as e:
-                    logger.warning(f"导出知识库表 {table_name} 失败: {e}")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "导出知识库表 %s 失败: %s",
+                        table_name,
+                        safe_error("", exc),
+                    )
                     export_data[table_name] = []
 
         return export_data
@@ -324,8 +347,10 @@ class AstrBotExporter:
             )
 
             return {"documents": docs}
-        except Exception as e:
-            logger.warning(f"导出知识库文档失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("导出知识库文档失败: %s", safe_error("", exc))
             return {"documents": []}
 
     async def _export_faiss_index(
@@ -340,9 +365,11 @@ class AstrBotExporter:
             if index_path.exists():
                 archive_path = f"databases/kb_{kb_id}/index.faiss"
                 zf.write(str(index_path), archive_path)
-                logger.debug(f"导出 FAISS 索引: {archive_path}")
-        except Exception as e:
-            logger.warning(f"导出 FAISS 索引失败: {e}")
+                logger.debug("已导出 FAISS 索引")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("导出 FAISS 索引失败: %s", safe_error("", exc))
 
     async def _export_kb_media_files(
         self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
@@ -360,8 +387,10 @@ class AstrBotExporter:
                     rel_path = file_path.relative_to(kb_helper.kb_dir)
                     archive_path = f"files/kb_media/{kb_id}/{rel_path}"
                     zf.write(str(file_path), archive_path)
-        except Exception as e:
-            logger.warning(f"导出知识库媒体文件失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("导出知识库媒体文件失败: %s", safe_error("", exc))
 
     async def _export_directories(
         self, zf: zipfile.ZipFile
@@ -377,7 +406,7 @@ class AstrBotExporter:
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
             if not full_path.exists():
-                logger.debug(f"目录不存在，跳过: {full_path}")
+                logger.debug("备份目录不存在，已跳过: %s", dir_name)
                 continue
 
             file_count = 0
@@ -401,15 +430,19 @@ class AstrBotExporter:
                             zf.write(str(file_path), archive_path)
                             file_count += 1
                             total_size += file_path.stat().st_size
-                        except Exception as e:
-                            logger.warning(f"导出文件 {file_path} 失败: {e}")
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as exc:
+                            logger.warning("导出文件失败: %s", safe_error("", exc))
 
                 stats[dir_name] = {"files": file_count, "size": total_size}
                 logger.debug(
                     f"导出目录 {dir_name}: {file_count} 个文件, {total_size} 字节"
                 )
-            except Exception as e:
-                logger.warning(f"导出目录 {dir_path} 失败: {e}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("导出目录失败: %s", safe_error("", exc))
                 stats[dir_name] = {"files": 0, "size": 0}
 
         return stats
@@ -427,8 +460,10 @@ class AstrBotExporter:
                     ext = os.path.splitext(file_path)[1]
                     archive_path = f"files/attachments/{attachment_id}{ext}"
                     zf.write(file_path, archive_path)
-            except Exception as e:
-                logger.warning(f"导出附件失败: {e}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("导出附件失败: %s", safe_error("", exc))
 
     def _model_to_dict(self, record: Any) -> dict:
         """将 SQLModel 实例转换为字典

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from astrbot import logger
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.io import ensure_dir
 from astrbot.utils.version_comparator import VersionComparator
 
@@ -57,7 +58,7 @@ def import_attachments(
                 attachments_dir / Path(name).name,
             )
             if not validate_path_within(target_path, attachments_dir):
-                logger.warning("附件路径越界，已跳过: %s", target_path)
+                logger.warning("附件路径越界，已跳过")
                 continue
 
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +66,7 @@ def import_attachments(
                 dst.write(src.read())
             count += 1
         except Exception as exc:
-            logger.warning("导入附件 %s 失败: %s", name, exc)
+            logger.warning("导入附件失败: %s", safe_error("", exc))
 
     return count
 
@@ -95,7 +96,7 @@ def import_directories(
     for dir_name in manifest.get("directories", []):
         target_dir_str = backup_directories.get(dir_name)
         if target_dir_str is None:
-            add_warning(f"未知的目录类型: {dir_name}")
+            add_warning(f"未知的目录类型: {redact_sensitive_text(str(dir_name))}")
             continue
 
         archive_prefix = f"directories/{dir_name}/"
@@ -115,9 +116,10 @@ def import_directories(
                 add_warning,
             )
             dir_stats[dir_name] = file_count
-            logger.debug("导入目录 %s: %d 个文件", dir_name, file_count)
+            logger.debug("导入目录完成: %d 个文件", file_count)
         except Exception as exc:
-            add_warning(f"导入目录 {dir_name} 失败: {exc}")
+            logger.warning("导入目录失败: %s", safe_error("", exc))
+            add_warning("导入目录失败")
             dir_stats[dir_name] = 0
 
     return dir_stats
@@ -139,7 +141,7 @@ def backup_existing_directory(target_dir: Path) -> None:
     if backup_path.exists():
         shutil.rmtree(backup_path)
     shutil.move(str(target_dir), str(backup_path))
-    logger.debug("已备份现有目录 %s 到 %s", target_dir, backup_path)
+    logger.debug("已备份现有目录")
 
 
 def extract_directory_files(
@@ -158,7 +160,7 @@ def extract_directory_files(
 
             target_path = target_dir / rel_path
             if not validate_path_within(target_path, target_dir):
-                add_warning(f"文件路径越界，已跳过: {name}")
+                add_warning("文件路径越界，已跳过")
                 continue
 
             if zf.getinfo(name).is_dir():
@@ -170,7 +172,8 @@ def extract_directory_files(
                 dst.write(src.read())
             file_count += 1
         except Exception as exc:
-            add_warning(f"导入文件 {name} 失败: {exc}")
+            logger.warning("导入文件失败: %s", safe_error("", exc))
+            add_warning("导入文件失败")
     return file_count
 
 

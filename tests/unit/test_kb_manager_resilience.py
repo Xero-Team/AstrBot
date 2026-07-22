@@ -10,9 +10,11 @@ These tests use lazy imports and mocks to avoid circular import issues
 in the astrbot core module chain.
 """
 
+import logging
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -149,6 +151,48 @@ async def test_update_kb_preserves_old_instance_when_reinit_fails(
         assert result.init_error is None
         assert result.kb.kb_name == "test_kb"
         assert result.kb.embedding_provider_id == "test-embedding-provider"
+
+
+@pytest.mark.asyncio
+async def test_load_kbs_redacts_initialization_errors(monkeypatch, caplog):
+    """Startup failures keep only a stable availability state in memory/logs."""
+    import astrbot.core.knowledge_base.kb_mgr as kb_mgr_module
+
+    sensitive_error = (
+        "api_key=api-key-top-secret Bearer bearer-secret-token "
+        "password=dashboard-password https://internal.example/private/config "
+        "C:\\private\\config\\secret.txt /srv/astrbot/private/config.json"
+    )
+
+    class FailingHelper:
+        def __init__(self, **_kwargs) -> None:
+            self.init_error = None
+
+        async def initialize(self) -> None:
+            raise RuntimeError(sensitive_error)
+
+    record = SimpleNamespace(kb_id="kb-1", kb_name="Demo")
+    manager = kb_mgr_module.KnowledgeBaseManager.__new__(
+        kb_mgr_module.KnowledgeBaseManager
+    )
+    manager.kb_db = SimpleNamespace(list_kbs=AsyncMock(return_value=[record]))
+    manager.provider_manager = MagicMock()
+    manager.kb_insts = {}
+    monkeypatch.setattr(kb_mgr_module, "KBHelper", FailingHelper)
+
+    with caplog.at_level(logging.ERROR, logger="astrbot"):
+        await manager.load_kbs()
+
+    assert manager.kb_insts["kb-1"].init_error == "Knowledge base initialization failed"
+    for secret in (
+        "api-key-top-secret",
+        "bearer-secret-token",
+        "dashboard-password",
+        "https://internal.example/private/config",
+        "C:\\private\\config\\secret.txt",
+        "/srv/astrbot/private/config.json",
+    ):
+        assert secret not in caplog.text
 
 
 @pytest.mark.asyncio

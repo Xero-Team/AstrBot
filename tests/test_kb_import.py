@@ -1,5 +1,6 @@
 import asyncio
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -8,48 +9,24 @@ import pytest_asyncio
 from fastapi import FastAPI
 from starlette.datastructures import UploadFile
 
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
-from astrbot.core.log import LogBroker
 from astrbot.core.provider.provider import EmbeddingProvider
-from astrbot.core.runtime_services import create_runtime_services
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
-    hash_md5_dashboard_password,
-)
-from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.api.auth import AuthContext
+from astrbot.dashboard.api.knowledge_bases import require_kb_scope, router
+from astrbot.dashboard.services import knowledge_base_service
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
 )
 
-_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
-
-@pytest_asyncio.fixture(scope="module")
-async def core_lifecycle_td(tmp_path_factory):
-    """Creates and initializes a core lifecycle instance with a temporary database."""
-    tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_kb.db"
-    db = SQLiteDatabase(str(tmp_db_path))
-    log_broker = LogBroker()
-    services = create_runtime_services()
-    services.db = db
-    services.preferences.db_helper = db
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
-    await core_lifecycle.initialize()
-
-    # Mock kb_manager and kb_helper
-    kb_manager = MagicMock()
-    kb_helper = AsyncMock(spec=KBHelper)
-
-    # Configure get_kb to be an async mock that returns kb_helper
-    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
-
-    # Mock upload_document return value
-    mock_doc = KBDocument(
+@pytest.fixture
+def kb_helper() -> AsyncMock:
+    """Return a deterministic knowledge-base helper for route tests."""
+    helper = AsyncMock(spec=KBHelper)
+    helper.upload_document.return_value = KBDocument(
         doc_id="test_doc_id",
         kb_id="test_kb_id",
         doc_name="test_file.txt",
@@ -59,76 +36,29 @@ async def core_lifecycle_td(tmp_path_factory):
         chunk_count=2,
         media_count=0,
     )
-    kb_helper.upload_document.return_value = mock_doc
-
-    # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
-    core_lifecycle.kb_manager = kb_manager
-    generated_password = getattr(
-        core_lifecycle.astrbot_config,
-        "_generated_dashboard_password",
-        None,
-    )
-    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
-    if not generated_password:
-        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
-            hash_dashboard_password(dashboard_password)
-        )
-        core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_md5_dashboard_password(dashboard_password)
-        )
-    object.__setattr__(
-        core_lifecycle,
-        "_dashboard_plain_password",
-        dashboard_password,
-    )
-
-    try:
-        yield core_lifecycle
-    finally:
-        try:
-            _stop_res = core_lifecycle.stop()
-            if asyncio.iscoroutine(_stop_res):
-                await _stop_res
-        except Exception:
-            pass
+    return helper
 
 
-@pytest.fixture(scope="module")
-def app(core_lifecycle_td: AstrBotCoreLifecycle):
-    """Creates a dashboard ASGI app instance for testing."""
-    shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
-    return server.asgi_app
+@pytest.fixture
+def knowledge_base_route_service(kb_helper: AsyncMock) -> KnowledgeBaseService:
+    """Return a service wired only to the controlled KB helper."""
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
+    return KnowledgeBaseService(SimpleNamespace(kb_manager=kb_manager))
 
 
-def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
-    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
-    if generated_password:
-        return generated_password
-    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
-    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
-        return "astrbot"
-    return password
+@pytest.fixture
+def app(knowledge_base_route_service: KnowledgeBaseService) -> FastAPI:
+    """Create a minimal authenticated KB API app without runtime side effects."""
+    app = FastAPI()
+    app.state.services = SimpleNamespace(knowledge_bases=knowledge_base_route_service)
 
+    async def allow_kb_scope() -> AuthContext:
+        return AuthContext(username="test", scopes=["kb"])
 
-@pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://testserver",
-    ) as client:
-        response = await client.post(
-            "/api/v1/auth/login",
-            json={
-                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-                "password": _resolve_dashboard_password(core_lifecycle_td),
-            },
-        )
-    data = response.json()
-    assert data["status"] == "ok"
-    token = data["data"]["token"]
-    return {"Authorization": f"Bearer {token}"}
+    app.dependency_overrides[require_kb_scope] = allow_kb_scope
+    app.include_router(router, prefix="/api/v1")
+    return app
 
 
 @pytest_asyncio.fixture
@@ -144,13 +74,25 @@ async def asgi_client(app: FastAPI):
 @pytest.mark.asyncio
 async def test_import_documents(
     asgi_client: httpx.AsyncClient,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
+    kb_helper: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """Tests the import documents functionality."""
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = None
+
+    created_tasks: list[asyncio.Task] = []
+    original_create_tracked_task = knowledge_base_service.create_tracked_task
+
+    def capture_background_task(task_set, coroutine, *, name=None):
+        task = original_create_tracked_task(task_set, coroutine, name=name)
+        created_tasks.append(task)
+        return task
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.create_tracked_task",
+        capture_background_task,
+    )
 
     # Test data
     import_data = {
@@ -164,7 +106,6 @@ async def test_import_documents(
     response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb_id/documents/import",
         json=import_data,
-        headers=authenticated_header,
     )
 
     # Verify response
@@ -176,17 +117,12 @@ async def test_import_documents(
 
     task_id = data["data"]["task_id"]
 
-    # Wait for background task to complete (mocked)
-    # Since we mocked upload_document, it should be fast, but we might need to poll progress
-    for _ in range(10):
-        progress_response = await asgi_client.get(
-            f"/api/v1/knowledge-bases/tasks/{task_id}",
-            headers=authenticated_header,
-        )
-        progress_data = progress_response.json()
-        if progress_data["data"]["status"] == "completed":
-            break
-        await asyncio.sleep(0.1)
+    assert len(created_tasks) == 1
+    await asyncio.wait_for(created_tasks[0], timeout=1)
+    progress_response = await asgi_client.get(
+        f"/api/v1/knowledge-bases/tasks/{task_id}",
+    )
+    progress_data = progress_response.json()
 
     assert progress_data["data"]["status"] == "completed"
     result = progress_data["data"]["result"]
@@ -212,9 +148,8 @@ async def test_import_documents(
 
 @pytest.mark.asyncio
 async def test_import_documents_returns_friendly_failure_message(
-    core_lifecycle_td: AstrBotCoreLifecycle,
+    kb_helper: AsyncMock,
 ):
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
         stage="embedding",
@@ -254,14 +189,13 @@ async def test_import_documents_returns_friendly_failure_message(
 
 @pytest.mark.asyncio
 async def test_import_documents_invalid_input(
-    asgi_client: httpx.AsyncClient, authenticated_header: dict
+    asgi_client: httpx.AsyncClient,
 ):
     """Tests import documents with invalid input."""
     # Missing documents
     response = await asgi_client.post(
         "/api/v1/knowledge-bases/test_kb/documents/import",
         json={},
-        headers=authenticated_header,
     )
     data = response.json()
     assert data["status"] == "error"
@@ -273,7 +207,6 @@ async def test_import_documents_invalid_input(
         json={
             "documents": [{"file_name": "test"}],  # Missing chunks
         },
-        headers=authenticated_header,
     )
     data = response.json()
     assert data["status"] == "error"
@@ -285,7 +218,6 @@ async def test_import_documents_invalid_input(
         json={
             "documents": [{"file_name": "test", "chunks": "not-a-list"}],
         },
-        headers=authenticated_header,
     )
     data = response.json()
     assert data["status"] == "error"
@@ -297,7 +229,6 @@ async def test_import_documents_invalid_input(
         json={
             "documents": [{"file_name": "test", "chunks": ["valid", ""]}],
         },
-        headers=authenticated_header,
     )
     data = response.json()
     assert data["status"] == "error"
@@ -481,7 +412,9 @@ async def test_background_upload_from_url_task_marks_failure_result():
     )
 
     assert service.upload_tasks["task-url-fail"]["status"] == "failed"
-    assert service.upload_tasks["task-url-fail"]["error"] == "fetch failed"
+    assert (
+        service.upload_tasks["task-url-fail"]["error"] == "Knowledge base task failed"
+    )
     assert service.upload_progress["task-url-fail"]["status"] == "failed"
 
 
@@ -504,7 +437,11 @@ async def test_list_kbs_clamps_page_and_includes_init_error():
 
     assert result == {
         "items": [
-            {"kb_id": "kb-1", "kb_name": "One", "init_error": "vector db failed"}
+            {
+                "kb_id": "kb-1",
+                "kb_name": "One",
+                "init_error": "Knowledge base initialization failed",
+            }
         ],
         "page": 1,
         "page_size": 1,
@@ -649,7 +586,7 @@ async def test_retrieve_reports_visualization_error_without_dropping_results(
         "results": [{"doc_id": "doc-1", "score": 0.9}],
         "total": 1,
         "query": "astrbot",
-        "visualization_error": "tsne failed",
+        "visualization_error": "Visualization generation failed",
     }
     kb_manager.retrieve.assert_awaited_once_with(
         query="astrbot",

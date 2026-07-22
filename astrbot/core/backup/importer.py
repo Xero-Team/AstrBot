@@ -7,6 +7,7 @@
 - 版本匹配时也需要用户确认
 """
 
+import asyncio
 import json
 import os
 import shutil
@@ -25,6 +26,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
 )
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 
 from ._importer_datetime import convert_datetime_fields
 from ._importer_files import (
@@ -74,6 +76,8 @@ DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
 PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (
     "ASTRBOT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT"
 )
+_IMPORT_ERROR = "Backup import failed"
+_PRE_CHECK_ERROR = "Backup pre-check failed"
 
 
 def _load_platform_stats_invalid_count_warn_limit() -> int:
@@ -146,13 +150,26 @@ class ImportResult:
         self.errors: list[str] = []
 
     def add_warning(self, msg: str) -> None:
-        self.warnings.append(msg)
-        logger.warning(msg)
+        safe_message = redact_sensitive_text(msg)
+        self.warnings.append(safe_message)
+        logger.warning("%s", safe_message)
 
     def add_error(self, msg: str) -> None:
-        self.errors.append(msg)
+        safe_message = redact_sensitive_text(msg)
+        self.errors.append(safe_message)
         self.success = False
-        logger.error(msg)
+        logger.error("%s", safe_message)
+
+    def add_internal_warning(self, message: str, exc: BaseException) -> None:
+        """Record a stable warning while logging the internal cause safely."""
+        self.warnings.append(message)
+        logger.warning("%s: %s", message, safe_error("", exc))
+
+    def add_internal_error(self, message: str, exc: BaseException) -> None:
+        """Record a stable error while logging the internal cause safely."""
+        self.errors.append(message)
+        self.success = False
+        logger.error("%s: %s", message, safe_error("", exc))
 
     def to_dict(self) -> dict:
         return {
@@ -233,10 +250,12 @@ class AstrBotImporter:
             imported = await self._import_main_database(main_data)
             result.imported_tables.update(imported)
             return main_data
-        except DatabaseClearError as e:
-            result.add_error(f"清空主数据库失败: {e}")
-        except Exception as e:
-            result.add_error(f"导入主数据库失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except DatabaseClearError as exc:
+            result.add_internal_error("清空主数据库失败", exc)
+        except Exception as exc:
+            result.add_internal_error("导入主数据库失败", exc)
         return None
 
     async def _import_knowledge_bases_stage(
@@ -253,8 +272,10 @@ class AstrBotImporter:
             if mode == "replace":
                 await self._clear_kb_data()
             await self._import_knowledge_bases(zf, kb_meta_data, result)
-        except Exception as e:
-            result.add_warning(f"导入知识库失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            result.add_internal_warning("导入知识库失败", exc)
 
     def _import_config_stage(self, zf: zipfile.ZipFile, result: ImportResult) -> None:
         if "config/cmd_config.json" not in zf.namelist():
@@ -267,8 +288,8 @@ class AstrBotImporter:
             with open(self.config_path, "wb") as f:
                 f.write(config_content)
             result.imported_files["config"] = 1
-        except Exception as e:
-            result.add_warning(f"导入配置文件失败: {e}")
+        except Exception as exc:
+            result.add_internal_warning("导入配置文件失败", exc)
 
     async def _import_attachments_stage(
         self,
@@ -338,7 +359,7 @@ class AstrBotImporter:
         result.current_version = VERSION
 
         if not os.path.exists(zip_path):
-            result.error = f"备份文件不存在: {zip_path}"
+            result.error = "备份文件不存在"
             return result
 
         try:
@@ -346,7 +367,7 @@ class AstrBotImporter:
                 try:
                     manifest = load_manifest(zf)
                 except ManifestLoadError as exc:
-                    result.error = str(exc)
+                    result.error = redact_sensitive_text(str(exc))
                     return result
 
                 result.backup_version = manifest.get("astrbot_version", "未知")
@@ -361,8 +382,9 @@ class AstrBotImporter:
         except zipfile.BadZipFile:
             result.error = "无效的 ZIP 文件"
             return result
-        except Exception as e:
-            result.error = f"检查备份文件失败: {e}"
+        except Exception as exc:
+            logger.warning("%s: %s", _PRE_CHECK_ERROR, safe_error("", exc))
+            result.error = _PRE_CHECK_ERROR
             return result
 
     def _check_version_compatibility(self, backup_version: str) -> dict:
@@ -396,10 +418,10 @@ class AstrBotImporter:
         result = ImportResult()
 
         if not os.path.exists(zip_path):
-            result.add_error(f"备份文件不存在: {zip_path}")
+            result.add_error("备份文件不存在")
             return result
 
-        logger.info(f"开始从 {zip_path} 导入备份")
+        logger.info("开始导入备份")
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -450,14 +472,22 @@ class AstrBotImporter:
                     lambda: self._import_directories_stage(zf, manifest, result),
                 )
 
-            logger.info(f"备份导入完成: {result.to_dict()}")
+            logger.info(
+                "备份导入完成: tables=%d, files=%d, directories=%d, warnings=%d",
+                len(result.imported_tables),
+                len(result.imported_files),
+                len(result.imported_directories),
+                len(result.warnings),
+            )
             return result
 
         except zipfile.BadZipFile:
             result.add_error("无效的 ZIP 文件")
             return result
-        except Exception as e:
-            result.add_error(f"导入失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            result.add_internal_error(_IMPORT_ERROR, exc)
             return result
 
     def _validate_version(self, manifest: dict) -> None:
@@ -478,7 +508,7 @@ class AstrBotImporter:
 
         # minor_diff 和 match 都允许导入
         if version_check["status"] == "minor_diff":
-            logger.warning(f"版本差异警告: {version_check['message']}")
+            logger.warning("备份版本存在差异")
 
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""
@@ -488,10 +518,10 @@ class AstrBotImporter:
                     try:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
-                    except Exception as e:
-                        raise DatabaseClearError(
-                            f"清空表 {table_name} 失败: {e}"
-                        ) from e
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        raise DatabaseClearError("清空主数据库失败") from exc
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -508,7 +538,7 @@ class AstrBotImporter:
                 for table_name, rows in data.items():
                     model_class = MAIN_DB_MODELS.get(table_name)
                     if not model_class:
-                        logger.warning(f"未知的表: {table_name}")
+                        logger.warning("未知的备份数据表，已跳过")
                         continue
                     normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
@@ -520,8 +550,14 @@ class AstrBotImporter:
                             obj = model_class(**row)
                             session.add(obj)
                             count += 1
-                        except Exception as e:
-                            logger.warning(f"导入记录到 {table_name} 失败: {e}")
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as exc:
+                            logger.warning(
+                                "导入记录到 %s 失败: %s",
+                                table_name,
+                                safe_error("", exc),
+                            )
 
                     imported[table_name] = count
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
@@ -621,8 +657,10 @@ class AstrBotImporter:
 
         try:
             await self._import_kb_documents(kb_id, json.loads(zf.read(doc_path)))
-        except Exception as e:
-            result.add_warning(f"导入知识库 {kb_id} 的文档失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            result.add_internal_warning("导入知识库文档失败", exc)
 
     async def _import_single_kb_faiss_index(
         self,
@@ -638,8 +676,10 @@ class AstrBotImporter:
         try:
             with zf.open(faiss_path) as src, open(kb_dir / "index.faiss", "wb") as dst:
                 dst.write(src.read())
-        except Exception as e:
-            result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            result.add_internal_warning("导入知识库 FAISS 索引失败", exc)
 
     async def _import_single_kb_media_files(
         self,
@@ -656,13 +696,15 @@ class AstrBotImporter:
                 rel_path = name[len(media_prefix) :]
                 target_path = kb_dir / rel_path
                 if not _validate_path_within(target_path, kb_dir):
-                    logger.warning("媒体文件路径越界，已跳过: %s", target_path)
+                    logger.warning("媒体文件路径越界，已跳过")
                     continue
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(name) as src, open(target_path, "wb") as dst:
                     dst.write(src.read())
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                result.add_warning(f"导入媒体文件 {name} 失败: {exc}")
+                result.add_internal_warning("导入知识库媒体文件失败", exc)
 
     async def _import_kb_documents(self, kb_id: str, doc_data: dict) -> None:
         """导入知识库文档到向量数据库"""
@@ -684,8 +726,10 @@ class AstrBotImporter:
                         text=doc.get("text", ""),
                         metadata=json.loads(doc.get("metadata", "{}")),
                     )
-                except Exception as e:
-                    logger.warning(f"导入文档块失败: {e}")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("导入文档块失败: %s", safe_error("", exc))
         finally:
             await doc_storage.close()
 

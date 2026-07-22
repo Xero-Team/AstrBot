@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError  # type: ignore
 from astrbot import logger
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
+from astrbot.core.utils.error_redaction import safe_error
 
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
@@ -19,6 +20,7 @@ FILES_PATH = get_astrbot_knowledge_base_path()
 DB_PATH = Path(FILES_PATH) / "kb.db"
 """Knowledge Base storage root directory"""
 CHUNKER = RecursiveCharacterChunker()
+_KB_INITIALIZATION_ERROR = "Knowledge base initialization failed"
 
 
 class KnowledgeBaseManager:
@@ -51,11 +53,11 @@ class KnowledgeBaseManager:
             )
             await self.load_kbs()
 
-        except ImportError as e:
-            logger.error(f"知识库模块导入失败: {e}")
+        except ImportError as exc:
+            logger.error("知识库模块导入失败: %s", safe_error("", exc))
             logger.warning("请确保已安装所需依赖: pypdf, aiofiles, Pillow, rank-bm25")
-        except Exception as e:
-            logger.error(f"知识库模块初始化失败: {e}", exc_info=True)
+        except Exception as exc:
+            logger.error("知识库模块初始化失败: %s", safe_error("", exc))
 
     async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
@@ -75,12 +77,9 @@ class KnowledgeBaseManager:
             )
             try:
                 await kb_helper.initialize()
-            except Exception as e:
-                kb_helper.init_error = str(e)
-                logger.error(
-                    f"知识库 {record.kb_name}({record.kb_id}) 初始化失败: {e}",
-                    exc_info=True,
-                )
+            except Exception as exc:
+                kb_helper.init_error = _KB_INITIALIZATION_ERROR
+                logger.error("知识库初始化失败: %s", safe_error("", exc))
             self.kb_insts[record.kb_id] = kb_helper
 
     async def create_kb(
@@ -290,13 +289,12 @@ class KnowledgeBaseManager:
 
         try:
             await new_helper.initialize()
-        except Exception as e:
+        except Exception as exc:
             # Roll back in-memory settings and keep current helper available.
             self._restore_kb_state(kb, previous_state)
             kb_helper.init_error = previous_init_error
             logger.error(
-                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
-                exc_info=True,
+                "知识库重新初始化失败，继续使用旧实例: %s", safe_error("", exc)
             )
             return kb_helper
 
@@ -321,16 +319,15 @@ class KnowledgeBaseManager:
         for kb_name in kb_names:
             if kb_helper := await self.get_kb_by_name(kb_name):
                 if kb_helper.init_error:
-                    unavailable_kbs.append((kb_name, kb_helper.init_error))
-                    logger.warning(f"知识库 {kb_name} 不可用: {kb_helper.init_error}")
+                    unavailable_kbs.append(kb_name)
+                    logger.warning("知识库不可用")
                     continue
                 kb_ids.append(kb_helper.kb.kb_id)
                 kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
 
         # all requested KBs are unavailable
         if not kb_ids and unavailable_kbs:
-            errors = "; ".join(f"{n}: {e}" for n, e in unavailable_kbs)
-            raise ValueError(f"所有请求的知识库均不可用: {errors}")
+            raise ValueError("所有请求的知识库均不可用")
 
         if not kb_ids:
             return {}

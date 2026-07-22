@@ -1,9 +1,11 @@
+import asyncio
 import shutil
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete
 
 from astrbot import logger
+from astrbot.core.utils.error_redaction import safe_error
 
 from .constants import KB_METADATA_MODELS
 
@@ -27,16 +29,20 @@ async def clear_kb_data(kb_manager: KnowledgeBaseManager | None) -> None:
                 try:
                     await session.execute(delete(model_class))
                     logger.debug("已清空知识库表 %s", table_name)
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
-                    logger.warning("清空知识库表 %s 失败: %s", table_name, exc)
+                    logger.warning("清空知识库表失败: %s", safe_error("", exc))
 
-    for kb_id, kb_helper in list(kb_manager.kb_insts.items()):
+    for _kb_id, kb_helper in list(kb_manager.kb_insts.items()):
         try:
             await kb_helper.terminate()
             if kb_helper.kb_dir.exists():
                 shutil.rmtree(kb_helper.kb_dir)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
-            logger.warning("清理知识库 %s 失败: %s", kb_id, exc)
+            logger.warning("清理知识库失败: %s", safe_error("", exc))
 
     kb_manager.kb_insts.clear()
 
@@ -72,11 +78,9 @@ async def import_kb_metadata_tables(
                         normalized_row = convert_datetime_fields(row, model_class)
                         session.add(model_class(**normalized_row))
                         count += 1
+                    except asyncio.CancelledError:
+                        raise
                     except Exception as exc:
-                        logger.warning(
-                            "导入知识库记录到 %s 失败: %s",
-                            table_name,
-                            exc,
-                        )
+                        logger.warning("导入知识库记录失败: %s", safe_error("", exc))
 
                 imported_tables[f"kb_{table_name}"] = count

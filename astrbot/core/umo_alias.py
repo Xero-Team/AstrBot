@@ -1,14 +1,17 @@
+import re
 from typing import Any
 
 from astrbot.core.db.po import UmoAlias
 
 MAX_UMO_NAME_LENGTH = 255
+_CONTROL_CHARACTERS_RE = re.compile(r"[\x00-\x1F\x7F-\x9F]")
 
 
 def normalize_umo_name(name: Any) -> str:
     if name is None:
         return ""
-    return str(name).strip()[:MAX_UMO_NAME_LENGTH]
+    normalized = _CONTROL_CHARACTERS_RE.sub(" ", str(name)).strip()
+    return normalized[:MAX_UMO_NAME_LENGTH]
 
 
 def parse_umo(umo: Any) -> dict[str, str]:

@@ -1,4 +1,3 @@
-
 import asyncio
 from pathlib import Path
 
@@ -52,3 +51,30 @@ def test_local_file_system_component_falls_back_to_gbk_on_windows(
 
     assert result["success"] is True
     assert result["content"] == "微博热搜"
+
+
+def test_local_file_system_component_applies_requested_mode_to_unicode_path(
+    monkeypatch,
+    tmp_path: Path,
+):
+    """Creating a file keeps the requested permission policy on Windows paths."""
+    _allow_tmp_root(monkeypatch, tmp_path)
+    target = tmp_path / "含 空格" / "notes.txt"
+    chmod_calls = []
+
+    def record_chmod(path: str, mode: int) -> None:
+        chmod_calls.append((Path(path), mode))
+
+    monkeypatch.setattr(local_booter.os, "chmod", record_chmod)
+
+    result = asyncio.run(
+        LocalFileSystemComponent().create_file(
+            str(target),
+            "content",
+            mode=0o600,
+        )
+    )
+
+    assert result == {"success": True, "path": str(target.resolve())}
+    assert target.read_text(encoding="utf-8") == "content"
+    assert chmod_calls == [(target.resolve(), 0o600)]

@@ -1,5 +1,5 @@
-
 import asyncio
+import signal
 import subprocess
 
 import pytest
@@ -133,3 +133,73 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
 
     assert proc.killed
     assert proc.wait_timeout == 5
+
+
+def test_local_shell_component_kills_posix_process_group_on_timeout(monkeypatch):
+    """A shell timeout must reap commands spawned by the shell as well."""
+
+    class TimeoutPopen:
+        pid = 12345
+
+        def __init__(self):
+            self.killed = False
+            self.wait_timeout = None
+
+        def communicate(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd="dummy", timeout=timeout)
+
+        def kill(self):
+            self.killed = True
+
+        def wait(self, timeout=None):
+            self.wait_timeout = timeout
+
+    proc = TimeoutPopen()
+    popen_kwargs = {}
+    killed_groups = []
+    expected_signal = getattr(signal, "SIGKILL", signal.SIGTERM)
+
+    def fake_popen(*_args, **kwargs):
+        popen_kwargs.update(kwargs)
+        return proc
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(
+        local_booter.signal,
+        "SIGKILL",
+        expected_signal,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        local_booter.os,
+        "killpg",
+        lambda pid, sig: killed_groups.append((pid, sig)),
+        raising=False,
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        asyncio.run(LocalShellComponent().exec("dummy", timeout=1))
+
+    assert popen_kwargs["start_new_session"] is True
+    assert killed_groups == [(proc.pid, expected_signal)]
+    assert proc.killed is False
+    assert proc.wait_timeout == 5
+
+
+def test_local_shell_component_starts_a_windows_process_group(monkeypatch):
+    """Windows commands need a group so their complete tree is controllable."""
+    popen_kwargs = {}
+
+    def fake_popen(*_args, **kwargs):
+        popen_kwargs.update(kwargs)
+        return _FakePopen(stdout=b"")
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+
+    result = asyncio.run(LocalShellComponent().exec("dummy"))
+
+    assert result["exit_code"] == 0
+    assert popen_kwargs["creationflags"] == subprocess.CREATE_NEW_PROCESS_GROUP
+    assert "start_new_session" not in popen_kwargs

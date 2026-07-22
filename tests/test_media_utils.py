@@ -6,6 +6,7 @@ import sys
 import wave
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
@@ -590,6 +591,23 @@ def test_file_uri_to_path_preserves_posix_root_for_container_paths():
         assert media_utils.file_uri_to_path("file:///AstrBot/data/cache/image.png") == (
             "/AstrBot/data/cache/image.png"
         )
+
+
+@pytest.mark.parametrize(
+    "file_uri",
+    [
+        "file:///Users/demo/voice%20note.wav",
+        "file:////Users/demo/voice%20note.wav",
+    ],
+)
+def test_file_uri_to_path_keeps_macos_posix_paths_local(monkeypatch, file_uri):
+    """macOS must not reinterpret a local URI as a network authority."""
+    monkeypatch.setattr(media_utils, "os", SimpleNamespace(name="posix"))
+
+    assert (
+        media_utils.file_uri_to_path(file_uri).replace("\\", "/")
+        == "/Users/demo/voice note.wav"
+    )
 
 
 def test_from_file_system_uses_pathlib_file_uri(tmp_path):

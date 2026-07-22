@@ -177,7 +177,7 @@ class CommandBinder:
             if param.literals and value not in param.literals:
                 raise ValueError
             return value
-        except KeyError, ValueError, TypeError:
+        except Exception:
             self._raise(
                 CommandErrorCode.INVALID_ARGUMENT,
                 span,

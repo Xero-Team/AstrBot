@@ -206,6 +206,25 @@ class RatioMode(enum.Enum):
     FULL = 1.0
 
 
+def test_binder_contains_custom_enum_conversion_failures() -> None:
+    secret = "api_key=super-secret https://internal.example/command"
+
+    class ExplosiveMode(enum.StrEnum):
+        SAFE = "safe"
+
+        @classmethod
+        def _missing_(cls, value: object):
+            raise RuntimeError(secret)
+
+    async def handler(self, event, mode: ExplosiveMode) -> None: ...
+
+    with pytest.raises(CommandError) as caught:
+        _bind(handler, "invalid")
+
+    assert caught.value.diagnostic.code is CommandErrorCode.INVALID_ARGUMENT
+    assert secret not in str(caught.value)
+
+
 def _bind(handler, source: str):
     schema = compile_command_schema(handler)
     invocation = parse_arguments(source)

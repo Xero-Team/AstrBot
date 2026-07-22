@@ -4,6 +4,7 @@ import locale
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -100,6 +101,15 @@ class LocalShellComponent(ShellComponent):
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+            popen_kwargs: dict[str, Any] = {
+                "shell": shell,
+                "cwd": working_dir,
+                "env": run_env,
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                popen_kwargs["start_new_session"] = True
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
@@ -107,11 +117,9 @@ class LocalShellComponent(ShellComponent):
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     command,
                     # Controlled local computer-use command.
-                    shell=shell,  # nosec B602
-                    cwd=working_dir,
-                    env=run_env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    **popen_kwargs,  # nosec B602
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
             # `command` is intentionally executed through the current shell so
@@ -120,11 +128,9 @@ class LocalShellComponent(ShellComponent):
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 # Controlled local computer-use command.
-                shell=shell,  # nosec B602
-                cwd=working_dir,
-                env=run_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                **popen_kwargs,  # nosec B602
             )
             effective_timeout = timeout if timeout is not None else timeout_seconds
             try:
@@ -141,6 +147,12 @@ class LocalShellComponent(ShellComponent):
                         )
                         should_kill_parent = taskkill_result.returncode != 0
                     except Exception:
+                        should_kill_parent = True
+                else:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                        should_kill_parent = False
+                    except OSError:
                         should_kill_parent = True
                 if should_kill_parent:
                     try:

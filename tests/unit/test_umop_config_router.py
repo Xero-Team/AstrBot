@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -82,3 +83,111 @@ async def test_update_routing_data_rejects_invalid_umo_format() -> None:
 
     with pytest.raises(ValueError, match="umop keys must be strings"):
         await router.update_routing_data({"invalid-pattern": "conf-a"})
+
+
+@pytest.mark.asyncio
+async def test_initialize_discards_corrupt_persisted_routing_data() -> None:
+    preferences = SimpleNamespace(get_async=AsyncMock(return_value=["::"]))
+    router = UmopConfigRouter(sp=preferences)
+
+    await router.initialize()
+
+    assert router.umop_to_conf_id == {}
+    assert router.get_conf_id_for_umop("telegram:group:1000") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("routing_data", "error_message"),
+    [
+        (["::"], "routing data"),
+        ({"::": ""}, "routing data"),
+        ({"::": object()}, "routing data"),
+        ({1: "default"}, "umop keys must be strings"),
+    ],
+)
+async def test_update_routing_data_rejects_invalid_mapping_values(
+    routing_data: object,
+    error_message: str,
+) -> None:
+    preferences = SimpleNamespace(global_put=AsyncMock())
+    router = make_router({"::": "original"})
+    router.sp = preferences
+
+    with pytest.raises(ValueError, match=error_message):
+        await router.update_routing_data(routing_data)  # type: ignore[arg-type]
+
+    assert router.umop_to_conf_id == {"::": "original"}
+    preferences.global_put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_route_rejects_non_string_umo() -> None:
+    preferences = SimpleNamespace(global_put=AsyncMock())
+    router = make_router({"::": "original"})
+    router.sp = preferences
+
+    with pytest.raises(ValueError, match="umop must be a string"):
+        await router.update_route(1, "replacement")  # type: ignore[arg-type]
+
+    assert router.umop_to_conf_id == {"::": "original"}
+    preferences.global_put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_routing_data_owns_a_snapshot_of_valid_routes() -> None:
+    preferences = SimpleNamespace(global_put=AsyncMock())
+    router = make_router()
+    router.sp = preferences
+    routes = {"::": "default"}
+
+    await router.update_routing_data(routes)
+    routes["telegram:group:1000"] = "later"
+
+    assert router.umop_to_conf_id == {"::": "default"}
+    preferences.global_put.assert_awaited_once_with(
+        "umop_config_routing",
+        {"::": "default"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_routing_data_keeps_live_routes_when_persistence_fails() -> None:
+    preferences = SimpleNamespace(
+        global_put=AsyncMock(side_effect=RuntimeError("storage unavailable"))
+    )
+    router = make_router({"::": "original"})
+    router.sp = preferences
+
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        await router.update_routing_data({"::": "replacement"})
+
+    assert router.umop_to_conf_id == {"::": "original"}
+
+
+@pytest.mark.asyncio
+async def test_update_route_keeps_live_routes_when_persistence_fails() -> None:
+    preferences = SimpleNamespace(
+        global_put=AsyncMock(side_effect=RuntimeError("storage unavailable"))
+    )
+    router = make_router({"::": "original"})
+    router.sp = preferences
+
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        await router.update_route("telegram:group:1000", "replacement")
+
+    assert router.umop_to_conf_id == {"::": "original"}
+
+
+@pytest.mark.asyncio
+async def test_delete_route_keeps_live_routes_when_persistence_fails() -> None:
+    preferences = SimpleNamespace(
+        global_put=AsyncMock(side_effect=RuntimeError("storage unavailable"))
+    )
+    router = make_router({"::": "original"})
+    router.sp = preferences
+
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        await router.delete_route("::")
+
+    assert router.umop_to_conf_id == {"::": "original"}

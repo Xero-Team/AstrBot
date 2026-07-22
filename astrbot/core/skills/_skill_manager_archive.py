@@ -1,7 +1,7 @@
 import shutil
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from astrbot.core.skills._skill_inventory import (
     _SKILL_NAME_RE,
@@ -113,7 +113,14 @@ class SkillManagerArchiveMixin:
             member_name = member.filename.replace("\\", "/")
             if not member_name or _is_ignored_zip_entry(member_name):
                 continue
-            zf.extract(member, tmp_dir)
+            target_path = Path(tmp_dir).joinpath(*PurePosixPath(member_name).parts)
+            if member_name.endswith("/"):
+                target_path.mkdir(parents=True, exist_ok=True)
+                continue
+
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(member) as source, target_path.open("wb") as destination:
+                shutil.copyfileobj(source, destination)
 
     def _install_extracted_skill_dir(
         self,

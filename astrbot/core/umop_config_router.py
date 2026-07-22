@@ -1,5 +1,7 @@
 import fnmatch
+from collections.abc import Mapping
 
+from astrbot import logger
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -23,7 +25,31 @@ class UmopConfigRouter:
             scope="global",
             scope_id="global",
         )
-        self.umop_to_conf_id = sp_data
+        try:
+            self.umop_to_conf_id = self._validated_routing_data(sp_data)
+        except Exception:
+            logger.warning("Ignoring invalid persisted UMO routing data.")
+            self.umop_to_conf_id = {}
+
+    @classmethod
+    def _validated_routing_data(cls, routing_data: object) -> dict[str, str]:
+        if not isinstance(routing_data, Mapping):
+            raise ValueError("routing data must be a mapping")
+
+        routes: dict[str, str] = {}
+        for umo, conf_id in routing_data.items():
+            if cls._split_umo(umo) is None:
+                raise ValueError(
+                    "umop keys must be strings in the format "
+                    "[platform_id]:[message_type]:[session_id], "
+                    "with optional wildcards * or empty for all",
+                )
+            if not isinstance(conf_id, str) or not conf_id:
+                raise ValueError(
+                    "routing data values must be non-empty configuration IDs",
+                )
+            routes[umo] = conf_id
+        return routes
 
     @staticmethod
     def _split_umo(umo: str) -> tuple[str, str, str] | None:
@@ -105,14 +131,9 @@ class UmopConfigRouter:
             ValueError: 如果 new_routing 中的 key 格式不正确
 
         """
-        for part in new_routing:
-            if self._split_umo(part) is None:
-                raise ValueError(
-                    "umop keys must be strings in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
-                )
-
-        self.umop_to_conf_id = new_routing
-        await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+        routes = self._validated_routing_data(new_routing)
+        await self.sp.global_put("umop_config_routing", routes)
+        self.umop_to_conf_id = routes
 
     async def update_route(self, umo: str, conf_id: str) -> None:
         """更新一条路由
@@ -129,9 +150,13 @@ class UmopConfigRouter:
             raise ValueError(
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
             )
+        if not isinstance(conf_id, str) or not conf_id:
+            raise ValueError("conf_id must be a non-empty string")
 
-        self.umop_to_conf_id[umo] = conf_id
-        await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+        routes = dict(self.umop_to_conf_id)
+        routes[umo] = conf_id
+        await self.sp.global_put("umop_config_routing", routes)
+        self.umop_to_conf_id = routes
 
     async def delete_route(self, umo: str) -> None:
         """删除一条路由
@@ -149,5 +174,7 @@ class UmopConfigRouter:
             )
 
         if umo in self.umop_to_conf_id:
-            del self.umop_to_conf_id[umo]
-            await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+            routes = dict(self.umop_to_conf_id)
+            del routes[umo]
+            await self.sp.global_put("umop_config_routing", routes)
+            self.umop_to_conf_id = routes

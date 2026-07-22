@@ -16,7 +16,7 @@ _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
 _SAFE_PATH_RE = re.compile(r"[^\w./ ,()'\-]", re.UNICODE)
 _WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:/|\\)")
 _WINDOWS_UNC_PATH_RE = re.compile(r"^(//|\\\\)[^/\\]+[/\\][^/\\]+")
-_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F-\x9F]")
 
 
 def _normalize_skill_name(name: str | None) -> str:
@@ -97,6 +97,8 @@ def _normalize_archive_skill_name(skill_name_hint: str | None) -> str | None:
 def _validate_archive_paths(names: list[str]) -> None:
     """Reject ZIP entries with unsafe paths."""
     for name in names:
+        if _CONTROL_CHARS_RE.search(name):
+            raise ValueError("Zip archive contains control characters in paths.")
         if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
             raise ValueError("Zip archive contains absolute paths.")
         parts = PurePosixPath(name).parts

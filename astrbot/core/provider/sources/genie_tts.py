@@ -120,7 +120,7 @@ class GenieTTSProvider(TTSProvider):
             await asyncio.shield(worker)
         except asyncio.CancelledError:
 
-            def _cleanup_after_worker(_worker: asyncio.Future[object]) -> None:
+            def _cleanup_after_worker(_worker: asyncio.Future[None]) -> None:
                 try:
                     _worker.exception()
                 except asyncio.CancelledError, Exception:

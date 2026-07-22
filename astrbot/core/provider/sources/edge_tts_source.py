@@ -51,6 +51,8 @@ class ProviderEdgeTTS(TTSProvider):
 
     @staticmethod
     def _get_timeout(value: object) -> float:
+        if not isinstance(value, (str, int, float)):
+            return 30.0
         try:
             timeout = float(value)
         except TypeError, ValueError:

@@ -42,7 +42,10 @@ class ProviderOpenAIWhisperAPI(STTProvider):
                 default_suffix=".wav",
             ).as_path(target_format="wav") as audio:
                 with audio.open("rb") as audio_file:
-                    result = await self.client.audio.transcriptions.create(
+                    client = self.client
+                    if client is None:
+                        raise RuntimeError("OpenAI Whisper client is closed.")
+                    result = await client.audio.transcriptions.create(
                         model=self.model_name,
                         file=("audio.wav", audio_file),
                     )

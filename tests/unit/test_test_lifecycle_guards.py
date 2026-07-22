@@ -73,6 +73,30 @@ def test_thread_guard_reports_leaked_daemon_thread(pytester) -> None:
     result.stdout.fnmatch_lines(["*Leaked threads: leaked-thread*"])
 
 
+def test_thread_guard_does_not_exempt_a_non_anyio_named_thread(pytester) -> None:
+    _load_repository_conftest(pytester)
+    pytester.makepyfile(
+        """
+        import threading
+
+
+        def test_leaks_named_thread():
+            thread = threading.Thread(
+                target=threading.Event().wait,
+                daemon=True,
+                name="AnyIO worker thread",
+            )
+            thread.start()
+            assert thread.is_alive()
+        """
+    )
+
+    result = pytester.runpytest_subprocess("-q")
+
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*Leaked threads: AnyIO worker thread*"])
+
+
 def test_thread_guard_allows_fixture_owned_module_thread(pytester) -> None:
     _load_repository_conftest(pytester)
     pytester.makepyfile(

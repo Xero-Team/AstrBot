@@ -140,6 +140,16 @@ def pytest_runtest_call(item) -> None:
     item._astrbot_test_threads = set(threading.enumerate())  # noqa: SLF001
 
 
+def _is_anyio_worker_thread(thread: threading.Thread) -> bool:
+    """Return whether a thread belongs to AnyIO's process-wide worker pool."""
+    thread_type = type(thread)
+    return (
+        thread.name == "AnyIO worker thread"
+        and thread_type.__module__ == "anyio._backends._asyncio"
+        and thread_type.__qualname__ == "WorkerThread"
+    )
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):  # noqa: ARG001
     """Report threads that a test left alive after its fixtures tear down."""
@@ -151,7 +161,9 @@ def pytest_runtest_teardown(item, nextitem):  # noqa: ARG001
     leaked_threads = [
         thread
         for thread in threading.enumerate()
-        if thread not in existing_threads and thread.is_alive()
+        if thread not in existing_threads
+        and thread.is_alive()
+        and not _is_anyio_worker_thread(thread)
     ]
     if leaked_threads:
         thread_names = ", ".join(thread.name for thread in leaked_threads)

@@ -126,6 +126,12 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
         "run",
         lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
     )
+    monkeypatch.setattr(
+        subprocess,
+        "CREATE_NEW_PROCESS_GROUP",
+        0x00000200,
+        raising=False,
+    )
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
 
     with pytest.raises(subprocess.TimeoutExpired):
@@ -196,6 +202,12 @@ def test_local_shell_component_starts_a_windows_process_group(monkeypatch):
         return _FakePopen(stdout=b"")
 
     monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        subprocess,
+        "CREATE_NEW_PROCESS_GROUP",
+        0x00000200,
+        raising=False,
+    )
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))

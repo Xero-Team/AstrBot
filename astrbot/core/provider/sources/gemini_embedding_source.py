@@ -70,7 +70,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     async def get_embedding(self, text: str) -> list[float]:
         """获取文本的嵌入"""
         try:
-            result = await self.client.models.embed_content(
+            client = self.client
+            if client is None:
+                raise RuntimeError(_REQUEST_ERROR)
+            result = await client.models.embed_content(
                 model=self.model,
                 contents=text,
                 config=types.EmbedContentConfig(
@@ -88,7 +91,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         """批量获取文本的嵌入"""
         try:
             contents = cast(types.ContentListUnion, list(text))
-            result = await self.client.models.embed_content(
+            client = self.client
+            if client is None:
+                raise RuntimeError(_REQUEST_ERROR)
+            result = await client.models.embed_content(
                 model=self.model,
                 contents=contents,
                 config=types.EmbedContentConfig(

@@ -75,7 +75,10 @@ class ProviderGeminiTTSAPI(TTSProvider):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             prompt = f"{self.prefix}: {text}" if self.prefix else text
-            response = await self.client.models.generate_content(
+            client = self.client
+            if client is None:
+                raise RuntimeError(_REQUEST_ERROR)
+            response = await client.models.generate_content(
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(

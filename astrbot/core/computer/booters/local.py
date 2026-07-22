@@ -43,12 +43,14 @@ def _is_safe_command(command: str) -> bool:
 
 
 def _decode_bytes_with_fallback(
-    output: bytes | None,
+    output: bytes | str | None,
     *,
     preferred_encoding: str | None = None,
 ) -> str:
     if output is None:
         return ""
+    if isinstance(output, str):
+        return output
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
     attempted_encodings: list[str] = []
@@ -77,7 +79,7 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
-def _decode_shell_output(output: bytes | None) -> str:
+def _decode_shell_output(output: bytes | str | None) -> str:
     return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
 
 

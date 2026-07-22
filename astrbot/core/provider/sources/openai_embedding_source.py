@@ -64,7 +64,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """Request and validate one vector for each input text."""
         expected_count = 1 if isinstance(text, str) else len(text)
         try:
-            response = await self.client.embeddings.create(
+            client = self.client
+            if client is None:
+                raise RuntimeError(_REQUEST_ERROR)
+            response = await client.embeddings.create(
                 input=text,
                 model=self.model,
                 **self._embedding_kwargs(),

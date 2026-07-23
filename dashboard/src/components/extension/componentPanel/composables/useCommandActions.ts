@@ -4,8 +4,8 @@
 import { reactive } from 'vue';
 import { commandApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import type { CommandItem } from '@/domain/commands';
 import type {
-  CommandItem,
   RenameDialogState,
   DetailsDialogState,
   TypeInfo,

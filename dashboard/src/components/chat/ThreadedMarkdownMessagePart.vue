@@ -16,7 +16,7 @@
 import { computed, provide } from 'vue';
 import { MarkdownRender } from 'markstream-vue';
 import { MARKDOWN_RENDER_MAX_LIVE_NODES } from '@/components/chat/markdownRenderConfig';
-import type { ChatThread } from '@/composables/useMessages';
+import type { ChatThread } from '@/domain/chat';
 
 const props = defineProps<{
   text: string;

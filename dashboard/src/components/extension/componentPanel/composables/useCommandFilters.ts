@@ -2,7 +2,7 @@
  * 指令过滤逻辑 Composable
  */
 import { ref, computed, type Ref } from 'vue';
-import type { CommandItem } from '../types';
+import type { CommandItem } from '@/domain/commands';
 import { normalizeTextInput } from '@/utils/inputValue';
 
 export function useCommandFilters(commands: Ref<CommandItem[]>) {

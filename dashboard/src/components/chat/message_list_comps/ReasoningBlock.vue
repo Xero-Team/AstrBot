@@ -47,8 +47,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
-  type MessagePart,
 } from '@/composables/useMessages';
+import type { MessagePart } from '@/domain/chat';
 import { useModuleI18n } from '@/i18n/composables';
 import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 

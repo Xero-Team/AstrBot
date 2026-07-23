@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import type { CommandItem } from '../types';
+import type { CommandItem } from '@/domain/commands';
 
 const { tm } = useModuleI18n('features/command');
 

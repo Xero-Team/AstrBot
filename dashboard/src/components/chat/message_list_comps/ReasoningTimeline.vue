@@ -62,7 +62,7 @@ import { MARKDOWN_RENDER_MAX_LIVE_NODES } from '@/components/chat/markdownRender
 import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
 import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
 import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
-import type { MessagePart } from '@/composables/useMessages';
+import type { MessagePart } from '@/domain/chat';
 import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps<{

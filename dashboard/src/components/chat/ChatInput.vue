@@ -325,7 +325,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import { isComposingEnter } from '@/utils/imeInput';
 import { commandApi } from '@/api/v1';
-import type { CommandItem } from '@/components/extension/componentPanel/types';
+import type { CommandItem } from '@/domain/commands';
 import ConfigSelector from './ConfigSelector.vue';
 import ProviderModelMenu from './ProviderModelMenu.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';

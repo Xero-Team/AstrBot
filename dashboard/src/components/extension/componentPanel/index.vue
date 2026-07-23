@@ -29,7 +29,8 @@ import RenameDialog from './components/RenameDialog.vue';
 import DetailsDialog from './components/DetailsDialog.vue';
 
 // Types
-import type { CommandItem, ToolItem } from './types';
+import type { CommandItem } from '@/domain/commands';
+import type { ToolItem } from '@/domain/tools';
 
 defineOptions({ name: 'ComponentPanel' });
 const props = withDefaults(defineProps<{ active?: boolean }>(), {

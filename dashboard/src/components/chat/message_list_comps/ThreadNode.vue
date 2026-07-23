@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { computed, inject, useSlots, type VNode } from 'vue';
-import type { ChatThread } from '@/composables/useMessages';
+import type { ChatThread } from '@/domain/chat';
 
 const props = defineProps<{
   node?: {

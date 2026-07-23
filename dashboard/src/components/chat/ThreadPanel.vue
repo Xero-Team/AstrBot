@@ -64,17 +64,19 @@ import {
   extractReasoningText,
   finishToolCall,
   hasPlainText,
-  type HistoryRecord,
   markMessageStarted,
   normalizeMessageParts,
   parseJsonSafe,
   payloadText,
-  type StreamPayload,
   upsertToolCall,
-  type ChatRecord,
-  type MessagePart,
-  type ChatThread,
 } from '@/composables/useMessages';
+import type {
+  ChatRecord,
+  ChatThread,
+  HistoryRecord,
+  MessagePart,
+  StreamPayload,
+} from '@/domain/chat';
 import { useModuleI18n } from '@/i18n/composables';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 

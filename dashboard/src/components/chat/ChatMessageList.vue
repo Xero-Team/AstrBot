@@ -473,18 +473,18 @@ import {
   attachmentPresentation,
 } from '@/components/chat/attachmentPresentation';
 import {
-  type ChatRefItem,
-  type ChatRefs,
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
 } from '@/composables/useMessages';
 import type {
   ChatContent,
+  ChatRefItem,
+  ChatRefs,
   ChatRecord,
   ChatThread,
+  MessageDisplayBlock,
   MessagePart,
-} from '@/composables/useMessages';
+} from '@/domain/chat';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { copyToClipboard } from '@/utils/clipboard';
 

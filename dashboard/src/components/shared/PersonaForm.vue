@@ -572,7 +572,7 @@ import {
   type PersonaData,
   type PersonaInput,
 } from '@/api/v1';
-import type { ToolItem } from '@/components/extension/componentPanel/types';
+import type { ToolItem } from '@/domain/tools';
 import { useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,

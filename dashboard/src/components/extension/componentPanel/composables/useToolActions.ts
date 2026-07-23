@@ -5,7 +5,8 @@ import { ref, computed, type Ref } from 'vue';
 import { toolApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { normalizeTextInput } from '@/utils/inputValue';
-import type { ToolItem, ToolSummary } from '../types';
+import type { ToolItem } from '@/domain/tools';
+import type { ToolSummary } from '../types';
 
 export function useToolActions(
   tools: Ref<ToolItem[]>,

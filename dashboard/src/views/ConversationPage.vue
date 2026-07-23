@@ -617,11 +617,7 @@ import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
-import type {
-  ChatRecord,
-  MessagePart,
-  ToolCall,
-} from '@/composables/useMessages';
+import type { ChatRecord, MessagePart, ToolCall } from '@/domain/chat';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,

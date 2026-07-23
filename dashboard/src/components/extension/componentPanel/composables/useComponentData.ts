@@ -4,12 +4,9 @@
 import { ref, reactive } from 'vue';
 import { commandApi, toolApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
-import type {
-  CommandItem,
-  CommandSummary,
-  SnackbarState,
-  ToolItem,
-} from '../types';
+import type { CommandItem } from '@/domain/commands';
+import type { ToolItem } from '@/domain/tools';
+import type { CommandSummary, SnackbarState } from '../types';
 
 export function useComponentData() {
   const loading = ref(false);

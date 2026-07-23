@@ -531,11 +531,9 @@ import { useSessions, type Session } from '@/composables/useSessions';
 import {
   messageBlocks as buildMessageBlocks,
   useMessages,
-  type ChatRecord,
-  type ChatThread,
-  type MessagePart,
   type TransportMode,
 } from '@/composables/useMessages';
+import type { ChatRecord, ChatThread, MessagePart } from '@/domain/chat';
 import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
 import { useProjects } from '@/composables/useProjects';

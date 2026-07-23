@@ -5,7 +5,7 @@ import type {
   BuiltinToolConfigTag,
   ToolConfigCondition,
   ToolItem,
-} from '../types';
+} from '@/domain/tools';
 
 const { tm: tmTool } = useModuleI18n('features/tooluse');
 

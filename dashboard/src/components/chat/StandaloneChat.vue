@@ -225,12 +225,14 @@ import { useMediaHandling } from '@/composables/useMediaHandling';
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
   useMessages,
-  type ChatRecord,
-  type MessagePart,
   type TransportMode,
 } from '@/composables/useMessages';
+import type {
+  ChatRecord,
+  MessageDisplayBlock,
+  MessagePart,
+} from '@/domain/chat';
 import type { Session } from '@/composables/useSessions';
 import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';

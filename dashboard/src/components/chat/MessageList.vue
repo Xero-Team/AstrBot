@@ -298,16 +298,16 @@ import {
   attachmentPresentation,
 } from '@/components/chat/attachmentPresentation';
 import {
-  type ChatRefItem,
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
 } from '@/composables/useMessages';
 import type {
   ChatContent,
+  ChatRefItem,
   ChatRecord,
+  MessageDisplayBlock,
   MessagePart,
-} from '@/composables/useMessages';
+} from '@/domain/chat';
 import { useModuleI18n } from '@/i18n/composables';
 import { copyToClipboard } from '@/utils/clipboard';
 

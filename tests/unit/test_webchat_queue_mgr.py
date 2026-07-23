@@ -1,13 +1,32 @@
 import asyncio
+import importlib
 
 import pytest
 
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import WebChatQueueMgr
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+
+
+def test_webchat_queue_manager_module_has_no_runtime_singleton() -> None:
+    module = importlib.import_module("astrbot.core.webchat.queue_manager")
+
+    assert not hasattr(module, "webchat" + "_queue_mgr")
+
+
+@pytest.mark.asyncio
+async def test_webchat_queue_managers_isolate_identical_request_ids() -> None:
+    first_manager = WebChatQueueManager()
+    second_manager = WebChatQueueManager()
+    first_queue = first_manager.get_or_create_back_queue("request-1")
+    second_queue = second_manager.get_or_create_back_queue("request-1")
+
+    assert await first_manager.put_back_queue("request-1", {"type": "plain"})
+    assert await first_queue.get() == {"type": "plain"}
+    assert second_queue.empty()
 
 
 @pytest.mark.asyncio
 async def test_webchat_queue_listener_processes_messages_concurrently() -> None:
-    queue_mgr = WebChatQueueMgr()
+    queue_mgr = WebChatQueueManager()
     queue = queue_mgr.get_or_create_queue("conversation-1")
 
     first_started = asyncio.Event()
@@ -38,4 +57,3 @@ async def test_webchat_queue_listener_processes_messages_concurrently() -> None:
 
     assert "first" in handled
     assert "second" in handled
-

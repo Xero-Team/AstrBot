@@ -19,7 +19,7 @@ from astrbot.dashboard.services.open_api_service import (
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Open API"])
-_SSE_RESPONSE = {
+_SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Server-sent chat stream or an error envelope",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},
@@ -150,7 +150,13 @@ def _build_chat_ws_bridge(
             message if isinstance(message, str | list) else str(message),
         ),
         create_attachment_from_file=chat_service.create_attachment_from_file,
-        extract_web_search_refs=extract_web_search_refs,
+        extract_web_search_refs=lambda accumulated_text, accumulated_parts: (
+            extract_web_search_refs(
+                accumulated_text,
+                accumulated_parts,
+                chat_service.preferences,
+            )
+        ),
         insert_user_message=lambda session_id, effective_username, message_parts: (
             _insert_webchat_user_message(
                 open_api_service,

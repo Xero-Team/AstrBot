@@ -2,12 +2,12 @@ import asyncio
 
 import pytest
 
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import WebChatQueueMgr
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
 
 @pytest.mark.asyncio
 async def test_removed_back_queue_unblocks_pending_writer():
-    queue_manager = WebChatQueueMgr(back_queue_maxsize=1)
+    queue_manager = WebChatQueueManager(back_queue_maxsize=1)
     request_id = "request-1"
     queue = queue_manager.get_or_create_back_queue(request_id, "conversation-1")
     await queue.put({"type": "plain", "data": "first"})

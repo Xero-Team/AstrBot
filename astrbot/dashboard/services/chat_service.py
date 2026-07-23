@@ -9,22 +9,15 @@ from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING
 
 from starlette.datastructures import UploadFile
 
 from astrbot import logger
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db.protocols import ChatStore
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.platform.sources.webchat.message_parts_helper import (
-    build_webchat_message_parts,
-    create_attachment_part_from_existing_file,
-    strip_message_parts_path_fields,
-    webchat_message_parts_have_content,
-)
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.active_event_registry import ActiveEventControl
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.error_redaction import safe_error
@@ -32,14 +25,27 @@ from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
 )
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
-from astrbot.dashboard.services.webchat_result_reducer import (
+from astrbot.core.webchat.message_parts import (
+    build_webchat_message_parts,
+    create_attachment_part_from_existing_file,
+    strip_message_parts_path_fields,
+    webchat_message_parts_have_content,
+)
+from astrbot.core.webchat.result_reducer import (
     BotMessageAccumulator,
+    build_bot_history_content,
     collect_plain_text_from_message_parts,
     merge_webchat_refs,
     parse_webchat_attachment,
 )
+from astrbot.core.webchat.run_coordinator import WebChatRun, WebChatRunCoordinator
 from astrbot.dashboard.upload_utils import save_upload_to_path
+
+if TYPE_CHECKING:
+    from astrbot.core.conversation_mgr import ConversationManager
+    from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+    from astrbot.core.umop_config_router import UmopConfigRouter
+    from astrbot.core.utils.shared_preferences import SharedPreferences
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
@@ -53,53 +59,6 @@ def sanitize_upload_filename(filename: str | None) -> str:
     if name in ("", ".", ".."):
         return f"{uuid.uuid4()!s}"
     return name
-
-
-def normalize_reasoning_message_parts(
-    message_parts: list[dict] | None,
-    reasoning: str = "",
-) -> list[dict]:
-    parts: list[dict] = []
-    for part in message_parts or []:
-        if not isinstance(part, dict):
-            continue
-        copied = dict(part)
-        if copied.get("type") == "reasoning":
-            copied = {"type": "think", "think": copied.get("text", "")}
-        parts.append(copied)
-    if reasoning and not any(part.get("type") == "think" for part in parts):
-        parts.insert(0, {"type": "think", "think": reasoning})
-    return parts
-
-
-def extract_reasoning_from_message_parts(message_parts: list[dict]) -> str:
-    reasoning_parts: list[str] = []
-    for part in message_parts:
-        if part.get("type") != "think":
-            continue
-        think = part.get("think")
-        if isinstance(think, str) and think:
-            reasoning_parts.append(think)
-    return "".join(reasoning_parts)
-
-
-def build_bot_history_content(
-    message_parts: list[dict],
-    *,
-    agent_stats: dict | None = None,
-    refs: dict | None = None,
-    include_reasoning_field: bool = True,
-) -> dict[str, Any]:
-    normalized_parts = normalize_reasoning_message_parts(message_parts)
-    content: dict[str, Any] = {"type": "bot", "message": normalized_parts}
-    reasoning = extract_reasoning_from_message_parts(normalized_parts)
-    if reasoning and include_reasoning_field:
-        content["reasoning"] = reasoning
-    if agent_stats:
-        content["agent_stats"] = agent_stats
-    if refs:
-        content["refs"] = refs
-    return content
 
 
 def extract_web_search_refs(
@@ -366,41 +325,41 @@ class ChatServiceError(Exception):
 class ChatRunState:
     """State owned by a WebChat generation independently of its subscribers."""
 
-    run_id: str
-    username: str
-    session_id: str
+    run: WebChatRun
     llm_checkpoint_id: str
     platform_history_id: str
-    back_queue: asyncio.Queue
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     message_parts: list[dict] = field(default_factory=list)
     agent_stats: dict = field(default_factory=dict)
     refs: dict = field(default_factory=dict)
     revision: int = 0
-    status: str = "running"
-    task: asyncio.Task[None] | None = None
 
 
 class ChatService:
     def __init__(
         self,
-        db: BaseDatabase,
-        core_lifecycle: DashboardCoreLifecycle,
+        db: ChatStore,
+        *,
+        preferences: SharedPreferences,
+        conversation_manager: ConversationManager,
+        platform_message_history_manager: PlatformMessageHistoryManager,
+        umop_config_router: UmopConfigRouter,
+        webchat_run_coordinator: WebChatRunCoordinator,
+        active_event_control: ActiveEventControl,
     ) -> None:
         self.db = db
-        self.core_lifecycle = core_lifecycle
-        self.preferences = core_lifecycle.services.preferences
+        self.preferences = preferences
+        self.webchat_run_coordinator = webchat_run_coordinator
+        self.active_event_control = active_event_control
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
-        self.conv_mgr = core_lifecycle.conversation_manager
-        self.platform_history_mgr = core_lifecycle.platform_message_history_manager
-        self.umop_config_router = core_lifecycle.umop_config_router
-        self.running_convs: dict[str, bool] = {}
-        self.chat_runs: dict[str, ChatRunState] = {}
-        self.chat_runs_by_session: dict[str, set[str]] = {}
+        self.conv_mgr = conversation_manager
+        self.platform_history_mgr = platform_message_history_manager
+        self.umop_config_router = umop_config_router
+        self.chat_run_states: dict[str, ChatRunState] = {}
 
     async def build_user_message_parts(self, message: str | list) -> list[dict]:
         return await build_webchat_message_parts(
@@ -537,23 +496,17 @@ class ChatService:
     async def delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
         for thread_id in thread_ids:
             unified_msg_origin = build_thread_unified_msg_origin(creator, thread_id)
-            active_event_registry.request_agent_stop_all(unified_msg_origin)
-            tasks = []
-            for run_id in list(self.chat_runs_by_session.get(thread_id, set())):
-                run = self.chat_runs.get(run_id)
-                if run and run.task and not run.task.done():
-                    run.task.cancel()
-                    tasks.append(run.task)
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+            self.active_event_control.request_agent_stop_all(unified_msg_origin)
+            await self.webchat_run_coordinator.close_session(
+                thread_id,
+                remove_input_queue=True,
+            )
             await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
             await self.platform_history_mgr.delete(
                 platform_id="webchat_thread",
                 user_id=thread_id,
                 offset_sec=99999999,
             )
-            webchat_queue_mgr.remove_queues(thread_id)
-            self.running_convs.pop(thread_id, None)
 
     async def load_current_conversation_history(self, session) -> tuple[str, list]:
         unified_msg_origin = build_webchat_unified_msg_origin(session)
@@ -635,15 +588,18 @@ class ChatService:
             Active run snapshots in creation order.
         """
         snapshots = []
-        for run in self.chat_runs.values():
-            if run.username != username or run.session_id != session_id:
+        for webchat_run in self.webchat_run_coordinator.get_session_runs(session_id):
+            if webchat_run.username != username:
+                continue
+            run = self.chat_run_states.get(webchat_run.request_id)
+            if run is None:
                 continue
             snapshots.append(
                 {
-                    "run_id": run.run_id,
-                    "session_id": run.session_id,
+                    "run_id": webchat_run.request_id,
+                    "session_id": webchat_run.session_id,
                     "llm_checkpoint_id": run.llm_checkpoint_id,
-                    "status": run.status,
+                    "status": webchat_run.status,
                     "revision": run.revision,
                     "content": build_bot_history_content(
                         deepcopy(run.message_parts),
@@ -653,6 +609,13 @@ class ChatService:
                 }
             )
         return snapshots
+
+    def _is_session_running(self, session_id: str) -> bool:
+        """Return whether a non-subscription request is active for a session."""
+        return any(
+            run.kind != "subscription"
+            for run in self.webchat_run_coordinator.get_session_runs(session_id)
+        )
 
     @staticmethod
     def _publish_chat_run(run: ChatRunState, payload: dict) -> None:
@@ -698,10 +661,10 @@ class ChatService:
         snapshot = None
         if include_snapshot:
             snapshot = {
-                "run_id": run.run_id,
-                "session_id": run.session_id,
+                "run_id": run.run.request_id,
+                "session_id": run.run.session_id,
                 "llm_checkpoint_id": run.llm_checkpoint_id,
-                "status": run.status,
+                "status": run.run.status,
                 "revision": run.revision,
                 "content": build_bot_history_content(
                     deepcopy(run.message_parts),
@@ -720,7 +683,7 @@ class ChatService:
                     session_info = {
                         "type": "session_id",
                         "data": None,
-                        "session_id": run.session_id,
+                        "session_id": run.run.session_id,
                     }
                     yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
                     if saved_user_record:
@@ -770,10 +733,10 @@ class ChatService:
         Raises:
             ChatServiceError: If the run is absent or owned by another user.
         """
-        run = self.chat_runs.get(run_id)
+        run = self.chat_run_states.get(run_id)
         if run is None:
             raise ChatServiceError(f"Chat run {run_id} not found")
-        if run.username != username:
+        if run.run.username != username:
             raise ChatServiceError("Permission denied")
         return self._subscribe_chat_run(run, include_snapshot=True)
 
@@ -815,7 +778,7 @@ class ChatService:
 
             run.refs = extracted_refs
             saved_record = await self.save_bot_message(
-                run.session_id,
+                run.run.session_id,
                 message_parts_to_save,
                 pending_agent_stats,
                 extracted_refs,
@@ -827,14 +790,10 @@ class ChatService:
             pending_refs = {}
             return saved_record
 
-        self.running_convs[run.session_id] = True
         try:
             while True:
-                result = await run.back_queue.get()
+                result = await self.webchat_run_coordinator.next_result(run.run)
                 if not result:
-                    continue
-                if result.get("message_id") and str(result["message_id"]) != run.run_id:
-                    logger.warning("webchat stream message_id mismatch")
                     continue
 
                 result_text = result.get("data", "")
@@ -924,13 +883,12 @@ class ChatService:
                             },
                         )
                 if msg_type == "end":
-                    run.status = "completed"
                     break
         except asyncio.CancelledError as exc:
-            run.status = "stopped"
+            run.run.status = "stopped"
             cancellation = exc
         except Exception as exc:
-            run.status = "failed"
+            run.run.status = "failed"
             logger.error("WebChat run unexpected error: %s", safe_error("", exc))
             self._publish_chat_run(
                 run,
@@ -961,24 +919,23 @@ class ChatService:
                         safe_error("", exc),
                     )
                 finally:
-                    webchat_queue_mgr.remove_back_queue(run.run_id)
-                    if self.chat_runs.get(run.run_id) is run:
-                        self.chat_runs.pop(run.run_id, None)
-                    run_ids = self.chat_runs_by_session.get(run.session_id)
-                    if run_ids is not None:
-                        run_ids.discard(run.run_id)
-                        if not run_ids:
-                            self.chat_runs_by_session.pop(run.session_id, None)
-                            self.running_convs.pop(run.session_id, None)
+                    self.chat_run_states.pop(run.run.request_id, None)
+                    await self.webchat_run_coordinator.close_run(run.run)
                     for subscriber in list(run.subscribers):
                         while not subscriber.empty():
                             subscriber.get_nowait()
                         subscriber.put_nowait(None)
                     run.subscribers.clear()
+                    # Close the request-scoped queue before signalling the
+                    # final SSE subscriber item.  The coordinator's own task
+                    # wrapper will invoke this again, but close_run is
+                    # idempotent and this ordering prevents a completed
+                    # stream from retaining an orphaned response queue.
+                    await self.webchat_run_coordinator.close_run(run.run)
 
             cleanup_task = asyncio.create_task(
                 finalize_run(),
-                name=f"webchat_run_cleanup:{run.run_id}",
+                name=f"webchat_run_cleanup:{run.run.request_id}",
             )
             try:
                 await asyncio.shield(cleanup_task)
@@ -1033,50 +990,44 @@ class ChatService:
                 llm_checkpoint_id=llm_checkpoint_id,
             )
 
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            message_id,
-            webchat_conv_id,
+        webchat_run = self.webchat_run_coordinator.create_run(
+            session_id=webchat_conv_id,
+            username=username,
+            request_id=message_id,
         )
         run = ChatRunState(
-            run_id=message_id,
-            username=username,
-            session_id=webchat_conv_id,
+            run=webchat_run,
             llm_checkpoint_id=llm_checkpoint_id,
             platform_history_id=platform_history_id,
-            back_queue=back_queue,
         )
-        self.chat_runs[message_id] = run
-        self.chat_runs_by_session.setdefault(webchat_conv_id, set()).add(message_id)
+        self.chat_run_states[message_id] = run
         stream = self._subscribe_chat_run(
             run,
             include_snapshot=False,
             saved_user_record=saved_user_record,
         )
-        run.task = asyncio.create_task(
+        self.webchat_run_coordinator.start_task(
+            webchat_run,
             self._consume_chat_run(run),
             name=f"webchat_run_{message_id}",
         )
 
         try:
-            chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
-            await chat_queue.put(
-                (
-                    username,
-                    webchat_conv_id,
-                    {
-                        "message": message_parts,
-                        "selected_provider": selected_provider,
-                        "selected_model": selected_model,
-                        "enable_streaming": enable_streaming,
-                        "message_id": message_id,
-                        "llm_checkpoint_id": llm_checkpoint_id,
-                        "thread_selected_text": thread_selected_text,
-                    },
-                ),
+            await self.webchat_run_coordinator.dispatch(
+                webchat_run,
+                {
+                    "message": message_parts,
+                    "selected_provider": selected_provider,
+                    "selected_model": selected_model,
+                    "enable_streaming": enable_streaming,
+                    "llm_checkpoint_id": llm_checkpoint_id,
+                    "thread_selected_text": thread_selected_text,
+                },
             )
         except BaseException:
-            run.task.cancel()
-            await asyncio.gather(run.task, return_exceptions=True)
+            if webchat_run.task is not None:
+                webchat_run.task.cancel()
+                await asyncio.gather(webchat_run.task, return_exceptions=True)
             raise
 
         return stream
@@ -1089,7 +1040,9 @@ class ChatService:
             raise ChatServiceError("Permission denied")
 
         unified_msg_origin = build_webchat_unified_msg_origin(session)
-        stopped_count = active_event_registry.request_agent_stop_all(unified_msg_origin)
+        stopped_count = self.active_event_control.request_agent_stop_all(
+            unified_msg_origin
+        )
         return {"stopped_count": stopped_count}
 
     async def stop_session_from_dashboard_payload(
@@ -1110,15 +1063,11 @@ class ChatService:
             f"{session.platform_id}:{message_type}:"
             f"{session.platform_id}!{username}!{session_id}"
         )
-        active_event_registry.request_agent_stop_all(unified_msg_origin)
-        tasks = []
-        for run_id in list(self.chat_runs_by_session.get(session_id, set())):
-            run = self.chat_runs.get(run_id)
-            if run and run.task and not run.task.done():
-                run.task.cancel()
-                tasks.append(run.task)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        self.active_event_control.request_agent_stop_all(unified_msg_origin)
+        await self.webchat_run_coordinator.close_session(
+            session_id,
+            remove_input_queue=session.platform_id == "webchat",
+        )
         await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
 
         history_list = await self.platform_history_mgr.get(
@@ -1146,9 +1095,6 @@ class ChatService:
                 "Failed to delete UMO route during session cleanup: %s",
                 safe_error("", exc),
             )
-
-        if session.platform_id == "webchat":
-            webchat_queue_mgr.remove_queues(session_id)
 
         await self.db.delete_platform_session(session_id)
 
@@ -1315,7 +1261,7 @@ class ChatService:
         response_data = {
             "history": [serialize_history_entry(history) for history in history_ls],
             "threads": [serialize_thread(thread) for thread in threads],
-            "is_running": self.running_convs.get(session_id, False),
+            "is_running": self._is_session_running(session_id),
             "active_runs": self.get_active_chat_runs(username, session_id),
         }
         if project_info:
@@ -1431,7 +1377,7 @@ class ChatService:
         return {
             "thread": serialize_thread(thread),
             "history": [serialize_history_entry(history) for history in history_ls],
-            "is_running": self.running_convs.get(thread_id, False),
+            "is_running": self._is_session_running(thread_id),
             "active_runs": self.get_active_chat_runs(username, thread_id),
         }
 

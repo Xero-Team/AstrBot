@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 from astrbot.dashboard.services.auth_service import DashboardTokenValidator
 from astrbot.dashboard.services.live_chat_service import LiveChatService
 
@@ -16,13 +17,14 @@ _LIVE_CHAT_JWT_SECRET = "live-chat-test-secret-with-32-bytes"
 
 
 def _service() -> LiveChatService:
-    core_lifecycle = SimpleNamespace(
-        astrbot_config={"dashboard": {"jwt_secret": _LIVE_CHAT_JWT_SECRET}},
-        services=SimpleNamespace(preferences=SimpleNamespace(temporary_cache={})),
-        plugin_manager=SimpleNamespace(),
+    return LiveChatService(
+        SimpleNamespace(),
+        preferences=SimpleNamespace(temporary_cache={}),
+        config={"dashboard": {"jwt_secret": _LIVE_CHAT_JWT_SECRET}},
+        provider_manager=SimpleNamespace(stt_provider_insts=[None]),
         platform_message_history_manager=SimpleNamespace(),
+        webchat_run_coordinator=WebChatRunCoordinator(WebChatQueueManager()),
     )
-    return LiveChatService(SimpleNamespace(), core_lifecycle)
 
 
 def _record(record_id: int):
@@ -319,9 +321,11 @@ async def test_handle_chat_message_scopes_events_to_request():
     )
 
     try:
-        input_queue = webchat_queue_mgr.get_or_create_queue(session_id)
+        input_queue = (
+            service.webchat_run_coordinator.queue_manager.get_or_create_queue(session_id)
+        )
         await asyncio.wait_for(input_queue.get(), timeout=1)
-        await webchat_queue_mgr.put_back_queue(
+        await service.webchat_run_coordinator.queue_manager.put_back_queue(
             message_id,
             {
                 "type": "end",
@@ -341,7 +345,7 @@ async def test_handle_chat_message_scopes_events_to_request():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await service.cleanup_session(session)
-        webchat_queue_mgr.remove_queues(session_id)
+        service.webchat_run_coordinator.queue_manager.remove_queues(session_id)
 
 
 @pytest.mark.asyncio
@@ -581,10 +585,23 @@ async def test_cleanup_chat_subscriptions_cancels_tasks_and_clears_state(monkeyp
         await asyncio.Event().wait()
 
     task = asyncio.create_task(_wait_forever())
+    service.webchat_run_coordinator.create_run(
+        session_id="conv-1",
+        username=session.username,
+        request_id="req-1",
+        kind="subscription",
+    )
+    service.webchat_run_coordinator.create_run(
+        session_id="conv-2",
+        username=session.username,
+        request_id="req-2",
+        kind="subscription",
+    )
     session.chat_subscriptions = {"conv-1": "req-1", "conv-2": "req-2"}
     session.chat_subscription_tasks = {"conv-1": task}
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
 
@@ -730,24 +747,30 @@ async def test_forward_chat_subscription_forwards_payload_and_cleans_state(monke
     back_queue: asyncio.Queue = asyncio.Queue()
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
+    )
+
+    run = service.webchat_run_coordinator.create_run(
+        session_id="chat-session",
+        username=session.username,
+        request_id="req-1",
+        kind="subscription",
     )
 
     async def send_json(payload: dict) -> None:
         sent_payloads.append(payload)
 
-    task = asyncio.create_task(
-        service.forward_chat_subscription(
-            session,
-            "chat-session",
-            "req-1",
-            send_json,
-        )
+    task = service.webchat_run_coordinator.start_task(
+        run,
+        service.forward_chat_subscription(session, run, send_json),
+        name="test_chat_subscription",
     )
     session.chat_subscription_tasks["chat-session"] = task
     back_queue.put_nowait({"type": "plain", "data": "hello"})
@@ -771,23 +794,33 @@ async def test_forward_chat_subscription_cleans_state_when_send_fails(monkeypatc
     back_queue.put_nowait({"type": "plain", "data": "hello"})
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
+    )
+
+    run = service.webchat_run_coordinator.create_run(
+        session_id="chat-session",
+        username=session.username,
+        request_id="req-2",
+        kind="subscription",
     )
 
     async def send_json(_payload: dict) -> None:
         raise RuntimeError("send failed")
 
-    await service.forward_chat_subscription(
-        session,
-        "chat-session",
-        "req-2",
-        send_json,
+    task = service.webchat_run_coordinator.start_task(
+        run,
+        service.forward_chat_subscription(session, run, send_json),
+        name="test_chat_subscription",
     )
+    session.chat_subscription_tasks["chat-session"] = task
+    await task
 
     assert removed_request_ids == ["req-2"]
     assert session.chat_subscriptions == {}
@@ -984,11 +1017,13 @@ async def test_handle_chat_message_send_reports_processing_failure_and_cleans_qu
     sent_payloads: list[dict] = []
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: (_ for _ in ()).throw(RuntimeError("queue boom")),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
 
@@ -1049,15 +1084,18 @@ async def test_handle_chat_message_send_logs_pending_flush_failure_and_still_cle
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
     monkeypatch.setattr(
@@ -1139,15 +1177,18 @@ async def test_handle_chat_message_send_enqueues_and_persists_messages(monkeypat
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
 
@@ -1280,15 +1321,18 @@ async def test_handle_chat_message_send_ignores_empty_mismatched_and_bad_agent_s
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
 
@@ -1357,15 +1401,18 @@ async def test_handle_chat_message_send_falls_back_when_extract_web_search_refs_
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
     monkeypatch.setattr(
@@ -1449,15 +1496,18 @@ async def test_handle_chat_message_send_persists_agent_stats_and_attachment(
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
 
@@ -1705,9 +1755,7 @@ async def test_handle_live_message_ignores_invalid_audio_chunks(monkeypatch):
 async def test_process_audio_returns_error_when_stt_provider_missing():
     service = _service()
     session = service.create_session("alice")
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[None])
-    )
+    service.provider_manager.stt_provider_insts = [None]
     sent_payloads: list[dict] = []
 
     async def send_json(payload: dict) -> None:
@@ -1736,13 +1784,12 @@ async def test_process_audio_returns_early_when_stt_text_is_empty(monkeypatch):
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value=""),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     sent_payloads: list[dict] = []
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: (_ for _ in ()).throw(
             AssertionError("queue should not be created when STT result is empty")
         ),
@@ -1774,9 +1821,7 @@ async def test_process_audio_reports_error_when_stt_raises():
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(side_effect=RuntimeError("stt boom")),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     sent_payloads: list[dict] = []
 
     async def send_json(payload: dict) -> None:
@@ -1812,9 +1857,7 @@ async def test_process_audio_streams_audio_chunks_without_plaintext_fallback(
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="hello bot"),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
     sent_payloads: list[dict] = []
@@ -1837,15 +1880,18 @@ async def test_process_audio_streams_audio_chunks_without_plaintext_fallback(
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
     monkeypatch.setattr(
@@ -1897,9 +1943,7 @@ async def test_process_audio_ignores_mismatched_message_id_until_matching_result
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="hello bot"),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
     sent_payloads: list[dict] = []
@@ -1912,15 +1956,18 @@ async def test_process_audio_ignores_mismatched_message_id_until_matching_result
     back_queue.put_nowait({"message_id": "reply-4", "type": "end", "data": ""})
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
     monkeypatch.setattr(
@@ -1957,9 +2004,7 @@ async def test_process_audio_falls_back_to_plain_bot_message_when_no_audio_chunk
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="question"),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
     sent_payloads: list[dict] = []
@@ -1980,15 +2025,18 @@ async def test_process_audio_falls_back_to_plain_bot_message_when_no_audio_chunk
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         lambda _request_id: None,
     )
     monkeypatch.setattr(
@@ -2026,9 +2074,7 @@ async def test_process_audio_audio_chunk_without_text_skips_bot_text_chunk(
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="question"),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
     sent_payloads: list[dict] = []
@@ -2039,15 +2085,18 @@ async def test_process_audio_audio_chunk_without_text_skips_bot_text_chunk(
     back_queue.put_nowait({"message_id": "reply-5", "type": "end", "data": ""})
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         lambda _request_id: None,
     )
     monkeypatch.setattr(
@@ -2077,9 +2126,7 @@ async def test_process_audio_ignores_malformed_stats_and_still_completes(monkeyp
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="question"),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
     sent_payloads: list[dict] = []
@@ -2116,15 +2163,18 @@ async def test_process_audio_ignores_malformed_stats_and_still_completes(monkeyp
     )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         lambda _request_id: None,
     )
     monkeypatch.setattr(
@@ -2163,9 +2213,7 @@ async def test_process_audio_interrupt_saves_partial_message_and_stops_playback(
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="question"),
     )
-    service.plugin_manager.context = SimpleNamespace(
-        provider_manager=SimpleNamespace(stt_provider_insts=[stt_provider])
-    )
+    service.provider_manager.stt_provider_insts = [stt_provider]
     service.save_interrupted_message = AsyncMock()
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
@@ -2174,15 +2222,18 @@ async def test_process_audio_interrupt_saves_partial_message_and_stops_playback(
     wait_for_calls = 0
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_queue",
         lambda _conversation_id: chat_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.get_or_create_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "get_or_create_back_queue",
         lambda _request_id, _conversation_id=None: back_queue,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.webchat_queue_mgr.remove_back_queue",
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
         removed_request_ids.append,
     )
     monkeypatch.setattr(

@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Coroutine
+from types import ModuleType, SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,11 +9,25 @@ import pytest
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Platform, PlatformMetadata, discovery
+from astrbot.core.platform.catalog import PlatformAdapterDescriptor, PlatformCatalog
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.star.star import PluginRegistry
+from astrbot.core.star.star_handler import HandlerRegistry
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
 pytestmark = pytest.mark.platform
+
+
+def _make_registries() -> tuple[HandlerRegistry, PluginRegistry]:
+    plugins = PluginRegistry()
+    return HandlerRegistry(plugins), plugins
+
+
+def _make_metrics() -> SimpleNamespace:
+    """Return a per-manager telemetry port without shared test state."""
+    return SimpleNamespace(upload=AsyncMock())
 
 
 def _make_manager() -> PlatformManager:
@@ -22,7 +37,17 @@ def _make_manager() -> PlatformManager:
             "platform_settings": {},
         },
         asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
     )
+
+
+class _ConfigWithAsyncSave(dict):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.save_config_async = AsyncMock(return_value=True)
 
 
 class _LifecycleFakeAdapter(Platform):
@@ -137,7 +162,7 @@ def _install_lifecycle_adapter(monkeypatch, *, client_ids: list[str] | None = No
     _LifecycleFakeAdapter.reset(client_ids)
     monkeypatch.setattr(
         "astrbot.core.platform.manager.discover_platform_adapter",
-        lambda _adapter_type: _LifecycleFakeAdapter,
+        lambda _adapter_type, _catalog: _LifecycleFakeAdapter,
     )
     return _LifecycleFakeAdapter.instances
 
@@ -217,6 +242,263 @@ def test_platform_manager_rejects_invalid_concurrency_limit() -> None:
 
     with pytest.raises(ValueError, match="platform concurrency limit must be >= 1"):
         manager.set_platform_concurrency_limit("telegram", 0)
+
+
+@pytest.mark.asyncio
+async def test_initialize_persists_webhook_defaults_before_loading_platform(
+    monkeypatch,
+):
+    config = _ConfigWithAsyncSave(
+        {
+            "platform": [{"enable": False, "id": "bot", "type": "unused"}],
+            "platform_settings": {},
+        }
+    )
+    manager = PlatformManager(
+        config,
+        asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
+    )
+    transitions: list[str] = []
+
+    async def persist() -> bool:
+        transitions.append("persist")
+        return True
+
+    async def load(platform_config: dict) -> None:
+        assert platform_config is config["platform"][0]
+        transitions.append("load")
+
+    class WebChatAdapter:
+        def __init__(self, *_args) -> None:
+            self.client_self_id = "webchat"
+
+    config.save_config_async.side_effect = persist
+    manager.load_platform = AsyncMock(side_effect=load)
+    manager._start_platform_task = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.ensure_platform_webhook_config",
+        lambda _platform: True,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.discover_platform_adapter",
+        lambda _adapter_type, _catalog: WebChatAdapter,
+    )
+
+    await manager.initialize()
+
+    config.save_config_async.assert_awaited_once()
+    manager.load_platform.assert_awaited_once_with(config["platform"][0])
+    assert transitions == ["persist", "load"]
+
+
+@pytest.mark.asyncio
+async def test_initialize_does_not_load_platform_when_webhook_save_is_superseded(
+    monkeypatch,
+):
+    config = _ConfigWithAsyncSave(
+        {
+            "platform": [{"enable": True, "id": "bot", "type": "unused"}],
+            "platform_settings": {},
+        }
+    )
+    config.save_config_async.return_value = False
+    manager = PlatformManager(
+        config,
+        asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
+    )
+    manager.load_platform = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.ensure_platform_webhook_config",
+        lambda _platform: True,
+    )
+
+    with pytest.raises(RuntimeError, match="webhook configuration save was superseded"):
+        await manager.initialize()
+
+    manager.load_platform.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_load_platform_does_not_create_adapter_when_id_save_is_superseded(
+    monkeypatch,
+):
+    config = _ConfigWithAsyncSave(
+        {
+            "platform": [{"enable": True, "id": "bot:legacy", "type": "unused"}],
+            "platform_settings": {},
+        }
+    )
+    config.save_config_async.return_value = False
+    manager = PlatformManager(
+        config,
+        asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
+    )
+    discover = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.discover_platform_adapter",
+        discover,
+    )
+
+    with pytest.raises(RuntimeError, match="ID migration save was superseded"):
+        await manager.load_platform(config["platform"][0])
+
+    discover.assert_not_called()
+    assert manager._platform_insts == []
+    assert config["platform"][0]["id"] == "bot:legacy"
+
+
+@pytest.mark.asyncio
+async def test_reload_keeps_existing_adapter_when_id_save_is_superseded(
+    monkeypatch,
+):
+    config = _ConfigWithAsyncSave(
+        {
+            "platform": [
+                {"enable": True, "id": "bot:legacy", "type": "unused"},
+            ],
+            "platform_settings": {},
+        }
+    )
+    config.save_config_async.return_value = False
+    manager = PlatformManager(
+        config,
+        asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
+    )
+    terminate = AsyncMock()
+    manager._terminate_platform_unlocked = terminate
+    discover = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.discover_platform_adapter",
+        discover,
+    )
+
+    with pytest.raises(RuntimeError, match="ID migration save was superseded"):
+        await manager.reload(config["platform"][0])
+
+    terminate.assert_not_awaited()
+    discover.assert_not_called()
+    assert config["platform"][0]["id"] == "bot:legacy"
+
+
+@pytest.mark.asyncio
+async def test_platform_manager_injects_runtime_queue_into_declaring_adapter(
+    monkeypatch,
+):
+    queue_manager = WebChatQueueManager()
+    manager = PlatformManager(
+        {"platform": [], "platform_settings": {}},
+        asyncio.Queue(),
+        queue_manager,
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
+    )
+    instances = []
+
+    class WebChatAdapter:
+        requires_webchat_queue_manager = True
+
+        def __init__(
+            self,
+            _platform_config,
+            _platform_settings,
+            _event_queue,
+            injected_queue_manager,
+        ) -> None:
+            self.client_self_id = "webchat"
+            self.injected_queue_manager = injected_queue_manager
+            instances.append(self)
+
+    manager._start_platform_task = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.discover_platform_adapter",
+        lambda _adapter_type, _catalog: WebChatAdapter,
+    )
+
+    await manager.initialize()
+
+    assert instances[0].injected_queue_manager is queue_manager
+
+
+def test_platform_manager_injects_scoped_handler_and_plugin_registries() -> None:
+    handlers, plugins = _make_registries()
+    metrics = _make_metrics()
+    manager = PlatformManager(
+        {"platform": [], "platform_settings": {}},
+        asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        handlers,
+        plugins,
+        metrics=metrics,
+    )
+    _LifecycleFakeAdapter.reset()
+    adapter = _LifecycleFakeAdapter({}, {}, asyncio.Queue())
+
+    manager._configure_platform_instance(adapter)
+
+    assert adapter.get_handler_registry() is handlers
+    assert adapter.get_plugin_registry() is plugins
+    assert adapter._metrics is metrics
+
+
+@pytest.mark.asyncio
+async def test_invalid_platform_id_is_persisted_before_adapter_starts(monkeypatch):
+    config = _ConfigWithAsyncSave(
+        {
+            "platform": [
+                {"enable": True, "id": "bot:one", "type": "fake-platform"},
+            ],
+            "platform_settings": {},
+        }
+    )
+    manager = PlatformManager(
+        config,
+        asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
+    )
+    transitions: list[str] = []
+
+    async def persist() -> bool:
+        transitions.append("persist")
+        return True
+
+    class Adapter:
+        def __init__(self, *_args) -> None:
+            self.client_self_id = "bot"
+
+    config.save_config_async.side_effect = persist
+    manager._start_platform_task = MagicMock(
+        side_effect=lambda *_args: transitions.append("start")
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.manager.discover_platform_adapter",
+        lambda _adapter_type, _catalog: Adapter,
+    )
+    await manager._load_platform_unlocked(config["platform"][0])
+
+    assert config["platform"][0]["id"] == "bot_one"
+    config.save_config_async.assert_awaited_once()
+    assert transitions == ["persist", "start"]
 
 
 @pytest.mark.asyncio
@@ -533,20 +815,37 @@ def test_platform_discovery_imports_registered_builtin_adapter_once(monkeypatch)
     adapter_type = "test-adapter"
     module_name = "astrbot.core.platform.sources.test_adapter"
     adapter = type("TestAdapter", (), {})
+    adapter.__module__ = module_name
+    setattr(
+        adapter,
+        "__astrbot_platform_adapter_descriptor__",
+        PlatformAdapterDescriptor.create(
+            name=adapter_type,
+            description="test adapter",
+            default_config_tmpl=None,
+            adapter_display_name=None,
+            logo_path=None,
+            support_streaming_message=True,
+            i18n_resources=None,
+            config_metadata=None,
+        ),
+    )
+    module = ModuleType(module_name)
+    module.TestAdapter = adapter
     imported = []
     monkeypatch.setattr(
         discovery, "BUILTIN_PLATFORM_MODULES", {adapter_type: module_name}
     )
-    monkeypatch.setattr(discovery, "platform_cls_map", {})
 
     def import_module(name):
         imported.append(name)
-        discovery.platform_cls_map[adapter_type] = adapter
+        return module
 
     monkeypatch.setattr(discovery.importlib, "import_module", import_module)
+    catalog = PlatformCatalog()
 
-    assert discovery.discover_platform_adapter(adapter_type) is adapter
-    assert discovery.discover_platform_adapter(adapter_type) is adapter
+    assert discovery.discover_platform_adapter(adapter_type, catalog) is adapter
+    assert discovery.discover_platform_adapter(adapter_type, catalog) is adapter
     assert imported == [module_name]
 
 
@@ -561,7 +860,7 @@ async def test_platform_manager_skips_disabled_and_unknown_platform(monkeypatch)
     await manager.load_platform({"enable": False, "id": "disabled", "type": "x"})
     await manager.load_platform({"enable": True, "id": "unknown", "type": "x"})
 
-    assert discover.call_args_list == [(("x",), {})]
+    discover.assert_called_once_with("x", manager.catalog)
     assert manager._platform_insts == []
 
 
@@ -611,6 +910,10 @@ async def test_platform_manager_terminate_owns_webchat_on_client_id_collision(
             "platform_settings": {},
         },
         asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
     )
     instances = _install_lifecycle_adapter(monkeypatch, client_ids=["same", "same"])
 
@@ -794,6 +1097,10 @@ async def test_platform_manager_terminate_and_reload_keep_new_instance_owned(
             "platform_settings": {},
         },
         asyncio.Queue(),
+        WebChatQueueManager(),
+        PlatformCatalog(),
+        *_make_registries(),
+        metrics=_make_metrics(),
     )
     instances = _install_lifecycle_adapter(
         monkeypatch,

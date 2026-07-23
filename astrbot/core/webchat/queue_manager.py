@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from astrbot import logger
 
 
-class WebChatQueueMgr:
+class WebChatQueueManager:
     def __init__(self, queue_maxsize: int = 128, back_queue_maxsize: int = 512) -> None:
         self.queues: dict[str, asyncio.Queue] = {}
         """Conversation ID to asyncio.Queue mapping"""
@@ -231,6 +231,3 @@ class WebChatQueueMgr:
             logger.error(
                 f"Error processing message from conversation {conversation_id}: {exc}"
             )
-
-
-webchat_queue_mgr = WebChatQueueMgr()

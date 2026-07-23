@@ -7,14 +7,20 @@ from typing import TypeVar, cast
 
 from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+from astrbot.core.db.protocols import WebChatStorageStore
+from astrbot.core.star.star import PluginRegistry
+from astrbot.core.star.star_handler import EventType, HandlerRegistry
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
+from astrbot.core.utils.metrics import MetricsSink
+from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.webhook_utils import (
     configure_webhook_utils,
     ensure_platform_webhook_config,
 )
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
 from .astrbot_message import AstrBotMessage
+from .catalog import PlatformCatalog
 from .discovery import discover_platform_adapter
 from .message_session import MessageSession
 from .platform import Platform, PlatformStatus
@@ -31,8 +37,23 @@ class PlatformTasks:
 _T = TypeVar("_T")
 
 
+class _PlatformConfigSaveSupersededError(RuntimeError):
+    """Raised when a platform configuration migration loses a save race."""
+
+
 class PlatformManager:
-    def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        event_queue: Queue,
+        webchat_queue_manager: WebChatQueueManager,
+        catalog: PlatformCatalog,
+        handler_registry: HandlerRegistry,
+        plugin_registry: PluginRegistry,
+        metrics: MetricsSink,
+    ) -> None:
+        if handler_registry.plugins is not plugin_registry:
+            raise ValueError("Handler and plugin registries must share one runtime")
         configure_webhook_utils(config)
         self._platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
@@ -48,12 +69,41 @@ class PlatformManager:
         self._platform_lifecycle_lock = asyncio.Lock()
 
         self.astrbot_config = config
+        self.catalog = catalog
+        self.handler_registry = handler_registry
+        self.plugin_registry = plugin_registry
+        self.metrics = metrics
         self.platforms_config = config["platform"]
         self.settings = config["platform_settings"]
         """NOTE: 这里是 default 的配置文件，以保证最大的兼容性；
         这个配置中的 unique_session 需要特殊处理，
         约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
         self.event_queue = event_queue
+        self.webchat_queue_manager = webchat_queue_manager
+        # Only the WebChat adapter receives persisted attachment/history access.
+        # PlatformManager must not depend on the concrete database implementation.
+        self.database: WebChatStorageStore | None = None
+        self.preferences: SharedPreferences | None = None
+
+    def _create_platform_instance(
+        self,
+        adapter_cls: type[Platform],
+        platform_config: dict,
+    ) -> Platform:
+        """Instantiate an adapter with the runtime capabilities it declares."""
+        if getattr(adapter_cls, "requires_webchat_queue_manager", False):
+            webchat_adapter_factory = cast(
+                Callable[[dict, dict, Queue, WebChatQueueManager], Platform],
+                adapter_cls,
+            )
+            return webchat_adapter_factory(
+                platform_config,
+                self.settings,
+                self.event_queue,
+                self.webchat_queue_manager,
+            )
+        adapter_factory = cast(Callable[[dict, dict, Queue], Platform], adapter_cls)
+        return adapter_factory(platform_config, self.settings, self.event_queue)
 
     def _is_valid_platform_id(self, platform_id: str | None) -> bool:
         if not platform_id:
@@ -72,6 +122,12 @@ class PlatformManager:
         inst.database = getattr(self, "database", None)
         inst.runtime_config = self.astrbot_config
         inst.preferences = getattr(self, "preferences", None)
+        if isinstance(inst, Platform):
+            inst.bind_metrics(self.metrics)
+            inst.bind_runtime_registries(
+                self.handler_registry,
+                self.plugin_registry,
+            )
 
     def _start_platform_task(self, task_name: str, inst: Platform) -> None:
         run_task = asyncio.create_task(inst.run(), name=task_name)
@@ -150,10 +206,19 @@ class PlatformManager:
     async def initialize(self) -> None:
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
+            if ensure_platform_webhook_config(platform):
+                committed = await self.astrbot_config.save_config_async()
+                if not committed:
+                    raise _PlatformConfigSaveSupersededError(
+                        "Platform webhook configuration save was superseded by "
+                        "a newer revision."
+                    )
             try:
-                if ensure_platform_webhook_config(platform):
-                    self.astrbot_config.save_config()
                 await self.load_platform(platform)
+            except asyncio.CancelledError:
+                raise
+            except _PlatformConfigSaveSupersededError:
+                raise
             except Exception as e:
                 logger.error(
                     "初始化 %s 平台适配器失败: %s",
@@ -162,10 +227,10 @@ class PlatformManager:
                 )
 
         # 网页聊天 is built-in but follows the same lazy discovery boundary.
-        webchat_cls = discover_platform_adapter("webchat")
+        webchat_cls = discover_platform_adapter("webchat", self.catalog)
         if webchat_cls is None:
             raise RuntimeError("Built-in webchat platform adapter was not registered")
-        webchat_inst = webchat_cls({}, self.settings, self.event_queue)
+        webchat_inst = self._create_platform_instance(webchat_cls, {})
         self._configure_platform_instance(webchat_inst)
         self._platform_insts.append(webchat_inst)
         self._start_platform_task("webchat", webchat_inst)
@@ -175,35 +240,73 @@ class PlatformManager:
         async with self._platform_lifecycle_lock:
             await self._load_platform_unlocked(platform_config)
 
+    async def _prepare_platform_id_for_loading(self, platform_config: dict) -> bool:
+        """Persist a legacy platform-ID normalization before adapter lifecycle work."""
+        platform_id = platform_config.get("id")
+        if self._is_valid_platform_id(platform_id):
+            return True
+
+        sanitized_id, changed = self._sanitize_platform_id(platform_id)
+        if not sanitized_id or not changed:
+            logger.error(
+                "平台 ID %r 不能为空，跳过加载该平台适配器。",
+                platform_id,
+            )
+            return False
+
+        logger.warning(
+            "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
+            platform_id,
+            sanitized_id,
+        )
+        platform_config["id"] = sanitized_id
+        configured_platform: dict | None = None
+        for candidate in self.platforms_config:
+            if candidate is platform_config:
+                configured_platform = candidate
+                break
+            if candidate.get("id") == platform_id:
+                candidate["id"] = sanitized_id
+                configured_platform = candidate
+                break
+
+        committed = await self.astrbot_config.save_config_async()
+        if not committed:
+            if platform_config.get("id") == sanitized_id:
+                platform_config["id"] = platform_id
+            if (
+                configured_platform is not None
+                and configured_platform is not platform_config
+                and configured_platform.get("id") == sanitized_id
+            ):
+                configured_platform["id"] = platform_id
+            raise _PlatformConfigSaveSupersededError(
+                "Platform ID migration save was superseded by a newer revision."
+            )
+        return True
+
     async def _load_platform_unlocked(self, platform_config: dict) -> None:
         # 动态导入
         cls_type: type | None = None
         try:
             if not platform_config["enable"]:
                 return
-            platform_id = platform_config.get("id")
-            if not self._is_valid_platform_id(platform_id):
-                sanitized_id, changed = self._sanitize_platform_id(platform_id)
-                if sanitized_id and changed:
-                    logger.warning(
-                        "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
-                        platform_id,
-                        sanitized_id,
-                    )
-                    platform_config["id"] = sanitized_id
-                    self.astrbot_config.save_config()
-                else:
-                    logger.error(
-                        f"平台 ID {platform_id!r} 不能为空，跳过加载该平台适配器。",
-                    )
-                    return
+            if not await self._prepare_platform_id_for_loading(platform_config):
+                return
 
             logger.info(
                 "Loading IM platform adapter %s(%s) ...",
                 platform_config["type"],
                 platform_config["id"],
             )
-            cls_type = discover_platform_adapter(platform_config["type"])
+            cls_type = discover_platform_adapter(
+                platform_config["type"],
+                self.catalog,
+            )
+        except asyncio.CancelledError:
+            raise
+        except _PlatformConfigSaveSupersededError:
+            raise
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 "加载平台适配器 %s 失败，原因：%s。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
@@ -222,7 +325,7 @@ class PlatformManager:
                 f"Platform adapter not found: {platform_config['type']}({platform_config['id']}).",
             )
             return
-        inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        inst = self._create_platform_instance(cls_type, platform_config)
         self._configure_platform_instance(inst)
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
@@ -233,13 +336,18 @@ class PlatformManager:
             f"platform_{platform_config['type']}_{platform_config['id']}",
             inst,
         )
-        handlers = star_handlers_registry.get_handlers_by_event_type(
+        handlers = self.handler_registry.get_handlers_by_event_type(
             EventType.OnPlatformLoadedEvent,
         )
         for handler in handlers:
             try:
+                plugin = self.plugin_registry.get_by_module(
+                    handler.handler_module_path,
+                )
                 logger.info(
-                    f"hook(on_platform_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    "hook(on_platform_loaded) -> %s - %s",
+                    plugin.name if plugin is not None else handler.handler_module_path,
+                    handler.handler_name,
                 )
                 await handler.handler()
             except Exception:
@@ -272,7 +380,12 @@ class PlatformManager:
 
     async def reload(self, platform_config: dict) -> None:
         async with self._platform_lifecycle_lock:
-            await self._terminate_platform_unlocked(platform_config["id"])
+            original_platform_id = platform_config["id"]
+            if platform_config[
+                "enable"
+            ] and not await self._prepare_platform_id_for_loading(platform_config):
+                return
+            await self._terminate_platform_unlocked(original_platform_id)
             if platform_config["enable"]:
                 await self._load_platform_unlocked(platform_config)
 

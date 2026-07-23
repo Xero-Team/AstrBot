@@ -7,6 +7,7 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.db.protocols import WebChatStorageStore
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -17,14 +18,15 @@ from astrbot.core.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
-from ...register import register_platform_adapter
-from .message_parts_helper import (
+from astrbot.core.webchat.emitter import emit_webchat_response
+from astrbot.core.webchat.message_parts import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
 )
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+
+from ...register import register_platform_adapter
 from .webchat_event import WebChatMessageEvent
-from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
 
 def _extract_conversation_id(session_id: str) -> str:
@@ -39,30 +41,35 @@ def _extract_conversation_id(session_id: str) -> str:
 class QueueListener:
     def __init__(
         self,
-        webchat_queue_mgr: WebChatQueueMgr,
+        webchat_queue_manager: WebChatQueueManager,
         callback: Callable,
         stop_event: asyncio.Event,
     ) -> None:
-        self.webchat_queue_mgr = webchat_queue_mgr
+        self.webchat_queue_manager = webchat_queue_manager
         self.callback = callback
         self.stop_event = stop_event
 
     async def run(self) -> None:
         """Register callback and keep adapter task alive."""
-        self.webchat_queue_mgr.set_listener(self.callback)
+        self.webchat_queue_manager.set_listener(self.callback)
         try:
             await self.stop_event.wait()
         finally:
-            await self.webchat_queue_mgr.clear_listener()
+            await self.webchat_queue_manager.clear_listener()
 
 
 @register_platform_adapter("webchat", "webchat")
 class WebChatAdapter(Platform):
+    requires_webchat_queue_manager = True
+
+    database: WebChatStorageStore | None
+
     def __init__(
         self,
         platform_config: dict,
         platform_settings: dict,
         event_queue: asyncio.Queue,
+        webchat_queue_manager: WebChatQueueManager,
     ) -> None:
         super().__init__(platform_config, event_queue)
 
@@ -79,7 +86,7 @@ class WebChatAdapter(Platform):
             support_proactive_message=True,
         )
         self._shutdown_event = asyncio.Event()
-        self._webchat_queue_mgr = webchat_queue_mgr
+        self._webchat_queue_manager = webchat_queue_manager
 
     async def send_by_session(
         self,
@@ -87,7 +94,7 @@ class WebChatAdapter(Platform):
         message_chain: MessageChain,
     ):
         conversation_id = _extract_conversation_id(session.session_id)
-        active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
+        active_request_ids = self._webchat_queue_manager.list_back_request_ids(
             conversation_id
         )
         stream_request_ids = [
@@ -108,10 +115,11 @@ class WebChatAdapter(Platform):
             return await super().send_by_session(session, message_chain)
 
         for request_id in target_request_ids:
-            await WebChatMessageEvent._send(
+            await emit_webchat_response(
+                self._webchat_queue_manager,
                 request_id,
                 message_chain,
-                session.session_id,
+                attachments_dir=self.attachments_dir,
                 streaming=True,
                 emit_complete=True,
             )
@@ -135,15 +143,18 @@ class WebChatAdapter(Platform):
         conversation_id: str,
         message_chain: MessageChain,
     ) -> None:
+        database = self.database
+        if database is None:
+            raise RuntimeError("WebChat storage was not injected")
         message_parts = await message_chain_to_storage_message_parts(
             message_chain,
-            insert_attachment=self.database.insert_attachment,
+            insert_attachment=database.insert_attachment,
             attachments_dir=self.attachments_dir,
         )
         if not message_parts:
             return
 
-        await self.database.insert_platform_message_history(
+        await database.insert_platform_message_history(
             platform_id="webchat",
             user_id=conversation_id,
             content={"type": "bot", "message": message_parts},
@@ -154,7 +165,10 @@ class WebChatAdapter(Platform):
     async def _get_message_history(
         self, message_id: int
     ) -> PlatformMessageHistory | None:
-        return await self.database.get_platform_message_history_by_id(message_id)
+        database = self.database
+        if database is None:
+            raise RuntimeError("WebChat storage was not injected")
+        return await database.get_platform_message_history_by_id(message_id)
 
     async def _parse_message_parts(
         self,
@@ -227,7 +241,11 @@ class WebChatAdapter(Platform):
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
 
-        bot = QueueListener(self._webchat_queue_mgr, callback, self._shutdown_event)
+        bot = QueueListener(
+            self._webchat_queue_manager,
+            callback,
+            self._shutdown_event,
+        )
         return bot.run()
 
     def meta(self) -> PlatformMetadata:
@@ -247,6 +265,8 @@ class WebChatAdapter(Platform):
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
+            webchat_queue_manager=self._webchat_queue_manager,
+            attachments_dir=self.attachments_dir,
         )
 
         raw_message = getattr(message, "raw_message", None)

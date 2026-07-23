@@ -1,3 +1,5 @@
+"""WebChat message-part conversion shared by transports."""
+
 import json
 import mimetypes
 import shutil

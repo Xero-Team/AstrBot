@@ -21,7 +21,7 @@ from astrbot.dashboard.services.chat_service import (
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Chat"])
-_SSE_RESPONSE = {
+_SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Server-sent chat stream or an error envelope",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},

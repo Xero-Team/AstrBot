@@ -9,8 +9,10 @@ import pytest
 from starlette.datastructures import UploadFile
 
 import astrbot.dashboard.services.chat_service as chat_service_module
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+from astrbot.core.webchat.result_reducer import BotMessageAccumulator
+from astrbot.core.webchat.run_coordinator import WebChatRun, WebChatRunCoordinator
 from astrbot.dashboard.services.chat_service import (
-    BotMessageAccumulator,
     ChatRunState,
     ChatService,
     ChatServiceError,
@@ -26,13 +28,51 @@ def _service() -> ChatService:
     service.db = MagicMock()
     service.conv_mgr = MagicMock()
     service.platform_history_mgr = MagicMock()
-    service.running_convs = {}
-    service.chat_runs = {}
-    service.chat_runs_by_session = {}
+    service.chat_run_states = {}
     service.delete_threads_by_ids = AsyncMock()
     service.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
     service.preferences = SimpleNamespace(temporary_cache={})
+    service.webchat_run_coordinator = WebChatRunCoordinator(WebChatQueueManager())
     return service
+
+
+def _create_webchat_run(
+    service: ChatService,
+    *,
+    session_id: str,
+    username: str,
+    request_id: str,
+) -> WebChatRun:
+    return service.webchat_run_coordinator.create_run(
+        session_id=session_id,
+        username=username,
+        request_id=request_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_running_is_derived_from_non_subscription_runs() -> None:
+    service = _service()
+    subscription = service.webchat_run_coordinator.create_run(
+        session_id="session-1",
+        username="alice",
+        request_id="subscription-1",
+        kind="subscription",
+    )
+
+    assert service._is_session_running("session-1") is False
+
+    request = _create_webchat_run(
+        service,
+        session_id="session-1",
+        username="alice",
+        request_id="request-1",
+    )
+    assert service._is_session_running("session-1") is True
+
+    await service.webchat_run_coordinator.close_run(request)
+    assert service._is_session_running("session-1") is False
+    await service.webchat_run_coordinator.close_run(subscription)
 
 
 def _session(
@@ -326,18 +366,18 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
     service.save_bot_message = AsyncMock(return_value=bot_record)
 
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_back_queue",
         lambda *_args: back_queue,
     )
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_queue",
         lambda *_args: queue,
     )
     remove_back_queue = MagicMock()
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "remove_back_queue",
         remove_back_queue,
     )
@@ -380,7 +420,11 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
         "alice",
         {"session_id": "session-1", "message": [{"type": "plain", "text": "hi"}]},
     )
+    webchat_run = service.webchat_run_coordinator.get_run("mid-1")
+    assert webchat_run is not None
     events = await _collect(stream)
+    assert webchat_run.task is not None
+    await webchat_run.task
 
     queue.put.assert_awaited_once()
     queued_payload = queue.put.await_args.args[0]
@@ -447,17 +491,17 @@ async def test_build_chat_stream_collects_tool_call_refs_and_agent_stats_on_end(
     )
 
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_back_queue",
         lambda *_args: back_queue,
     )
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_queue",
         lambda *_args: queue,
     )
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "remove_back_queue",
         MagicMock(),
     )
@@ -619,19 +663,20 @@ async def test_build_chat_stream_collects_tool_call_refs_and_agent_stats_on_end(
 
 
 @pytest.mark.asyncio
-async def test_chat_run_persists_native_refs_and_publishes_them(monkeypatch):
+async def test_chat_run_persists_native_refs_and_publishes_them():
     service = _service()
-    back_queue = asyncio.Queue()
-    run = ChatRunState(
-        run_id="native-refs",
-        username="alice",
+    webchat_run = _create_webchat_run(
+        service,
         session_id="session-native-refs",
+        username="alice",
+        request_id="native-refs",
+    )
+    run = ChatRunState(
+        run=webchat_run,
         llm_checkpoint_id="checkpoint-1",
         platform_history_id="webchat",
-        back_queue=back_queue,
     )
-    service.chat_runs[run.run_id] = run
-    service.chat_runs_by_session[run.session_id] = {run.run_id}
+    service.chat_run_states[webchat_run.request_id] = run
     published = []
     service._publish_chat_run = MagicMock(
         side_effect=lambda _run, payload: published.append(payload)
@@ -639,25 +684,29 @@ async def test_chat_run_persists_native_refs_and_publishes_them(monkeypatch):
     service.save_bot_message = AsyncMock(
         return_value=_history_record(10, {"type": "bot", "message": []})
     )
-    monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr, "remove_back_queue", MagicMock()
-    )
     native_refs = {
         "used": [
             {"url": "https://example.com/one", "title": "One"},
             {"url": "https://example.com/one", "snippet": "duplicate"},
         ]
     }
-    await back_queue.put(
-        {"message_id": run.run_id, "type": "refs", "data": native_refs}
+    await webchat_run.back_queue.put(
+        {"message_id": webchat_run.request_id, "type": "refs", "data": native_refs}
     )
-    await back_queue.put({"message_id": run.run_id, "type": "end", "data": ""})
+    await webchat_run.back_queue.put(
+        {"message_id": webchat_run.request_id, "type": "end", "data": ""}
+    )
 
-    await service._consume_chat_run(run)
+    task = service.webchat_run_coordinator.start_task(
+        webchat_run,
+        service._consume_chat_run(run),
+        name="test_native_refs",
+    )
+    await task
 
     assert run.refs == {"used": [native_refs["used"][0]]}
     service.save_bot_message.assert_awaited_once_with(
-        run.session_id,
+        webchat_run.session_id,
         [],
         {},
         {"used": [native_refs["used"][0]]},
@@ -671,17 +720,18 @@ async def test_chat_run_persists_native_refs_and_publishes_them(monkeypatch):
 async def test_chat_run_redacts_web_search_reference_exceptions(monkeypatch, caplog):
     """Internal ref extraction failures must not leak into Dashboard logs."""
     service = _service()
-    back_queue = asyncio.Queue()
-    run = ChatRunState(
-        run_id="redacted-refs",
-        username="alice",
+    webchat_run = _create_webchat_run(
+        service,
         session_id="session-redacted-refs",
+        username="alice",
+        request_id="redacted-refs",
+    )
+    run = ChatRunState(
+        run=webchat_run,
         llm_checkpoint_id="checkpoint-1",
         platform_history_id="webchat",
-        back_queue=back_queue,
     )
-    service.chat_runs[run.run_id] = run
-    service.chat_runs_by_session[run.session_id] = {run.run_id}
+    service.chat_run_states[webchat_run.request_id] = run
     service._publish_chat_run = MagicMock()
     service.save_bot_message = AsyncMock(
         return_value=_history_record(10, {"type": "bot", "message": []})
@@ -696,14 +746,20 @@ async def test_chat_run_redacts_web_search_reference_exceptions(monkeypatch, cap
         "extract_web_search_refs",
         MagicMock(side_effect=RuntimeError(sensitive_error)),
     )
-    monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr, "remove_back_queue", MagicMock()
+    await webchat_run.back_queue.put(
+        {"message_id": webchat_run.request_id, "type": "plain", "data": "Answer"}
     )
-    await back_queue.put({"message_id": run.run_id, "type": "plain", "data": "Answer"})
-    await back_queue.put({"message_id": run.run_id, "type": "end", "data": ""})
+    await webchat_run.back_queue.put(
+        {"message_id": webchat_run.request_id, "type": "end", "data": ""}
+    )
 
     with caplog.at_level("ERROR", logger="astrbot"):
-        await service._consume_chat_run(run)
+        task = service.webchat_run_coordinator.start_task(
+            webchat_run,
+            service._consume_chat_run(run),
+            name="test_redacted_refs",
+        )
+        await task
 
     for secret in (
         "api-key-top-secret",
@@ -742,17 +798,17 @@ async def test_build_chat_stream_emits_attachment_saved_event_for_image(monkeypa
     service.save_bot_message = AsyncMock(return_value=bot_record)
 
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_back_queue",
         lambda *_args: back_queue,
     )
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_queue",
         lambda *_args: queue,
     )
     monkeypatch.setattr(
-        chat_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "remove_back_queue",
         MagicMock(),
     )
@@ -1120,7 +1176,12 @@ async def test_delete_attachments_still_deletes_rows_when_file_removal_fails(
 async def test_get_session_includes_project_threads_and_running_state():
     service = _service()
     session = _session()
-    service.running_convs = {"session-1": True}
+    _create_webchat_run(
+        service,
+        session_id="session-1",
+        username="alice",
+        request_id="active-session-run",
+    )
     service.db.get_platform_session_by_id = AsyncMock(return_value=session)
     service.db.get_project_by_session = AsyncMock(
         return_value=SimpleNamespace(project_id="proj-1", title="Alpha", emoji="A")
@@ -1227,7 +1288,12 @@ async def test_get_thread_returns_history_and_running_state():
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
-    service.running_convs = {"thread-1": True}
+    _create_webchat_run(
+        service,
+        session_id="thread-1",
+        username="alice",
+        request_id="active-thread-run",
+    )
     service.db.get_webchat_thread_by_id = AsyncMock(return_value=thread)
     service.platform_history_mgr.get = AsyncMock(
         return_value=[_history_record(2, {"type": "bot", "message": []})]

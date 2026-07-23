@@ -8,6 +8,8 @@ import pytest
 
 import astrbot.dashboard.services.open_api_service as open_api_service_module
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 from astrbot.dashboard.services.open_api_service import (
     OpenApiService,
     OpenApiServiceError,
@@ -34,17 +36,16 @@ def _assert_no_sensitive_fragments(*texts: str) -> None:
 
 
 def _service() -> OpenApiService:
-    core_lifecycle = SimpleNamespace(
-        platform_manager=SimpleNamespace(
-            send_to_session=None,
-        ),
-        platform_message_history_manager=None,
-    )
     return OpenApiService(
         SimpleNamespace(
             get_attachment_by_id=lambda _attachment_id: None,
         ),
-        core_lifecycle,
+        platform_manager=SimpleNamespace(send_to_session=None),
+        astrbot_config_mgr=SimpleNamespace(get_conf_list=lambda: []),
+        umop_config_router=SimpleNamespace(),
+        astrbot_config={"platform": []},
+        platform_message_history_manager=SimpleNamespace(),
+        webchat_run_coordinator=WebChatRunCoordinator(WebChatQueueManager()),
     )
 
 
@@ -217,17 +218,19 @@ async def test_handle_chat_ws_send_reduces_queue_results_and_persists_native_ref
     service.prepare_chat_send = AsyncMock(return_value=("alice", "session-1", None))
     service.update_session_config_route = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        open_api_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_back_queue",
         lambda *_args: back_queue,
     )
     monkeypatch.setattr(
-        open_api_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_queue",
         lambda *_args: chat_queue,
     )
     monkeypatch.setattr(
-        open_api_service_module.webchat_queue_mgr, "remove_back_queue", MagicMock()
+        service.webchat_run_coordinator.queue_manager,
+        "remove_back_queue",
+        MagicMock(),
     )
 
     saved = []
@@ -341,17 +344,17 @@ async def test_handle_chat_ws_send_hides_internal_bridge_errors(monkeypatch):
     logger = MagicMock()
     monkeypatch.setattr(open_api_service_module, "logger", logger)
     monkeypatch.setattr(
-        open_api_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_back_queue",
         lambda *_args: back_queue,
     )
     monkeypatch.setattr(
-        open_api_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "get_or_create_queue",
         lambda *_args: chat_queue,
     )
     monkeypatch.setattr(
-        open_api_service_module.webchat_queue_mgr,
+        service.webchat_run_coordinator.queue_manager,
         "remove_back_queue",
         MagicMock(),
     )
@@ -405,7 +408,7 @@ async def test_open_api_session_and_route_errors_hide_internal_details(monkeypat
     )
     session_error = await service.ensure_chat_session("alice", "session-1")
 
-    service.core_lifecycle.umop_config_router = SimpleNamespace(
+    service.umop_config_router = SimpleNamespace(
         update_route=AsyncMock(side_effect=RuntimeError(_SENSITIVE_INTERNAL_ERROR))
     )
     route_error = await service.update_session_config_route(

@@ -7,33 +7,41 @@ import time
 import uuid
 import wave
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING
 
 import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
-from astrbot.core.platform.sources.webchat.message_parts_helper import (
+from astrbot.core.db.protocols import AttachmentStore
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.webchat.message_parts import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
-from astrbot.core.utils.error_redaction import safe_error
-from astrbot.dashboard.services.auth_service import DashboardTokenValidator
-from astrbot.dashboard.services.chat_service import (
+from astrbot.core.webchat.result_reducer import (
     BotMessageAccumulator,
     build_bot_history_content,
     collect_plain_text_from_message_parts,
-)
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
-from astrbot.dashboard.services.webchat_result_reducer import (
     merge_webchat_refs,
     parse_webchat_attachment,
 )
+from astrbot.core.webchat.run_coordinator import (
+    DuplicateWebChatRunError,
+    WebChatRun,
+    WebChatRunCoordinator,
+)
+from astrbot.dashboard.services.auth_service import DashboardTokenValidator
+
+if TYPE_CHECKING:
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.utils.shared_preferences import SharedPreferences
 
 SendJson = Callable[[dict], Awaitable[None]]
 ReceiveJson = Callable[[], Awaitable[dict]]
@@ -122,20 +130,24 @@ class LiveChatSession:
 class LiveChatService:
     def __init__(
         self,
-        db: Any,
-        core_lifecycle: DashboardCoreLifecycle,
+        db: AttachmentStore,
         *,
+        preferences: SharedPreferences,
+        config: AstrBotConfig,
+        provider_manager: ProviderManager,
+        platform_message_history_manager: PlatformMessageHistoryManager,
+        webchat_run_coordinator: WebChatRunCoordinator,
         token_validator: DashboardTokenValidator | None = None,
     ) -> None:
         self.db = db
-        self.core_lifecycle = core_lifecycle
-        self.preferences = core_lifecycle.services.preferences
-        self.config = core_lifecycle.astrbot_config
-        self.plugin_manager = core_lifecycle.plugin_manager
+        self.preferences = preferences
+        self.webchat_run_coordinator = webchat_run_coordinator
+        self.config = config
+        self.provider_manager = provider_manager
         self.token_validator = token_validator or DashboardTokenValidator(
             self.config["dashboard"].get("jwt_secret", "")
         )
-        self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        self.platform_history_mgr = platform_message_history_manager
         self.sessions: dict[str, LiveChatSession] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
@@ -360,33 +372,28 @@ class LiveChatService:
     async def forward_chat_subscription(
         self,
         session: LiveChatSession,
-        chat_session_id: str,
-        request_id: str,
+        run: WebChatRun,
         send_json: SendJson,
     ) -> None:
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            request_id, chat_session_id
-        )
         try:
             while True:
-                result = await back_queue.get()
+                result = await self.webchat_run_coordinator.next_result(run)
                 if not result:
                     continue
                 await self.send_chat_payload(
                     session, {"ct": "chat", **result}, send_json
                 )
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception as exc:
             logger.error(
-                f"[Live Chat] chat subscription forward failed ({chat_session_id}): {exc}",
+                f"[Live Chat] chat subscription forward failed ({run.session_id}): {exc}",
                 exc_info=True,
             )
         finally:
-            webchat_queue_mgr.remove_back_queue(request_id)
-            if session.chat_subscriptions.get(chat_session_id) == request_id:
-                session.chat_subscriptions.pop(chat_session_id, None)
-            session.chat_subscription_tasks.pop(chat_session_id, None)
+            if session.chat_subscriptions.get(run.session_id) == run.request_id:
+                session.chat_subscriptions.pop(run.session_id, None)
+            session.chat_subscription_tasks.pop(run.session_id, None)
 
     async def ensure_chat_subscription(
         self,
@@ -400,20 +407,20 @@ class LiveChatService:
             return existing_request_id
 
         request_id = f"ws_sub_{uuid.uuid4().hex}"
-        coro = self.forward_chat_subscription(
-            session,
-            chat_session_id,
-            request_id,
-            send_json,
+        run = self.webchat_run_coordinator.create_run(
+            session_id=chat_session_id,
+            username=session.username,
+            request_id=request_id,
+            kind="subscription",
         )
-        task = None
         try:
-            task = asyncio.create_task(
-                coro,
+            task = self.webchat_run_coordinator.start_task(
+                run,
+                self.forward_chat_subscription(session, run, send_json),
                 name=f"chat_ws_sub_{chat_session_id}",
             )
         except Exception:
-            coro.close()
+            await self.webchat_run_coordinator.close_run(run)
             session.chat_subscriptions.pop(chat_session_id, None)
             raise
 
@@ -432,7 +439,9 @@ class LiveChatService:
             await asyncio.gather(*tasks, return_exceptions=True)
 
         for request_id in list(session.chat_subscriptions.values()):
-            webchat_queue_mgr.remove_back_queue(request_id)
+            run = self.webchat_run_coordinator.get_run(request_id)
+            if run is not None:
+                await self.webchat_run_coordinator.close_run(run)
         session.chat_subscriptions.clear()
         session.chat_subscription_tasks.clear()
         session.chat_request_tasks.clear()
@@ -488,31 +497,46 @@ class LiveChatService:
             return
         assert message_parts is not None
 
-        await self.ensure_chat_subscription(session, session_id, send_json)
+        try:
+            run = self.webchat_run_coordinator.create_run(
+                session_id=session_id,
+                username=session.username,
+                request_id=message_id,
+                kind="live_chat",
+            )
+            self.webchat_run_coordinator.bind_task(run)
+        except DuplicateWebChatRunError:
+            await self.send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": "Duplicate active message_id",
+                    "code": "INVALID_MESSAGE_FORMAT",
+                    **request_metadata,
+                },
+                send_json,
+            )
+            return
 
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
         llm_checkpoint_id = str(uuid.uuid4())
 
         pending_bot_message_flusher = None
         try:
-            chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
-            await chat_queue.put(
-                (
-                    session.username,
-                    session_id,
-                    {
-                        "message": message_parts,
-                        "selected_provider": selected_provider,
-                        "selected_model": selected_model,
-                        "selected_stt_provider": selected_stt_provider,
-                        "selected_tts_provider": selected_tts_provider,
-                        "persona_prompt": persona_prompt,
-                        "show_reasoning": show_reasoning,
-                        "enable_streaming": enable_streaming,
-                        "message_id": message_id,
-                        "llm_checkpoint_id": llm_checkpoint_id,
-                    },
-                ),
+            await self.ensure_chat_subscription(session, session_id, send_json)
+            await self.webchat_run_coordinator.dispatch(
+                run,
+                {
+                    "message": message_parts,
+                    "selected_provider": selected_provider,
+                    "selected_model": selected_model,
+                    "selected_stt_provider": selected_stt_provider,
+                    "selected_tts_provider": selected_tts_provider,
+                    "persona_prompt": persona_prompt,
+                    "show_reasoning": show_reasoning,
+                    "enable_streaming": enable_streaming,
+                    "llm_checkpoint_id": llm_checkpoint_id,
+                },
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
@@ -600,19 +624,20 @@ class LiveChatService:
                 )
 
             while True:
-                if message_id in session.interrupted_chat_requests:
+                if (
+                    message_id in session.interrupted_chat_requests
+                    or run.interrupt_requested.is_set()
+                ):
                     session.interrupted_chat_requests.discard(message_id)
                     await flush_pending_bot_message()
                     break
 
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except TimeoutError:
-                    continue
+                result = await self.webchat_run_coordinator.next_result(
+                    run,
+                    wait_seconds=1,
+                )
 
                 if not result:
-                    continue
-                if result.get("message_id") and result.get("message_id") != message_id:
                     continue
 
                 result_text = result.get("data", "")
@@ -711,7 +736,7 @@ class LiveChatService:
                     exc_info=True,
                 )
             session.interrupted_chat_requests.discard(message_id)
-            webchat_queue_mgr.remove_back_queue(message_id)
+            await self.webchat_run_coordinator.close_run(run)
 
     async def _build_non_empty_chat_message_parts(
         self, payload: object
@@ -813,9 +838,13 @@ class LiveChatService:
         if msg_type == "interrupt":
             message_id = message.get("message_id")
             if message_id:
-                session.interrupted_chat_requests.add(str(message_id))
+                request_id = str(message_id)
+                session.interrupted_chat_requests.add(request_id)
+                self.webchat_run_coordinator.request_interrupt(request_id)
             else:
                 session.interrupted_chat_requests.update(session.chat_request_tasks)
+                for request_id in session.chat_request_tasks:
+                    self.webchat_run_coordinator.request_interrupt(request_id)
             await self.send_chat_payload(
                 session,
                 {
@@ -912,8 +941,7 @@ class LiveChatService:
             session.is_processing = True
             session.should_interrupt = False
 
-            ctx = self.plugin_manager.context
-            stt_provider = ctx.provider_manager.stt_provider_insts[0]
+            stt_provider = self.provider_manager.stt_provider_insts[0]
 
             if not stt_provider:
                 logger.error("[Live Chat] STT Provider 未配置")
@@ -937,18 +965,20 @@ class LiveChatService:
             )
 
             conversation_id = session.conversation_id
-            queue = webchat_queue_mgr.get_or_create_queue(conversation_id)
-
             message_id = str(uuid.uuid4())
-            payload = {
-                "message_id": message_id,
-                "message": [{"type": "plain", "text": user_text}],
-                "action_type": "live",
-            }
-
-            await queue.put((session.username, conversation_id, payload))
-            back_queue = webchat_queue_mgr.get_or_create_back_queue(
-                message_id, conversation_id
+            run = self.webchat_run_coordinator.create_run(
+                session_id=conversation_id,
+                username=session.username,
+                request_id=message_id,
+                kind="live_audio",
+            )
+            self.webchat_run_coordinator.bind_task(run)
+            await self.webchat_run_coordinator.dispatch(
+                run,
+                {
+                    "message": [{"type": "plain", "text": user_text}],
+                    "action_type": "live",
+                },
             )
 
             bot_text = ""
@@ -956,32 +986,25 @@ class LiveChatService:
 
             try:
                 while True:
-                    if session.should_interrupt:
+                    if session.should_interrupt or run.interrupt_requested.is_set():
                         logger.info("[Live Chat] 检测到用户打断")
                         await send_json({"t": "stop_play"})
                         await self.save_interrupted_message(
                             session, user_text, bot_text
                         )
-                        while not back_queue.empty():
+                        while not run.back_queue.empty():
                             try:
-                                back_queue.get_nowait()
+                                run.back_queue.get_nowait()
                             except asyncio.QueueEmpty:
                                 break
                         break
 
-                    try:
-                        result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
-                    except TimeoutError:
-                        continue
+                    result = await self.webchat_run_coordinator.next_result(
+                        run,
+                        wait_seconds=0.5,
+                    )
 
                     if not result:
-                        continue
-
-                    result_message_id = result.get("message_id")
-                    if result_message_id != message_id:
-                        logger.warning(
-                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}"
-                        )
                         continue
 
                     result_type = result.get("type")
@@ -1079,7 +1102,7 @@ class LiveChatService:
                         )
                         break
             finally:
-                webchat_queue_mgr.remove_back_queue(message_id)
+                await self.webchat_run_coordinator.close_run(run)
 
         except Exception as exc:
             logger.error(f"[Live Chat] 处理音频失败: {exc}", exc_info=True)

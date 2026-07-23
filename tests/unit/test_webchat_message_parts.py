@@ -1,41 +1,31 @@
-import asyncio
 from types import SimpleNamespace
 
 import pytest
 
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File, Json
-from astrbot.core.platform.sources.webchat import webchat_event
-from astrbot.core.platform.sources.webchat.message_parts_helper import (
+from astrbot.core.webchat.emitter import emit_webchat_response
+from astrbot.core.webchat.message_parts import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
 )
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
 
 @pytest.mark.asyncio
-async def test_webchat_file_send_keeps_original_filename(tmp_path, monkeypatch):
+async def test_webchat_file_send_keeps_original_filename(tmp_path):
     """WebChat file payloads should carry both stored and display filenames."""
-    queue = asyncio.Queue()
-
-    async def put_back_queue(_request_id, payload):
-        await queue.put(payload)
-        return True
-
     attachments_dir = tmp_path / "attachments"
     attachments_dir.mkdir()
     source_file = tmp_path / "source.txt"
     source_file.write_text("hello", encoding="utf-8")
-    monkeypatch.setattr(webchat_event, "attachments_dir", str(attachments_dir))
-    monkeypatch.setattr(
-        webchat_event.webchat_queue_mgr,
-        "put_back_queue",
-        put_back_queue,
-    )
-
-    await webchat_event.WebChatMessageEvent._send(
+    queue_manager = WebChatQueueManager()
+    queue = queue_manager.get_or_create_back_queue("message-1")
+    await emit_webchat_response(
+        queue_manager,
         "message-1",
         MessageChain([File(name="report.txt", file=str(source_file))]),
-        "webchat!user!conversation-1",
+        attachments_dir=attachments_dir,
     )
 
     payload = await queue.get()
@@ -48,20 +38,11 @@ async def test_webchat_file_send_keeps_original_filename(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_webchat_llm_sources_emit_deduplicated_refs_payload(monkeypatch):
-    queue = asyncio.Queue()
-
-    async def put_back_queue(_request_id, payload):
-        await queue.put(payload)
-        return True
-
-    monkeypatch.setattr(
-        webchat_event.webchat_queue_mgr,
-        "put_back_queue",
-        put_back_queue,
-    )
-
-    await webchat_event.WebChatMessageEvent._send(
+async def test_webchat_llm_sources_emit_deduplicated_refs_payload(tmp_path):
+    queue_manager = WebChatQueueManager()
+    queue = queue_manager.get_or_create_back_queue("message-refs")
+    await emit_webchat_response(
+        queue_manager,
         "message-refs",
         MessageChain(
             type="llm_sources",
@@ -82,7 +63,7 @@ async def test_webchat_llm_sources_emit_deduplicated_refs_payload(monkeypatch):
                 )
             ],
         ),
-        "webchat!user!conversation-1",
+        attachments_dir=tmp_path,
     )
 
     payload = await queue.get()

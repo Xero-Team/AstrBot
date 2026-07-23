@@ -1,32 +1,38 @@
-import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from astrbot import logger
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db.protocols import OpenApiStore
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.platform.sources.webchat.message_parts_helper import (
+from astrbot.core.star.dashboard_extension import ALL_OPEN_API_SCOPES
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.webchat.message_parts import (
     build_message_chain_from_payload,
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.core.star.dashboard_extension import ALL_OPEN_API_SCOPES
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
-from astrbot.core.utils.error_redaction import safe_error
-from astrbot.dashboard.responses import INTERNAL_SERVER_ERROR_MESSAGE
-from astrbot.dashboard.services.api_key_service import ApiKeyService
-from astrbot.dashboard.services.chat_service import (
-    collect_plain_text_from_message_parts,
-)
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
-from astrbot.dashboard.services.webchat_result_reducer import (
+from astrbot.core.webchat.result_reducer import (
     WebChatResultReducer,
+    collect_plain_text_from_message_parts,
     merge_webchat_refs,
     parse_webchat_attachment,
 )
+from astrbot.core.webchat.run_coordinator import (
+    DuplicateWebChatRunError,
+    WebChatRunCoordinator,
+)
+from astrbot.dashboard.responses import INTERNAL_SERVER_ERROR_MESSAGE
+from astrbot.dashboard.services.api_key_service import ApiKeyService
+
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.platform.manager import PlatformManager
+    from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+    from astrbot.core.umop_config_router import UmopConfigRouter
 
 SendJson = Callable[[dict], Awaitable[None]]
 ReceiveJson = Callable[[], Awaitable[Any]]
@@ -51,17 +57,22 @@ class OpenApiWebSocketChatBridge:
 class OpenApiService:
     def __init__(
         self,
-        db: BaseDatabase,
-        core_lifecycle: DashboardCoreLifecycle,
+        db: OpenApiStore,
+        *,
+        platform_manager: PlatformManager,
+        astrbot_config_mgr: AstrBotConfigManager,
+        umop_config_router: UmopConfigRouter,
+        astrbot_config: AstrBotConfig,
+        platform_message_history_manager: PlatformMessageHistoryManager,
+        webchat_run_coordinator: WebChatRunCoordinator,
     ) -> None:
         self.db = db
-        self.core_lifecycle = core_lifecycle
-        self.platform_manager = core_lifecycle.platform_manager
-        self.platform_history_mgr = getattr(
-            core_lifecycle,
-            "platform_message_history_manager",
-            None,
-        )
+        self.platform_manager = platform_manager
+        self.astrbot_config_mgr = astrbot_config_mgr
+        self.umop_config_router = umop_config_router
+        self.astrbot_config = astrbot_config
+        self.webchat_run_coordinator = webchat_run_coordinator
+        self.platform_history_mgr = platform_message_history_manager
 
     @staticmethod
     def resolve_open_username(
@@ -75,7 +86,7 @@ class OpenApiService:
         return username, None
 
     def get_chat_config_list(self) -> list[dict]:
-        conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
+        conf_list = self.astrbot_config_mgr.get_conf_list()
 
         result = []
         for conf_info in conf_list:
@@ -295,11 +306,9 @@ class OpenApiService:
         umo = f"webchat:FriendMessage:webchat!{username}!{session_id}"
         try:
             if config_id == "default":
-                await self.core_lifecycle.umop_config_router.delete_route(umo)
+                await self.umop_config_router.delete_route(umo)
             else:
-                await self.core_lifecycle.umop_config_router.update_route(
-                    umo, config_id
-                )
+                await self.umop_config_router.update_route(umo, config_id)
         except Exception as exc:
             logger.error(
                 "Failed to update chat config route: %s",
@@ -315,8 +324,6 @@ class OpenApiService:
         effective_username: str,
         message_parts: list,
     ) -> None:
-        if self.platform_history_mgr is None:
-            raise OpenApiServiceError("Platform message history manager is unavailable")
         await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=session_id,
@@ -385,21 +392,23 @@ class OpenApiService:
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
+        run = None
         try:
-            chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
-            await chat_queue.put(
-                (
-                    effective_username,
-                    session_id,
-                    {
-                        "message": message_parts,
-                        "selected_provider": selected_provider,
-                        "selected_model": selected_model,
-                        "enable_streaming": enable_streaming,
-                        "message_id": message_id,
-                    },
-                )
+            run = self.webchat_run_coordinator.create_run(
+                session_id=session_id,
+                username=effective_username,
+                request_id=message_id,
+                kind="open_api",
+            )
+            self.webchat_run_coordinator.bind_task(run)
+            await self.webchat_run_coordinator.dispatch(
+                run,
+                {
+                    "message": message_parts,
+                    "selected_provider": selected_provider,
+                    "selected_model": selected_model,
+                    "enable_streaming": enable_streaming,
+                },
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
@@ -420,16 +429,12 @@ class OpenApiService:
 
             reducer = WebChatResultReducer()
             while True:
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except TimeoutError:
-                    continue
+                result = await self.webchat_run_coordinator.next_result(
+                    run,
+                    wait_seconds=1,
+                )
 
                 if not result:
-                    continue
-
-                if "message_id" in result and result["message_id"] != message_id:
-                    logger.warning("openapi ws stream message_id mismatch")
                     continue
 
                 result_text = result.get("data", "")
@@ -508,11 +513,14 @@ class OpenApiService:
                     reducer.reset()
                 if msg_type == "end":
                     break
+        except DuplicateWebChatRunError:
+            await send_error("Duplicate active message_id", "INVALID_MESSAGE")
         except Exception as exc:
             logger.error("Open API WS chat failed: %s", safe_error("", exc))
             await send_error("Failed to process message", "PROCESSING_ERROR")
         finally:
-            webchat_queue_mgr.remove_back_queue(message_id)
+            if run is not None:
+                await self.webchat_run_coordinator.close_run(run)
 
     async def get_chat_sessions(
         self,
@@ -624,7 +632,7 @@ class OpenApiService:
 
     def get_bots(self) -> dict:
         bot_ids = []
-        for platform in self.core_lifecycle.astrbot_config.get("platform", []):
+        for platform in self.astrbot_config.get("platform", []):
             platform_id = platform.get("id") if isinstance(platform, dict) else None
             if (
                 isinstance(platform_id, str)

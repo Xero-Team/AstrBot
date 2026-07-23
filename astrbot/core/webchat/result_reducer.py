@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 ATTACHMENT_MARKERS = {
     "image": "[IMAGE]",
@@ -22,6 +23,56 @@ def collect_plain_text_from_message_parts(message_parts: list[dict]) -> str:
         and isinstance(text := part.get("text"), str)
         and text
     )
+
+
+def normalize_reasoning_message_parts(
+    message_parts: list[dict] | None,
+    reasoning: str = "",
+) -> list[dict]:
+    """Normalize persisted reasoning parts to the WebChat storage shape."""
+    parts: list[dict] = []
+    for part in message_parts or []:
+        if not isinstance(part, dict):
+            continue
+        copied = dict(part)
+        if copied.get("type") == "reasoning":
+            copied = {"type": "think", "think": copied.get("text", "")}
+        parts.append(copied)
+    if reasoning and not any(part.get("type") == "think" for part in parts):
+        parts.insert(0, {"type": "think", "think": reasoning})
+    return parts
+
+
+def extract_reasoning_from_message_parts(message_parts: list[dict]) -> str:
+    """Collect persisted reasoning text in transport order."""
+    reasoning_parts: list[str] = []
+    for part in message_parts:
+        if part.get("type") != "think":
+            continue
+        think = part.get("think")
+        if isinstance(think, str) and think:
+            reasoning_parts.append(think)
+    return "".join(reasoning_parts)
+
+
+def build_bot_history_content(
+    message_parts: list[dict],
+    *,
+    agent_stats: dict | None = None,
+    refs: dict | None = None,
+    include_reasoning_field: bool = True,
+) -> dict[str, Any]:
+    """Build the durable WebChat bot-history payload from queue results."""
+    normalized_parts = normalize_reasoning_message_parts(message_parts)
+    content: dict[str, Any] = {"type": "bot", "message": normalized_parts}
+    reasoning = extract_reasoning_from_message_parts(normalized_parts)
+    if reasoning and include_reasoning_field:
+        content["reasoning"] = reasoning
+    if agent_stats:
+        content["agent_stats"] = agent_stats
+    if refs:
+        content["refs"] = refs
+    return content
 
 
 class BotMessageAccumulator:

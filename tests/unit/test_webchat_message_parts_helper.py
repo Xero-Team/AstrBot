@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.message.components import Record
-from astrbot.core.platform.sources.webchat.message_parts_helper import (
+from astrbot.core.webchat.message_parts import (
     parse_webchat_message_parts,
 )
 

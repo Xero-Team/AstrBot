@@ -40,8 +40,8 @@ def sanitize_contexts_by_modalities(
         return [], ContextSanitizeStats()
     if modalities is None or not isinstance(modalities, list):
         copied_contexts = []
-        for msg in contexts:
-            copied_msg = _message_to_dict(msg)
+        for raw_context in contexts:
+            copied_msg = _message_to_dict(raw_context)
             if copied_msg:
                 copied_contexts.append(copied_msg)
         return copied_contexts, ContextSanitizeStats()
@@ -51,8 +51,8 @@ def sanitize_contexts_by_modalities(
     supports_tool_use = "tool_use" in modalities
     if supports_image and supports_audio and supports_tool_use:
         copied_contexts = []
-        for msg in contexts:
-            copied_msg = _message_to_dict(msg)
+        for raw_context in contexts:
+            copied_msg = _message_to_dict(raw_context)
             if copied_msg:
                 copied_contexts.append(copied_msg)
         return copied_contexts, ContextSanitizeStats()
@@ -61,9 +61,10 @@ def sanitize_contexts_by_modalities(
     stats = ContextSanitizeStats()
 
     for raw_msg in contexts:
-        msg = _message_to_dict(raw_msg)
-        if not msg:
+        copied_msg = _message_to_dict(raw_msg)
+        if not copied_msg:
             continue
+        msg: dict[str, Any] = copied_msg
         role = msg.get("role")
         if not role:
             continue
@@ -71,11 +72,10 @@ def sanitize_contexts_by_modalities(
         if not supports_tool_use:
             if role == "tool":
                 stats.fixed_tool_messages += 1
-                fixed_msg: dict[str, Any] = {
+                msg = {
                     "role": "user",
                     "content": _tool_result_placeholder(msg.get("content")),
                 }
-                msg = fixed_msg
             if role == "assistant" and "tool_calls" in msg:
                 stats.removed_tool_calls += 1
                 msg.pop("tool_calls", None)

@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
-from astrbot.core.provider.entities import ProviderRequest
 
 
 class _Preferences:

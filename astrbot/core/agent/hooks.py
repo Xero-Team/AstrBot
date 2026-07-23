@@ -1,8 +1,8 @@
 import mcp
 
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.provider.entities import LLMResponse
 
+from .llm_types import LLMResponse
 from .run_context import ContextWrapper
 
 

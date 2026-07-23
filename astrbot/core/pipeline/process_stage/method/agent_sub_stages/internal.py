@@ -1,11 +1,15 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
 
-import asyncio
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot import logger
+from astrbot.core.agent.follow_up import FollowUpCapture
 from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
+from astrbot.core.agent.llm_types import (
+    LLMResponse,
+    ProviderRequest,
+)
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -35,33 +39,16 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     get_agent_error_message,
 )
-from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ProviderRequest,
-)
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.metrics import Metric
-from astrbot.core.utils.session_lock import session_lock_manager
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
-    FollowUpCapture,
-    finalize_follow_up_capture,
-    prepare_follow_up_capture,
-    register_active_runner,
-    try_capture_follow_up,
-    unregister_active_runner,
-)
-
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
-class InternalAgentSubStage(Stage):
+class InternalAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         conf = ctx.astrbot_config
@@ -141,7 +128,7 @@ class InternalAgentSubStage(Stage):
         proactive_cfg = settings.get("proactive_capability", {})
         self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
 
-        self.conv_manager = ctx.plugin_manager.context.conversation_manager
+        self.conv_manager = ctx.execution_context.conversation_manager
 
         self.main_agent_cfg = MainAgentBuildConfig(
             tool_call_timeout=self.tool_call_timeout,
@@ -165,7 +152,7 @@ class InternalAgentSubStage(Stage):
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            timezone=self.ctx.execution_context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
@@ -189,13 +176,13 @@ class InternalAgentSubStage(Stage):
             resp=final_resp.completion_text if final_resp else None,
         )
         create_tracked_task(
-            _BACKGROUND_TASKS,
+            self.ctx.execution_context.background_tasks,
             _record_internal_agent_stats(
                 event,
                 req,
                 agent_runner,
                 final_resp,
-                self.ctx.plugin_manager.context.database,
+                self.ctx.execution_context.database,
             ),
             name="record_internal_agent_stats",
         )
@@ -213,8 +200,8 @@ class InternalAgentSubStage(Stage):
                 user_aborted=agent_runner.was_aborted(),
             )
         create_tracked_task(
-            _BACKGROUND_TASKS,
-            Metric.upload(
+            self.ctx.execution_context.background_tasks,
+            self.ctx.execution_context.metrics.upload(
                 llm_tick=1,
                 model_name=agent_runner.provider.get_model(),
                 provider_type=agent_runner.provider.meta().type,
@@ -236,7 +223,7 @@ class InternalAgentSubStage(Stage):
         )
         build_result = await build_main_agent(
             event=event,
-            plugin_context=self.ctx.plugin_manager.context,
+            plugin_context=self.ctx.execution_context,
             config=build_cfg,
             apply_reset=False,
         )
@@ -298,12 +285,16 @@ class InternalAgentSubStage(Stage):
                 return
 
             logger.debug("ready to request llm provider")
-            follow_up_capture = try_capture_follow_up(event)
+            follow_up_capture = (
+                self.ctx.execution_context.follow_up_coordinator.try_capture(event)
+            )
             if follow_up_capture:
                 (
                     follow_up_consumed_marked,
                     follow_up_activated,
-                ) = await prepare_follow_up_capture(follow_up_capture)
+                ) = await self.ctx.execution_context.follow_up_coordinator.prepare_capture(
+                    follow_up_capture
+                )
                 if follow_up_consumed_marked:
                     event.set_extra(
                         "_follow_up_captured",
@@ -321,10 +312,17 @@ class InternalAgentSubStage(Stage):
                 await event.send_typing()
             except Exception as exc:
                 logger.warning("send_typing failed: %s", safe_error("", exc))
-            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+            if await call_event_hook(
+                event,
+                EventType.OnWaitingLLMRequestEvent,
+                handler_registry=self.ctx.handlers,
+                plugin_registry=self.ctx.plugins,
+            ):
                 return
 
-            async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+            async with self.ctx.execution_context.session_lock_manager.acquire_lock(
+                event.unified_msg_origin
+            ):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
@@ -348,7 +346,13 @@ class InternalAgentSubStage(Stage):
                         and not event.platform_meta.support_streaming_message
                     )
 
-                    if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    if await call_event_hook(
+                        event,
+                        EventType.OnLLMRequestEvent,
+                        req,
+                        handler_registry=self.ctx.handlers,
+                        plugin_registry=self.ctx.plugins,
+                    ):
                         if reset_coro:
                             reset_coro.close()
                         return
@@ -357,7 +361,10 @@ class InternalAgentSubStage(Stage):
                     if reset_coro:
                         await reset_coro
 
-                    register_active_runner(event.unified_msg_origin, agent_runner)
+                    self.ctx.execution_context.follow_up_coordinator.register_active_runner(
+                        event.unified_msg_origin,
+                        agent_runner,
+                    )
                     runner_registered = True
                     action_type = event.get_extra("action_type")
 
@@ -379,7 +386,7 @@ class InternalAgentSubStage(Stage):
 
                         # 获取 TTS Provider
                         tts_provider = (
-                            self.ctx.plugin_manager.context.get_using_tts_provider(
+                            self.ctx.execution_context.get_using_tts_provider(
                                 event.unified_msg_origin
                             )
                         )
@@ -477,7 +484,10 @@ class InternalAgentSubStage(Stage):
                     )
                 finally:
                     if runner_registered and agent_runner is not None:
-                        unregister_active_runner(event.unified_msg_origin, agent_runner)
+                        self.ctx.execution_context.follow_up_coordinator.unregister_active_runner(
+                            event.unified_msg_origin,
+                            agent_runner,
+                        )
 
         except Exception as e:
             logger.error(
@@ -492,7 +502,7 @@ class InternalAgentSubStage(Stage):
                 except Exception as exc:
                     logger.warning("stop_typing failed: %s", safe_error("", exc))
             if follow_up_capture:
-                await finalize_follow_up_capture(
+                await self.ctx.execution_context.follow_up_coordinator.finalize_capture(
                     follow_up_capture,
                     activated=follow_up_activated,
                     consumed_marked=follow_up_consumed_marked,
@@ -574,7 +584,7 @@ class InternalAgentSubStage(Stage):
         self._schedule_runtime_memory_postprocess(
             event,
             req,
-            llm_response.completion_text,
+            llm_response.completion_text or "",
         )
 
     def _schedule_runtime_memory_postprocess(
@@ -583,26 +593,22 @@ class InternalAgentSubStage(Stage):
         req: ProviderRequest,
         assistant_text: str,
     ) -> None:
-        plugin_context = getattr(
-            getattr(getattr(self, "ctx", None), "plugin_manager", None),
-            "context",
-            None,
-        )
-        if plugin_context is None:
+        execution_context = getattr(self.ctx, "execution_context", None)
+        if execution_context is None:
             return
 
         persona_runtime_manager = getattr(
-            plugin_context,
+            execution_context,
             "persona_runtime_manager",
             None,
         )
-        memory_manager = getattr(plugin_context, "memory_manager", None)
+        memory_manager = getattr(execution_context, "memory_manager", None)
         if persona_runtime_manager is None and memory_manager is None:
             return
 
         try:
             create_tracked_task(
-                _BACKGROUND_TASKS,
+                self.ctx.execution_context.background_tasks,
                 _run_runtime_memory_postprocess(
                     event=event,
                     req=req,

@@ -13,11 +13,11 @@ from google.genai.errors import APIError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
+from astrbot.core.agent.llm_types import LLMResponse, TokenUsage
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, TokenUsage
-from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import (
     describe_media_ref,

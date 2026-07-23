@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 from dashscope.app.application_response import ApplicationOutput, ApplicationResponse
 
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.runners.dashscope import dashscope_agent_runner as runner_module
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )
-from astrbot.core.provider.entities import ProviderRequest
 
 pytestmark = pytest.mark.provider
 

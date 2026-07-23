@@ -9,9 +9,9 @@ from google.genai.errors import APIError
 
 import astrbot.core.provider.sources.gemini_source as gemini_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.llm_types import LLMResponse
 from astrbot.core.agent.message import AudioURLPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 

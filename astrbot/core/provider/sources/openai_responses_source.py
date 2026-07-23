@@ -19,16 +19,16 @@ from openai.types.responses.response import Response
 
 from astrbot import logger
 from astrbot.core.agent.history_sanitizer import IMAGE_HISTORY_PLACEHOLDER
-from astrbot.core.agent.message import ContentPart, Message, ProviderMessageState
-from astrbot.core.agent.tool import ToolSet
-from astrbot.core.exceptions import MalformedToolCallError, ProviderResponseError
-from astrbot.core.provider.entities import (
+from astrbot.core.agent.llm_types import (
     LLMCitation,
     LLMResponse,
     LLMSource,
     TokenUsage,
     ToolCallsResult,
 )
+from astrbot.core.agent.message import ContentPart, Message, ProviderMessageState
+from astrbot.core.agent.tool import ToolSet
+from astrbot.core.exceptions import MalformedToolCallError, ProviderResponseError
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 from astrbot.core.utils.network_utils import create_proxy_client

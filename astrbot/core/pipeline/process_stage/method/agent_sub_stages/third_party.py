@@ -16,7 +16,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_main_agent import MainAgentBuildConfig, prepare_event_attachments
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -31,17 +31,15 @@ from astrbot.core.persona_error_reply import (
 )
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.llm_types import LLMResponse
     from astrbot.core.agent.runners.base import BaseAgentRunner
-    from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.pipeline.stage import Stage
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import (
+from astrbot.core.agent.llm_types import (
     ProviderRequest,
 )
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -60,7 +58,6 @@ RUNNER_NO_FINAL_RESPONSE_LOG = (
     "Agent Runner returned no final response, fallback to streamed error/result chain."
 )
 RUNNER_NO_RESULT_LOG = "Agent Runner did not return final result."
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
 async def run_third_party_agent(
@@ -178,7 +175,7 @@ async def _close_runner_if_supported(runner: BaseAgentRunner) -> None:
         )
 
 
-class ThirdPartyAgentSubStage(Stage):
+class ThirdPartyAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
@@ -216,11 +213,11 @@ class ThirdPartyAgentSubStage(Stage):
         try:
             conversation_persona_id = await resolve_event_conversation_persona_id(
                 event,
-                self.ctx.plugin_manager.context.conversation_manager,
+                self.ctx.execution_context.conversation_manager,
             )
             return await resolve_persona_custom_error_message(
                 event=event,
-                persona_manager=self.ctx.plugin_manager.context.persona_manager,
+                persona_manager=self.ctx.execution_context.persona_manager,
                 provider_settings=self.conf["provider_settings"],
                 conversation_persona_id=conversation_persona_id,
             )
@@ -352,7 +349,7 @@ class ThirdPartyAgentSubStage(Stage):
                 tool_call_timeout=int(settings.get("tool_call_timeout", 120)),
                 provider_settings=settings,
             ),
-            self.ctx.plugin_manager.context,
+            self.ctx.execution_context,
         )
 
         if (
@@ -367,7 +364,13 @@ class ThirdPartyAgentSubStage(Stage):
         set_persona_custom_error_message_on_event(event, custom_error_message)
 
         # call event hook
-        if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+        if await call_event_hook(
+            event,
+            EventType.OnLLMRequestEvent,
+            req,
+            handler_registry=self.ctx.handlers,
+            plugin_registry=self.ctx.plugins,
+        ):
             return
 
         if self.runner_type == "dify":
@@ -384,7 +387,7 @@ class ThirdPartyAgentSubStage(Stage):
             )
 
         astr_agent_ctx = AstrAgentContext(
-            context=self.ctx.plugin_manager.context,
+            context=self.ctx.execution_context,
             event=event,
         )
 
@@ -424,7 +427,7 @@ class ThirdPartyAgentSubStage(Stage):
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                 ),
-                "agent_hooks": MAIN_AGENT_HOOKS,
+                "agent_hooks": MainAgentHooks(),
                 "provider_config": self.prov_cfg,
                 "streaming": streaming_response,
             }
@@ -466,8 +469,8 @@ class ThirdPartyAgentSubStage(Stage):
                     await asyncio.gather(stream_watchdog_task, return_exceptions=True)
 
         create_tracked_task(
-            _BACKGROUND_TASKS,
-            Metric.upload(
+            self.ctx.execution_context.background_tasks,
+            self.ctx.execution_context.metrics.upload(
                 llm_tick=1,
                 model_name=self.runner_type,
                 provider_type=self.runner_type,

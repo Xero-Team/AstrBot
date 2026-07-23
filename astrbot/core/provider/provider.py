@@ -5,15 +5,17 @@ from collections.abc import AsyncGenerator
 from typing import Literal
 
 from astrbot import logger
+from astrbot.core.agent.llm_types import LLMResponse, ToolCallsResult
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.provider.catalog import (
+    PROVIDER_ADAPTER_DESCRIPTOR_ATTR,
+    ProviderAdapterDescriptor,
+)
 from astrbot.core.provider.entities import (
-    LLMResponse,
     ProviderMeta,
     RerankResult,
-    ToolCallsResult,
 )
-from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.error_redaction import safe_error
 
@@ -46,14 +48,21 @@ class AbstractProvider(abc.ABC):
     def meta(self) -> ProviderMeta:
         """Get the provider metadata"""
         provider_type_name = self.provider_config["type"]
-        meta_data = provider_cls_map.get(provider_type_name)
-        if not meta_data:
+        descriptor = getattr(self, "_provider_adapter_descriptor", None)
+        if descriptor is None:
+            descriptor = type(self).__dict__.get(PROVIDER_ADAPTER_DESCRIPTOR_ATTR)
+        if not isinstance(descriptor, ProviderAdapterDescriptor):
             raise ValueError(f"Provider type {provider_type_name} not registered")
+        if descriptor.type != provider_type_name:
+            raise ValueError(
+                f"Provider descriptor type {descriptor.type} does not match "
+                f"configured type {provider_type_name}"
+            )
         meta = ProviderMeta(
             id=self.provider_config.get("id", "default"),
             model=self.get_model(),
             type=provider_type_name,
-            provider_type=meta_data.provider_type,
+            provider_type=descriptor.provider_type,
         )
         return meta
 

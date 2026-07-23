@@ -14,13 +14,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
 
@@ -468,9 +469,9 @@ def provider_request(tool_set):
 
 
 @pytest.fixture
-def runner():
+def runner(tmp_path):
     """创建ToolLoopAgentRunner实例"""
-    return ToolLoopAgentRunner()
+    return ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
 
 
 def _make_large_tool_result_text() -> str:
@@ -810,8 +811,6 @@ async def test_tool_result_includes_all_calltoolresult_content(
 ):
     """工具返回多个 content 项时，tool result 应包含全部内容。"""
 
-    from astrbot.core.agent.tool_image_cache import tool_image_cache
-
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 1
 
@@ -833,7 +832,7 @@ async def test_tool_result_includes_all_calltoolresult_content(
             file_path=f"/tmp/{tool_call_id}_{index}.png", mime_type=mime_type
         )
 
-    monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
+    monkeypatch.setattr(runner.tool_image_cache, "save_image", fake_save_image)
 
     await runner.reset(
         provider=mock_provider,
@@ -1264,7 +1263,7 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
 
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
+async def test_stop_interrupts_pending_subagent_handoff(mock_hooks, tmp_path):
     subagent_context = BlockingSubagentContext()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
     handoff_tool = HandoffTool(
@@ -1277,7 +1276,7 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
         func_tool=ToolSet(tools=[handoff_tool]),
         contexts=[],
     )
-    runner = ToolLoopAgentRunner()
+    runner = ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
 
     await runner.reset(
         provider=provider,
@@ -1314,7 +1313,7 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
 
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_pending_regular_tool(mock_hooks):
+async def test_stop_interrupts_pending_regular_tool(mock_hooks, tmp_path):
     tool_state = BlockingToolState()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
     tool = FunctionTool(
@@ -1329,7 +1328,7 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
         func_tool=ToolSet(tools=[tool]),
         contexts=[],
     )
-    runner = ToolLoopAgentRunner()
+    runner = ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
 
     await runner.reset(
         provider=provider,
@@ -1363,10 +1362,13 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
 
 
 @pytest.mark.asyncio
-async def test_reset_skills_like_without_tools_still_initializes_runner(mock_hooks):
+async def test_reset_skills_like_without_tools_still_initializes_runner(
+    mock_hooks,
+    tmp_path,
+):
     provider = MockProvider()
     request = ProviderRequest(prompt="hello", contexts=[])
-    runner = ToolLoopAgentRunner()
+    runner = ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
 
     await runner.reset(
@@ -1463,7 +1465,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_passes_extra_user_content_parts():
+async def test_skills_like_requery_passes_extra_user_content_parts(tmp_path: Path):
     """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
     from astrbot.core.agent.message import TextPart
 
@@ -1520,7 +1522,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     event = MockEvent(umo="test_umo", sender_id="test_sender")
     ctx = MockAgentContext(event)
     run_context = ContextWrapper(context=ctx)
-    runner = ToolLoopAgentRunner()
+    runner = ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
 
     await runner.reset(
         provider=provider,
@@ -1578,7 +1580,7 @@ async def test_large_tool_result_is_spilled_to_file_and_replaced_with_read_notic
     tool_set = ToolSet(tools=[tool, read_tool])
     provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
     request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
-    runner = ToolLoopAgentRunner()
+    runner = ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
 
     await runner.reset(
         provider=provider,
@@ -1638,7 +1640,7 @@ async def test_large_tool_result_keeps_preview_when_spill_fails(
     tool_set = ToolSet(tools=[tool, read_tool])
     provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
     request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
-    runner = ToolLoopAgentRunner()
+    runner = ToolLoopAgentRunner(ToolImageCache(tmp_path / "tool_images"))
 
     async def _raise_spill_error(*, tool_call_id: str, content: str) -> str:
         raise OSError("disk full")

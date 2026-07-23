@@ -14,6 +14,8 @@ class AgentRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
+        if ctx.preferences is None:
+            raise RuntimeError("AgentRequestSubStage requires shared preferences")
         self.session_services = SessionServiceManager(ctx.preferences)
 
         self.bot_wake_prefixs: list[str] = self.config["wake_prefix"]

@@ -8,14 +8,17 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeGuard, cast
 
 from astrbot import logger
+from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
-from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
@@ -27,6 +30,9 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.conversation_mgr import Conversation, load_sanitized_history
+from astrbot.core.db.po import Personality
+from astrbot.core.db.protocols import PlatformSessionStore
+from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.memory.tools import (
     GetPersonProfileTool,
     MaintainMemoryTool,
@@ -39,17 +45,12 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.provider.provider import Provider
-from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
     build_skills_prompt,
 )
-from astrbot.core.star.context import Context
-from astrbot.core.star.star import star_registry
-from astrbot.core.star.star_handler import star_map
+from astrbot.core.star.star import PluginRegistry
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
     BrowserBatchExecTool,
@@ -80,6 +81,7 @@ from astrbot.core.tools.computer_tools import (
     normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
+from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
@@ -101,7 +103,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     IMAGE_COMPRESS_DEFAULT_QUALITY,
@@ -131,7 +132,6 @@ WEEKDAY_NAMES = (
     "Saturday",
     "Sunday",
 )
-_MAIN_AGENT_BACKGROUND_TASKS: set[asyncio.Task] = set()
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {
         "web_search_baidu",
@@ -147,6 +147,22 @@ WEB_SEARCH_CITATION_PROMPT = (
     "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
     "after the sentence that uses the information. Do not invent citations."
 )
+
+
+def _is_chat_model(value: object) -> TypeGuard[ChatModel]:
+    """Check the complete chat capability needed by the main Agent path."""
+    return (
+        isinstance(getattr(value, "provider_config", None), dict)
+        and callable(getattr(value, "get_model", None))
+        and callable(getattr(value, "meta", None))
+        and callable(getattr(value, "text_chat", None))
+        and callable(getattr(value, "text_chat_stream", None))
+    )
+
+
+def _can_text_chat(value: object) -> bool:
+    """Check the smaller capability needed by image-caption requests."""
+    return callable(getattr(value, "text_chat", None))
 
 
 @dataclass(slots=True)
@@ -192,7 +208,7 @@ class MainAgentBuildConfig:
     dequeue_context_length: int = 10
     """The number of oldest turns to remove when context length limit is reached."""
     fallback_max_context_tokens: int = 128000
-    """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
+    """Fallback context limit when the runtime metadata catalog has no model entry."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -213,7 +229,7 @@ class MainAgentBuildConfig:
 class MainAgentBuildResult:
     agent_runner: AgentRunner
     provider_request: ProviderRequest
-    provider: Provider
+    provider: ChatModel
     reset_coro: Coroutine | None = None
 
 
@@ -222,8 +238,8 @@ def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
 
 
 def _select_provider(
-    event: AstrMessageEvent, plugin_context: Context
-) -> Provider | None:
+    event: AstrMessageEvent, plugin_context: CoreExecutionContext
+) -> ChatModel | None:
     """Select chat provider for the event."""
     sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
@@ -235,7 +251,7 @@ def _select_provider(
                 f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
             )
             return None
-        if not isinstance(provider, Provider):
+        if not _is_chat_model(provider):
             logger.error(
                 "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
             )
@@ -254,7 +270,7 @@ def _select_provider(
 
 
 async def _get_session_conv(
-    event: AstrMessageEvent, plugin_context: Context
+    event: AstrMessageEvent, plugin_context: CoreExecutionContext
 ) -> Conversation:
     conv_mgr = plugin_context.conversation_manager
     umo = event.unified_msg_origin
@@ -273,7 +289,7 @@ async def _get_session_conv(
 async def _apply_kb(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
@@ -401,7 +417,10 @@ def _apply_workspace_extra_prompt(
     )
 
 
-def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
+def _apply_local_env_tools(
+    req: ProviderRequest,
+    plugin_context: CoreExecutionContext,
+) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
@@ -432,6 +451,7 @@ def _build_local_mode_prompt() -> str:
 def _filter_skills_for_current_config(
     skills: list[SkillInfo],
     cfg: dict,
+    plugins: PluginRegistry,
 ) -> list[SkillInfo]:
     plugin_set = cfg.get("plugin_set", ["*"])
     allowed_plugins = (
@@ -441,7 +461,7 @@ def _filter_skills_for_current_config(
     )
     plugin_by_root_dir = {
         metadata.root_dir_name: metadata
-        for metadata in star_registry
+        for metadata in plugins.all()
         if metadata.root_dir_name
     }
     filtered: list[SkillInfo] = []
@@ -461,14 +481,14 @@ def _filter_skills_for_current_config(
     return filtered
 
 
-def _get_context_runtime_attr(plugin_context: Context, name: str):
+def _get_context_runtime_attr(plugin_context: CoreExecutionContext, name: str):
     return getattr(plugin_context, "__dict__", {}).get(name)
 
 
 async def _inject_persona_runtime_and_memory(
     req: ProviderRequest,
     event: AstrMessageEvent,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     persona_id: str | None,
     memory_manager,
 ) -> None:
@@ -501,14 +521,16 @@ async def _inject_persona_runtime_and_memory(
 def _append_skills_prompt(
     req: ProviderRequest,
     cfg: dict,
-    persona: dict | None,
+    persona: Personality | None,
     event: AstrMessageEvent,
+    plugin_context: CoreExecutionContext,
 ) -> None:
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = _filter_skills_for_current_config(
         skill_manager.list_skills(active_only=True, runtime=runtime),
         cfg,
+        plugin_context.catalogs.plugins,
     )
     workspace_skills = (
         skill_manager.list_workspace_skills(
@@ -541,7 +563,7 @@ def _append_skills_prompt(
 
 def _merge_persona_tools(
     req: ProviderRequest,
-    persona: dict | None,
+    persona: Personality | None,
     tool_manager,
     memory_manager,
 ) -> ToolSet:
@@ -574,7 +596,7 @@ def _merge_persona_tools(
 
 def _add_subagent_tools(
     req: ProviderRequest,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     tool_manager,
 ) -> None:
     orchestrator_config = plugin_context.get_config().get("subagent_orchestrator", {})
@@ -628,7 +650,7 @@ def _add_subagent_tools(
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
@@ -675,7 +697,7 @@ async def _ensure_persona_and_skills(
         memory_manager,
     )
 
-    _append_skills_prompt(req, cfg, persona, event)
+    _append_skills_prompt(req, cfg, persona, event, plugin_context)
     tmgr = plugin_context.get_llm_tool_manager()
     persona_toolset = _merge_persona_tools(req, persona, tmgr, memory_manager)
 
@@ -695,25 +717,25 @@ async def _request_img_caption(
     provider_id: str,
     cfg: dict,
     image_urls: list[str],
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
 ) -> str:
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
         raise ValueError(
             f"Cannot get image caption because provider `{provider_id}` is not exist.",
         )
-    if not isinstance(prov, Provider):
+    if not _can_text_chat(prov):
         raise ValueError(
             f"Cannot get image caption because provider `{provider_id}` is not a valid Provider, it is {type(prov)}.",
         )
 
     img_cap_prompt = _build_image_caption_prompt(event, cfg)
     logger.debug("Processing image caption with provider: %s", provider_id)
-    llm_resp = await prov.text_chat(
+    llm_resp = await cast(ChatModel, prov).text_chat(
         prompt=img_cap_prompt,
         image_urls=image_urls,
     )
-    return llm_resp.completion_text
+    return llm_resp.completion_text or ""
 
 
 def _sanitize_caption_context(text: str, limit: int = 500) -> str:
@@ -751,7 +773,7 @@ async def _ensure_img_caption(
     event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     image_caption_provider: str,
 ) -> None:
     try:
@@ -909,7 +931,7 @@ async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
     img_cap_prov_id: str,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
     main_provider_supports_image: bool = False,
@@ -944,6 +966,8 @@ async def _process_quote_message(
                 break
 
     if image_seg:
+        path: str | None = None
+        compress_path: str | None = None
         if skip_quote_image_caption:
             logger.debug(
                 "Skipping quote image captioning because image captioning already handled this request."
@@ -960,13 +984,11 @@ async def _process_quote_message(
         else:
             try:
                 prov = None
-                path = None
-                compress_path = None
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
                 if prov is None:
                     prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
-                if prov and isinstance(prov, Provider):
+                if prov and _can_text_chat(prov):
                     path = await image_seg.convert_to_file_path()
                     compress_path = await _compress_image_for_provider(
                         path,
@@ -976,7 +998,7 @@ async def _process_quote_message(
                         path, compress_path
                     ):
                         event.track_temporary_local_file(compress_path)
-                    llm_resp = await prov.text_chat(
+                    llm_resp = await cast(ChatModel, prov).text_chat(
                         prompt="Please describe the image content.",
                         image_urls=[compress_path],
                     )
@@ -1072,9 +1094,9 @@ def _append_system_reminders(
 async def _decorate_llm_request(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     config: MainAgentBuildConfig,
-    provider: Provider | None = None,
+    provider: ChatModel | None = None,
 ) -> None:
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
@@ -1120,7 +1142,11 @@ async def _decorate_llm_request(
     _apply_workspace_extra_prompt(event, req)
 
 
-def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+def _plugin_tool_fix(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    plugin_context: CoreExecutionContext,
+) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
@@ -1139,7 +1165,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 # 不应受到会话插件过滤影响。
                 new_tool_set.add_tool(tool)
                 continue
-            plugin = star_map.get(mp)
+            plugin = plugin_context.catalogs.plugins.get_by_module(mp)
             if not plugin:
                 # 无法解析插件归属时，保守保留工具，避免误过滤。
                 new_tool_set.add_tool(tool)
@@ -1152,8 +1178,8 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
 async def _handle_webchat(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    prov: Provider,
-    db,
+    prov: ChatModel,
+    db: PlatformSessionStore,
 ) -> None:
     chatui_session_id = event.session_id.split("!")[-1]
     user_prompt = req.prompt
@@ -1208,6 +1234,8 @@ def _apply_sandbox_tools(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
     session_id: str,
+    tool_manager: FunctionToolManager,
+    existing_booter: object | None = None,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -1215,7 +1243,7 @@ def _apply_sandbox_tools(
         req.system_prompt = ""
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
 
-    tool_mgr = llm_tools
+    tool_mgr = tool_manager
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
@@ -1246,13 +1274,10 @@ def _apply_sandbox_tools(
             "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
         )
 
-        # Determine sandbox capabilities from an already-booted session.
-        # If no session exists yet (first request), capabilities is None
-        # and we register all tools conservatively.
-        from astrbot.core.computer.computer_client import session_booter
-
-        sandbox_capabilities: list[str] | None = None
-        existing_booter = session_booter.get(session_id)
+        # Determine sandbox capabilities from the runtime-owned session booter.
+        # If no session exists yet (first request), capabilities is None and we
+        # register all tools conservatively.
+        sandbox_capabilities: tuple[str, ...] | list[str] | None = None
         if existing_booter is not None:
             sandbox_capabilities = getattr(existing_booter, "capabilities", None)
 
@@ -1295,7 +1320,10 @@ def _apply_sandbox_tools(
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
-def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
+def _proactive_cron_job_tools(
+    req: ProviderRequest,
+    plugin_context: CoreExecutionContext,
+) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
@@ -1305,7 +1333,7 @@ def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> 
 async def _apply_web_search_tools(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
 ) -> None:
     cfg = plugin_context.get_config(umo=event.unified_msg_origin)
     prov_settings = cfg.get("provider_settings", {})
@@ -1354,14 +1382,14 @@ def _apply_web_search_citation_prompt(
 
 def _get_compress_provider(
     config: MainAgentBuildConfig,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     event: AstrMessageEvent | None = None,
-) -> Provider | None:
+) -> ChatModel | None:
     if config.context_limit_reached_strategy != "llm_compress":
         return None
     if config.llm_compress_provider_id:
         provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
-        if provider and isinstance(provider, Provider):
+        if provider and _is_chat_model(provider):
             return provider
         logger.warning(
             "指定的上下文压缩模型 %s 不可用",
@@ -1377,8 +1405,10 @@ def _get_compress_provider(
 
 
 def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context, provider_settings: dict
-) -> list[Provider]:
+    provider: ChatModel,
+    plugin_context: CoreExecutionContext,
+    provider_settings: dict,
+) -> list[ChatModel]:
     fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
         logger.warning(
@@ -1388,7 +1418,7 @@ def _get_fallback_chat_providers(
 
     provider_id = str(provider.provider_config.get("id", ""))
     seen_provider_ids: set[str] = {provider_id} if provider_id else set()
-    fallbacks: list[Provider] = []
+    fallbacks: list[ChatModel] = []
 
     for fallback_id in fallback_ids:
         if not isinstance(fallback_id, str) or not fallback_id:
@@ -1399,7 +1429,7 @@ def _get_fallback_chat_providers(
         if fallback_provider is None:
             logger.warning("Fallback chat provider `%s` not found, skip.", fallback_id)
             continue
-        if not isinstance(fallback_provider, Provider):
+        if not _is_chat_model(fallback_provider):
             logger.warning(
                 "Fallback chat provider `%s` is invalid type: %s, skip.",
                 fallback_id,
@@ -1411,16 +1441,16 @@ def _get_fallback_chat_providers(
     return fallbacks
 
 
-def _provider_supports_modality(provider: Provider, modality: str) -> bool:
+def _provider_supports_modality(provider: ChatModel, modality: str) -> bool:
     modalities = provider.provider_config.get("modalities", None)
     return isinstance(modalities, list) and modality in modalities
 
 
 def _select_image_chat_provider(
-    provider: Provider,
+    provider: ChatModel,
     req: ProviderRequest,
-    fallback_providers: list[Provider],
-) -> Provider:
+    fallback_providers: list[ChatModel],
+) -> ChatModel:
     if not req.image_urls or _provider_supports_modality(provider, "image"):
         return provider
 
@@ -1446,9 +1476,9 @@ def _select_image_chat_provider(
 async def _prepare_request_for_agent(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     config: MainAgentBuildConfig,
-    provider: Provider,
+    provider: ChatModel,
 ) -> bool:
     """Normalize a request and apply request-scoped capabilities."""
     if isinstance(req.contexts, str):
@@ -1486,23 +1516,29 @@ async def _prepare_request_for_agent(
     await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
     await _apply_kb(event, req, plugin_context, config)
     req.session_id = req.session_id or event.unified_msg_origin
-    _plugin_tool_fix(event, req)
+    _plugin_tool_fix(event, req, plugin_context)
     await _apply_web_search_tools(event, req, plugin_context)
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
     if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
+        _apply_sandbox_tools(
+            config,
+            req,
+            req.session_id,
+            plugin_context.catalogs.tools,
+            plugin_context.computer_runtime.get_session_booter(req.session_id),
+        )
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
     return True
 
 
 def _select_request_provider(
-    provider: Provider,
+    provider: ChatModel,
     req: ProviderRequest,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     config: MainAgentBuildConfig,
-) -> tuple[Provider, list[Provider]]:
+) -> tuple[ChatModel, list[ChatModel]]:
     """Select an image-capable provider and preserve ordered fallbacks."""
     fallbacks = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
@@ -1717,7 +1753,7 @@ async def prepare_event_attachments(
     event: AstrMessageEvent,
     req: ProviderRequest,
     config: MainAgentBuildConfig,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
 ) -> None:
     """Attach direct and quoted event media to a request exactly once."""
     del plugin_context
@@ -1755,12 +1791,12 @@ async def prepare_event_attachments(
 def _create_main_runner_reset(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    provider: Provider,
-    plugin_context: Context,
+    provider: ChatModel,
+    plugin_context: CoreExecutionContext,
     config: MainAgentBuildConfig,
-    fallback_providers: list[Provider],
+    fallback_providers: list[ChatModel],
 ) -> tuple[AgentRunner, Coroutine]:
-    agent_runner = AgentRunner()
+    agent_runner = AgentRunner(plugin_context.tool_image_cache)
     read_tool = (
         req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
     )
@@ -1772,7 +1808,7 @@ def _create_main_runner_reset(
             tool_call_timeout=config.tool_call_timeout,
         ),
         tool_executor=FunctionToolExecutor(),
-        agent_hooks=MAIN_AGENT_HOOKS,
+        agent_hooks=MainAgentHooks(),
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
@@ -1793,9 +1829,9 @@ def _create_main_runner_reset(
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
-    plugin_context: Context,
+    plugin_context: CoreExecutionContext,
     config: MainAgentBuildConfig,
-    provider: Provider | None = None,
+    provider: ChatModel | None = None,
     req: ProviderRequest | None = None,
     apply_reset: bool = True,
 ) -> MainAgentBuildResult | None:
@@ -1865,7 +1901,7 @@ async def build_main_agent(
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
-        if model_info := LLM_METADATAS.get(model):
+        if model_info := plugin_context.llm_metadata_catalog.get(model):
             provider.provider_config["max_context_tokens"] = model_info["limit"][
                 "context"
             ]
@@ -1877,8 +1913,13 @@ async def build_main_agent(
 
     if event.get_platform_name() == "webchat":
         create_tracked_task(
-            _MAIN_AGENT_BACKGROUND_TASKS,
-            _handle_webchat(event, req, provider, plugin_context.database),
+            plugin_context.background_tasks,
+            _handle_webchat(
+                event,
+                req,
+                provider,
+                cast(PlatformSessionStore, plugin_context.database),
+            ),
             name="handle_webchat",
         )
 

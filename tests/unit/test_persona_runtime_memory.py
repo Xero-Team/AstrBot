@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.memory.manager import MemoryManager
 from astrbot.core.memory.policy import MemoryScopePolicy
 from astrbot.core.memory.tools import (
@@ -16,7 +17,6 @@ from astrbot.core.persona_runtime.models import PersonaRuntimeSignal
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     _run_runtime_memory_postprocess,
 )
-from astrbot.core.provider.entities import ProviderRequest
 
 
 def test_memory_fact_extractor_extracts_and_dedupes_core_facts():

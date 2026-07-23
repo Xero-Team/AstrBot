@@ -1,10 +1,11 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from ...provider.modalities import (
+from ..chat_model import ChatModel
+from ..message import Message
+from .modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
-from ..message import Message
 from .token_counter import EstimateTokenCounter, TokenCounter
 
 if TYPE_CHECKING:
@@ -16,9 +17,6 @@ else:
         import logging
 
         logger = logging.getLogger("astrbot")
-
-if TYPE_CHECKING:
-    from astrbot.core.provider.provider import Provider
 
 from ..context.truncator import ContextTruncator
 
@@ -125,7 +123,7 @@ class LLMSummaryCompressor:
 
     def __init__(
         self,
-        provider: Provider,
+        provider: ChatModel,
         keep_recent_ratio: float = 0.15,
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
@@ -134,7 +132,7 @@ class LLMSummaryCompressor:
         """Initialize the LLM summary compressor.
 
         Args:
-            provider: The LLM provider instance.
+            provider: The chat model used to generate summaries.
             keep_recent_ratio: Ratio of current context tokens to keep as recent
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.

@@ -10,6 +10,7 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_chat_completions_source as openai_chat_completions_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.llm_types import LLMResponse, ToolCallsResult
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ProviderMessageState,
@@ -17,7 +18,6 @@ from astrbot.core.agent.message import (
     ToolCallMessageSegment,
 )
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_chat_completions_source import (
     ProviderOpenAIChatCompletions,

@@ -2,7 +2,8 @@ import typing as T
 from dataclasses import dataclass, field
 
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import TokenUsage
+
+from .llm_types import TokenUsage
 
 
 class AgentResponseData(T.TypedDict):

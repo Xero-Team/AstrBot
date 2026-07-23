@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.agent.message import CheckpointData, Message
 from astrbot.core.message.components import Image, Record, Reply
 from astrbot.core.message.message_event_result import (
@@ -15,7 +16,7 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     internal,
     third_party,
 )
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
+from astrbot.core.utils import task_utils
 
 
 class FakeEvent:
@@ -62,7 +63,35 @@ def _internal_plugin_context(tts_provider=None) -> SimpleNamespace:
     return SimpleNamespace(
         get_using_tts_provider=lambda _umo: tts_provider,
         database=SimpleNamespace(insert_provider_stat=AsyncMock()),
+        session_lock_manager=SimpleNamespace(
+            acquire_lock=lambda _umo: _AsyncLockContext()
+        ),
+        background_tasks=set(),
+        follow_up_coordinator=SimpleNamespace(
+            try_capture=MagicMock(return_value=None),
+            prepare_capture=AsyncMock(),
+            finalize_capture=AsyncMock(),
+            register_active_runner=MagicMock(),
+            unregister_active_runner=MagicMock(),
+        ),
     )
+
+
+def _pipeline_context(execution_context: SimpleNamespace) -> SimpleNamespace:
+    if not hasattr(execution_context, "background_tasks"):
+        execution_context.background_tasks = set()
+    if not hasattr(execution_context, "metrics"):
+        execution_context.metrics = SimpleNamespace(upload=AsyncMock())
+    return SimpleNamespace(
+        execution_context=execution_context,
+        handlers=SimpleNamespace(),
+        plugins=SimpleNamespace(),
+    )
+
+
+def _set_metrics_upload(stage, upload) -> None:
+    """Replace only the telemetry port bound to this test runtime."""
+    stage.ctx.execution_context.metrics.upload = upload
 
 
 class FakeThirdPartyRunner:
@@ -167,6 +196,7 @@ class _AwaitableFlag:
 async def test_internal_save_to_history_filters_messages_and_appends_checkpoints():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
     event = FakeEvent(extras={"llm_checkpoint_id": "ck-latest"})
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-1"))
 
@@ -212,6 +242,7 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
 async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_messages():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-1"))
     image_data = "data:image/png;base64,aGVsbG8="
@@ -244,6 +275,7 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
 async def test_internal_save_to_history_keeps_aborted_error_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-2"))
 
@@ -269,6 +301,7 @@ async def test_internal_save_to_history_keeps_aborted_error_response():
 async def test_internal_save_to_history_skips_empty_non_aborted_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
 
     await stage._save_to_history(
         FakeEvent(),
@@ -286,6 +319,7 @@ async def test_internal_save_to_history_skips_empty_non_aborted_response():
 async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
     req = ProviderRequest(
         conversation=SimpleNamespace(cid="conv-tools"),
         tool_calls_result=[{"name": "kb_search", "result": "ok"}],
@@ -312,6 +346,7 @@ async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
 async def test_internal_save_to_history_skips_non_aborted_non_assistant_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
 
     await stage._save_to_history(
         FakeEvent(),
@@ -329,6 +364,7 @@ async def test_internal_save_to_history_skips_non_aborted_non_assistant_response
 async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empty_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
 
     await stage._save_to_history(
         FakeEvent(),
@@ -349,6 +385,7 @@ async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empt
 async def test_internal_save_to_history_skips_when_request_or_conversation_missing():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
     event = FakeEvent()
     response = LLMResponse(role="assistant", completion_text="answer")
     messages = [Message(role="assistant", content="answer")]
@@ -375,6 +412,7 @@ async def test_internal_save_to_history_skips_when_request_or_conversation_missi
 async def test_internal_save_to_history_preserves_non_initial_system_messages():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
 
     await stage._save_to_history(
         FakeEvent(),
@@ -404,12 +442,10 @@ async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     persona_runtime_manager = SimpleNamespace()
     memory_manager = SimpleNamespace()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(
-                persona_runtime_manager=persona_runtime_manager,
-                memory_manager=memory_manager,
-            )
+    stage.ctx = _pipeline_context(
+        SimpleNamespace(
+            persona_runtime_manager=persona_runtime_manager,
+            memory_manager=memory_manager,
         )
     )
     event = FakeEvent(extras={"selected_persona_id": "persona-a"})
@@ -440,9 +476,45 @@ async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
 
 
 @pytest.mark.asyncio
+async def test_internal_save_to_history_normalizes_missing_completion_for_postprocess(
+    monkeypatch,
+):
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(
+        SimpleNamespace(
+            persona_runtime_manager=SimpleNamespace(),
+            memory_manager=SimpleNamespace(),
+        )
+    )
+    scheduled = []
+    postprocess = AsyncMock()
+
+    def fake_create_tracked_task(tasks, coro, *, name):
+        scheduled.append((tasks, coro, name))
+        coro.close()
+
+    monkeypatch.setattr(internal, "create_tracked_task", fake_create_tracked_task)
+    monkeypatch.setattr(internal, "_run_runtime_memory_postprocess", postprocess)
+
+    await stage._save_to_history(
+        FakeEvent(),
+        ProviderRequest(conversation=SimpleNamespace(cid="conv-post-empty")),
+        LLMResponse(role="assistant", completion_text=None),
+        [Message(role="user", content="I like tea.")],
+        runner_stats=None,
+        user_aborted=True,
+    )
+
+    assert scheduled[0][2] == "runtime_memory_postprocess"
+    assert postprocess.call_args.kwargs["assistant_text"] == ""
+
+
+@pytest.mark.asyncio
 async def test_internal_save_to_history_skips_no_save_assistant_and_ignores_runner_stats_usage():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
 
     skipped_assistant = Message(role="assistant", content="draft")
     skipped_assistant._no_save = True
@@ -920,12 +992,10 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(
-                conversation_manager=object(),
-                persona_manager=object(),
-            )
+    stage.ctx = _pipeline_context(
+        SimpleNamespace(
+            conversation_manager=object(),
+            persona_manager=object(),
         )
     )
     stage.conf = {"provider_settings": {}}
@@ -966,9 +1036,7 @@ async def test_third_party_process_returns_early_when_request_has_no_prompt_or_m
     )
     stage.prov_id = "runner-1"
     stage.runner_type = "dify"
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider": [{"id": "runner-1"}]}
     event = FakeInternalProcessEvent(message_str="ask", message_components=[])
 
@@ -987,9 +1055,7 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
     stage.runner_type = "unknown"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider": [{"id": "runner-1", "name": "Runner One"}]}
     event = FakeInternalProcessEvent(message_str="ask hello")
 
@@ -1018,9 +1084,7 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(
         message_str="ask hello",
@@ -1072,7 +1136,7 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -1096,9 +1160,7 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "turn_off"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     event.platform_meta.support_streaming_message = False
@@ -1148,7 +1210,7 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -1172,9 +1234,7 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     runner = FakeThirdPartyRunner()
@@ -1237,7 +1297,7 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
         "_start_stream_watchdog",
         fake_start_stream_watchdog,
     )
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="stream setup failed"):
         async for _ in stage.process(event, provider_wake_prefix="ask"):
@@ -1261,9 +1321,7 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1300,7 +1358,7 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="reset failed"):
         async for _ in stage.process(event, provider_wake_prefix="ask"):
@@ -1322,9 +1380,7 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1367,7 +1423,7 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     monkeypatch.setattr(
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="non-streaming failed"):
         async for _ in stage.process(event, provider_wake_prefix="ask"):
@@ -1386,9 +1442,7 @@ async def test_third_party_process_returns_early_when_provider_id_missing(monkey
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     logger_error = MagicMock()
@@ -1414,9 +1468,7 @@ async def test_third_party_process_returns_early_when_provider_config_missing(
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     logger_error = MagicMock()
@@ -1441,9 +1493,7 @@ async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatc
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
 
@@ -1483,9 +1533,7 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 0
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1534,7 +1582,7 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
         ),
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -1560,9 +1608,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     image = MagicMock(spec=Image)
     image.convert_to_file_path = AsyncMock(return_value="/tmp/image.png")
@@ -1614,7 +1660,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     monkeypatch.setattr(
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -1642,9 +1688,7 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
     stage.stream_consumption_close_timeout_sec = 1
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
-    )
+    stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     metric_upload = AsyncMock()
@@ -1686,7 +1730,7 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    monkeypatch.setattr(third_party.Metric, "upload", metric_upload)
+    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -1720,13 +1764,11 @@ async def test_internal_process_skips_empty_messages_without_provider_request(
     stage.max_step = 5
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="   ", message_components=[])
 
     try_capture = MagicMock()
-    monkeypatch.setattr(internal, "try_capture_follow_up", try_capture)
+    stage.ctx.execution_context.follow_up_coordinator.try_capture = try_capture
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -1757,9 +1799,7 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(
         message_str="   ",
         message_components=message_components,
@@ -1778,7 +1818,7 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
         yield
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
@@ -1787,16 +1827,13 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
         "replace",
         lambda _cfg, **kwargs: _fake_build_cfg(**kwargs),
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     build_main_agent = AsyncMock(return_value=build_result)
     monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    _set_metrics_upload(stage, AsyncMock())
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -1818,22 +1855,18 @@ async def test_internal_process_stops_when_follow_up_ticket_was_consumed(monkeyp
     stage.max_step = 5
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="follow up")
     capture = SimpleNamespace(ticket=SimpleNamespace(seq=3))
 
     finalize = AsyncMock()
-    monkeypatch.setattr(
-        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    stage.ctx.execution_context.follow_up_coordinator.try_capture = MagicMock(
+        return_value=capture
     )
-    monkeypatch.setattr(
-        internal,
-        "prepare_follow_up_capture",
-        AsyncMock(return_value=(True, False)),
+    stage.ctx.execution_context.follow_up_coordinator.prepare_capture = AsyncMock(
+        return_value=(True, False)
     )
-    monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
+    stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -1860,24 +1893,20 @@ async def test_internal_process_sends_error_message_and_finalizes_follow_up_on_e
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = SimpleNamespace()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     capture = SimpleNamespace(ticket=SimpleNamespace(seq=4))
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
-    monkeypatch.setattr(
-        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    stage.ctx.execution_context.follow_up_coordinator.try_capture = MagicMock(
+        return_value=capture
     )
-    monkeypatch.setattr(
-        internal,
-        "prepare_follow_up_capture",
-        AsyncMock(return_value=(False, True)),
+    stage.ctx.execution_context.follow_up_coordinator.prepare_capture = AsyncMock(
+        return_value=(False, True)
     )
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
@@ -1891,7 +1920,7 @@ async def test_internal_process_sends_error_message_and_finalizes_follow_up_on_e
         lambda _event: "custom internal failure",
     )
     finalize = AsyncMock()
-    monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
+    stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -1921,23 +1950,19 @@ async def test_internal_process_finalizes_follow_up_when_waiting_hook_blocks(
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     capture = SimpleNamespace(ticket=SimpleNamespace(seq=9))
     finalize = AsyncMock()
 
-    monkeypatch.setattr(
-        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    stage.ctx.execution_context.follow_up_coordinator.try_capture = MagicMock(
+        return_value=capture
     )
-    monkeypatch.setattr(
-        internal,
-        "prepare_follow_up_capture",
-        AsyncMock(return_value=(False, True)),
+    stage.ctx.execution_context.follow_up_coordinator.prepare_capture = AsyncMock(
+        return_value=(False, True)
     )
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
-    monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
+    stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -1965,23 +1990,20 @@ async def test_internal_process_sends_llm_error_message_when_build_returns_none(
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={internal.LLM_ERROR_MESSAGE_EXTRA_KEY: "provider unavailable"},
     )
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
@@ -2008,9 +2030,7 @@ async def test_internal_process_build_none_finalizes_follow_up_capture(monkeypat
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={internal.LLM_ERROR_MESSAGE_EXTRA_KEY: "provider unavailable"},
@@ -2019,24 +2039,22 @@ async def test_internal_process_build_none_finalizes_follow_up_capture(monkeypat
     finalize = AsyncMock()
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(
-        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    stage.ctx.execution_context.follow_up_coordinator.try_capture = MagicMock(
+        return_value=capture
     )
-    monkeypatch.setattr(
-        internal,
-        "prepare_follow_up_capture",
-        AsyncMock(return_value=(False, True)),
+    stage.ctx.execution_context.follow_up_coordinator.prepare_capture = AsyncMock(
+        return_value=(False, True)
     )
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
-    monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
+    stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -2067,20 +2085,17 @@ async def test_internal_process_skips_send_when_build_returns_none_without_llm_e
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
@@ -2105,9 +2120,7 @@ async def test_internal_process_closes_reset_coro_when_llm_request_hook_blocks(
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     reset_coro = MagicMock()
     build_result = SimpleNamespace(
@@ -2118,14 +2131,13 @@ async def test_internal_process_closes_reset_coro_when_llm_request_hook_blocks(
     )
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(
         internal, "call_event_hook", AsyncMock(side_effect=[False, True])
     )
@@ -2154,9 +2166,7 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     capture = SimpleNamespace(ticket=SimpleNamespace(seq=12))
     reset_coro = MagicMock()
@@ -2169,20 +2179,18 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
     )
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(
-        internal, "try_capture_follow_up", MagicMock(return_value=capture)
+    stage.ctx.execution_context.follow_up_coordinator.try_capture = MagicMock(
+        return_value=capture
     )
-    monkeypatch.setattr(
-        internal,
-        "prepare_follow_up_capture",
-        AsyncMock(return_value=(False, True)),
+    stage.ctx.execution_context.follow_up_coordinator.prepare_capture = AsyncMock(
+        return_value=(False, True)
     )
     monkeypatch.setattr(
         internal, "call_event_hook", AsyncMock(side_effect=[False, True])
@@ -2190,7 +2198,7 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
-    monkeypatch.setattr(internal, "finalize_follow_up_capture", finalize)
+    stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -2216,12 +2224,9 @@ async def test_internal_process_stops_when_waiting_hook_blocks(monkeypatch):
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
 
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
     build_main_agent = AsyncMock()
     monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
@@ -2246,9 +2251,7 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={internal.LLM_ERROR_MESSAGE_EXTRA_KEY: "provider unavailable"},
@@ -2257,14 +2260,13 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
     logger_warning = MagicMock()
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
     monkeypatch.setattr(internal.logger, "warning", logger_warning)
@@ -2293,14 +2295,11 @@ async def test_internal_process_swallows_stop_typing_failures(monkeypatch):
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     event.stop_typing.side_effect = RuntimeError("stop typing failed")
     logger_warning = MagicMock()
 
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
     monkeypatch.setattr(internal.logger, "warning", logger_warning)
 
@@ -2324,9 +2323,7 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     runner = FakeInternalRunner()
     build_result = SimpleNamespace(
@@ -2344,20 +2341,19 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
     )
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     register_runner = MagicMock()
-    monkeypatch.setattr(internal, "register_active_runner", register_runner)
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -2407,9 +2403,7 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     runner = FakeInternalRunner(final_resp=final_resp, done=True)
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-stream"))
@@ -2432,25 +2426,22 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
         return task
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fake_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.gather(*scheduled_tasks)
@@ -2482,9 +2473,7 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     event.platform_meta.support_streaming_message = False
     runner = FakeInternalRunner()
@@ -2503,7 +2492,7 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
         yield
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
@@ -2512,17 +2501,14 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
         "replace",
         lambda _cfg, **kwargs: _fake_build_cfg(**kwargs),
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    _set_metrics_upload(stage, AsyncMock())
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.sleep(0)
@@ -2546,9 +2532,7 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     runner = FakeInternalRunner()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-reset"))
@@ -2572,25 +2556,22 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
         return task
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fake_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.gather(*scheduled_tasks)
@@ -2612,9 +2593,7 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context("tts-provider"))
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context("tts-provider"))
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={"action_type": "live"},
@@ -2640,25 +2619,22 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
         return task
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", metric_upload)
-    monkeypatch.setattr(internal.asyncio, "create_task", fake_create_task)
+    _set_metrics_upload(stage, metric_upload)
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.gather(*scheduled_tasks)
@@ -2693,9 +2669,7 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={"action_type": "live"},
@@ -2721,25 +2695,22 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(
         return task
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fake_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.gather(*scheduled_tasks)
@@ -2762,9 +2733,7 @@ async def test_internal_process_live_mode_skips_history_when_event_stopped_witho
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context("tts-provider"))
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context("tts-provider"))
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={"action_type": "live"},
@@ -2791,25 +2760,22 @@ async def test_internal_process_live_mode_skips_history_when_event_stopped_witho
         return task
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fake_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.gather(*scheduled_tasks)
@@ -2832,9 +2798,7 @@ async def test_internal_process_live_mode_saves_history_when_event_stopped_but_r
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context("tts-provider"))
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context("tts-provider"))
     event = FakeInternalProcessEvent(
         message_str="hello",
         extras={"action_type": "live"},
@@ -2860,25 +2824,22 @@ async def test_internal_process_live_mode_saves_history_when_event_stopped_but_r
         return task
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fake_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
     await asyncio.gather(*scheduled_tasks)
@@ -2904,9 +2865,7 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello", stopped=True)
     runner = FakeInternalRunner(aborted=False)
     build_result = SimpleNamespace(
@@ -2923,23 +2882,22 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
         yield
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", register_runner)
-    monkeypatch.setattr(internal, "unregister_active_runner", unregister_runner)
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
+    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -2965,9 +2923,7 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello", stopped=True)
     runner = FakeInternalRunner(aborted=True)
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-2"))
@@ -2983,23 +2939,20 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
         yield
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", MagicMock())
-    monkeypatch.setattr(internal, "unregister_active_runner", MagicMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
@@ -3026,9 +2979,7 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     runner = FakeInternalRunner()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-history-fail"))
@@ -3046,24 +2997,23 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
         yield
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", register_runner)
-    monkeypatch.setattr(internal, "unregister_active_runner", unregister_runner)
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
+    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(
         internal,
         "get_agent_error_message",
@@ -3099,9 +3049,7 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     runner = FakeInternalRunner()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-stats-task-fail"))
@@ -3123,25 +3071,24 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
         raise RuntimeError("schedule stats failed")
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", register_runner)
-    monkeypatch.setattr(internal, "unregister_active_runner", unregister_runner)
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fail_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fail_create_task)
     monkeypatch.setattr(
         internal,
         "get_agent_error_message",
@@ -3176,9 +3123,7 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
     stage.unsupported_streaming_strategy = "turn_off"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.main_agent_cfg = object()
-    stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=_internal_plugin_context())
-    )
+    stage.ctx = _pipeline_context(_internal_plugin_context())
     event = FakeInternalProcessEvent(message_str="hello")
     runner = FakeInternalRunner()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-metric-task-fail"))
@@ -3208,25 +3153,24 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         raise RuntimeError("schedule metric failed")
 
     monkeypatch.setattr(
-        internal.session_lock_manager,
+        stage.ctx.execution_context.session_lock_manager,
         "acquire_lock",
         lambda _umo: _AsyncLockContext(),
     )
     monkeypatch.setattr(
         internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
     )
-    monkeypatch.setattr(internal, "try_capture_follow_up", MagicMock(return_value=None))
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "register_active_runner", register_runner)
-    monkeypatch.setattr(internal, "unregister_active_runner", unregister_runner)
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    monkeypatch.setattr(internal.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(internal.asyncio, "create_task", fail_on_second_create_task)
+    _set_metrics_upload(stage, AsyncMock())
+    monkeypatch.setattr(task_utils.asyncio, "create_task", fail_on_second_create_task)
     monkeypatch.setattr(
         internal,
         "get_agent_error_message",

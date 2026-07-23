@@ -3,9 +3,9 @@ import typing as T
 from enum import Enum, auto
 
 from astrbot import logger
-from astrbot.core.provider.entities import LLMResponse
 
 from ..hooks import BaseAgentRunHooks
+from ..llm_types import LLMResponse
 from ..response import AgentResponse
 from ..run_context import ContextWrapper
 

@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.llm_types import LLMResponse
 from astrbot.core.agent.message import AudioURLPart, ImageURLPart, Message, TextPart
-from astrbot.core.provider.entities import LLMResponse
 
 
 class MockProvider:

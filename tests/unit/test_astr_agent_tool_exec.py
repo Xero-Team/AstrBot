@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -10,7 +11,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
-from astrbot.core.provider.func_tool_manager import (
+from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
@@ -45,6 +46,71 @@ class _DoneRunner:
 
     def get_final_llm_resp(self):
         return SimpleNamespace(role="assistant", completion_text="done")
+
+
+@pytest.mark.asyncio
+async def test_background_tool_tasks_are_owned_by_the_execution_context(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Background tool tasks stay isolated between explicitly owned runtimes."""
+    started_count = 0
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_execute_background(
+        cls,
+        tool,
+        run_context,
+        task_id,
+        **tool_args,
+    ):
+        nonlocal started_count
+        started_count += 1
+        if started_count == 2:
+            both_started.set()
+        await release.wait()
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_background",
+        classmethod(fake_execute_background),
+    )
+
+    tool = FunctionTool(
+        name="background-tool",
+        description="run in the background",
+        parameters={"type": "object", "properties": {}},
+        is_background_task=True,
+    )
+    first_tasks: set[asyncio.Task] = set()
+    second_tasks: set[asyncio.Task] = set()
+
+    async def schedule(tasks: set[asyncio.Task]) -> None:
+        execution_context = SimpleNamespace(background_tasks=tasks)
+        run_context = ContextWrapper(
+            context=SimpleNamespace(
+                event=_DummyEvent(),
+                context=execution_context,
+            )
+        )
+        async for _ in FunctionToolExecutor.execute(tool, run_context):
+            pass
+
+    await schedule(first_tasks)
+    await schedule(second_tasks)
+    await asyncio.wait_for(both_started.wait(), timeout=1)
+
+    assert not hasattr(FunctionToolExecutor, "_background_tasks")
+    assert len(first_tasks) == 1
+    assert len(second_tasks) == 1
+    assert first_tasks.isdisjoint(second_tasks)
+
+    release.set()
+    await asyncio.gather(*first_tasks, *second_tasks)
+    await asyncio.sleep(0)
+
+    assert first_tasks == set()
+    assert second_tasks == set()
 
 
 def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
@@ -266,6 +332,48 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
 
     assert len(results) == 1
     assert captured["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_normalizes_missing_completion_text_to_empty_string():
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        return SimpleNamespace(completion_text=None)
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context)
+    )
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = [
+        result
+        async for result in FunctionToolExecutor._execute_handoff(
+            tool,
+            run_context,
+            image_urls_prepared=True,
+            input="hello",
+            image_urls=[],
+        )
+    ]
+
+    assert results[0].content[0].text == ""
 
 
 @pytest.mark.asyncio

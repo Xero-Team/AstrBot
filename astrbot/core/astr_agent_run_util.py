@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from astrbot import logger
+from astrbot.core.agent.llm_types import LLMResponse
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -17,7 +18,6 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     get_agent_error_message,
 )
-from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.utils.error_redaction import safe_error
 

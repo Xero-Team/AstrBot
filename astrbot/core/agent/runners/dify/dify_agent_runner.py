@@ -4,13 +4,10 @@ from typing import override
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ProviderRequest,
-)
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...hooks import BaseAgentRunHooks
+from ...llm_types import LLMResponse, ProviderRequest
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core import astr_main_agent as ama
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.message.components import (
     File,
     Forward,
@@ -12,7 +13,6 @@ from astrbot.core.message.components import (
     Record,
     Video,
 )
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.message_context import MessageContextRenderer
 from astrbot.core.utils.quoted_message.settings import QuotedMessageParserSettings
 

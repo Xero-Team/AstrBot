@@ -1,11 +1,13 @@
 """Tests for astr_main_agent module."""
 
 import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core import astr_main_agent as ama
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -14,7 +16,7 @@ from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
 
@@ -47,6 +49,7 @@ def mock_context():
     tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     ctx.get_llm_tool_manager.return_value = tool_mgr
     ctx.subagent_orchestrator = None
+    ctx.catalogs = RuntimeCatalogs()
     return ctx
 
 
@@ -151,6 +154,24 @@ async def test_image_caption_prompt_sanitizes_untrusted_event_context(
     assert "</image_caption>" not in prompt
     assert "［/image_caption］" in prompt
     assert "<untrusted_user_context>" in prompt
+
+
+@pytest.mark.asyncio
+async def test_image_caption_normalizes_missing_completion_text(mock_event, mock_context):
+    """Image-caption callers always receive text even for an empty response."""
+    provider = MagicMock(spec=Provider)
+    provider.text_chat = AsyncMock(return_value=MagicMock(completion_text=None))
+    mock_context.get_provider_by_id.return_value = provider
+
+    result = await ama._request_img_caption(
+        mock_event,
+        "caption-provider",
+        {},
+        ["image.png"],
+        mock_context,
+    )
+
+    assert result == ""
 
 
 @pytest.fixture
@@ -347,6 +368,28 @@ class TestSelectProvider:
             module.LLM_ERROR_MESSAGE_EXTRA_KEY,
             "LLM 请求失败：选择的提供商类型无效（str），已跳过本次请求。",
         )
+
+    def test_select_provider_requires_chat_model_metadata(
+        self,
+        mock_event,
+        mock_context,
+    ):
+        """A chat model must provide metadata used by Agent telemetry."""
+        module = ama
+        mock_event.get_extra.side_effect = lambda key: (
+            "incomplete" if key == "selected_provider" else None
+        )
+        mock_context.get_provider_by_id.return_value = SimpleNamespace(
+            provider_config={},
+            get_model=lambda: "model",
+            text_chat=lambda **_: None,
+            text_chat_stream=lambda **_: None,
+        )
+
+        result = module._select_provider(mock_event, mock_context)
+
+        assert result is None
+        mock_event.set_extra.assert_called_once()
 
     def test_select_provider_fallback(self, mock_event, mock_context, mock_provider):
         """Test provider selection fallback to using provider."""
@@ -931,23 +974,24 @@ class TestApplyFileExtract:
 class TestEnsurePersonaAndSkills:
     """Tests for _ensure_persona_and_skills function."""
 
-    def test_filter_plugin_skills_uses_current_config_plugin_set(self, monkeypatch):
+    def test_filter_plugin_skills_uses_current_config_plugin_set(self):
         module = ama
-        monkeypatch.setattr(
-            module,
-            "star_registry",
-            [
-                StarMetadata(
-                    name="allowed_plugin",
-                    root_dir_name="astrbot_plugin_allowed",
-                    activated=True,
-                ),
-                StarMetadata(
-                    name="blocked_plugin",
-                    root_dir_name="astrbot_plugin_blocked",
-                    activated=True,
-                ),
-            ],
+        catalogs = RuntimeCatalogs()
+        catalogs.plugins.publish(
+            StarMetadata(
+                name="allowed_plugin",
+                root_dir_name="astrbot_plugin_allowed",
+                module_path="plugin.allowed",
+                activated=True,
+            )
+        )
+        catalogs.plugins.publish(
+            StarMetadata(
+                name="blocked_plugin",
+                root_dir_name="astrbot_plugin_blocked",
+                module_path="plugin.blocked",
+                activated=True,
+            )
         )
         skills = [
             SkillInfo(name="local", description="", path="local/SKILL.md", active=True),
@@ -972,24 +1016,23 @@ class TestEnsurePersonaAndSkills:
         filtered = module._filter_skills_for_current_config(
             skills,
             {"plugin_set": ["allowed_plugin"]},
+            catalogs.plugins,
         )
 
         assert [skill.name for skill in filtered] == ["local", "allowed-skill"]
 
     def test_filter_plugin_skills_skips_inactive_plugins_even_when_all_allowed(
-        self, monkeypatch
+        self,
     ):
         module = ama
-        monkeypatch.setattr(
-            module,
-            "star_registry",
-            [
-                StarMetadata(
-                    name="inactive_plugin",
-                    root_dir_name="astrbot_plugin_inactive",
-                    activated=False,
-                )
-            ],
+        catalogs = RuntimeCatalogs()
+        catalogs.plugins.publish(
+            StarMetadata(
+                name="inactive_plugin",
+                root_dir_name="astrbot_plugin_inactive",
+                module_path="plugin.inactive",
+                activated=False,
+            )
         )
         skills = [
             SkillInfo(
@@ -1005,6 +1048,7 @@ class TestEnsurePersonaAndSkills:
         filtered = module._filter_skills_for_current_config(
             skills,
             {"plugin_set": ["*"]},
+            catalogs.plugins,
         )
 
         assert filtered == []
@@ -1490,7 +1534,11 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=ToolSet())
         mock_event.plugins_name = None
 
-        module._plugin_tool_fix(mock_event, req)
+        module._plugin_tool_fix(
+            mock_event,
+            req,
+            SimpleNamespace(catalogs=RuntimeCatalogs()),
+        )
 
         assert req.func_tool is not None
 
@@ -1512,13 +1560,11 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=tool_set)
         mock_event.plugins_name = ["test_plugin"]
 
-        with patch("astrbot.core.astr_main_agent.star_map") as mock_star_map:
-            mock_plugin = MagicMock()
-            mock_plugin.name = "test_plugin"
-            mock_plugin.reserved = False
-            mock_star_map.get.return_value = mock_plugin
-
-            module._plugin_tool_fix(mock_event, req)
+        catalogs = RuntimeCatalogs()
+        catalogs.plugins.publish(
+            StarMetadata(name="test_plugin", module_path="test_plugin")
+        )
+        module._plugin_tool_fix(mock_event, req, SimpleNamespace(catalogs=catalogs))
 
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
@@ -1536,8 +1582,11 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=tool_set)
         mock_event.plugins_name = ["other_plugin"]
 
-        with patch("astrbot.core.astr_main_agent.star_map"):
-            module._plugin_tool_fix(mock_event, req)
+        module._plugin_tool_fix(
+            mock_event,
+            req,
+            SimpleNamespace(catalogs=RuntimeCatalogs()),
+        )
 
         assert "mcp_tool" in req.func_tool.names()
 
@@ -1558,8 +1607,11 @@ class TestPluginToolFix:
         req = ProviderRequest(func_tool=tool_set)
         mock_event.plugins_name = ["other_plugin"]
 
-        with patch("astrbot.core.astr_main_agent.star_map"):
-            module._plugin_tool_fix(mock_event, req)
+        module._plugin_tool_fix(
+            mock_event,
+            req,
+            SimpleNamespace(catalogs=RuntimeCatalogs()),
+        )
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
 
@@ -2609,7 +2661,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
@@ -2624,7 +2681,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         tool_names = req.func_tool.names()
         assert "astrbot_execute_shell" in tool_names
@@ -2642,7 +2704,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert "sandboxed environment" in req.system_prompt
 
@@ -2656,7 +2723,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert req.func_tool is not None
         tool_names = req.func_tool.names()
@@ -2688,7 +2760,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None, system_prompt="Original")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert "[Shipyard Neo File Path Rule]" in req.system_prompt
         assert "baidu_homepage.png" in req.system_prompt
@@ -2708,7 +2785,12 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
@@ -2723,7 +2805,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
@@ -2738,7 +2825,12 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(
+            config,
+            req,
+            "session-123",
+            mock_context.catalogs.tools,
+        )
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt

@@ -27,7 +27,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.exceptions import EmptyModelOutputError, ProviderResponseError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -36,22 +36,18 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ProviderRequest,
-    ToolCallsResult,
-)
-from astrbot.core.provider.modalities import (
-    log_context_sanitize_stats,
-    sanitize_contexts_by_modalities,
-)
-from astrbot.core.provider.provider import Provider
 
+from ..chat_model import ChatModel
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
+from ..context.modalities import (
+    log_context_sanitize_stats,
+    sanitize_contexts_by_modalities,
+)
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
+from ..llm_types import LLMResponse, ProviderRequest, ToolCallsResult
 from ..message import (
     AssistantMessageSegment,
     Message,
@@ -169,6 +165,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "Use a narrower window when reading large files."
     )
 
+    def __init__(self, tool_image_cache: ToolImageCache) -> None:
+        """Create a runner with its runtime-owned tool image cache."""
+        self.tool_image_cache = tool_image_cache
+
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
@@ -209,7 +209,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: ChatModel,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
@@ -221,14 +221,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # llm compressor
         llm_compress_instruction: str | None = None,
         llm_compress_keep_recent_ratio: float = 0.15,
-        llm_compress_provider: Provider | None = None,
+        llm_compress_provider: ChatModel | None = None,
         # truncate by turns compressor
         truncate_turns: int = 1,
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
-        fallback_providers: list[Provider] | None = None,
+        fallback_providers: list[ChatModel] | None = None,
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
@@ -264,7 +264,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
 
         self.provider = provider
-        self.fallback_providers: list[Provider] = []
+        self.fallback_providers: list[ChatModel] = []
         seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
         for fallback_provider in fallback_providers or []:
             fallback_id = str(fallback_provider.provider_config.get("id", ""))
@@ -915,7 +915,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
         image_parts = []
         for cached_image in cached_images:
-            image_data = tool_image_cache.get_image_base64_by_path(
+            image_data = self.tool_image_cache.get_image_base64_by_path(
                 cached_image.file_path,
                 cached_image.mime_type,
             )
@@ -1187,7 +1187,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
                 continue
 
-            cached_image = tool_image_cache.save_image(
+            cached_image = self.tool_image_cache.save_image(
                 base64_data=image_data,
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,

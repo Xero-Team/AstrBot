@@ -12,9 +12,9 @@ from urllib.parse import quote
 import pytest
 
 import astrbot.core.utils.media_utils as media_utils
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.message.components import File, Image, Record, Video
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.path_util import path_Mapping
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 

@@ -12,6 +12,7 @@ import mcp
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
@@ -29,8 +30,6 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -54,8 +53,6 @@ from astrbot.core.utils.task_utils import create_tracked_task
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    _background_tasks: set[asyncio.Task] = set()
-
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -176,7 +173,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     )
 
             create_tracked_task(
-                cls._background_tasks,
+                run_context.context.context.background_tasks,
                 _run_in_background(),
                 name=f"background_tool:{tool.name}",
             )
@@ -259,11 +256,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        tool_mgr = (
-            ctx.get_llm_tool_manager()
-            if hasattr(ctx, "get_llm_tool_manager")
-            else llm_tools
-        )
+
+        # An explicitly empty handoff tool list needs no registry lookup.  In
+        # particular, this keeps the handoff execution path independent from
+        # an unrelated tool catalog when no tools are exposed to the subagent.
+        if tools == []:
+            return None
+
+        tool_mgr = ctx.get_llm_tool_manager()
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
@@ -288,13 +288,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 toolset.add_tool(runtime_tool)
             return None if toolset.empty() else toolset
 
-        if not tools:
-            return None
-
         toolset = ToolSet()
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_tool(tool_name_or_obj)
+                registered_tool = tool_mgr.get_tool(tool_name_or_obj)
                 if registered_tool and registered_tool.active:
                     toolset.add_tool(registered_tool)
                     continue
@@ -377,7 +374,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             stream=stream,
         )
         yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
+            content=[
+                mcp.types.TextContent(
+                    type="text",
+                    text=llm_resp.completion_text or "",
+                )
+            ]
         )
 
     @classmethod
@@ -412,7 +414,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
 
         create_tracked_task(
-            cls._background_tasks,
+            run_context.context.context.background_tasks,
             _run_handoff_in_background(),
             name=f"background_handoff:{tool.name}",
         )

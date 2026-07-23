@@ -7,8 +7,8 @@ import pytest
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.llm_types import LLMResponse
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse
 
 
 class _FakeAsyncAnthropic:

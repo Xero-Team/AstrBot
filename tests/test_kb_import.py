@@ -44,7 +44,7 @@ def knowledge_base_route_service(kb_helper: AsyncMock) -> KnowledgeBaseService:
     """Return a service wired only to the controlled KB helper."""
     kb_manager = MagicMock()
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
-    return KnowledgeBaseService(SimpleNamespace(kb_manager=kb_manager))
+    return KnowledgeBaseService(kb_manager)
 
 
 @pytest.fixture
@@ -54,7 +54,11 @@ def app(knowledge_base_route_service: KnowledgeBaseService) -> FastAPI:
     app.state.services = SimpleNamespace(knowledge_bases=knowledge_base_route_service)
 
     async def allow_kb_scope() -> AuthContext:
-        return AuthContext(username="test", scopes=["kb"])
+        return AuthContext(
+            username="test",
+            scopes=["kb"],
+            subject="test-session",
+        )
 
     app.dependency_overrides[require_kb_scope] = allow_kb_scope
     app.include_router(router, prefix="/api/v1")
@@ -251,8 +255,7 @@ def _make_service_with_mock_kb_helper():
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock()
-    service.core_lifecycle.kb_manager = kb_manager
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
     return service, kb_helper
@@ -429,7 +432,7 @@ async def test_list_kbs_clamps_page_and_includes_init_error():
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -474,7 +477,7 @@ async def test_create_kb_wraps_embedding_validation_failure():
     )
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -506,7 +509,7 @@ async def test_update_kb_uses_existing_name_when_name_is_omitted():
     kb_manager.update_kb = AsyncMock(return_value=updated_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -534,7 +537,7 @@ async def test_update_kb_uses_existing_name_when_name_is_omitted():
 @pytest.mark.asyncio
 async def test_update_kb_requires_at_least_one_field():
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=MagicMock())
+    service.knowledge_base_manager = MagicMock()
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -548,7 +551,7 @@ async def test_delete_kb_raises_when_target_is_missing():
     kb_manager.delete_kb = AsyncMock(return_value=False)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -566,7 +569,7 @@ async def test_retrieve_reports_visualization_error_without_dropping_results(
     )
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -604,7 +607,7 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -667,7 +670,7 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
 @pytest.mark.asyncio
 async def test_upload_document_rejects_too_many_files():
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=MagicMock())
+    service.knowledge_base_manager = MagicMock()
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -690,7 +693,7 @@ async def test_get_document_raises_when_document_is_missing():
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -707,7 +710,7 @@ async def test_delete_document_and_chunk_delegate_to_helper():
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 
@@ -735,7 +738,7 @@ async def test_list_chunks_returns_items_and_offset_page_metadata():
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
 

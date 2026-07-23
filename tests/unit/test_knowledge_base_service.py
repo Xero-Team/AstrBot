@@ -13,7 +13,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
 
 def _make_service(*, kb_manager=None) -> KnowledgeBaseService:
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = MagicMock(kb_manager=kb_manager or MagicMock())
+    service.knowledge_base_manager = kb_manager or MagicMock()
     service.upload_progress = {}
     service.upload_tasks = {}
     service._background_tasks = set()

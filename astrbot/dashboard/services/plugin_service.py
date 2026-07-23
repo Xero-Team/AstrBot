@@ -15,19 +15,22 @@ import certifi
 from starlette.datastructures import UploadFile
 
 from astrbot import logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.computer.computer_client import ComputerRuntime
+from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
-from astrbot.core.star.star import StarMetadata
-from astrbot.core.star.star_handler import EventType, star_handlers_registry
-from astrbot.core.star.star_manager import (
-    PluginManager,
-    PluginVersionUnsupportedError,
-)
+from astrbot.core.star.plugin_extension_coordinator import PluginExtensionCoordinator
+from astrbot.core.star.plugin_lifecycle import PluginLifecycle
+from astrbot.core.star.plugin_package_installer import PluginPackageInstaller
+from astrbot.core.star.plugin_runtime_common import PluginVersionUnsupportedError
+from astrbot.core.star.plugin_runtime_loader import PluginRuntimeLoader
+from astrbot.core.star.star import PluginRegistry, StarMetadata
+from astrbot.core.star.star_handler import EventType, HandlerRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.dashboard.upload_utils import save_upload_to_path
 
 PLUGIN_UPDATE_CONCURRENCY = 3
@@ -84,12 +87,28 @@ class PluginServiceWarning(Exception):
 class PluginService:
     def __init__(
         self,
-        core_lifecycle,
-        plugin_manager: PluginManager,
+        plugin_lifecycle: PluginLifecycle,
+        plugin_loader: PluginRuntimeLoader,
+        plugin_packages: PluginPackageInstaller,
+        extensions: PluginExtensionCoordinator,
+        plugin_catalog: PluginRegistry,
+        handler_catalog: HandlerRegistry,
+        preferences: SharedPreferences,
+        file_token_service: FileTokenService,
+        computer_runtime: ComputerRuntime,
+        *,
+        demo_mode: bool,
     ) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.plugin_manager = plugin_manager
-        self.services = core_lifecycle.services
+        self.plugin_lifecycle = plugin_lifecycle
+        self.plugin_loader = plugin_loader
+        self.plugin_packages = plugin_packages
+        self.extensions = extensions
+        self.plugin_catalog = plugin_catalog
+        self.handler_catalog = handler_catalog
+        self.preferences = preferences
+        self.file_token_service = file_token_service
+        self.computer_runtime = computer_runtime
+        self.demo_mode = demo_mode
         self.translated_event_type = {
             EventType.AdapterMessageEvent: "平台消息下发时",
             EventType.OnLLMRequestEvent: "LLM 请求时",
@@ -108,14 +127,14 @@ class PluginService:
         return data if isinstance(data, dict) else {}
 
     def _ensure_not_demo(self) -> None:
-        if self.services.demo_mode:
+        if self.demo_mode:
             raise PluginServiceError(
                 "You are not permitted to do this operation in demo mode"
             )
 
     async def sync_skills_after_plugin_change(self) -> None:
         try:
-            await sync_skills_to_active_sandboxes()
+            await self.computer_runtime.sync_skills_to_active_sandboxes()
         except Exception:
             logger.warning("Failed to sync plugin-provided skills to active sandboxes.")
 
@@ -126,7 +145,7 @@ class PluginService:
         if not dir_name:
             raise PluginServiceError("缺少插件目录名")
 
-        success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
+        success, err = await self.plugin_lifecycle.reload_failed_plugin(dir_name)
         if not success:
             raise PluginServiceError(f"重载失败: {err}", public_message="重载失败")
         await self.sync_skills_after_plugin_change()
@@ -136,7 +155,7 @@ class PluginService:
         self._ensure_not_demo()
         payload = data if isinstance(data, dict) else {}
         plugin_name = payload.get("name", None)
-        success, message = await self.plugin_manager.reload(plugin_name)
+        success, message = await self.plugin_lifecycle.reload(plugin_name)
         if not success:
             raise PluginServiceError(
                 message or "插件重载失败",
@@ -154,7 +173,7 @@ class PluginService:
     ) -> tuple[list[dict], str | None]:
         plugins = [
             plugin
-            for plugin in self.plugin_manager.context.get_all_stars()
+            for plugin in self.plugin_catalog.all()
             if not (plugin_name and plugin.name != plugin_name)
         ]
         install_sources = await self.get_plugin_install_sources()
@@ -181,7 +200,7 @@ class PluginService:
                     ),
                 }
             )
-        return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
+        return payload, self.plugin_loader.failure_info
 
     async def get_plugin_detail(
         self,
@@ -194,7 +213,7 @@ class PluginService:
             raise PluginServiceError("缺少插件名")
 
         install_sources = await self.get_plugin_install_sources()
-        for plugin in self.plugin_manager.context.get_all_stars():
+        for plugin in self.plugin_catalog.all():
             if plugin.name != plugin_name:
                 continue
 
@@ -227,11 +246,9 @@ class PluginService:
     async def get_plugin_logo_token(self, logo_path: str) -> str | None:
         try:
             if token := self._logo_cache.get(logo_path):
-                if not await self.services.file_token_service.check_token_expired(
-                    token
-                ):
+                if not await self.file_token_service.check_token_expired(token):
                     return token
-            token = await self.services.file_token_service.register_file(
+            token = await self.file_token_service.register_file(
                 logo_path, ttl_seconds=300
             )
             self._logo_cache[logo_path] = token
@@ -245,9 +262,9 @@ class PluginService:
             return None
 
         base_dir = Path(
-            self.plugin_manager.reserved_plugin_path
+            self.plugin_loader.bundled_store_path
             if plugin.reserved
-            else self.plugin_manager.plugin_store_path
+            else self.plugin_packages.store_path
         )
         plugin_dir = base_dir / plugin.root_dir_name
         if not plugin_dir.is_dir():
@@ -297,9 +314,7 @@ class PluginService:
         Returns:
             A mapping keyed by local plugin root directory name.
         """
-        records = await self.services.preferences.global_get(
-            PLUGIN_INSTALL_SOURCES_KEY, {}
-        )
+        records = await self.preferences.global_get(PLUGIN_INSTALL_SOURCES_KEY, {})
         if not isinstance(records, dict):
             return {}
         return {
@@ -315,7 +330,7 @@ class PluginService:
         Args:
             records: Mapping keyed by local plugin root directory name.
         """
-        await self.services.preferences.global_put(PLUGIN_INSTALL_SOURCES_KEY, records)
+        await self.preferences.global_put(PLUGIN_INSTALL_SOURCES_KEY, records)
 
     @staticmethod
     def resolve_plugin_install_source(
@@ -364,10 +379,10 @@ class PluginService:
         """
         if not plugin_name:
             return None
-        plugin = self.plugin_manager.context.get_registered_star(plugin_name)
+        plugin = self.plugin_catalog.get_by_name(plugin_name)
         if plugin:
             return plugin
-        for item in self.plugin_manager.context.get_all_stars():
+        for item in self.plugin_catalog.all():
             if item.name == plugin_name or item.root_dir_name == plugin_name:
                 return item
         return None
@@ -581,7 +596,7 @@ class PluginService:
         }
 
     def get_failed_plugins(self) -> dict:
-        return self.plugin_manager.failed_plugin_dict
+        return self.plugin_loader.failed_plugins()
 
     async def get_plugin_components_info(
         self,
@@ -601,7 +616,7 @@ class PluginService:
         manifest = getattr(plugin, "dashboard", None)
         if manifest is None:
             return []
-        registry = self.plugin_manager.dashboard_extension_registry
+        registry = self.extensions.registry
         snapshot = registry.get_snapshot(manifest.extension_id)
         if snapshot is None:
             return []
@@ -631,7 +646,7 @@ class PluginService:
 
         for handler_full_name in handler_full_names:
             info = {}
-            handler = star_handlers_registry.star_handlers_map.get(
+            handler = self.handler_catalog.star_handlers_map.get(
                 handler_full_name,
                 None,
             )
@@ -1493,7 +1508,7 @@ class PluginService:
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            plugin_info = await self.plugin_manager.install_plugin(
+            plugin_info = await self.plugin_lifecycle.install_plugin(
                 repo_url,
                 proxy or "",
                 ignore_version_check=ignore_version_check,
@@ -1540,7 +1555,7 @@ class PluginService:
         )
         await save_upload_to_path(upload_file, file_path)
         try:
-            plugin_info = await self.plugin_manager.install_plugin_from_file(
+            plugin_info = await self.plugin_lifecycle.install_plugin_from_file(
                 file_path,
                 ignore_version_check=ignore_version_check,
             )
@@ -1573,7 +1588,7 @@ class PluginService:
         logger.info(f"正在卸载插件 {plugin_name}")
         plugin = self.find_plugin_by_name(plugin_name)
         root_dir_name = plugin.root_dir_name if plugin else None
-        await self.plugin_manager.uninstall_plugin(
+        await self.plugin_lifecycle.uninstall_plugin(
             plugin_name,
             delete_config=delete_config,
             delete_data=delete_data,
@@ -1593,7 +1608,7 @@ class PluginService:
             raise PluginServiceError("缺少失败插件目录名")
 
         logger.info(f"正在卸载失败插件 {dir_name}")
-        await self.plugin_manager.uninstall_failed_plugin(
+        await self.plugin_lifecycle.uninstall_failed_plugin(
             dir_name,
             delete_config=delete_config,
             delete_data=delete_data,
@@ -1610,11 +1625,11 @@ class PluginService:
         update_info = await self.resolve_market_update_info(plugin_name)
         download_url = str(update_info.get("download_url") or "").strip()
         logger.info(f"正在更新插件 {plugin_name}")
-        await self.plugin_manager.update_plugin(
+        await self.plugin_lifecycle.update_plugin(
             plugin_name, proxy or "", download_url=download_url
         )
         await self.refresh_plugin_install_source_after_update(plugin_name, update_info)
-        await self.plugin_manager.reload(plugin_name)
+        await self.plugin_lifecycle.reload(plugin_name)
         await self.sync_skills_after_plugin_change()
         logger.info(f"更新插件 {plugin_name} 成功。")
         return None, "更新成功。"
@@ -1637,7 +1652,7 @@ class PluginService:
                     logger.info(f"批量更新插件 {name}")
                     update_info = await self.resolve_market_update_info(name)
                     download_url = str(update_info.get("download_url") or "").strip()
-                    await self.plugin_manager.update_plugin(
+                    await self.plugin_lifecycle.update_plugin(
                         name, proxy, download_url=download_url
                     )
                     await self.refresh_plugin_install_source_after_update(
@@ -1704,11 +1719,11 @@ class PluginService:
         payload = data if isinstance(data, dict) else {}
         plugin_name = payload["name"]
         if enabled:
-            await self.plugin_manager.turn_on_plugin(plugin_name)
+            await self.plugin_lifecycle.turn_on_plugin(plugin_name)
             message = "启用成功。"
             log_action = "启用"
         else:
-            await self.plugin_manager.turn_off_plugin(plugin_name)
+            await self.plugin_lifecycle.turn_off_plugin(plugin_name)
             message = "停用成功。"
             log_action = "停用"
         await self.sync_skills_after_plugin_change()
@@ -1720,7 +1735,7 @@ class PluginService:
             raise PluginServiceError("插件名称不能为空")
 
         plugin_obj = None
-        for plugin in self.plugin_manager.context.get_all_stars():
+        for plugin in self.plugin_catalog.all():
             if plugin.name == plugin_name:
                 plugin_obj = plugin
                 break
@@ -1732,9 +1747,9 @@ class PluginService:
 
         plugin_dir = (
             Path(
-                self.plugin_manager.reserved_plugin_path
+                self.plugin_loader.bundled_store_path
                 if plugin_obj.reserved
-                else self.plugin_manager.plugin_store_path
+                else self.plugin_packages.store_path
             )
             / plugin_obj.root_dir_name
         )
@@ -1794,13 +1809,13 @@ class PluginService:
 
     async def get_custom_sources(self) -> list:
         return self._normalize_custom_sources(
-            await self.services.preferences.global_get("custom_plugin_sources", [])
+            await self.preferences.global_get("custom_plugin_sources", [])
         )
 
     async def save_custom_sources(self, data: object) -> tuple[None, str]:
         payload = data if isinstance(data, dict) else {}
         sources = PluginService._custom_sources_from_payload(payload)
-        await self.services.preferences.global_put("custom_plugin_sources", sources)
+        await self.preferences.global_put("custom_plugin_sources", sources)
         return None, "保存成功"
 
     @staticmethod
@@ -1818,13 +1833,13 @@ class PluginService:
         source = data if isinstance(data, dict) else {}
         sources = await self.get_custom_sources()
         sources.append(source)
-        await self.services.preferences.global_put("custom_plugin_sources", sources)
+        await self.preferences.global_put("custom_plugin_sources", sources)
         return sources
 
     async def replace_custom_sources(self, data: object) -> list:
         payload = data if isinstance(data, dict) else {}
         sources = PluginService._custom_sources_from_payload(payload)
-        await self.services.preferences.global_put("custom_plugin_sources", sources)
+        await self.preferences.global_put("custom_plugin_sources", sources)
         return sources
 
     async def delete_custom_source(self, source_id: str) -> list:
@@ -1839,7 +1854,7 @@ class PluginService:
             )
             and not (isinstance(source, str) and source == source_id)
         ]
-        await self.services.preferences.global_put("custom_plugin_sources", filtered)
+        await self.preferences.global_put("custom_plugin_sources", filtered)
         return filtered
 
 

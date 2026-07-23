@@ -4,6 +4,7 @@ import logging
 from collections.abc import Iterable
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -13,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.star.star import PluginRegistry
 from astrbot.dashboard.api.sessions import router as sessions_router
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.auth_service import DashboardTokenValidator
@@ -108,14 +110,14 @@ class _ProviderManager:
 
 
 def _build_service(temp_db, preferences: _Preferences, providers: _ProviderManager):
-    core = SimpleNamespace(
-        services=SimpleNamespace(preferences=preferences),
-        provider_manager=providers,
-        persona_mgr=SimpleNamespace(personas=[]),
-        plugin_manager=None,
-        kb_manager=None,
+    return SessionManagementService(
+        temp_db,
+        preferences,
+        providers,
+        SimpleNamespace(personas=[]),
+        PluginRegistry(),
+        SimpleNamespace(list_kbs=AsyncMock(return_value=[])),
     )
-    return SessionManagementService(core, temp_db)
 
 
 async def _add_conversations(temp_db, umos: Iterable[str]) -> None:

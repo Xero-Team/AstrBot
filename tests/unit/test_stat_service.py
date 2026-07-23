@@ -48,13 +48,6 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
         ]
 
     db_helper.get_platform_stats = _get_platform_stats
-    core_lifecycle = SimpleNamespace(
-        start_time=timestamp - 3600,
-        services=SimpleNamespace(demo_mode=False),
-        star_context=SimpleNamespace(get_all_stars=lambda: []),
-        platform_manager=SimpleNamespace(get_platform_count=lambda: 1),
-    )
-
     monkeypatch.setattr(
         "astrbot.dashboard.services.stat_service.psutil.cpu_percent",
         lambda interval=0.5: 12.5,
@@ -70,7 +63,16 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
         lambda: SimpleNamespace(total=1024 << 20),
     )
 
-    service = StatService(db_helper, core_lifecycle, astrbot_config)
+    service = StatService(
+        db_helper,
+        SimpleNamespace(),
+        astrbot_config,
+        demo_mode=False,
+        start_time=timestamp - 3600,
+        html_renderer=SimpleNamespace(get_runtime_stats=lambda: {}),
+        plugin_catalog=SimpleNamespace(all=lambda: ()),
+        platform_manager=SimpleNamespace(get_platform_count=lambda: 1),
+    )
 
     data = await service.get_stat(offset_sec=3600)
 

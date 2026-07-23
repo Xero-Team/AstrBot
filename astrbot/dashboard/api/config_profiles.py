@@ -60,7 +60,7 @@ def _model_dict(payload) -> dict[str, Any]:
 
 @router.get("/config-profiles/schema")
 async def get_config_profile_schema(
-    _auth: AuthContext = Depends(require_config_scope),
+    auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
     return ok(service.get_profile_schema())
@@ -97,12 +97,13 @@ async def update_config_profile(
     config_id: str,
     payload: ConfigContentRequest,
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
     message = await service.update_profile(
         config_id,
         _model_dict(payload),
+        subject=auth.subject,
         two_factor_code=request.headers.get("X-2FA-Code"),
     )
     return ok(message=message or "保存成功")
@@ -157,12 +158,13 @@ async def get_system_config_runtime(
 async def update_system_config(
     payload: ConfigContentRequest,
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
     message = await service.update_profile(
         "default",
         _model_dict(payload),
+        subject=auth.subject,
         two_factor_code=request.headers.get("X-2FA-Code"),
     )
     return ok(message=message or "保存成功")

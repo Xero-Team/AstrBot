@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 
@@ -8,7 +10,7 @@ from astrbot.dashboard.services.log_service import LogService, LogServiceError
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Logs"])
-_SSE_RESPONSE = {
+_SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Server-sent log stream",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},
@@ -54,9 +56,9 @@ def _get_trace_settings(service: LogService):
         _raise_log_error(exc)
 
 
-def _update_trace_settings(payload: TraceSettingsRequest, service: LogService):
+async def _update_trace_settings(payload: TraceSettingsRequest, service: LogService):
     try:
-        message = service.update_trace_settings(payload.enabled)
+        message = await service.update_trace_settings(payload.enabled)
         return ok(message=message)
     except LogServiceError as exc:
         _raise_log_error(exc)
@@ -93,4 +95,4 @@ async def update_trace_settings(
     _auth: AuthContext = Depends(require_system_scope),
     service: LogService = Depends(get_service),
 ):
-    return _update_trace_settings(payload, service)
+    return await _update_trace_settings(payload, service)

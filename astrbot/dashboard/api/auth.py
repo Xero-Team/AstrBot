@@ -34,6 +34,7 @@ _SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 class AuthContext:
     username: str
     scopes: list[str]
+    subject: str
     api_key_id: str | None = None
     via: str = "jwt"
 
@@ -90,8 +91,7 @@ def _dashboard_token_validator(request: Request) -> DashboardTokenValidator:
 
 
 def _dashboard_config(request: Request) -> dict:
-    core_lifecycle = getattr(request.app.state, "core_lifecycle", None)
-    config = getattr(core_lifecycle, "astrbot_config", None)
+    config = getattr(request.app.state, "astrbot_config", None)
     if config is None:
         return {}
     dashboard_config = config.get("dashboard", {})
@@ -267,6 +267,7 @@ async def _require_api_key_scope(
     return AuthContext(
         username=f"api_key:{api_key.key_id}",
         scopes=scopes,
+        subject=f"api-key:{api_key.key_id}",
         api_key_id=api_key.key_id,
         via="api_key",
     )
@@ -295,7 +296,12 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
 
     if source == "cookie":
         _require_cookie_mutation_origin(request)
-    return AuthContext(username=principal.username, scopes=["*"], via="jwt")
+    return AuthContext(
+        username=principal.username,
+        scopes=["*"],
+        subject=f"dashboard-session:{principal.sid}",
+        via="jwt",
+    )
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -466,11 +472,12 @@ async def _setup(
 async def _totp_setup(
     request: Request,
     payload: TotpSetupRequest | None,
+    auth: AuthContext,
     service: AuthService,
 ):
     return _auth_service_response(
         request,
-        await service.totp_setup(_payload(payload)),
+        await service.totp_setup(_payload(payload), subject=auth.subject),
     )
 
 
@@ -508,6 +515,9 @@ async def logout(request: Request):
         services = request.app.state.services
         await services.plugin_page_sessions.revoke_by_auth_session_id(principal.sid)
         await services.plugin_file_tickets.revoke_by_auth_session_id(principal.sid)
+        await services.auth.discard_totp_rotation(
+            f"dashboard-session:{principal.sid}",
+        )
     response = JSONResponse(
         {"status": "ok", "message": "已退出登录", "data": {}},
         status_code=200,
@@ -537,10 +547,10 @@ async def setup(
 async def totp_setup(
     request: Request,
     payload: TotpSetupRequest | None = None,
-    _auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_system_scope),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_setup(request, payload, service)
+    return await _totp_setup(request, payload, auth, service)
 
 
 @router.post("/auth/totp/recovery")

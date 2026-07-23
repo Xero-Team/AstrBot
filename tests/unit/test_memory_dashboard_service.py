@@ -41,8 +41,7 @@ def _memory_app(service: MemoryService, db) -> FastAPI:
 async def test_memory_service_fact_lifecycle_stats_and_logs(temp_db):
     await temp_db.initialize()
     memory_manager = MemoryManager(temp_db)
-    core = SimpleNamespace(memory_manager=memory_manager)
-    service = MemoryService(temp_db, core)
+    service = MemoryService(temp_db, memory_manager)
 
     created, _ = await service.create_fact(
         {
@@ -109,7 +108,7 @@ async def test_memory_service_fact_lifecycle_stats_and_logs(temp_db):
 async def test_memory_service_profiles_refresh_and_api_route_listing(temp_db):
     await temp_db.initialize()
     memory_manager = MemoryManager(temp_db)
-    service = MemoryService(temp_db, SimpleNamespace(memory_manager=memory_manager))
+    service = MemoryService(temp_db, memory_manager)
     fact, _ = await temp_db.upsert_memory_fact(
         person_id="user-profile",
         chat_id="webchat:FriendMessage:s1",
@@ -139,7 +138,11 @@ async def test_memory_service_profiles_refresh_and_api_route_listing(temp_db):
                 "person_id": "user-profile",
             }
         ),
-        AuthContext(username="dashboard-user", scopes=["*"]),
+        AuthContext(
+            username="dashboard-user",
+            scopes=["*"],
+            subject="dashboard-session:test",
+        ),
         service,
     )
 
@@ -153,8 +156,12 @@ async def test_memory_service_profiles_refresh_and_api_route_listing(temp_db):
 async def test_memory_profile_refresh_route_accepts_optional_body(temp_db):
     await temp_db.initialize()
     memory_manager = MemoryManager(temp_db)
-    service = MemoryService(temp_db, SimpleNamespace(memory_manager=memory_manager))
-    auth = AuthContext(username="dashboard-user", scopes=["*"])
+    service = MemoryService(temp_db, memory_manager)
+    auth = AuthContext(
+        username="dashboard-user",
+        scopes=["*"],
+        subject="dashboard-session:test",
+    )
 
     missing_scope = await refresh_memory_profile(
         "user-profile",
@@ -181,7 +188,7 @@ async def test_memory_profile_refresh_route_accepts_optional_body(temp_db):
 async def test_memory_api_routes_use_real_http_and_sqlite(temp_db):
     await temp_db.initialize()
     memory_manager = MemoryManager(temp_db)
-    service = MemoryService(temp_db, SimpleNamespace(memory_manager=memory_manager))
+    service = MemoryService(temp_db, memory_manager)
     app = _memory_app(service, temp_db)
 
     async with httpx.AsyncClient(

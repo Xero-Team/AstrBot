@@ -3,7 +3,7 @@ import traceback
 from datetime import UTC, datetime
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.cron.manager import CronJobManager
 
 
 class CronServiceError(Exception):
@@ -11,15 +11,12 @@ class CronServiceError(Exception):
 
 
 class CronService:
-    def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
+    def __init__(self, cron_manager: CronJobManager) -> None:
+        self.cron_manager = cron_manager
         self._background_tasks: set[asyncio.Task] = set()
 
     def _get_cron_manager(self):
-        cron_mgr = self.core_lifecycle.cron_manager
-        if cron_mgr is None:
-            raise CronServiceError("Cron manager not initialized")
-        return cron_mgr
+        return self.cron_manager
 
     @staticmethod
     def serialize_job(job) -> dict:

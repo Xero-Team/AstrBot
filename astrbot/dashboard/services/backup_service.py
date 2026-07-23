@@ -17,8 +17,9 @@ import jwt
 from astrbot import logger
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import AstrBotImporter
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db import BaseDatabase
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.db.protocols import DatabaseSessionStore
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
@@ -64,14 +65,15 @@ def generate_unique_filename(original_filename: str) -> str:
 class BackupService:
     def __init__(
         self,
-        db: BaseDatabase,
-        core_lifecycle: AstrBotCoreLifecycle,
+        db: DatabaseSessionStore,
+        config: AstrBotConfig,
+        knowledge_base_manager: KnowledgeBaseManager,
         *,
         token_validator: DashboardTokenValidator | None = None,
     ) -> None:
         self.db = db
-        self.core_lifecycle = core_lifecycle
-        self.config = core_lifecycle.astrbot_config
+        self.config = config
+        self.knowledge_base_manager = knowledge_base_manager
         self.token_validator = token_validator or DashboardTokenValidator(
             self.config["dashboard"].get("jwt_secret", "")
         )
@@ -293,7 +295,7 @@ class BackupService:
     async def background_export_task(self, task_id: str) -> None:
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
-            kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
+            kb_manager = self.knowledge_base_manager
             exporter = AstrBotExporter(
                 main_db=self.db,
                 kb_manager=kb_manager,
@@ -515,7 +517,7 @@ class BackupService:
         if not os.path.exists(zip_path):
             raise BackupServiceError(f"备份文件不存在: {filename}")
 
-        kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
+        kb_manager = self.knowledge_base_manager
         importer = AstrBotImporter(
             main_db=self.db,
             kb_manager=kb_manager,
@@ -555,7 +557,7 @@ class BackupService:
     async def background_import_task(self, task_id: str, zip_path: str) -> None:
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
-            kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
+            kb_manager = self.knowledge_base_manager
             importer = AstrBotImporter(
                 main_db=self.db,
                 kb_manager=kb_manager,

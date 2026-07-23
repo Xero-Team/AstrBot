@@ -47,7 +47,7 @@ def _assert_no_sensitive_values(*texts: str | None) -> None:
 def _backup_service() -> BackupService:
     service = BackupService.__new__(BackupService)
     service.db = MagicMock()
-    service.core_lifecycle = SimpleNamespace(kb_manager=None)
+    service.knowledge_base_manager = None
     service.data_dir = "data"
     service.backup_dir = "backups"
     service.backup_tasks = {}
@@ -57,7 +57,7 @@ def _backup_service() -> BackupService:
 
 def _knowledge_base_service() -> KnowledgeBaseService:
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = SimpleNamespace(kb_manager=MagicMock())
+    service.knowledge_base_manager = MagicMock()
     service.upload_progress = {}
     service.upload_tasks = {}
     service._background_tasks = set()
@@ -349,6 +349,9 @@ async def test_neo_promotion_sync_error_is_generic_and_log_is_redacted(
     caplog,
 ) -> None:
     class FailingSyncManager:
+        def __init__(self, *, sync_active_sandboxes) -> None:
+            self.sync_active_sandboxes = sync_active_sandboxes
+
         async def promote_with_optional_sync(self, _client, **_kwargs):
             return {
                 "release": {"id": "release-1"},
@@ -359,6 +362,9 @@ async def test_neo_promotion_sync_error_is_generic_and_log_is_redacted(
 
     service = SkillsService.__new__(SkillsService)
     service.demo_mode = False
+    service.computer_runtime = SimpleNamespace(
+        sync_skills_to_active_sandboxes=AsyncMock()
+    )
 
     async def run_neo_operation(operation):
         return await operation(object())
@@ -382,9 +388,7 @@ async def test_neo_promotion_sync_error_is_generic_and_log_is_redacted(
 @pytest.mark.asyncio
 async def test_neo_configuration_validation_message_remains_specific() -> None:
     service = SkillsService.__new__(SkillsService)
-    service.core_lifecycle = SimpleNamespace(
-        astrbot_config={"provider_settings": {"sandbox": {}}}
-    )
+    service.config = {"provider_settings": {"sandbox": {}}}
 
     result = await service.with_neo_client(lambda _client: None)
 
@@ -480,7 +484,7 @@ async def test_knowledge_base_provider_failures_are_generic_and_redacted(
     )
     provider_manager = MagicMock(get_provider_by_id=AsyncMock(side_effect=providers))
     service = _knowledge_base_service()
-    service.core_lifecycle.kb_manager.provider_manager = provider_manager
+    service.knowledge_base_manager.provider_manager = provider_manager
     payload = {"kb_name": "demo", "embedding_provider_id": "embedding"}
     if provider_kind == "rerank":
         payload["rerank_provider_id"] = "rerank"
@@ -509,7 +513,7 @@ async def test_knowledge_base_initialization_state_is_generic_in_api_data() -> N
         get_kb=AsyncMock(return_value=SimpleNamespace(init_error=_SENSITIVE_ERROR)),
     )
     service = _knowledge_base_service()
-    service.core_lifecycle.kb_manager = kb_manager
+    service.knowledge_base_manager = kb_manager
 
     response = await knowledge_bases_api._run(
         lambda: service.list_kbs(page=1, page_size=20),

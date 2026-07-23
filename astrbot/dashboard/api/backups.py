@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -19,7 +21,7 @@ from .auth import AuthContext, require_scope
 from .error_handling import internal_error_response
 
 router = APIRouter(tags=["Backups"])
-_ARCHIVE_RESPONSE = {
+_ARCHIVE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Backup archive",
         "content": {

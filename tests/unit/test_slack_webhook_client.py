@@ -1,6 +1,6 @@
-import json
 import hashlib
 import hmac
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -59,7 +59,7 @@ async def test_slack_webhook_accepts_fresh_valid_signature(monkeypatch: pytest.M
     )
     signature = "v0=" + hmac.new(
         b"secret",
-        b"v0:2000000000:{\"type\": \"event_callback\"}",
+        b'v0:2000000000:{"type": "event_callback"}',
         hashlib.sha256,
     ).hexdigest()
     request = _FakeRequest(

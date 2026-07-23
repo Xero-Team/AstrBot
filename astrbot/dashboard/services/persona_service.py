@@ -1,5 +1,5 @@
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.sentinels import NOT_GIVEN
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class PersonaServiceError(Exception):
@@ -7,8 +7,8 @@ class PersonaServiceError(Exception):
 
 
 class PersonaService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.persona_mgr = core_lifecycle.persona_mgr
+    def __init__(self, persona_manager: PersonaManager) -> None:
+        self.persona_mgr = persona_manager
 
     async def list_personas(
         self,

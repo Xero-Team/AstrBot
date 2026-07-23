@@ -1,6 +1,8 @@
 from astrbot import logger
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.core_runtime import CoreControl
 from astrbot.core.utils.t2i.template_manager import TemplateManager
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 
 
 class T2iServiceError(Exception):
@@ -12,21 +14,27 @@ class T2iServiceError(Exception):
 class T2iService:
     def __init__(
         self,
-        core_lifecycle: DashboardCoreLifecycle,
+        config: AstrBotConfig,
+        config_manager: AstrBotConfigManager,
+        core_control: CoreControl,
         manager: TemplateManager | None = None,
     ) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.config = core_lifecycle.astrbot_config
+        self.config_manager = config_manager
+        self.core_control = core_control
+        self.config = config
         self.manager = manager or TemplateManager()
 
     async def reload_all_pipeline_schedulers(self) -> None:
-        for conf_id in self.core_lifecycle.astrbot_config_mgr.confs:
-            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+        for conf_id in self.config_manager.confs:
+            await self.core_control.reload_pipeline_scheduler(conf_id)
 
     async def sync_active_template_to_all_configs(self, name: str) -> None:
-        for config in self.core_lifecycle.astrbot_config_mgr.confs.values():
-            config["t2i_active_template"] = name
-            config.save_config()
+        for config in self.config_manager.confs.values():
+            committed = await config.save_config_async({"t2i_active_template": name})
+            if not committed:
+                raise T2iServiceError(
+                    "T2I template configuration save was superseded by a newer update."
+                )
         await self.reload_all_pipeline_schedulers()
 
     def list_templates(self):

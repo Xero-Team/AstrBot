@@ -17,12 +17,15 @@ from sqlmodel import col, select
 from astrbot import logger
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.db import BaseDatabase
+from astrbot.core.core_runtime import CoreControl
 from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.protocols import StatisticsSessionStore
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
 )
+from astrbot.core.platform.manager import PlatformManager
+from astrbot.core.star.star import PluginRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
@@ -30,12 +33,12 @@ from astrbot.core.utils.auth_password import (
 )
 from astrbot.core.utils.io import get_dashboard_dist_version, get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
+from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
     is_password_storage_upgraded,
 )
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.utils.version_comparator import VersionComparator
 
 
@@ -46,14 +49,24 @@ class StatServiceError(Exception):
 class StatService:
     def __init__(
         self,
-        db_helper: BaseDatabase,
-        core_lifecycle: DashboardCoreLifecycle,
+        db_helper: StatisticsSessionStore,
+        core_control: CoreControl,
         config: AstrBotConfig,
+        *,
+        demo_mode: bool,
+        start_time: int,
+        html_renderer: HtmlRenderer,
+        plugin_catalog: PluginRegistry,
+        platform_manager: PlatformManager,
     ) -> None:
         self.db_helper = db_helper
-        self.core_lifecycle = core_lifecycle
+        self.core_control = core_control
         self.config = config
-        self.demo_mode = core_lifecycle.services.demo_mode
+        self.demo_mode = demo_mode
+        self.start_time = start_time
+        self.html_renderer = html_renderer
+        self.plugin_catalog = plugin_catalog
+        self.platform_manager = platform_manager
         self.storage_cleaner = StorageCleaner(config)
 
     async def restart_core(self) -> None:
@@ -64,7 +77,7 @@ class StatService:
         if is_desktop_managed_backend():
             raise StatServiceError(DESKTOP_MANAGED_RESTART_MESSAGE)
 
-        await self.core_lifecycle.restart()
+        await self.core_control.restart()
 
     @staticmethod
     def get_running_time_components(total_seconds: int):
@@ -74,14 +87,12 @@ class StatService:
 
     async def is_default_cred(self):
         password_change_required = await is_password_change_required(
-            self.db_helper,
             self.config,
         )
         if password_change_required:
             return not self.demo_mode
 
         storage_upgraded = await is_password_storage_upgraded(
-            self.db_helper,
             self.config,
         )
         if not storage_upgraded:
@@ -95,7 +106,6 @@ class StatService:
 
     async def get_version(self) -> dict:
         storage_upgraded = await is_password_storage_upgraded(
-            self.db_helper,
             self.config,
         )
         password = get_dashboard_password_hash(
@@ -174,11 +184,11 @@ class StatService:
         }
 
     def get_start_time(self) -> dict:
-        return {"start_time": self.core_lifecycle.start_time}
+        return {"start_time": self.start_time}
 
     def get_t2i_runtime_stats(self) -> dict[str, int | float | bool]:
         """Return the current non-sensitive local T2I renderer statistics."""
-        return self.core_lifecycle.services.html_renderer.get_runtime_stats()
+        return self.html_renderer.get_runtime_stats()
 
     async def get_storage_status(self) -> dict:
         try:
@@ -257,7 +267,7 @@ class StatService:
             cpu_percent = psutil.cpu_percent(interval=0.5)
             thread_count = threading.active_count()
 
-            plugins = self.core_lifecycle.star_context.get_all_stars()
+            plugins = self.plugin_catalog.all()
             plugin_info = []
             for plugin in plugins:
                 info = {
@@ -268,14 +278,14 @@ class StatService:
                 plugin_info.append(info)
 
             running_time = self.get_running_time_components(
-                int(time.time()) - self.core_lifecycle.start_time,
+                int(time.time()) - self.start_time,
             )
             message_count = sum(item.count for item, _timestamp in platform_stats)
 
             stat_dict.update(
                 {
                     "message_count": message_count,
-                    "platform_count": self.core_lifecycle.platform_manager.get_platform_count(),
+                    "platform_count": self.platform_manager.get_platform_count(),
                     "plugin_count": len(plugins),
                     "plugins": plugin_info,
                     "message_time_series": message_time_based_stats,
@@ -286,7 +296,7 @@ class StatService:
                     },
                     "cpu_percent": round(cpu_percent, 1),
                     "thread_count": thread_count,
-                    "start_time": self.core_lifecycle.start_time,
+                    "start_time": self.start_time,
                 },
             )
             return stat_dict

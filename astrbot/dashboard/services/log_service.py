@@ -73,10 +73,13 @@ class LogService:
             logger.error(f"获取 Trace 设置失败: {exc}")
             raise LogServiceError(f"获取 Trace 设置失败: {exc}") from exc
 
-    def update_trace_settings(self, enabled: bool) -> str:
+    async def update_trace_settings(self, enabled: bool) -> str:
         try:
-            self.config["trace_enable"] = enabled
-            self.config.save_config()
+            committed = await self.config.save_config_async({"trace_enable": enabled})
+            if not committed:
+                raise LogServiceError(
+                    "Trace configuration save was superseded by a newer update."
+                )
             return "Trace 设置已更新"
         except LogServiceError:
             raise

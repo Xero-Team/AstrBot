@@ -51,7 +51,7 @@ def _assert_no_sensitive_values(*texts: object) -> None:
 def _backup_service(tmp_path: Path) -> BackupService:
     service = BackupService.__new__(BackupService)
     service.db = MagicMock()
-    service.core_lifecycle = SimpleNamespace(kb_manager=None)
+    service.knowledge_base_manager = None
     service.data_dir = str(tmp_path)
     service.backup_dir = str(tmp_path)
     return service

@@ -7,9 +7,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db import BaseDatabase
-from astrbot.core.log import LogBroker
+from astrbot.core.core_runtime import CoreControl, CoreRuntime
+from astrbot.core.db.protocols import DashboardStore
 from astrbot.dashboard.responses import ApiError, DashboardValidationError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.appearance_service import AppearanceService
@@ -31,7 +30,6 @@ from astrbot.dashboard.services.config_service import (
     ProviderConfigService,
 )
 from astrbot.dashboard.services.conversation_service import ConversationService
-from astrbot.dashboard.services.core_lifecycle import require_dashboard_core
 from astrbot.dashboard.services.cron_service import CronService
 from astrbot.dashboard.services.file_service import FileService
 from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
@@ -73,8 +71,9 @@ CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
 
 def create_dashboard_asgi_app(
     *,
-    core_lifecycle: AstrBotCoreLifecycle,
-    db: BaseDatabase,
+    runtime: CoreRuntime,
+    core_control: CoreControl,
+    db: DashboardStore,
     jwt_secret: str,
     static_folder: str | None = None,
 ) -> FastAPI:
@@ -85,8 +84,7 @@ def create_dashboard_asgi_app(
         docs_url=f"{API_V1_PREFIX}/docs",
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
-    dashboard_core = require_dashboard_core(core_lifecycle)
-    app.state.core_lifecycle = dashboard_core
+    app.state.astrbot_config = runtime.astrbot_config
     app.state.db = db
     app.state.jwt_secret = jwt_secret
     dashboard_token_validator = DashboardTokenValidator(jwt_secret)
@@ -94,8 +92,7 @@ def create_dashboard_asgi_app(
     app.state.dashboard_static_folder = static_folder
     app.state.dashboard_config = {}
     app.state.dashboard_testing = False
-    log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
-    extension_registry = dashboard_core.plugin_manager.dashboard_extension_registry
+    extension_registry = runtime.plugin_manager.extensions.registry
     plugin_page_sessions = PluginPageSessionService(extension_registry, jwt_secret)
     plugin_file_tickets = PluginFileTicketService(extension_registry, jwt_secret)
     plugin_dashboard = PluginDashboardService(
@@ -105,58 +102,156 @@ def create_dashboard_asgi_app(
     )
     app.state.services = SimpleNamespace(
         appearance=AppearanceService(),
-        config_profiles=ConfigProfileService(dashboard_core, db),
-        config_display=ConfigDisplayService(dashboard_core),
-        config_files=ConfigFileService(dashboard_core),
-        config_routes=ConfigRoutingService(dashboard_core),
+        config_profiles=ConfigProfileService(
+            runtime.astrbot_config_mgr,
+            runtime.umop_config_router,
+            core_control,
+            runtime.services.totp_runtime_state,
+            db,
+        ),
+        config_display=ConfigDisplayService(
+            runtime.astrbot_config,
+            runtime.catalogs.platforms,
+            runtime.catalogs.providers,
+            runtime.catalogs.plugins,
+            runtime.services.file_token_service,
+        ),
+        config_files=ConfigFileService(
+            runtime.catalogs.plugins,
+            runtime.plugin_manager.lifecycle,
+        ),
+        config_routes=ConfigRoutingService(runtime.umop_config_router),
         api_keys=ApiKeyService(db),
         auth=AuthService(
             db,
-            dashboard_core.astrbot_config,
-            demo_mode=dashboard_core.services.demo_mode,
+            runtime.astrbot_config,
+            demo_mode=runtime.services.demo_mode,
+            totp_runtime_state=runtime.services.totp_runtime_state,
             token_validator=dashboard_token_validator,
         ),
         backups=BackupService(
             db,
-            core_lifecycle,
+            runtime.astrbot_config,
+            runtime.knowledge_base_manager,
             token_validator=dashboard_token_validator,
         ),
-        chat=ChatService(db, dashboard_core),
+        chat=ChatService(
+            db,
+            preferences=runtime.services.preferences,
+            conversation_manager=runtime.conversation_manager,
+            platform_message_history_manager=runtime.platform_message_history_manager,
+            umop_config_router=runtime.umop_config_router,
+            webchat_run_coordinator=runtime.webchat_run_coordinator,
+            active_event_control=runtime.execution_context.active_event_registry,
+        ),
         chat_projects=ChatUIProjectService(db),
-        commands=CommandService(dashboard_core.astrbot_config, core_lifecycle),
-        conversations=ConversationService(db, dashboard_core),
-        cron=CronService(core_lifecycle),
-        files=FileService(dashboard_core.services.file_token_service),
-        knowledge_bases=KnowledgeBaseService(dashboard_core),
-        memory=MemoryService(db, core_lifecycle),
+        commands=CommandService(
+            runtime.astrbot_config,
+            db,
+            runtime.services.preferences,
+            runtime.catalogs.handlers,
+            runtime.plugin_manager.catalog,
+            runtime.platform_manager,
+            runtime.astrbot_config_mgr,
+        ),
+        conversations=ConversationService(db, runtime.conversation_manager),
+        cron=CronService(runtime.cron_manager),
+        files=FileService(runtime.services.file_token_service),
+        knowledge_bases=KnowledgeBaseService(runtime.knowledge_base_manager),
+        memory=MemoryService(db, runtime.memory_manager),
         live_chat=LiveChatService(
             db,
-            dashboard_core,
+            preferences=runtime.services.preferences,
+            config=runtime.astrbot_config,
+            provider_manager=runtime.provider_manager,
+            platform_message_history_manager=runtime.platform_message_history_manager,
+            webchat_run_coordinator=runtime.webchat_run_coordinator,
             token_validator=dashboard_token_validator,
         ),
-        logs=LogService(log_broker, dashboard_core.astrbot_config),
-        bots=BotConfigService(dashboard_core),
-        platforms=PlatformService(dashboard_core),
-        providers=ProviderConfigService(dashboard_core),
-        personas=PersonaService(dashboard_core),
+        logs=LogService(runtime.log_broker, runtime.astrbot_config),
+        bots=BotConfigService(
+            runtime.astrbot_config,
+            runtime.catalogs.platforms,
+            runtime.platform_manager,
+        ),
+        platforms=PlatformService(runtime.platform_manager, runtime.catalogs.platforms),
+        providers=ProviderConfigService(
+            runtime.astrbot_config,
+            runtime.provider_manager,
+            runtime.catalogs.providers,
+            runtime.services.llm_metadata_catalog,
+        ),
+        personas=PersonaService(runtime.persona_mgr),
         plugin_dashboard=plugin_dashboard,
         plugin_page_sessions=plugin_page_sessions,
         plugin_file_tickets=plugin_file_tickets,
-        plugins=PluginService(dashboard_core, dashboard_core.plugin_manager),
-        open_api=OpenApiService(db, dashboard_core),
-        sessions=SessionManagementService(dashboard_core, db),
-        skills=SkillsService(dashboard_core),
-        stats=StatService(db, dashboard_core, dashboard_core.astrbot_config),
-        subagents=SubAgentService(dashboard_core),
-        t2i=T2iService(dashboard_core),
-        tools=ToolsService(dashboard_core),
+        plugins=PluginService(
+            runtime.plugin_manager.lifecycle,
+            runtime.plugin_manager.loader,
+            runtime.plugin_manager.packages,
+            runtime.plugin_manager.extensions,
+            runtime.catalogs.plugins,
+            runtime.catalogs.handlers,
+            runtime.services.preferences,
+            runtime.services.file_token_service,
+            runtime.services.computer_runtime,
+            demo_mode=runtime.services.demo_mode,
+        ),
+        open_api=OpenApiService(
+            db,
+            platform_manager=runtime.platform_manager,
+            astrbot_config_mgr=runtime.astrbot_config_mgr,
+            umop_config_router=runtime.umop_config_router,
+            astrbot_config=runtime.astrbot_config,
+            platform_message_history_manager=runtime.platform_message_history_manager,
+            webchat_run_coordinator=runtime.webchat_run_coordinator,
+        ),
+        sessions=SessionManagementService(
+            db,
+            runtime.services.preferences,
+            runtime.provider_manager,
+            runtime.persona_mgr,
+            runtime.catalogs.plugins,
+            runtime.knowledge_base_manager,
+        ),
+        skills=SkillsService(
+            runtime.astrbot_config,
+            runtime.services.computer_runtime,
+            demo_mode=runtime.services.demo_mode,
+        ),
+        stats=StatService(
+            db,
+            core_control,
+            runtime.astrbot_config,
+            demo_mode=runtime.services.demo_mode,
+            start_time=runtime.start_time,
+            html_renderer=runtime.services.html_renderer,
+            plugin_catalog=runtime.catalogs.plugins,
+            platform_manager=runtime.platform_manager,
+        ),
+        subagents=SubAgentService(
+            runtime.astrbot_config,
+            runtime.subagent_orchestrator,
+            runtime.catalogs.tools,
+        ),
+        t2i=T2iService(
+            runtime.astrbot_config,
+            runtime.astrbot_config_mgr,
+            core_control,
+        ),
+        tools=ToolsService(
+            runtime.catalogs.tools,
+            runtime.services.preferences,
+            runtime.astrbot_config_mgr,
+            runtime.catalogs.plugins,
+        ),
         updates=UpdateService(
-            core_lifecycle.astrbot_updator,
-            core_lifecycle,
+            runtime.updater,
+            core_control,
             pip_install_func=lambda *args, **kwargs: call_pip_install(
-                dashboard_core.services.pip_installer, *args, **kwargs
+                runtime.services.pip_installer, *args, **kwargs
             ),
-            demo_mode=dashboard_core.services.demo_mode,
+            demo_mode=runtime.services.demo_mode,
             clear_site_data_headers=CLEAR_SITE_DATA_HEADERS,
         ),
     )

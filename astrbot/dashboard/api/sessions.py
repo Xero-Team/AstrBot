@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse
 
 from astrbot import logger
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -37,7 +38,7 @@ def _unexpected_error(prefix: str, exc: Exception):
     return internal_error_response(logger, prefix, exc)
 
 
-async def _run(operation, *, label: str) -> dict:
+async def _run(operation, *, label: str) -> dict | JSONResponse:
     try:
         result = await run_maybe_async(operation)
         return ok(result)

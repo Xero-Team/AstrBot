@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -8,12 +9,12 @@ from starlette.datastructures import UploadFile
 
 from astrbot import logger
 from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 from astrbot.dashboard.schemas import KnowledgeBaseRequest
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
 
@@ -28,8 +29,8 @@ _KB_INITIALIZATION_ERROR = "Knowledge base initialization failed"
 
 
 class KnowledgeBaseService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
+    def __init__(self, knowledge_base_manager: KnowledgeBaseManager) -> None:
+        self.knowledge_base_manager = knowledge_base_manager
         self.upload_progress: dict[str, dict[str, Any]] = {}
         self.upload_tasks: dict[str, dict[str, Any]] = {}
         self._background_tasks: set[asyncio.Task] = set()
@@ -52,7 +53,7 @@ class KnowledgeBaseService:
         return raw
 
     def get_kb_manager(self):
-        return self.core_lifecycle.kb_manager
+        return self.knowledge_base_manager
 
     def _get_background_tasks(self) -> set[asyncio.Task]:
         task_set = getattr(self, "_background_tasks", None)
@@ -520,7 +521,7 @@ class KnowledgeBaseService:
         *,
         content_type: str | None,
         form_data,
-        files: list[UploadFile],
+        files: Sequence[UploadFile],
     ) -> dict[str, Any]:
         if content_type and "multipart/form-data" not in content_type:
             raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")

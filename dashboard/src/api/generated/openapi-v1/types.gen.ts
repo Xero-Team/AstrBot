@@ -5,7 +5,7 @@ export type ClientOptions = {
 };
 
 export type SuccessEnvelope = {
-  status: 'ok';
+  status: 'ok' | 'warning';
   message?: string;
   data: unknown;
 };

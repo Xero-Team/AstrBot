@@ -33,7 +33,7 @@ class FakeEmbeddingProvider(EmbeddingProvider):
 
 def make_service(kb_manager) -> KnowledgeBaseService:
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.core_lifecycle = SimpleNamespace(kb_manager=kb_manager)
+    service.knowledge_base_manager = kb_manager
     service.upload_progress = {}
     service.upload_tasks = {}
     return service

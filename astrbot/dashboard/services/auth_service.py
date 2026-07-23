@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import datetime
 import hashlib
 import hmac
@@ -12,7 +13,7 @@ import pyotp
 
 from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db.protocols import DatabaseSessionStore
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -26,26 +27,20 @@ from astrbot.core.utils.totp import (
     TOTP_TRUSTED_DEVICE_MAX_AGE as _TOTP_TRUSTED_DEVICE_MAX_AGE,
 )
 from astrbot.core.utils.totp import (
+    TotpRuntimeState,
     TwoFactorCodeType,
-    consume_configured_totp_code,
-    consume_rotation_verified,
-    consume_totp_code,
     generate_recovery_code,
     is_totp_enabled,
     is_totp_trusted_device_valid,
     issue_totp_trusted_device,
     revoke_user_trusted_devices,
-    set_pending_totp_secret,
-    set_rotation_verified,
-    verify_configured_2fa_code,
 )
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
     is_password_storage_upgraded,
     set_dashboard_password_hashes,
-    set_password_change_required,
-    set_password_storage_upgraded,
+    set_dashboard_password_security_state,
 )
 
 OPEN_API_SCOPE_INCLUDES = {
@@ -176,15 +171,17 @@ class DashboardTokenValidator:
 class AuthService:
     def __init__(
         self,
-        db: BaseDatabase,
+        db: DatabaseSessionStore,
         config: AstrBotConfig,
         *,
         demo_mode: bool,
+        totp_runtime_state: TotpRuntimeState,
         token_validator: DashboardTokenValidator | None = None,
     ) -> None:
         self.db = db
         self.config = config
         self.demo_mode = demo_mode
+        self.totp_runtime_state = totp_runtime_state
         self.token_validator = token_validator or DashboardTokenValidator(
             self.config["dashboard"].get("jwt_secret", "")
         )
@@ -195,13 +192,17 @@ class AuthService:
                 "setup_required": await self.is_setup_required(),
                 "skip_default_password_auth": self.can_skip_default_password_auth(),
                 "password_upgrade_required": not await is_password_storage_upgraded(
-                    self.db,
                     self.config,
                 ),
             }
         )
 
-    async def totp_setup(self, post_data: object) -> AuthServiceResult:
+    async def totp_setup(
+        self,
+        post_data: object,
+        *,
+        subject: str,
+    ) -> AuthServiceResult:
         if isinstance(post_data, dict) and post_data.get("secret"):
             secret = post_data["secret"]
             code = post_data.get("code")
@@ -210,13 +211,18 @@ class AuthService:
 
             if not isinstance(code, str) or not code.strip():
                 return self.error("TOTP 验证码是必需的")
-            if not await consume_totp_code(secret, code):
-                return self.error("TOTP 验证码无效")
-
-            if is_totp_enabled(self.config) and not consume_rotation_verified():
+            if is_totp_enabled(
+                self.config
+            ) and not await self.totp_runtime_state.has_rotation_verification(subject):
                 return self.error("需要先验证当前 TOTP")
 
-            set_pending_totp_secret(secret)
+            if not await self.totp_runtime_state.stage_pending_totp_secret(
+                subject,
+                self.config,
+                secret,
+                code,
+            ):
+                return self.error("TOTP 验证码无效")
             recovery_code, recovery_code_hash = generate_recovery_code()
             return AuthServiceResult(
                 data={
@@ -230,12 +236,15 @@ class AuthService:
             if not isinstance(post_data, dict):
                 return self.error("Invalid request payload")
 
-            set_rotation_verified(False)
+            await self.totp_runtime_state.clear_subject(subject)
 
             code = post_data.get("code")
             if isinstance(code, str) and code.strip():
-                if await consume_configured_totp_code(self.config, code):
-                    set_rotation_verified(True)
+                if await self.totp_runtime_state.verify_current_rotation_code(
+                    subject,
+                    self.config,
+                    code,
+                ):
                     return AuthServiceResult(data={"secret": pyotp.random_base32()})
                 return self.error("当前 TOTP 验证码无效")
 
@@ -251,6 +260,10 @@ class AuthService:
                 "recovery_code_hash": recovery_code_hash,
             }
         )
+
+    async def discard_totp_rotation(self, subject: str) -> None:
+        """Discard a pending TOTP rotation when its dashboard session ends."""
+        await self.totp_runtime_state.clear_subject(subject)
 
     async def setup(self, post_data: object) -> AuthServiceResult:
         if not self.can_skip_default_password_auth():
@@ -292,11 +305,13 @@ class AuthService:
             return self.error(str(exc))
 
         username = new_username.strip()
-        self.config["dashboard"]["username"] = username
-        set_dashboard_password_hashes(self.config, new_password)
-        await set_password_storage_upgraded(self.db, self.config, True)
-        await set_password_change_required(self.db, self.config, False)
-        self.config.save_config()
+        next_config = copy.deepcopy(dict(self.config))
+        next_dashboard_config = next_config["dashboard"]
+        next_dashboard_config["username"] = username
+        set_dashboard_password_hashes(next_dashboard_config, new_password)
+        set_dashboard_password_security_state(next_dashboard_config)
+        if not await self.config.save_config_async(next_config):
+            return self._config_save_superseded_error()
 
         token = self.generate_jwt(username)
         return AuthServiceResult(
@@ -318,7 +333,7 @@ class AuthService:
         trusted_device_cookie_token: str,
     ) -> AuthServiceResult:
         username = self.config["dashboard"]["username"]
-        storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
+        storage_upgraded = await is_password_storage_upgraded(self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
 
         req_username = (
@@ -363,21 +378,26 @@ class AuthService:
                         data={"totp_required": True},
                         status_code=401,
                     )
-                verified_type = await verify_configured_2fa_code(
-                    self.config,
-                    totp_code,
-                    allow_recovery=True,
+                verified_type = (
+                    await self.totp_runtime_state.verify_configured_2fa_code(
+                        self.config,
+                        totp_code,
+                        allow_recovery=True,
+                    )
                 )
                 if verified_type is TwoFactorCodeType.TOTP:
                     totp_verified = True
                 elif verified_type is TwoFactorCodeType.RECOVERY:
-                    self.config["dashboard"]["totp"] = {
+                    next_config = copy.deepcopy(dict(self.config))
+                    next_config["dashboard"]["totp"] = {
                         "enable": False,
                         "secret": "",
                         "recovery_code_hash": "",
                     }
+                    if not await self.config.save_config_async(next_config):
+                        return self._config_save_superseded_error()
                     await revoke_user_trusted_devices(self.db)
-                    self.config.save_config()
+                    await self.totp_runtime_state.clear_all()
                 elif len(totp_code) == 6 and totp_code.isdigit():
                     return self.error("TOTP 验证码无效", status_code=401)
                 else:
@@ -386,7 +406,6 @@ class AuthService:
         change_pwd_hint = False
         md5_pwd_hint = is_md5_dashboard_password(password)
         password_change_required = await is_password_change_required(
-            self.db,
             self.config,
         )
         if (
@@ -423,7 +442,12 @@ class AuthService:
         if self.demo_mode:
             return self.error("You are not permitted to do this operation in demo mode")
 
-        storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
+        # Keep inferred state reads side-effect free so this account change is
+        # committed as one snapshot.
+        storage_upgraded = await is_password_storage_upgraded(
+            self.config,
+            persist=False,
+        )
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
         if not isinstance(post_data, dict):
             return self.error("Invalid request payload")
@@ -438,8 +462,8 @@ class AuthService:
         new_pwd = post_data.get("new_password", None)
         new_username = post_data.get("new_username", None)
         password_change_required = await is_password_change_required(
-            self.db,
             self.config,
+            persist=False,
         )
         if (not storage_upgraded or password_change_required) and not new_pwd:
             return self.error("请设置新密码以完成安全升级")
@@ -452,6 +476,7 @@ class AuthService:
                 return self.error("用户名长度至少3位")
             username_to_save = new_username.strip()
 
+        revoke_trusted_devices = False
         if new_pwd:
             if not isinstance(new_pwd, str):
                 return self.error("新密码无效")
@@ -462,17 +487,31 @@ class AuthService:
                 validate_dashboard_password(new_pwd)
             except ValueError as exc:
                 return self.error(str(exc))
-            set_dashboard_password_hashes(self.config, new_pwd)
-            await set_password_storage_upgraded(self.db, self.config, True)
-            await set_password_change_required(self.db, self.config, False)
             if is_totp_enabled(self.config):
-                await revoke_user_trusted_devices(self.db)
-        if username_to_save:
-            self.config["dashboard"]["username"] = username_to_save
+                revoke_trusted_devices = True
 
-        self.config.save_config()
+        next_config = copy.deepcopy(dict(self.config))
+        next_dashboard_config = next_config["dashboard"]
+        if new_pwd:
+            set_dashboard_password_hashes(next_dashboard_config, new_pwd)
+            set_dashboard_password_security_state(next_dashboard_config)
+        if username_to_save:
+            next_dashboard_config["username"] = username_to_save
+
+        if not await self.config.save_config_async(next_config):
+            return self._config_save_superseded_error()
+        if revoke_trusted_devices:
+            await revoke_user_trusted_devices(self.db)
 
         return AuthServiceResult(message="Updated account successfully")
+
+    @staticmethod
+    def _config_save_superseded_error() -> AuthServiceResult:
+        """Return the standard error when a newer configuration write wins."""
+        return AuthService.error(
+            "Configuration update was superseded by a newer update. Please retry.",
+            status_code=409,
+        )
 
     def generate_jwt(self, username: str) -> str:
         return self.token_validator.issue(username)
@@ -483,13 +522,12 @@ class AuthService:
 
         dashboard_config = self.config["dashboard"]
         password_change_required = await is_password_change_required(
-            self.db,
             self.config,
         )
         if password_change_required:
             return True
 
-        storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
+        storage_upgraded = await is_password_storage_upgraded(self.config)
         if not storage_upgraded:
             return False
 

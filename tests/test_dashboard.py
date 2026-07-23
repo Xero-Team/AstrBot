@@ -16,11 +16,10 @@ import pytest_asyncio
 from fastapi import FastAPI
 from werkzeug.datastructures import FileStorage
 
+from astrbot.application import resolve_dashboard_assets
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.log import LogBroker
-from astrbot.core.star.star import star_registry
-from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_md5_dashboard_password,
@@ -55,6 +54,25 @@ from tests.fixtures.helpers import (
 from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
+
+
+def _create_dashboard(
+    runtime,
+    core_control,
+    db,
+    shutdown_event: asyncio.Event,
+    webui_dir: str | None = None,
+) -> AstrBotDashboard:
+    """Create a Dashboard after asynchronously persisting its JWT secret."""
+    return asyncio.run(
+        AstrBotDashboard.create(
+            runtime,
+            core_control,
+            db,
+            shutdown_event,
+            webui_dir,
+        )
+    )
 
 
 def _removed_md5_hint_alias_key() -> str:
@@ -148,12 +166,10 @@ async def core_lifecycle_td(tmp_path_factory):
             hash_md5_dashboard_password(dashboard_password)
         )
         await set_password_storage_upgraded(
-            core_lifecycle.db,
             core_lifecycle.astrbot_config,
             True,
         )
         await set_password_change_required(
-            core_lifecycle.db,
             core_lifecycle.astrbot_config,
             False,
         )
@@ -179,7 +195,12 @@ async def core_lifecycle_td(tmp_path_factory):
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
     """Creates a FastAPI app instance for dashboard testing."""
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = _create_dashboard(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+    )
     return server.asgi_app
 
 
@@ -207,26 +228,33 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.application.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.application.get_bundled_dashboard_dist_path",
         lambda: bundled_dist,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        "astrbot.application.get_repo_dashboard_dist_path",
         lambda: tmp_path / "repo-dist",
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
+        "astrbot.application.should_use_bundled_dashboard_dist",
         lambda *_args, **_kwargs: True,
     )
 
+    webui_dir = asyncio.run(resolve_dashboard_assets())
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = _create_dashboard(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+        webui_dir,
+    )
 
-    assert server.data_path == str(bundled_dist)
+    assert server.data_path == str(user_dist)
 
 
 def test_dashboard_prefers_repo_dist_when_data_dist_matches(
@@ -247,20 +275,27 @@ def test_dashboard_prefers_repo_dist_when_data_dist_matches(
     (repo_dist / "index.html").write_text("repo", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.application.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        "astrbot.application.get_repo_dashboard_dist_path",
         lambda: repo_dist,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.application.get_bundled_dashboard_dist_path",
         lambda: tmp_path / "bundled-dist",
     )
 
+    webui_dir = asyncio.run(resolve_dashboard_assets())
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = _create_dashboard(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+        webui_dir,
+    )
 
     assert server.data_path == str(repo_dist)
 
@@ -278,20 +313,27 @@ def test_dashboard_ignores_mismatched_data_dist_without_bundled(
     (user_dist / "index.html").write_text("stale", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.application.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.application.get_bundled_dashboard_dist_path",
         lambda: bundled_dist,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        "astrbot.application.get_repo_dashboard_dist_path",
         lambda: tmp_path / "repo-dist",
     )
 
+    webui_dir = asyncio.run(resolve_dashboard_assets())
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = _create_dashboard(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+        webui_dir,
+    )
 
     assert server.data_path is None
 
@@ -308,20 +350,27 @@ def test_dashboard_ignores_incomplete_mismatched_data_dist_without_bundled(
     (user_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.application.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.application.get_bundled_dashboard_dist_path",
         lambda: bundled_dist,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_repo_dashboard_dist_path",
+        "astrbot.application.get_repo_dashboard_dist_path",
         lambda: tmp_path / "repo-dist",
     )
 
+    webui_dir = asyncio.run(resolve_dashboard_assets())
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = _create_dashboard(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+        webui_dir,
+    )
 
     assert server.data_path is None
 
@@ -331,7 +380,6 @@ async def _set_dashboard_password_change_required(
     required: bool,
 ) -> None:
     await set_password_change_required(
-        core_lifecycle_td.db,
         core_lifecycle_td.astrbot_config,
         required,
     )
@@ -343,12 +391,10 @@ async def _restore_dashboard_password_state(
 ) -> None:
     core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config
     await set_password_change_required(
-        core_lifecycle_td.db,
         core_lifecycle_td.astrbot_config,
         False,
     )
     await set_password_storage_upgraded(
-        core_lifecycle_td.db,
         core_lifecycle_td.astrbot_config,
         bool(dashboard_config.get("pbkdf2_password")),
     )
@@ -1093,6 +1139,60 @@ async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
 
 
 @pytest.mark.asyncio
+async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
+    app: FastAPI,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    current_secret = pyotp.random_base32()
+    replacement_secret = pyotp.random_base32()
+    test_client = DashboardTestClient(app)
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": current_secret,
+            "recovery_code_hash": "recovery-hash",
+        }
+        username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+        first_token = app.state.dashboard_token_validator.issue(username)
+        second_token = app.state.dashboard_token_validator.issue(username)
+        first_headers = {"Authorization": f"Bearer {first_token}"}
+        second_headers = {"Authorization": f"Bearer {second_token}"}
+
+        verified = await test_client.post(
+            "/api/v1/auth/totp/setup",
+            headers=first_headers,
+            json={"code": pyotp.TOTP(current_secret).now()},
+        )
+        assert (await verified.get_json())["status"] == "ok"
+
+        replacement_payload = {
+            "secret": replacement_secret,
+            "code": pyotp.TOTP(replacement_secret).now(),
+        }
+        rejected = await test_client.post(
+            "/api/v1/auth/totp/setup",
+            headers=second_headers,
+            json=replacement_payload,
+        )
+        assert (await rejected.get_json())["status"] == "error"
+
+        staged = await test_client.post(
+            "/api/v1/auth/totp/setup",
+            headers=first_headers,
+            json=replacement_payload,
+        )
+        assert (await staged.get_json())["status"] == "ok"
+    finally:
+        await app.state.services.auth.totp_runtime_state.clear_all()
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await test_client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
     app: FastAPI,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -1112,7 +1212,6 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
         await set_password_storage_upgraded(
-            core_lifecycle_td.db,
             core_lifecycle_td.astrbot_config,
             False,
         )
@@ -1152,7 +1251,6 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         assert data["status"] == "error"
         assert (
             await is_password_storage_upgraded(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is False
@@ -1172,7 +1270,6 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         assert data["status"] == "ok"
         assert (
             await is_password_storage_upgraded(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is True
@@ -1211,7 +1308,6 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
         await set_password_storage_upgraded(
-            core_lifecycle_td.db,
             core_lifecycle_td.astrbot_config,
             False,
         )
@@ -1253,7 +1349,6 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
         await set_password_storage_upgraded(
-            core_lifecycle_td.db,
             core_lifecycle_td.astrbot_config,
             True,
         )
@@ -1270,7 +1365,6 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         assert data["data"]["password_upgrade_required"] is True
         assert (
             await is_password_storage_upgraded(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is False
@@ -1392,7 +1486,6 @@ async def test_generated_password_requires_password_change_until_changed(
         assert data["status"] == "error"
         assert (
             await is_password_change_required(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is True
@@ -1414,7 +1507,6 @@ async def test_generated_password_requires_password_change_until_changed(
         assert data["status"] == "ok"
         assert (
             await is_password_change_required(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is False
@@ -1559,7 +1651,6 @@ async def test_local_setup_can_skip_default_password_auth(
         assert data["data"]["token"]
         assert (
             await is_password_change_required(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is False
@@ -1623,7 +1714,6 @@ async def test_authenticated_default_password_login_can_complete_setup(
         assert data["data"]["username"] == setup_username
         assert (
             await is_password_change_required(
-                core_lifecycle_td.db,
                 core_lifecycle_td.astrbot_config,
             )
             is False
@@ -1807,7 +1897,12 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
     monkeypatch,
 ):
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = await AstrBotDashboard.create(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+    )
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config.get("dashboard", {}),
     )
@@ -2063,6 +2158,16 @@ async def test_plugins(
     """Tests plugin API endpoints with mocked install and update paths."""
     test_client = DashboardTestClient(app)
 
+    async def mock_get_online_plugins(_service, *, custom_registry, force_refresh):
+        del _service, custom_registry, force_refresh
+        return [], None
+
+    monkeypatch.setattr(
+        PluginService,
+        "get_online_plugins",
+        mock_get_online_plugins,
+    )
+
     response = await test_client.get("/api/v1/plugins", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
@@ -2084,7 +2189,7 @@ async def test_plugins(
     data = await response.get_json()
     assert data["status"] == "ok"
 
-    plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    plugin_store_path = core_lifecycle_td.plugin_manager.packages.store_path
     builder = MockPluginBuilder(plugin_store_path)
     test_plugin_name = "test_mock_plugin"
     test_repo_url = f"https://github.com/test/{test_plugin_name}"
@@ -2095,9 +2200,13 @@ async def test_plugins(
     mock_update = create_mock_updater_update(builder)
 
     monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "install", mock_install
+        core_lifecycle_td.plugin_manager.packages._updator, "install", mock_install
     )
-    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager.packages._updator,
+        "update",
+        mock_update,
+    )
 
     try:
         response = await test_client.post(
@@ -2144,7 +2253,10 @@ async def test_plugins(
         assert "components" in data["data"]
         assert isinstance(data["data"]["components"], list)
 
-        exists = any(md.name == test_plugin_name for md in star_registry)
+        exists = any(
+            md.name == test_plugin_name
+            for md in core_lifecycle_td.runtime.catalogs.plugins.all()
+        )
         assert exists is True, f"插件 {test_plugin_name} 未成功载入"
 
         response = await test_client.post(
@@ -2167,10 +2279,14 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        exists = any(md.name == test_plugin_name for md in star_registry)
+        exists = any(
+            md.name == test_plugin_name
+            for md in core_lifecycle_td.runtime.catalogs.plugins.all()
+        )
         assert exists is False, f"插件 {test_plugin_name} 未成功卸载"
         exists = any(
-            test_plugin_name in md.handler_module_path for md in star_handlers_registry
+            test_plugin_name in md.handler_module_path
+            for md in core_lifecycle_td.runtime.catalogs.handlers
         )
         assert exists is False, f"插件 {test_plugin_name} handler 未成功清理"
     finally:
@@ -2717,7 +2833,7 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
         raise RuntimeError("secret stack trace")
 
     monkeypatch.setattr(
-        app.state.core_lifecycle.astrbot_updator,
+        app.state.services.updates.astrbot_updator,
         "download_update_package",
         mock_download_core,
     )
@@ -2867,7 +2983,8 @@ async def test_neo_skills_routes(
         _fake_sync_release,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
+        core_lifecycle_td.services.computer_runtime,
+        "sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
 
@@ -2981,6 +3098,7 @@ async def test_batch_upload_skills_returns_error_when_all_files_invalid(
 async def test_batch_upload_skills_accepts_zip_files(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     async def _fake_sync_skills_to_active_sandboxes():
@@ -2999,7 +3117,8 @@ async def test_batch_upload_skills_accepts_zip_files(
         return "demo_skill"
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
+        core_lifecycle_td.services.computer_runtime,
+        "sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
@@ -3036,6 +3155,7 @@ async def test_batch_upload_skills_accepts_zip_files(
 async def test_batch_upload_skills_accepts_valid_skill_archive(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
     tmp_path,
 ):
@@ -3050,7 +3170,8 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         return
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
+        core_lifecycle_td.services.computer_runtime,
+        "sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
@@ -3109,6 +3230,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
 async def test_batch_upload_skills_partial_success(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     async def _fake_sync_skills_to_active_sandboxes():
@@ -3128,7 +3250,8 @@ async def test_batch_upload_skills_partial_success(
         raise RuntimeError("install failed")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
+        core_lifecycle_td.services.computer_runtime,
+        "sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
@@ -3226,6 +3349,7 @@ async def test_batch_upload_skills_does_not_retry_internal_type_error(
 async def test_skill_file_browser_and_editor_security(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
     tmp_path,
 ):
@@ -3253,7 +3377,8 @@ async def test_skill_file_browser_and_editor_security(
         lambda: str(skills_root),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
+        core_lifecycle_td.services.computer_runtime,
+        "sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
 

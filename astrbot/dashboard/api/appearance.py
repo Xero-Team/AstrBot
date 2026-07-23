@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
@@ -18,7 +20,7 @@ _IMAGE_HEADERS = {
     "Cache-Control": "private, max-age=300",
     "X-Content-Type-Options": "nosniff",
 }
-_WALLPAPER_RESPONSE = {
+_WALLPAPER_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Wallpaper image bytes",
         "content": {
@@ -29,7 +31,7 @@ _WALLPAPER_RESPONSE = {
         },
     }
 }
-_THUMBNAIL_RESPONSE = {
+_THUMBNAIL_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "WebP wallpaper thumbnail bytes",
         "content": {"image/webp": {"schema": {"type": "string", "format": "binary"}}},

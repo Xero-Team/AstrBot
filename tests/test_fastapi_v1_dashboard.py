@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
 import httpx
 import jwt
 import pytest
@@ -21,8 +22,16 @@ import astrbot.dashboard.api.sessions as dashboard_sessions_api
 import astrbot.dashboard.api.skills as dashboard_skills_api
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core.file_token_service import FileTokenService
+from astrbot.core.log import LogBroker
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.dashboard_extension import DashboardExtensionRegistry
+from astrbot.core.star.plugin_extension_coordinator import PluginExtensionCoordinator
+from astrbot.core.utils.active_event_registry import ActiveEventRegistry
+from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
+from astrbot.core.utils.totp import TotpRuntimeState
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import (
@@ -177,8 +186,7 @@ class FakeLlmTools:
     def is_builtin_tool(self, _tool_name: str) -> bool:
         return False
 
-    async def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
-        _ = star_map
+    async def activate_llm_tool(self, _tool_name: str) -> bool:
         self.activated_tools.append(_tool_name)
         return True
 
@@ -200,7 +208,10 @@ class FakeProviderManager:
         self.set_provider_calls: list[dict] = []
         self.cleared_provider_calls: list[dict] = []
         self.cleared_all_provider_calls: list[str] = []
-        self.llm_tools = FakeLlmTools()
+        self.tool_manager = FakeLlmTools()
+
+    def dynamic_import_provider(self, provider_type: str) -> None:
+        raise ImportError(provider_type)
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         config = copy.deepcopy(provider_config)
@@ -609,6 +620,15 @@ class FakeAstrBotConfig(dict):
         self.clear()
         self.update(copy.deepcopy(post_config))
 
+    async def save_config_async(
+        self,
+        post_config: dict | None = None,
+        *,
+        indent: int = 2,
+    ) -> bool:
+        self.save_config(post_config, indent=indent)
+        return True
+
 
 def _build_fake_config() -> dict:
     return FakeAstrBotConfig(
@@ -666,6 +686,9 @@ def fake_db() -> FakeDb:
 def fake_core_lifecycle():
     config = _build_fake_config()
     provider_manager = FakeProviderManager(config)
+    catalogs = RuntimeCatalogs()
+    catalogs.tools = provider_manager.tool_manager
+    webchat_run_coordinator = WebChatRunCoordinator(WebChatQueueManager())
     platform = FakePlatform("webchat-main")
     umop_config_router = FakeUmopConfigRouter()
     reloaded_config_ids = []
@@ -674,6 +697,12 @@ def fake_core_lifecycle():
 
     async def reload_pipeline_scheduler(config_id: str) -> None:
         reloaded_config_ids.append(config_id)
+
+    async def remove_pipeline_scheduler(config_id: str) -> None:
+        reloaded_config_ids.remove(config_id)
+
+    async def restart() -> None:
+        return None
 
     async def reload_platform(config: dict) -> None:
         platform_reload_configs.append(copy.deepcopy(config))
@@ -686,6 +715,7 @@ def fake_core_lifecycle():
 
     demo_plugin = SimpleNamespace(
         name="astrbot_plugin_demo",
+        module_path="tests.fastapi.dashboard.demo_plugin",
         repo=None,
         author="demo",
         desc="Demo plugin",
@@ -698,6 +728,7 @@ def fake_core_lifecycle():
         support_platforms=[],
         astrbot_version="",
         i18n={},
+        config=None,
         root_dir_name=None,
         star_handler_full_names=[],
         skills=[],
@@ -717,6 +748,14 @@ def fake_core_lifecycle():
     def validate_astrbot_version_specifier(version_spec: str):
         return True, f"supported: {version_spec}"
 
+    catalogs.plugins.publish(demo_plugin)
+    plugin_catalog = SimpleNamespace(
+        runtime_catalogs=catalogs,
+        refresh_command_catalogs=lambda: None,
+    )
+    extension_registry = DashboardExtensionRegistry()
+    plugin_extensions = PluginExtensionCoordinator(extension_registry)
+
     class FakePreferences:
         def __init__(self) -> None:
             self.values: dict[str, object] = {}
@@ -733,15 +772,42 @@ def fake_core_lifecycle():
         async def session_put(self, *_args, **_kwargs) -> None:
             return None
 
+    plugin_lifecycle = SimpleNamespace(
+        reload_failed_plugin=reload_plugin,
+        reload=reload_plugin,
+        install_plugin=AsyncMock(),
+        install_plugin_from_file=AsyncMock(),
+        update_plugin=AsyncMock(),
+        uninstall_plugin=AsyncMock(),
+        uninstall_failed_plugin=AsyncMock(),
+        turn_off_plugin=turn_off_plugin,
+        turn_on_plugin=turn_on_plugin,
+    )
+    plugin_loader = SimpleNamespace(
+        bundled_store_path="",
+        failure_info=None,
+        failed_plugins=lambda: {},
+    )
+    plugin_packages = SimpleNamespace(store_path="")
+
     return SimpleNamespace(
         astrbot_config=config,
+        log_broker=LogBroker(),
         services=SimpleNamespace(
             demo_mode=False,
             preferences=FakePreferences(),
             file_token_service=FileTokenService(),
             pip_installer=SimpleNamespace(install=lambda *_args, **_kwargs: None),
+            computer_runtime=SimpleNamespace(
+                sync_skills_to_active_sandboxes=AsyncMock(),
+            ),
+            html_renderer=SimpleNamespace(),
+            llm_metadata_catalog=LLMMetadataCatalog(),
+            totp_runtime_state=TotpRuntimeState(),
         ),
-        astrbot_updator=FakeAstrBotUpdator(),
+        updater=FakeAstrBotUpdator(),
+        catalogs=catalogs,
+        webchat_run_coordinator=webchat_run_coordinator,
         start_time=1234567890,
         astrbot_config_mgr=SimpleNamespace(
             confs={"default": config},
@@ -749,12 +815,21 @@ def fake_core_lifecycle():
             get_conf_list=lambda: [{"id": "default", "name": "default"}],
         ),
         reload_pipeline_scheduler=reload_pipeline_scheduler,
+        remove_pipeline_scheduler=remove_pipeline_scheduler,
+        restart=restart,
         reloaded_config_ids=reloaded_config_ids,
         platform_reload_configs=platform_reload_configs,
         terminated_platform_ids=terminated_platform_ids,
         umop_config_router=umop_config_router,
         platform_manager=SimpleNamespace(
             fake_platform=platform,
+            find_inst_by_webhook_uuid=(
+                lambda webhook_uuid: (
+                    platform
+                    if webhook_uuid == platform.config["webhook_uuid"]
+                    else None
+                )
+            ),
             send_to_session=platform.send_to_session,
             reload=reload_platform,
             load_platform=load_platform,
@@ -768,28 +843,47 @@ def fake_core_lifecycle():
         conversation_manager=FakeConversationManager(),
         platform_message_history_manager=SimpleNamespace(),
         plugin_manager=SimpleNamespace(
-            dashboard_extension_registry=DashboardExtensionRegistry(),
-            context=SimpleNamespace(get_all_stars=lambda: [demo_plugin]),
-            failed_plugin_info=None,
-            failed_plugin_dict={},
-            turn_off_plugin=turn_off_plugin,
-            turn_on_plugin=turn_on_plugin,
-            reload=reload_plugin,
-            _validate_astrbot_version_specifier=validate_astrbot_version_specifier,
+            catalog=plugin_catalog,
+            extensions=plugin_extensions,
+            lifecycle=plugin_lifecycle,
+            loader=plugin_loader,
+            packages=plugin_packages,
+        ),
+        execution_context=SimpleNamespace(
+            active_event_registry=ActiveEventRegistry(),
         ),
         star_context=SimpleNamespace(),
-        kb_manager=None,
+        knowledge_base_manager=None,
+        memory_manager=SimpleNamespace(),
+        cron_manager=SimpleNamespace(),
+        subagent_orchestrator=SimpleNamespace(reload_from_config=AsyncMock()),
     )
 
 
 @pytest.fixture
 def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
     app = create_dashboard_asgi_app(
-        core_lifecycle=fake_core_lifecycle,
+        runtime=fake_core_lifecycle,
+        core_control=fake_core_lifecycle,
         db=fake_db,
         jwt_secret=JWT_SECRET,
     )
     return app
+
+
+def test_dashboard_uses_the_runtime_log_broker(
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    """Dashboard logs must use the explicit completed-runtime dependency."""
+    app = create_dashboard_asgi_app(
+        runtime=fake_core_lifecycle,
+        core_control=SimpleNamespace(),
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+    )
+
+    assert app.state.services.logs.log_broker is fake_core_lifecycle.log_broker
 
 
 @pytest_asyncio.fixture
@@ -845,7 +939,8 @@ async def test_public_versions_route_uses_static_folder(
     (assets_folder / "version").write_text("v9.8.7", encoding="utf-8")
 
     app = create_dashboard_asgi_app(
-        core_lifecycle=fake_core_lifecycle,
+        runtime=fake_core_lifecycle,
+        core_control=fake_core_lifecycle,
         db=fake_db,
         jwt_secret=JWT_SECRET,
         static_folder=str(static_folder),
@@ -1039,7 +1134,7 @@ async def test_cookie_csrf_uses_trusted_proxy_external_origin(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
 ):
-    astrbot_config = asgi_app.state.core_lifecycle.astrbot_config
+    astrbot_config = asgi_app.state.astrbot_config
     previous_dashboard_config = astrbot_config.get("dashboard")
     astrbot_config["dashboard"] = {"trust_proxy_headers": True}
     token = DashboardTokenValidator(JWT_SECRET).issue("proxy-user")
@@ -1170,7 +1265,8 @@ async def test_dashboard_static_dist_files_are_served(
     (tmp_path / "secret.txt").write_text("outside static root", encoding="utf-8")
 
     app = create_dashboard_asgi_app(
-        core_lifecycle=fake_core_lifecycle,
+        runtime=fake_core_lifecycle,
+        core_control=fake_core_lifecycle,
         db=fake_db,
         jwt_secret=JWT_SECRET,
         static_folder=str(static_folder),
@@ -1374,10 +1470,15 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
     fake_core_lifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    def fake_save_config(post_config: dict, config: FakeAstrBotConfig, is_core=False):
-        config.save_config(post_config)
+    async def fake_save_config_async(
+        post_config: dict,
+        config: FakeAstrBotConfig,
+        is_core=False,
+    ) -> bool:
+        _ = is_core
+        return await config.save_config_async(post_config)
 
-    monkeypatch.setattr(config_service, "save_config", fake_save_config)
+    monkeypatch.setattr(config_service, "save_config_async", fake_save_config_async)
 
     original_platform = copy.deepcopy(fake_core_lifecycle.astrbot_config["platform"])
     original_provider_sources = copy.deepcopy(
@@ -1432,9 +1533,16 @@ async def test_v1_provider_source_rename_updates_provider_refs(
     fake_core_lifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    async def fake_save_config_async(
+        post_config: dict,
+        config: FakeAstrBotConfig,
+        **_kwargs,
+    ) -> bool:
+        return await config.save_config_async(post_config)
+
     monkeypatch.setattr(
-        "astrbot.dashboard.services.config_service.save_config",
-        lambda *_args, **_kwargs: None,
+        "astrbot.dashboard.services.config_service.save_config_async",
+        fake_save_config_async,
     )
 
     response = await asgi_client.put(
@@ -1540,7 +1648,14 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     fake_core_lifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(config_service, "save_config", lambda *_args, **_kwargs: None)
+    async def fake_save_config_async(
+        post_config: dict,
+        config: FakeAstrBotConfig,
+        **_kwargs,
+    ) -> bool:
+        return await config.save_config_async(post_config)
+
+    monkeypatch.setattr(config_service, "save_config_async", fake_save_config_async)
 
     source_id = "https://example.com/source"
     provider_id = "qianxun/kimi-k2-0905-preview"
@@ -1754,7 +1869,14 @@ async def test_v1_safe_bot_routes_accept_slash_ids(
     fake_core_lifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(config_service, "save_config", lambda *_args, **_kwargs: None)
+    async def fake_save_config_async(
+        post_config: dict,
+        config: FakeAstrBotConfig,
+        **_kwargs,
+    ) -> bool:
+        return await config.save_config_async(post_config)
+
+    monkeypatch.setattr(config_service, "save_config_async", fake_save_config_async)
 
     bot_id = "group/a"
     fake_core_lifecycle.astrbot_config["platform"].append(
@@ -1931,7 +2053,7 @@ async def test_v1_plugin_enabled_patch_calls_service(
     data = response.json()
     assert data["status"] == "ok"
     assert data["message"] == "停用成功。"
-    plugin = fake_core_lifecycle.plugin_manager.context.get_all_stars()[0]
+    plugin = fake_core_lifecycle.catalogs.plugins.all()[0]
     assert plugin.activated is False
 
 
@@ -2057,10 +2179,9 @@ async def test_plugin_service_market_install_uses_registry_entry(
 
     monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
     monkeypatch.setattr(
-        plugin_service.plugin_manager,
+        plugin_service.plugin_lifecycle,
         "install_plugin",
         fake_install_plugin,
-        raising=False,
     )
     monkeypatch.setattr(
         plugin_service,
@@ -2445,7 +2566,18 @@ async def test_plugin_service_update_github_source_uses_plugin_repo(
 @pytest.mark.asyncio
 async def test_v1_plugin_update_all_hides_internal_exceptions(
     asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
 ):
+    async def fail_update_resolution(_name: str):
+        raise RuntimeError("internal update failure")
+
+    monkeypatch.setattr(
+        asgi_app.state.services.plugins,
+        "resolve_market_update_info",
+        fail_update_resolution,
+    )
+
     response = await asgi_client.post(
         "/api/v1/plugins/update",
         json={"names": ["astrbot_plugin_demo"]},
@@ -2641,7 +2773,7 @@ async def test_v1_plugin_source_delete_uses_path_ids(
     async def fake_global_put(_key, value):
         sources[:] = value
 
-    preferences = asgi_app.state.services.plugins.services.preferences
+    preferences = asgi_app.state.services.plugins.preferences
     monkeypatch.setattr(preferences, "global_get", fake_global_get)
     monkeypatch.setattr(preferences, "global_put", fake_global_put)
 
@@ -2757,7 +2889,7 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
     data = response.json()
     assert data["status"] == "ok"
     assert data["message"] == "Successfully updated MCP server demo-server"
-    mcp_servers = fake_core_lifecycle.provider_manager.llm_tools.config["mcpServers"]
+    mcp_servers = fake_core_lifecycle.provider_manager.tool_manager.config["mcpServers"]
     assert mcp_servers["demo-server"]["active"] is False
 
 
@@ -2768,7 +2900,7 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
 ):
     server_name = "modelscope/demo"
     headers = _jwt_headers()
-    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools = fake_core_lifecycle.provider_manager.tool_manager
 
     enabled_response = await asgi_client.patch(
         "/api/v1/mcp/servers/modelscope%2Fdemo/enabled",
@@ -2864,7 +2996,7 @@ async def test_v1_tool_toggle_uses_async_manager(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
-    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools = fake_core_lifecycle.provider_manager.tool_manager
     headers = _jwt_headers()
 
     activate_response = await asgi_client.patch(

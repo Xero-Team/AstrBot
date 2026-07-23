@@ -1,8 +1,11 @@
+import copy
 import traceback
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.tools.function_tool_manager import FunctionToolManager
 
 
 class SubAgentServiceError(Exception):
@@ -10,14 +13,19 @@ class SubAgentServiceError(Exception):
 
 
 class SubAgentService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        subagent_orchestrator: SubAgentOrchestrator,
+        tool_manager: FunctionToolManager,
+    ) -> None:
+        self.config = config
+        self.subagent_orchestrator = subagent_orchestrator
+        self.tool_manager = tool_manager
 
     def get_config(self) -> dict:
         try:
-            config_data = self.core_lifecycle.astrbot_config.get(
-                "subagent_orchestrator"
-            )
+            config_data = self.config.get("subagent_orchestrator")
             return self._normalize_config(config_data)
         except Exception as exc:
             logger.error(traceback.format_exc())
@@ -28,13 +36,15 @@ class SubAgentService:
             if not isinstance(data, dict):
                 raise SubAgentServiceError("配置必须为 JSON 对象")
 
-            config = self.core_lifecycle.astrbot_config
-            config["subagent_orchestrator"] = data
-            config.save_config()
-
-            orchestrator = getattr(self.core_lifecycle, "subagent_orchestrator", None)
-            if orchestrator is not None:
-                await orchestrator.reload_from_config(data)
+            next_config = copy.deepcopy(data)
+            committed = await self.config.save_config_async(
+                {"subagent_orchestrator": next_config},
+            )
+            if not committed:
+                raise SubAgentServiceError(
+                    "Subagent configuration save was superseded by a newer update."
+                )
+            await self.subagent_orchestrator.reload_from_config(next_config)
         except SubAgentServiceError:
             raise
         except Exception as exc:
@@ -43,9 +53,8 @@ class SubAgentService:
 
     def get_available_tools(self) -> list[dict]:
         try:
-            tool_mgr = self.core_lifecycle.provider_manager.llm_tools
             tools = []
-            for tool in tool_mgr.func_list:
+            for tool in self.tool_manager.func_list:
                 if self._is_subagent_internal_tool(tool):
                     continue
                 tools.append(

@@ -5,12 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from astrbot import logger
-from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
+from astrbot.core.db.protocols import SessionManagementStore
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.star.star import PluginRegistry
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 AVAILABLE_SESSION_RULE_KEYS = [
     "session_service_config",
@@ -32,12 +36,19 @@ class SessionManagementServiceError(Exception):
 class SessionManagementService:
     def __init__(
         self,
-        core_lifecycle: DashboardCoreLifecycle,
-        db_helper: BaseDatabase,
+        db_helper: SessionManagementStore,
+        preferences: SharedPreferences,
+        provider_manager: ProviderManager,
+        persona_manager: PersonaManager,
+        plugin_catalog: PluginRegistry,
+        knowledge_base_manager: KnowledgeBaseManager,
     ) -> None:
-        self.core_lifecycle = core_lifecycle
         self.db_helper = db_helper
-        self.preferences = core_lifecycle.services.preferences
+        self.preferences = preferences
+        self.provider_manager = provider_manager
+        self.persona_manager = persona_manager
+        self.plugin_catalog = plugin_catalog
+        self.knowledge_base_manager = knowledge_base_manager
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -264,41 +275,33 @@ class SessionManagementService:
             for umo, rules in umo_rules.items()
         ]
 
-        provider_manager = self.core_lifecycle.provider_manager
-        persona_mgr = getattr(self.core_lifecycle, "persona_mgr", None)
-        plugin_manager = getattr(self.core_lifecycle, "plugin_manager", None)
-        kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
-
         available_personas = [
             {"name": p.persona_id, "prompt": p.system_prompt}
-            for p in getattr(persona_mgr, "personas", [])
+            for p in self.persona_manager.personas
         ]
-        available_plugins = []
-        if plugin_manager and getattr(plugin_manager, "context", None):
-            available_plugins = [
-                {
-                    "name": p.name,
-                    "display_name": p.display_name or p.name,
-                    "desc": p.desc,
-                }
-                for p in plugin_manager.context.get_all_stars()
-                if not p.reserved and p.name
-            ]
+        available_plugins = [
+            {
+                "name": p.name,
+                "display_name": p.display_name or p.name,
+                "desc": p.desc,
+            }
+            for p in self.plugin_catalog.all()
+            if not p.reserved and p.name
+        ]
 
         available_kbs = []
-        if kb_manager:
-            try:
-                kbs = await kb_manager.list_kbs()
-                available_kbs = [
-                    {
-                        "kb_id": kb.kb_id,
-                        "kb_name": kb.kb_name,
-                        "emoji": kb.emoji,
-                    }
-                    for kb in kbs
-                ]
-            except Exception as exc:
-                logger.warning("获取知识库列表失败: %s", safe_error("", exc))
+        try:
+            kbs = await self.knowledge_base_manager.list_kbs()
+            available_kbs = [
+                {
+                    "kb_id": kb.kb_id,
+                    "kb_name": kb.kb_name,
+                    "emoji": kb.emoji,
+                }
+                for kb in kbs
+            ]
+        except Exception as exc:
+            logger.warning("获取知识库列表失败: %s", safe_error("", exc))
 
         return {
             "rules": rules_list,
@@ -307,13 +310,13 @@ class SessionManagementService:
             "page_size": page_size,
             "available_personas": available_personas,
             "available_chat_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "provider_insts", [])
+                self.provider_manager.provider_insts
             ),
             "available_stt_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "stt_provider_insts", [])
+                self.provider_manager.stt_provider_insts
             ),
             "available_tts_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "tts_provider_insts", [])
+                self.provider_manager.tts_provider_insts
             ),
             "available_plugins": available_plugins,
             "available_kbs": available_kbs,
@@ -347,7 +350,7 @@ class SessionManagementService:
                 raise SessionManagementServiceError(
                     f"规则 {rule_key} 需要非空 provider_id"
                 )
-            await self.core_lifecycle.provider_manager.set_provider(
+            await self.provider_manager.set_provider(
                 provider_id=rule_value,
                 provider_type=provider_type,
                 umo=umo,
@@ -369,7 +372,7 @@ class SessionManagementService:
                 raise SessionManagementServiceError(f"不支持的规则键: {rule_key}")
             provider_type = self._provider_type_from_rule_key(rule_key)
             if provider_type is not None:
-                await self.core_lifecycle.provider_manager.clear_provider_override(
+                await self.provider_manager.clear_provider_override(
                     umo,
                     provider_type,
                 )
@@ -377,7 +380,7 @@ class SessionManagementService:
                 await self.preferences.session_remove(umo, rule_key)
             return {"message": f"规则 {rule_key} 已删除", "umo": umo}
 
-        await self.core_lifecycle.provider_manager.clear_all_provider_overrides(umo)
+        await self.provider_manager.clear_all_provider_overrides(umo)
         await self.preferences.clear_async("umo", umo)
         return {"message": "所有规则已删除", "umo": umo}
 
@@ -412,16 +415,14 @@ class SessionManagementService:
                 if rule_key:
                     provider_type = self._provider_type_from_rule_key(rule_key)
                     if provider_type is not None:
-                        await self.core_lifecycle.provider_manager.clear_provider_override(
+                        await self.provider_manager.clear_provider_override(
                             umo,
                             provider_type,
                         )
                     else:
                         await self.preferences.session_remove(umo, rule_key)
                 else:
-                    await self.core_lifecycle.provider_manager.clear_all_provider_overrides(
-                        umo
-                    )
+                    await self.provider_manager.clear_all_provider_overrides(umo)
                     await self.preferences.clear_async("umo", umo)
                 success_count += 1
             except Exception as exc:
@@ -532,8 +533,6 @@ class SessionManagementService:
         end_idx = start_idx + page_size
         paginated = umos_with_status[start_idx:end_idx]
         platforms = sorted({u["platform"] for u in umos_with_status})
-        provider_manager = self.core_lifecycle.provider_manager
-
         return {
             "sessions": paginated,
             "total": total,
@@ -541,13 +540,13 @@ class SessionManagementService:
             "page_size": page_size,
             "platforms": platforms,
             "available_chat_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "provider_insts", [])
+                self.provider_manager.provider_insts
             ),
             "available_tts_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "tts_provider_insts", [])
+                self.provider_manager.tts_provider_insts
             ),
             "available_stt_providers": self._serialize_provider_insts(
-                getattr(provider_manager, "stt_provider_insts", [])
+                self.provider_manager.stt_provider_insts
             ),
         }
 
@@ -643,11 +642,9 @@ class SessionManagementService:
 
         success_count = 0
         failed_umos = []
-        provider_manager = self.core_lifecycle.provider_manager
-
         for umo in umos:
             try:
-                await provider_manager.set_provider(
+                await self.provider_manager.set_provider(
                     provider_id=provider_id,
                     provider_type=provider_type_map[provider_type],
                     umo=umo,

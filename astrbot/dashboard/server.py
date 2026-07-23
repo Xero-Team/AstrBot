@@ -1,11 +1,12 @@
 import asyncio
+import copy
 import ipaddress
 import os
 import re
 import socket
 import time
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, Self, cast
 
 import psutil
 from fastapi import Request
@@ -17,17 +18,9 @@ from hypercorn.logging import Logger as HypercornLogger
 
 from astrbot import logger
 from astrbot.core.config.default import VERSION
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import (
-    get_bundled_dashboard_dist_path,
-    get_dashboard_dist_version,
-    get_local_ip_addresses,
-    get_repo_dashboard_dist_path,
-    is_dashboard_dist_compatible,
-    should_use_bundled_dashboard_dist,
-)
+from astrbot.core.core_runtime import CoreControl, CoreRuntime
+from astrbot.core.db.protocols import DashboardStore
+from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.dashboard.request_state import DashboardRequestState
 from astrbot.dashboard.responses import error
 
@@ -43,6 +36,59 @@ _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
 _SECRET_RAW_PATH_RE = re.compile(
     r"^(/api/plugin-pages/v1/sessions/|/api/plugin-files/v1/)[^/]+"
 )
+
+
+async def initialize_dashboard_jwt_secret(config: Any) -> str:
+    """Return a persisted Dashboard JWT secret.
+
+    A Dashboard server must never begin serving with a newly generated secret
+    that was not durably saved.  The configuration mutation is rolled back if
+    the asynchronous write fails, so a later startup can safely retry.
+
+    Args:
+        config: The initialized AstrBot configuration object.
+
+    Returns:
+        The existing or newly persisted JWT secret.
+    """
+    dashboard_config = config.get("dashboard")
+    if not isinstance(dashboard_config, dict):
+        raise ValueError("Dashboard configuration is missing or invalid.")
+
+    configured_secret = dashboard_config.get("jwt_secret")
+    if configured_secret:
+        return str(configured_secret)
+
+    next_config = copy.deepcopy(dict(config))
+    next_dashboard_config = next_config["dashboard"]
+    jwt_secret = os.urandom(32).hex()
+    next_dashboard_config["jwt_secret"] = jwt_secret
+
+    previous_dashboard_config = copy.deepcopy(dashboard_config)
+    dashboard_config.clear()
+    dashboard_config.update(next_dashboard_config)
+    try:
+        committed = await config.save_config_async()
+    except BaseException:
+        dashboard_config.clear()
+        dashboard_config.update(previous_dashboard_config)
+        raise
+
+    if not committed:
+        # A later configuration revision won the write race. Do not start a
+        # Dashboard with the locally generated secret unless it was durably
+        # committed. Only restore our own unchanged mutation; a newer writer
+        # may already have supplied a different Dashboard configuration.
+        if dashboard_config == next_dashboard_config:
+            dashboard_config.clear()
+            dashboard_config.update(previous_dashboard_config)
+        raise RuntimeError(
+            "Dashboard JWT secret initialization was superseded by a newer "
+            "configuration update."
+        )
+
+    logger.info("Initialized random JWT secret for dashboard.")
+    return jwt_secret
 
 
 class _AuthRateLimiter:
@@ -168,7 +214,7 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
         path = str(request.get("path", ""))
         redacted_path = _SECRET_RAW_PATH_RE.sub(r"\1<redacted>", path)
         if redacted_path != path:
-            method = "GET" if request.get("type") != "http" else request["method"]
+            method = str(request.get("method", "GET"))
             protocol = request.get("http_version", "ws")
             atoms["r"] = f"{method} {redacted_path} {protocol}"
             atoms["R"] = atoms["r"]
@@ -182,57 +228,51 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
 
 
 class AstrBotDashboard:
-    def __init__(
-        self,
-        core_lifecycle: AstrBotCoreLifecycle,
-        db: BaseDatabase,
+    @classmethod
+    async def create(
+        cls,
+        runtime: CoreRuntime,
+        core_control: CoreControl,
+        db: DashboardStore,
         shutdown_event: asyncio.Event,
         webui_dir: str | None = None,
-    ) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.config = core_lifecycle.astrbot_config
-        self.db = db
+    ) -> Self:
+        """Persist Dashboard credentials before constructing its ASGI app."""
+        jwt_secret = await initialize_dashboard_jwt_secret(runtime.astrbot_config)
+        return cls(
+            runtime,
+            core_control,
+            db,
+            shutdown_event,
+            webui_dir,
+            jwt_secret=jwt_secret,
+        )
 
-        # Path priority:
-        # 1. Explicit webui_dir argument
-        # 2. dashboard/dist/ from the source tree when it matches the core version
-        # 3. data/dist/ when it matches the core version
-        # 4. astrbot/dashboard/dist/ when it matches the core version
-        if webui_dir and os.path.exists(webui_dir):
-            self.data_path = os.path.abspath(webui_dir)
-        else:
-            user_dist = os.path.join(get_astrbot_data_path(), "dist")
-            repo_dist = get_repo_dashboard_dist_path()
-            bundled_dist = get_bundled_dashboard_dist_path()
-            user_version = get_dashboard_dist_version(user_dist)
-            if is_dashboard_dist_compatible(repo_dist, VERSION):
-                self.data_path = str(repo_dist)
-                logger.info("Using source-tree dashboard dist: %s", self.data_path)
-            elif os.path.exists(user_dist) and is_dashboard_dist_compatible(
-                user_dist,
-                VERSION,
-            ):
-                self.data_path = os.path.abspath(user_dist)
-            elif should_use_bundled_dashboard_dist(
-                user_dist,
-                VERSION,
-            ) or is_dashboard_dist_compatible(bundled_dist, VERSION):
-                self.data_path = str(bundled_dist)
-                logger.info("Using bundled dashboard dist: %s", self.data_path)
-            elif os.path.exists(user_dist):
-                logger.warning(
-                    "Ignoring data/dist because WebUI version mismatches core: found %s, expected v%s.",
-                    user_version or "<unknown>",
-                    VERSION,
-                )
-                self.data_path = None
-            else:
-                self.data_path = None
+    def __init__(
+        self,
+        runtime: CoreRuntime,
+        core_control: CoreControl,
+        db: DashboardStore,
+        shutdown_event: asyncio.Event,
+        webui_dir: str | None = None,
+        *,
+        jwt_secret: str,
+    ) -> None:
+        self.runtime = runtime
+        self.core_control = core_control
+        self.config = runtime.astrbot_config
+        self.db = db
+        self.data_path = (
+            os.path.abspath(webui_dir)
+            if webui_dir and os.path.isdir(webui_dir)
+            else None
+        )
 
         self._rate_limiter_registry = _RateLimiterRegistry()
-        self._init_jwt_secret()
+        self._jwt_secret = jwt_secret
         self.asgi_app = create_dashboard_asgi_app(
-            core_lifecycle=core_lifecycle,
+            runtime=runtime,
+            core_control=core_control,
             db=db,
             jwt_secret=self._jwt_secret,
             static_folder=self.data_path,
@@ -365,15 +405,6 @@ class AstrBotDashboard:
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
 
-    def _init_jwt_secret(self) -> None:
-        if not self.config.get("dashboard", {}).get("jwt_secret", None):
-            # 如果没有设置 JWT 密钥，则生成一个新的密钥
-            jwt_secret = os.urandom(32).hex()
-            self.config["dashboard"]["jwt_secret"] = jwt_secret
-            self.config.save_config()
-            logger.info("Initialized random JWT secret for dashboard.")
-        self._jwt_secret = self.config["dashboard"]["jwt_secret"]
-
     def _build_dashboard_credentials_display(self) -> str:
         username = self.config["dashboard"].get("username", "astrbot")
         generated_password = getattr(self.config, "_generated_dashboard_password", None)
@@ -445,7 +476,7 @@ class AstrBotDashboard:
 
     def run(self):
         ip_addr = []
-        dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
+        dashboard_config = self.runtime.astrbot_config.get("dashboard", {})
         port = (
             os.environ.get("DASHBOARD_PORT")
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")

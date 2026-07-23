@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -209,6 +210,7 @@ async def plugin_api(tmp_path: Path):
     page_sessions = PluginPageSessionService(registry, JWT_SECRET)
     file_tickets = PluginFileTicketService(registry, JWT_SECRET)
     dashboard = PluginDashboardService(registry, page_sessions, file_tickets)
+    auth = SimpleNamespace(discard_totp_rotation=AsyncMock())
     app = FastAPI()
     app.state.dashboard_token_validator = validator
     app.state.dashboard_config = {}
@@ -217,6 +219,7 @@ async def plugin_api(tmp_path: Path):
         plugin_dashboard=dashboard,
         plugin_page_sessions=page_sessions,
         plugin_file_tickets=file_tickets,
+        auth=auth,
     )
 
     @app.exception_handler(ApiError)
@@ -260,6 +263,7 @@ async def plugin_api(tmp_path: Path):
         snapshot=snapshot,
         page_sessions=page_sessions,
         file_tickets=file_tickets,
+        auth=auth,
     )
     await client.aclose()
     await page_sessions.shutdown()
@@ -535,6 +539,8 @@ async def test_cookie_csrf_and_logout_revoke_current_sid(plugin_api):
         headers={"Origin": "http://testserver"},
     )
     assert logout.status_code == 200
+    auth = plugin_api.auth.discard_totp_rotation
+    auth.assert_awaited_once()
     shell = await plugin_api.client.get(session["iframe_url"])
     assert shell.status_code in {401, 404}
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -54,7 +55,7 @@ _UPLOAD_OPENAPI_EXTRA = {
         },
     },
 }
-_SET_COOKIE_RESPONSE = {
+_SET_COOKIE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Success with an exact-Path HttpOnly capability cookie",
         "headers": {"Set-Cookie": {"schema": {"type": "string"}}},

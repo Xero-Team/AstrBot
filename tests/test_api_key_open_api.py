@@ -81,7 +81,14 @@ async def core_lifecycle_td(tmp_path_factory):
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
     shutdown_event = asyncio.Event()
-    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server = asyncio.run(
+        AstrBotDashboard.create(
+            core_lifecycle_td.runtime,
+            core_lifecycle_td,
+            core_lifecycle_td.db,
+            shutdown_event,
+        )
+    )
     return server.asgi_app
 
 
@@ -531,12 +538,12 @@ async def test_open_chat_send_config_resolution(
     update_route = AsyncMock()
     delete_route = AsyncMock()
     monkeypatch.setattr(
-        app.state.dashboard_server.core_lifecycle.umop_config_router,
+        app.state.dashboard_server.runtime.umop_config_router,
         "update_route",
         update_route,
     )
     monkeypatch.setattr(
-        app.state.dashboard_server.core_lifecycle.umop_config_router,
+        app.state.dashboard_server.runtime.umop_config_router,
         "delete_route",
         delete_route,
     )

@@ -1,4 +1,4 @@
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db.protocols import ChatProjectSessionStore
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 
@@ -7,7 +7,7 @@ class ChatUIProjectServiceError(Exception):
 
 
 class ChatUIProjectService:
-    def __init__(self, db: BaseDatabase) -> None:
+    def __init__(self, db: ChatProjectSessionStore) -> None:
         self.db = db
 
     async def create_project(self, username: str, data: object) -> dict:

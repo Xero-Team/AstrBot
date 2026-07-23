@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import importlib
 import inspect
 import os
 import traceback
@@ -8,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from astrbot import logger
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -17,23 +17,28 @@ from astrbot.core.config.default import (
     DEFAULT_VALUE_MAP,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
-from astrbot.core.db import BaseDatabase
-from astrbot.core.platform.register import platform_cls_map, platform_registry
-from astrbot.core.provider.register import provider_registry
-from astrbot.core.star.star import star_registry
+from astrbot.core.core_runtime import CoreControl
+from astrbot.core.db.protocols import DatabaseSessionStore
+from astrbot.core.file_token_service import FileTokenService
+from astrbot.core.platform.catalog import PlatformCatalog
+from astrbot.core.platform.discovery import discover_platform_adapter
+from astrbot.core.platform.manager import PlatformManager
+from astrbot.core.provider.catalog import ProviderCatalog
+from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.star.plugin_lifecycle import PluginLifecycle
+from astrbot.core.star.star import PluginRegistry
+from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
 from astrbot.core.utils.totp import (
+    TotpRuntimeState,
     is_totp_enabled,
     revoke_user_trusted_devices,
-    set_pending_totp_secret,
-    verify_configured_2fa_code,
 )
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, DashboardValidationError
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
 from astrbot.dashboard.upload_utils import save_upload_to_path
 
 PROTECTED_2FA_CONFIG_PATHS = (
@@ -71,7 +76,9 @@ SENSITIVE_CONFIG_SUFFIXES = (
 )
 
 
-def _ensure_dashboard_platform_metadata_loaded() -> None:
+def _ensure_dashboard_platform_metadata_loaded(
+    platform_catalog: PlatformCatalog,
+) -> None:
     """Load platform adapters whose config metadata must be visible in the dashboard.
 
     Built-in platform templates in `CONFIG_METADATA_2` cover legacy adapters, but
@@ -79,13 +86,11 @@ def _ensure_dashboard_platform_metadata_loaded() -> None:
     The dashboard can be opened before such adapters are enabled, so their modules
     may never have been imported through `PlatformManager.load_platform()`.
     """
-    if any(platform.name == "napcat" for platform in platform_registry):
+    if platform_catalog.get("napcat") is not None:
         return
 
     try:
-        importlib.import_module(
-            "astrbot.core.platform.sources.napcat.napcat_platform_adapter"
-        )
+        discover_platform_adapter("napcat", platform_catalog)
     except Exception as exc:
         logger.warning("Failed to load NapCat platform metadata for dashboard: %s", exc)
 
@@ -548,11 +553,17 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
     return None
 
 
-def save_config(
+async def save_config_async(
     post_config: dict,
     config: AstrBotConfig,
     is_core: bool = False,
-) -> None:
+) -> bool:
+    """Validate and persist a Dashboard configuration update.
+
+    The configuration snapshot is prepared synchronously by ``AstrBotConfig``
+    before its file write is moved off the event loop. Callers must await this
+    function before reloading runtime state that consumes the new values.
+    """
     if isinstance(post_config, dict):
         post_config = copy.deepcopy(dict(post_config))
     else:
@@ -583,18 +594,32 @@ def save_config(
     if errors:
         raise DashboardValidationError(f"格式校验未通过: {errors}")
 
-    config.save_config(post_config)
+    return await config.save_config_async(post_config)
+
+
+def _require_config_save_commit(committed: bool) -> None:
+    """Raise a conflict when a newer configuration revision won the write race."""
+    if not committed:
+        raise ApiError(
+            "Configuration save was superseded by a newer update.",
+            status_code=409,
+        )
 
 
 class ConfigProfileService:
     def __init__(
         self,
-        core_lifecycle: DashboardCoreLifecycle,
-        db: BaseDatabase | None = None,
+        config_manager: AstrBotConfigManager,
+        config_router: UmopConfigRouter,
+        core_control: CoreControl,
+        totp_runtime_state: TotpRuntimeState,
+        db: DatabaseSessionStore | None = None,
     ) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.acm = core_lifecycle.astrbot_config_mgr
+        self.core_control = core_control
+        self.acm = config_manager
+        self.config_router = config_router
         self.db = db
+        self.totp_runtime_state = totp_runtime_state
 
     def get_profile_schema(self) -> dict:
         return {
@@ -618,7 +643,7 @@ class ConfigProfileService:
 
     async def create_profile(self, name: str | None, config: dict | None) -> dict:
         conf_id = await self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
-        await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+        await self.core_control.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
     def get_profile(self, config_id: str) -> dict:
@@ -634,6 +659,7 @@ class ConfigProfileService:
         config_id: str,
         config: dict,
         *,
+        subject: str,
         two_factor_code: str | None = None,
     ) -> str | None:
         if config_id not in self.acm.confs:
@@ -649,7 +675,11 @@ class ConfigProfileService:
         if (
             is_totp_enabled(current_config)
             and protected_2fa_changed
-            and not await self._verify_config_2fa(current_config, two_factor_code)
+            and not await self._verify_config_2fa(
+                subject,
+                current_config,
+                two_factor_code,
+            )
         ):
             raise ApiError(
                 "需要 TOTP 验证",
@@ -661,18 +691,29 @@ class ConfigProfileService:
             _set_nested_value(config, ("dashboard", "totp", "secret"), "")
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
 
-        set_pending_totp_secret(None)
-        save_config(config, self.acm.confs[config_id], is_core=True)
-        if protected_2fa_changed and self.db is not None:
-            await revoke_user_trusted_devices(self.db)
-        await self.core_lifecycle.reload_pipeline_scheduler(config_id)
+        committed = await save_config_async(
+            config,
+            self.acm.confs[config_id],
+            is_core=True,
+        )
+        if not committed:
+            raise ApiError(
+                "Configuration save was superseded by a newer update.",
+                status_code=409,
+            )
+        if protected_2fa_changed:
+            await self.totp_runtime_state.clear_all()
+            if self.db is not None:
+                await revoke_user_trusted_devices(self.db)
+        await self.core_control.reload_pipeline_scheduler(config_id)
         warning = await _validate_neo_connectivity(config)
         if warning:
             return f"保存成功。{warning}"
         return "保存成功~"
 
-    @staticmethod
     async def _verify_config_2fa(
+        self,
+        subject: str,
         current_config: dict,
         two_factor_code: str | None,
     ) -> bool:
@@ -680,9 +721,10 @@ class ConfigProfileService:
         if not code:
             return False
         return bool(
-            await verify_configured_2fa_code(
+            await self.totp_runtime_state.verify_configured_2fa_code(
                 current_config,
                 code,
+                subject=subject,
                 include_pending=True,
                 allow_recovery=False,
             )
@@ -695,8 +737,8 @@ class ConfigProfileService:
     async def delete_profile(self, config_id: str) -> None:
         if not await self.acm.delete_conf(config_id):
             raise DashboardValidationError("Failed to delete config profile")
-        self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
-        ucr = self.core_lifecycle.umop_config_router
+        await self.core_control.remove_pipeline_scheduler(config_id)
+        ucr = self.config_router
         next_routing = {
             umo: mapped_conf_id
             for umo, mapped_conf_id in ucr.umop_to_conf_id.items()
@@ -707,8 +749,8 @@ class ConfigProfileService:
 
 
 class ConfigRoutingService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.ucr = core_lifecycle.umop_config_router
+    def __init__(self, config_router: UmopConfigRouter) -> None:
+        self.ucr = config_router
 
     def list_routes(self) -> dict:
         return {"routing": self.ucr.umop_to_conf_id}
@@ -729,9 +771,19 @@ class ConfigRoutingService:
 
 
 class ConfigDisplayService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.config = core_lifecycle.astrbot_config
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        platform_catalog: PlatformCatalog,
+        provider_catalog: ProviderCatalog,
+        plugin_catalog: PluginRegistry,
+        file_token_service: FileTokenService,
+    ) -> None:
+        self.config = config
+        self.platform_catalog = platform_catalog
+        self.provider_catalog = provider_catalog
+        self.plugin_catalog = plugin_catalog
+        self.file_token_service = file_token_service
         self._logo_token_cache: dict[str, str] = {}
 
     async def get_configs(self, plugin_name: str | None = None) -> dict:
@@ -740,7 +792,7 @@ class ConfigDisplayService:
         return self.get_plugin_config(plugin_name)
 
     async def get_astrbot_config(self) -> dict:
-        _ensure_dashboard_platform_metadata_loaded()
+        _ensure_dashboard_platform_metadata_loaded(self.platform_catalog)
         metadata = copy.deepcopy(CONFIG_METADATA_2)
         platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
             {
@@ -761,7 +813,7 @@ class ConfigDisplayService:
         platform_i18n_translations = {}
         logo_registration_tasks = []
 
-        for platform in platform_registry:
+        for platform in self.platform_catalog.metadata():
             if not platform.default_config_tmpl:
                 continue
 
@@ -785,7 +837,7 @@ class ConfigDisplayService:
         provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
             "config_template"
         ]
-        for provider in provider_registry:
+        for provider in self.provider_catalog.metadata():
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
 
@@ -798,7 +850,7 @@ class ConfigDisplayService:
     def get_plugin_config(self, plugin_name: str) -> dict:
         result: dict = {"metadata": None, "config": None, "i18n": {}}
 
-        for plugin_md in star_registry:
+        for plugin_md in self.plugin_catalog.all():
             if plugin_md.name != plugin_name:
                 continue
             if not plugin_md.config:
@@ -831,10 +883,11 @@ class ConfigDisplayService:
                 logger.debug(f"Using cached logo token for platform {platform.name}")
                 return
 
-            platform_cls = platform_cls_map.get(platform.name)
-            if not platform_cls:
+            registration = self.platform_catalog.get(platform.name)
+            if registration is None:
                 logger.warning(f"Platform class not found for {platform.name}")
                 return
+            platform_cls = registration.cls_type
 
             module_file = inspect.getfile(platform_cls)
             plugin_dir = os.path.dirname(module_file)
@@ -846,11 +899,9 @@ class ConfigDisplayService:
                 )
                 return
 
-            logo_token = (
-                await self.core_lifecycle.services.file_token_service.register_file(
-                    logo_file_path,
-                    ttl_seconds=3600,
-                )
+            logo_token = await self.file_token_service.register_file(
+                logo_file_path,
+                ttl_seconds=3600,
             )
             self._set_platform_logo_token(
                 platform_default_tmpl,
@@ -916,14 +967,16 @@ class ConfigDisplayService:
 
 
 class ConfigFileService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
+    def __init__(
+        self,
+        plugin_catalog: PluginRegistry,
+        plugin_lifecycle: PluginLifecycle,
+    ) -> None:
+        self.plugin_catalog = plugin_catalog
+        self.plugin_lifecycle = plugin_lifecycle
 
     def get_plugin_metadata_by_name(self, plugin_name: str):
-        for plugin_md in star_registry:
-            if plugin_md.name == plugin_name:
-                return plugin_md
-        return None
+        return self.plugin_catalog.get_by_name(plugin_name)
 
     def resolve_config_file_scope(
         self,
@@ -962,8 +1015,9 @@ class ConfigFileService:
         )
         if errors:
             raise DashboardValidationError(f"格式校验未通过: {errors}")
-        metadata.config.save_config(post_configs)
-        await self.core_lifecycle.plugin_manager.reload(plugin_name)
+        committed = await metadata.config.save_config_async(post_configs)
+        _require_config_save_commit(committed)
+        await self.plugin_lifecycle.reload(plugin_name)
 
     async def upload_config_file(
         self,
@@ -1117,15 +1171,22 @@ class ConfigFileService:
 
 
 class BotConfigService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.config = core_lifecycle.astrbot_config
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        platform_catalog: PlatformCatalog,
+        platform_manager: PlatformManager,
+    ) -> None:
+        self.config = config
+        self.platform_catalog = platform_catalog
+        self.platform_manager = platform_manager
 
     def list_bot_types(self) -> dict:
-        _ensure_dashboard_platform_metadata_loaded()
+        _ensure_dashboard_platform_metadata_loaded(self.platform_catalog)
         bot_types = []
-        for platform in platform_registry:
-            platform_cls = platform_cls_map.get(platform.name)
+        for platform in self.platform_catalog.metadata():
+            registration = self.platform_catalog.get(platform.name)
+            platform_cls = registration.cls_type if registration is not None else None
             bot_types.append(
                 {
                     "type": platform.name,
@@ -1164,7 +1225,7 @@ class BotConfigService:
         return {"bot": copy.deepcopy(bot)}
 
     def get_bot_stats(self) -> dict:
-        return self.core_lifecycle.platform_manager.get_all_stats()
+        return self.platform_manager.get_all_stats()
 
     async def create_bot(self, config: dict) -> None:
         bot_id = config.get("id")
@@ -1173,19 +1234,27 @@ class BotConfigService:
         if self._find_bot(bot_id) is not None:
             raise DashboardValidationError(f"Bot {bot_id} already exists")
         ensure_platform_webhook_config(config)
-        self.config["platform"].append(config)
-        save_config(self.config, self.config, is_core=True)
-        await self.core_lifecycle.platform_manager.load_platform(config)
+        next_config = copy.deepcopy(dict(self.config))
+        next_config.setdefault("platform", []).append(copy.deepcopy(config))
+        committed = await save_config_async(next_config, self.config, is_core=True)
+        _require_config_save_commit(committed)
+        await self.platform_manager.load_platform(config)
 
     async def update_bot(self, bot_id: str, config: dict) -> None:
         if config.get("id") != bot_id:
             raise DashboardValidationError("Bot id cannot be changed")
         ensure_platform_webhook_config(config)
-        for idx, bot in enumerate(self.config.get("platform", [])):
+        next_config = copy.deepcopy(dict(self.config))
+        for idx, bot in enumerate(next_config.get("platform", [])):
             if bot.get("id") == bot_id:
-                self.config["platform"][idx] = config
-                save_config(self.config, self.config, is_core=True)
-                await self.core_lifecycle.platform_manager.reload(config)
+                next_config["platform"][idx] = copy.deepcopy(config)
+                committed = await save_config_async(
+                    next_config,
+                    self.config,
+                    is_core=True,
+                )
+                _require_config_save_commit(committed)
+                await self.platform_manager.reload(config)
                 return
         raise DashboardValidationError(f"Bot {bot_id} not found")
 
@@ -1198,11 +1267,17 @@ class BotConfigService:
         await self.update_bot(bot_id, new_config)
 
     async def delete_bot(self, bot_id: str) -> None:
-        for idx, bot in enumerate(self.config.get("platform", [])):
+        next_config = copy.deepcopy(dict(self.config))
+        for idx, bot in enumerate(next_config.get("platform", [])):
             if bot.get("id") == bot_id:
-                del self.config["platform"][idx]
-                save_config(self.config, self.config, is_core=True)
-                await self.core_lifecycle.platform_manager.terminate_platform(bot_id)
+                del next_config["platform"][idx]
+                committed = await save_config_async(
+                    next_config,
+                    self.config,
+                    is_core=True,
+                )
+                _require_config_save_commit(committed)
+                await self.platform_manager.terminate_platform(bot_id)
                 return
         raise DashboardValidationError(f"Bot {bot_id} not found")
 
@@ -1214,38 +1289,34 @@ class BotConfigService:
 
 
 class ProviderConfigService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.config = core_lifecycle.astrbot_config
-        self.provider_manager = core_lifecycle.provider_manager
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        provider_manager: ProviderManager,
+        provider_catalog: ProviderCatalog,
+        llm_metadata_catalog: LLMMetadataCatalog,
+    ) -> None:
+        self.config = config
+        self.provider_manager = provider_manager
+        self.provider_catalog = provider_catalog
+        self.llm_metadata_catalog = llm_metadata_catalog
 
     def _resolve_provider_type_value(self, adapter_type: object) -> str | None:
         if not isinstance(adapter_type, str) or not adapter_type:
             return None
 
-        from astrbot.core.provider.register import provider_cls_map
-
-        provider_metadata = provider_cls_map.get(adapter_type)
-        if provider_metadata is None:
-            dynamic_import_provider = getattr(
-                self.provider_manager,
-                "dynamic_import_provider",
-                None,
-            )
-            if not callable(dynamic_import_provider):
-                return None
+        registration = self.provider_catalog.get(adapter_type)
+        if registration is None:
             try:
-                dynamic_import_provider(adapter_type)
+                self.provider_manager.dynamic_import_provider(adapter_type)
             except ImportError, ModuleNotFoundError:
                 return None
-            provider_metadata = provider_cls_map.get(adapter_type)
+            registration = self.provider_catalog.get(adapter_type)
 
-        if provider_metadata is None:
+        if registration is None:
             return None
 
-        provider_type = getattr(provider_metadata, "provider_type", None)
-        value = getattr(provider_type, "value", None)
-        return value if isinstance(value, str) and value else None
+        return registration.descriptor.provider_type.value
 
     def _ensure_provider_type(self, config: dict) -> dict:
         if config.get("type") == "openai_responses" and isinstance(
@@ -1278,8 +1349,10 @@ class ProviderConfigService:
 
     def _attach_model_metadata(self, provider: dict) -> dict:
         model_id = provider.get("model")
-        if isinstance(model_id, str) and model_id in LLM_METADATAS:
-            provider["model_metadata"] = LLM_METADATAS[model_id]
+        if isinstance(model_id, str) and (
+            metadata := self.llm_metadata_catalog.get(model_id)
+        ):
+            provider["model_metadata"] = metadata
         return provider
 
     def _build_provider_response(self, provider: dict) -> dict:
@@ -1310,7 +1383,7 @@ class ProviderConfigService:
             "provider": provider_metadata["provider_group"]["metadata"]["provider"]
         }
         provider_default_tmpl = config_schema["provider"]["config_template"]
-        for provider in provider_registry:
+        for provider in self.provider_catalog.metadata():
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
         providers = []
@@ -1356,7 +1429,8 @@ class ProviderConfigService:
                 "Provider source config must have an 'id' field"
             )
         config["id"] = next_source_id
-        sources = self.config.setdefault("provider_sources", [])
+        next_config = copy.deepcopy(dict(self.config))
+        sources = next_config.setdefault("provider_sources", [])
 
         for source in sources:
             if source.get("id") == next_source_id and next_source_id != source_id:
@@ -1367,29 +1441,40 @@ class ProviderConfigService:
         for idx, source in enumerate(sources):
             if source.get("id") == source_id:
                 old_source_id = source.get("id") or source_id
-                sources[idx] = config
+                sources[idx] = copy.deepcopy(config)
                 affected_providers = self._move_providers_to_source(
+                    next_config.get("provider", []),
                     old_source_id,
                     next_source_id,
                 )
-                save_config(self.config, self.config, is_core=True)
-                self.provider_manager.provider_sources_config = sources
+                committed = await save_config_async(
+                    next_config,
+                    self.config,
+                    is_core=True,
+                )
+                _require_config_save_commit(committed)
+                self.provider_manager.provider_sources_config = self.config[
+                    "provider_sources"
+                ]
                 await self._reload_providers(affected_providers)
                 return
 
-        sources.append(config)
-        save_config(self.config, self.config, is_core=True)
-        self.provider_manager.provider_sources_config = sources
+        sources.append(copy.deepcopy(config))
+        committed = await save_config_async(next_config, self.config, is_core=True)
+        _require_config_save_commit(committed)
+        self.provider_manager.provider_sources_config = self.config["provider_sources"]
 
     async def delete_provider_source(self, source_id: str) -> None:
         sources = self.config.get("provider_sources", [])
         next_sources = [source for source in sources if source.get("id") != source_id]
         if len(next_sources) == len(sources):
             raise DashboardValidationError(f"Provider source {source_id} not found")
-        self.config["provider_sources"] = next_sources
+        next_config = copy.deepcopy(dict(self.config))
+        next_config["provider_sources"] = copy.deepcopy(next_sources)
+        committed = await save_config_async(next_config, self.config, is_core=True)
+        _require_config_save_commit(committed)
         await self.provider_manager.delete_provider(provider_source_id=source_id)
-        save_config(self.config, self.config, is_core=True)
-        self.provider_manager.provider_sources_config = next_sources
+        self.provider_manager.provider_sources_config = self.config["provider_sources"]
 
     async def list_provider_source_models(self, source_id: str) -> dict:
         source = self._find_provider_source(source_id)
@@ -1397,8 +1482,6 @@ class ProviderConfigService:
             raise DashboardValidationError(f"Provider source {source_id} not found")
 
         from astrbot.core.provider import Provider
-        from astrbot.core.provider.register import provider_cls_map
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         provider_type = source.get("type")
         if not provider_type:
@@ -1409,14 +1492,15 @@ class ProviderConfigService:
             raise DashboardValidationError(
                 "动态导入提供商适配器失败，请检查提供商类型配置或查看服务端日志"
             ) from exc
-        provider_metadata = provider_cls_map.get(provider_type)
-        cls_type = provider_metadata.cls_type if provider_metadata else None
-        if cls_type is None or not issubclass(cls_type, Provider):
+        registration = self.provider_catalog.get(provider_type)
+        if registration is None or not issubclass(registration.cls_type, Provider):
             raise DashboardValidationError(
                 f"Provider source {source_id} does not support model list"
             )
 
+        cls_type = registration.cls_type
         inst = cls_type(source, {})
+        setattr(inst, "_provider_adapter_descriptor", registration.descriptor)
         init_fn = getattr(inst, "initialize", None)
         if callable(init_fn):
             await run_maybe_async(init_fn)
@@ -1427,9 +1511,9 @@ class ProviderConfigService:
                 "models": models,
                 "provider_source_id": source_id,
                 "model_metadata": {
-                    model_id: LLM_METADATAS[model_id]
+                    model_id: metadata
                     for model_id in models
-                    if model_id in LLM_METADATAS
+                    if (metadata := self.llm_metadata_catalog.get(model_id))
                 },
             }
         finally:
@@ -1439,7 +1523,6 @@ class ProviderConfigService:
 
     async def list_provider_models(self, provider_id: str) -> dict:
         from astrbot.core.provider import Provider
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         provider = self.provider_manager.inst_map.get(provider_id)
         if not provider:
@@ -1455,9 +1538,9 @@ class ProviderConfigService:
             "models": models,
             "provider_id": provider_id,
             "model_metadata": {
-                model_id: LLM_METADATAS[model_id]
+                model_id: metadata
                 for model_id in models
-                if model_id in LLM_METADATAS
+                if (metadata := self.llm_metadata_catalog.get(model_id))
             },
         }
 
@@ -1466,33 +1549,27 @@ class ProviderConfigService:
             raise DashboardValidationError("缺少提供商配置")
 
         from astrbot.core.provider.provider import EmbeddingProvider
-        from astrbot.core.provider.register import provider_cls_map
 
         provider_type = provider_config.get("type")
         if not provider_type:
             raise DashboardValidationError("提供商配置缺少 type 字段")
 
-        if provider_type not in provider_cls_map:
+        registration = self.provider_catalog.get(provider_type)
+        if registration is None:
             try:
-                dynamic_import_provider = getattr(
-                    self.provider_manager,
-                    "dynamic_import_provider",
-                    None,
-                )
-                if not callable(dynamic_import_provider):
-                    raise ImportError(provider_type)
-                dynamic_import_provider(provider_type)
+                self.provider_manager.dynamic_import_provider(provider_type)
             except ImportError as exc:
                 raise DashboardValidationError(
                     "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
                 ) from exc
+            registration = self.provider_catalog.get(provider_type)
 
-        provider_metadata = provider_cls_map.get(provider_type)
-        cls_type = provider_metadata.cls_type if provider_metadata else None
-        if not cls_type:
+        if registration is None:
             raise DashboardValidationError(f"无法找到 {provider_type} 的类")
 
+        cls_type = registration.cls_type
         inst = cls_type(provider_config, {})
+        setattr(inst, "_provider_adapter_descriptor", registration.descriptor)
         try:
             init_fn = getattr(inst, "initialize", None)
             if callable(init_fn):
@@ -1634,11 +1711,12 @@ class ProviderConfigService:
 
     def _move_providers_to_source(
         self,
+        providers: list[dict],
         old_source_id: str,
         next_source_id: str,
     ) -> list[dict]:
         affected_providers = []
-        for provider in self.config.get("provider", []):
+        for provider in providers:
             if provider.get("provider_source_id") == old_source_id:
                 provider["provider_source_id"] = next_source_id
                 affected_providers.append(provider)

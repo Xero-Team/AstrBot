@@ -22,7 +22,7 @@ from .auth import AuthContext, require_scope
 from .error_handling import internal_error_response
 
 router = APIRouter(tags=["Skills"])
-_ARCHIVE_RESPONSE = {
+_ARCHIVE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Skill archive",
         "content": {

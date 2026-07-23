@@ -4594,7 +4594,7 @@ components:
       properties:
         status:
           type: string
-          const: ok
+          enum: [ok, warning]
         message:
           type: string
         data: {}

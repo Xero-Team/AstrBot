@@ -1,7 +1,7 @@
 import os
 import re
 import shutil
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,9 +10,10 @@ from starlette.datastructures import UploadFile
 
 from astrbot import logger
 from astrbot.core.computer.computer_client import (
+    ComputerRuntime,
     _discover_bay_credentials,
-    sync_skills_to_active_sandboxes,
 )
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -94,9 +95,16 @@ def _next_available_temp_path(temp_dir: str, filename: str) -> str:
 
 
 class SkillsService:
-    def __init__(self, core_lifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.demo_mode = core_lifecycle.services.demo_mode
+    def __init__(
+        self,
+        config: AstrBotConfig,
+        computer_runtime: ComputerRuntime,
+        *,
+        demo_mode: bool,
+    ) -> None:
+        self.config = config
+        self.computer_runtime = computer_runtime
+        self.demo_mode = demo_mode
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -205,7 +213,7 @@ class SkillsService:
         }
 
     def get_neo_client_config(self) -> tuple[str, str]:
-        provider_settings = self.core_lifecycle.astrbot_config.get(
+        provider_settings = self.config.get(
             "provider_settings",
             {},
         )
@@ -248,9 +256,7 @@ class SkillsService:
             return SkillsOperationResult(ok=False, message="Neo operation failed")
 
     def get_skills(self) -> dict:
-        provider_settings = self.core_lifecycle.astrbot_config.get(
-            "provider_settings", {}
-        )
+        provider_settings = self.config.get("provider_settings", {})
         runtime = provider_settings.get("computer_use_runtime", "local")
         skill_mgr = SkillManager()
         skills = skill_mgr.list_skills(
@@ -288,7 +294,7 @@ class SkillsService:
             )
 
             try:
-                await sync_skills_to_active_sandboxes()
+                await self.computer_runtime.sync_skills_to_active_sandboxes()
             except Exception:
                 logger.warning("Failed to sync uploaded skills to active sandboxes.")
 
@@ -304,7 +310,7 @@ class SkillsService:
                     logger.warning("Failed to remove temporary skill file.")
 
     async def batch_upload_skills(
-        self, file_list: list[UploadFile]
+        self, file_list: Sequence[UploadFile]
     ) -> SkillsOperationResult:
         self._ensure_mutation_allowed()
 
@@ -367,7 +373,7 @@ class SkillsService:
 
         if succeeded:
             try:
-                await sync_skills_to_active_sandboxes()
+                await self.computer_runtime.sync_skills_to_active_sandboxes()
             except Exception:
                 logger.warning("Failed to sync uploaded skills to active sandboxes.")
 
@@ -533,7 +539,7 @@ class SkillsService:
         target_file.write_text(content, encoding="utf-8")
 
         try:
-            await sync_skills_to_active_sandboxes()
+            await self.computer_runtime.sync_skills_to_active_sandboxes()
         except Exception:
             logger.warning("Failed to sync edited skills to active sandboxes.")
 
@@ -563,7 +569,7 @@ class SkillsService:
             raise SkillsServiceError("Missing skill name")
         SkillManager().delete_skill(name)
         try:
-            await sync_skills_to_active_sandboxes()
+            await self.computer_runtime.sync_skills_to_active_sandboxes()
         except Exception:
             logger.warning("Failed to sync deleted skills to active sandboxes.")
         return {"name": name}
@@ -672,7 +678,11 @@ class SkillsService:
             )
 
         async def _do(client):
-            sync_mgr = NeoSkillSyncManager()
+            sync_mgr = NeoSkillSyncManager(
+                sync_active_sandboxes=(
+                    self.computer_runtime.sync_skills_to_active_sandboxes
+                )
+            )
             result = await sync_mgr.promote_with_optional_sync(
                 client,
                 candidate_id=candidate_id,
@@ -706,7 +716,7 @@ class SkillsService:
 
             if not did_sync_to_local:
                 try:
-                    await sync_skills_to_active_sandboxes()
+                    await self.computer_runtime.sync_skills_to_active_sandboxes()
                 except Exception:
                     logger.warning("Failed to sync skills to active sandboxes.")
 
@@ -743,7 +753,11 @@ class SkillsService:
             )
 
         async def _do(client):
-            sync_mgr = NeoSkillSyncManager()
+            sync_mgr = NeoSkillSyncManager(
+                sync_active_sandboxes=(
+                    self.computer_runtime.sync_skills_to_active_sandboxes
+                )
+            )
             result = await sync_mgr.sync_release(
                 client,
                 release_id=release_id,

@@ -3,7 +3,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db.protocols import ApiKeyStore
 from astrbot.core.star.dashboard_extension import ALL_OPEN_API_SCOPES
 from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
@@ -15,7 +15,7 @@ class ApiKeyServiceError(Exception):
 
 
 class ApiKeyService:
-    def __init__(self, db: BaseDatabase) -> None:
+    def __init__(self, db: ApiKeyStore) -> None:
         self.db = db
 
     @staticmethod

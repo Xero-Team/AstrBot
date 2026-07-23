@@ -3,9 +3,10 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
-from astrbot.core.star import star_map
-from astrbot.core.tools.registry import get_builtin_tool_config_statuses
-from astrbot.dashboard.services.core_lifecycle import DashboardCoreLifecycle
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.star.star import PluginRegistry
+from astrbot.core.tools.function_tool_manager import FunctionToolManager
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
 class ToolsServiceError(Exception):
@@ -13,10 +14,17 @@ class ToolsServiceError(Exception):
 
 
 class ToolsService:
-    def __init__(self, core_lifecycle: DashboardCoreLifecycle) -> None:
-        self.core_lifecycle = core_lifecycle
-        self.tool_mgr = core_lifecycle.provider_manager.llm_tools
-        self.preferences = core_lifecycle.services.preferences
+    def __init__(
+        self,
+        tool_manager: FunctionToolManager,
+        preferences: SharedPreferences,
+        config_manager: AstrBotConfigManager,
+        plugin_catalog: PluginRegistry,
+    ) -> None:
+        self.tool_mgr = tool_manager
+        self.preferences = preferences
+        self.config_manager = config_manager
+        self.plugin_catalog = plugin_catalog
 
     def rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -296,10 +304,7 @@ class ToolsService:
 
             if action:
                 try:
-                    ok = await self.tool_mgr.activate_llm_tool(
-                        tool_name,
-                        star_map=star_map,
-                    )
+                    ok = await self.tool_mgr.activate_llm_tool(tool_name)
                 except ValueError as exc:
                     raise ToolsServiceError(
                         f"Failed to activate tool: {exc!s}"
@@ -463,10 +468,10 @@ class ToolsService:
             ) from exc
 
     def _get_config_entries(self) -> list[dict]:
-        conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
+        conf_list = self.config_manager.get_conf_list()
         conf_name_map = {conf["id"]: conf["name"] for conf in conf_list}
         config_entries = []
-        for conf_id, conf in self.core_lifecycle.astrbot_config_mgr.confs.items():
+        for conf_id, conf in self.config_manager.confs.items():
             config_entries.append(
                 {
                     "conf_id": conf_id,
@@ -490,7 +495,7 @@ class ToolsService:
             origin = "builtin"
             origin_name = "AstrBot Core"
             readonly = True
-            builtin_config_statuses = get_builtin_tool_config_statuses(
+            builtin_config_statuses = self.tool_mgr.get_builtin_tool_config_statuses(
                 tool.name,
                 config_entries,
             )
@@ -500,8 +505,9 @@ class ToolsService:
         elif isinstance(tool, MCPTool):
             origin = "mcp"
             origin_name = tool.mcp_server_name
-        elif tool.handler_module_path and star_map.get(tool.handler_module_path):
-            star = star_map[tool.handler_module_path]
+        elif tool.handler_module_path and (
+            star := self.plugin_catalog.get_by_module(tool.handler_module_path)
+        ):
             origin = "plugin"
             origin_name = star.name
         else:

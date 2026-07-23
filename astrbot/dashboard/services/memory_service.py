@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db.protocols import MemoryStore
+from astrbot.core.memory.manager import MemoryManager
 from astrbot.core.memory.writeback.profile_refresher import MemoryProfileRefresher
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
@@ -15,9 +15,9 @@ class MemoryServiceError(Exception):
 
 
 class MemoryService:
-    def __init__(self, db: BaseDatabase, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(self, db: MemoryStore, memory_manager: MemoryManager) -> None:
         self.db = db
-        self.core_lifecycle = core_lifecycle
+        self.memory_manager = memory_manager
         self.profile_refresher = MemoryProfileRefresher(db)
         self.refresh_tasks: dict[str, dict[str, Any]] = {}
         self._background_tasks: set = set()
@@ -47,10 +47,7 @@ class MemoryService:
     def _scope_id(self, chat_id: str, scope_id: str | None = None) -> str:
         if scope_id:
             return scope_id
-        manager = getattr(self.core_lifecycle, "memory_manager", None)
-        if manager is not None:
-            return manager.scope_policy.resolve(chat_id).scope_id
-        return f"isolated:{chat_id}"
+        return self.memory_manager.scope_policy.resolve(chat_id).scope_id
 
     async def list_facts(
         self,
@@ -339,9 +336,8 @@ class MemoryService:
         }
 
     async def stats(self) -> dict[str, Any]:
-        manager = getattr(self.core_lifecycle, "memory_manager", None)
-        worker = getattr(manager, "writeback_worker", None)
-        task = getattr(worker, "_task", None)
+        worker = self.memory_manager.writeback_worker
+        task = worker._task
         return {
             "facts": await self.db.count_memory_facts(status="active"),
             "deleted_facts": await self.db.count_memory_facts(status="deleted"),
@@ -350,8 +346,8 @@ class MemoryService:
             "operations": await self.db.count_memory_operation_logs(),
             "worker": {
                 "running": bool(task and not task.done()),
-                "queue_size": worker.queue.qsize() if worker else 0,
-                "queue_max_size": worker.queue.maxsize if worker else 0,
+                "queue_size": worker.queue.qsize(),
+                "queue_max_size": worker.queue.maxsize,
                 "recent_profile_tasks": list(self.refresh_tasks.items())[-5:],
             },
         }

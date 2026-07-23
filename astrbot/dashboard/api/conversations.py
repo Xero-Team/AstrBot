@@ -20,7 +20,7 @@ from astrbot.dashboard.services.conversation_service import (
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Conversations"])
-_EXPORT_RESPONSE = {
+_EXPORT_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Exported conversation data",
         "content": {

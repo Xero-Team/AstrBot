@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from astrbot import logger
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.core_runtime import CoreControl
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
@@ -48,7 +48,7 @@ class UpdateService:
     def __init__(
         self,
         astrbot_updator: AstrBotUpdator,
-        core_lifecycle: AstrBotCoreLifecycle,
+        core_control: CoreControl,
         *,
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
@@ -58,7 +58,7 @@ class UpdateService:
         if max_progress_records < 1:
             raise ValueError("max_progress_records must be >= 1")
         self.astrbot_updator = astrbot_updator
-        self.core_lifecycle = core_lifecycle
+        self.core_control = core_control
         self.pip_install = pip_install_func
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
@@ -321,7 +321,7 @@ class UpdateService:
                         "更新成功，正在准备重启...",
                         98,
                     )
-                    await self.core_lifecycle.restart()
+                    await self.core_control.restart()
                     self._set_update_stage(
                         progress_id,
                         "restart",

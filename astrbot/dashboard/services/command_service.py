@@ -1,5 +1,7 @@
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db.protocols import CommandStore
+from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.command_management import (
     list_command_conflicts,
     list_commands,
@@ -7,6 +9,9 @@ from astrbot.core.star.command_management import (
     toggle_command,
     update_command_permission,
 )
+from astrbot.core.star.plugin_catalog import PluginCatalog
+from astrbot.core.star.star_handler import HandlerRegistry
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
 class CommandServiceError(Exception):
@@ -17,34 +22,27 @@ class CommandService:
     def __init__(
         self,
         config: AstrBotConfig,
-        core_lifecycle: AstrBotCoreLifecycle | None = None,
+        db: CommandStore,
+        preferences: SharedPreferences,
+        handler_registry: HandlerRegistry,
+        plugin_catalog: PluginCatalog,
+        platform_manager: PlatformManager,
+        config_manager: AstrBotConfigManager,
     ) -> None:
         self.config = config
-        self.core_lifecycle = core_lifecycle
-
-    def _services(self):
-        if self.core_lifecycle is None:
-            raise CommandServiceError("Core lifecycle is required")
-        return self.core_lifecycle.services
+        self.db = db
+        self.preferences = preferences
+        self.handler_registry = handler_registry
+        self.plugin_catalog = plugin_catalog
+        self.platform_manager = platform_manager
+        self.config_manager = config_manager
 
     async def _refresh_command_surfaces(self) -> None:
-        plugin_manager = (
-            getattr(self.core_lifecycle, "plugin_manager", None)
-            if self.core_lifecycle
-            else None
-        )
-        if plugin_manager is not None:
-            plugin_manager.refresh_command_catalogs()
-        platform_manager = (
-            getattr(self.core_lifecycle, "platform_manager", None)
-            if self.core_lifecycle
-            else None
-        )
-        if platform_manager is not None:
-            await platform_manager.refresh_registered_commands()
+        self.plugin_catalog.refresh_command_catalogs()
+        await self.platform_manager.refresh_registered_commands()
 
     async def list_commands(self, config_id: str = "") -> dict:
-        commands = await list_commands(self._services().db)
+        commands = await list_commands(self.db, self.handler_registry)
         summary = {
             "total": len(commands),
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
@@ -58,7 +56,10 @@ class CommandService:
         }
 
     async def list_conflicts(self):
-        return await list_command_conflicts(self._services().db)
+        return await list_command_conflicts(
+            self.db,
+            self.handler_registry,
+        )
 
     async def toggle_command(self, handler_full_name: str | None, enabled) -> dict:
         if handler_full_name is None or enabled is None:
@@ -68,7 +69,12 @@ class CommandService:
             enabled = enabled.lower() in ("1", "true", "yes", "on")
 
         try:
-            await toggle_command(self._services().db, handler_full_name, bool(enabled))
+            await toggle_command(
+                self.db,
+                self.handler_registry,
+                handler_full_name,
+                bool(enabled),
+            )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
@@ -77,8 +83,8 @@ class CommandService:
 
     async def bulk_toggle_builtin_commands(self, enabled: bool) -> dict:
         """Set enabled state for every built-in command in the command DB."""
-        db = self._services().db
-        commands = await list_commands(db)
+        db = self.db
+        commands = await list_commands(db, self.handler_registry)
         updated: list[str] = []
         for command in self._iter_commands(commands):
             if (
@@ -89,7 +95,12 @@ class CommandService:
             handler_full_name = command.get("handler_full_name")
             if not isinstance(handler_full_name, str):
                 continue
-            await toggle_command(db, handler_full_name, enabled)
+            await toggle_command(
+                db,
+                self.handler_registry,
+                handler_full_name,
+                enabled,
+            )
             updated.append(handler_full_name)
         await self._refresh_command_surfaces()
         return {"enabled": enabled, "updated": updated}
@@ -105,7 +116,8 @@ class CommandService:
 
         try:
             await rename_command(
-                self._services().db,
+                self.db,
+                self.handler_registry,
                 handler_full_name,
                 new_name,
                 aliases=aliases,
@@ -126,7 +138,8 @@ class CommandService:
 
         try:
             await update_command_permission(
-                self._services().preferences,
+                self.preferences,
+                self.handler_registry,
                 handler_full_name,
                 permission,
             )
@@ -138,14 +151,12 @@ class CommandService:
     def _get_wake_prefix(self, config_id: str) -> list:
         wake_prefix = self.config.get("wake_prefix", ["/"])
         config_id = config_id.strip()
-        if config_id and self.core_lifecycle:
-            config_mgr = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
-            if config_mgr and config_id in config_mgr.confs:
-                return config_mgr.confs[config_id].get("wake_prefix", wake_prefix)
+        if config_id and config_id in self.config_manager.confs:
+            return self.config_manager.confs[config_id].get("wake_prefix", wake_prefix)
         return wake_prefix
 
     async def _get_command_payload(self, handler_full_name: str) -> dict:
-        commands = await list_commands(self._services().db)
+        commands = await list_commands(self.db, self.handler_registry)
         for cmd in commands:
             found = CommandService._find_command_payload(cmd, handler_full_name)
             if found:

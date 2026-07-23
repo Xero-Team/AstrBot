@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
@@ -9,7 +11,7 @@ from astrbot.dashboard.services.file_service import FileService, FileServiceErro
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Files"])
-_BINARY_FILE_RESPONSE = {
+_BINARY_FILE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "File bytes or an error envelope",
         "content": {

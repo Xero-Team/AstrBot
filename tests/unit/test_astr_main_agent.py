@@ -113,6 +113,116 @@ def test_provider_supports_modality_requires_explicit_list():
     assert not ama._provider_supports_modality(provider, "image")
 
 
+def test_filter_plugin_tools_for_loop_keeps_only_assigned_plugin_tools():
+    plugin_tool = FunctionTool(
+        name="plugin_tool",
+        description="plugin tool",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.example.main",
+    )
+    builtin_tool = FunctionTool(
+        name="builtin_tool",
+        description="builtin tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    req = ProviderRequest(prompt="test", func_tool=ToolSet([plugin_tool, builtin_tool]))
+    plugin = SimpleNamespace(root_dir_name="example", name="example")
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    plugin if module_path == "plugins.example.main" else None
+                )
+            )
+        )
+    )
+    config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        loop_mode="conversation",
+        btw_plugin_routes=[{"plugin_id": "example", "loop": "work"}],
+    )
+
+    ama._filter_plugin_tools_for_loop(req, context, config)
+
+    assert req.func_tool is not None
+    assert req.func_tool.names() == ["builtin_tool"]
+
+
+def test_filter_plugin_tools_for_loop_keeps_default_both_assignment():
+    plugin_tool = FunctionTool(
+        name="plugin_tool",
+        description="plugin tool",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.example.main",
+    )
+    req = ProviderRequest(prompt="test", func_tool=ToolSet([plugin_tool]))
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    SimpleNamespace(root_dir_name="example", name="example")
+                    if module_path == "plugins.example.main"
+                    else None
+                )
+            )
+        )
+    )
+    config = ama.MainAgentBuildConfig(tool_call_timeout=60, loop_mode="work")
+
+    ama._filter_plugin_tools_for_loop(req, context, config)
+
+    assert req.func_tool is not None
+    assert req.func_tool.names() == ["plugin_tool"]
+
+
+def test_filter_mcp_tools_for_loop_keeps_only_assigned_servers():
+    input_schema = {"type": "object", "properties": {}}
+    conversation_tool = MCPTool(
+        SimpleNamespace(name="weather", description="weather", inputSchema=input_schema),
+        MagicMock(),
+        "weather-server",
+    )
+    work_tool = MCPTool(
+        SimpleNamespace(name="workspace", description="workspace", inputSchema=input_schema),
+        MagicMock(),
+        "workspace-server",
+    )
+    req = ProviderRequest(
+        prompt="test",
+        func_tool=ToolSet([conversation_tool, work_tool]),
+    )
+    config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        loop_mode="conversation",
+        btw_mcp_routes=[{"server_name": "workspace-server", "loop": "work"}],
+    )
+
+    ama._filter_mcp_tools_for_loop(req, config)
+
+    assert req.func_tool is not None
+    assert req.func_tool.names() == ["weather"]
+
+
+def test_filter_skills_for_loop_keeps_only_assigned_skills():
+    skills = [
+        SkillInfo(name="chat-search", description="", path="chat/SKILL.md", active=True),
+        SkillInfo(
+            name="workspace-edit",
+            description="",
+            path="workspace/SKILL.md",
+            active=True,
+        ),
+    ]
+
+    conversation_skills = ama._filter_skills_for_loop(
+        skills,
+        [{"skill_name": "workspace-edit", "loop": "work"}],
+        "conversation",
+    )
+
+    assert [skill.name for skill in conversation_skills] == ["chat-search"]
+
+
 @pytest.mark.asyncio
 async def test_prepare_event_attachments_is_idempotent(mock_event, mock_context):
     req = ProviderRequest()
@@ -339,6 +449,21 @@ class TestSelectProvider:
 
         assert result == mock_provider
         mock_context.get_provider_by_id.assert_called_once_with("test-provider")
+
+    def test_select_provider_prefers_loop_model_override(
+        self, mock_event, mock_context, mock_provider
+    ):
+        mock_event.get_extra.return_value = "session-provider"
+        mock_context.get_provider_by_id.return_value = mock_provider
+
+        result = ama._select_provider(
+            mock_event,
+            mock_context,
+            provider_id_override="work-provider",
+        )
+
+        assert result == mock_provider
+        mock_context.get_provider_by_id.assert_called_once_with("work-provider")
 
     def test_select_provider_not_found(self, mock_event, mock_context):
         """Test selecting provider when ID is not found."""
@@ -1160,7 +1285,11 @@ class TestEnsurePersonaAndSkills:
         runtime_config = {"computer_use_runtime": "local"}
 
         await module._ensure_persona_and_skills(
-            req, runtime_config, mock_context, mock_event
+            req,
+            runtime_config,
+            mock_context,
+            mock_event,
+            loop_mode="work",
         )
 
         assert "**workspace-skill**" in req.system_prompt
@@ -1370,6 +1499,7 @@ class TestEnsurePersonaAndSkills:
         mock_event.platform_meta.support_proactive_message = False
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
+            loop_mode="work",
             computer_use_runtime="local",
             add_cron_tools=False,
         )
@@ -1401,6 +1531,32 @@ class TestEnsurePersonaAndSkills:
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
+
+    def test_conversation_loop_filters_computer_and_filesystem_tools(self):
+        req = ProviderRequest(
+            prompt="hello",
+            func_tool=ToolSet(
+                [
+                    ama.ExecuteShellTool(),
+                    ama.FileReadTool(),
+                    FunctionTool(
+                        name="safe_tool",
+                        description="safe",
+                        parameters={"type": "object", "properties": {}},
+                    ),
+                ]
+            ),
+        )
+        config = ama.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            loop_mode="conversation",
+            computer_use_runtime="local",
+        )
+
+        ama._filter_privileged_tools_for_conversation(req, config)
+
+        assert req.func_tool is not None
+        assert req.func_tool.names() == ["safe_tool"]
 
     @pytest.mark.asyncio
     async def test_subagent_dedupe_uses_default_persona_tools(

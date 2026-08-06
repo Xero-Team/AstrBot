@@ -245,6 +245,88 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             }
         return {}
 
+    @staticmethod
+    def _route_is_available_in_loop(
+        routes: object,
+        *,
+        route_key: str,
+        route_id: str,
+        loop_mode: str,
+    ) -> bool:
+        """Return whether a BTW route permits one nested handoff capability."""
+        if loop_mode not in {"conversation", "work"} or not route_id:
+            return True
+
+        route = "both"
+        if isinstance(routes, dict):
+            candidate = routes.get(route_id, "both")
+            route = candidate if isinstance(candidate, str) else "both"
+        elif isinstance(routes, list):
+            for entry in routes:
+                if not isinstance(entry, dict) or entry.get(route_key) != route_id:
+                    continue
+                candidate = entry.get("loop", "both")
+                route = candidate if isinstance(candidate, str) else "both"
+                break
+        if route not in {"conversation", "work", "both"}:
+            route = "both"
+        return route in {
+            "both",
+            loop_mode,
+        }
+
+    @classmethod
+    def _filter_handoff_toolset_for_btw(
+        cls,
+        toolset: ToolSet,
+        *,
+        ctx,
+        cfg: dict,
+        event,
+    ) -> ToolSet:
+        """Apply BTW routes to tools exposed inside an existing handoff."""
+        loop_mode = event.get_extra("btw_loop")
+        if loop_mode not in {"conversation", "work"}:
+            return toolset
+
+        btw = cfg.get("btw", {})
+        btw = btw if isinstance(btw, dict) else {}
+        plugins = getattr(getattr(ctx, "catalogs", None), "plugins", None)
+        filtered = ToolSet()
+        for tool in toolset.tools:
+            raw_tool = getattr(tool, "_wrapped", tool)
+            if loop_mode == "conversation" and type(raw_tool).__module__.startswith(
+                "astrbot.core.tools.computer_tools"
+            ):
+                continue
+            if isinstance(raw_tool, MCPTool) and not cls._route_is_available_in_loop(
+                btw.get("mcp_routes", []),
+                route_key="server_name",
+                route_id=raw_tool.mcp_server_name,
+                loop_mode=loop_mode,
+            ):
+                continue
+            module_path = getattr(raw_tool, "handler_module_path", None)
+            plugin = (
+                plugins.get_by_module(module_path)
+                if plugins is not None and module_path
+                else None
+            )
+            plugin_id = (
+                getattr(plugin, "root_dir_name", None)
+                or getattr(plugin, "name", None)
+                or ""
+            )
+            if plugin is not None and not cls._route_is_available_in_loop(
+                btw.get("plugin_routes", []),
+                route_key="plugin_id",
+                route_id=plugin_id,
+                loop_mode=loop_mode,
+            ):
+                continue
+            filtered.add_tool(tool)
+        return filtered
+
     @classmethod
     def _build_handoff_toolset(
         cls,
@@ -256,6 +338,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        if event.get_extra("btw_loop") == "conversation":
+            runtime = "none"
 
         # An explicitly empty handoff tool list needs no registry lookup.  In
         # particular, this keeps the handoff execution path independent from
@@ -286,6 +370,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
+            toolset = cls._filter_handoff_toolset_for_btw(
+                toolset,
+                ctx=ctx,
+                cfg=cfg,
+                event=event,
+            )
             return None if toolset.empty() else toolset
 
         toolset = ToolSet()
@@ -300,6 +390,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(runtime_tool)
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
+        toolset = cls._filter_handoff_toolset_for_btw(
+            toolset,
+            ctx=ctx,
+            cfg=cfg,
+            event=event,
+        )
         return None if toolset.empty() else toolset
 
     @classmethod

@@ -250,10 +250,12 @@ def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
 
 
 def _select_provider(
-    event: AstrMessageEvent, plugin_context: CoreExecutionContext
+    event: AstrMessageEvent,
+    plugin_context: CoreExecutionContext,
+    provider_id_override: str = "",
 ) -> ChatModel | None:
     """Select chat provider for the event."""
-    sel_provider = event.get_extra("selected_provider")
+    sel_provider = provider_id_override or event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if provider is None:
@@ -493,6 +495,57 @@ def _filter_skills_for_current_config(
     return filtered
 
 
+def _route_is_available_in_loop(
+    routes: object,
+    *,
+    route_key: str,
+    route_id: str,
+    loop_mode: str,
+) -> bool:
+    """Return whether a configured capability is available in one BTW loop.
+
+    Omitting a route intentionally retains the current capability behaviour and
+    exposes it to both loops. This applies to plugin tools, MCP servers, and
+    Skills alike.
+    """
+    if loop_mode not in {"conversation", "work"} or not route_id:
+        return True
+
+    route = "both"
+    if isinstance(routes, dict):
+        candidate = routes.get(route_id, "both")
+        route = candidate if isinstance(candidate, str) else "both"
+    elif isinstance(routes, list):
+        for entry in routes:
+            if not isinstance(entry, dict) or entry.get(route_key) != route_id:
+                continue
+            candidate = entry.get("loop", "both")
+            route = candidate if isinstance(candidate, str) else "both"
+            break
+
+    if route not in {"conversation", "work", "both"}:
+        route = "both"
+    return route in {"both", loop_mode}
+
+
+def _filter_skills_for_loop(
+    skills: list[SkillInfo],
+    routes: object,
+    loop_mode: str,
+) -> list[SkillInfo]:
+    """Keep only Skills assigned to the current BTW loop."""
+    return [
+        skill
+        for skill in skills
+        if _route_is_available_in_loop(
+            routes,
+            route_key="skill_name",
+            route_id=skill.name,
+            loop_mode=loop_mode,
+        )
+    ]
+
+
 def _get_context_runtime_attr(plugin_context: CoreExecutionContext, name: str):
     return getattr(plugin_context, "__dict__", {}).get(name)
 
@@ -536,6 +589,9 @@ def _append_skills_prompt(
     persona: Personality | None,
     event: AstrMessageEvent,
     plugin_context: CoreExecutionContext,
+    *,
+    loop_mode: str = "conversation",
+    skill_routes: object = (),
 ) -> None:
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = plugin_context.skill_manager or SkillManager(
@@ -546,11 +602,12 @@ def _append_skills_prompt(
         cfg,
         plugin_context.catalogs.plugins,
     )
+    skills = _filter_skills_for_loop(skills, skill_routes, loop_mode)
     workspace_skills = (
         skill_manager.list_workspace_skills(
             _get_workspace_path_for_umo(event.unified_msg_origin)
         )
-        if runtime == "local"
+        if runtime == "local" and loop_mode == "work"
         else []
     )
     if persona and persona.get("skills") is not None:
@@ -666,6 +723,9 @@ async def _ensure_persona_and_skills(
     cfg: dict,
     plugin_context: CoreExecutionContext,
     event: AstrMessageEvent,
+    *,
+    loop_mode: str = "conversation",
+    skill_routes: object = (),
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
@@ -711,7 +771,15 @@ async def _ensure_persona_and_skills(
         memory_manager,
     )
 
-    _append_skills_prompt(req, cfg, persona, event, plugin_context)
+    _append_skills_prompt(
+        req,
+        cfg,
+        persona,
+        event,
+        plugin_context,
+        loop_mode=loop_mode,
+        skill_routes=skill_routes,
+    )
     tmgr = plugin_context.get_llm_tool_manager()
     persona_toolset = _merge_persona_tools(req, persona, tmgr, memory_manager)
 
@@ -1125,7 +1193,14 @@ async def _decorate_llm_request(
     quote_images_already_captioned = False
 
     if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+        await _ensure_persona_and_skills(
+            req,
+            cfg,
+            plugin_context,
+            event,
+            loop_mode=config.loop_mode,
+            skill_routes=config.btw_skill_routes,
+        )
 
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
@@ -1514,7 +1589,7 @@ async def _prepare_request_for_agent(
     if isinstance(tool_history_policy, dict):
         req.tool_history_mode = str(tool_history_policy.get("mode", "full"))
         req.tool_history_placeholder = str(tool_history_policy.get("placeholder", ""))
-    if config.file_extract_enabled:
+    if config.file_extract_enabled and config.loop_mode != "conversation":
         try:
             await _apply_file_extract(event, req, config)
         except Exception as exc:  # noqa: BLE001
@@ -1534,7 +1609,7 @@ async def _prepare_request_for_agent(
     await _apply_web_search_tools(event, req, plugin_context)
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
-    if config.computer_use_runtime == "sandbox":
+    if config.loop_mode != "conversation" and config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(
             config,
             req,
@@ -1542,9 +1617,103 @@ async def _prepare_request_for_agent(
             plugin_context.catalogs.tools,
             plugin_context.computer_runtime.get_session_booter(req.session_id),
         )
-    elif config.computer_use_runtime == "local":
+    elif config.loop_mode != "conversation" and config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
     return True
+
+
+_CONVERSATION_FORBIDDEN_TOOL_TYPES = (
+    AnnotateExecutionTool,
+    BrowserBatchExecTool,
+    BrowserExecTool,
+    CreateSkillCandidateTool,
+    CreateSkillPayloadTool,
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
+    EvaluateSkillCandidateTool,
+    ExecuteShellTool,
+    FileDownloadTool,
+    FileEditTool,
+    FileReadTool,
+    FileUploadTool,
+    FileWriteTool,
+    GetExecutionHistoryTool,
+    GetSkillPayloadTool,
+    GrepTool,
+    ListSkillCandidatesTool,
+    ListSkillReleasesTool,
+    LocalPythonTool,
+    PromoteSkillCandidateTool,
+    PythonTool,
+    RollbackSkillReleaseTool,
+    RunBrowserSkillTool,
+    SyncSkillReleaseTool,
+)
+
+
+def _filter_privileged_tools_for_conversation(
+    req: ProviderRequest,
+    config: MainAgentBuildConfig,
+) -> None:
+    """Ensure the conversation loop cannot call computer or filesystem tools."""
+    if config.loop_mode != "conversation" or req.func_tool is None:
+        return
+    filtered = ToolSet()
+    for tool in req.func_tool.tools:
+        if isinstance(tool, _CONVERSATION_FORBIDDEN_TOOL_TYPES):
+            continue
+        filtered.add_tool(tool)
+    req.func_tool = filtered
+
+
+def _filter_plugin_tools_for_loop(
+    req: ProviderRequest,
+    plugin_context: CoreExecutionContext,
+    config: MainAgentBuildConfig,
+) -> None:
+    """Keep only plugin tools assigned to the current BTW loop.
+
+    Built-in and MCP tools are not owned by a plugin and remain available.  An
+    omitted or malformed assignment defaults to both loops, preserving current
+    installations until an operator chooses a narrower scope.
+    """
+    if req.func_tool is None or config.loop_mode not in {"conversation", "work"}:
+        return
+    filtered = ToolSet()
+    for tool in req.func_tool.tools:
+        plugin = plugin_context.catalogs.plugins.get_by_module(
+            tool.handler_module_path
+        )
+        if plugin is None:
+            filtered.add_tool(tool)
+            continue
+        plugin_id = plugin.root_dir_name or plugin.name or ""
+        if _route_is_available_in_loop(
+            config.btw_plugin_routes,
+            route_key="plugin_id",
+            route_id=plugin_id,
+            loop_mode=config.loop_mode,
+        ):
+            filtered.add_tool(tool)
+    req.func_tool = filtered
+
+
+def _filter_mcp_tools_for_loop(req: ProviderRequest, config: MainAgentBuildConfig) -> None:
+    """Keep only MCP server tools assigned to the current BTW loop."""
+    if req.func_tool is None or config.loop_mode not in {"conversation", "work"}:
+        return
+
+    filtered = ToolSet()
+    for tool in req.func_tool.tools:
+        if not isinstance(tool, MCPTool) or _route_is_available_in_loop(
+            config.btw_mcp_routes,
+            route_key="server_name",
+            route_id=tool.mcp_server_name,
+            loop_mode=config.loop_mode,
+        ):
+            filtered.add_tool(tool)
+    req.func_tool = filtered
 
 
 def _select_request_provider(
@@ -1853,7 +2022,11 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    provider = provider or _select_provider(
+        event,
+        plugin_context,
+        config.provider_id_override,
+    )
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
@@ -1901,6 +2074,9 @@ async def build_main_agent(
     ):
         return None
 
+    _filter_plugin_tools_for_loop(req, plugin_context, config)
+    _filter_mcp_tools_for_loop(req, config)
+
     if config.add_cron_tools:
         _proactive_cron_job_tools(req, plugin_context)
 
@@ -1912,6 +2088,8 @@ async def build_main_agent(
                 SendMessageToUserTool
             )
         )
+
+    _filter_privileged_tools_for_conversation(req, config)
 
     provider, fallback_providers = _select_request_provider(
         provider, req, plugin_context, config

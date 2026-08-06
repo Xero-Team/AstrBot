@@ -214,6 +214,27 @@ DEFAULT_CONFIG = {
         ),
         "agents": [],
     },
+    "btw": {
+        "enabled": True,
+        "classifier": {
+            "enabled": True,
+        },
+        "conversation_loop": {
+            "provider_id": "",
+        },
+        "work_loop": {
+            "enabled": True,
+            "provider_id": "",
+            "computer_use_runtime": "inherit",
+            "max_concurrent": 2,
+        },
+        "work_session": {
+            "max_age_seconds": 3600,
+        },
+        "plugin_routes": [],
+        "mcp_routes": [],
+        "skill_routes": [],
+    },
     "provider_stt_settings": {
         "enable": False,
         "provider_id": "",
@@ -4141,6 +4162,80 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用，则此处的选择不会生效。",
                         "_special": "select_plugin_set",
+                    },
+                },
+            },
+            "btw": {
+                "description": "BTW 双循环",
+                "type": "object",
+                "items": {
+                    "btw.enabled": {
+                        "description": "启用 BTW 双循环",
+                        "type": "bool",
+                        "hint": "由对话循环统一接收消息，并将工具密集型请求转入工作循环。",
+                    },
+                    "btw.classifier.enabled": {
+                        "description": "启用任务分类",
+                        "type": "bool",
+                        "hint": "使用内置规则识别代码、文件、查询和调研等工作任务。",
+                        "condition": {"btw.enabled": True},
+                    },
+                    "btw.conversation_loop.provider_id": {
+                        "description": "对话循环模型",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "留空时使用当前会话的默认对话模型。对话循环不会获得本地、沙盒或文件工具。",
+                        "condition": {"btw.enabled": True},
+                    },
+                    "btw.work_loop.enabled": {
+                        "description": "启用工作循环",
+                        "type": "bool",
+                        "hint": "关闭后，所有请求都由对话循环处理。",
+                        "condition": {"btw.enabled": True},
+                    },
+                    "btw.work_loop.provider_id": {
+                        "description": "工作循环模型",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "留空时使用当前会话的默认对话模型。配置后会优先于会话模型选择。",
+                        "condition": {"btw.work_loop.enabled": True},
+                    },
+                    "btw.work_loop.computer_use_runtime": {
+                        "description": "工作循环电脑权限",
+                        "type": "string",
+                        "options": ["inherit", "none", "local", "sandbox"],
+                        "hint": "inherit 使用现有电脑使用配置；local 和 sandbox 只会暴露给工作循环。",
+                        "condition": {"btw.work_loop.enabled": True},
+                    },
+                    "btw.work_loop.max_concurrent": {
+                        "description": "工作循环最大并发数",
+                        "type": "int",
+                        "hint": "同一配置文件中可同时执行的工作任务数量。",
+                        "condition": {"btw.work_loop.enabled": True},
+                    },
+                    "btw.work_session.max_age_seconds": {
+                        "description": "工作会话保留时长",
+                        "type": "int",
+                        "hint": "已完成、失败或取消的工作任务保留多少秒以供状态查询。",
+                        "condition": {"btw.enabled": True},
+                    },
+                    "btw.plugin_routes": {
+                        "description": "插件工具循环分配",
+                        "type": "list",
+                        "hint": "为每个已启用插件选择在对话循环、工作循环或两者中提供其 LLM 工具。",
+                        "_special": "select_plugin_loop_routes",
+                    },
+                    "btw.mcp_routes": {
+                        "description": "MCP 服务器循环分配",
+                        "type": "list",
+                        "hint": "为每个已启用 MCP 服务器选择在对话循环、工作循环或两者中提供工具。",
+                        "_special": "select_mcp_loop_routes",
+                    },
+                    "btw.skill_routes": {
+                        "description": "Skills 循环分配",
+                        "type": "list",
+                        "hint": "为每个已启用 Skill 选择在对话循环、工作循环或两者中注入提示。",
+                        "_special": "select_skill_loop_routes",
                     },
                 },
             },

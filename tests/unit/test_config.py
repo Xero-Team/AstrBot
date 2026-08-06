@@ -73,6 +73,44 @@ def test_default_config_avoids_public_listener_addresses():
     assert "0.0.0.0" not in values
 
 
+def test_btw_capability_route_assignments_survive_config_integrity(temp_config_path):
+    default_config = {
+        "btw": {"plugin_routes": [], "mcp_routes": [], "skill_routes": []}
+    }
+    with open(temp_config_path, "w", encoding="utf-8-sig") as file:
+        json.dump(
+            {
+                "btw": {
+                    "plugin_routes": [
+                        {"plugin_id": "example", "loop": "work"},
+                    ],
+                    "mcp_routes": [
+                        {"server_name": "workspace", "loop": "work"},
+                    ],
+                    "skill_routes": [
+                        {"skill_name": "workspace-edit", "loop": "work"},
+                    ],
+                }
+            },
+            file,
+        )
+
+    config = AstrBotConfig(
+        config_path=temp_config_path,
+        default_config=default_config,
+    )
+
+    assert config["btw"]["plugin_routes"] == [
+        {"plugin_id": "example", "loop": "work"}
+    ]
+    assert config["btw"]["mcp_routes"] == [
+        {"server_name": "workspace", "loop": "work"}
+    ]
+    assert config["btw"]["skill_routes"] == [
+        {"skill_name": "workspace-edit", "loop": "work"}
+    ]
+
+
 class TestAstrBotConfigLoad:
     """Tests for AstrBotConfig loading and initialization."""
 

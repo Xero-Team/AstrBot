@@ -7,10 +7,12 @@ import pytest
 
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.tools.computer_tools import FileReadTool
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -18,13 +20,19 @@ from astrbot.core.tools.function_tool_manager import (
 
 
 class _DummyEvent:
-    def __init__(self, message_components: list[object] | None = None) -> None:
+    def __init__(
+        self,
+        message_components: list[object] | None = None,
+        *,
+        extras: dict | None = None,
+    ) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
         self.role = "member"
+        self._extras = extras or {}
 
-    def get_extra(self, _key: str):
-        return None
+    def get_extra(self, key: str):
+        return self._extras.get(key)
 
 
 class _DummyTool:
@@ -137,6 +145,40 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     assert toolset is not None
     assert isinstance(toolset.get_tool("admin_only_mcp"), _PermissionGuardedTool)
     assert toolset.get_tool("transfer_to_child") is None
+
+
+def test_handoff_toolset_honors_btw_mcp_and_computer_routes():
+    mcp_tool = MCPTool(
+        SimpleNamespace(
+            name="workspace_mcp",
+            description="workspace MCP",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        AsyncMock(),
+        "workspace-server",
+    )
+    safe_tool = FunctionTool(
+        name="safe",
+        description="safe",
+        parameters={"type": "object", "properties": {}},
+    )
+    event = _DummyEvent(extras={"btw_loop": "conversation"})
+    context = SimpleNamespace(catalogs=SimpleNamespace(plugins=None))
+
+    filtered = FunctionToolExecutor._filter_handoff_toolset_for_btw(
+        ToolSet([mcp_tool, FileReadTool(), safe_tool]),
+        ctx=context,
+        cfg={
+            "btw": {
+                "mcp_routes": [
+                    {"server_name": "workspace-server", "loop": "work"},
+                ]
+            }
+        },
+        event=event,
+    )
+
+    assert filtered.names() == ["safe"]
 
 
 @pytest.mark.asyncio

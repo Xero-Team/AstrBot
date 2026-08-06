@@ -117,6 +117,26 @@
     "fileCount": "Files: {count}",
     "done": "Done"
   },
+  "pluginLoopSelector": {
+    "hint": "The default, Conversation and Work, preserves existing behavior. A single-loop assignment exposes that plugin's LLM tools only to the selected loop.",
+    "plugin": "Plugin",
+    "loop": "Available loop",
+    "conversation": "Conversation only",
+    "work": "Work only",
+    "both": "Conversation and Work",
+    "empty": "There are no enabled non-system plugins."
+  },
+  "capabilityLoopSelector": {
+    "mcpHint": "The default, Conversation and Work, preserves existing behavior. Assign local or high-privilege MCP servers to Work only.",
+    "skillHint": "The default, Conversation and Work, preserves existing behavior. Workspace Skills are available only to the work loop.",
+    "capability": "Capability",
+    "loop": "Available loop",
+    "conversation": "Conversation only",
+    "work": "Work only",
+    "both": "Conversation and Work",
+    "emptyMcp": "There are no enabled MCP servers.",
+    "emptySkill": "There are no enabled Skills."
+  },
   "unsavedChangesWarning": {
     "dialogTitle": "Unsaved changes",
     "leavePage": "You have unsaved changes. Do you want to save before leaving?",

@@ -906,6 +906,63 @@
         "description": "Available Plugins",
         "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
       }
+    },
+    "btw": {
+      "description": "BTW dual loops",
+      "btw": {
+        "enabled": {
+          "description": "Enable BTW dual loops",
+          "hint": "Route all messages through the conversation loop and send tool-intensive requests to the work loop."
+        },
+        "classifier": {
+          "enabled": {
+            "description": "Enable task classification",
+            "hint": "Use built-in rules to identify code, file, lookup, and research work."
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "Conversation-loop model",
+            "hint": "Leave empty to use the current session's default chat model. The conversation loop never receives local, sandbox, or filesystem tools."
+          }
+        },
+        "work_loop": {
+          "enabled": {
+            "description": "Enable work loop",
+            "hint": "When disabled, the conversation loop handles every request."
+          },
+          "provider_id": {
+            "description": "Work-loop model",
+            "hint": "Leave empty to use the current session's default chat model. When set, it takes priority over a session model selection."
+          },
+          "computer_use_runtime": {
+            "description": "Work-loop computer permission",
+            "hint": "inherit uses the existing computer-use setting; local and sandbox are exposed only to the work loop."
+          },
+          "max_concurrent": {
+            "description": "Maximum concurrent work loops",
+            "hint": "Number of work tasks that may execute concurrently in this configuration profile."
+          }
+        },
+        "work_session": {
+          "max_age_seconds": {
+            "description": "Work-session retention",
+            "hint": "How many seconds to retain completed, failed, or cancelled work for status queries."
+          }
+        },
+        "plugin_routes": {
+          "description": "Plugin tool loop assignments",
+          "hint": "Choose whether each enabled plugin exposes its LLM tools to the conversation loop, work loop, or both."
+        },
+        "mcp_routes": {
+          "description": "MCP server loop assignments",
+          "hint": "Choose whether each enabled MCP server exposes its tools to the conversation loop, work loop, or both."
+        },
+        "skill_routes": {
+          "description": "Skill loop assignments",
+          "hint": "Choose whether each enabled Skill is included in the conversation loop, work loop, or both."
+        }
+      }
     }
   },
   "ext_group": {

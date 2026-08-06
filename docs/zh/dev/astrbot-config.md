@@ -36,6 +36,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                             |
 | `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                |
 | `subagent_orchestrator`                           | 子代理 handoff 编排。                                                          |
+| `btw`                                             | 对话循环入口、规则任务分类、工作循环，以及插件、MCP、Skill 的循环分配。       |
 | `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                         |
 | `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。 |
 | `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                             |
@@ -146,6 +147,27 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 `web_search`、`websearch_provider` 及各 Provider Key 控制内置网页搜索；`web_search_link` 控制是否附加链接。密钥应在 WebUI 中填写。
 
 `image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制送入模型前的图片压缩。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
+
+## BTW 双循环原型
+
+`btw` 为当前的双循环原型提供统一入口。所有消息先进入对话循环；启用规则分类后，包含代码、文件、命令、搜索或调研意图的请求，以及以 `/work` 开头的请求，会转入工作循环。工作循环复用现有 Agent 与工具执行链，不会在此阶段引入 Codex、CC 或其他专用执行器。
+
+- `btw.enabled`：总开关。关闭后，所有请求仍通过对话循环使用既有 Agent 路径。
+- `btw.classifier.enabled`：启用内置的确定性分类规则；关闭后不会自动转入工作循环。
+- `btw.conversation_loop.provider_id`：对话循环模型。留空时使用会话默认模型；填写后会优先于会话模型选择。
+- `btw.work_loop.enabled`：启用工作循环；`max_concurrent` 限制同一配置档可同时执行的已分类工作任务数。
+- `btw.work_loop.provider_id`：工作循环模型。可与对话循环使用不同 Provider；留空时使用会话默认模型。
+- `btw.work_loop.computer_use_runtime`：工作循环的电脑权限。`inherit` 使用原有 `provider_settings.computer_use_runtime`，也可显式设为 `none`、`local` 或 `sandbox`。
+- `btw.work_session.max_age_seconds`：终态工作会话保留时间，默认 `3600` 秒；到期后会在下一次会话操作时清理。
+- `btw.plugin_routes`：在 **配置文件** 页为每个已启用的非系统插件选择“仅对话循环”“仅工作循环”或“两者”。未保存条目即“两者”，以保持现有行为。
+- `btw.mcp_routes`：为每个已启用 MCP 服务器做相同的循环选择。使用本地进程或访问敏感系统的 MCP 服务器应设为“仅工作循环”。
+- `btw.skill_routes`：为每个已启用 Skill 做相同的循环选择。工作区 Skill 即使没有保存分配，也只会注入工作循环。
+
+对话循环会强制禁用本地电脑、沙盒、浏览器和文件工具，并关闭文件内容提取；这些能力只可能由工作循环获得。插件分配过滤插件注册给 LLM 的工具，MCP 分配过滤每个 MCP 服务器提供的全部工具，Skill 分配过滤注入的 Skill 提示。既有的子代理 handoff 也会应用相同的工具分配，且无法在对话循环重新获得电脑工具。插件的 Pipeline/Star 处理器仍按既有优先级运行。未保存分配默认对两个循环可用，因此应显式把高权限 MCP 服务器和 Skill 设为“仅工作循环”。
+
+工作循环会先回复“工作任务已开始处理”，再由运行时后台任务执行；其结果仍会通过既有的内容安全、结果装饰和平台发送流程。后台工作使用与普通对话不同的会话锁，因此不会阻塞同一会话后续的聊天或状态查询。工作会话是运行时内存状态：可在任务执行中或结束后通过“进度”“状态”“怎么样了”等消息查询最近一次任务状态；重启或重建运行时后该状态不会保留。
+
+这些设置属于配置档。多个配置档时，应分别检查其 BTW 开关、并发数和插件工具分配。
 
 ## 子代理、语音与知识库
 

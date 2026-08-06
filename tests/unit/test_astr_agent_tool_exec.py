@@ -147,7 +147,7 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     assert toolset.get_tool("transfer_to_child") is None
 
 
-def test_handoff_toolset_honors_btw_mcp_and_computer_routes():
+def test_handoff_toolset_defaults_plugin_mcp_and_computer_tools_to_work():
     mcp_tool = MCPTool(
         SimpleNamespace(
             name="workspace_mcp",
@@ -162,23 +162,79 @@ def test_handoff_toolset_honors_btw_mcp_and_computer_routes():
         description="safe",
         parameters={"type": "object", "properties": {}},
     )
+    plugin_tool = FunctionTool(
+        name="coding_agent",
+        description="coding agent",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.coding.main",
+    )
     event = _DummyEvent(extras={"btw_loop": "conversation"})
-    context = SimpleNamespace(catalogs=SimpleNamespace(plugins=None))
+    plugin = SimpleNamespace(root_dir_name="coding", name="coding")
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    plugin if module_path == "plugins.coding.main" else None
+                )
+            )
+        )
+    )
 
     filtered = FunctionToolExecutor._filter_handoff_toolset_for_btw(
-        ToolSet([mcp_tool, FileReadTool(), safe_tool]),
+        ToolSet([mcp_tool, FileReadTool(), plugin_tool, safe_tool]),
+        ctx=context,
+        cfg={"btw": {}},
+        event=event,
+    )
+
+    assert filtered.names() == ["safe"]
+
+
+def test_handoff_toolset_honors_explicit_both_routes():
+    mcp_tool = MCPTool(
+        SimpleNamespace(
+            name="workspace_mcp",
+            description="workspace MCP",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        AsyncMock(),
+        "workspace-server",
+    )
+    plugin_tool = FunctionTool(
+        name="coding_agent",
+        description="coding agent",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.coding.main",
+    )
+    event = _DummyEvent(extras={"btw_loop": "conversation"})
+    plugin = SimpleNamespace(root_dir_name="coding", name="coding")
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    plugin if module_path == "plugins.coding.main" else None
+                )
+            )
+        )
+    )
+
+    filtered = FunctionToolExecutor._filter_handoff_toolset_for_btw(
+        ToolSet([mcp_tool, plugin_tool]),
         ctx=context,
         cfg={
             "btw": {
                 "mcp_routes": [
-                    {"server_name": "workspace-server", "loop": "work"},
-                ]
+                    {"server_name": "workspace-server", "loop": "both"},
+                ],
+                "plugin_routes": [
+                    {"plugin_id": "coding", "loop": "both"},
+                ],
             }
         },
         event=event,
     )
 
-    assert filtered.names() == ["safe"]
+    assert filtered.names() == ["workspace_mcp", "coding_agent"]
 
 
 @pytest.mark.asyncio

@@ -501,30 +501,34 @@ def _route_is_available_in_loop(
     route_key: str,
     route_id: str,
     loop_mode: str,
+    default_loop: str = "both",
 ) -> bool:
     """Return whether a configured capability is available in one BTW loop.
 
-    Omitting a route intentionally retains the current capability behaviour and
-    exposes it to both loops. This applies to plugin tools, MCP servers, and
-    Skills alike.
+    Plugin and MCP callers use a work-only default so newly installed execution
+    capabilities cannot silently enter the conversation loop. Skills keep the
+    both-loop default because they inject instructions rather than execution
+    privileges. An explicit route always wins.
     """
     if loop_mode not in {"conversation", "work"} or not route_id:
         return True
 
-    route = "both"
+    if default_loop not in {"conversation", "work", "both"}:
+        default_loop = "work"
+    route = default_loop
     if isinstance(routes, dict):
-        candidate = routes.get(route_id, "both")
-        route = candidate if isinstance(candidate, str) else "both"
+        candidate = routes.get(route_id, default_loop)
+        route = candidate if isinstance(candidate, str) else default_loop
     elif isinstance(routes, list):
         for entry in routes:
             if not isinstance(entry, dict) or entry.get(route_key) != route_id:
                 continue
-            candidate = entry.get("loop", "both")
-            route = candidate if isinstance(candidate, str) else "both"
+            candidate = entry.get("loop", default_loop)
+            route = candidate if isinstance(candidate, str) else default_loop
             break
 
     if route not in {"conversation", "work", "both"}:
-        route = "both"
+        route = default_loop
     return route in {"both", loop_mode}
 
 
@@ -1674,9 +1678,9 @@ def _filter_plugin_tools_for_loop(
 ) -> None:
     """Keep only plugin tools assigned to the current BTW loop.
 
-    Built-in and MCP tools are not owned by a plugin and remain available.  An
-    omitted or malformed assignment defaults to both loops, preserving current
-    installations until an operator chooses a narrower scope.
+    Built-in and MCP tools are not owned by a plugin and remain available for
+    their own policy checks. Omitted or malformed plugin assignments fail
+    closed to the work loop.
     """
     if req.func_tool is None or config.loop_mode not in {"conversation", "work"}:
         return
@@ -1692,6 +1696,7 @@ def _filter_plugin_tools_for_loop(
             route_key="plugin_id",
             route_id=plugin_id,
             loop_mode=config.loop_mode,
+            default_loop="work",
         ):
             filtered.add_tool(tool)
     req.func_tool = filtered
@@ -1711,6 +1716,7 @@ def _filter_mcp_tools_for_loop(
             route_key="server_name",
             route_id=tool.mcp_server_name,
             loop_mode=config.loop_mode,
+            default_loop="work",
         ):
             filtered.add_tool(tool)
     req.func_tool = filtered

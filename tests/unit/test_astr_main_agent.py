@@ -148,7 +148,7 @@ def test_filter_plugin_tools_for_loop_keeps_only_assigned_plugin_tools():
     assert req.func_tool.names() == ["builtin_tool"]
 
 
-def test_filter_plugin_tools_for_loop_keeps_default_both_assignment():
+def test_filter_plugin_tools_for_loop_defaults_unassigned_tools_to_work():
     plugin_tool = FunctionTool(
         name="plugin_tool",
         description="plugin tool",
@@ -167,12 +167,70 @@ def test_filter_plugin_tools_for_loop_keeps_default_both_assignment():
             )
         )
     )
-    config = ama.MainAgentBuildConfig(tool_call_timeout=60, loop_mode="work")
+    config = ama.MainAgentBuildConfig(tool_call_timeout=60, loop_mode="conversation")
+
+    ama._filter_plugin_tools_for_loop(req, context, config)
+
+    assert req.func_tool is not None
+    assert req.func_tool.names() == []
+
+    work_req = ProviderRequest(prompt="test", func_tool=ToolSet([plugin_tool]))
+    work_config = ama.MainAgentBuildConfig(tool_call_timeout=60, loop_mode="work")
+
+    ama._filter_plugin_tools_for_loop(work_req, context, work_config)
+
+    assert work_req.func_tool is not None
+    assert work_req.func_tool.names() == ["plugin_tool"]
+
+
+def test_filter_plugin_tools_for_loop_honors_explicit_both_assignment():
+    plugin_tool = FunctionTool(
+        name="plugin_tool",
+        description="plugin tool",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.example.main",
+    )
+    req = ProviderRequest(prompt="test", func_tool=ToolSet([plugin_tool]))
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    SimpleNamespace(root_dir_name="example", name="example")
+                    if module_path == "plugins.example.main"
+                    else None
+                )
+            )
+        )
+    )
+    config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        loop_mode="conversation",
+        btw_plugin_routes=[{"plugin_id": "example", "loop": "both"}],
+    )
 
     ama._filter_plugin_tools_for_loop(req, context, config)
 
     assert req.func_tool is not None
     assert req.func_tool.names() == ["plugin_tool"]
+
+
+def test_route_filter_uses_capability_default_for_malformed_assignment():
+    routes = [{"plugin_id": "coding", "loop": "unexpected"}]
+
+    assert not ama._route_is_available_in_loop(
+        routes,
+        route_key="plugin_id",
+        route_id="coding",
+        loop_mode="conversation",
+        default_loop="work",
+    )
+    assert ama._route_is_available_in_loop(
+        routes,
+        route_key="plugin_id",
+        route_id="coding",
+        loop_mode="work",
+        default_loop="work",
+    )
 
 
 def test_filter_mcp_tools_for_loop_keeps_only_assigned_servers():
@@ -194,13 +252,46 @@ def test_filter_mcp_tools_for_loop_keeps_only_assigned_servers():
     config = ama.MainAgentBuildConfig(
         tool_call_timeout=60,
         loop_mode="conversation",
-        btw_mcp_routes=[{"server_name": "workspace-server", "loop": "work"}],
+        btw_mcp_routes=[
+            {"server_name": "weather-server", "loop": "conversation"},
+            {"server_name": "workspace-server", "loop": "work"},
+        ],
     )
 
     ama._filter_mcp_tools_for_loop(req, config)
 
     assert req.func_tool is not None
     assert req.func_tool.names() == ["weather"]
+
+
+def test_filter_mcp_tools_for_loop_defaults_unassigned_servers_to_work():
+    input_schema = {"type": "object", "properties": {}}
+    work_tool = MCPTool(
+        SimpleNamespace(name="workspace", description="workspace", inputSchema=input_schema),
+        MagicMock(),
+        "workspace-server",
+    )
+    conversation_req = ProviderRequest(
+        prompt="test",
+        func_tool=ToolSet([work_tool]),
+    )
+    conversation_config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        loop_mode="conversation",
+    )
+
+    ama._filter_mcp_tools_for_loop(conversation_req, conversation_config)
+
+    assert conversation_req.func_tool is not None
+    assert conversation_req.func_tool.names() == []
+
+    work_req = ProviderRequest(prompt="test", func_tool=ToolSet([work_tool]))
+    work_config = ama.MainAgentBuildConfig(tool_call_timeout=60, loop_mode="work")
+
+    ama._filter_mcp_tools_for_loop(work_req, work_config)
+
+    assert work_req.func_tool is not None
+    assert work_req.func_tool.names() == ["workspace"]
 
 
 def test_filter_skills_for_loop_keeps_only_assigned_skills():

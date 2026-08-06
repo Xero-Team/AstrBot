@@ -952,15 +952,15 @@
         },
         "plugin_routes": {
           "description": "Plugin tool loop assignments",
-          "hint": "Choose whether each enabled plugin exposes its LLM tools to the conversation loop, work loop, or both."
+          "hint": "Plugin LLM tools default to the work loop; explicitly assign an enabled plugin to the conversation loop or both when needed."
         },
         "mcp_routes": {
           "description": "MCP server loop assignments",
-          "hint": "Choose whether each enabled MCP server exposes its tools to the conversation loop, work loop, or both."
+          "hint": "MCP tools default to the work loop; explicitly assign an enabled server to the conversation loop or both when needed."
         },
         "skill_routes": {
           "description": "Skill loop assignments",
-          "hint": "Choose whether each enabled Skill is included in the conversation loop, work loop, or both."
+          "hint": "Skills default to both loops; explicitly restrict an enabled Skill to one loop when needed."
         }
       }
     }

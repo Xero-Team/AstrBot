@@ -31,8 +31,9 @@ class ConversationLoop:
     """Process user-visible AI conversations through the current Agent path.
 
     It owns task classification and dispatches work requests to the work loop.
-    Both loops reuse the established Agent request executor; existing tools
-    therefore remain available unless their plugin has a narrower loop scope.
+    Both loops reuse the established Agent request executor. Plugin and MCP
+    execution capabilities default to the work loop unless an operator assigns
+    them to the conversation loop or both loops explicitly.
     """
 
     def __init__(

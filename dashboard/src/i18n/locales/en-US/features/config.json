@@ -118,7 +118,7 @@
     "done": "Done"
   },
   "pluginLoopSelector": {
-    "hint": "The default, Conversation and Work, preserves existing behavior. A single-loop assignment exposes that plugin's LLM tools only to the selected loop.",
+    "hint": "Plugin LLM tools default to Work only. You can explicitly allow Conversation only or both loops; plugin commands are outside this tool route.",
     "plugin": "Plugin",
     "loop": "Available loop",
     "conversation": "Conversation only",
@@ -127,8 +127,8 @@
     "empty": "There are no enabled non-system plugins."
   },
   "capabilityLoopSelector": {
-    "mcpHint": "The default, Conversation and Work, preserves existing behavior. Assign local or high-privilege MCP servers to Work only.",
-    "skillHint": "The default, Conversation and Work, preserves existing behavior. Workspace Skills are available only to the work loop.",
+    "mcpHint": "MCP tools default to Work only. Expose a server to the conversation loop only when it is appropriate for chat-time use.",
+    "skillHint": "Skills default to both loops. Workspace Skills remain available only to the work loop.",
     "capability": "Capability",
     "loop": "Available loop",
     "conversation": "Conversation only",

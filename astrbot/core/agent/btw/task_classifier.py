@@ -1,7 +1,5 @@
 """Rule-based task classification for the BTW prototype."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -21,6 +19,8 @@ DEFAULT_WORK_KEYWORDS = (
     "搜索",
     "查询",
     "调研",
+    "代码代理",
+    "编程代理",
     "write code",
     "generate code",
     "refactor",
@@ -29,6 +29,13 @@ DEFAULT_WORK_KEYWORDS = (
     "run command",
     "search",
     "research",
+    "claude code",
+    "claudecode",
+    "codex",
+    "opencode",
+    "coding agent",
+    "vibe coding",
+    "hapi",
 )
 
 

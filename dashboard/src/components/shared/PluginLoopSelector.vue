@@ -44,6 +44,7 @@ import { pluginApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 
 type LoopMode = 'conversation' | 'work' | 'both';
+const defaultLoop: LoopMode = 'work';
 
 interface PluginRoute {
   plugin_id?: unknown;
@@ -84,14 +85,18 @@ function routes(): PluginRoute[] {
 
 function routeFor(pluginId: string): LoopMode {
   const route = routes().find((item) => item.plugin_id === pluginId)?.loop;
-  return route === 'conversation' || route === 'work' ? route : 'both';
+  return route === 'conversation' || route === 'work' || route === 'both'
+    ? route
+    : defaultLoop;
 }
 
 function setRoute(pluginId: string, value: unknown) {
   const loop: LoopMode =
-    value === 'conversation' || value === 'work' ? value : 'both';
+    value === 'conversation' || value === 'work' || value === 'both'
+      ? value
+      : defaultLoop;
   const next = routes().filter((item) => item.plugin_id !== pluginId);
-  if (loop !== 'both') {
+  if (loop !== defaultLoop) {
     next.push({ plugin_id: pluginId, loop });
   }
   emit('update:modelValue', next);

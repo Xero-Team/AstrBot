@@ -82,7 +82,7 @@ def test_btw_capability_route_assignments_survive_config_integrity(temp_config_p
             {
                 "btw": {
                     "plugin_routes": [
-                        {"plugin_id": "example", "loop": "work"},
+                        {"plugin_id": "example", "loop": "both"},
                     ],
                     "mcp_routes": [
                         {"server_name": "workspace", "loop": "work"},
@@ -101,7 +101,7 @@ def test_btw_capability_route_assignments_survive_config_integrity(temp_config_p
     )
 
     assert config["btw"]["plugin_routes"] == [
-        {"plugin_id": "example", "loop": "work"}
+        {"plugin_id": "example", "loop": "both"}
     ]
     assert config["btw"]["mcp_routes"] == [
         {"server_name": "workspace", "loop": "work"}

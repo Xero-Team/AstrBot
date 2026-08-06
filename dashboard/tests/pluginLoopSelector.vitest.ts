@@ -36,7 +36,7 @@ describe('PluginLoopSelector', () => {
     });
   });
 
-  it('writes only non-default plugin loop assignments', async () => {
+  it('defaults plugin tools to work and preserves an explicit both override', async () => {
     const wrapper = mountWithVuetify(PluginLoopSelector, {
       props: {
         modelValue: [],
@@ -49,21 +49,23 @@ describe('PluginLoopSelector', () => {
     expect(wrapper.text()).not.toContain('system-plugin');
 
     const select = wrapper.findComponent({ name: 'VSelect' });
-    select.vm.$emit('update:modelValue', 'work');
-    await wrapper.vm.$nextTick();
+    expect(select.props('modelValue')).toBe('work');
 
-    expect(wrapper.emitted('update:modelValue')).toEqual([
-      [[{ plugin_id: 'example-plugin', loop: 'work' }]],
-    ]);
-
-    await wrapper.setProps({
-      modelValue: [{ plugin_id: 'example-plugin', loop: 'work' }],
-    });
     select.vm.$emit('update:modelValue', 'both');
     await wrapper.vm.$nextTick();
 
     expect(wrapper.emitted('update:modelValue')).toEqual([
-      [[{ plugin_id: 'example-plugin', loop: 'work' }]],
+      [[{ plugin_id: 'example-plugin', loop: 'both' }]],
+    ]);
+
+    await wrapper.setProps({
+      modelValue: [{ plugin_id: 'example-plugin', loop: 'both' }],
+    });
+    select.vm.$emit('update:modelValue', 'work');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      [[{ plugin_id: 'example-plugin', loop: 'both' }]],
       [[]],
     ]);
     wrapper.unmount();

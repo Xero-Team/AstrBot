@@ -41,7 +41,7 @@ describe('CapabilityLoopSelector', () => {
     });
   });
 
-  it('writes only a non-default MCP server assignment', async () => {
+  it('defaults MCP servers to work and preserves an explicit both override', async () => {
     const wrapper = mountWithVuetify(CapabilityLoopSelector, {
       props: {
         kind: 'mcp',
@@ -55,11 +55,13 @@ describe('CapabilityLoopSelector', () => {
     expect(wrapper.text()).not.toContain('disabled-mcp');
 
     const select = wrapper.findComponent({ name: 'VSelect' });
-    select.vm.$emit('update:modelValue', 'work');
+    expect(select.props('modelValue')).toBe('work');
+
+    select.vm.$emit('update:modelValue', 'both');
     await wrapper.vm.$nextTick();
 
     expect(wrapper.emitted('update:modelValue')).toEqual([
-      [[{ server_name: 'workspace-mcp', loop: 'work' }]],
+      [[{ server_name: 'workspace-mcp', loop: 'both' }]],
     ]);
     wrapper.unmount();
   });

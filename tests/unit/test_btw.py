@@ -58,6 +58,14 @@ async def test_task_classifier_selects_work_for_keywords_and_conversation_otherw
 
     assert await classifier.classify(SimpleNamespace(message_str="你好")) is TaskType.CONVERSATION
     assert await classifier.classify(SimpleNamespace(message_str="帮我修改代码")) is TaskType.WORK
+    assert (
+        await classifier.classify(SimpleNamespace(message_str="让 Claude Code 处理这个仓库"))
+        is TaskType.WORK
+    )
+    assert (
+        await classifier.classify(SimpleNamespace(message_str="continue with Codex"))
+        is TaskType.WORK
+    )
 
 
 @pytest.mark.asyncio

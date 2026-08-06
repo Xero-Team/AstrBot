@@ -74,6 +74,9 @@ const capabilities = ref<CapabilityItem[]>([]);
 const routeKey = computed<RouteKey>(() =>
   props.kind === 'mcp' ? 'server_name' : 'skill_name',
 );
+const defaultLoop = computed<LoopMode>(() =>
+  props.kind === 'mcp' ? 'work' : 'both',
+);
 const hint = computed(() =>
   tm(
     props.kind === 'mcp'
@@ -107,14 +110,18 @@ function routeFor(capabilityId: string): LoopMode {
   const route = routes().find(
     (item) => item[routeKey.value] === capabilityId,
   )?.loop;
-  return route === 'conversation' || route === 'work' ? route : 'both';
+  return route === 'conversation' || route === 'work' || route === 'both'
+    ? route
+    : defaultLoop.value;
 }
 
 function setRoute(capabilityId: string, value: unknown) {
   const loop: LoopMode =
-    value === 'conversation' || value === 'work' ? value : 'both';
+    value === 'conversation' || value === 'work' || value === 'both'
+      ? value
+      : defaultLoop.value;
   const next = routes().filter((item) => item[routeKey.value] !== capabilityId);
-  if (loop !== 'both') {
+  if (loop !== defaultLoop.value) {
     next.push({ [routeKey.value]: capabilityId, loop });
   }
   emit('update:modelValue', next);

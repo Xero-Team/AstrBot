@@ -4222,19 +4222,19 @@ CONFIG_METADATA_3 = {
                     "btw.plugin_routes": {
                         "description": "插件工具循环分配",
                         "type": "list",
-                        "hint": "为每个已启用插件选择在对话循环、工作循环或两者中提供其 LLM 工具。",
+                        "hint": "插件 LLM 工具默认仅在工作循环可用；可为每个已启用插件显式改为对话循环或两者。",
                         "_special": "select_plugin_loop_routes",
                     },
                     "btw.mcp_routes": {
                         "description": "MCP 服务器循环分配",
                         "type": "list",
-                        "hint": "为每个已启用 MCP 服务器选择在对话循环、工作循环或两者中提供工具。",
+                        "hint": "MCP 工具默认仅在工作循环可用；可为每个已启用服务器显式改为对话循环或两者。",
                         "_special": "select_mcp_loop_routes",
                     },
                     "btw.skill_routes": {
                         "description": "Skills 循环分配",
                         "type": "list",
-                        "hint": "为每个已启用 Skill 选择在对话循环、工作循环或两者中注入提示。",
+                        "hint": "Skill 默认注入两个循环；可为每个已启用 Skill 显式限制到单一循环。",
                         "_special": "select_skill_loop_routes",
                     },
                 },

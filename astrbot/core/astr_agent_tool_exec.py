@@ -252,24 +252,27 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         route_key: str,
         route_id: str,
         loop_mode: str,
+        default_loop: str = "both",
     ) -> bool:
         """Return whether a BTW route permits one nested handoff capability."""
         if loop_mode not in {"conversation", "work"} or not route_id:
             return True
 
-        route = "both"
+        if default_loop not in {"conversation", "work", "both"}:
+            default_loop = "work"
+        route = default_loop
         if isinstance(routes, dict):
-            candidate = routes.get(route_id, "both")
-            route = candidate if isinstance(candidate, str) else "both"
+            candidate = routes.get(route_id, default_loop)
+            route = candidate if isinstance(candidate, str) else default_loop
         elif isinstance(routes, list):
             for entry in routes:
                 if not isinstance(entry, dict) or entry.get(route_key) != route_id:
                     continue
-                candidate = entry.get("loop", "both")
-                route = candidate if isinstance(candidate, str) else "both"
+                candidate = entry.get("loop", default_loop)
+                route = candidate if isinstance(candidate, str) else default_loop
                 break
         if route not in {"conversation", "work", "both"}:
-            route = "both"
+            route = default_loop
         return route in {
             "both",
             loop_mode,
@@ -305,6 +308,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 route_key="server_name",
                 route_id=raw_tool.mcp_server_name,
                 loop_mode=loop_mode,
+                default_loop="work",
             ):
                 continue
             module_path = getattr(raw_tool, "handler_module_path", None)
@@ -323,6 +327,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 route_key="plugin_id",
                 route_id=plugin_id,
                 loop_mode=loop_mode,
+                default_loop="work",
             ):
                 continue
             filtered.add_tool(tool)

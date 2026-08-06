@@ -131,6 +131,37 @@ class InternalAgentSubStage:
         self.computer_use_runtime = settings.get("computer_use_runtime")
         self.sandbox_cfg = settings.get("sandbox", {})
 
+        btw_config = conf.get("btw", {})
+        btw_config = btw_config if isinstance(btw_config, dict) else {}
+        conversation_loop_config = btw_config.get("conversation_loop", {})
+        conversation_loop_config = (
+            conversation_loop_config
+            if isinstance(conversation_loop_config, dict)
+            else {}
+        )
+        work_loop_config = btw_config.get("work_loop", {})
+        work_loop_config = (
+            work_loop_config if isinstance(work_loop_config, dict) else {}
+        )
+        self.conversation_provider_id = conversation_loop_config.get(
+            "provider_id", ""
+        )
+        if not isinstance(self.conversation_provider_id, str):
+            self.conversation_provider_id = ""
+        self.work_provider_id = work_loop_config.get("provider_id", "")
+        if not isinstance(self.work_provider_id, str):
+            self.work_provider_id = ""
+        self.work_computer_use_runtime = work_loop_config.get(
+            "computer_use_runtime", "inherit"
+        )
+        if self.work_computer_use_runtime not in {
+            "inherit",
+            "none",
+            "local",
+            "sandbox",
+        }:
+            self.work_computer_use_runtime = "inherit"
+
         # Proactive capability configuration
         proactive_cfg = settings.get("proactive_capability", {})
         self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
@@ -159,6 +190,24 @@ class InternalAgentSubStage:
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
+            btw_plugin_routes=(
+                conf.get("btw", {}).get("plugin_routes", [])
+                if isinstance(conf.get("btw", {}), dict)
+                else []
+            ),
+            btw_mcp_routes=(
+                conf.get("btw", {}).get("mcp_routes", [])
+                if isinstance(conf.get("btw", {}), dict)
+                else []
+            ),
+            btw_skill_routes=(
+                conf.get("btw", {}).get("skill_routes", [])
+                if isinstance(conf.get("btw", {}), dict)
+                else []
+            ),
+            conversation_provider_id=self.conversation_provider_id,
+            work_provider_id=self.work_provider_id,
+            work_computer_use_runtime=self.work_computer_use_runtime,
             timezone=self.ctx.execution_context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
@@ -217,10 +266,58 @@ class InternalAgentSubStage:
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
+        loop_mode = (
+            "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        )
+        if loop_mode == "conversation":
+            computer_use_runtime = "none"
+            provider_id_override = getattr(
+                self.main_agent_cfg, "conversation_provider_id", ""
+            )
+            file_extract_enabled = False
+        else:
+            computer_use_runtime = getattr(
+                self.main_agent_cfg, "work_computer_use_runtime", "inherit"
+            )
+            if computer_use_runtime == "inherit":
+                computer_use_runtime = getattr(
+                    self.main_agent_cfg, "computer_use_runtime", None
+                )
+            if computer_use_runtime not in {"none", "local", "sandbox"}:
+                computer_use_runtime = "none"
+            provider_id_override = getattr(self.main_agent_cfg, "work_provider_id", "")
+            file_extract_enabled = bool(
+                getattr(self.main_agent_cfg, "file_extract_enabled", False)
+            )
+
+        configured_provider_settings = getattr(
+            self.main_agent_cfg, "provider_settings", {}
+        )
+        provider_settings = (
+            dict(configured_provider_settings)
+            if isinstance(configured_provider_settings, dict)
+            else {}
+        )
+        provider_settings["computer_use_runtime"] = computer_use_runtime
+        if loop_mode == "conversation":
+            file_extract_settings = provider_settings.get("file_extract", {})
+            file_extract_settings = (
+                dict(file_extract_settings)
+                if isinstance(file_extract_settings, dict)
+                else {}
+            )
+            file_extract_settings["enable"] = False
+            provider_settings["file_extract"] = file_extract_settings
+
         build_cfg = replace(
             self.main_agent_cfg,
             provider_wake_prefix=provider_wake_prefix,
             streaming_response=streaming_response,
+            loop_mode=loop_mode,
+            provider_id_override=provider_id_override,
+            computer_use_runtime=computer_use_runtime,
+            file_extract_enabled=file_extract_enabled,
+            provider_settings=provider_settings,
         )
         build_result = await build_main_agent(
             event=event,
@@ -253,6 +350,7 @@ class InternalAgentSubStage:
         follow_up_activated = False
         typing_requested = False
         try:
+            is_detached_work = bool(event.get_extra("btw_detached_work"))
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
@@ -287,7 +385,9 @@ class InternalAgentSubStage:
 
             logger.debug("ready to request llm provider")
             follow_up_capture = (
-                self.ctx.execution_context.follow_up_coordinator.try_capture(event)
+                None
+                if is_detached_work
+                else self.ctx.execution_context.follow_up_coordinator.try_capture(event)
             )
             if follow_up_capture:
                 (
@@ -321,8 +421,11 @@ class InternalAgentSubStage:
             ):
                 return
 
+            session_lock_key = event.get_extra("btw_agent_lock_key")
+            if not isinstance(session_lock_key, str) or not session_lock_key:
+                session_lock_key = event.unified_msg_origin
             async with self.ctx.execution_context.session_lock_manager.acquire_lock(
-                event.unified_msg_origin
+                session_lock_key
             ):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
@@ -371,11 +474,12 @@ class InternalAgentSubStage:
                     if reset_coro:
                         await reset_coro
 
-                    self.ctx.execution_context.follow_up_coordinator.register_active_runner(
-                        event.unified_msg_origin,
-                        agent_runner,
-                    )
-                    runner_registered = True
+                    if not is_detached_work:
+                        self.ctx.execution_context.follow_up_coordinator.register_active_runner(
+                            event.unified_msg_origin,
+                            agent_runner,
+                        )
+                        runner_registered = True
                     action_type = event.get_extra("action_type")
 
                     event.trace.record(

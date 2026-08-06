@@ -224,6 +224,14 @@ class MainAgentBuildConfig:
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
     subagent_orchestrator: dict = field(default_factory=dict)
+    btw_plugin_routes: object = field(default_factory=list)
+    btw_mcp_routes: object = field(default_factory=list)
+    btw_skill_routes: object = field(default_factory=list)
+    loop_mode: str = "conversation"
+    provider_id_override: str = ""
+    conversation_provider_id: str = ""
+    work_provider_id: str = ""
+    work_computer_use_runtime: str = "inherit"
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""

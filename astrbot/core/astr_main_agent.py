@@ -1682,9 +1682,7 @@ def _filter_plugin_tools_for_loop(
         return
     filtered = ToolSet()
     for tool in req.func_tool.tools:
-        plugin = plugin_context.catalogs.plugins.get_by_module(
-            tool.handler_module_path
-        )
+        plugin = plugin_context.catalogs.plugins.get_by_module(tool.handler_module_path)
         if plugin is None:
             filtered.add_tool(tool)
             continue
@@ -1699,7 +1697,9 @@ def _filter_plugin_tools_for_loop(
     req.func_tool = filtered
 
 
-def _filter_mcp_tools_for_loop(req: ProviderRequest, config: MainAgentBuildConfig) -> None:
+def _filter_mcp_tools_for_loop(
+    req: ProviderRequest, config: MainAgentBuildConfig
+) -> None:
     """Keep only MCP server tools assigned to the current BTW loop."""
     if req.func_tool is None or config.loop_mode not in {"conversation", "work"}:
         return

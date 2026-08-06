@@ -1,7 +1,5 @@
 """The BTW work-loop prototype backed by the existing Agent tool loop."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Protocol
@@ -70,7 +68,9 @@ class WorkLoop:
         Yields:
             Pipeline progress markers emitted by the existing Agent executor.
         """
-        session = await self.sessions.create(event.unified_msg_origin, event.message_str)
+        session = await self.sessions.create(
+            event.unified_msg_origin, event.message_str
+        )
         self._prepare_event(event, session.id)
         async for progress in self._execute(event, session.id):
             yield progress
@@ -90,7 +90,9 @@ class WorkLoop:
                 yield progress
             return
 
-        session = await self.sessions.create(event.unified_msg_origin, event.message_str)
+        session = await self.sessions.create(
+            event.unified_msg_origin, event.message_str
+        )
         self._prepare_event(event, session.id)
         event.set_result(MessageEventResult().message("🔧 工作任务已开始处理。"))
         yield

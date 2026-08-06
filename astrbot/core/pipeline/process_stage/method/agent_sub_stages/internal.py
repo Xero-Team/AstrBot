@@ -143,9 +143,7 @@ class InternalAgentSubStage:
         work_loop_config = (
             work_loop_config if isinstance(work_loop_config, dict) else {}
         )
-        self.conversation_provider_id = conversation_loop_config.get(
-            "provider_id", ""
-        )
+        self.conversation_provider_id = conversation_loop_config.get("provider_id", "")
         if not isinstance(self.conversation_provider_id, str):
             self.conversation_provider_id = ""
         self.work_provider_id = work_loop_config.get("provider_id", "")
@@ -266,9 +264,7 @@ class InternalAgentSubStage:
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
-        loop_mode = (
-            "work" if event.get_extra("btw_loop") == "work" else "conversation"
-        )
+        loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
         if loop_mode == "conversation":
             computer_use_runtime = "none"
             provider_id_override = getattr(

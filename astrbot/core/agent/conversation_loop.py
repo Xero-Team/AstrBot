@@ -6,8 +6,6 @@ Agent runner behaviour, while giving later classifier and work-loop work one
 stable hand-off boundary.
 """
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
@@ -111,9 +109,7 @@ class ConversationLoop:
         Yields:
             Pipeline progress markers emitted by the Agent request executor.
         """
-        work_session = await self.work_sessions.get_for_origin(
-            event.unified_msg_origin
-        )
+        work_session = await self.work_sessions.get_for_origin(event.unified_msg_origin)
         if work_session and self._is_status_query(event):
             event.set_result(
                 MessageEventResult()

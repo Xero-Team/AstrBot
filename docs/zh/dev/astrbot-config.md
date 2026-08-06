@@ -36,7 +36,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                             |
 | `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                |
 | `subagent_orchestrator`                           | 子代理 handoff 编排。                                                          |
-| `btw`                                             | 对话循环入口、规则任务分类、工作循环，以及插件、MCP、Skill 的循环分配。       |
+| `btw`                                             | 对话循环入口、规则任务分类、工作循环，以及插件、MCP、Skill 的循环分配。        |
 | `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                         |
 | `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。 |
 | `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                             |

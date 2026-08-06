@@ -285,7 +285,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event,
     ) -> ToolSet:
         """Apply BTW routes to tools exposed inside an existing handoff."""
-        loop_mode = event.get_extra("btw_loop")
+        get_extra = getattr(event, "get_extra", None)
+        loop_mode = get_extra("btw_loop") if callable(get_extra) else None
         if loop_mode not in {"conversation", "work"}:
             return toolset
 
@@ -338,7 +339,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        if event.get_extra("btw_loop") == "conversation":
+        get_extra = getattr(event, "get_extra", None)
+        loop_mode = get_extra("btw_loop") if callable(get_extra) else None
+        if loop_mode == "conversation":
             runtime = "none"
 
         # An explicitly empty handoff tool list needs no registry lookup.  In

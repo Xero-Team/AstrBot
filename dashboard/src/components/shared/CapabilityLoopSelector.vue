@@ -97,18 +97,22 @@ const loopOptions = computed(() => [
 function routes(): RouteEntry[] {
   return Array.isArray(props.modelValue)
     ? props.modelValue.filter(
-        (route): route is RouteEntry => route !== null && typeof route === 'object',
+        (route): route is RouteEntry =>
+          route !== null && typeof route === 'object',
       )
     : [];
 }
 
 function routeFor(capabilityId: string): LoopMode {
-  const route = routes().find((item) => item[routeKey.value] === capabilityId)?.loop;
+  const route = routes().find(
+    (item) => item[routeKey.value] === capabilityId,
+  )?.loop;
   return route === 'conversation' || route === 'work' ? route : 'both';
 }
 
 function setRoute(capabilityId: string, value: unknown) {
-  const loop: LoopMode = value === 'conversation' || value === 'work' ? value : 'both';
+  const loop: LoopMode =
+    value === 'conversation' || value === 'work' ? value : 'both';
   const next = routes().filter((item) => item[routeKey.value] !== capabilityId);
   if (loop !== 'both') {
     next.push({ [routeKey.value]: capabilityId, loop });
@@ -120,20 +124,22 @@ function normalizeItems(value: unknown): CapabilityItem[] {
   if (!Array.isArray(value)) return [];
   const items = value
     .filter(
-      (item): item is Record<string, unknown> => item !== null && typeof item === 'object',
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === 'object',
     )
     .filter((item) => item.active !== false)
     .map((item) => {
       const id = typeof item.name === 'string' ? item.name.trim() : '';
-      const description = typeof item.description === 'string' ? item.description.trim() : '';
+      const description =
+        typeof item.description === 'string' ? item.description.trim() : '';
       return {
         id,
         label: description ? `${id} — ${description}` : id,
       };
     })
     .filter((item) => item.id);
-  return [...new Map(items.map((item) => [item.id, item])).values()].sort((left, right) =>
-    left.label.localeCompare(right.label),
+  return [...new Map(items.map((item) => [item.id, item])).values()].sort(
+    (left, right) => left.label.localeCompare(right.label),
   );
 }
 
@@ -156,7 +162,8 @@ async function loadCapabilities() {
 
     const response = await skillApi.list();
     const skills = normalizeSkillsPayload(response.data.data);
-    capabilities.value = response.data.status === 'ok' ? normalizeItems(skills) : [];
+    capabilities.value =
+      response.data.status === 'ok' ? normalizeItems(skills) : [];
   } catch {
     capabilities.value = [];
   } finally {

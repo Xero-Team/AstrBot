@@ -36,7 +36,7 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 | `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                            |
 | `provider_settings`                               | Agent, default-model, Persona, retrieval, context, and tool behavior for this profile.                                            |
 | `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                   |
-| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.               |
+| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                  |
 | `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                    |
 | `provider_ltm_settings`                           | Group-context, image-caption, and proactive-reply settings under a historical name; it is not the Alkaid long-term-memory switch. |
 | `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                              |

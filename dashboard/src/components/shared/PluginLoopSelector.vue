@@ -76,7 +76,8 @@ const loopOptions = computed(() => [
 function routes(): PluginRoute[] {
   return Array.isArray(props.modelValue)
     ? props.modelValue.filter(
-        (route): route is PluginRoute => route !== null && typeof route === 'object',
+        (route): route is PluginRoute =>
+          route !== null && typeof route === 'object',
       )
     : [];
 }
@@ -87,7 +88,8 @@ function routeFor(pluginId: string): LoopMode {
 }
 
 function setRoute(pluginId: string, value: unknown) {
-  const loop: LoopMode = value === 'conversation' || value === 'work' ? value : 'both';
+  const loop: LoopMode =
+    value === 'conversation' || value === 'work' ? value : 'both';
   const next = routes().filter((item) => item.plugin_id !== pluginId);
   if (loop !== 'both') {
     next.push({ plugin_id: pluginId, loop });

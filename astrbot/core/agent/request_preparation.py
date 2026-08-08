@@ -69,7 +69,7 @@ def _provider_supports(provider: ChatModel | None, modality: str) -> bool:
 async def _prepare_media(
     refs: list[str],
     *,
-    media_type: Literal["image", "audio"],
+    media_type: Literal["image", "audio", "video", "file"],
     provider: ChatModel | None,
     max_bytes: int,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:

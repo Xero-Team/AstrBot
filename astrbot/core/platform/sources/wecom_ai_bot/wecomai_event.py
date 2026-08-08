@@ -216,7 +216,9 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         return await super().send(message)
 
     async def send_streaming(
-        self, generator, use_fallback=False
+        self,
+        generator,
+        use_fallback: bool = False,
     ) -> PlatformSendResult | None:
         """流式发送消息，参考webchat的send_streaming设计"""
         final_data = ""

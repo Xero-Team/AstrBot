@@ -61,7 +61,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         )
 
     async def send_streaming(
-        self, generator, use_fallback: bool = False
+        self,
+        generator,
+        use_fallback: bool = False,
     ) -> PlatformSendResult | None:
         final_data = ""
         reasoning_content = ""

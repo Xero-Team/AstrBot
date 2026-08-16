@@ -417,35 +417,16 @@
                       :value="scope.value"
                       :color="
                         newApiKeyScopes.includes(scope.value)
-                          ? scope.sensitive
-                            ? 'error'
-                            : 'primary'
+                          ? 'primary'
                           : undefined
                       "
                       :variant="
                         newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'
                       "
                     >
-                      {{ scope.label
-                      }}<span v-if="scope.sensitive" class="ml-1"
-                        >· {{ tm('apiKey.sensitiveScope') }}</span
-                      >
+                      {{ scope.label }}
                     </v-chip>
                   </v-chip-group>
-
-                  <v-alert
-                    v-if="
-                      newApiKeyScopes.some((scope) =>
-                        sensitiveScopes.has(scope),
-                      )
-                    "
-                    type="warning"
-                    variant="tonal"
-                    density="comfortable"
-                    class="mb-3"
-                  >
-                    {{ tm('apiKey.sensitiveScopeWarning') }}
-                  </v-alert>
 
                   <v-alert
                     v-if="createdApiKeyPlaintext"
@@ -564,6 +545,13 @@
     @confirm="handleConfigSave2faConfirm"
     @cancel="handleConfigSave2faCancel"
   />
+  <DashboardStepUpDialog
+    v-model="stepUpDialogOpen"
+    :loading="stepUpLoading"
+    :error-message="stepUpErrorMessage"
+    @confirm="submitStepUp"
+    @cancel="cancelStepUp"
+  />
 </template>
 
 <script setup>
@@ -577,11 +565,14 @@ import DashboardAppearanceSettings from '@/components/appearance/DashboardAppear
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
-import { PurpleTheme } from '@/theme/LightTheme';
+import { applyUserThemeColors, defaultThemeColors } from '@/design/theme';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
@@ -590,6 +581,14 @@ const { tm: tmMeta } = useModuleI18n('features/config-metadata');
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const getStoredColor = (key, fallback) => {
   const stored =
@@ -598,10 +597,10 @@ const getStoredColor = (key, fallback) => {
 };
 
 const primaryColor = ref(
-  getStoredColor('themePrimary', PurpleTheme.colors.primary),
+  getStoredColor('themePrimary', defaultThemeColors.primary),
 );
 const secondaryColor = ref(
-  getStoredColor('themeSecondary', PurpleTheme.colors.secondary),
+  getStoredColor('themeSecondary', defaultThemeColors.secondary),
 );
 
 const resolveThemes = () => {
@@ -610,20 +609,8 @@ const resolveThemes = () => {
   return null;
 };
 
-const applyThemeColors = (primary, secondary) => {
-  const themes = resolveThemes();
-  if (!themes) return;
-  ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
-    const themeDef = themes[name];
-    if (!themeDef?.colors) return;
-    if (primary) themeDef.colors.primary = primary;
-    if (secondary) themeDef.colors.secondary = secondary;
-    if (primary && themeDef.colors.darkprimary)
-      themeDef.colors.darkprimary = primary;
-    if (secondary && themeDef.colors.darksecondary)
-      themeDef.colors.darksecondary = secondary;
-  });
-};
+const applyThemeColors = (primary, secondary) =>
+  void applyUserThemeColors(resolveThemes(), primary, secondary);
 
 applyThemeColors(primaryColor.value, secondaryColor.value);
 
@@ -688,9 +675,7 @@ const availableScopes = [
   { value: 'persona', label: 'persona' },
   { value: 'im', label: 'im' },
   { value: 'config', label: 'config' },
-  { value: 'config:edit_admin', label: 'config:edit_admin', sensitive: true },
   { value: 'chat', label: 'chat' },
-  { value: 'chat:admin', label: 'chat:admin', sensitive: true },
   { value: 'kb', label: 'kb' },
   { value: 'memory', label: 'memory' },
   { value: 'data', label: 'data' },
@@ -730,11 +715,6 @@ const settingsNavItems = computed(() => [
 ]);
 
 const configIncludedScopes = ['bot', 'provider'];
-const scopeDependencies = {
-  'config:edit_admin': 'config',
-  'chat:admin': 'chat',
-};
-const sensitiveScopes = new Set(Object.keys(scopeDependencies));
 const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 
 const systemConfigHasChanges = computed(
@@ -886,16 +866,6 @@ watch(
     const selectedScopes = new Set(scopes);
     const previousScopes = new Set(previousApiKeyScopes.value);
 
-    for (const [child, parent] of Object.entries(scopeDependencies)) {
-      if (selectedScopes.has(child)) {
-        if (previousScopes.has(parent) && !scopes.includes(parent)) {
-          selectedScopes.delete(child);
-        } else {
-          selectedScopes.add(parent);
-        }
-      }
-    }
-
     if (selectedScopes.has('config')) {
       const includedScopeRemoved = configIncludedScopes.some(
         (scope) => previousScopes.has(scope) && !selectedScopes.has(scope),
@@ -908,13 +878,6 @@ watch(
           selectedScopes.add(scope);
         }
       }
-    }
-
-    if (!selectedScopes.has('config')) {
-      selectedScopes.delete('config:edit_admin');
-    }
-    if (!selectedScopes.has('chat')) {
-      selectedScopes.delete('chat:admin');
     }
 
     const nextScopes = availableScopes
@@ -1150,6 +1113,13 @@ const loadApiKeys = async () => {
   }
 };
 
+const requestApiKeyStepUp = () =>
+  requestStepUp({
+    action: 'identity.manage',
+    resourceType: 'api-key',
+    resourceId: 'collection',
+  });
+
 const copyCreatedApiKey = async () => {
   if (!createdApiKeyPlaintext.value) return;
   const ok = await copyToClipboard(createdApiKeyPlaintext.value);
@@ -1167,11 +1137,6 @@ const createApiKey = async () => {
       selectedScopeSet.add(scope);
     }
   }
-  for (const [child, parent] of Object.entries(scopeDependencies)) {
-    if (selectedScopeSet.has(child)) {
-      selectedScopeSet.add(parent);
-    }
-  }
   const selectedScopes = availableScopes
     .map((scope) => scope.value)
     .filter((scope) => selectedScopeSet.has(scope));
@@ -1182,6 +1147,8 @@ const createApiKey = async () => {
   }
   apiKeyCreating.value = true;
   try {
+    const stepUp = await requestApiKeyStepUp();
+    if (!stepUp) return;
     const payload = {
       name: newApiKeyName.value,
       scopes: selectedScopes,
@@ -1189,7 +1156,9 @@ const createApiKey = async () => {
     if (newApiKeyExpiresInDays.value !== 'permanent') {
       payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
     }
-    const res = await apiKeyApi.create(payload);
+    const res = await apiKeyApi.create(payload, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status !== 'ok') {
       showToast(
         res.data.message || tm('apiKey.messages.createFailed'),
@@ -1214,7 +1183,11 @@ const createApiKey = async () => {
 
 const revokeApiKey = async (keyId) => {
   try {
-    const res = await apiKeyApi.revoke(keyId);
+    const stepUp = await requestApiKeyStepUp();
+    if (!stepUp) return;
+    const res = await apiKeyApi.revoke(keyId, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status !== 'ok') {
       showToast(
         res.data.message || tm('apiKey.messages.revokeFailed'),
@@ -1234,7 +1207,11 @@ const revokeApiKey = async (keyId) => {
 
 const deleteApiKey = async (keyId) => {
   try {
-    const res = await apiKeyApi.delete(keyId);
+    const stepUp = await requestApiKeyStepUp();
+    if (!stepUp) return;
+    const res = await apiKeyApi.delete(keyId, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status !== 'ok') {
       showToast(
         res.data.message || tm('apiKey.messages.deleteFailed'),
@@ -1260,7 +1237,7 @@ const restartAstrBot = async () => {
   if (!confirmed) return;
 
   try {
-    await restartAstrBotRuntime(wfr.value);
+    await restartAstrBotRuntime(wfr.value, requestStepUp);
   } catch (error) {
     console.error(error);
   }
@@ -1273,8 +1250,8 @@ const openBackupDialog = () => {
 };
 
 const resetThemeColors = () => {
-  primaryColor.value = PurpleTheme.colors.primary;
-  secondaryColor.value = PurpleTheme.colors.secondary;
+  primaryColor.value = defaultThemeColors.primary;
+  secondaryColor.value = defaultThemeColors.secondary;
   localStorage.removeItem('themePrimary');
   localStorage.removeItem('themeSecondary');
   applyThemeColors(primaryColor.value, secondaryColor.value);

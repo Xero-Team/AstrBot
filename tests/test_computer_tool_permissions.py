@@ -8,6 +8,7 @@ from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTo
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     GetExecutionHistoryTool,
 )
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class _FakeBrowser:
@@ -36,8 +37,7 @@ def _make_run_context(
             "provider_settings": {
                 "computer_use_require_admin": require_admin,
             }
-        }
-        ,
+        },
         computer_runtime=computer_runtime,
     )
     event = SimpleNamespace(
@@ -45,12 +45,18 @@ def _make_run_context(
         unified_msg_origin="qq_official:friend:user-1",
         get_sender_id=lambda: "user-1",
     )
+    attach_authorized_tool_context(
+        event,
+        config_holder,
+        "tool.browser_control",
+        "extension.manage",
+    )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)
 
 
 @pytest.mark.asyncio
-async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
+async def test_browser_tool_direct_component_call_is_not_gated_by_legacy_config(
     monkeypatch,
 ):
     async def _fake_get_booter(_ctx, _session_id):
@@ -68,7 +74,7 @@ async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
 
 
 @pytest.mark.asyncio
-async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
+async def test_neo_skill_tool_direct_component_call_is_not_gated_by_legacy_config(
     monkeypatch,
 ):
     async def _fake_get_booter(_ctx, _session_id):
@@ -91,12 +97,10 @@ async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
 
 
 @pytest.mark.asyncio
-async def test_browser_tool_still_denies_non_admin_when_admin_requirement_enabled():
+async def test_browser_tool_without_runtime_context_is_not_gated_by_legacy_config():
     result = await BrowserExecTool().call(
         _make_run_context(require_admin=True),
         cmd="open https://example.com",
     )
 
-    assert "Permission denied" in result
-    assert "Using browser tools is only allowed for admin users" in result
-    assert "User's ID is: user-1" in result
+    assert "Error executing browser command" in result

@@ -33,6 +33,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation, load_sanitized_history
 from astrbot.core.db.po import Personality
 from astrbot.core.db.protocols import PlatformSessionStore
@@ -49,6 +50,7 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
@@ -81,6 +83,7 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
     normalize_umo_for_workspace,
 )
@@ -90,7 +93,10 @@ from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+    SendMessageToUserTool,
+)
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -439,6 +445,7 @@ def _apply_local_env_tools(
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -449,16 +456,28 @@ def _apply_local_env_tools(
 
 def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
-    shell_hint = (
-        "The runtime shell is Windows Command Prompt (cmd.exe). "
-        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
-        if system_name.lower() == "windows"
-        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
-    )
+    if system_name.lower() != "windows":
+        shell_hint = (
+            "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+        )
+    elif Path(resolve_windows_shell()).name.lower().startswith("pwsh"):
+        shell_hint = (
+            "The runtime shell is PowerShell 7 (pwsh.exe). "
+            "Use PowerShell 7-compatible syntax and cmdlets, and do not "
+            "assume a full Unix userland or GNU utilities are available."
+        )
+    else:
+        shell_hint = (
+            "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+            "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+            "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
+        )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Long-running commands return managed sessions; use astrbot_shell_session "
+        "with write_line for line-oriented programs."
     )
 
 
@@ -1652,6 +1671,7 @@ _CONVERSATION_FORBIDDEN_TOOL_TYPES = (
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
 )
 
@@ -1783,10 +1803,11 @@ async def _append_message_component_context(
     )
     rendered = await renderer.render_event_components()
     if rendered.text:
+        req.message_component_context = (
+            f"<Message Components>\n{rendered.text}\n</Message Components>"
+        )
         req.extra_user_content_parts.append(
-            TextPart(
-                text=(f"<Message Components>\n{rendered.text}\n</Message Components>")
-            )
+            TextPart(text=req.message_component_context)
         )
 
     for image_ref in rendered.image_refs:
@@ -1977,6 +1998,48 @@ async def prepare_event_attachments(
     req._attachments_prepared = True
 
 
+async def append_message_component_context_to_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    config: MainAgentBuildConfig,
+) -> None:
+    """Inline safe message semantics for runners limited to a text prompt.
+
+    Local providers consume ``extra_user_content_parts`` directly. Third-party
+    Agent runners accept only ``ProviderRequest.prompt``, so this deliberately
+    promotes only rendered message metadata and quoted-message text. Attachment
+    paths and unrelated request-scoped reminders remain out of the prompt.
+    """
+    contexts = [req.message_component_context] if req.message_component_context else []
+    settings = _get_quoted_message_parser_settings(config.provider_settings)
+
+    for component in event.message_obj.message:
+        if not isinstance(component, Reply):
+            continue
+        try:
+            quoted_text = await extract_quoted_message_text(
+                event,
+                component,
+                settings=settings,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to render quoted message context for third-party runner: %s",
+                type(exc).__name__,
+            )
+            continue
+        if quoted_text:
+            contexts.append(f"<Quoted Message>\n{quoted_text}\n</Quoted Message>")
+
+    if not contexts:
+        return
+
+    context_text = "\n\n".join(contexts)
+    req.prompt = f"{req.prompt}\n\n{context_text}" if req.prompt else context_text
+
+
 def _create_main_runner_reset(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -2085,6 +2148,20 @@ async def build_main_agent(
 
     if config.add_cron_tools:
         _proactive_cron_job_tools(req, plugin_context)
+
+    ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
+        "provider_ltm_settings", {}
+    )
+    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
+        "group_message_history_enable", False
+    ):
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                GetGroupMessageHistoryTool
+            )
+        )
 
     if event.platform_meta.support_proactive_message:
         if req.func_tool is None:

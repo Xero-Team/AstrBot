@@ -12,6 +12,7 @@ import { resolveErrorMessage } from '@/utils/errorUtils';
 import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
 import { getValidHashTab, replaceTabRoute } from '@/utils/hashRouteTabs';
 import { getPlatformDisplayName } from '@/utils/platformUtils';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import {
   buildSearchQuery,
   matchesPluginSearch,
@@ -24,7 +25,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 type ExtensionTab = 'installed' | 'market' | 'mcp' | 'skills' | 'components';
 type UploadTab = 'file' | 'url';
-type SortBy = 'default' | 'stars' | 'author' | 'updated';
+type SortBy = 'default' | 'stars' | 'downloads' | 'author' | 'updated';
 type SortOrder = 'desc' | 'asc';
 type PluginLogLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
 
@@ -55,6 +56,28 @@ interface CategoryMeta {
   count: number;
   rawLabel: string;
 }
+
+const MARKET_CATEGORY_ALIASES: Record<string, string> = {
+  ai_增强: 'ai_tools',
+  ai_tools: 'ai_tools',
+  entertainment: 'entertainment',
+  integrations: 'integrations',
+  knowledge_base: 'knowledge_base',
+  long_term_memory: 'long_term_memory',
+  productivity: 'productivity',
+  tools: 'tools',
+  utilities: 'utilities',
+  三方集成: 'integrations',
+  娱乐: 'entertainment',
+  工具: 'tools',
+  生活: 'utilities',
+  生活实用: 'utilities',
+  知识库: 'knowledge_base',
+  长期记忆: 'long_term_memory',
+  外部集成: 'integrations',
+  其他: 'other',
+  other: 'other',
+};
 
 interface LoadingDialogState {
   show: boolean;
@@ -120,10 +143,28 @@ const buildFailedPluginItems = (
 export const useExtensionPage = () => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
-  const { tm } = useModuleI18n('features/extension');
+  const { tm, getRaw } = useModuleI18n('features/extension');
   const router = useRouter();
   const route = useRoute();
   const getSelectedGitHubProxy = readSelectedGitHubProxy;
+  const {
+    dialogOpen: stepUpDialogOpen,
+    loading: stepUpLoading,
+    errorMessage: stepUpErrorMessage,
+    requestStepUp,
+    submitStepUp,
+    cancelStepUp,
+  } = useDashboardStepUp();
+
+  const requestPluginInstallStepUp = async (): Promise<string> => {
+    const token = await requestStepUp({
+      action: 'extension.plugin_install',
+      resourceType: 'dashboard-api',
+      resourceId: 'post-plugin',
+    });
+    if (!token) throw new Error('Plugin installation authorization cancelled.');
+    return token;
+  };
 
   // 检查指令冲突并提示
   const conflictDialog = reactive({
@@ -279,7 +320,7 @@ export const useExtensionPage = () => {
   const marketSearch = ref('');
   const debouncedMarketSearch = ref('');
   const refreshingMarket = ref(false);
-  const sortBy = ref<SortBy>('default'); // default, stars, author, updated
+  const sortBy = ref<SortBy>('default'); // default, stars, downloads, author, updated
   const sortOrder = ref<SortOrder>('desc'); // desc (降序) or asc (升序)
   const randomPluginNames = ref<string[]>([]);
   const marketCategoryFilter = ref('all');
@@ -293,7 +334,8 @@ export const useExtensionPage = () => {
     if (!normalized) {
       return 'other';
     }
-    return normalized.replace(/[\s-]+/g, '_');
+    const normalizedKey = normalized.replace(/[\s-]+/g, '_');
+    return MARKET_CATEGORY_ALIASES[normalizedKey] || normalizedKey;
   };
 
   const getMarketCategoryLabel = (key: string, rawCategory = '') => {
@@ -304,21 +346,25 @@ export const useExtensionPage = () => {
       productivity: 'Productivity',
       integrations: 'Integrations',
       utilities: 'Utilities',
+      tools: 'Tools',
+      knowledge_base: 'Knowledge Base',
+      long_term_memory: 'Long-term Memory',
       other: 'Other',
     };
-    const i18nKey = `market.categories.${key}`;
-    const translated = tm(i18nKey);
-    if (translated && !translated.includes('[MISSING:')) {
+    const categoryKey = normalizeMarketCategory(key);
+    const i18nKey = `market.categories.${categoryKey}`;
+    const translated = getRaw(i18nKey);
+    if (typeof translated === 'string') {
       return translated;
     }
-    if (fallbackMap[key]) {
-      return fallbackMap[key];
+    if (fallbackMap[categoryKey]) {
+      return fallbackMap[categoryKey];
     }
     const normalizedRaw = String(rawCategory || '').trim();
     if (normalizedRaw) {
       return normalizedRaw;
     }
-    return key
+    return categoryKey
       .split(/[_-]+/)
       .filter(Boolean)
       .map((part: string) => part[0].toUpperCase() + part.slice(1))
@@ -470,6 +516,14 @@ export const useExtensionPage = () => {
         const starsA = a.stars ?? 0;
         const starsB = b.stars ?? 0;
         return sortOrder.value === 'desc' ? starsB - starsA : starsA - starsB;
+      });
+    } else if (sortBy.value === 'downloads') {
+      plugins.sort((a, b) => {
+        const downloadsA = Number(a.download_count) || 0;
+        const downloadsB = Number(b.download_count) || 0;
+        return sortOrder.value === 'desc'
+          ? downloadsB - downloadsA
+          : downloadsA - downloadsB;
       });
     } else if (sortBy.value === 'author') {
       // 按作者名字典序排序
@@ -873,9 +927,12 @@ export const useExtensionPage = () => {
     loadingDialog.result = '';
     loadingDialog.show = true;
     try {
-      const res = await pluginApi.update(extensionName, {
-        proxy: downloadUrl ? '' : getSelectedGitHubProxy(),
-      });
+      const stepUp = await requestPluginInstallStepUp();
+      const res = await pluginApi.update(
+        extensionName,
+        { proxy: downloadUrl ? '' : getSelectedGitHubProxy() },
+        stepUp,
+      );
 
       if (res.data.status === 'error') {
         onLoadingDialogResult(2, res.data.message, -1);
@@ -950,10 +1007,14 @@ export const useExtensionPage = () => {
 
     const targets = updatableExtensions.value.map((ext) => ext.name);
     try {
-      const res = await pluginApi.updateMany({
-        names: targets,
-        proxy: getSelectedGitHubProxy(),
-      });
+      const stepUp = await requestPluginInstallStepUp();
+      const res = await pluginApi.updateMany(
+        {
+          names: targets,
+          proxy: getSelectedGitHubProxy(),
+        },
+        stepUp,
+      );
 
       if (res.data.status === 'error') {
         onLoadingDialogResult(
@@ -1677,9 +1738,11 @@ export const useExtensionPage = () => {
   const performInstallRequest = async ({
     source,
     ignoreVersionCheck,
+    stepUp,
   }: {
     source: UploadTab;
     ignoreVersionCheck: boolean;
+    stepUp: string;
   }) => {
     const shouldIgnoreVersionCheck = ignoreVersionCheck === true;
     if (source === 'file') {
@@ -1689,7 +1752,7 @@ export const useExtensionPage = () => {
       const formData = new FormData();
       formData.append('file', upload_file.value);
       formData.append('ignore_version_check', String(shouldIgnoreVersionCheck));
-      return pluginApi.installUpload(formData);
+      return pluginApi.installUpload(formData, stepUp);
     }
 
     const urlPayload: Parameters<typeof pluginApi.installUrl>[0] = {
@@ -1706,8 +1769,8 @@ export const useExtensionPage = () => {
     };
 
     return installUsesGithubSource.value
-      ? pluginApi.installGithub(githubPayload)
-      : pluginApi.installUrl(urlPayload);
+      ? pluginApi.installGithub(githubPayload, stepUp)
+      : pluginApi.installUrl(urlPayload, stepUp);
   };
 
   const finalizeSuccessfulInstall = async (
@@ -1750,9 +1813,11 @@ export const useExtensionPage = () => {
     loading_.value = true;
 
     try {
+      const stepUp = await requestPluginInstallStepUp();
       const res = await performInstallRequest({
         source,
         ignoreVersionCheck: shouldIgnoreVersionCheck,
+        stepUp,
       });
       loading_.value = false;
 
@@ -1987,6 +2052,7 @@ export const useExtensionPage = () => {
     commonStore,
     t,
     tm,
+    getRaw,
     router,
     route,
     getSelectedGitHubProxy,
@@ -2021,6 +2087,7 @@ export const useExtensionPage = () => {
     marketCategoryFilter,
     marketCategoryItems,
     marketCategoryCounts,
+    getMarketCategoryLabel,
     dangerConfirmDialog,
     selectedDangerPlugin,
     selectedMarketInstallPlugin,
@@ -2128,6 +2195,11 @@ export const useExtensionPage = () => {
     selectedUpdateDownloadUrl,
     selectedUpdateSourceUrl,
     updateUsesGithubSource,
+    stepUpDialogOpen,
+    stepUpLoading,
+    stepUpErrorMessage,
+    submitStepUp,
+    cancelStepUp,
     checkInstallVersionSupport,
     refreshPluginMarket,
     handleLocaleChange,

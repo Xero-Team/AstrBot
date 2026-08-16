@@ -1,6 +1,22 @@
 # syntax=docker/dockerfile:1.7
-FROM python:3.14.6-slim
+# Runtime feature groups are selected with the BuildKit argument
+# ASTRBOT_FEATURES. `full` expands to all groups; `minimal` keeps only the
+# Python application and core shell utilities. Comma-separated group names may
+# be used for a tailored image:
+#   browser  Chromium and Playwright system libraries
+#   documents  Pandoc, Poppler, and TeX
+#   media  FFmpeg, ImageMagick, Ghostscript, and codecs
+#   ocr  Tesseract language data
+#   fonts  fontconfig and runtime font families
+#   node  Node.js, npm, npx, and pnpm
+#   docker  Docker CLI and Compose plugin
+ARG ASTRBOT_FEATURES=full
+ARG GITHUB_RELEASE_BASES="https://github.com https://ghproxy.net/https://github.com https://gh-proxy.com/https://github.com https://ghfast.top/https://github.com"
+FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS builder
 WORKDIR /AstrBot
+
+ARG ASTRBOT_FEATURES
+ARG GITHUB_RELEASE_BASES
 
 # Enable pipefail so failures in install pipes abort the build.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -166,13 +182,71 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && docker compose version \
     && rm -f /etc/apt/apt.conf.d/99astrbot
 
+# Try the official release host first, then configured mirrors. Mirrors are a
+# network fallback only; callers still validate every downloaded asset.
+RUN <<'EOF'
+cat > /usr/local/bin/download-github-release <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+path="$1"
+output="$2"
+kind="$3"
+bases="$4"
+tmp="${output}.part"
+
+validate() {
+    case "$1" in
+        elf)
+            file -b "$2" | grep -q 'ELF '
+            ;;
+        tar-gzip)
+            tar -tzf "$2" >/dev/null
+            ;;
+        tar-xz)
+            tar -tJf "$2" >/dev/null
+            ;;
+        deb)
+            dpkg-deb --info "$2" >/dev/null
+            ;;
+        *)
+            echo "Unsupported GitHub release asset type: $1" >&2
+            return 2
+            ;;
+    esac
+}
+
+for base in ${bases}; do
+    if [[ "$base" != https://* ]]; then
+        echo "Refusing non-HTTPS GitHub release base: $base" >&2
+        continue
+    fi
+    url="${base%/}/${path#/}"
+    if curl --proto '=https' --tlsv1.2 --http1.1 -fsSL \
+        --retry 5 --retry-all-errors --retry-delay 2 \
+        --connect-timeout 30 "$url" -o "$tmp" \
+        && test -s "$tmp" \
+        && validate "$kind" "$tmp"; then
+        mv "$tmp" "$output"
+        exit 0
+    fi
+    echo "GitHub release download failed or failed validation: $url" >&2
+    rm -f "$tmp"
+done
+
+echo "Unable to download a valid GitHub release asset: $path" >&2
+exit 1
+SCRIPT
+chmod 0755 /usr/local/bin/download-github-release
+EOF
+
 RUN touch "${BASH_ENV}" \
     && echo '. "${BASH_ENV}"' >> ~/.bashrc \
     && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | PROFILE="${BASH_ENV}" bash \
     && source "${BASH_ENV}" \
     && nvm install 26.5.0 \
     && nvm alias default 26.5.0 \
-    && npm install -g npm@12.0.1 pnpm@11.15.1 \
+    && npm install -g npm@12.0.2 pnpm@11.21.0 \
     && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
     && for tool in node npm npx pnpm; do \
         if [[ -x "${current_node_dir}/bin/${tool}" ]]; then \
@@ -185,7 +259,9 @@ RUN touch "${BASH_ENV}" \
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    curl --proto '=https' --tlsv1.2 -sSf \
+    --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+    https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable \
     && cargo --version \
     && arch="$(dpkg --print-architecture)" \
@@ -195,9 +271,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -L --proto '=https' --tlsv1.2 -sSf \
-        "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-${cargo_binstall_arch}.tgz" \
-        | tar -C "$tmpdir" -xzf - \
+    && download-github-release \
+        "cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-${cargo_binstall_arch}.tgz" \
+        "${tmpdir}/cargo-binstall.tgz" tar-gzip "${GITHUB_RELEASE_BASES}" \
+    && tar -C "$tmpdir" -xzf "${tmpdir}/cargo-binstall.tgz" \
     && install -m 0755 "$tmpdir/cargo-binstall" /usr/local/cargo/bin/cargo-binstall \
     && rm -rf "$tmpdir" \
     && cargo binstall --no-confirm \
@@ -216,14 +293,16 @@ RUN arch="$(dpkg --print-architecture)" \
         arm64) shfmt_arch="linux_arm64"; hadolint_arch="Linux-arm64" ;; \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL \
-        "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_${shfmt_arch}" \
-        -o /usr/local/bin/shfmt \
-    && chmod +x /usr/local/bin/shfmt \
-    && curl -fsSL \
-        "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${hadolint_arch}" \
-        -o /usr/local/bin/hadolint \
-    && chmod +x /usr/local/bin/hadolint \
+    && tmpdir="$(mktemp -d)" \
+    && download-github-release \
+        "mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_${shfmt_arch}" \
+        "${tmpdir}/shfmt" elf "${GITHUB_RELEASE_BASES}" \
+    && install -m 0755 "${tmpdir}/shfmt" /usr/local/bin/shfmt \
+    && download-github-release \
+        "hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${hadolint_arch}" \
+        "${tmpdir}/hadolint" elf "${GITHUB_RELEASE_BASES}" \
+    && install -m 0755 "${tmpdir}/hadolint" /usr/local/bin/hadolint \
+    && rm -rf "${tmpdir}" \
     && shfmt --version \
     && hadolint --version
 
@@ -233,10 +312,12 @@ RUN arch="$(dpkg --print-architecture)" \
         arm64) yq_arch="arm64" ;; \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL \
-        "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yq_arch}" \
-        -o /usr/local/bin/yq \
-    && chmod +x /usr/local/bin/yq \
+    && tmpdir="$(mktemp -d)" \
+    && download-github-release \
+        "mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yq_arch}" \
+        "${tmpdir}/yq" elf "${GITHUB_RELEASE_BASES}" \
+    && install -m 0755 "${tmpdir}/yq" /usr/local/bin/yq \
+    && rm -rf "${tmpdir}" \
     && yq --version
 
 # GitHub release downloads can occasionally terminate TLS connections early.
@@ -247,9 +328,9 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-${typst_arch}.tar.xz" \
-        -o "${tmpdir}/typst.tar.xz" \
+    && download-github-release \
+        "typst/typst/releases/download/v${TYPST_VERSION}/typst-${typst_arch}.tar.xz" \
+        "${tmpdir}/typst.tar.xz" tar-xz "${GITHUB_RELEASE_BASES}" \
     && tar -xJf "${tmpdir}/typst.tar.xz" -C "${tmpdir}" \
     && install -m 0755 \
         "$(find "${tmpdir}" -type f -name typst | head -n 1)" \
@@ -266,9 +347,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL \
-        "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${quarto_arch}.deb" \
-        -o "${tmpdir}/quarto.deb" \
+    && download-github-release \
+        "quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${quarto_arch}.deb" \
+        "${tmpdir}/quarto.deb" deb "${GITHUB_RELEASE_BASES}" \
     && apt-get update \
     && eatmydata apt-get install -y --no-install-recommends "${tmpdir}/quarto.deb" \
     && rm -rf "${tmpdir}" \
@@ -326,10 +407,14 @@ RUN cp -a /tmp/docker-local/. /root/
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv pip install "playwright==${PLAYWRIGHT_VERSION}" --no-cache-dir --system \
-    && PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node \
-       PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 \
-       playwright install --with-deps chromium
+    if [[ "${ASTRBOT_FEATURES}" == "full" || ",${ASTRBOT_FEATURES}," == *,browser,* ]]; then \
+        uv pip install "playwright==${PLAYWRIGHT_VERSION}" --no-cache-dir --system \
+        && PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node \
+           PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 \
+           playwright install --with-deps chromium; \
+    else \
+        mkdir -p /ms-playwright; \
+    fi
 
 RUN arch="$(dpkg --print-architecture)" \
     && case "${arch}" in \
@@ -338,9 +423,12 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && mkdir -p /opt/microsoft/powershell/7 \
-    && curl -fsSL \
-        "https://github.com/PowerShell/PowerShell/releases/download/v7.6.3/powershell-7.6.3-linux-${powershell_arch}.tar.gz" \
-        | tar -xz -C /opt/microsoft/powershell/7 \
+    && tmpdir="$(mktemp -d)" \
+    && download-github-release \
+        "PowerShell/PowerShell/releases/download/v7.6.3/powershell-7.6.3-linux-${powershell_arch}.tar.gz" \
+        "${tmpdir}/powershell.tar.gz" tar-gzip "${GITHUB_RELEASE_BASES}" \
+    && tar -xzf "${tmpdir}/powershell.tar.gz" -C /opt/microsoft/powershell/7 \
+    && rm -rf "${tmpdir}" \
     && chmod +x /opt/microsoft/powershell/7/pwsh \
     && ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh \
     && ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/powershell \
@@ -379,6 +467,114 @@ if [ -S /var/run/docker.sock ]; then
   export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 fi
 EOF
+
+FROM builder AS runtime-assets
+
+ARG ASTRBOT_FEATURES
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -eux; \
+    features="${ASTRBOT_FEATURES}"; \
+    case "${features}" in \
+        full) features="browser,documents,media,ocr,fonts,node,docker" ;; \
+        minimal) features="" ;; \
+    esac; \
+    for feature in ${features//,/ }; do \
+        case "${feature}" in \
+            browser|documents|media|ocr|fonts|node|docker) ;; \
+            *) echo "Unknown AstrBot feature: ${feature}" >&2; exit 1 ;; \
+        esac; \
+    done; \
+    mkdir -p \
+        /opt/astrbot/runtime-assets/bin \
+        /opt/astrbot/runtime-assets/docker-config/cli-plugins \
+        /opt/astrbot/runtime-assets/ms-playwright \
+        /opt/astrbot/runtime-assets/nvm; \
+    install -m 0755 /usr/local/bin/uv /opt/astrbot/runtime-assets/bin/uv; \
+    install -m 0755 /usr/local/bin/playwright /opt/astrbot/runtime-assets/bin/playwright; \
+    if [[ ",${features}," == *,node,* ]]; then \
+        cp -a /root/.nvm/. /opt/astrbot/runtime-assets/nvm/; \
+    fi; \
+    if [[ ",${features}," == *,docker,* ]]; then \
+        install -m 0755 /usr/bin/docker /opt/astrbot/runtime-assets/bin/docker; \
+        install -m 0755 \
+            /usr/libexec/docker/cli-plugins/docker-compose \
+            /opt/astrbot/runtime-assets/docker-config/cli-plugins/docker-compose; \
+    fi; \
+    if [[ ",${features}," == *,browser,* ]]; then \
+        cp -a /ms-playwright/. /opt/astrbot/runtime-assets/ms-playwright/; \
+    fi
+
+FROM builder AS dev
+
+EXPOSE 6185
+
+CMD ["python", "main.py"]
+
+# Keep the development image above separate from the production runtime. The
+# runtime copies only the application, installed Python packages, browser
+# assets, and the Node/uv tools needed by runtime MCP integrations.
+FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS runtime
+
+WORKDIR /AstrBot
+
+ARG ASTRBOT_FEATURES
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/astrbot/runtime-assets/ms-playwright \
+    DOCKER_CONFIG=/opt/astrbot/runtime-assets/docker-config \
+    NVM_DIR=/opt/astrbot/runtime-assets/nvm \
+    PATH=/opt/astrbot/runtime-assets/bin:/opt/astrbot/runtime-assets/nvm/versions/node/v26.5.0/bin:/usr/local/bin:${PATH} \
+    UV_LINK_MODE=copy \
+    UV_INSTALL_DIR=/usr/local/bin \
+    HOME=/root
+
+COPY --from=runtime-assets /opt/astrbot/runtime-assets/ /opt/astrbot/runtime-assets/
+
+COPY --from=builder /usr/local/lib/python3.14/site-packages/ \
+    /usr/local/lib/python3.14/site-packages/
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    features="${ASTRBOT_FEATURES}" \
+    && case "${features}" in \
+        full) features="browser,documents,media,ocr,fonts,node,docker" ;; \
+        minimal) features="" ;; \
+    esac \
+    && for feature in ${features//,/ }; do \
+        case "${feature}" in \
+            browser|documents|media|ocr|fonts|node|docker) ;; \
+            *) echo "Unknown AstrBot feature: ${feature}" >&2; exit 1 ;; \
+        esac; \
+    done \
+    && apt_packages="bash ca-certificates curl file git jq openssh-client procps psmisc ripgrep sqlite3 unzip wget xxd zip" \
+    && if [[ ",${features}," == *,media,* ]]; then \
+        apt_packages="${apt_packages} ffmpeg ghostscript imagemagick libavcodec-extra libmagic1"; \
+    fi \
+    && if [[ ",${features}," == *,documents,* ]]; then \
+        apt_packages="${apt_packages} lmodern pandoc poppler-utils texlive-fonts-recommended texlive-lang-chinese texlive-latex-extra texlive-latex-recommended texlive-pictures texlive-xetex"; \
+    fi \
+    && if [[ ",${features}," == *,ocr,* ]]; then \
+        apt_packages="${apt_packages} tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng"; \
+    fi \
+    && if [[ ",${features}," == *,fonts,* ]]; then \
+        apt_packages="${apt_packages} fontconfig fonts-croscore fonts-crosextra-caladea fonts-crosextra-carlito fonts-dejavu-core fonts-dejavu-extra fonts-freefont-otf fonts-firacode fonts-inter fonts-liberation fonts-liberation2 fonts-noto-cjk fonts-noto-color-emoji fonts-noto-core fonts-noto-extra fonts-noto-mono fonts-roboto fonts-texgyre fonts-texgyre-math fonts-wqy-microhei fonts-wqy-zenhei"; \
+    fi \
+    && read -r -a apt_package_array <<< "${apt_packages}" \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends "${apt_package_array[@]}" \
+    && if [[ ",${features}," == *,browser,* ]]; then \
+        playwright install-deps chromium; \
+    fi \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /AstrBot/astrbot /AstrBot/astrbot
+COPY --from=builder /AstrBot/main.py /AstrBot/runtime_bootstrap.py \
+    /AstrBot/pyproject.toml /AstrBot/requirements.txt /AstrBot/.python-version /AstrBot/
 
 EXPOSE 6185
 

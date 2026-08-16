@@ -179,7 +179,6 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "none",
-        "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard_neo",
             "shipyard_neo_endpoint": "",
@@ -249,6 +248,8 @@ DEFAULT_CONFIG = {
     "provider_ltm_settings": {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
+        "group_message_history_enable": False,
+        "group_message_history_max_cnt": 700,
         "image_caption": False,
         "image_caption_provider_id": "",
         "active_reply": {
@@ -263,7 +264,6 @@ DEFAULT_CONFIG = {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
-    "admins_id": ["astrbot"],
     "t2i": False,
     "t2i_word_threshold": 150,
     "t2i_use_file_service": False,
@@ -1405,6 +1405,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "SSYCloud(胜算云)": {
+                        "id": "ssycloud",
+                        "provider": "ssycloud",
+                        "type": "ssycloud_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://router.shengsuanyun.com/api/v1",
+                        "proxy": "",
+                        "custom_headers": {"X-Title": "AstrBot"},
+                    },
                     "NVIDIA": {
                         "id": "nvidia",
                         "provider": "nvidia",
@@ -2133,6 +2145,13 @@ CONFIG_METADATA_2 = {
                                 "hint": "生成的最大词元（Tokens）数。",
                                 "type": "int",
                                 "default": 8192,
+                            },
+                            "reasoning_effort": {
+                                "name": "Reasoning Effort",
+                                "description": "推理强度",
+                                "hint": "控制推理模型的推理强度，支持的值取决于具体模型。",
+                                "type": "string",
+                                "default": "high",
                             },
                         },
                     },
@@ -3064,6 +3083,12 @@ CONFIG_METADATA_2 = {
                     "group_message_max_cnt": {
                         "type": "int",
                     },
+                    "group_message_history_enable": {
+                        "type": "bool",
+                    },
+                    "group_message_history_max_cnt": {
+                        "type": "int",
+                    },
                     "image_caption": {
                         "type": "bool",
                     },
@@ -3107,10 +3132,6 @@ CONFIG_METADATA_2 = {
             },
             "t2i_word_threshold": {
                 "type": "int",
-            },
-            "admins_id": {
-                "type": "list",
-                "items": {"type": "string"},
             },
             "http_proxy": {
                 "type": "string",
@@ -3488,11 +3509,6 @@ CONFIG_METADATA_3 = {
                         "options": ["none", "local", "sandbox"],
                         "labels": ["无", "本地", "沙箱"],
                         "hint": "选择 Computer Use 运行环境。",
-                    },
-                    "provider_settings.computer_use_require_admin": {
-                        "description": "需要 AstrBot 管理员权限",
-                        "type": "bool",
-                        "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /session info 指令查看管理员 ID。",
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
@@ -3941,11 +3957,6 @@ CONFIG_METADATA_3 = {
                 "description": "基本",
                 "type": "object",
                 "items": {
-                    "admins_id": {
-                        "description": "管理员 ID",
-                        "type": "list",
-                        "items": {"type": "string"},
-                    },
                     "platform_settings.unique_session": {
                         "description": "隔离会话",
                         "type": "bool",
@@ -4322,6 +4333,14 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_ltm_settings.group_message_max_cnt": {
                         "description": "最大消息数量",
+                        "type": "int",
+                    },
+                    "provider_ltm_settings.group_message_history_enable": {
+                        "description": "持久化群消息历史",
+                        "type": "bool",
+                    },
+                    "provider_ltm_settings.group_message_history_max_cnt": {
+                        "description": "持久化群消息历史保留数量",
                         "type": "int",
                     },
                     "provider_ltm_settings.image_caption": {

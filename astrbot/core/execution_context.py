@@ -13,16 +13,19 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.assistant_history import AssistantHistoryCommitter
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.protocols import PluginRuntimeStore
 from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
-from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.send_result import DeliveryReceipt, PlatformSendResult
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
@@ -145,6 +148,16 @@ class PlatformManagerProtocol(Protocol):
         **kwargs,
     ) -> dict[str, object]: ...
 
+    async def invoke_capability(
+        self,
+        platform_id: str,
+        capability_name: str,
+        action_name: str,
+        **kwargs,
+    ) -> object: ...
+
+    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]: ...
+
     async def refresh_registered_commands(self) -> None: ...
 
     async def send_to_session(
@@ -185,6 +198,7 @@ class CoreExecutionContext:
         session_waiter_registry: SessionWaiterRegistry | None = None,
         follow_up_coordinator: FollowUpCoordinator | None = None,
         llm_metadata_catalog: LLMMetadataCatalog | None = None,
+        authorization: AuthorizationService | None = None,
     ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -216,6 +230,8 @@ class CoreExecutionContext:
         """Temporary file publication capability available to plugins."""
         self.catalogs = catalogs
         """Runtime-owned plugin, handler, and function-tool catalogs."""
+        self.authorization = authorization
+        """Runtime-owned action/resource authorization service."""
         self.llm_metadata_catalog = llm_metadata_catalog or LLMMetadataCatalog()
         """Runtime-owned model metadata used by Agent and Dashboard paths."""
         self.metrics = metrics
@@ -239,6 +255,7 @@ class CoreExecutionContext:
         self.session_waiter_registry = (
             session_waiter_registry or SessionWaiterRegistry()
         )
+        self._persisted_group_send_objects: set[int] = set()
         """Runtime-owned interactive message waits."""
         self.demo_mode = demo_mode
         self.subagent_orchestrator = subagent_orchestrator
@@ -648,6 +665,7 @@ class CoreExecutionContext:
 
         result = await self._platform_manager.send_to_session(session, message_chain)
         if result.success:
+            await self._persist_accepted_group_send(session, message_chain)
             return result
         logger.warning(
             "send_message failed for session %s: %s",
@@ -655,6 +673,133 @@ class CoreExecutionContext:
             result.error_message or "unknown error",
         )
         return result
+
+    async def _persist_accepted_group_send(
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
+    ) -> None:
+        """Persist one accepted assistant group send without duplicating retries."""
+        if session.message_type.value != "GroupMessage":
+            return
+        if session.platform_id == "webchat":
+            return
+        marker = id(message_chain)
+        if marker in self._persisted_group_send_objects:
+            return
+        record_id = await self._persist_group_message_chain(
+            platform_id=session.platform_id,
+            group_id=str(session),
+            message_chain=message_chain,
+            role="assistant",
+            sender_id="assistant",
+            sender_name="AstrBot",
+            error_context="accepted group message",
+        )
+        if record_id is not None:
+            self._persisted_group_send_objects.add(marker)
+            if len(self._persisted_group_send_objects) > 2048:
+                self._persisted_group_send_objects.clear()
+
+    async def persist_inbound_group_message(self, event: AstrMessageEvent) -> None:
+        """Persist one inbound group message before plugin processing.
+
+        Args:
+            event: The normalized inbound platform event.
+        """
+        if (
+            event.get_message_type() != MessageType.GROUP_MESSAGE
+            or event.get_platform_name() == "webchat"
+        ):
+            return
+        record_id = await self._persist_group_message_chain(
+            platform_id=event.get_platform_id(),
+            group_id=event.unified_msg_origin,
+            message_chain=MessageChain(chain=list(event.get_messages())),
+            role="user",
+            sender_id=event.get_sender_id(),
+            sender_name=event.get_sender_name(),
+            error_context="inbound group message",
+        )
+        if record_id is not None:
+            event.set_extra("_group_history_current_id", record_id)
+
+    async def persist_accepted_group_response(
+        self,
+        event: AstrMessageEvent,
+        receipt: DeliveryReceipt,
+    ) -> None:
+        """Persist the accepted portion of one group response.
+
+        Args:
+            event: The event that produced the response.
+            receipt: The platform acceptance receipt for that response.
+        """
+        if (
+            event.get_message_type() != MessageType.GROUP_MESSAGE
+            or event.get_platform_name() == "webchat"
+            or not receipt.accepted_attempts
+            or event.get_extra("_group_history_assistant_persisted", False)
+        ):
+            return
+        result = event.get_result()
+        if result is None or not result.chain:
+            return
+        message_chain = MessageChain(chain=list(result.chain))
+        if receipt.status != "accepted":
+            if not receipt.history_text:
+                return
+            message_chain = MessageChain(chain=[Plain(receipt.history_text)])
+        record_id = await self._persist_group_message_chain(
+            platform_id=event.get_platform_id(),
+            group_id=event.unified_msg_origin,
+            message_chain=message_chain,
+            role="assistant",
+            sender_id=event.get_self_id() or "assistant",
+            sender_name="AstrBot",
+            error_context="accepted group response",
+        )
+        if record_id is not None:
+            event.set_extra("_group_history_assistant_persisted", True)
+
+    async def _persist_group_message_chain(
+        self,
+        *,
+        platform_id: str,
+        group_id: str,
+        message_chain: MessageChain,
+        role: str,
+        sender_id: str | None,
+        sender_name: str | None,
+        error_context: str,
+    ) -> int | None:
+        """Persist one enabled group history record and return its identifier."""
+        try:
+            settings = self.get_config(umo=group_id).get("provider_ltm_settings", {})
+            if not settings.get("group_message_history_enable", False):
+                return None
+            try:
+                max_messages = max(
+                    1, int(settings.get("group_message_history_max_cnt", 700))
+                )
+            except TypeError, ValueError:
+                max_messages = 700
+            record = await self.message_history_manager.insert_message_chain(
+                platform_id=platform_id,
+                user_id=group_id,
+                message_chain=message_chain,
+                role=role,
+                is_group=True,
+                sender_id=sender_id,
+                sender_name=sender_name,
+                max_messages=max_messages,
+            )
+            return record.id if record is not None else None
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Failed to persist %s.", error_context)
+            return None
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
         """添加 LLM 工具。
@@ -721,6 +866,25 @@ class CoreExecutionContext:
             action_name,
             **kwargs,
         )
+
+    async def invoke_platform_capability(
+        self,
+        platform_id: str,
+        capability_name: str,
+        action_name: str,
+        **kwargs: Any,
+    ) -> object:
+        """Invoke a versioned platform capability through its owner."""
+        return await self._platform_manager.invoke_capability(
+            platform_id,
+            capability_name,
+            action_name,
+            **kwargs,
+        )
+
+    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]:
+        """Return the immutable capability snapshot for a platform instance."""
+        return self._platform_manager.get_platform_capabilities(platform_id)
 
     async def invoke_event_platform_action(
         self,

@@ -87,6 +87,7 @@ def create_dashboard_asgi_app(
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
     app.state.astrbot_config = runtime.astrbot_config
+    app.state.runtime = runtime
     app.state.db = db
     app.state.jwt_secret = jwt_secret
     dashboard_token_validator = DashboardTokenValidator(jwt_secret)
@@ -101,6 +102,13 @@ def create_dashboard_asgi_app(
         extension_registry,
         plugin_page_sessions,
         plugin_file_tickets,
+    )
+    auth_service = AuthService(
+        db,
+        runtime.astrbot_config,
+        demo_mode=runtime.services.demo_mode,
+        totp_runtime_state=runtime.services.totp_runtime_state,
+        token_validator=dashboard_token_validator,
     )
     app.state.services = SimpleNamespace(
         appearance=AppearanceService(),
@@ -124,18 +132,11 @@ def create_dashboard_asgi_app(
         ),
         config_routes=ConfigRoutingService(runtime.umop_config_router),
         api_keys=ApiKeyService(db),
-        auth=AuthService(
-            db,
-            runtime.astrbot_config,
-            demo_mode=runtime.services.demo_mode,
-            totp_runtime_state=runtime.services.totp_runtime_state,
-            token_validator=dashboard_token_validator,
-        ),
+        auth=auth_service,
         backups=BackupService(
             db,
             runtime.astrbot_config,
             runtime.knowledge_base_manager,
-            token_validator=dashboard_token_validator,
         ),
         chat=ChatService(
             db,
@@ -144,6 +145,7 @@ def create_dashboard_asgi_app(
             platform_message_history_manager=runtime.platform_message_history_manager,
             umop_config_router=runtime.umop_config_router,
             webchat_run_coordinator=runtime.webchat_run_coordinator,
+            authorization=getattr(runtime.services, "authorization", None),
             active_event_control=runtime.execution_context.active_event_registry,
         ),
         chat_projects=ChatUIProjectService(db),
@@ -168,7 +170,11 @@ def create_dashboard_asgi_app(
             provider_manager=runtime.provider_manager,
             platform_message_history_manager=runtime.platform_message_history_manager,
             webchat_run_coordinator=runtime.webchat_run_coordinator,
+            mcp_interaction_coordinator=getattr(
+                runtime.catalogs.tools, "mcp_interaction_coordinator", None
+            ),
             token_validator=dashboard_token_validator,
+            auth_service=auth_service,
         ),
         logs=LogService(runtime.log_broker, runtime.astrbot_config),
         bots=BotConfigService(
@@ -208,6 +214,7 @@ def create_dashboard_asgi_app(
             astrbot_config=runtime.astrbot_config,
             platform_message_history_manager=runtime.platform_message_history_manager,
             webchat_run_coordinator=runtime.webchat_run_coordinator,
+            authorization=getattr(runtime.services, "authorization", None),
         ),
         sessions=SessionManagementService(
             db,
@@ -216,12 +223,14 @@ def create_dashboard_asgi_app(
             runtime.persona_mgr,
             runtime.catalogs.plugins,
             runtime.knowledge_base_manager,
+            runtime.umop_config_router,
         ),
         skills=SkillsService(
             runtime.astrbot_config,
             runtime.services.computer_runtime,
             SkillManager(builtin_skill_catalog=runtime.catalogs.builtin_skills),
             demo_mode=runtime.services.demo_mode,
+            plugins=runtime.catalogs.plugins,
         ),
         stats=StatService(
             db,

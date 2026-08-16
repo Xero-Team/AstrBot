@@ -79,7 +79,7 @@ class TestAstrMessageEventInit:
     def test_init_basic(self, astr_message_event):
         """Test basic AstrMessageEvent initialization."""
         assert astr_message_event.message_str == "Hello world"
-        assert astr_message_event.role == "member"
+        assert astr_message_event.platform_member_role == "member"
         assert astr_message_event.is_wake is False
         assert astr_message_event.is_at_or_wake_command is False
         assert astr_message_event._extras == {}
@@ -329,7 +329,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        assert "[表情:123]" in outline
+        assert "[QQ Face: NO (id: 123)]" in outline
 
     def test_outline_with_forward(self, platform_meta, astrbot_message):
         """Test outline with Forward component."""
@@ -574,10 +574,10 @@ class TestIsAdmin:
         """Test is_admin returns False by default."""
         assert astr_message_event.is_admin() is False
 
-    def test_is_admin_when_admin(self, astr_message_event):
-        """Test is_admin returns True when role is admin."""
-        astr_message_event.role = "admin"
-        assert astr_message_event.is_admin() is True
+    def test_is_admin_does_not_promote_platform_role(self, astr_message_event):
+        """Platform admin facts never become AstrBot administrator status."""
+        astr_message_event.set_platform_member_role("admin", source="adapter")
+        assert astr_message_event.is_admin() is False
 
 
 class TestProcessBuffer:

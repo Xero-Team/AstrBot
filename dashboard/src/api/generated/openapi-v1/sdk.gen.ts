@@ -35,8 +35,13 @@ import type {
   CleanupStorageResponses,
   CompleteBackupUploadData,
   CompleteBackupUploadResponses,
+  CompleteMcpData,
+  CompleteMcpOAuthCallbackData,
+  CompleteMcpResponses,
   CreateApiKeyData,
   CreateApiKeyResponses,
+  CreateAuthorizationAccountData,
+  CreateAuthorizationAccountResponses,
   CreateBackupData,
   CreateBackupResponses,
   CreateBotData,
@@ -139,6 +144,8 @@ import type {
   DownloadAttachmentResponses,
   DownloadBackupData,
   DownloadBackupResponses,
+  DownloadChatProjectWorkspaceFileData,
+  DownloadChatProjectWorkspaceFileResponses,
   DownloadOpenApiFileData,
   DownloadOpenApiFileResponses,
   DownloadSkillData,
@@ -168,6 +175,8 @@ import type {
   GetChangelogResponses,
   GetChatProjectData,
   GetChatProjectResponses,
+  GetChatProjectWorkspaceFileData,
+  GetChatProjectWorkspaceFileResponses,
   GetChatSessionData,
   GetChatSessionResponses,
   GetChatThreadData,
@@ -192,6 +201,12 @@ import type {
   GetKnowledgeTaskResponses,
   GetLogHistoryData,
   GetLogHistoryResponses,
+  GetMcpCatalogData,
+  GetMcpCatalogResponses,
+  GetMcpOAuthStatusData,
+  GetMcpOAuthStatusResponses,
+  GetMcpPromptData,
+  GetMcpPromptResponses,
   GetMemoryFactData,
   GetMemoryFactResponses,
   GetMemoryStatsData,
@@ -255,6 +270,8 @@ import type {
   GetUpdateProgressResponses,
   GetVersionData,
   GetVersionResponses,
+  GrantAuthorizationRoleBindingData,
+  GrantAuthorizationRoleBindingResponses,
   ImportBackupData,
   ImportBackupResponses,
   ImportKnowledgeDocumentFromUrlData,
@@ -282,12 +299,22 @@ import type {
   InvokePluginDashboardUploadData,
   InvokePluginDashboardUploadErrors,
   InvokePluginDashboardUploadResponses,
+  IssueAuthorizationBatchRevokeStepUpData,
+  IssueAuthorizationBatchRevokeStepUpResponses,
+  IssueAuthorizationStepUpData,
+  IssueAuthorizationStepUpResponses,
   ListActiveUmosData,
   ListActiveUmosResponses,
   ListApiKeysData,
   ListApiKeysResponses,
   ListAppearanceWallpapersData,
   ListAppearanceWallpapersResponses,
+  ListAuthorizationAccountsData,
+  ListAuthorizationAccountsResponses,
+  ListAuthorizationAuditData,
+  ListAuthorizationAuditResponses,
+  ListAuthorizationRoleBindingsData,
+  ListAuthorizationRoleBindingsResponses,
   ListBackupsData,
   ListBackupsResponses,
   ListBotsData,
@@ -304,6 +331,8 @@ import type {
   ListChatProjectSessionsData,
   ListChatProjectSessionsResponses,
   ListChatProjectsResponses,
+  ListChatProjectWorkspaceFilesData,
+  ListChatProjectWorkspaceFilesResponses,
   ListChatSessionsData,
   ListChatSessionsResponses,
   ListCommandConflictsData,
@@ -328,6 +357,12 @@ import type {
   ListKnowledgeChunksResponses,
   ListKnowledgeDocumentsData,
   ListKnowledgeDocumentsResponses,
+  ListMcpPromptsData,
+  ListMcpPromptsResponses,
+  ListMcpResourcesData,
+  ListMcpResourcesResponses,
+  ListMcpResourceTemplatesData,
+  ListMcpResourceTemplatesResponses,
   ListMcpServersData,
   ListMcpServersResponses,
   ListMemoryFactsData,
@@ -392,6 +427,8 @@ import type {
   OpenUnifiedChatWebSocketData,
   PromoteNeoSkillCandidateData,
   PromoteNeoSkillCandidateResponses,
+  ReadMcpResourceData,
+  ReadMcpResourceResponses,
   ReceivePlatformWebhookData,
   ReceivePlatformWebhookResponses,
   RecoverTotpData,
@@ -434,6 +471,12 @@ import type {
   RetrieveKnowledgeBaseResponses,
   RevokeApiKeyData,
   RevokeApiKeyResponses,
+  RevokeAuthorizationRoleBindingData,
+  RevokeAuthorizationRoleBindingResponses,
+  RevokeAuthorizationRoleBindingsData,
+  RevokeAuthorizationRoleBindingsResponses,
+  RevokeMcpOAuthData,
+  RevokeMcpOAuthResponses,
   RollbackNeoSkillReleaseData,
   RollbackNeoSkillReleaseResponses,
   RunCronJobData,
@@ -462,12 +505,12 @@ import type {
   SetToolEnabledResponses,
   SetToolParallelData,
   SetToolParallelResponses,
-  SetToolPermissionData,
-  SetToolPermissionResponses,
   SetupAuthData,
   SetupAuthResponses,
   SetupTotpData,
   SetupTotpResponses,
+  StartMcpOAuthData,
+  StartMcpOAuthResponses,
   StopChatSessionData,
   StopChatSessionResponses,
   StreamLiveLogsData,
@@ -491,6 +534,8 @@ import type {
   UninstallPluginResponses,
   UpdateAuthAccountData,
   UpdateAuthAccountResponses,
+  UpdateAuthorizationAccountData,
+  UpdateAuthorizationAccountResponses,
   UpdateBotData,
   UpdateBotResponses,
   UpdateChatMessageData,
@@ -766,6 +811,234 @@ export const deleteApiKey = <ThrowOnError extends boolean = false>(
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/api-keys/{key_id}',
     ...options,
+  });
+
+/**
+ * List role bindings
+ */
+export const listAuthorizationRoleBindings = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ListAuthorizationRoleBindingsData, ThrowOnError>,
+): RequestResult<
+  ListAuthorizationRoleBindingsResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ListAuthorizationRoleBindingsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings',
+    ...options,
+  });
+
+/**
+ * Grant a scoped role binding
+ */
+export const grantAuthorizationRoleBinding = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GrantAuthorizationRoleBindingData, ThrowOnError>,
+): RequestResult<
+  GrantAuthorizationRoleBindingResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    GrantAuthorizationRoleBindingResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Revoke a scoped role binding
+ */
+export const revokeAuthorizationRoleBinding = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<RevokeAuthorizationRoleBindingData, ThrowOnError>,
+): RequestResult<
+  RevokeAuthorizationRoleBindingResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    RevokeAuthorizationRoleBindingResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings/{binding_id}/revoke',
+    ...options,
+  });
+
+/**
+ * Reauthenticate for one exact batch role-binding revocation
+ */
+export const issueAuthorizationBatchRevokeStepUp = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<IssueAuthorizationBatchRevokeStepUpData, ThrowOnError>,
+): RequestResult<
+  IssueAuthorizationBatchRevokeStepUpResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    IssueAuthorizationBatchRevokeStepUpResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings/batch-revoke/step-up',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Revoke one exact batch of scoped role bindings
+ */
+export const revokeAuthorizationRoleBindings = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<RevokeAuthorizationRoleBindingsData, ThrowOnError>,
+): RequestResult<
+  RevokeAuthorizationRoleBindingsResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    RevokeAuthorizationRoleBindingsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings/batch-revoke',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Reauthenticate and issue a one-time step-up credential
+ */
+export const issueAuthorizationStepUp = <ThrowOnError extends boolean = false>(
+  options: Options<IssueAuthorizationStepUpData, ThrowOnError>,
+): RequestResult<IssueAuthorizationStepUpResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    IssueAuthorizationStepUpResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/step-up',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * List redacted authorization audit records
+ */
+export const listAuthorizationAudit = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAuthorizationAuditData, ThrowOnError>,
+): RequestResult<ListAuthorizationAuditResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListAuthorizationAuditResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/audit',
+    ...options,
+  });
+
+/**
+ * List stable Dashboard accounts
+ */
+export const listAuthorizationAccounts = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAuthorizationAccountsData, ThrowOnError>,
+): RequestResult<ListAuthorizationAccountsResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListAuthorizationAccountsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/accounts',
+    ...options,
+  });
+
+/**
+ * Create a Dashboard account and global role binding
+ */
+export const createAuthorizationAccount = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CreateAuthorizationAccountData, ThrowOnError>,
+): RequestResult<CreateAuthorizationAccountResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    CreateAuthorizationAccountResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/accounts',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Update or disable a Dashboard account
+ */
+export const updateAuthorizationAccount = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<UpdateAuthorizationAccountData, ThrowOnError>,
+): RequestResult<UpdateAuthorizationAccountResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).patch<
+    UpdateAuthorizationAccountResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/accounts/{account_id}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 
 /**
@@ -2019,6 +2292,71 @@ export const addChatProjectSession = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List files in a ChatUI project workspace directory
+ */
+export const listChatProjectWorkspaceFiles = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ListChatProjectWorkspaceFilesData, ThrowOnError>,
+): RequestResult<
+  ListChatProjectWorkspaceFilesResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ListChatProjectWorkspaceFilesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/projects/{project_id}/workspace/files',
+    ...options,
+  });
+
+/**
+ * Preview a ChatUI project workspace file
+ */
+export const getChatProjectWorkspaceFile = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GetChatProjectWorkspaceFileData, ThrowOnError>,
+): RequestResult<GetChatProjectWorkspaceFileResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    GetChatProjectWorkspaceFileResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/projects/{project_id}/workspace/file',
+    ...options,
+  });
+
+/**
+ * Download a ChatUI project workspace file
+ */
+export const downloadChatProjectWorkspaceFile = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<DownloadChatProjectWorkspaceFileData, ThrowOnError>,
+): RequestResult<
+  DownloadChatProjectWorkspaceFileResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    DownloadChatProjectWorkspaceFileResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'blob',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/projects/{project_id}/workspace/file/download',
+    ...options,
+  });
+
+/**
  * Remove a session from its ChatUI project
  */
 export const removeChatProjectSession = <ThrowOnError extends boolean = false>(
@@ -3061,7 +3399,7 @@ export const listCommands = <ThrowOnError extends boolean = false>(
   );
 
 /**
- * Update command enabled state, alias, or permission group
+ * Update command enabled state, alias, or authorization action
  */
 export const updateCommand = <ThrowOnError extends boolean = false>(
   options: Options<UpdateCommandData, ThrowOnError>,
@@ -3196,27 +3534,6 @@ export const setToolParallel = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Update an LLM tool permission
- */
-export const setToolPermission = <ThrowOnError extends boolean = false>(
-  options: Options<SetToolPermissionData, ThrowOnError>,
-): RequestResult<SetToolPermissionResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).patch<
-    SetToolPermissionResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/tools/{tool_id}/permission',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
  * List MCP servers
  */
 export const listMcpServers = <ThrowOnError extends boolean = false>(
@@ -3332,6 +3649,192 @@ export const testMcpServer = <ThrowOnError extends boolean = false>(
       'Content-Type': 'application/json',
       ...options.headers,
     },
+  });
+
+/**
+ * Get a connected MCP server catalog and status
+ */
+export const getMcpCatalog = <ThrowOnError extends boolean = false>(
+  options: Options<GetMcpCatalogData, ThrowOnError>,
+): RequestResult<GetMcpCatalogResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<GetMcpCatalogResponses, unknown, ThrowOnError>(
+    {
+      responseType: 'json',
+      security: [{ name: 'X-API-Key', type: 'apiKey' }],
+      url: '/api/v1/mcp/servers/{server_name}/catalog',
+      ...options,
+    },
+  );
+
+/**
+ * List explicitly browsable MCP resources
+ */
+export const listMcpResources = <ThrowOnError extends boolean = false>(
+  options: Options<ListMcpResourcesData, ThrowOnError>,
+): RequestResult<ListMcpResourcesResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    ListMcpResourcesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/resources',
+    ...options,
+  });
+
+/**
+ * List MCP resource templates
+ */
+export const listMcpResourceTemplates = <ThrowOnError extends boolean = false>(
+  options: Options<ListMcpResourceTemplatesData, ThrowOnError>,
+): RequestResult<ListMcpResourceTemplatesResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    ListMcpResourceTemplatesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/resources/templates',
+    ...options,
+  });
+
+/**
+ * Read an explicitly selected MCP resource
+ */
+export const readMcpResource = <ThrowOnError extends boolean = false>(
+  options: Options<ReadMcpResourceData, ThrowOnError>,
+): RequestResult<ReadMcpResourceResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    ReadMcpResourceResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/resources/read',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * List explicitly selectable MCP prompts
+ */
+export const listMcpPrompts = <ThrowOnError extends boolean = false>(
+  options: Options<ListMcpPromptsData, ThrowOnError>,
+): RequestResult<ListMcpPromptsResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    ListMcpPromptsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/prompts',
+    ...options,
+  });
+
+/**
+ * Get an explicitly selected MCP prompt
+ */
+export const getMcpPrompt = <ThrowOnError extends boolean = false>(
+  options: Options<GetMcpPromptData, ThrowOnError>,
+): RequestResult<GetMcpPromptResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<GetMcpPromptResponses, unknown, ThrowOnError>(
+    {
+      responseType: 'json',
+      security: [{ name: 'X-API-Key', type: 'apiKey' }],
+      url: '/api/v1/mcp/servers/{server_name}/prompts/{prompt_name}/get',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    },
+  );
+
+/**
+ * Complete an MCP prompt or resource argument
+ */
+export const completeMcp = <ThrowOnError extends boolean = false>(
+  options: Options<CompleteMcpData, ThrowOnError>,
+): RequestResult<CompleteMcpResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<CompleteMcpResponses, unknown, ThrowOnError>({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/completion',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get safe MCP OAuth status
+ */
+export const getMcpOAuthStatus = <ThrowOnError extends boolean = false>(
+  options: Options<GetMcpOAuthStatusData, ThrowOnError>,
+): RequestResult<GetMcpOAuthStatusResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    GetMcpOAuthStatusResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/oauth/status',
+    ...options,
+  });
+
+/**
+ * Start MCP OAuth authorization with PKCE
+ */
+export const startMcpOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<StartMcpOAuthData, ThrowOnError>,
+): RequestResult<StartMcpOAuthResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    StartMcpOAuthResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/oauth/start',
+    ...options,
+  });
+
+/**
+ * Revoke locally stored MCP OAuth credentials
+ */
+export const revokeMcpOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<RevokeMcpOAuthData, ThrowOnError>,
+): RequestResult<RevokeMcpOAuthResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).delete<
+    RevokeMcpOAuthResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/oauth',
+    ...options,
+  });
+
+/**
+ * Complete MCP OAuth callback
+ */
+export const completeMcpOAuthCallback = <ThrowOnError extends boolean = false>(
+  options?: Options<CompleteMcpOAuthCallbackData, ThrowOnError>,
+): RequestResult<unknown, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<unknown, unknown, ThrowOnError>({
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/oauth/callback',
+    ...options,
   });
 
 /**
@@ -5154,8 +5657,8 @@ export const downloadBackup = <ThrowOnError extends boolean = false>(
         type: 'http',
       },
       {
-        in: 'query',
-        name: 'token',
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
         type: 'apiKey',
       },
     ],

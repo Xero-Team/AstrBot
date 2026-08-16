@@ -21,6 +21,7 @@ from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.core_runtime import CoreRuntime
@@ -38,7 +39,6 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.skills.skill_manager import SkillManager
-from astrbot.core.star.command_management import list_commands, toggle_command
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
@@ -338,6 +338,8 @@ class AstrBotCoreLifecycle:
 
     async def _initialize(self) -> None:
         """Initialize core resources in dependency order."""
+        if getattr(self.services, "authorization", None) is None:
+            self.services.authorization = AuthorizationService(self.db)
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
@@ -350,6 +352,9 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         self._register_cleanup("database", self.db.close)
+        authorization = self.services.authorization
+        if isinstance(self.db, SQLiteDatabase):
+            self._register_cleanup("authorization", authorization.close)
         self._register_cleanup(
             "file token artifacts",
             self.services.file_token_service.shutdown,
@@ -360,6 +365,9 @@ class AstrBotCoreLifecycle:
             self.services.preferences.terminate,
         )
         await self.db.initialize()
+        if isinstance(self.db, SQLiteDatabase):
+            await authorization.start()
+        self.services.catalogs.tools.bind_authorization(authorization)
         configure_trace(self.astrbot_config)
 
         self._register_cleanup(
@@ -469,6 +477,7 @@ class AstrBotCoreLifecycle:
             follow_up_coordinator=self.services.follow_up_coordinator,
             llm_metadata_catalog=self.services.llm_metadata_catalog,
             metrics=self.services.metrics,
+            authorization=self.services.authorization,
         )
         self.execution_context = execution_context
         execution_context.persona_runtime_manager = self.persona_runtime_manager
@@ -506,9 +515,10 @@ class AstrBotCoreLifecycle:
             builtin_skill_catalog=self.services.catalogs.builtin_skills,
         )
         execution_context.skill_manager = skill_manager
-        self.services.computer_runtime.bind_skill_manager(skill_manager)
-        await self._migrate_legacy_builtin_command_switch()
-
+        self.services.computer_runtime.bind_skill_manager(
+            skill_manager,
+            self.services.catalogs.plugins,
+        )
         # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
         self._register_cleanup("provider manager", self.provider_manager.terminate)
@@ -601,51 +611,6 @@ class AstrBotCoreLifecycle:
             start_time=self.start_time,
             updater=self.astrbot_updator,
         )
-
-    async def _migrate_legacy_builtin_command_switch(self) -> None:
-        """Migrate the removed global builtin-command flag into command records."""
-        config_manager = self.astrbot_config_mgr
-        if config_manager is None:
-            raise RuntimeError("Configuration manager is not initialized")
-        configs_to_migrate = [
-            config
-            for config in config_manager.confs.values()
-            if config.get("disable_builtin_commands") is True
-        ]
-        if not configs_to_migrate:
-            return
-
-        # Persist removal of the legacy switch before mutating the command
-        # database. A superseded configuration must not disable commands from
-        # a stale startup snapshot.
-        for config in configs_to_migrate:
-            next_config = dict(config)
-            next_config.pop("disable_builtin_commands", None)
-            committed = await config.save_config_async(next_config)
-            if not committed:
-                raise RuntimeError(
-                    "Builtin command migration was superseded by a newer "
-                    "configuration update."
-                )
-
-        commands = await list_commands(self.db, self.services.catalogs.handlers)
-        pending = list(commands)
-        while pending:
-            command = pending.pop()
-            pending.extend(command.get("sub_commands", []))
-            if command.get(
-                "module_path"
-            ) == "astrbot.builtin_stars.builtin_commands.main" and isinstance(
-                command.get("handler_full_name"), str
-            ):
-                await toggle_command(
-                    self.db,
-                    self.services.catalogs.handlers,
-                    command["handler_full_name"],
-                    False,
-                )
-
-        logger.info("Migrated disable_builtin_commands to per-command settings.")
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -846,6 +811,7 @@ class AstrBotCoreLifecycle:
                     self.services.html_renderer,
                     self.services.file_token_service,
                     self.services.preferences,
+                    getattr(self.services, "authorization", None),
                 ),
             )
             await scheduler.initialize()
@@ -882,6 +848,7 @@ class AstrBotCoreLifecycle:
                 self.services.html_renderer,
                 self.services.file_token_service,
                 self.services.preferences,
+                getattr(self.services, "authorization", None),
             ),
         )
         await scheduler.initialize()

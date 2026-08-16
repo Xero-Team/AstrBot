@@ -174,10 +174,6 @@
           "description": "Computer Use Runtime",
           "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
         },
-        "computer_use_require_admin": {
-          "description": "Require AstrBot Admin Permission",
-          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use /session info to view admin IDs."
-        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"
@@ -737,9 +733,6 @@
     },
     "general": {
       "description": "General",
-      "admins_id": {
-        "description": "Administrator IDs"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "Isolate Sessions",
@@ -1022,6 +1015,12 @@
         "group_message_max_cnt": {
           "description": "Maximum Message Count"
         },
+        "group_message_history_enable": {
+          "description": "Persist Group Message History"
+        },
+        "group_message_history_max_cnt": {
+          "description": "Maximum Persisted Group Messages"
+        },
         "image_caption": {
           "description": "Auto-understand Images",
           "hint": "Requires setting a group chat image caption model."
@@ -1299,6 +1298,11 @@
             "description": "Max tokens",
             "hint": "Maximum number of generated tokens.",
             "name": "Max Tokens"
+          },
+          "reasoning_effort": {
+            "description": "Reasoning effort",
+            "hint": "Controls the effort used by reasoning models. Supported values depend on the model.",
+            "name": "Reasoning Effort"
           }
         }
       },

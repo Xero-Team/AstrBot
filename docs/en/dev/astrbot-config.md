@@ -28,21 +28,21 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 ## Top-level structure
 
-| Key                                               | Purpose                                                                                                                           |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `2`. Do not downgrade it manually.                                                    |
-| `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                |
-| `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                             |
-| `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                            |
-| `provider_settings`                               | Agent, default-model, Persona, retrieval, context, and tool behavior for this profile.                                            |
-| `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                   |
-| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                  |
-| `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                    |
-| `provider_ltm_settings`                           | Group-context, image-caption, and proactive-reply settings under a historical name; it is not the Alkaid long-term-memory switch. |
-| `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                              |
-| `dashboard`                                       | WebUI listening, authentication, rate limiting, TOTP, and TLS.                                                                    |
-| `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                         |
-| Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                       |
+| Key                                               | Purpose                                                                                                                                |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `config_version`                                  | Current core configuration version, default `2`. Do not downgrade it manually.                                                         |
+| `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                     |
+| `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                  |
+| `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                 |
+| `provider_settings`                               | Agent, default-model, Persona, retrieval, context, and tool behavior for this profile.                                                 |
+| `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                        |
+| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                       |
+| `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                         |
+| `provider_ltm_settings`                           | Group-context, image-caption, and proactive-reply settings under a historical name; it is not the Alkaid long-term-memory switch.      |
+| `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                   |
+| `dashboard`                                       | WebUI listening, authentication, rate limiting, and TLS; Dashboard account identity and authoritative TOTP state live in its database. |
+| `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                              |
+| Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                            |
 
 Object layouts inside `provider_sources`, `provider`, and `platform` come from the currently registered type templates. Do not copy old objects from documentation. Create them in the WebUI and inspect the saved result if necessary. A model references its source through `provider_source_id`; use the WebUI when renaming or deleting a source so references are updated together.
 
@@ -135,7 +135,7 @@ The old `provider_settings.streaming_segmented` field has been removed. Do not a
 ### Computer Use and sandboxing
 
 - `computer_use_runtime` is `none`, `local`, or `sandbox` and defaults to `none`.
-- `computer_use_require_admin` defaults to `true`, restricting computer tools to AstrBot administrators.
+- `computer_use_require_admin` is no longer a runtime authorization switch. Computer capabilities use the unified `tool.computer_use`, `tool.local_exec`, `tool.file_read`, and `tool.file_write` actions, with step-up/elevation for high-risk operations.
 - `sandbox.booter` selects `shipyard_neo` or `cua`; related fields store endpoint, token, profile, TTL, or CUA OS, telemetry, and local/cloud settings.
 
 Local mode operates directly on the AstrBot host and belongs only in a trusted environment. A sandbox is not an authorization boundary by itself; continue to restrict administrators, Persona tools, and external network access.
@@ -185,16 +185,16 @@ Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disab
 
 Important `dashboard` defaults:
 
-| Key                      | Default     | Meaning                                                                                                                          |
-| ------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `enable`                 | `true`      | Enable the WebUI/API.                                                                                                            |
-| `username`               | `astrbot`   | Initial username.                                                                                                                |
-| `host`                   | `127.0.0.1` | Listen on loopback only. Remote access requires an explicit `0.0.0.0` or interface binding plus firewall/reverse-proxy controls. |
-| `port`                   | `6185`      | HTTP(S) listening port.                                                                                                          |
-| `trust_proxy_headers`    | `false`     | Trust `X-Forwarded-For` / `X-Real-IP` only behind a controlled reverse proxy.                                                    |
-| `auth_rate_limit.enable` | `true`      | Rate-limit login, TOTP, and other authentication endpoints.                                                                      |
-| `totp.enable`            | `false`     | Require WebUI TOTP two-factor authentication.                                                                                    |
-| `ssl.enable`             | `false`     | Terminate TLS in AstrBot using the certificate, key, and optional CA path fields.                                                |
+| Key                      | Default          | Meaning                                                                                                                          |
+| ------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `enable`                 | `true`           | Enable the WebUI/API.                                                                                                            |
+| `username`               | `astrbot`        | Initial username.                                                                                                                |
+| `host`                   | `127.0.0.1`      | Listen on loopback only. Remote access requires an explicit `0.0.0.0` or interface binding plus firewall/reverse-proxy controls. |
+| `port`                   | `6185`           | HTTP(S) listening port.                                                                                                          |
+| `trust_proxy_headers`    | `false`          | Trust `X-Forwarded-For` / `X-Real-IP` only behind a controlled reverse proxy.                                                    |
+| `auth_rate_limit.enable` | `true`           | Rate-limit login, TOTP, and other authentication endpoints.                                                                      |
+| `totp.*`                 | Managed by WebUI | Dashboard TOTP snapshot retained for configuration export; it is not the authority for account authentication.                   |
+| `ssl.enable`             | `false`          | Terminate TLS in AstrBot using the certificate, key, and optional CA path fields.                                                |
 
 Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. `password` is a migration-era hash field. Never write plaintext into either field or manually exchange hashes. To recover access, run:
 
@@ -204,9 +204,10 @@ uv run astrbot run --reset-password
 
 The source entry point also accepts `uv run main.py --reset-password`. Startup logs print the new temporary password and require it to be changed after login.
 
+Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-code hash, and trusted devices are stored per account. The Security page synchronizes the `dashboard.totp` snapshot for configuration export and UI use, but login and high-risk operations validate only the account record. Do not edit that snapshot manually, copy TOTP fields between accounts, or treat it as a recovery-code bypass.
+
 ## System, logging, and response decoration
 
-- `admins_id` lists AstrBot administrator IDs; use `/session info` to inspect a platform ID.
 - `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
 - `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
 - `http_proxy` / `no_proxy` configure outbound HTTP proxying and bypasses.

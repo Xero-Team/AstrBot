@@ -10,6 +10,7 @@ from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunne
 from astrbot.core.agent.tool import FunctionTool, ToolSet, get_tool_id
 from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class _Preferences:
@@ -36,11 +37,11 @@ def _make_runner(tmp_path, preferences: _Preferences) -> ToolLoopAgentRunner:
     runner._pending_follow_ups = []
     runner._abort_signal = asyncio.Event()
     runner._aborted = False
+    event = _Event()
+    runtime = SimpleNamespace(preferences=preferences)
+    attach_authorized_tool_context(event, runtime, "session.read")
     runner.run_context = ContextWrapper(
-        context=SimpleNamespace(
-            context=SimpleNamespace(preferences=preferences),
-            event=_Event(),
-        )
+        context=SimpleNamespace(context=runtime, event=event)
     )
     runner.tool_executor = FunctionToolExecutor()
     runner.agent_hooks = BaseAgentRunHooks()
@@ -71,6 +72,7 @@ async def test_parallel_tools_overlap_and_preserve_result_order(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
         FunctionTool(
             name="read_b",
@@ -79,6 +81,7 @@ async def test_parallel_tools_overlap_and_preserve_result_order(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
     ]
     preferences = _Preferences(
@@ -130,6 +133,7 @@ async def test_parallel_feature_requires_explicit_tool_allowlist(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
         FunctionTool(
             name="read_b",
@@ -138,6 +142,7 @@ async def test_parallel_feature_requires_explicit_tool_allowlist(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
     ]
     runner = _make_runner(
@@ -172,6 +177,7 @@ async def test_parallel_stop_cancels_the_batch(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         )
         for suffix in ("a", "b")
     ]

@@ -190,7 +190,7 @@
                 </v-list-item>
               </template>
 
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
+              <v-card class="styled-menu-card" elevation="4" rounded="md">
                 <v-list density="compact" class="styled-menu-list pa-1">
                   <v-list-item
                     v-for="item in transportOptions"
@@ -242,7 +242,7 @@
                 </v-list-item>
               </template>
 
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
+              <v-card class="styled-menu-card" elevation="4" rounded="md">
                 <v-list density="compact" class="styled-menu-list pa-1">
                   <v-list-item
                     v-for="lang in languageOptions"
@@ -737,6 +737,65 @@ const {
       scrollToBottom();
     }
   },
+  onMcpInputRequest: (payload, respond) => {
+    const server = String(payload.server_name || 'MCP server');
+    const message = String(
+      payload.message || 'This MCP server requests input.',
+    );
+    if (payload.mode === 'url') {
+      const url = String(payload.url || '');
+      if (
+        window.confirm(
+          tm('interaction.openUrl', {
+            server,
+            message,
+            url: String(payload.url_display || url),
+          }),
+        )
+      ) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        respond({ action: 'accept' });
+      } else {
+        respond({ action: 'cancel' });
+      }
+      return;
+    }
+    const schema = payload.schema as {
+      properties?: Record<string, { type?: string; title?: string }>;
+      required?: string[];
+    };
+    if (!schema?.properties) {
+      respond({ action: 'cancel' });
+      return;
+    }
+    if (!window.confirm(tm('interaction.formAccept', { server, message }))) {
+      respond({ action: 'decline' });
+      return;
+    }
+    const content: Record<string, unknown> = {};
+    for (const [name, definition] of Object.entries(schema.properties)) {
+      const value = window.prompt(
+        tm('interaction.fieldPrompt', { field: definition.title || name }),
+        '',
+      );
+      if (value === null) {
+        respond({ action: 'cancel' });
+        return;
+      }
+      if (definition.type === 'integer')
+        content[name] = Number.parseInt(value, 10);
+      else if (definition.type === 'number') content[name] = Number(value);
+      else if (definition.type === 'boolean')
+        content[name] = value.toLowerCase() === 'true';
+      else content[name] = value;
+    }
+    if ((schema.required || []).some((name) => content[name] === '')) {
+      window.alert(tm('interaction.invalidForm'));
+      respond({ action: 'cancel' });
+      return;
+    }
+    respond({ action: 'accept', content });
+  },
 });
 
 const transportMode = ref<TransportMode>(
@@ -759,7 +818,7 @@ watch(transportMode, (mode) => {
   localStorage.setItem('chat.transportMode', mode);
 });
 
-const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
 const canSend = computed(
   () =>
     Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
@@ -1153,6 +1212,9 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
+      // Refresh only after the project association completes. Otherwise the
+      // newly created project session briefly appears in the ordinary list.
+      await getSessions();
     }
 
     const text = draft.value.trim();
@@ -1528,11 +1590,11 @@ function toggleTheme() {
 
 <style scoped>
 .chat-ui {
-  --chat-sidebar-bg: #fbfbfb;
-  --chat-session-active-bg: #efefef;
+  --chat-sidebar-bg: rgb(var(--v-theme-surface));
+  --chat-session-active-bg: rgb(var(--v-theme-surface-variant));
   --chat-page-bg: rgb(var(--v-theme-background));
-  --chat-border: rgba(var(--v-border-color), 0.16);
-  --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
+  --chat-border: rgb(var(--v-theme-outline-variant));
+  --chat-muted: rgb(var(--v-theme-on-surface-variant));
   display: flex;
   height: 100%;
   min-height: 0;
@@ -1540,12 +1602,6 @@ function toggleTheme() {
   background: var(--chat-page-bg);
   color: rgb(var(--v-theme-on-surface));
   font-family: var(--astrbot-font-ui);
-}
-
-.chat-ui.is-dark {
-  --chat-sidebar-bg: #2d2d2d;
-  --chat-session-active-bg: rgba(255, 255, 255, 0.08);
-  --chat-border: rgba(255, 255, 255, 0.1);
 }
 
 :global(.dashboard-appearance-active .chat-ui) {

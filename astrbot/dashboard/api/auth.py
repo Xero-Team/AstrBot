@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -5,6 +6,9 @@ import jwt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.core.auth.models import AuthContext as CoreAuthContext
+from astrbot.core.auth.models import Resource, Subject
+from astrbot.dashboard.password_state import get_dashboard_password_hash
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import (
     AccountUpdateRequest,
@@ -33,21 +37,272 @@ router = APIRouter(tags=["Auth"])
 _SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 
+def object_resource(
+    resource_type: str, *parts: object, config_id: str | None = None
+) -> Resource:
+    """Build a stable opaque resource id from untrusted object identifiers.
+
+    Dashboard data identifiers may contain long UMO strings or user supplied
+    paths.  Hashing the tuple keeps audit/resource identifiers bounded and
+    prevents raw caller data from becoming part of the authorization key.
+    """
+
+    payload = "\x00".join(str(part) for part in parts)
+    resource_id = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return Resource.named(resource_type, resource_id, config_id=config_id)
+
+
 @dataclass(frozen=True)
 class AuthContext:
     username: str
     scopes: list[str]
     subject: str
     api_key_id: str | None = None
+    api_key_created_by: str | None = None
+    account_id: str | None = None
+    sid: str | None = None
+    auth_strength: str = "none"
+    issued_at: object | None = None
     via: str = "jwt"
+
+
+_SCOPE_ACTIONS = {
+    "bot": "platform.manage",
+    "provider": "provider.manage",
+    "persona": "agent.manage",
+    "im": "session.manage",
+    "config": "platform.manage",
+    "chat": "session.manage",
+    "kb": "data.manage",
+    "memory": "data.manage",
+    "data": "data.manage",
+    "file": "data.manage",
+    "plugin": "extension.manage",
+    "mcp": "extension.manage",
+    "skill": "extension.manage",
+    "tool": "extension.manage",
+    "system": "system.manage",
+}
+
+
+def _scope_action(request: Request, auth: AuthContext, scope: str) -> str | None:
+    """Resolve an endpoint scope to the narrowest core capability."""
+
+    if scope == "provider":
+        if auth.via == "api_key":
+            return (
+                "provider.read"
+                if request.method.upper() in _SAFE_HTTP_METHODS
+                else None
+            )
+        return (
+            "provider.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "provider.manage"
+        )
+    if scope == "bot":
+        return (
+            "platform.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "platform.manage"
+        )
+    if scope == "config":
+        return (
+            "platform.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "platform.manage"
+        )
+    if scope in {"plugin", "skill", "tool"}:
+        return (
+            "extension.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "extension.manage"
+        )
+    if scope == "mcp":
+        return (
+            "tool.mcp_read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "tool.mcp_write"
+        )
+    if scope == "data":
+        return "data.manage"
+    return _SCOPE_ACTIONS.get(scope)
+
+
+def _request_config_id(request: Request) -> str | None:
+    """Read an explicit config scope without parsing endpoint-specific bodies."""
+
+    value = request.query_params.get("config_id") or request.headers.get(
+        "X-AstrBot-Config-Id"
+    )
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+async def _authorize_scope_action(
+    request: Request,
+    auth: AuthContext,
+    scope: str,
+    action_override: str | None = None,
+) -> None:
+    """Apply the single authorization service to Dashboard/API principals."""
+
+    action = action_override or _scope_action(request, auth, scope)
+    runtime = getattr(request.app.state, "runtime", None)
+    services = getattr(runtime, "services", None)
+    if services is None or not hasattr(services, "authorization"):
+        raise ApiError("Authorization unavailable", status_code=503)
+    authorization = services.authorization
+    if action is None:
+        raise ApiError("Authorization denied", status_code=403)
+    if authorization is None:
+        raise ApiError("Authorization unavailable", status_code=503)
+    if auth.via == "api_key":
+        subject = Subject.api_key(auth.api_key_id or "unknown")
+        source = "api_key"
+        api_scopes = tuple(auth.scopes)
+        session_id = None
+    elif auth.account_id:
+        subject = Subject.dashboard_account(auth.account_id, auth.username)
+        source = "dashboard"
+        api_scopes = ()
+        session_id = auth.sid
+    elif auth.sid:
+        subject = Subject.dashboard_session(auth.sid, auth.username)
+        source = "dashboard"
+        api_scopes = ()
+        session_id = auth.sid
+    else:
+        raise ApiError("Invalid Dashboard session", status_code=401)
+    config_id = _request_config_id(request)
+    resource = Resource.named(
+        "dashboard-api",
+        f"{request.method.lower()}-{scope}",
+        config_id=config_id,
+    )
+    core_context = CoreAuthContext(
+        subject=subject,
+        source=source,
+        config_id=config_id,
+        authenticated=True,
+        principal_subject_id=(
+            Subject.dashboard_account(auth.account_id, auth.username).id
+            if auth.account_id
+            else None
+        ),
+        api_scopes=api_scopes,
+        auth_strength=auth.auth_strength,
+        authenticated_at=auth.issued_at,
+        step_up_token=request.headers.get("X-AstrBot-Step-Up"),
+        metadata={
+            "dashboard_session_id": session_id,
+            "dashboard_write": request.method.upper() not in _SAFE_HTTP_METHODS,
+            "path": request.url.path,
+            "api_key_created_by": auth.api_key_created_by,
+        },
+    )
+    decision = await authorization.authorize(subject, action, resource, core_context)
+    if not decision.allowed:
+        raise ApiError(
+            "Authorization denied",
+            data={"requires_step_up": decision.requires_step_up},
+            status_code=403,
+        )
+
+
+def core_authorization_context(request: Request, auth: AuthContext) -> CoreAuthContext:
+    """Build the trusted core context reused by route-level resource checks."""
+
+    if auth.via == "api_key":
+        subject = Subject.api_key(auth.api_key_id or "unknown")
+        source = "api_key"
+        api_scopes = tuple(auth.scopes)
+        session_id = None
+    elif auth.account_id:
+        subject = Subject.dashboard_account(auth.account_id, auth.username)
+        source = "dashboard"
+        api_scopes = ()
+        session_id = auth.sid
+    elif auth.sid:
+        subject = Subject.dashboard_session(auth.sid, auth.username)
+        source = "dashboard"
+        api_scopes = ()
+        session_id = auth.sid
+    else:
+        raise ApiError("Invalid Dashboard session", status_code=401)
+    return CoreAuthContext(
+        subject=subject,
+        source=source,
+        config_id=_request_config_id(request),
+        authenticated=True,
+        principal_subject_id=(
+            Subject.dashboard_account(auth.account_id, auth.username).id
+            if auth.account_id
+            else None
+        ),
+        api_scopes=api_scopes,
+        auth_strength=auth.auth_strength,
+        authenticated_at=auth.issued_at,
+        step_up_token=request.headers.get("X-AstrBot-Step-Up"),
+        metadata={
+            "dashboard_session_id": session_id,
+            "api_key_created_by": auth.api_key_created_by,
+        },
+    )
+
+
+async def require_resource_action(
+    request: Request,
+    auth: AuthContext,
+    *,
+    action: str,
+    resource: Resource,
+) -> None:
+    """Authorize a route after it resolves the actual protected resource."""
+
+    runtime = getattr(request.app.state, "runtime", None)
+    services = getattr(runtime, "services", None)
+    if services is None or not hasattr(services, "authorization"):
+        raise ApiError("Authorization unavailable", status_code=503)
+    authorization = services.authorization
+    if authorization is None:
+        raise ApiError("Authorization unavailable", status_code=503)
+    context = core_authorization_context(request, auth)
+    if resource.config_id is not None:
+        context = CoreAuthContext(
+            subject=context.subject,
+            source=context.source,
+            request_id=context.request_id,
+            config_id=resource.config_id,
+            platform=context.platform,
+            message_type=context.message_type,
+            platform_member_role=context.platform_member_role,
+            platform_role_source=context.platform_role_source,
+            platform_role_expires_at=context.platform_role_expires_at,
+            authenticated=context.authenticated,
+            principal_subject_id=context.principal_subject_id,
+            api_scopes=context.api_scopes,
+            auth_strength=context.auth_strength,
+            authenticated_at=context.authenticated_at,
+            step_up_token=context.step_up_token,
+            caller_declared_username=context.caller_declared_username,
+            metadata=context.metadata,
+        )
+    decision = await authorization.authorize(context.subject, action, resource, context)
+    if not decision.allowed:
+        raise ApiError(
+            "Authorization denied",
+            data={"requires_step_up": decision.requires_step_up},
+            status_code=403,
+        )
 
 
 def _extract_raw_api_key(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "").strip()
-    if auth_header.startswith("Bearer "):
+    scheme, separator, credentials = auth_header.partition(" ")
+    if separator and scheme.lower() == "bearer":
         return None
-    if auth_header.startswith("ApiKey "):
-        return auth_header.removeprefix("ApiKey ").strip()
+    if separator and scheme.lower() == "apikey":
+        return credentials.strip()
     if key := request.query_params.get("api_key"):
         return key.strip()
     if key := request.query_params.get("key"):
@@ -58,13 +313,13 @@ def _extract_raw_api_key(request: Request) -> str | None:
 
 
 def _get_dashboard_state_username(request: Request) -> str | None:
-    dashboard_g = getattr(request.state, "dashboard_g", None)
-    if dashboard_g is None:
+    dashboard_state = getattr(request.state, "dashboard_request_state", None)
+    if dashboard_state is None:
         return None
 
-    username = getattr(dashboard_g, "username", None)
-    if username is None and hasattr(dashboard_g, "get"):
-        username = dashboard_g.get("username")
+    username = getattr(dashboard_state, "username", None)
+    if username is None and hasattr(dashboard_state, "get"):
+        username = dashboard_state.get("username")
     if isinstance(username, str) and username.strip():
         return username
     return None
@@ -74,8 +329,9 @@ def _extract_dashboard_jwt_with_source(
     request: Request,
 ) -> tuple[str | None, str | None]:
     auth_header = request.headers.get("Authorization", "").strip()
-    if auth_header.startswith("Bearer "):
-        token = auth_header.removeprefix("Bearer ").strip()
+    scheme, separator, credentials = auth_header.partition(" ")
+    if separator and scheme.lower() == "bearer":
+        token = credentials.strip()
         if token:
             return token, "bearer"
 
@@ -207,6 +463,10 @@ async def require_dashboard_user(request: Request) -> str:
         raise ApiError("Token 过期", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
         raise ApiError("Token 无效", status_code=401) from exc
+    auth_service = getattr(request.app.state.services, "auth", None)
+    validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
+    if callable(validate_principal) and not await validate_principal(principal):
+        raise ApiError("Token 无效", status_code=401)
     if source == "cookie":
         _require_cookie_mutation_origin(request)
     return principal.username
@@ -215,29 +475,75 @@ async def require_dashboard_user(request: Request) -> str:
 async def require_dashboard_session_principal(
     request: Request,
 ) -> DashboardSessionPrincipal:
-    """Require matching Dashboard Bearer and HttpOnly-cookie sessions."""
+    """Require a Dashboard session from Bearer and/or the session cookie.
+
+    Browser requests commonly authenticate with the HttpOnly cookie alone,
+    while API callers send the token as a Bearer credential.  When both are
+    present they must identify the same session.  Cookie-backed mutations are
+    always protected by the origin check; test mode only changes cookie
+    security attributes, never the CSRF policy.
+    """
     auth_header = request.headers.get("Authorization", "").strip()
-    if not auth_header.startswith("Bearer "):
-        raise ApiError("Unauthorized", status_code=401)
-    bearer_token = auth_header.removeprefix("Bearer ").strip()
+    scheme, separator, credentials = auth_header.partition(" ")
+    bearer_token = (
+        credentials.strip() if separator and scheme.lower() == "bearer" else ""
+    )
     cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
-    if not bearer_token or not cookie_token:
+    if not bearer_token and not cookie_token:
         raise ApiError("Unauthorized", status_code=401)
     validator = _dashboard_token_validator(request)
     try:
-        bearer_principal = validator.validate(bearer_token)
-        cookie_principal = validator.validate(cookie_token)
+        bearer_principal = validator.validate(bearer_token) if bearer_token else None
+        cookie_principal = validator.validate(cookie_token) if cookie_token else None
     except jwt.ExpiredSignatureError as exc:
         raise ApiError("Token expired", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
         raise ApiError("Invalid token", status_code=401) from exc
     if (
-        bearer_principal.sid != cookie_principal.sid
-        or bearer_principal.username != cookie_principal.username
+        bearer_principal is not None
+        and cookie_principal is not None
+        and (
+            bearer_principal.sid != cookie_principal.sid
+            or bearer_principal.username != cookie_principal.username
+            or bearer_principal.account_id != cookie_principal.account_id
+        )
     ):
         raise ApiError("Unauthorized", status_code=401)
-    _require_cookie_mutation_origin(request)
-    return bearer_principal
+    auth_service = getattr(request.app.state.services, "auth", None)
+    validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
+    selected_principal = bearer_principal or cookie_principal
+    if callable(validate_principal) and not await validate_principal(
+        selected_principal
+    ):
+        raise ApiError("Unauthorized", status_code=401)
+    # An explicit Bearer credential is the API authentication path.  Only a
+    # cookie-only browser mutation needs the CSRF origin check here; the
+    # control-plane dependency below deliberately enforces it even when a
+    # bearer token is also supplied.
+    if (
+        cookie_principal is not None
+        and not bearer_token
+        and request.method.upper() not in _SAFE_HTTP_METHODS
+    ):
+        _require_cookie_mutation_origin(request)
+    return bearer_principal or cookie_principal  # type: ignore[return-value]
+
+
+async def require_dashboard_control_plane_principal(
+    request: Request,
+) -> DashboardSessionPrincipal:
+    """Require matching bearer/cookie authentication for iframe control planes."""
+
+    auth_header = request.headers.get("Authorization", "").strip()
+    scheme, separator, _credentials = auth_header.partition(" ")
+    if auth_header and (not separator or scheme.lower() != "bearer"):
+        raise ApiError("Unauthorized", status_code=401)
+    if not request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip():
+        raise ApiError("Unauthorized", status_code=401)
+    principal = await require_dashboard_session_principal(request)
+    if request.method.upper() not in _SAFE_HTTP_METHODS:
+        _require_cookie_mutation_origin(request)
+    return principal
 
 
 async def _require_api_key_scope(
@@ -261,14 +567,24 @@ async def _require_api_key_scope(
         scopes=scopes,
         subject=f"api-key:{api_key.key_id}",
         api_key_id=api_key.key_id,
+        api_key_created_by=getattr(api_key, "created_by", None),
         via="api_key",
     )
 
 
-async def require_scope(request: Request, scope: str) -> AuthContext:
+async def require_scope(
+    request: Request,
+    scope: str,
+    *,
+    authorize_action: bool = True,
+    action_override: str | None = None,
+) -> AuthContext:
     raw_key = _extract_raw_api_key(request)
     if raw_key:
-        return await _require_api_key_scope(request, raw_key, scope)
+        auth = await _require_api_key_scope(request, raw_key, scope)
+        if authorize_action:
+            await _authorize_scope_action(request, auth, scope, action_override)
+        return auth
 
     token, source = _extract_dashboard_jwt_with_source(request)
     if not token:
@@ -279,21 +595,38 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
         raise ApiError("Token expired", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
         auth_header = request.headers.get("Authorization", "").strip()
-        if auth_header.startswith("Bearer "):
+        scheme, separator, _credentials = auth_header.partition(" ")
+        if separator and scheme.lower() == "bearer":
             try:
                 return await _require_api_key_scope(request, token, scope)
             except ApiError as api_key_exc:
                 raise api_key_exc from exc
         raise ApiError("Invalid token", status_code=401) from exc
 
+    auth_service = getattr(request.app.state.services, "auth", None)
+    validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
+    if callable(validate_principal) and not await validate_principal(principal):
+        raise ApiError("Invalid token", status_code=401)
+
     if source == "cookie":
         _require_cookie_mutation_origin(request)
-    return AuthContext(
+    auth = AuthContext(
         username=principal.username,
         scopes=["*"],
-        subject=f"dashboard-session:{principal.sid}",
+        subject=(
+            f"dashboard-account:{principal.account_id}"
+            if principal.account_id
+            else f"dashboard-session:{principal.sid}"
+        ),
+        account_id=principal.account_id,
+        sid=principal.sid,
+        auth_strength=principal.auth_strength,
+        issued_at=principal.issued_at,
         via="jwt",
     )
+    if authorize_action:
+        await _authorize_scope_action(request, auth, scope, action_override)
+    return auth
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -397,9 +730,10 @@ def _auth_service_response(
 
 
 def _has_auth_credentials(request: Request) -> bool:
-    auth_header = request.headers.get("Authorization", "")
+    auth_header = request.headers.get("Authorization", "").strip()
+    scheme, separator, _credentials = auth_header.partition(" ")
     return bool(
-        auth_header.startswith(("Bearer ", "ApiKey "))
+        (separator and scheme.lower() in {"bearer", "apikey"})
         or request.query_params.get("api_key")
         or request.query_params.get("key")
         or request.headers.get("X-API-Key")
@@ -464,30 +798,54 @@ async def _setup(
 async def _totp_setup(
     request: Request,
     payload: TotpSetupRequest | None,
-    auth: AuthContext,
+    principal: DashboardSessionPrincipal,
     service: AuthService,
 ):
+    account_id = principal.account_id
+    if not account_id:
+        account = await service._find_dashboard_account(principal.username)
+        account_id = account.account_id if account is not None else None
+    if not account_id:
+        account = await service._ensure_dashboard_account(
+            principal.username,
+            get_dashboard_password_hash(service.config, upgraded=True),
+        )
+        account_id = account.account_id
+    result = await service.totp_setup(
+        _payload(payload),
+        # Rotation verification is bound to the authenticated Dashboard
+        # session, not merely the account, so another session cannot consume
+        # a pending factor change.
+        subject=f"dashboard-account:{account_id}:session:{principal.sid}",
+        account_id=account_id,
+    )
     return _auth_service_response(
         request,
-        await service.totp_setup(_payload(payload), subject=auth.subject),
+        result,
     )
 
 
 async def _totp_recovery(
     request: Request,
+    principal: DashboardSessionPrincipal,
     service: AuthService,
 ):
-    return _auth_service_response(request, await service.totp_recovery())
+    return _auth_service_response(
+        request, await service.totp_recovery(account_id=principal.account_id or "")
+    )
 
 
 async def _update_account(
     request: Request,
     payload: AccountUpdateRequest,
+    principal: DashboardSessionPrincipal,
     service: AuthService,
 ):
     return _auth_service_response(
         request,
-        await service.edit_account(_payload(payload)),
+        await service.edit_account(
+            _payload(payload), account_id=principal.account_id or ""
+        ),
     )
 
 
@@ -508,7 +866,7 @@ async def logout(request: Request):
         await services.plugin_page_sessions.revoke_by_auth_session_id(principal.sid)
         await services.plugin_file_tickets.revoke_by_auth_session_id(principal.sid)
         await services.auth.discard_totp_rotation(
-            f"dashboard-session:{principal.sid}",
+            f"dashboard-account:{principal.account_id}",
         )
     response = JSONResponse(
         {"status": "ok", "message": "已退出登录", "data": {}},
@@ -539,26 +897,26 @@ async def setup(
 async def totp_setup(
     request: Request,
     payload: TotpSetupRequest | None = None,
-    auth: AuthContext = Depends(require_system_scope),
+    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_setup(request, payload, auth, service)
+    return await _totp_setup(request, payload, principal, service)
 
 
 @router.post("/auth/totp/recovery")
 async def totp_recovery(
     request: Request,
-    _auth: AuthContext = Depends(require_system_scope),
+    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_recovery(request, service)
+    return await _totp_recovery(request, principal, service)
 
 
 @router.patch("/auth/account")
 async def update_account(
     request: Request,
     payload: AccountUpdateRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _update_account(request, payload, service)
+    return await _update_account(request, payload, principal, service)

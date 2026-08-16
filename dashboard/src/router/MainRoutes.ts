@@ -80,6 +80,11 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue'),
     },
     {
+      name: 'Authorization',
+      path: '/authorization',
+      component: () => import('@/views/AuthorizationPage.vue'),
+    },
+    {
       name: 'Persona',
       path: '/persona',
       component: () => import('@/views/PersonaPage.vue'),
@@ -138,18 +143,9 @@ const MainRoutes = {
           redirect: '/alkaid/long-term-memory',
         },
         {
-          path: 'knowledge-base',
-          redirect: '/knowledge-base',
-        },
-        {
           name: 'AlkaidLongTermMemory',
           path: 'long-term-memory',
           component: () => import('@/views/alkaid/LongTermMemoryPage.vue'),
-        },
-        {
-          name: 'AlkaidOther',
-          path: 'other',
-          component: () => import('@/views/alkaid/Other.vue'),
         },
       ],
     },

@@ -8,10 +8,8 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, kb, memory, data, file, plugin, mcp, skill,
-    plus the explicitly granted sensitive scopes config:edit_admin and
-    chat:admin. The config scope also grants bot and provider access, but it
-    never grants a sensitive scope.
+    persona, im, config, chat, kb, memory, data, file, plugin, mcp, and skill.
+    The config scope also grants bot and provider access.
 x-astrbot-scope-definitions:
   bot:
     description: Manage bot and platform configurations.
@@ -26,22 +24,12 @@ x-astrbot-scope-definitions:
     description: Send proactive IM messages and query bot or platform identifiers.
     description_zh: 主动发送 IM 消息，并查询机器人或平台标识。
   config:
-    description: Manage configuration profiles and system configuration, excluding admins_id changes.
-    description_zh: 管理配置文件和系统配置，但不包含修改 admins_id 的能力。
+    description: Manage configuration profiles and system configuration.
+    description_zh: 管理配置文件和系统配置。
     includes: [bot, provider]
-  'config:edit_admin':
-    description: Allow an explicitly trusted config key to change admins_id.
-    description_zh: 允许明确授权的 config Key 修改 admins_id。
-    parent: config
-    sensitive: true
   chat:
     description: Use chat capabilities and manage ChatUI sessions and projects.
     description_zh: 调用对话能力，并管理 ChatUI 会话和项目。
-  'chat:admin':
-    description: Allow an explicitly trusted chat key to use a configured administrator ID as its sender.
-    description_zh: 允许明确授权的 chat Key 使用已配置管理员 ID 作为发送者。
-    parent: chat
-    sensitive: true
   kb:
     description: Manage knowledge bases.
     description_zh: 管理知识库。
@@ -74,6 +62,7 @@ tags:
   - name: Open API
   - name: Auth
   - name: API Keys
+  - name: Authorization
   - name: System Config
   - name: Config Profiles
   - name: Bot Config Routes
@@ -242,6 +231,140 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/authorization/role-bindings:
+    get:
+      tags: [Authorization]
+      summary: List role bindings
+      operationId: listAuthorizationRoleBindings
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+    post:
+      tags: [Authorization]
+      summary: Grant a scoped role binding
+      operationId: grantAuthorizationRoleBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationBindingRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/role-bindings/{binding_id}/revoke:
+    post:
+      tags: [Authorization]
+      summary: Revoke a scoped role binding
+      operationId: revokeAuthorizationRoleBinding
+      parameters:
+        - name: binding_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/role-bindings/batch-revoke/step-up:
+    post:
+      tags: [Authorization]
+      summary: Reauthenticate for one exact batch role-binding revocation
+      operationId: issueAuthorizationBatchRevokeStepUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationBindingBatchRevokeRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/role-bindings/batch-revoke:
+    post:
+      tags: [Authorization]
+      summary: Revoke one exact batch of scoped role bindings
+      operationId: revokeAuthorizationRoleBindings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationBindingBatchRevokeRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/step-up:
+    post:
+      tags: [Authorization]
+      summary: Reauthenticate and issue a one-time step-up credential
+      operationId: issueAuthorizationStepUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationStepUpRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/audit:
+    get:
+      tags: [Authorization]
+      summary: List redacted authorization audit records
+      operationId: listAuthorizationAudit
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/accounts:
+    get:
+      tags: [Authorization]
+      summary: List stable Dashboard accounts
+      operationId: listAuthorizationAccounts
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+    post:
+      tags: [Authorization]
+      summary: Create a Dashboard account and global role binding
+      operationId: createAuthorizationAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardAccountCreateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/accounts/{account_id}:
+    patch:
+      tags: [Authorization]
+      summary: Update or disable a Dashboard account
+      operationId: updateAuthorizationAccount
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardAccountUpdateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/system-config/schema:
     get:
       tags: [System Config]
@@ -266,7 +389,6 @@ paths:
       summary: Replace the system configuration
       operationId: updateSystemConfig
       x-astrbot-scope: config
-      x-astrbot-sensitive-scopes: ['config:edit_admin']
       requestBody:
         required: true
         content:
@@ -311,7 +433,6 @@ paths:
       summary: Create a configuration profile
       operationId: createConfigProfile
       x-astrbot-scope: config
-      x-astrbot-sensitive-scopes: ['config:edit_admin']
       requestBody:
         required: true
         content:
@@ -338,7 +459,6 @@ paths:
       summary: Replace a configuration profile
       operationId: updateConfigProfileContent
       x-astrbot-scope: config
-      x-astrbot-sensitive-scopes: ['config:edit_admin']
       parameters:
         - $ref: '#/components/parameters/ConfigId'
       requestBody:
@@ -846,7 +966,6 @@ paths:
       summary: Send a webchat message
       operationId: sendChatMessage
       x-astrbot-scope: chat
-      x-astrbot-sensitive-scopes: ['chat:admin']
       requestBody:
         required: true
         content:
@@ -868,7 +987,6 @@ paths:
       operationId: openChatWebSocket
       x-websocket: true
       x-astrbot-scope: chat
-      x-astrbot-sensitive-scopes: ['chat:admin']
       parameters:
         - name: api_key
           in: query
@@ -1273,6 +1391,78 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Ok'
+
+  /api/v1/chat/projects/{project_id}/workspace/files:
+    get:
+      tags: [Chat]
+      summary: List files in a ChatUI project workspace directory
+      operationId: listChatProjectWorkspaceFiles
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ''
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/chat/projects/{project_id}/workspace/file:
+    get:
+      tags: [Chat]
+      summary: Preview a ChatUI project workspace file
+      operationId: getChatProjectWorkspaceFile
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/chat/projects/{project_id}/workspace/file/download:
+    get:
+      tags: [Chat]
+      summary: Download a ChatUI project workspace file
+      operationId: downloadChatProjectWorkspaceFile
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace file bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
 
   /api/v1/chat/projects/sessions/{session_id}:
     delete:
@@ -2018,6 +2208,8 @@ paths:
       summary: Update a plugin
       operationId: updatePlugin
       x-astrbot-scope: plugin
+      x-astrbot-action: extension.plugin_install
+      x-astrbot-step-up: required
       parameters:
         - $ref: '#/components/parameters/PluginId'
       requestBody:
@@ -2036,6 +2228,8 @@ paths:
       summary: Update multiple plugins
       operationId: updatePlugins
       x-astrbot-scope: plugin
+      x-astrbot-action: extension.plugin_install
+      x-astrbot-step-up: required
       requestBody:
         required: true
         content:
@@ -2098,6 +2292,8 @@ paths:
       summary: Install a plugin from GitHub
       operationId: installPluginFromGithub
       x-astrbot-scope: plugin
+      x-astrbot-action: extension.plugin_install
+      x-astrbot-step-up: required
       requestBody:
         required: true
         content:
@@ -2113,6 +2309,8 @@ paths:
       summary: Install a plugin from a downloadable ZIP URL
       operationId: installPluginFromUrl
       x-astrbot-scope: plugin
+      x-astrbot-action: extension.plugin_install
+      x-astrbot-step-up: required
       requestBody:
         required: true
         content:
@@ -2129,6 +2327,8 @@ paths:
       summary: Install a plugin from an uploaded ZIP file
       operationId: installPluginFromUpload
       x-astrbot-scope: plugin
+      x-astrbot-action: extension.plugin_install
+      x-astrbot-step-up: required
       requestBody:
         required: true
         content:
@@ -2261,7 +2461,7 @@ paths:
   /api/v1/commands/{command_id}:
     patch:
       tags: [Commands]
-      summary: Update command enabled state, alias, or permission group
+      summary: Update command enabled state, alias, or authorization action
       operationId: updateCommand
       x-astrbot-scope: plugin
       parameters:
@@ -2378,24 +2578,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/tools/{tool_id}/permission:
-    patch:
-      tags: [Tools]
-      summary: Update an LLM tool permission
-      operationId: setToolPermission
-      x-astrbot-scope: tool
-      parameters:
-        - $ref: '#/components/parameters/ToolId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ToolPermissionPatch'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/mcp/servers:
     get:
       tags: [MCP]
@@ -2479,15 +2661,162 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                config:
-                  type: object
-                  additionalProperties: true
-              additionalProperties: false
+              $ref: '#/components/schemas/McpServerConfig'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/catalog:
+    get:
+      tags: [MCP]
+      summary: Get a connected MCP server catalog and status
+      operationId: getMcpCatalog
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/resources:
+    get:
+      tags: [MCP]
+      summary: List explicitly browsable MCP resources
+      operationId: listMcpResources
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/resources/templates:
+    get:
+      tags: [MCP]
+      summary: List MCP resource templates
+      operationId: listMcpResourceTemplates
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/resources/read:
+    post:
+      tags: [MCP]
+      summary: Read an explicitly selected MCP resource
+      operationId: readMcpResource
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpResourceReadRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/prompts:
+    get:
+      tags: [MCP]
+      summary: List explicitly selectable MCP prompts
+      operationId: listMcpPrompts
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/prompts/{prompt_name}/get:
+    post:
+      tags: [MCP]
+      summary: Get an explicitly selected MCP prompt
+      operationId: getMcpPrompt
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+        - name: prompt_name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpPromptGetRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/completion:
+    post:
+      tags: [MCP]
+      summary: Complete an MCP prompt or resource argument
+      operationId: completeMcp
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpCompletionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/oauth/status:
+    get:
+      tags: [MCP]
+      summary: Get safe MCP OAuth status
+      operationId: getMcpOAuthStatus
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/oauth/start:
+    post:
+      tags: [MCP]
+      summary: Start MCP OAuth authorization with PKCE
+      operationId: startMcpOAuth
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/servers/{server_name}/oauth:
+    delete:
+      tags: [MCP]
+      summary: Revoke locally stored MCP OAuth credentials
+      operationId: revokeMcpOAuth
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: '#/components/parameters/ServerName'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/mcp/oauth/callback:
+    get:
+      tags: [MCP]
+      summary: Complete MCP OAuth callback
+      operationId: completeMcpOAuthCallback
+      responses:
+        '303':
+          description: Browser redirect after a validated OAuth callback.
 
   /api/v1/mcp/providers/modelscope/sync:
     post:
@@ -2522,7 +2851,11 @@ paths:
             type: string
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: Skills inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillInventoryResponse'
     post:
       tags: [Skills]
       summary: Upload or import a skill archive
@@ -3708,6 +4041,8 @@ paths:
       summary: Export conversations
       operationId: exportConversations
       x-astrbot-scope: data
+      x-astrbot-action: data.export_all
+      x-astrbot-step-up: required
       requestBody:
         required: true
         content:
@@ -3887,6 +4222,8 @@ paths:
       summary: Restart AstrBot core
       operationId: restartCore
       x-astrbot-scope: system
+      x-astrbot-action: system.restart
+      x-astrbot-step-up: required
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -4019,9 +4356,11 @@ paths:
       tags: [Backups]
       summary: Download a backup
       operationId: downloadBackup
+      x-astrbot-scope: system
+      x-astrbot-action: system.manage
       security:
         - DashboardBearerAuth: []
-        - BackupDownloadToken: []
+        - DashboardCookieAuth: []
       parameters:
         - $ref: '#/components/parameters/Filename'
       responses:
@@ -4115,6 +4454,8 @@ paths:
       summary: Update AstrBot core
       operationId: updateCore
       x-astrbot-scope: system
+      x-astrbot-action: system.update
+      x-astrbot-step-up: required
       requestBody:
         required: false
         content:
@@ -4143,6 +4484,8 @@ paths:
       summary: Install a Python package
       operationId: installPipPackage
       x-astrbot-scope: system
+      x-astrbot-action: system.pip_install
+      x-astrbot-step-up: required
       requestBody:
         required: true
         content:
@@ -4240,6 +4583,21 @@ paths:
       summary: Stream live logs
       operationId: streamLiveLogs
       x-astrbot-scope: system
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: privacy
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         '200':
           description: Server-sent log stream
@@ -4254,6 +4612,21 @@ paths:
       summary: Get log history
       operationId: getLogHistory
       x-astrbot-scope: system
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: privacy
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         '200':
           $ref: '#/components/responses/Text'
@@ -4462,11 +4835,6 @@ components:
       type: apiKey
       in: cookie
       name: astrbot_dashboard_jwt
-    BackupDownloadToken:
-      type: apiKey
-      in: query
-      name: token
-
   responses:
     Ok:
       description: Standard AstrBot success response
@@ -4721,6 +5089,62 @@ components:
         message:
           type: string
         data: {}
+      additionalProperties: false
+
+    SkillInventoryItem:
+      type: object
+      required: [name, description, path, active]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        path:
+          type: string
+        active:
+          type: boolean
+        source_type:
+          type: string
+        source_label:
+          type: string
+        plugin_name:
+          type: string
+        plugin_active:
+          type: boolean
+          description: Whether the owning plugin is active in the runtime catalog.
+        plugin_display_name:
+          type: string
+          description: Display name of the owning runtime plugin, when known.
+        readonly:
+          type: boolean
+      additionalProperties: true
+
+    SkillInventoryData:
+      type: object
+      required: [skills, runtime, sandbox_cache]
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillInventoryItem'
+        runtime:
+          type: string
+        sandbox_cache:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+
+    SkillInventoryResponse:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          enum: [ok, warning]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/SkillInventoryData'
       additionalProperties: false
 
     ErrorEnvelope:
@@ -5075,8 +5499,6 @@ components:
                 plugin,
                 mcp,
                 skill,
-                'chat:admin',
-                'config:edit_admin',
               ]
           example:
             [
@@ -5093,8 +5515,6 @@ components:
               plugin,
               mcp,
               skill,
-              'chat:admin',
-              'config:edit_admin',
             ]
         expires_at:
           type: string
@@ -5191,15 +5611,6 @@ components:
           type: boolean
       additionalProperties: false
 
-    ToolPermissionPatch:
-      type: object
-      required: [permission]
-      properties:
-        permission:
-          type: string
-          enum: [admin, member]
-      additionalProperties: false
-
     ProviderSourceConfigRequest:
       type: object
       required: [config]
@@ -5229,7 +5640,7 @@ components:
       properties:
         username:
           type: string
-          description: Caller-declared WebChat sender/session owner. A configured AstrBot administrator ID requires the explicitly granted chat:admin API-key scope.
+          description: Caller-declared WebChat sender/session owner.
         session_id:
           type: string
         message:
@@ -5574,9 +5985,116 @@ components:
           type: array
           items:
             type: string
-        permission_group:
+        action:
           type: string
       additionalProperties: false
+
+    AuthorizationBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [subject_id, role, scope_type, scope_id]
+      properties:
+        subject_id:
+          type: string
+        role:
+          type: string
+          enum:
+            [
+              root,
+              operator,
+              instance_operator,
+              session_owner,
+              session_admin,
+              member,
+            ]
+        scope_type:
+          type: string
+          enum: [global, instance, session, resource]
+        scope_id:
+          type: string
+        config_id:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AuthorizationStepUpRequest:
+      type: object
+      additionalProperties: false
+      required: [action, resource_type, resource_id]
+      properties:
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        config_id:
+          type: string
+          nullable: true
+        password:
+          type: string
+          writeOnly: true
+          nullable: true
+        code:
+          type: string
+          writeOnly: true
+          nullable: true
+
+    AuthorizationBindingBatchRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding_ids]
+      properties:
+        binding_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        password:
+          type: string
+          writeOnly: true
+          nullable: true
+        code:
+          type: string
+          writeOnly: true
+          nullable: true
+
+    DashboardAccountCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+        role:
+          type: string
+          enum: [operator, root]
+
+    DashboardAccountUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+        is_active:
+          type: boolean
 
     BuiltinCommandBulkToggleRequest:
       type: object
@@ -5634,9 +6152,9 @@ components:
           type: array
           items:
             type: string
-        permission:
+        action:
           type: string
-          enum: [admin, everyone, member]
+          nullable: true
         enabled:
           type: boolean
         is_group:
@@ -5705,7 +6223,7 @@ components:
           default: true
         transport:
           type: string
-          enum: [stdio, sse, streamable_http]
+          enum: [stdio, streamable_http]
         command:
           type: string
         args:
@@ -5714,13 +6232,75 @@ components:
             type: string
         url:
           type: string
+          format: uri
         headers:
           type: object
           additionalProperties:
             type: string
-        timeout:
-          type: integer
-      additionalProperties: true
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        allow_private_network:
+          type: boolean
+          default: false
+        connect_timeout_seconds:
+          type: number
+          exclusiveMinimum: 0
+        read_timeout_seconds:
+          type: number
+          exclusiveMinimum: 0
+        terminate_on_close:
+          type: boolean
+          default: true
+        auth_ref:
+          type: string
+      oneOf:
+        - required: [command]
+          not:
+            required: [url]
+        - required: [url, transport]
+          properties:
+            transport:
+              const: streamable_http
+          not:
+            required: [command]
+      additionalProperties: false
+
+    McpResourceReadRequest:
+      type: object
+      required: [uri]
+      properties:
+        uri:
+          type: string
+          format: uri
+      additionalProperties: false
+
+    McpPromptGetRequest:
+      type: object
+      properties:
+        arguments:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+
+    McpCompletionRequest:
+      type: object
+      required: [reference, argument]
+      properties:
+        reference:
+          type: object
+          additionalProperties: true
+        argument:
+          type: object
+          additionalProperties:
+            type: string
+        context_arguments:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
 
     ModelScopeSyncRequest:
       type: object

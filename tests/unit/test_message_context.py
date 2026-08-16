@@ -5,6 +5,7 @@ import pytest
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.message.components import (
+    Face,
     File,
     Forward,
     Json,
@@ -155,6 +156,29 @@ async def test_message_context_renders_embedded_components_and_rich_messages():
 
 
 @pytest.mark.asyncio
+async def test_message_context_renders_qq_face_semantics_for_direct_and_forwarded_faces():
+    client = _NapCatContextClient(
+        {
+            "forward-face": {
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Mock Sender"},
+                            "message": [{"type": "face", "data": {"id": "111"}}],
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    event = _make_event([Face(id=111), Forward(id="forward-face")], client)
+
+    rendered = await MessageContextRenderer(event).render_event_components()
+
+    assert (rendered.text or "").count("[QQ Face: 可怜 (id: 111)]") == 2
+
+
+@pytest.mark.asyncio
 async def test_message_context_fetches_existing_node_content_on_demand():
     client = _NapCatContextClient(
         message_payloads={
@@ -199,50 +223,61 @@ async def test_message_context_renders_rich_segments_from_fetched_forward():
                 "data": {
                     "messages": [
                         {
-                            "sender": {"nickname": "Mock Rich Sender"},
-                            "message": [
-                                {
-                                    "type": "record",
-                                    "data": {
-                                        "file": "voice.amr",
-                                        "url": "https://media.example.com/mock.amr",
+                            "type": "node",
+                            "data": {
+                                "user_id": "10001",
+                                "nickname": "Mock Rich Sender",
+                                "message": [
+                                    {
+                                        "type": "image",
+                                        "data": {
+                                            "file": "mock-image.jpg",
+                                            "url": "https://img.example.com/mock.jpg",
+                                        },
                                     },
-                                },
-                                {
-                                    "type": "video",
-                                    "data": {
-                                        "file": "mock-video-token",
-                                        "url": "https://media.example.com/mock.mp4",
+                                    {
+                                        "type": "record",
+                                        "data": {
+                                            "file": "voice.amr",
+                                            "url": "https://media.example.com/mock.amr",
+                                        },
                                     },
-                                },
-                                {
-                                    "type": "file",
-                                    "data": {
-                                        "file": "mock.txt",
-                                        "url": "https://files.example.com/mock.txt",
+                                    {
+                                        "type": "video",
+                                        "data": {
+                                            "file": "mock-video-token",
+                                            "url": "https://media.example.com/mock.mp4",
+                                        },
                                     },
-                                },
-                                {
-                                    "type": "music",
-                                    "data": {"type": "qq", "id": "123"},
-                                },
-                                {
-                                    "type": "location",
-                                    "data": {
-                                        "lat": "30.0",
-                                        "lon": "120.0",
-                                        "title": "Mock Place",
+                                    {
+                                        "type": "file",
+                                        "data": {
+                                            "file": "mock.txt",
+                                            "url": "https://files.example.com/mock.txt",
+                                        },
                                     },
-                                },
-                                {
-                                    "type": "markdown",
-                                    "data": {"content": "# Mock Markdown"},
-                                },
-                                {
-                                    "type": "onlinefile",
-                                    "data": {"fileName": "mock.zip"},
-                                },
-                            ],
+                                    {
+                                        "type": "music",
+                                        "data": {"type": "qq", "id": "123"},
+                                    },
+                                    {
+                                        "type": "location",
+                                        "data": {
+                                            "lat": "30.0",
+                                            "lon": "120.0",
+                                            "title": "Mock Place",
+                                        },
+                                    },
+                                    {
+                                        "type": "markdown",
+                                        "data": {"content": "# Mock Markdown"},
+                                    },
+                                    {
+                                        "type": "onlinefile",
+                                        "data": {"fileName": "mock.zip"},
+                                    },
+                                ],
+                            },
                         }
                     ]
                 }
@@ -258,6 +293,7 @@ async def test_message_context_renders_rich_segments_from_fetched_forward():
     assert "[Location:Mock Place (30.0, 120.0)]" in (rendered.text or "")
     assert "[Markdown]# Mock Markdown" in (rendered.text or "")
     assert "[Online File:mock.zip]" in (rendered.text or "")
+    assert rendered.image_refs == ["https://img.example.com/mock.jpg"]
     assert [type(component) for component in rendered.nested_media] == [
         Record,
         Video,
@@ -344,11 +380,14 @@ async def test_append_message_component_context_makes_forward_only_request_valid
                 "data": {
                     "messages": [
                         {
-                            "sender": {"nickname": "Mock Sender"},
-                            "message": [
-                                {"type": "text", "data": {"text": "hello"}},
-                                {"type": "image", "data": {"url": image_url}},
-                            ],
+                            "type": "node",
+                            "data": {
+                                "nickname": "Mock Sender",
+                                "message": [
+                                    {"type": "text", "data": {"text": "hello"}},
+                                    {"type": "image", "data": {"url": image_url}},
+                                ],
+                            },
                         }
                     ]
                 }

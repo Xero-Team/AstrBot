@@ -6,6 +6,7 @@ from typing import Any, TypedDict
 from astrbot.core.message.components import (
     At,
     AtAll,
+    Face,
     File,
     Forward,
     Image,
@@ -15,6 +16,7 @@ from astrbot.core.message.components import (
     Reply,
     Video,
 )
+from astrbot.core.message.qq_face import format_qq_face
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
@@ -134,6 +136,8 @@ def _extract_text_from_component_chain(
             parts.append("@all")
         elif isinstance(seg, Image):
             parts.append("[Image]")
+        elif isinstance(seg, Face):
+            parts.append(format_qq_face(seg.id))
         elif isinstance(seg, Video):
             parts.append("[Video]")
         elif isinstance(seg, File):
@@ -289,7 +293,7 @@ def _parse_simple_onebot_segment(seg_type: str, seg_data: dict[Any, Any]) -> str
         target = seg_data.get("name") or seg_data.get("qq")
         return f"@{target}" if target is not None else None
     if seg_type == "face":
-        return f"[Face:{seg_data.get('id', '')}]"
+        return format_qq_face(seg_data.get("id"))
     if seg_type == "mface":
         summary = seg_data.get("summary")
         return summary if isinstance(summary, str) else "[Market Face]"
@@ -493,17 +497,24 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
         if not isinstance(node, dict):
             continue
 
-        sender = node.get("sender")
+        node_data = node
+        if node.get("type") == "node" and isinstance(node.get("data"), dict):
+            node_data = node["data"]
+
+        sender = node_data.get("sender")
         if not isinstance(sender, dict):
             sender = {}
         sender_name = (
             sender.get("nickname")
             or sender.get("card")
             or sender.get("user_id")
+            or node_data.get("nickname")
+            or node_data.get("name")
+            or node_data.get("user_id")
             or "Unknown User"
         )
 
-        raw_content = node.get("message") or node.get("content") or []
+        raw_content = node_data.get("message") or node_data.get("content") or []
         chain: list[Any] = []
         if isinstance(raw_content, list):
             chain = raw_content

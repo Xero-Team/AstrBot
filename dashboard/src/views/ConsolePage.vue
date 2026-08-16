@@ -3,6 +3,9 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { updatesApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import { stepUpHeaders } from '@/utils/stepUp';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useToast } from '@/utils/toast';
 import { ref, watch } from 'vue';
 
@@ -11,8 +14,19 @@ const toast = useToast();
 const autoScrollEnabled = ref(
   localStorage.getItem('console_auto_scroll') !== 'false',
 );
+const hideUserChatEnabled = ref(
+  localStorage.getItem('console_hide_user_chat') !== 'false',
+);
 const pipDialog = ref(false);
 const loading = ref(false);
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 const pipInstallPayload = ref({
   package: '',
   mirror: '',
@@ -22,10 +36,22 @@ watch(autoScrollEnabled, (value) => {
   localStorage.setItem('console_auto_scroll', String(value));
 });
 
+watch(hideUserChatEnabled, (value) => {
+  localStorage.setItem('console_hide_user_chat', String(value));
+});
+
 async function pipInstall(): Promise<void> {
-  loading.value = true;
   try {
-    const res = await updatesApi.installPip(pipInstallPayload.value);
+    const stepUp = await requestStepUp({
+      action: 'system.pip_install',
+      resourceType: 'system',
+      resourceId: 'pip-install',
+    });
+    if (!stepUp) return;
+    loading.value = true;
+    const res = await updatesApi.installPip(pipInstallPayload.value, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status === 'ok') {
       toast.success(res.data.message || tm('pipInstall.installSuccess'));
       pipDialog.value = false;
@@ -49,7 +75,19 @@ async function pipInstall(): Promise<void> {
           {{ tm('debugHint.text') }}
         </p>
       </div>
-      <div class="d-flex align-center">
+      <div class="console-header__controls">
+        <v-switch
+          v-model="hideUserChatEnabled"
+          :label="
+            hideUserChatEnabled
+              ? tm('hideUserChat.enabled')
+              : tm('hideUserChat.disabled')
+          "
+          hide-details
+          density="compact"
+          inset
+          color="primary"
+        ></v-switch>
         <v-switch
           v-model="autoScrollEnabled"
           :label="
@@ -61,7 +99,6 @@ async function pipInstall(): Promise<void> {
           density="compact"
           inset
           color="primary"
-          style="margin-right: 16px"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400" scrollable>
           <template #activator="{ props: activatorProps }">
@@ -69,7 +106,7 @@ async function pipInstall(): Promise<void> {
               tm('pipInstall.button')
             }}</v-btn>
           </template>
-          <v-card class="console-pip-dialog">
+          <v-card class="app-dialog console-pip-dialog">
             <v-card-title>
               <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
             </v-card-title>
@@ -91,7 +128,7 @@ async function pipInstall(): Promise<void> {
             <v-card-actions class="console-pip-dialog__actions">
               <v-spacer></v-spacer>
               <v-btn
-                color="blue-darken-1"
+                color="primary"
                 variant="text"
                 :loading="loading"
                 @click="pipInstall"
@@ -106,6 +143,14 @@ async function pipInstall(): Promise<void> {
     <ConsoleDisplayer
       class="console-display"
       :auto-scroll="autoScrollEnabled"
+      :hide-user-chat="hideUserChatEnabled"
+    />
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
     />
   </div>
 </template>
@@ -114,11 +159,10 @@ async function pipInstall(): Promise<void> {
 .console-page {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 67px);
   margin: 0 auto;
   max-width: 1400px;
-  min-height: 0;
-  padding: 24px;
+  min-height: 100%;
+  padding: var(--astrbot-space-6);
   width: 100%;
 }
 
@@ -127,7 +171,14 @@ async function pipInstall(): Promise<void> {
   display: flex;
   flex-shrink: 0;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: var(--astrbot-space-6);
+}
+
+.console-header__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--astrbot-space-4);
 }
 
 .console-display {
@@ -151,20 +202,6 @@ async function pipInstall(): Promise<void> {
 
 .console-pip-dialog__actions {
   flex: 0 0 auto;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.fade-in {
-  animation: fadeIn 0.2s ease-in-out;
 }
 
 @media (max-width: 768px) {

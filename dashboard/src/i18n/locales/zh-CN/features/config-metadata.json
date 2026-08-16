@@ -170,10 +170,6 @@
           "description": "运行环境",
           "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
-        "computer_use_require_admin": {
-          "description": "需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /session info 指令查看管理员 ID。"
-        },
         "sandbox": {
           "booter": {
             "description": "沙箱环境驱动器"
@@ -733,9 +729,6 @@
     },
     "general": {
       "description": "基本",
-      "admins_id": {
-        "description": "管理员 ID"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "隔离会话",
@@ -1018,6 +1011,12 @@
         "group_message_max_cnt": {
           "description": "最大消息数量"
         },
+        "group_message_history_enable": {
+          "description": "持久化群消息历史"
+        },
+        "group_message_history_max_cnt": {
+          "description": "群消息历史最大保留数量"
+        },
         "image_caption": {
           "description": "自动理解图片",
           "hint": "需要设置群聊图片转述模型。"
@@ -1295,6 +1294,11 @@
             "description": "最大词元（Tokens）数",
             "hint": "生成的最大词元（Tokens）数。",
             "name": "Max Tokens"
+          },
+          "reasoning_effort": {
+            "description": "推理强度",
+            "hint": "控制推理模型的推理强度，支持的值取决于具体模型。",
+            "name": "Reasoning Effort"
           }
         }
       },

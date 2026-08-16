@@ -55,6 +55,7 @@ from astrbot.dashboard.services.session_management_service import (
 from astrbot.dashboard.services.skills_service import SkillArchive, SkillsServiceError
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
+TEST_DASHBOARD_ACCOUNT_ID = "fastapi-v1-dashboard-account"
 
 
 @dataclass
@@ -136,11 +137,13 @@ class FakeLlmTools:
             "mcpServers": {
                 "demo-server": {
                     "active": True,
-                    "url": "https://example.com/demo-server",
+                    "url": "https://93.184.216.34/demo-server",
+                    "transport": "streamable_http",
                 },
                 "modelscope/demo": {
                     "active": True,
-                    "url": "https://example.com/modelscope-demo",
+                    "url": "https://93.184.216.34/modelscope-demo",
+                    "transport": "streamable_http",
                 },
             }
         }
@@ -598,6 +601,9 @@ class FakeUmopConfigRouter:
     async def delete_route(self, umo: str) -> None:
         self.umop_to_conf_id.pop(umo, None)
 
+    def get_conf_id_for_umop(self, umo: str) -> str | None:
+        return self.umop_to_conf_id.get(umo)
+
 
 class FakeAstrBotUpdator:
     async def check_update(self, *_args, **_kwargs):
@@ -632,6 +638,13 @@ class FakeAstrBotConfig(dict):
     ) -> bool:
         self.save_config(post_config, indent=indent)
         return True
+
+
+class FakeAuthorizationService:
+    """Allow-all authorization double for route-focused Dashboard tests."""
+
+    async def authorize(self, *_args, **_kwargs):
+        return SimpleNamespace(allowed=True, requires_step_up=False)
 
 
 def _build_fake_config() -> dict:
@@ -796,6 +809,7 @@ def fake_core_lifecycle():
         log_broker=LogBroker(),
         services=SimpleNamespace(
             demo_mode=False,
+            authorization=FakeAuthorizationService(),
             preferences=FakePreferences(),
             file_token_service=FileTokenService(),
             pip_installer=SimpleNamespace(install=lambda *_args, **_kwargs: None),
@@ -869,6 +883,11 @@ def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
         db=fake_db,
         jwt_secret=JWT_SECRET,
     )
+
+    async def validate_dashboard_principal(principal) -> bool:
+        return principal.account_id == TEST_DASHBOARD_ACCOUNT_ID
+
+    app.state.services.auth.validate_dashboard_principal = validate_dashboard_principal
     return app
 
 
@@ -923,7 +942,10 @@ async def test_dashboard_shutdown_owns_update_service(asgi_app: FastAPI, monkeyp
 
 
 def _jwt_headers() -> dict[str, str]:
-    token = DashboardTokenValidator(JWT_SECRET).issue("fastapi-v1-test")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "fastapi-v1-test",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -988,7 +1010,10 @@ async def test_dashboard_unhandled_errors_use_the_standard_error_envelope(
 async def test_v1_scope_dependencies_accept_dashboard_cookie(
     asgi_client: httpx.AsyncClient,
 ):
-    token = DashboardTokenValidator(JWT_SECRET).issue("fastapi-v1-cookie-test")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "fastapi-v1-cookie-test",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
 
     response = await asgi_client.get(
         "/api/v1/bots",
@@ -999,6 +1024,20 @@ async def test_v1_scope_dependencies_accept_dashboard_cookie(
     data = response.json()
     assert data["status"] == "ok"
     assert isinstance(data["data"]["bots"], list)
+
+
+@pytest.mark.asyncio
+async def test_accountless_dashboard_session_is_rejected(
+    asgi_client: httpx.AsyncClient,
+):
+    token = DashboardTokenValidator(JWT_SECRET).issue("legacy-dashboard-user")
+
+    response = await asgi_client.get(
+        "/api/v1/bots",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1038,7 +1077,7 @@ async def test_dashboard_session_claim_mismatch_is_rejected(
 ):
     validator = DashboardTokenValidator(JWT_SECRET)
     payload = jwt.decode(
-        validator.issue("fastapi-v1-test"),
+        validator.issue("fastapi-v1-test", account_id=TEST_DASHBOARD_ACCOUNT_ID),
         options={"verify_signature": False},
     )
     payload[claim] = value
@@ -1063,7 +1102,7 @@ async def test_dashboard_session_missing_required_claim_is_rejected(
 ):
     validator = DashboardTokenValidator(JWT_SECRET)
     payload = jwt.decode(
-        validator.issue("fastapi-v1-test"),
+        validator.issue("fastapi-v1-test", account_id=TEST_DASHBOARD_ACCOUNT_ID),
         options={"verify_signature": False},
     )
     del payload[missing_claim]
@@ -1080,8 +1119,12 @@ async def test_dashboard_session_missing_required_claim_is_rejected(
 def test_each_dashboard_login_token_has_a_distinct_session_id(asgi_app: FastAPI):
     validator = asgi_app.state.dashboard_token_validator
 
-    first = validator.validate(validator.issue("dashboard-user"))
-    second = validator.validate(validator.issue("dashboard-user"))
+    first = validator.validate(
+        validator.issue("dashboard-user", account_id=TEST_DASHBOARD_ACCOUNT_ID)
+    )
+    second = validator.validate(
+        validator.issue("dashboard-user", account_id=TEST_DASHBOARD_ACCOUNT_ID)
+    )
 
     assert first.sid != second.sid
     assert first.jti != second.jti
@@ -1091,7 +1134,10 @@ def test_each_dashboard_login_token_has_a_distinct_session_id(asgi_app: FastAPI)
 async def test_cookie_authenticated_mutation_rejects_untrusted_origins(
     asgi_client: httpx.AsyncClient,
 ):
-    token = DashboardTokenValidator(JWT_SECRET).issue("cookie-user")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "cookie-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     cookie = {"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}={token}"}
 
     missing = await asgi_client.post("/api/v1/auth/logout", headers=cookie)
@@ -1138,7 +1184,10 @@ async def test_cookie_csrf_uses_trusted_proxy_external_origin(
     astrbot_config = asgi_app.state.astrbot_config
     previous_dashboard_config = astrbot_config.get("dashboard")
     astrbot_config["dashboard"] = {"trust_proxy_headers": True}
-    token = DashboardTokenValidator(JWT_SECRET).issue("proxy-user")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "proxy-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     try:
         response = await asgi_client.post(
             "/api/v1/auth/logout",
@@ -1299,7 +1348,7 @@ async def test_dashboard_static_dist_files_are_served(
 async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
     download_response = await asgi_client.get(
         "/api/v1/backups/%2E%2E/secret.zip",
-        params={"token": "demo"},
+        headers=_jwt_headers(),
     )
     delete_response = await asgi_client.delete(
         "/api/v1/backups/%2E%2E/secret.zip",
@@ -1315,7 +1364,7 @@ async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_v1_backup_download_accepts_dashboard_bearer_or_query_token(
+async def test_v1_backup_download_requires_authorized_dashboard_bearer(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     tmp_path: Path,
@@ -1323,26 +1372,23 @@ async def test_v1_backup_download_accepts_dashboard_bearer_or_query_token(
     service = asgi_app.state.services.backups
     service.backup_dir = str(tmp_path)
     (tmp_path / "backup.zip").write_bytes(b"backup")
-    valid_token = DashboardTokenValidator(JWT_SECRET).issue("backup-user")
+    valid_token = DashboardTokenValidator(JWT_SECRET).issue(
+        "backup-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
 
     bearer = await asgi_client.get(
         "/api/v1/backups/backup.zip",
         headers={"Authorization": f"bEaReR    {valid_token}"},
     )
-    empty_query_uses_bearer = await asgi_client.get(
-        "/api/v1/backups/backup.zip",
-        params={"token": ""},
-        headers={"Authorization": f"Bearer {valid_token}"},
-    )
-    query = await asgi_client.get(
+    query_token = await asgi_client.get(
         "/api/v1/backups/backup.zip",
         params={"token": valid_token},
     )
 
     assert bearer.status_code == 200
     assert bearer.content == b"backup"
-    assert empty_query_uses_bearer.status_code == 200
-    assert query.status_code == 200
+    assert query_token.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1354,16 +1400,14 @@ async def test_v1_backup_download_rejects_non_dashboard_credentials(
     service = asgi_app.state.services.backups
     service.backup_dir = str(tmp_path)
     (tmp_path / "backup.zip").write_bytes(b"backup")
-    valid_token = DashboardTokenValidator(JWT_SECRET).issue("backup-user")
+    valid_token = DashboardTokenValidator(JWT_SECRET).issue(
+        "backup-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     expired_payload = jwt.decode(valid_token, options={"verify_signature": False})
     expired_payload["exp"] = 0
     expired_token = jwt.encode(expired_payload, JWT_SECRET, algorithm="HS256")
 
-    wrong_query = await asgi_client.get(
-        "/api/v1/backups/backup.zip",
-        params={"token": "not-a-dashboard-token"},
-        headers={"Authorization": f"Bearer {valid_token}"},
-    )
     empty_credentials = await asgi_client.get(
         "/api/v1/backups/backup.zip",
         headers={"Authorization": "Bearer    "},
@@ -1381,8 +1425,35 @@ async def test_v1_backup_download_rejects_non_dashboard_credentials(
         headers={"Authorization": f"Bearer {valid_token}forged"},
     )
 
-    for response in (wrong_query, empty_credentials, wrong_scheme, expired, forged):
-        assert response.status_code == 401
+    assert empty_credentials.status_code == 401
+    assert expired.status_code == 401
+    # A malformed Dashboard bearer is checked as a legacy raw API-key input
+    # only after JWT validation fails. Neither it nor an explicit API Key can
+    # carry the Dashboard-only `system` capability.
+    assert forged.status_code == 403
+    assert wrong_scheme.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_v1_backup_download_rejects_missing_authorization_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    tmp_path: Path,
+):
+    """Backup archives cannot bypass an unavailable authorization runtime."""
+
+    service = asgi_app.state.services.backups
+    service.backup_dir = str(tmp_path)
+    (tmp_path / "backup.zip").write_bytes(b"backup")
+    asgi_app.state.runtime.services.authorization = None
+
+    response = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["message"] == "Authorization unavailable"
 
 
 @pytest.mark.asyncio
@@ -1480,6 +1551,25 @@ async def test_v1_conversation_detail_requires_user_id(
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_conversation_export_rejects_missing_authorization_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+):
+    """A valid Dashboard JWT must not bypass unavailable authorization."""
+
+    asgi_app.state.runtime.services.authorization = None
+
+    response = await asgi_client.post(
+        "/api/v1/conversations/export",
+        json={"conversations": []},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["message"] == "Authorization unavailable"
 
 
 @pytest.mark.asyncio
@@ -1600,6 +1690,38 @@ async def test_v1_system_config_returns_system_metadata(
 
 
 @pytest.mark.asyncio
+async def test_v1_provider_schema_keeps_reasoning_in_model_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_core_lifecycle.astrbot_config["provider"][0]["reasoning"] = True
+    model_metadata = {
+        "id": "gpt-4o-mini",
+        "reasoning": True,
+        "tool_call": True,
+        "knowledge": "2023-10",
+        "release_date": "2024-07-18",
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "open_weights": False,
+        "limit": {"context": 128000, "output": 16384},
+    }
+    fake_core_lifecycle.services.llm_metadata_catalog.replace(
+        {"gpt-4o-mini": model_metadata}
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/providers/schema",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    provider = next(item for item in data["providers"] if item["id"] == "gpt-mini")
+    assert "reasoning" not in provider
+    assert data["model_metadata"]["gpt-4o-mini"] == model_metadata
+
+
+@pytest.mark.asyncio
 async def test_v1_provider_source_rename_updates_provider_refs(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1678,6 +1800,7 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
                 "provider_source_id": "openai-source",
                 "model": "gpt-4o-mini",
                 "enable": True,
+                "reasoning": True,
             }
         },
         headers=_jwt_headers(),
@@ -1687,9 +1810,66 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
     assert response.json()["status"] == "ok"
     config = fake_core_lifecycle.astrbot_config
     assert config["provider"][0]["id"] == "gpt-renamed"
+    assert "reasoning" not in config["provider"][0]
     assert fake_core_lifecycle.provider_manager.reloaded_providers == [
         config["provider"][0]
     ]
+
+
+@pytest.mark.asyncio
+async def test_v1_create_source_provider_strips_reasoning_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "config": {
+                "id": "gpt-source-model",
+                "provider_source_id": "openai-source",
+                "model": "gpt-4o-mini",
+                "enable": True,
+                "reasoning": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["id"] == "gpt-source-model"
+    assert "reasoning" not in provider
+
+
+@pytest.mark.asyncio
+async def test_v1_create_standalone_provider_keeps_reasoning_field(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "config": {
+                "id": "standalone-agent-runner",
+                "type": "dify",
+                "provider_type": "agent_runner",
+                "enable": True,
+                "reasoning": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert fake_core_lifecycle.astrbot_config["provider"][-1] == {
+        "id": "standalone-agent-runner",
+        "type": "dify",
+        "provider_type": "agent_runner",
+        "enable": True,
+        "reasoning": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -1822,7 +2002,12 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.status_code == 200
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
-    assert "config_schema" in schema_response.json()["data"]
+    config_schema = schema_response.json()["data"]["config_schema"]
+    reasoning_effort_preset = config_schema["provider"]["items"]["custom_extra_body"][
+        "template_schema"
+    ]["reasoning_effort"]
+    assert reasoning_effort_preset["type"] == "string"
+    assert reasoning_effort_preset["default"] == "high"
     assert path_test_response.status_code == 200
     assert path_test_response.json()["data"]["status"] == "available"
     assert provider_instance.tested is True
@@ -3006,6 +3191,26 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
 
 
 @pytest.mark.asyncio
+async def test_v1_mcp_list_never_returns_configured_header_secrets(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_tools = fake_core_lifecycle.provider_manager.tool_manager
+    fake_tools.config["mcpServers"]["demo-server"]["headers"] = {
+        "Authorization": "Bearer dashboard-must-not-see-this"
+    }
+
+    response = await asgi_client.get("/api/v1/mcp/servers", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    server = next(
+        item for item in response.json()["data"] if item["name"] == "demo-server"
+    )
+    assert "headers" not in server
+    assert server["headers_configured"] is True
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_mcp_routes_accept_slash_server_names(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -3030,7 +3235,8 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
     assert test_response.json()["data"] == ["demo_tool"]
     assert fake_tools.tested_configs[-1] == {
         "active": False,
-        "url": "https://example.com/modelscope-demo",
+        "url": "https://93.184.216.34/modelscope-demo",
+        "transport": "streamable_http",
     }
 
     delete_response = await asgi_client.delete(
@@ -3149,7 +3355,7 @@ async def test_v1_session_groups_use_async_shared_preferences(
     headers = _jwt_headers()
     create_response = await asgi_client.post(
         "/api/v1/session-groups",
-        json={"name": "Ops", "umos": ["umo-1"]},
+        json={"name": "Ops", "umos": ["webchat:FriendMessage:umo-1"]},
         headers=headers,
     )
     assert create_response.status_code == 200
@@ -3158,7 +3364,7 @@ async def test_v1_session_groups_use_async_shared_preferences(
     list_response = await asgi_client.get("/api/v1/session-groups", headers=headers)
     update_response = await asgi_client.put(
         f"/api/v1/session-groups/{group_id}",
-        json={"add_umos": ["umo-2"]},
+        json={"add_umos": ["webchat:FriendMessage:umo-2"]},
         headers=headers,
     )
     delete_response = await asgi_client.delete(
@@ -3171,12 +3377,15 @@ async def test_v1_session_groups_use_async_shared_preferences(
         {
             "id": group_id,
             "name": "Ops",
-            "umos": ["umo-1"],
+            "umos": ["webchat:FriendMessage:umo-1"],
             "umo_count": 1,
         }
     ]
     assert update_response.status_code == 200
-    assert set(update_response.json()["data"]["group"]["umos"]) == {"umo-1", "umo-2"}
+    assert set(update_response.json()["data"]["group"]["umos"]) == {
+        "webchat:FriendMessage:umo-1",
+        "webchat:FriendMessage:umo-2",
+    }
     assert delete_response.status_code == 200
     assert store["session_groups"] == {}
 
@@ -3188,7 +3397,10 @@ async def test_v1_batch_session_service_uses_async_shared_preferences(
     monkeypatch: pytest.MonkeyPatch,
 ):
     store = {
-        ("umo-1", "session_service_config"): {"llm_enabled": True, "tts_enabled": True}
+        ("webchat:FriendMessage:umo-1", "session_service_config"): {
+            "llm_enabled": True,
+            "tts_enabled": True,
+        }
     }
 
     async def fake_session_get(umo: str, key: str, default=None):
@@ -3203,13 +3415,17 @@ async def test_v1_batch_session_service_uses_async_shared_preferences(
 
     response = await asgi_client.patch(
         "/api/v1/sessions/service",
-        json={"umos": ["umo-1"], "llm_enabled": False, "session_enabled": False},
+        json={
+            "umos": ["webchat:FriendMessage:umo-1"],
+            "llm_enabled": False,
+            "session_enabled": False,
+        },
         headers=_jwt_headers(),
     )
 
     assert response.status_code == 200
     assert response.json()["data"]["success_count"] == 1
-    assert store[("umo-1", "session_service_config")] == {
+    assert store[("webchat:FriendMessage:umo-1", "session_service_config")] == {
         "llm_enabled": False,
         "tts_enabled": True,
         "session_enabled": False,
@@ -3224,7 +3440,7 @@ async def test_v1_session_provider_rule_uses_provider_manager_cache_path(
     response = await asgi_client.post(
         "/api/v1/sessions/rules",
         json={
-            "umo": "umo-1",
+            "umo": "webchat:FriendMessage:umo-1",
             "rule_key": "provider_perf_chat_completion",
             "rule_value": "gpt-mini",
         },
@@ -3235,7 +3451,7 @@ async def test_v1_session_provider_rule_uses_provider_manager_cache_path(
     assert len(fake_core_lifecycle.provider_manager.set_provider_calls) == 1
     call = fake_core_lifecycle.provider_manager.set_provider_calls[0]
     assert call["provider_id"] == "gpt-mini"
-    assert call["umo"] == "umo-1"
+    assert call["umo"] == "webchat:FriendMessage:umo-1"
     assert getattr(call["provider_type"], "value", None) == "chat_completion"
 
 
@@ -3246,14 +3462,17 @@ async def test_v1_delete_session_provider_rule_clears_provider_manager_cache_pat
 ):
     response = await asgi_client.post(
         "/api/v1/sessions/rules/delete",
-        json={"umo": "umo-1", "rule_key": "provider_perf_chat_completion"},
+        json={
+            "umo": "webchat:FriendMessage:umo-1",
+            "rule_key": "provider_perf_chat_completion",
+        },
         headers=_jwt_headers(),
     )
 
     assert response.status_code == 200
     assert len(fake_core_lifecycle.provider_manager.cleared_provider_calls) == 1
     call = fake_core_lifecycle.provider_manager.cleared_provider_calls[0]
-    assert call["umo"] == "umo-1"
+    assert call["umo"] == "webchat:FriendMessage:umo-1"
     assert getattr(call["provider_type"], "value", None) == "chat_completion"
 
 

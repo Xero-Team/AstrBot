@@ -189,11 +189,7 @@
       <VueMonacoEditor
         :theme="itemMeta?.editor_theme || 'vs-light'"
         :language="itemMeta?.editor_language || 'json'"
-        style="
-          min-height: 100px;
-          flex-grow: 1;
-          border: 1px solid rgba(0, 0, 0, 0.1);
-        "
+        class="config-editor"
         :value="modelValue"
         @update:value="emitUpdate"
       >
@@ -235,7 +231,7 @@
         color="primary"
         density="compact"
         hide-details
-        style="flex: 1"
+        class="config-number-control"
         @update:model-value="
           (val) => {
             numericTemp = val;
@@ -248,10 +244,9 @@
         :model-value="numericTemp ?? modelValue"
         density="compact"
         variant="outlined"
-        class="config-field"
+        class="config-field config-number-control"
         type="number"
         hide-details
-        style="flex: 1"
         @update:model-value="(val) => (numericTemp = val)"
         @blur="
           () => {
@@ -479,6 +474,16 @@ function getSpecialSubtype(value) {
   position: relative;
   display: flex;
   width: 100%;
+}
+
+.config-editor {
+  min-height: 100px;
+  flex-grow: 1;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+}
+
+.config-number-control {
+  flex: 1;
 }
 
 .editor-fullscreen-btn {

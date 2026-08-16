@@ -59,7 +59,7 @@ const {
 const {
   searchQuery,
   pluginFilter,
-  permissionFilter,
+  actionFilter,
   statusFilter,
   typeFilter,
   showSystemPlugins,
@@ -67,6 +67,7 @@ const {
   hasSystemPluginConflict,
   effectiveShowSystemPlugins,
   availablePlugins,
+  availableActions,
   filteredCommands,
   toggleGroupExpand,
 } = useCommandFilters(commands);
@@ -76,7 +77,6 @@ const {
   renameDialog,
   detailsDialog,
   toggleCommand,
-  updatePermission,
   openRenameDialog,
   confirmRename,
   openDetailsDialog,
@@ -90,7 +90,6 @@ const {
   toolSummary,
   parallelExecutionEnabled,
   toggleTool,
-  updateToolPermission,
   toggleToolParallel,
   toggleParallelExecution,
 } = useToolActions(tools, toast);
@@ -104,37 +103,12 @@ const handleToggleCommand = async (cmd: CommandItem) => {
   );
 };
 
-const handleUpdatePermission = async (
-  cmd: CommandItem,
-  permission: 'admin' | 'member',
-) => {
-  await updatePermission(
-    cmd,
-    permission,
-    tm('messages.updateSuccess'),
-    tm('messages.updateFailed'),
-  );
-};
-
 const handleToggleTool = async (tool: ToolItem) => {
   await toggleTool(
     tool,
     tmTool('messages.toggleToolReadonly'),
     tmTool('messages.toggleToolSuccess'),
     tmTool('messages.toggleToolError', { error: '' }),
-  );
-};
-
-const handleUpdateToolPermission = async (
-  tool: ToolItem,
-  permission: 'admin' | 'member',
-) => {
-  await updateToolPermission(
-    tool,
-    permission,
-    tmTool('messages.updateToolPermissionSuccess', { name: tool.name }),
-    tmTool('messages.updateToolPermissionBuiltin'),
-    tmTool('messages.updateToolPermissionFailed'),
   );
 };
 
@@ -193,8 +167,8 @@ watch(viewMode, async (mode) => {
 <template>
   <v-row>
     <v-col cols="12">
-      <v-card variant="flat" style="background-color: transparent">
-        <v-card-text style="padding: 20px 12px; padding-top: 0px">
+      <v-card variant="flat" class="component-panel">
+        <v-card-text class="component-panel__body">
           <div
             class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3"
           >
@@ -218,13 +192,13 @@ watch(viewMode, async (mode) => {
               v-if="viewMode === 'commands' && loading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1"
+              class="component-panel__progress"
             />
             <v-progress-linear
               v-else-if="viewMode === 'tools' && toolsLoading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1"
+              class="component-panel__progress"
             />
           </div>
 
@@ -232,7 +206,8 @@ watch(viewMode, async (mode) => {
             <CommandFilters
               :plugin-filter="pluginFilter"
               :type-filter="typeFilter"
-              :permission-filter="permissionFilter"
+              :action-filter="actionFilter"
+              :available-actions="availableActions"
               :status-filter="statusFilter"
               :show-system-plugins="showSystemPlugins"
               :search-query="searchQuery"
@@ -241,7 +216,7 @@ watch(viewMode, async (mode) => {
               :effective-show-system-plugins="effectiveShowSystemPlugins"
               @update:plugin-filter="pluginFilter = $event"
               @update:type-filter="typeFilter = $event"
-              @update:permission-filter="permissionFilter = $event"
+              @update:action-filter="actionFilter = $event"
               @update:status-filter="statusFilter = $event"
               @update:show-system-plugins="showSystemPlugins = $event"
               @update:search-query="searchQuery = $event"
@@ -258,7 +233,7 @@ watch(viewMode, async (mode) => {
                     filteredCommands.length
                   }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="error" class="mr-1"
                     >mdi-close-circle-outline</v-icon
@@ -306,13 +281,12 @@ watch(viewMode, async (mode) => {
               @toggle-command="handleToggleCommand"
               @rename="openRenameDialog"
               @view-details="openDetailsDialog"
-              @update-permission="handleUpdatePermission"
             />
           </div>
 
           <div v-else>
             <div class="d-flex flex-wrap align-center ga-4 mb-4">
-              <div style="min-width: 240px; max-width: 380px; flex: 1">
+              <div class="component-panel__tool-search">
                 <v-text-field
                   v-model="toolSearch"
                   prepend-inner-icon="mdi-magnify"
@@ -336,7 +310,7 @@ watch(viewMode, async (mode) => {
                     toolSummary.total
                   }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="success" class="mr-1"
                     >mdi-check-circle-outline</v-icon
@@ -348,7 +322,7 @@ watch(viewMode, async (mode) => {
                     toolSummary.active
                   }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="error" class="mr-1"
                     >mdi-close-circle-outline</v-icon
@@ -361,7 +335,7 @@ watch(viewMode, async (mode) => {
                   }}</span>
                 </div>
 
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <v-checkbox
                   v-model="showBuiltinTools"
                   :label="tmTool('functionTools.filter.showBuiltin')"
@@ -388,7 +362,6 @@ watch(viewMode, async (mode) => {
               :loading="toolsLoading"
               @toggle-tool="handleToggleTool"
               @toggle-parallel="handleToggleToolParallel"
-              @update-permission="handleUpdateToolPermission"
             />
           </div>
         </v-card-text>
@@ -419,7 +392,7 @@ watch(viewMode, async (mode) => {
   <!-- Snackbar -->
   <v-snackbar
     :timeout="2000"
-    elevation="6"
+    elevation="4"
     :color="snackbar.color"
     v-model="snackbar.show"
   >
@@ -432,7 +405,26 @@ watch(viewMode, async (mode) => {
   flex: none;
 }
 
-.builtin-tools-checkbox :deep(.v-selection-control) {
-  min-height: auto;
+.component-panel {
+  background: transparent;
+}
+
+.component-panel__body {
+  padding: 0 var(--astrbot-space-3) var(--astrbot-space-4);
+}
+
+.component-panel__progress {
+  flex: 1;
+  max-width: 220px;
+}
+
+.component-summary-divider {
+  height: 20px;
+}
+
+.component-panel__tool-search {
+  min-width: 240px;
+  max-width: 380px;
+  flex: 1;
 }
 </style>

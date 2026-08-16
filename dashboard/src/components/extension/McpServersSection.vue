@@ -3,8 +3,8 @@
     <v-container fluid class="pa-0" elevation="0">
       <!-- MCP 服务器部分 -->
       <div v-if="mcpServers.length === 0" class="text-center pa-8">
-        <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
-        <p class="text-grey mt-4">{{ tm('mcpServers.empty') }}</p>
+        <v-icon size="64" color="on-surface-variant">mdi-server-off</v-icon>
+        <p class="text-medium-emphasis mt-4">{{ tm('mcpServers.empty') }}</p>
       </div>
 
       <div v-else class="mcp-server-list">
@@ -47,7 +47,7 @@
                   </button>
                 </template>
                 <template #default="{ isActive }">
-                  <v-card class="mcp-dialog__card" style="padding: 16px">
+                  <v-card class="app-dialog mcp-dialog__card mcp-tools-dialog">
                     <v-card-title class="d-flex align-center">
                       <span>{{ tm('mcpServers.status.availableTools') }}</span>
                     </v-card-title>
@@ -56,7 +56,7 @@
                         <li
                           v-for="(tool, idx) in server.tools"
                           :key="idx"
-                          style="margin: 8px 0px"
+                          class="mcp-tools-dialog__item"
                         >
                           {{ tool }}
                         </li>
@@ -85,7 +85,48 @@
             </template>
           </div>
 
+          <div
+            v-if="server.connection_status"
+            class="text-caption text-medium-emphasis"
+          >
+            {{
+              tm('mcpServers.status.runtime', {
+                status: server.connection_status,
+                resources: server.resource_count || 0,
+                prompts: server.prompt_count || 0,
+              })
+            }}
+          </div>
+
           <template #actions>
+            <v-tooltip :text="tm('mcpServers.buttons.catalog')" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-database-search-outline"
+                  variant="text"
+                  size="small"
+                  class="list-action-icon-btn"
+                  @click.stop="openCatalog(server)"
+                />
+              </template>
+            </v-tooltip>
+            <v-tooltip
+              v-if="server.auth_ref"
+              :text="tm('mcpServers.buttons.authorize')"
+              location="top"
+            >
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-shield-key-outline"
+                  variant="text"
+                  size="small"
+                  class="list-action-icon-btn"
+                  @click.stop="startAuthorization(server)"
+                />
+              </template>
+            </v-tooltip>
             <v-tooltip :text="t('core.common.itemCard.delete')" location="top">
               <template #activator="{ props }">
                 <v-btn
@@ -134,12 +175,12 @@
       </div>
     </v-container>
 
-    <div class="mcp-fab-stack">
+    <FloatingActionStack :label="tm('mcpServers.buttons.add')">
       <v-tooltip :text="tm('mcpServers.buttons.sync')" location="left">
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
-            color="darkprimary"
+            color="primary"
             icon="mdi-sync"
             size="x-large"
             variant="elevated"
@@ -152,7 +193,7 @@
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
-            color="darkprimary"
+            color="primary"
             icon="mdi-plus"
             size="x-large"
             variant="elevated"
@@ -161,11 +202,11 @@
           />
         </template>
       </v-tooltip>
-    </div>
+    </FloatingActionStack>
 
     <!-- 添加/编辑 MCP 服务器对话框 -->
     <v-dialog v-model="showMcpServerDialog" max-width="750px" scrollable>
-      <v-card class="mcp-dialog__card">
+      <v-card class="app-dialog mcp-dialog__card">
         <v-card-title class="pa-4 pl-6">
           <v-icon class="me-2">{{
             isEditMode ? 'mdi-pencil' : 'mdi-plus'
@@ -213,18 +254,9 @@
               >
                 {{ tm('mcpServers.buttons.useTemplateStreamableHttp') }}
               </v-btn>
-              <v-btn
-                size="small"
-                color="primary"
-                variant="tonal"
-                class="me-1"
-                @click="setConfigTemplate('sse')"
-              >
-                {{ tm('mcpServers.buttons.useTemplateSse') }}
-              </v-btn>
             </div>
 
-            <small style="color: grey"
+            <small class="text-medium-emphasis"
               >*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small
             >
 
@@ -232,7 +264,7 @@
               {{ tm('dialogs.addServer.tips.transportRecommendation') }}
             </v-alert>
 
-            <div class="monaco-container" style="margin-top: 16px">
+            <div class="monaco-container mcp-monaco-container">
               <VueMonacoEditor
                 v-model:value="serverConfigJson"
                 theme="vs-dark"
@@ -258,7 +290,7 @@
               <span>{{ jsonError }}</span>
             </div>
           </v-form>
-          <div style="margin-top: 8px">
+          <div class="mt-2">
             <small>{{ addServerDialogMessage }}</small>
           </div>
         </v-card-text>
@@ -287,6 +319,45 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="showMcpCatalogDialog" max-width="760px" scrollable>
+      <v-card class="app-dialog mcp-dialog__card">
+        <v-card-title>{{
+          tm('mcpServers.catalog.title', { name: catalogServerName })
+        }}</v-card-title>
+        <v-card-text class="mcp-dialog__content">
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            {{ tm('mcpServers.catalog.untrusted') }}
+          </v-alert>
+          <div class="text-subtitle-2">
+            {{ tm('mcpServers.catalog.resources') }}
+          </div>
+          <v-list density="compact">
+            <v-list-item
+              v-for="resource in catalogResources"
+              :key="String(resource.uri)"
+              :title="String(resource.name || resource.uri)"
+              :subtitle="String(resource.uri)"
+              @click="readCatalogResource(String(resource.uri))"
+            />
+          </v-list>
+          <div class="text-subtitle-2">
+            {{ tm('mcpServers.catalog.prompts') }}
+          </div>
+          <v-list density="compact">
+            <v-list-item
+              v-for="prompt in catalogPrompts"
+              :key="String(prompt.name)"
+              :title="String(prompt.title || prompt.name)"
+              @click="getCatalogPrompt(String(prompt.name))"
+            />
+          </v-list>
+          <pre v-if="catalogResult" class="mt-3 text-body-2">{{
+            catalogResult
+          }}</pre>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog
       v-model="showSyncMcpServerDialog"
@@ -294,7 +365,7 @@
       persistent
       scrollable
     >
-      <v-card class="mcp-dialog__card">
+      <v-card class="app-dialog mcp-dialog__card">
         <v-card-title class="bg-primary text-white py-3">
           <span>同步外部平台 MCP 服务器</span>
         </v-card-title>
@@ -309,10 +380,7 @@
           ></v-select>
           <div v-if="selectedMcpServerProvider === 'modelscope'">
             <v-timeline align="start" side="end">
-              <v-timeline-item
-                icon="mdi-numeric-1"
-                icon-color="rgb(var(--v-theme-background))"
-              >
+              <v-timeline-item icon="mdi-numeric-1" icon-color="on-primary">
                 <div>
                   <div class="text-h4">发现 MCP 服务器</div>
                   <p class="mt-2">
@@ -325,10 +393,7 @@
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item
-                icon="mdi-numeric-2"
-                icon-color="rgb(var(--v-theme-background))"
-              >
+              <v-timeline-item icon="mdi-numeric-2" icon-color="on-primary">
                 <div>
                   <div class="text-h4">获取访问令牌</div>
                   <p class="mt-2">
@@ -341,10 +406,7 @@
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item
-                icon="mdi-numeric-3"
-                icon-color="rgb(var(--v-theme-background))"
-              >
+              <v-timeline-item icon="mdi-numeric-3" icon-color="on-primary">
                 <div>
                   <div class="text-h4">输入您的访问令牌</div>
                   <p class="mt-2">输入您的访问令牌以同步 MCP 服务器。</p>
@@ -386,13 +448,20 @@
     <!-- 消息提示 -->
     <v-snackbar
       :timeout="3000"
-      elevation="6"
+      elevation="4"
       :color="save_message_success"
       v-model="save_message_snack"
       location="top"
     >
       {{ save_message }}
     </v-snackbar>
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
   </div>
 </template>
 
@@ -407,6 +476,10 @@ import type {
 } from '@/api/generated/openapi-v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
@@ -420,6 +493,11 @@ interface McpServerItem extends McpServerConfig {
   name: string;
   active: boolean;
   tools: string[];
+  connection_status?: string;
+  protocol_version?: string;
+  resource_count?: number;
+  prompt_count?: number;
+  auth_status?: string;
 }
 
 interface McpServerDraft {
@@ -430,9 +508,22 @@ interface McpServerDraft {
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/tooluse');
 const confirmDialog = useConfirmDialog();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const mcpServers = ref<McpServerItem[]>([]);
 const showMcpServerDialog = ref(false);
+const showMcpCatalogDialog = ref(false);
+const catalogServerName = ref('');
+const catalogResources = ref<Record<string, unknown>[]>([]);
+const catalogPrompts = ref<Record<string, unknown>[]>([]);
+const catalogResult = ref('');
 const selectedMcpServerProvider = ref<McpServerProvider>('modelscope');
 const mcpServerProviderList: McpServerProvider[] = ['modelscope'];
 const mcpProviderToken = ref('');
@@ -452,6 +543,13 @@ const save_message_success = ref<SnackbarColor>('success');
 const isServerFormValid = computed(
   () => Boolean(currentServer.value.name.trim()) && !jsonError.value,
 );
+
+const requestMcpStepUp = (resourceId: string) =>
+  requestStepUp({
+    action: 'tool.mcp_write',
+    resourceType: 'dashboard-api',
+    resourceId,
+  });
 
 let refreshInterval: ReturnType<typeof window.setInterval> | null = null;
 
@@ -531,16 +629,8 @@ function setConfigTemplate(
       url: 'your mcp server url',
       allow_private_network: false,
       headers: {},
-      timeout: 5,
-      sse_read_timeout: 300,
-    };
-  } else if (type === 'sse') {
-    template = {
-      transport: 'sse',
-      url: 'your mcp server url',
-      headers: {},
-      timeout: 5,
-      sse_read_timeout: 300,
+      connect_timeout_seconds: 15,
+      read_timeout_seconds: 60,
     };
   } else {
     template = {
@@ -565,6 +655,79 @@ function showSuccess(message: string) {
 
 function showError(message: string) {
   showMessage(message, 'error');
+}
+
+async function openCatalog(server: McpServerItem) {
+  try {
+    const response = await mcpApi.catalog(server.name);
+    const data = response.data.data;
+    if (!isRecord(data)) {
+      throw new Error('Invalid MCP catalog response');
+    }
+    catalogServerName.value = server.name;
+    catalogResources.value = Array.isArray(data.resources)
+      ? data.resources.filter(isRecord)
+      : [];
+    catalogPrompts.value = Array.isArray(data.prompts)
+      ? data.prompts.filter(isRecord)
+      : [];
+    catalogResult.value = '';
+    showMcpCatalogDialog.value = true;
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+async function readCatalogResource(uri: string) {
+  try {
+    const response = await mcpApi.readResource(catalogServerName.value, uri);
+    catalogResult.value = JSON.stringify(response.data.data, null, 2);
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+async function getCatalogPrompt(name: string) {
+  try {
+    const response = await mcpApi.getPrompt(catalogServerName.value, name);
+    catalogResult.value = JSON.stringify(response.data.data, null, 2);
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+async function startAuthorization(server: McpServerItem) {
+  try {
+    const stepUp = await requestMcpStepUp('post-mcp');
+    if (!stepUp) return;
+    const response = await mcpApi.startOAuth(server.name, {
+      headers: stepUpHeaders(stepUp),
+    });
+    const data = response.data.data;
+    if (isRecord(data) && typeof data.authorization_url === 'string') {
+      window.open(data.authorization_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    showMessage(tm('mcpServers.auth.pending'), 'success');
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
 }
 
 async function getServers() {
@@ -609,7 +772,18 @@ function getServerConfigSummary(server: McpServerItem) {
   }
 
   const configKeys = Object.keys(server).filter(
-    (key) => !['name', 'active', 'tools'].includes(key),
+    (key) =>
+      ![
+        'name',
+        'active',
+        'tools',
+        'connection_status',
+        'protocol_version',
+        'resource_count',
+        'prompt_count',
+        'auth_status',
+        'headers_configured',
+      ].includes(key),
   );
   if (configKeys.length > 0) {
     return tm('mcpServers.status.configSummary', {
@@ -624,9 +798,6 @@ function getServerConfigIcon(server: McpServerItem) {
   const transport = String(server.transport || '').toLowerCase();
   if (transport === 'streamable_http') {
     return 'mdi-web';
-  }
-  if (transport === 'sse') {
-    return 'mdi-broadcast';
   }
   if (server.command) {
     return 'mdi-console-line';
@@ -647,12 +818,18 @@ async function saveServer() {
       active: currentServer.value.active,
       ...configObj,
     };
+    const stepUp = await requestMcpStepUp(
+      isEditMode.value ? 'put-mcp' : 'post-mcp',
+    );
+    if (!stepUp) return;
+    const requestConfig = { headers: stepUpHeaders(stepUp) };
     const response = isEditMode.value
       ? await mcpApi.update(
           originalServerName.value || serverData.name,
           serverData,
+          requestConfig,
         )
-      : await mcpApi.create(serverData);
+      : await mcpApi.create(serverData, requestConfig);
 
     if (response.data.status === 'error') {
       showError(
@@ -686,7 +863,11 @@ async function deleteServer(server: McpServerItem | string) {
   }
 
   try {
-    const response = await mcpApi.delete(serverName);
+    const stepUp = await requestMcpStepUp('delete-mcp');
+    if (!stepUp) return;
+    const response = await mcpApi.delete(serverName, {
+      headers: stepUpHeaders(stepUp),
+    });
     await getServers();
     showSuccess(response.data.message || tm('messages.deleteSuccess'));
   } catch (error) {
@@ -704,8 +885,23 @@ function editServer(server: McpServerItem) {
     active,
     tools: _tools,
     errlogs: _errlogs,
+    connection_status: _connectionStatus,
+    protocol_version: _protocolVersion,
+    resource_count: _resourceCount,
+    resource_template_count: _resourceTemplateCount,
+    prompt_count: _promptCount,
+    capabilities: _capabilities,
+    tool_count: _toolCount,
+    headers_configured: _headersConfigured,
+    auth_status: _authStatus,
     ...configCopy
-  } = server as McpServerItem & { errlogs?: unknown };
+  } = server as McpServerItem & {
+    errlogs?: unknown;
+    capabilities?: unknown;
+    resource_template_count?: unknown;
+    tool_count?: unknown;
+    headers_configured?: unknown;
+  };
   currentServer.value = {
     name,
     active,
@@ -722,7 +918,14 @@ async function updateServerStatus(server: McpServerItem) {
   server.active = !previousActive;
 
   try {
-    const response = await mcpApi.setEnabled(server.name, server.active);
+    const stepUp = await requestMcpStepUp('patch-mcp');
+    if (!stepUp) {
+      server.active = previousActive;
+      return;
+    }
+    const response = await mcpApi.setEnabled(server.name, server.active, {
+      headers: stepUpHeaders(stepUp),
+    });
     await getServers();
     showSuccess(response.data.message || tm('messages.updateSuccess'));
   } catch (error) {
@@ -789,9 +992,12 @@ async function syncMcpServers() {
 
   loading.value = true;
   try {
-    const response = await mcpApi.syncModelScope({
-      access_token: accessToken,
-    });
+    const stepUp = await requestMcpStepUp('post-mcp');
+    if (!stepUp) return;
+    const response = await mcpApi.syncModelScope(
+      { access_token: accessToken },
+      { headers: stepUpHeaders(stepUp) },
+    );
     if (response.data.status !== 'ok') {
       showError(
         response.data.message ||
@@ -856,6 +1062,14 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.mcp-tools-dialog {
+  padding: var(--astrbot-space-4);
+}
+
+.mcp-tools-dialog__item {
+  margin: var(--astrbot-space-2) 0;
+}
+
 .mcp-server-list {
   display: flex;
   flex-direction: column;
@@ -893,41 +1107,23 @@ onUnmounted(() => {
 }
 
 .list-action-icon-btn {
-  color: rgba(var(--v-theme-on-surface), 0.78);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .list-action-icon-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.08);
+  background: rgb(var(--v-theme-surface-variant));
   color: rgb(var(--v-theme-on-surface));
 }
 
-.mcp-fab-stack {
-  align-items: center;
-  bottom: 52px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  position: fixed;
-  right: 52px;
-  z-index: 10000;
-}
-
-.mcp-fab {
-  border-radius: 16px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.mcp-fab:hover {
-  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
-  transform: translateY(-4px) scale(1.05);
-}
-
 .monaco-container {
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgb(var(--v-theme-outline-variant));
   border-radius: 8px;
   height: 300px;
-  margin-top: 4px;
+  margin-top: var(--astrbot-space-1);
   overflow: hidden;
+}
+
+.mcp-monaco-container {
+  margin-top: var(--astrbot-space-4);
 }
 </style>

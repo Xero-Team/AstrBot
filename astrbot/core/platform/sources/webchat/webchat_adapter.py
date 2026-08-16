@@ -287,11 +287,17 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )
-                api_key_allow_admin_role = payload.get("_api_key_allow_admin_role")
-                if isinstance(api_key_allow_admin_role, bool):
+                api_key_principal = payload.get("_api_key_principal")
+                if isinstance(api_key_principal, dict):
                     message_event.set_extra(
-                        "_api_key_allow_admin_role",
-                        api_key_allow_admin_role,
+                        "_api_key_principal",
+                        api_key_principal,
+                    )
+                dashboard_principal = payload.get("_dashboard_principal")
+                if isinstance(dashboard_principal, dict):
+                    message_event.set_extra(
+                        "_dashboard_principal",
+                        dashboard_principal,
                     )
 
         return message_event

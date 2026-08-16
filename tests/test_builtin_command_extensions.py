@@ -23,6 +23,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.register.star_handler import collect_plugin_module_declarations
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import (
@@ -155,60 +156,70 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
 
 
 @pytest.mark.asyncio
-async def test_admin_list_reports_configured_ids_and_empty_state():
-    config = {"admins_id": ["42", 7]}
-    context = SimpleNamespace(config=SimpleNamespace(get=lambda **_kwargs: config))
+async def test_admin_list_reports_authorization_bindings():
+    bindings = [
+        SimpleNamespace(
+            subject_id="im:napcat:bot:42",
+            role="session_admin",
+            scope_type="session",
+        )
+    ]
+    authz = SimpleNamespace(list_bindings=AsyncMock(return_value=bindings))
+    context = SimpleNamespace(authz=authz)
     command = AdminCommands(context)
 
     event = DummyEvent(message_str="admin list")
     await command.list_admins(event)
-    assert _plain_text(event.result) == "✅ Administrator IDs:\n- 42\n- 7"
+    assert _plain_text(event.result) == (
+        "✅ Authorization bindings:\n- im:napcat:bot:42: session_admin (session)"
+    )
+    authz.list_bindings.assert_awaited_once_with(event)
 
-    config["admins_id"] = []
+    authz.list_bindings.reset_mock(return_value=True)
+    authz.list_bindings.return_value = []
     empty_event = DummyEvent(message_str="admin list")
     await command.list_admins(empty_event)
-    assert _plain_text(empty_event.result) == "✅ No administrator IDs are configured."
+    assert _plain_text(empty_event.result) == "✅ Authorization bindings:\n- none"
 
 
 @pytest.mark.asyncio
-async def test_admin_grant_and_revoke_use_async_config_persistence():
-    class AsyncConfig(dict):
-        pass
-
-    config = AsyncConfig(admins_id=[])
-    config.save_config_async = AsyncMock(return_value=True)
-    context = SimpleNamespace(config=SimpleNamespace(get=lambda **_kwargs: config))
+async def test_admin_grant_and_revoke_delegate_to_authorization_capability():
+    authz = SimpleNamespace(
+        grant_session_admin=AsyncMock(),
+        revoke_session_admin=AsyncMock(return_value=True),
+    )
+    context = SimpleNamespace(authz=authz)
     command = AdminCommands(context)
 
-    await command.grant(DummyEvent(message_str="admin op 42"), "42")
-    await command.revoke(DummyEvent(message_str="admin deop 42"), "42")
+    grant_event = DummyEvent(message_str="admin op 42")
+    revoke_event = DummyEvent(message_str="admin deop 42")
+    await command.grant(grant_event, "42")
+    await command.revoke(revoke_event, "42")
 
-    assert config["admins_id"] == []
-    assert config.save_config_async.await_count == 2
+    authz.grant_session_admin.assert_awaited_once_with(grant_event, "42")
+    authz.revoke_session_admin.assert_awaited_once_with(revoke_event, "42")
+    assert _plain_text(grant_event.result) == "✅ Session administrator granted."
+    assert _plain_text(revoke_event.result) == "✅ Session administrator revoked."
 
 
 @pytest.mark.asyncio
-async def test_admin_commands_do_not_report_success_when_save_is_superseded():
-    class AsyncConfig(dict):
-        pass
-
-    config = AsyncConfig(admins_id=[])
-    config.save_config_async = AsyncMock(return_value=False)
-    context = SimpleNamespace(config=SimpleNamespace(get=lambda **_kwargs: config))
+async def test_admin_commands_report_authorization_denial():
+    authz = SimpleNamespace(
+        grant_session_admin=AsyncMock(side_effect=PermissionError),
+        revoke_session_admin=AsyncMock(side_effect=PermissionError),
+    )
+    context = SimpleNamespace(authz=authz)
     command = AdminCommands(context)
 
     grant_event = DummyEvent(message_str="admin op 42")
     await command.grant(grant_event, "42")
 
-    assert "superseded" in _plain_text(grant_event.result)
-    assert "Added" not in _plain_text(grant_event.result)
+    assert _plain_text(grant_event.result) == "❌ Authorization denied."
 
     revoke_event = DummyEvent(message_str="admin deop 42")
     await command.revoke(revoke_event, "42")
 
-    assert "superseded" in _plain_text(revoke_event.result)
-    assert "Removed" not in _plain_text(revoke_event.result)
-    assert config.save_config_async.await_count == 2
+    assert _plain_text(revoke_event.result) == "❌ Authorization denied."
 
 
 @pytest.mark.asyncio
@@ -750,6 +761,40 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
     assert list_param.option.names == ("--page", "-p")
     assert history_param.default == 1
     assert list_param.default == 1
+
+
+def test_non_public_builtin_commands_declare_the_planned_actions():
+    from astrbot.builtin_stars.builtin_commands import main as builtin_commands_main
+
+    declarations = collect_plugin_module_declarations(builtin_commands_main)
+    handlers = materialize_handler_declarations(list(declarations.handlers))
+    actions = {
+        handler.handler_name: next(
+            (
+                filter_ref.action
+                for filter_ref in handler.event_filters
+                if isinstance(filter_ref, ActionPermissionFilter)
+            ),
+            None,
+        )
+        for handler in handlers
+    }
+
+    assert {
+        "sid": "session.read",
+        "stop": "session.manage",
+        "new_conv": "session.manage",
+        "stats": "session.read",
+        "history": "session.read",
+        "convs": "session.read",
+        "switch": "session.manage",
+        "rename": "session.manage",
+        "set_variable": "session.manage",
+        "unset_variable": "session.manage",
+        "plugin_ls": "extension.read",
+        "plugin_help": "extension.read",
+    }.items() <= actions.items()
+    assert actions["groupnew"] is None
 
 
 def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():

@@ -384,14 +384,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="trace-cell umo">{{ event.umo }}</div>
           <div class="trace-cell sender">
-            <div
-              class="event-sub"
-              style="
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              "
-            >
+            <div class="event-sub trace-sender">
               {{ event.sender_name || '-' }}
             </div>
           </div>
@@ -445,6 +438,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.trace-sender {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .trace-wrapper {
   height: 100%;
 }
@@ -455,7 +454,7 @@ onBeforeUnmount(() => {
   padding: 0;
   height: 100%;
   overflow-y: auto;
-  color: #2b3340;
+  color: rgba(var(--v-theme-on-surface), 0.88);
   font-family: var(--astrbot-font-mono);
 }
 
@@ -466,7 +465,7 @@ onBeforeUnmount(() => {
 }
 
 .trace-group {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   background: transparent;
   padding: 8px 0;
 }
@@ -482,8 +481,8 @@ onBeforeUnmount(() => {
 
 .trace-header {
   font-weight: 600;
-  color: #6b7280;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   padding-bottom: 10px;
 }
 
@@ -495,18 +494,18 @@ onBeforeUnmount(() => {
 
 .event-title {
   font-weight: 600;
-  color: #1f2937;
+  color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
 .event-sub {
   font-size: 12px;
-  color: #4b5563;
+  color: rgba(var(--v-theme-on-surface), 0.72);
   margin-top: 2px;
   word-break: break-word;
 }
 
 .event-sub.outline {
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
 .event-controls {
@@ -527,7 +526,7 @@ onBeforeUnmount(() => {
 .trace-empty {
   padding: 24px;
   text-align: center;
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
 @media (max-width: 1200px) {
@@ -552,12 +551,12 @@ onBeforeUnmount(() => {
 }
 
 .trace-record-time {
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 11px;
 }
 
 .trace-record-action {
-  color: #1f2937;
+  color: rgba(var(--v-theme-on-surface), 0.88);
   font-weight: 600;
   font-size: 11px;
 }
@@ -566,7 +565,7 @@ onBeforeUnmount(() => {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
+  color: rgba(var(--v-theme-on-surface), 0.72);
   font-size: 10px;
 }
 

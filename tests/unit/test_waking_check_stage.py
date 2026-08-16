@@ -14,7 +14,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 
@@ -90,7 +90,6 @@ class FakeEvent:
 
 async def make_stage(**settings):
     config = {
-        "admins_id": ["admin"],
         "wake_prefix": ["/"],
         "plugin_set": ["*"],
         "platform_settings": {
@@ -122,6 +121,35 @@ async def make_stage(**settings):
         side_effect=lambda _, h: h
     )
     return stage
+
+
+@pytest.mark.asyncio
+async def test_dashboard_webchat_principal_is_kept_separate_from_username():
+    stage = await make_stage()
+    event = FakeEvent(
+        [],
+        private=True,
+        platform="webchat",
+        sender_id="alice",
+        extras={
+            "_dashboard_principal": {
+                "account_id": "account-1",
+                "sid": "session-1",
+                "username": "alice",
+                "auth_strength": "password",
+            }
+        },
+    )
+
+    await stage._attach_authorization(event)
+
+    assert event.get_extra("auth_subject").kind == "dashboard-account"
+    context = event.get_extra("auth_context")
+    assert context.source == "webchat"
+    assert context.principal_subject_id == "dashboard-account:account-1"
+    assert context.caller_declared_username == "alice"
+    assert context.auth_strength == "password"
+    assert context.metadata["dashboard_session_id"] == "session-1"
 
 
 def install_handlers(stage, monkeypatch, handlers) -> None:
@@ -245,7 +273,8 @@ async def test_process_applies_admin_self_message_and_unique_session_rules(monke
 
     admin_event = FakeEvent([Plain("/hello")], message_text="/hello", sender_id="admin")
     await stage.process(admin_event)
-    assert admin_event.role == "admin"
+    assert admin_event.role == "member"
+    assert admin_event.get_extra("auth_context").subject.kind == "im"
     assert admin_event.session_id == "admin_group"
 
     notice_event = FakeEvent(
@@ -256,23 +285,12 @@ async def test_process_applies_admin_self_message_and_unique_session_rules(monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("api_key_allow_admin_role", "expected_role"),
-    [(False, "member"), (True, "admin"), (None, "admin")],
-)
-async def test_api_key_admin_capability_is_only_denied_by_explicit_false(
-    api_key_allow_admin_role,
-    expected_role,
-):
+async def test_platform_sender_never_becomes_global_admin_role():
     stage = await make_stage()
-    extras = {}
-    if api_key_allow_admin_role is not None:
-        extras["_api_key_allow_admin_role"] = api_key_allow_admin_role
-    event = FakeEvent([Plain("hello")], sender_id="admin", extras=extras)
-
-    stage._assign_admin_role(event)
-
-    assert event.role == expected_role
+    event = FakeEvent([Plain("hello")], sender_id="admin")
+    await stage.process(event)
+    assert event.role == "member"
+    assert event.get_extra("auth_context").subject.kind == "im"
 
 
 @pytest.mark.asyncio
@@ -335,7 +353,7 @@ async def test_command_permission_denial_keeps_existing_behavior(monkeypatch):
     async def admin_only(self, event) -> None: ...
 
     handler, _ = make_command_handler(
-        "admin", admin_only, PermissionTypeFilter(PermissionType.ADMIN)
+        "admin", admin_only, ActionPermissionFilter("session.manage")
     )
     install_handlers(stage, monkeypatch, [handler])
     event = FakeEvent([Plain("/admin")], message_text="/admin")
@@ -360,7 +378,7 @@ async def test_command_group_permission_applies_to_subcommands(monkeypatch):
         "admin",
         "test.plugin",
         group_handler,
-        [group, PermissionTypeFilter(PermissionType.ADMIN)],
+        [group, ActionPermissionFilter("session.manage")],
     )
 
     async def run(self, event) -> None: ...
@@ -445,7 +463,7 @@ async def test_command_group_permission_precedes_group_diagnostics(monkeypatch):
         "admin",
         "test.plugin",
         group_handler,
-        [PermissionTypeFilter(PermissionType.ADMIN), group],
+        [ActionPermissionFilter("session.manage"), group],
     )
 
     async def run(self, event) -> None: ...

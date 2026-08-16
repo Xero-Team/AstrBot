@@ -14,10 +14,12 @@ import pyotp
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
+from sqlmodel import col, select
 from werkzeug.datastructures import FileStorage
 
 from astrbot.application import resolve_dashboard_assets
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db.po import DashboardAccount
 from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.log import LogBroker
 from astrbot.core.skills.skill_manager import SkillManager
@@ -216,6 +218,33 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     return password
 
 
+async def _high_risk_headers(
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    *,
+    action: str,
+    resource_id: str,
+) -> dict:
+    """Issue the one-time step-up required for a system operation."""
+
+    response = await test_client.post(
+        "/api/v1/authorization/step-up",
+        json={
+            "action": action,
+            "resource_type": "system",
+            "resource_id": resource_id,
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    return {
+        **authenticated_header,
+        "X-AstrBot-Step-Up": (await response.get_json())["data"]["token"],
+    }
+
+
 def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -386,6 +415,43 @@ async def _set_dashboard_password_change_required(
     )
 
 
+async def _set_dashboard_account_totp(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    secret: str,
+    recovery_code_hash: str,
+) -> None:
+    async with core_lifecycle_td.db.get_db() as session:
+        async with session.begin():
+            account = (
+                await session.execute(
+                    select(DashboardAccount)
+                    .where(col(DashboardAccount.is_active).is_(True))
+                    .limit(1)
+                )
+            ).scalar_one()
+            account.totp_enabled = True
+            account.totp_secret = secret
+            account.totp_recovery_code_hash = recovery_code_hash
+
+
+async def _set_dashboard_account_password(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    username: str,
+    password_hash: str,
+) -> None:
+    async with core_lifecycle_td.db.get_db() as session:
+        async with session.begin():
+            account = (
+                await session.execute(
+                    select(DashboardAccount)
+                    .where(col(DashboardAccount.is_active).is_(True))
+                    .limit(1)
+                )
+            ).scalar_one()
+            account.username = username
+            account.password_hash = password_hash
+
+
 async def _restore_dashboard_password_state(
     core_lifecycle_td: AstrBotCoreLifecycle,
     dashboard_config: dict,
@@ -399,6 +465,31 @@ async def _restore_dashboard_password_state(
         core_lifecycle_td.astrbot_config,
         bool(dashboard_config.get("pbkdf2_password")),
     )
+    async with core_lifecycle_td.db.get_db() as session:
+        async with session.begin():
+            account = (
+                await session.execute(
+                    select(DashboardAccount)
+                    .where(col(DashboardAccount.is_active).is_(True))
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if account is not None:
+                account.username = str(dashboard_config.get("username", "astrbot"))
+                account.password_hash = str(
+                    dashboard_config.get("pbkdf2_password", "")
+                )
+                totp = dashboard_config.get("totp", {})
+                if isinstance(totp, dict):
+                    account.totp_enabled = bool(totp.get("enable"))
+                    account.totp_secret = str(totp.get("secret", "") or "")
+                    account.totp_recovery_code_hash = str(
+                        totp.get("recovery_code_hash", "") or ""
+                    )
+                else:
+                    account.totp_enabled = False
+                    account.totp_secret = ""
+                    account.totp_recovery_code_hash = ""
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -749,6 +840,7 @@ async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -785,6 +877,7 @@ async def test_auth_login_accepts_valid_totp_code(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -821,6 +914,7 @@ async def test_auth_login_rejects_invalid_totp_code(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         valid_code = pyotp.TOTP(secret).now()
         invalid_code = str((int(valid_code) + 1) % 1_000_000).zfill(6)
         response = await test_client.post(
@@ -859,6 +953,7 @@ async def test_auth_login_with_recovery_code_disables_totp(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -899,6 +994,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -948,6 +1044,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         first_login = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -1143,6 +1240,7 @@ async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
 async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
     app: FastAPI,
     core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict,
 ):
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config["dashboard"]
@@ -1157,9 +1255,23 @@ async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
             "secret": current_secret,
             "recovery_code_hash": "recovery-hash",
         }
+        await _set_dashboard_account_totp(
+            core_lifecycle_td, current_secret, "recovery-hash"
+        )
         username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-        first_token = app.state.dashboard_token_validator.issue(username)
-        second_token = app.state.dashboard_token_validator.issue(username)
+        bootstrap_token = authenticated_header["Authorization"].split(" ", 1)[1]
+        account_id = app.state.dashboard_token_validator.validate(
+            bootstrap_token
+        ).account_id
+        assert account_id is not None
+        first_token = app.state.dashboard_token_validator.issue(
+            username,
+            account_id=account_id,
+        )
+        second_token = app.state.dashboard_token_validator.issue(
+            username,
+            account_id=account_id,
+        )
         first_headers = {"Authorization": f"Bearer {first_token}"}
         second_headers = {"Authorization": f"Bearer {second_token}"}
 
@@ -1189,7 +1301,10 @@ async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
         assert (await staged.get_json())["status"] == "ok"
     finally:
         await app.state.services.auth.totp_runtime_state.clear_all()
-        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
         await test_client.aclose()
 
 
@@ -1215,6 +1330,11 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         await set_password_storage_upgraded(
             core_lifecycle_td.astrbot_config,
             False,
+        )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            hash_md5_dashboard_password(md5_password),
         )
 
         response = await test_client.post(
@@ -1312,6 +1432,11 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
             core_lifecycle_td.astrbot_config,
             False,
         )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            hash_md5_dashboard_password(md5_password),
+        )
 
         response = await test_client.post(
             "/api/v1/auth/login",
@@ -1352,6 +1477,11 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         await set_password_storage_upgraded(
             core_lifecycle_td.astrbot_config,
             True,
+        )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            hash_md5_dashboard_password(md5_password),
         )
 
         response = await test_client.post(
@@ -2159,6 +2289,23 @@ async def test_plugins(
     """Tests plugin API endpoints with mocked install and update paths."""
     test_client = DashboardTestClient(app)
 
+    async def plugin_deploy_headers() -> dict[str, str]:
+        step_up = await test_client.post(
+            "/api/v1/authorization/step-up",
+            json={
+                "action": "extension.plugin_install",
+                "resource_type": "dashboard-api",
+                "resource_id": "post-plugin",
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+            headers=authenticated_header,
+        )
+        assert step_up.status_code == 200
+        return {
+            **authenticated_header,
+            "X-AstrBot-Step-Up": (await step_up.get_json())["data"]["token"],
+        }
+
     async def mock_get_online_plugins(_service, *, custom_registry, force_refresh):
         del _service, custom_registry, force_refresh
         return [], None
@@ -2213,7 +2360,7 @@ async def test_plugins(
         response = await test_client.post(
             "/api/v1/plugins/install/github",
             json={"repository": test_repo_url},
-            headers=authenticated_header,
+            headers=await plugin_deploy_headers(),
         )
         assert response.status_code == 200
         data = await response.get_json()
@@ -2263,7 +2410,7 @@ async def test_plugins(
         response = await test_client.post(
             f"/api/v1/plugins/{test_plugin_name}/update",
             json={},
-            headers=authenticated_header,
+            headers=await plugin_deploy_headers(),
         )
         assert response.status_code == 200
         data = await response.get_json()
@@ -2607,7 +2754,13 @@ async def test_restart_core_rejects_desktop_managed_backend(
 
     response = await test_client.post(
         "/api/v1/system/restart",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.restart",
+            resource_id="restart",
+        ),
     )
 
     assert response.status_code == 400
@@ -2666,7 +2819,13 @@ async def test_do_update(
 
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "test-progress"},
     )
     assert response.status_code == 200
@@ -2718,7 +2877,13 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     )
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "atomic-fail"},
     )
     data = await response.get_json()
@@ -2761,7 +2926,13 @@ async def test_do_update_rejects_desktop_managed_backend(
 
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "desktop-progress"},
     )
 
@@ -2805,7 +2976,13 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     )
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "invalid-zip"},
     )
     data = await response.get_json()
@@ -2825,6 +3002,7 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
 async def test_do_update_hides_internal_error_message_in_response_and_progress(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     test_client = DashboardTestClient(app)
@@ -2841,7 +3019,13 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
 
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "failed-progress"},
     )
     data = await response.get_json()
@@ -2866,6 +3050,7 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
 async def test_install_pip_package_returns_generic_error_message(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     test_client = DashboardTestClient(app)
@@ -2878,7 +3063,13 @@ async def test_install_pip_package_returns_generic_error_message(
 
     response = await test_client.post(
         "/api/v1/pip/install",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.pip_install",
+            resource_id="pip-install",
+        ),
         json={"package": "demo-package"},
     )
 

@@ -16,11 +16,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle-tool', tool: ToolItem): void;
-  (
-    e: 'update-permission',
-    tool: ToolItem,
-    permission: 'admin' | 'member',
-  ): void;
   (e: 'toggle-parallel', tool: ToolItem, enabled: boolean): void;
 }>();
 
@@ -38,12 +33,6 @@ const toolHeaders = computed(() => [
     key: 'origin_name',
     sortable: false,
     width: '140px',
-  },
-  {
-    title: tmTool('functionTools.table.permission'),
-    key: 'permission',
-    sortable: false,
-    width: '110px',
   },
   {
     title: tmTool('functionTools.table.parallel'),
@@ -107,30 +96,10 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
   if (tool.origin !== 'builtin') return [];
   return (tool.builtin_config_tags || []).filter((tag) => tag.enabled);
 };
-
-const getPermissionColor = (permission?: string): string => {
-  switch (permission) {
-    case 'admin':
-      return 'error';
-    case undefined:
-    default:
-      return 'success';
-  }
-};
-
-const getPermissionLabel = (permission?: string): string => {
-  switch (permission) {
-    case 'admin':
-      return tmTool('functionTools.table.permissionAdmin');
-    case undefined:
-    default:
-      return tmTool('functionTools.table.permissionEveryone');
-  }
-};
 </script>
 
 <template>
-  <v-card class="rounded-lg overflow-hidden elevation-1">
+  <v-card class="overflow-hidden elevation-1">
     <v-data-table
       :headers="toolHeaders"
       :items="items"
@@ -186,13 +155,7 @@ const getPermissionLabel = (permission?: string): string => {
 
       <template #item.description="{ item }">
         <div
-          class="text-body-2 text-medium-emphasis"
-          style="
-            max-width: 320px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          "
+          class="tool-description text-body-2 text-medium-emphasis"
           :title="item.description"
         >
           {{ item.description || '-' }}
@@ -212,64 +175,11 @@ const getPermissionLabel = (permission?: string): string => {
 
       <template #item.origin_name="{ item }">
         <div
-          class="text-body-2 text-medium-emphasis"
-          style="
-            max-width: 180px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          "
+          class="tool-origin text-body-2 text-medium-emphasis"
           :title="item.origin_name"
         >
           {{ item.origin_name || '-' }}
         </div>
-      </template>
-
-      <template #item.permission="{ item }">
-        <!-- Builtin tools: non-clickable badge -->
-        <v-chip
-          v-if="item.origin === 'builtin'"
-          size="small"
-          variant="tonal"
-          class="font-weight-medium text-medium-emphasis"
-        >
-          {{ tmTool('functionTools.table.permissionBuiltin') }}
-        </v-chip>
-        <!-- Other tools: clickable dropdown -->
-        <v-menu v-else location="bottom">
-          <template #activator="{ props: menuProps }">
-            <v-chip
-              v-bind="menuProps"
-              :color="getPermissionColor(item.permission)"
-              size="small"
-              class="font-weight-medium cursor-pointer"
-              link
-            >
-              {{ getPermissionLabel(item.permission) }}
-              <v-icon end size="14">mdi-chevron-down</v-icon>
-            </v-chip>
-          </template>
-          <v-list density="compact">
-            <v-list-item
-              :value="'member'"
-              :active="item.permission !== 'admin'"
-              @click="emit('update-permission', item, 'member')"
-            >
-              <v-list-item-title>{{
-                tmTool('functionTools.table.permissionEveryone')
-              }}</v-list-item-title>
-            </v-list-item>
-            <v-list-item
-              :value="'admin'"
-              :active="item.permission === 'admin'"
-              @click="emit('update-permission', item, 'admin')"
-            >
-              <v-list-item-title>{{
-                tmTool('functionTools.table.permissionAdmin')
-              }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-menu>
       </template>
 
       <template #item.parallel="{ item }">
@@ -342,8 +252,7 @@ const getPermissionLabel = (permission?: string): string => {
                       {{ tmTool('functionTools.table.paramName') }}
                     </th>
                     <th
-                      class="text-left text-caption text-medium-emphasis"
-                      style="width: 140px"
+                      class="tool-parameter-type text-left text-caption text-medium-emphasis"
                     >
                       {{ tmTool('functionTools.table.type') }}
                     </th>
@@ -384,6 +293,25 @@ const getPermissionLabel = (permission?: string): string => {
 </template>
 
 <style scoped>
+.tool-description,
+.tool-origin {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-description {
+  max-width: 320px;
+}
+
+.tool-origin {
+  max-width: 180px;
+}
+
+.tool-parameter-type {
+  width: 140px;
+}
+
 .param-table {
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 8px;

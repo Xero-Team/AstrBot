@@ -24,7 +24,8 @@ def get_tool_id(tool: Any) -> str:
     """
     server_name = getattr(tool, "mcp_server_name", None)
     if isinstance(server_name, str) and server_name:
-        return f"mcp:{server_name}:{tool.name}"
+        original_name = getattr(tool, "mcp_tool_name", tool.name)
+        return f"mcp:{server_name}:{original_name}"
 
     handler_module_path = getattr(tool, "handler_module_path", None)
     if isinstance(handler_module_path, str) and handler_module_path:
@@ -117,6 +118,14 @@ class FunctionTool[TContext](ToolSchema):
     ``unknown`` is the conservative default. Runtime policy still requires
     explicit administrator opt-in, and hard-blocked tool types cannot be
     enabled through configuration.
+    """
+
+    required_actions: tuple[str, ...] = ()
+    """Actions required at the shared execution boundary.
+
+    Tool declarations must select an explicit capability. The executor adds
+    execution-near classifications for sensitive builtin tool families. An
+    undeclared third-party tool is denied at the execution boundary.
     """
 
     def __repr__(self) -> str:

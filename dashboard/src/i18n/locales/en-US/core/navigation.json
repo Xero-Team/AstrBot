@@ -26,11 +26,13 @@
   "alkaidMemory": "Alkaid Memory",
   "knowledgeBase": "Knowledge Base",
   "about": "About",
+  "authorization": "Authorization",
   "settings": "Settings",
   "changelog": "Changelog",
   "documentation": "Documentation",
   "faq": "FAQ",
   "github": "GitHub",
+  "toggleSidebar": "Toggle navigation",
   "drag": "Drag",
   "groups": {
     "more": "More Features"

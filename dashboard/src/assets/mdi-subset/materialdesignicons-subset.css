@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 265 icons */
+/* Auto-generated MDI subset – 264 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -328,10 +328,6 @@
   content: "\F0CFD";
 }
 
-.mdi-cursor-move::before {
-  content: "\F01BE";
-}
-
 .mdi-database::before {
   content: "\F01BC";
 }
@@ -452,6 +448,10 @@
   content: "\F0E2A";
 }
 
+.mdi-file-outline::before {
+  content: "\F0224";
+}
+
 .mdi-file-pdf-box::before {
   content: "\F0226";
 }
@@ -516,10 +516,6 @@
   content: "\F0279";
 }
 
-.mdi-frequently-asked-questions::before {
-  content: "\F0EB4";
-}
-
 .mdi-fullscreen::before {
   content: "\F0293";
 }
@@ -538,10 +534,6 @@
 
 .mdi-grain::before {
   content: "\F0D7C";
-}
-
-.mdi-hand-heart::before {
-  content: "\F10F1";
 }
 
 .mdi-hand-wave-outline::before {
@@ -896,6 +888,10 @@
   content: "\F0832";
 }
 
+.mdi-shield-account-outline::before {
+  content: "\F0A12";
+}
+
 .mdi-shield-check::before {
   content: "\F0565";
 }
@@ -906,6 +902,10 @@
 
 .mdi-shield-key::before {
   content: "\F0BC4";
+}
+
+.mdi-shield-key-outline::before {
+  content: "\F0BC5";
 }
 
 .mdi-shield-lock-outline::before {
@@ -982,10 +982,6 @@
 
 .mdi-text-box-outline::before {
   content: "\F09ED";
-}
-
-.mdi-text-box-search::before {
-  content: "\F0EAE";
 }
 
 .mdi-text-box-search-outline::before {

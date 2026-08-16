@@ -81,7 +81,7 @@
             :disabled="loading"
             size="small"
             class="mr-2"
-            @click="exportConversations"
+            @click="requestConversationExport"
           >
             {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
           </v-btn>
@@ -106,10 +106,9 @@
             :headers="tableHeaders"
             :items="conversations"
             :loading="loading"
-            style="font-size: 12px"
             density="comfortable"
             hide-default-footer
-            class="elevation-0"
+            class="elevation-0 conversation-table"
             :items-per-page="pagination.page_size"
             :items-per-page-options="pageSizeOptions"
             show-select
@@ -252,7 +251,7 @@
 
             <template #no-data>
               <div class="d-flex flex-column align-center py-6">
-                <v-icon size="64" color="grey lighten-1"
+                <v-icon size="64" color="on-surface-variant"
                   >mdi-chat-remove</v-icon
                 >
                 <span class="text-subtitle-1 text-disabled mt-3">{{
@@ -266,7 +265,7 @@
           <div class="d-flex justify-center py-3">
             <!-- 每页大小选择器 -->
             <div
-              class="d-flex justify-between align-center px-4 py-2 bg-grey-lighten-5"
+              class="conversation-pagination d-flex justify-between align-center px-4 py-2"
             >
               <div class="d-flex align-center">
                 <span class="text-caption mr-2"
@@ -278,7 +277,7 @@
                   variant="outlined"
                   density="compact"
                   hide-details
-                  style="max-width: 100px"
+                  class="conversation-page-size"
                   :disabled="loading"
                   @update:model-value="onPageSizeChange"
                 ></v-select>
@@ -314,7 +313,7 @@
 
     <!-- 对话详情对话框 -->
     <v-dialog v-model="dialogView" max-width="900px" scrollable>
-      <v-card class="conversation-detail-card">
+      <v-card class="app-dialog conversation-detail-card">
         <v-card-title class="ml-2 mt-2 conversation-detail-title">
           <div class="conversation-detail-heading">
             <span class="text-truncate">{{
@@ -409,17 +408,15 @@
           </div>
 
           <!-- 预览模式 - 聊天界面 -->
-          <div
-            v-else
-            class="conversation-messages-container"
-            style="background-color: var(--v-theme-surface)"
-          >
+          <div v-else class="conversation-messages-container">
             <!-- 空对话提示 -->
             <div
               v-if="conversationHistory.length === 0"
               class="text-center py-5"
             >
-              <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
+              <v-icon size="48" color="on-surface-variant"
+                >mdi-chat-remove</v-icon
+              >
               <p class="text-disabled mt-2">{{ tm('status.emptyContent') }}</p>
             </div>
 
@@ -443,9 +440,11 @@
 
     <!-- 编辑对话框 -->
     <v-dialog v-model="dialogEdit" max-width="500px" scrollable>
-      <v-card class="conversation-modal-card conversation-edit-dialog">
+      <v-card
+        class="app-dialog conversation-modal-card conversation-edit-dialog"
+      >
         <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+          <v-icon color="on-primary" class="me-2">mdi-pencil</v-icon>
           <span>{{ tm('dialogs.edit.title') }}</span>
         </v-card-title>
 
@@ -478,9 +477,11 @@
 
     <!-- 删除确认对话框 -->
     <v-dialog v-model="dialogDelete" max-width="500px" scrollable>
-      <v-card class="conversation-modal-card conversation-delete-dialog">
+      <v-card
+        class="app-dialog conversation-modal-card conversation-delete-dialog"
+      >
         <v-card-title class="bg-error text-white py-3">
-          <v-icon color="white" class="me-2">mdi-alert</v-icon>
+          <v-icon color="on-error" class="me-2">mdi-alert</v-icon>
           <span>{{ tm('dialogs.delete.title') }}</span>
         </v-card-title>
 
@@ -514,9 +515,11 @@
 
     <!-- 批量删除确认对话框 -->
     <v-dialog v-model="dialogBatchDelete" max-width="600px" scrollable>
-      <v-card class="conversation-modal-card conversation-batch-delete-dialog">
+      <v-card
+        class="app-dialog conversation-modal-card conversation-batch-delete-dialog"
+      >
         <v-card-title class="bg-error text-white py-3">
-          <v-icon color="white" class="me-2">mdi-delete</v-icon>
+          <v-icon color="on-error" class="me-2">mdi-delete</v-icon>
           <span>{{ tm('dialogs.batchDelete.title') }}</span>
         </v-card-title>
 
@@ -580,11 +583,19 @@
       </v-card>
     </v-dialog>
 
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
+
     <!-- 消息提示 -->
     <v-snackbar
       v-model="showMessage"
       :timeout="3000"
-      elevation="6"
+      elevation="4"
       :color="messageType"
       location="top"
     >
@@ -622,6 +633,8 @@ import {
 } from '@/utils/confirmDialog';
 import { copyToClipboard } from '@/utils/clipboard';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 type SnackbarType = 'success' | 'error';
 type UmoDisplayMode = 'parsed' | 'raw';
@@ -748,6 +761,14 @@ const dialogView = ref(false);
 const dialogEdit = ref(false);
 const dialogDelete = ref(false);
 const dialogBatchDelete = ref(false);
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const selectedConversation = ref<ConversationRecord | null>(null);
 const conversationHistory = ref<HistoryMessage[]>([]);
@@ -819,7 +840,7 @@ const messageTypeItems = computed(() => [
   { title: tm('messageTypes.friend'), value: 'FriendMessage' },
 ]);
 
-const isDark = computed(() => customizerStore.uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizerStore.uiTheme === 'AstrBotDark');
 
 const formattedMessages = computed<ChatRecord[]>(() => {
   const toolResultsById: Record<string, unknown> = {};
@@ -1493,20 +1514,34 @@ async function batchDeleteConversations() {
   }
 }
 
-async function exportConversations() {
+function requestConversationExport() {
   if (selectedItems.value.length === 0) {
     showErrorMessage(tm('messages.noItemSelectedForExport'));
     return;
   }
 
+  void (async () => {
+    const stepUp = await requestStepUp({
+      action: 'data.export_all',
+      resourceType: 'conversation',
+      resourceId: 'export',
+    });
+    if (stepUp) await exportConversations(stepUp);
+  })();
+}
+
+async function exportConversations(stepUp: string) {
   loading.value = true;
   try {
-    const response = await conversationApi.export({
-      conversations: selectedItems.value.map((item) => ({
-        user_id: item.user_id,
-        cid: item.cid,
-      })),
-    });
+    const response = await conversationApi.export(
+      {
+        conversations: selectedItems.value.map((item) => ({
+          user_id: item.user_id,
+          cid: item.cid,
+        })),
+      },
+      stepUp,
+    );
 
     const url = window.URL.createObjectURL(response.data);
     const link = document.createElement('a');
@@ -1659,14 +1694,12 @@ function handleTableOptions(options: TableOptionsLike) {
   height: 500px;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* 聊天消息容器样式 */
 .conversation-messages-container {
-  padding: 8px;
+  padding: var(--astrbot-space-2);
   border-radius: 8px;
-  background-color: #f9f9f9;
+  background: rgb(var(--v-theme-surface));
 }
 
 .conversation-history-actions {
@@ -1674,14 +1707,20 @@ function handleTableOptions(options: TableOptionsLike) {
   padding: 16px 16px 8px 24px;
 }
 
-/* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
 .conversation-messages-container .tool-call-inline-status {
   display: none;
 }
 
-/* 暗色模式下的聊天消息容器 */
-.v-theme--dark .conversation-messages-container {
-  background-color: #1e1e1e;
+.conversation-table {
+  font-size: 12px;
+}
+
+.conversation-pagination {
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.conversation-page-size {
+  max-width: 100px;
 }
 
 /* 对话详情卡片 */

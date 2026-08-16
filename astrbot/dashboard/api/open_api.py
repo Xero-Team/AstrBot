@@ -3,9 +3,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
-from astrbot.dashboard.services.api_key_scopes import api_key_has_scope
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -17,7 +17,12 @@ from astrbot.dashboard.services.open_api_service import (
     OpenApiWebSocketChatBridge,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import (
+    AuthContext,
+    object_resource,
+    require_resource_action,
+    require_scope,
+)
 
 router = APIRouter(tags=["Open API"])
 _SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -41,7 +46,20 @@ async def require_config_scope(request: Request) -> AuthContext:
 
 
 async def require_file_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "file")
+    auth = await require_scope(request, "file")
+    attachment_id = request.query_params.get("attachment_id")
+    resource = (
+        object_resource("file", attachment_id)
+        if attachment_id
+        else Resource.named("file", "collection")
+    )
+    await require_resource_action(
+        request,
+        auth,
+        action="data.manage",
+        resource=resource,
+    )
+    return auth
 
 
 def get_service(request: Request) -> OpenApiService:
@@ -73,13 +91,15 @@ async def _build_streaming_chat_response(
     username: str,
     post_data: dict[str, Any],
     *,
-    api_key_allow_admin_role: bool | None = None,
+    api_key_principal: dict[str, object] | None = None,
+    dashboard_principal: dict[str, str] | None = None,
 ) -> StreamingResponse | JSONResponse:
     try:
         stream = await chat_service.build_chat_stream(
             username,
             post_data,
-            api_key_allow_admin_role=api_key_allow_admin_role,
+            api_key_principal=api_key_principal,
+            dashboard_principal=dashboard_principal,
         )
     except ChatServiceError as exc:
         return _open_api_error(str(exc))
@@ -102,13 +122,22 @@ async def _open_api_chat_response(
     chat_service: ChatService,
 ) -> StreamingResponse | JSONResponse:
     if auth.via != "api_key":
+        dashboard_principal = None
+        if auth.account_id and auth.sid:
+            dashboard_principal = {
+                "account_id": auth.account_id,
+                "sid": auth.sid,
+                "username": auth.username,
+                "auth_strength": auth.auth_strength,
+            }
         return await _build_streaming_chat_response(
             chat_service,
             auth.username,
             post_data,
+            dashboard_principal=dashboard_principal,
         )
 
-    allow_admin_username = api_key_has_scope(auth.scopes, "chat:admin")
+    api_key_principal = {"key_id": auth.api_key_id, "scopes": auth.scopes}
     try:
         (
             effective_username,
@@ -117,7 +146,6 @@ async def _open_api_chat_response(
         ) = await open_api_service.prepare_chat_send(
             post_data,
             _get_chat_config_list(open_api_service),
-            allow_admin_username=allow_admin_username,
         )
     except OpenApiServiceError as exc:
         return _open_api_error(str(exc))
@@ -134,7 +162,7 @@ async def _open_api_chat_response(
         chat_service,
         effective_username,
         post_data,
-        api_key_allow_admin_role=allow_admin_username,
+        api_key_principal=api_key_principal,
     )
 
 
@@ -198,7 +226,6 @@ def _extract_ws_api_key(websocket: WebSocket) -> str | None:
 @router.post(
     "/chat",
     responses=_SSE_RESPONSE,
-    openapi_extra={"x-astrbot-sensitive-scopes": ["chat:admin"]},
 )
 async def chat(
     payload: OpenApiChatRequest,
@@ -222,6 +249,12 @@ async def chat_sessions(
     chat_service: ChatService = Depends(get_chat_service),
 ):
     if auth.via != "api_key":
+        await require_resource_action(
+            request,
+            auth,
+            action="session.read",
+            resource=object_resource("webchat-user", auth.username),
+        )
         try:
             return ok(
                 await chat_service.get_sessions(
@@ -240,6 +273,12 @@ async def chat_sessions(
             return error(username_err)
         if not resolved_username:
             return error("Invalid username")
+        await require_resource_action(
+            request,
+            auth,
+            action="session.read",
+            resource=object_resource("webchat-user", resolved_username),
+        )
         return ok(
             await service.get_chat_sessions(
                 username=resolved_username,

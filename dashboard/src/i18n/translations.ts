@@ -27,8 +27,6 @@ import zhCNChart from './locales/zh-CN/features/chart.json';
 import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
 import zhCNCron from './locales/zh-CN/features/cron.json';
 import zhCNStats from './locales/zh-CN/features/stats.json';
-import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
-import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
 import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
 import zhCNKnowledgeBaseIndex from './locales/zh-CN/features/knowledge-base/index.json';
 import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/detail.json';
@@ -37,6 +35,7 @@ import zhCNPersona from './locales/zh-CN/features/persona.json';
 import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
+import zhCNAuthorization from './locales/zh-CN/features/authorization.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -68,8 +67,6 @@ import enUSChart from './locales/en-US/features/chart.json';
 import enUSDashboard from './locales/en-US/features/dashboard.json';
 import enUSCron from './locales/en-US/features/cron.json';
 import enUSStats from './locales/en-US/features/stats.json';
-import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
-import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
 import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
 import enUSKnowledgeBaseIndex from './locales/en-US/features/knowledge-base/index.json';
 import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/detail.json';
@@ -78,6 +75,7 @@ import enUSPersona from './locales/en-US/features/persona.json';
 import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
+import enUSAuthorization from './locales/en-US/features/authorization.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -114,8 +112,6 @@ export const translations = {
       cron: zhCNCron,
       stats: zhCNStats,
       alkaid: {
-        index: zhCNAlkaidIndex,
-        'knowledge-base': zhCNAlkaidKnowledgeBase,
         memory: zhCNAlkaidMemory,
       },
       'knowledge-base': {
@@ -127,6 +123,7 @@ export const translations = {
       command: zhCNCommand,
       subagent: zhCNSubagent,
       welcome: zhCNWelcome,
+      authorization: zhCNAuthorization,
     },
     messages: {
       errors: zhCNErrors,
@@ -163,8 +160,6 @@ export const translations = {
       cron: enUSCron,
       stats: enUSStats,
       alkaid: {
-        index: enUSAlkaidIndex,
-        'knowledge-base': enUSAlkaidKnowledgeBase,
         memory: enUSAlkaidMemory,
       },
       'knowledge-base': {
@@ -176,6 +171,7 @@ export const translations = {
       command: enUSCommand,
       subagent: enUSSubagent,
       welcome: enUSWelcome,
+      authorization: enUSAuthorization,
     },
     messages: {
       errors: enUSErrors,

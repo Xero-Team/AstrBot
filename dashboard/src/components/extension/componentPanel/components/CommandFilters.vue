@@ -12,7 +12,8 @@ const props = defineProps<{
   effectiveShowSystemPlugins: boolean;
   pluginFilter: string;
   typeFilter: string;
-  permissionFilter: string;
+  actionFilter: string;
+  availableActions: string[];
   statusFilter: string;
   showSystemPlugins: boolean;
   searchQuery: string;
@@ -22,7 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:pluginFilter', value: string): void;
   (e: 'update:typeFilter', value: string): void;
-  (e: 'update:permissionFilter', value: string): void;
+  (e: 'update:actionFilter', value: string): void;
   (e: 'update:statusFilter', value: string): void;
   (e: 'update:showSystemPlugins', value: boolean): void;
   (e: 'update:searchQuery', value: string): void;
@@ -41,11 +42,10 @@ const typeItems = [
   { title: tm('type.subCommand'), value: 'sub_command' },
 ];
 
-const permissionItems = [
+const actionItems = computed(() => [
   { title: tm('filters.all'), value: 'all' },
-  { title: tm('permission.everyone'), value: 'everyone' },
-  { title: tm('permission.admin'), value: 'admin' },
-];
+  ...props.availableActions.map((action) => ({ title: action, value: action })),
+]);
 
 const statusItems = [
   { title: tm('filters.all'), value: 'all' },
@@ -82,13 +82,13 @@ const statusItems = [
     </v-col>
     <v-col cols="12" sm="6" md="2">
       <v-select
-        :model-value="permissionFilter"
-        :items="permissionItems"
-        :label="tm('filters.byPermission')"
+        :model-value="actionFilter"
+        :items="actionItems"
+        :label="tm('filters.byAction')"
         density="compact"
         variant="outlined"
         hide-details
-        @update:model-value="emit('update:permissionFilter', $event)"
+        @update:model-value="emit('update:actionFilter', $event)"
       />
     </v-col>
     <v-col cols="12" sm="6" md="2">
@@ -106,15 +106,7 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div
-      style="
-        min-width: 200px;
-        max-width: 350px;
-        flex: 1;
-        border: 1px solid #b9b9b9;
-        border-radius: 16px;
-      "
-    >
+    <div class="command-search">
       <v-text-field
         :model-value="searchQuery"
         density="compact"
@@ -132,7 +124,7 @@ const statusItems = [
     </div>
     <div class="d-flex align-center ga-4">
       <slot name="stats"></slot>
-      <v-divider vertical class="mx-1" style="height: 20px" />
+      <v-divider vertical class="command-filters-divider mx-1" />
       <v-checkbox
         :model-value="effectiveShowSystemPlugins"
         :label="tm('filters.showSystemPlugins')"
@@ -167,7 +159,15 @@ const statusItems = [
   flex: none;
 }
 
-.system-plugin-checkbox :deep(.v-selection-control) {
-  min-height: auto;
+.command-search {
+  min-width: 200px;
+  max-width: 350px;
+  flex: 1;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+}
+
+.command-filters-divider {
+  height: 20px;
 }
 </style>

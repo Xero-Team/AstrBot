@@ -21,7 +21,7 @@ No single prose document defines the entire project. Check the relevant source w
 | Current upstream sync point    | `upstream-sync.yaml`                                                                                                                       |
 | Versioned change records       | `changelogs/`; they record absorbed version changes, not proof of fork publication; later commits are not yet in the latest version record |
 
-The reproducible development and CI baseline is currently Python 3.14.6, Node.js 26.5.0, and pnpm 11.15.1. Package metadata supports Python 3.14 and later.
+The reproducible development and CI baseline is currently Python 3.14.6, Node.js 26.5.0, and pnpm 11.21.0. Package metadata supports Python 3.14 and later.
 
 ## Startup Flow
 
@@ -64,7 +64,7 @@ The order in `astrbot/core/pipeline/stage_order.py` is:
 
 `ProcessStage` runs plugin handlers and the Agent. `ResultDecorateStage` applies prefixes, segmentation, TTS, local text-to-image rendering, quoting, and related transformations. `RespondStage` uses the platform's unified send API. The scheduler supports both ordinary async stages and async-generator onion middleware; preserve stop-propagation and finalization semantics.
 
-Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; the old `disable_builtin_commands` value is only a startup migration input and no longer filters the Pipeline.
+Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline.
 
 ### Command Parsing Subsystem
 
@@ -78,7 +78,7 @@ Core diagnostics retain only stable error codes, Unicode code-point spans, param
 
 The Agent runtime is under `astrbot/core/agent/`, with main-request assembly in `astrbot/core/astr_main_agent.py`. Provider abstractions live in `astrbot/core/provider/`; concrete OpenAI, Anthropic, Gemini, and similar sources live in `provider/sources/` and are lazily registered through `provider_modules.py`. Dify, Coze, DashScope, and DeerFlow are external Agent Runners under `astrbot/core/agent/runners/`, not ordinary model providers.
 
-Tools can come from the core, plugins, or MCP. MCP supports stdio, SSE, and Streamable HTTP. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.
+Tools can come from the core, plugins, or MCP. MCP supports stdio and Streamable HTTP only. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.
 
 Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`.
 

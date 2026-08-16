@@ -7,6 +7,10 @@ import {
 } from '@/utils/confirmDialog';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { normalizeTextInput } from '@/utils/inputValue';
+import {
+  isDashboardStepUpRequired,
+  type DashboardStepUpTarget,
+} from '@/composables/useDashboardStepUp';
 
 type GenericObject = Record<string, unknown>;
 
@@ -45,7 +49,6 @@ interface ProviderItem extends GenericObject {
   enable?: boolean;
   provider_type?: string;
   modalities?: string[];
-  reasoning?: boolean;
   max_context_tokens?: number;
   model_metadata?: ProviderModelMetadata | null;
 }
@@ -89,6 +92,7 @@ export interface UseProviderSourcesOptions {
   defaultTab?: string;
   tm: (key: string, params?: Record<string, unknown>) => string;
   showMessage: (message: string, color?: string) => void;
+  requestStepUp?: (target: DashboardStepUpTarget) => Promise<string | null>;
 }
 
 export function resolveDefaultTab(value?: string) {
@@ -274,7 +278,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return {
       modalities: { input },
       tool_call: mods.includes('tool_use'),
-      reasoning: Boolean(provider.reasoning),
       limit: { context: provider.max_context_tokens || 0 },
     };
   }
@@ -451,6 +454,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function getSourceDisplayName(source: ProviderSourceItem | null | undefined) {
     if (!source) return '';
     if (source.isPlaceholder) return source.templateKey || source.id || '';
+    if (source.id === 'ssycloud') return 'ssycloud(胜算云)';
     return source.id || '';
   }
 
@@ -665,10 +669,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     );
     const editableSource = editableProviderSource.value;
     try {
-      const response = await providerApi.upsertSource(
-        originalId,
-        editableSource,
-      );
+      let response;
+      try {
+        response = await providerApi.upsertSource(originalId, editableSource);
+      } catch (error: unknown) {
+        if (!isDashboardStepUpRequired(error) || !options.requestStepUp) {
+          throw error;
+        }
+
+        const stepUp = await options.requestStepUp({
+          action: 'provider.credentials.write',
+          resourceType: 'provider-source',
+          resourceId: originalId,
+          configId: 'default',
+        });
+        if (!stepUp) return false;
+        response = await providerApi.upsertSource(
+          originalId,
+          editableSource,
+          stepUp,
+        );
+      }
 
       if (response.data.status !== 'ok') {
         throw new Error(
@@ -810,7 +831,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       modalities,
       custom_extra_body: {},
       max_context_tokens,
-      reasoning: supportsReasoning(metadata),
     };
   }
 

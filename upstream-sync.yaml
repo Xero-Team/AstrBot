@@ -5,36 +5,40 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 1e4a779e1eec13f1f63bfcf057add5ef278802cf
-  synced_at_utc: 2026-08-08T15:09:48Z
+  commit: fa399cb0955585d5c8186aa5b10ac92ad17fe57f
+  synced_at_utc: 2026-08-16T13:58:31Z
   sync_method: manual-adaptation
-  source_pr: 'bae3e67d, dd38c3c4, cf13b375, 8fed6250, 4da9ff20, 0670787b, 6bfae16e, 6158a7df, fa2e2339, fd81cb23, e2f2e98d, 37b8cdeb, 9f1ddf64, 8d709159, 9850a40f, 77005563, 1e4a779e'
+  source_pr: '9570, 9612, 9636, 9643, 9644, 9646, 9648, 9655, 9658, 9659, 9665, 9688, 9690, 9699, 9701'
   note: >-
     Merged the Xero-Team/AstrBot sibling fork (remote `upstream`, tip
-    1e4a779e) into Zephirum via a single merge commit, bringing in 17
-    commits diverged since the shared merge-base 00261e95. The upstream
-    commits carry no PR-number references, so source_pr lists their short
-    SHAs in chronological order. Ported features and fixes: opt-in parallel
-    tool execution with per-MCP concurrency and dashboard controls
-    (37b8cdeb, 9f1ddf64, 8d709159); knowledge-base document search,
-    pagination and loading-error/empty-state distinction (6bfae16e,
-    6158a7df); cron session timezone inheritance and effective server-time
-    preview (8fed6250, 4da9ff20); profile mapping async serialization
-    (0670787b); full-area chat drag uploads (fa2e2339); favicon plugin
-    defaults (fd81cb23); platform send-result typing alignment
-    (dd38c3c4); assistant history encoding for responses (cf13b375);
-    upstream platform sync (bae3e67d); CI Dependabot cadence and security
-    audit dependency bumps (77005563, 1e4a779e, 9850a40f); and the
-    upstream fork's own sync-record commit (e2f2e98d). Zephirum's BTW
-    dual-loop (conversation/work) feature was preserved unchanged; the
-    upstream parallel-tool-execution dispatch and the fork's
-    `_filter_handoff_toolset_for_btw` routing touch disjoint regions and
-    coexist. Conflict resolution favored upstream for
-    request_preparation.py (wider media Literal and retained
-    `from __future__`), the webchat/wecomai send_streaming line wrapping,
-    and the dashboard pnpm workspace/lockfile (js-yaml 4.3.1 plus the
-    upstream-added nanoid 3.3.17 override); tests/unit/test_config.py kept
-    both the BTW route-assignment and the platform-template tests. The
+    fa399cb09) into Zephirum via a single merge commit, bringing in 117
+    commits diverged since the previous marker 1e4a779e. The interval mixes
+    AstrBotDevs PRs (listed in source_pr) with the sibling fork's own
+    adaptation and sync commits, so source_pr lists only the PR-numbered
+    entries. Major upstream features: a unified authorization system with
+    per-action role checks and dashboard step-up for high-risk operations;
+    dashboard account identity with authoritative TOTP state in its
+    database; MCP SDK 2 protocol with stable, collision-free MCP tool
+    names; NapCat OneBot versioned contracts and chunked uploads; a group
+    message history tool; an SSYCloud provider; a managed shell-session
+    tool; selectable Docker feature builds; and an upstream-sync skill.
+    BTW was preserved and adapted where upstream intersected it. The 4
+    textual conflicts were resolved as follows: internal.py combined the
+    BTW detached-work follow-up guard with upstream's agent stop-callback
+    registry; docs/en and docs/zh took upstream's reflowed top-level table
+    and the updated dashboard/computer-use/admins_id notes while keeping
+    the fork's `btw` row and BTW dual-loop section; upstream-sync.yaml was
+    rewritten for this merge. Semantic adaptations beyond the textual
+    conflicts: added upstream's new ShellSessionTool to
+    `_CONVERSATION_FORBIDDEN_TOOL_TYPES` so the conversation loop's
+    computer/filesystem isolation backstop stays complete; taught the
+    unified authorization gate to treat an explicitly engaged BTW work
+    loop as an elevation equivalent to dashboard step-up, so IM operators
+    can run high-risk `tool.*` actions (shell, computer, file, browser) in
+    the work loop while the role check still restricts them to
+    operators/root and non-tool high-risk actions stay dashboard-only; and
+    updated the BTW MCP tool test fixtures to the SDK 2 `mcp.types.Tool`
+    shape and the new deterministic MCP tool-name allocator. The
     `upstream.repo` field continues to point at AstrBotDevs/AstrBot per
     fork convention even though this sync pulled from Xero-Team/AstrBot;
     Zephirum operates as an independent fork and does not open PRs back

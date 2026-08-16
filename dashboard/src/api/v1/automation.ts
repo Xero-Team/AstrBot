@@ -1,4 +1,4 @@
-import { generatedQuery, openApiV1, typed } from './shared';
+import { generatedOptions, generatedQuery, openApiV1, typed } from './shared';
 import type {
   CommandPatchRequest,
   CronJobPatchRequest,
@@ -8,6 +8,7 @@ import type {
   ModelScopeSyncRequest,
   T2iTemplateRequest,
 } from './shared';
+import type { AxiosRequestConfig } from './shared';
 import type {
   CommandListData,
   CronJobListParams,
@@ -100,55 +101,154 @@ export const toolApi = {
       }),
     );
   },
-  setPermission(toolId: string, permission: 'admin' | 'member') {
-    return typed<OpenConfig>(
-      openApiV1.setToolPermission({
-        path: { tool_id: toolId },
-        body: { permission },
-      }),
-    );
-  },
 };
 
 export const mcpApi = {
   list() {
     return typed<OpenConfig[]>(openApiV1.listMcpServers());
   },
-  create(config: McpServerConfig) {
-    return typed<OpenConfig>(openApiV1.createMcpServer({ body: config }));
-  },
-  update(serverName: string, config: McpServerConfig) {
+  create(config: McpServerConfig, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.updateMcpServer({
-        path: { server_name: serverName },
-        body: config,
-      }),
+      openApiV1.createMcpServer(
+        generatedOptions({ body: config }, requestConfig),
+      ),
     );
   },
-  delete(serverName: string) {
+  update(
+    serverName: string,
+    config: McpServerConfig,
+    requestConfig?: AxiosRequestConfig,
+  ) {
     return typed<OpenConfig>(
-      openApiV1.deleteMcpServer({ path: { server_name: serverName } }),
+      openApiV1.updateMcpServer(
+        generatedOptions(
+          {
+            path: { server_name: serverName },
+            body: config,
+          },
+          requestConfig,
+        ),
+      ),
     );
   },
-  setEnabled(serverName: string, enabled: boolean) {
+  delete(serverName: string, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.setMcpServerEnabled({
-        path: { server_name: serverName },
-        body: { enabled },
-      }),
+      openApiV1.deleteMcpServer(
+        generatedOptions({ path: { server_name: serverName } }, requestConfig),
+      ),
+    );
+  },
+  setEnabled(
+    serverName: string,
+    enabled: boolean,
+    requestConfig?: AxiosRequestConfig,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.setMcpServerEnabled(
+        generatedOptions(
+          {
+            path: { server_name: serverName },
+            body: { enabled },
+          },
+          requestConfig,
+        ),
+      ),
     );
   },
   test(serverName: string, config?: DynamicConfig) {
     return typed<OpenConfig>(
       openApiV1.testMcpServer({
         path: { server_name: serverName },
-        body: config ? { config } : undefined,
+        body: config ? { name: serverName, ...config } : undefined,
       }),
     );
   },
-  syncModelScope(payload?: ModelScopeSyncRequest) {
+  catalog(serverName: string) {
     return typed<OpenConfig>(
-      openApiV1.syncModelScopeMcpServers({ body: payload }),
+      openApiV1.getMcpCatalog({ path: { server_name: serverName } }),
+    );
+  },
+  resources(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.listMcpResources({ path: { server_name: serverName } }),
+    );
+  },
+  resourceTemplates(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.listMcpResourceTemplates({
+        path: { server_name: serverName },
+      }),
+    );
+  },
+  readResource(serverName: string, uri: string) {
+    return typed<OpenConfig>(
+      openApiV1.readMcpResource({
+        path: { server_name: serverName },
+        body: { uri },
+      }),
+    );
+  },
+  prompts(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.listMcpPrompts({ path: { server_name: serverName } }),
+    );
+  },
+  getPrompt(
+    serverName: string,
+    promptName: string,
+    promptArguments?: Record<string, string>,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.getMcpPrompt({
+        path: { server_name: serverName, prompt_name: promptName },
+        body: promptArguments ? { arguments: promptArguments } : undefined,
+      }),
+    );
+  },
+  complete(
+    serverName: string,
+    reference: DynamicConfig,
+    argument: Record<string, string>,
+    contextArguments?: Record<string, string>,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.completeMcp({
+        path: { server_name: serverName },
+        body: {
+          reference,
+          argument,
+          context_arguments: contextArguments,
+        },
+      }),
+    );
+  },
+  oauthStatus(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.getMcpOAuthStatus({ path: { server_name: serverName } }),
+    );
+  },
+  startOAuth(serverName: string, requestConfig?: AxiosRequestConfig) {
+    return typed<OpenConfig>(
+      openApiV1.startMcpOAuth(
+        generatedOptions({ path: { server_name: serverName } }, requestConfig),
+      ),
+    );
+  },
+  revokeOAuth(serverName: string, requestConfig?: AxiosRequestConfig) {
+    return typed<OpenConfig>(
+      openApiV1.revokeMcpOAuth(
+        generatedOptions({ path: { server_name: serverName } }, requestConfig),
+      ),
+    );
+  },
+  syncModelScope(
+    payload?: ModelScopeSyncRequest,
+    requestConfig?: AxiosRequestConfig,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.syncModelScopeMcpServers(
+        generatedOptions({ body: payload }, requestConfig),
+      ),
     );
   },
 };
@@ -192,10 +292,20 @@ export const t2iApi = {
 };
 
 export const logApi = {
-  history() {
-    return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
+  history(filters?: { category?: string[]; privacy?: string[] }) {
+    return typed<{ logs?: OpenConfig[] }>(
+      openApiV1.getLogHistory({ query: filters }),
+    );
   },
-  liveUrl() {
-    return '/api/v1/logs/live';
+  liveUrl(filters?: { category?: string[]; privacy?: string[] }) {
+    const params = new URLSearchParams();
+    for (const category of filters?.category || []) {
+      params.append('category', category);
+    }
+    for (const privacy of filters?.privacy || []) {
+      params.append('privacy', privacy);
+    }
+    const query = params.toString();
+    return `/api/v1/logs/live${query ? `?${query}` : ''}`;
   },
 };

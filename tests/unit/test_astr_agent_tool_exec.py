@@ -4,10 +4,11 @@ from unittest.mock import AsyncMock
 
 import mcp
 import pytest
+from mcp.types import Tool
 
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.mcp_client import MCPTool, MCPToolNameAllocator
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
@@ -15,7 +16,6 @@ from astrbot.core.message.components import Image
 from astrbot.core.tools.computer_tools import FileReadTool
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
-    _PermissionGuardedTool,
 )
 
 
@@ -43,7 +43,15 @@ class _DummyTool:
 
 def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
-    ctx = SimpleNamespace(event=event, context=SimpleNamespace())
+    event.subject = SimpleNamespace(id="im:test:bot:user", authenticated=True)
+    event.resource = SimpleNamespace(config_id="default")
+    event.auth_context = SimpleNamespace()
+    authorization = SimpleNamespace(
+        authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
+    )
+    ctx = SimpleNamespace(
+        event=event, context=SimpleNamespace(authorization=authorization)
+    )
     return ContextWrapper(context=ctx)
 
 
@@ -89,16 +97,26 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
         description="run in the background",
         parameters={"type": "object", "properties": {}},
         is_background_task=True,
+        required_actions=("session.read",),
     )
     first_tasks: set[asyncio.Task] = set()
     second_tasks: set[asyncio.Task] = set()
 
     async def schedule(tasks: set[asyncio.Task]) -> None:
         execution_context = SimpleNamespace(background_tasks=tasks)
+        event = _DummyEvent()
+        event.subject = SimpleNamespace(id="im:test:bot:user", authenticated=True)
+        event.resource = SimpleNamespace(config_id="default")
+        event.auth_context = SimpleNamespace()
         run_context = ContextWrapper(
             context=SimpleNamespace(
-                event=_DummyEvent(),
-                context=execution_context,
+                event=event,
+                context=SimpleNamespace(
+                    **vars(execution_context),
+                    authorization=SimpleNamespace(
+                        authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
+                    ),
+                ),
             )
         )
         async for _ in FunctionToolExecutor.execute(tool, run_context):
@@ -121,7 +139,7 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
     assert second_tasks == set()
 
 
-def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
+def test_build_handoff_toolset_keeps_declared_tools():
     mgr = FunctionToolManager()
     plugin_tool = FunctionTool(
         name="admin_only_mcp",
@@ -143,13 +161,13 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     toolset = FunctionToolExecutor._build_handoff_toolset(run_context, tools=None)
 
     assert toolset is not None
-    assert isinstance(toolset.get_tool("admin_only_mcp"), _PermissionGuardedTool)
+    assert toolset.get_tool("admin_only_mcp") is plugin_tool
     assert toolset.get_tool("transfer_to_child") is None
 
 
 def test_handoff_toolset_defaults_plugin_mcp_and_computer_tools_to_work():
     mcp_tool = MCPTool(
-        SimpleNamespace(
+        Tool(
             name="workspace_mcp",
             description="workspace MCP",
             inputSchema={"type": "object", "properties": {}},
@@ -192,7 +210,7 @@ def test_handoff_toolset_defaults_plugin_mcp_and_computer_tools_to_work():
 
 def test_handoff_toolset_honors_explicit_both_routes():
     mcp_tool = MCPTool(
-        SimpleNamespace(
+        Tool(
             name="workspace_mcp",
             description="workspace MCP",
             inputSchema={"type": "object", "properties": {}},
@@ -234,7 +252,10 @@ def test_handoff_toolset_honors_explicit_both_routes():
         event=event,
     )
 
-    assert filtered.names() == ["workspace_mcp", "coding_agent"]
+    assert filtered.names() == [
+        MCPToolNameAllocator().allocate("workspace-server", "workspace_mcp"),
+        "coding_agent",
+    ]
 
 
 @pytest.mark.asyncio

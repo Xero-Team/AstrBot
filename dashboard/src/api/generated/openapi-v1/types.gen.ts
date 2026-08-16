@@ -10,6 +10,40 @@ export type SuccessEnvelope = {
   data: unknown;
 };
 
+export type SkillInventoryItem = {
+  name: string;
+  description: string;
+  path: string;
+  active: boolean;
+  source_type?: string;
+  source_label?: string;
+  plugin_name?: string;
+  /**
+   * Whether the owning plugin is active in the runtime catalog.
+   */
+  plugin_active?: boolean;
+  /**
+   * Display name of the owning runtime plugin, when known.
+   */
+  plugin_display_name?: string;
+  readonly?: boolean;
+  [key: string]: unknown;
+};
+
+export type SkillInventoryData = {
+  skills: Array<SkillInventoryItem>;
+  runtime: string;
+  sandbox_cache: {
+    [key: string]: unknown;
+  };
+};
+
+export type SkillInventoryResponse = {
+  status: 'ok' | 'warning';
+  message?: string;
+  data: SkillInventoryData;
+};
+
 export type ErrorEnvelope = {
   status: 'error';
   message: string;
@@ -165,8 +199,6 @@ export type CreateApiKeyRequest = {
     | 'plugin'
     | 'mcp'
     | 'skill'
-    | 'chat:admin'
-    | 'config:edit_admin'
   >;
   expires_at?: string;
   expires_in_days?: number;
@@ -220,10 +252,6 @@ export type EnabledPatch = {
   enabled: boolean;
 };
 
-export type ToolPermissionPatch = {
-  permission: 'admin' | 'member';
-};
-
 export type ProviderSourceConfigRequest = {
   config: DynamicConfig;
 };
@@ -238,7 +266,7 @@ export type ProviderEmbeddingDimensionRequest = {
 
 export type ChatRequest = {
   /**
-   * Caller-declared WebChat sender/session owner. A configured AstrBot administrator ID requires the explicitly granted chat:admin API-key scope.
+   * Caller-declared WebChat sender/session owner.
    */
   username?: string;
   session_id?: string;
@@ -422,7 +450,43 @@ export type CommandPatchRequest = {
   enabled?: boolean;
   alias?: string;
   aliases?: Array<string>;
-  permission_group?: string;
+  action?: string;
+};
+
+export type AuthorizationBindingRequest = {
+  subject_id: string;
+  role:
+    | 'root'
+    | 'operator'
+    | 'instance_operator'
+    | 'session_owner'
+    | 'session_admin'
+    | 'member';
+  scope_type: 'global' | 'instance' | 'session' | 'resource';
+  scope_id: string;
+  config_id?: string;
+  expires_at?: string;
+};
+
+export type AuthorizationStepUpRequest = {
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  config_id?: string;
+};
+
+export type AuthorizationBindingBatchRevokeRequest = {
+  binding_ids: Array<string>;
+};
+
+export type DashboardAccountCreateRequest = {
+  username: string;
+  role?: 'operator' | 'root';
+};
+
+export type DashboardAccountUpdateRequest = {
+  username?: string;
+  is_active?: boolean;
 };
 
 export type BuiltinCommandBulkToggleRequest = {
@@ -452,7 +516,7 @@ export type CommandItem = {
   signature?: string;
   display_signature?: string;
   aliases?: Array<string>;
-  permission?: 'admin' | 'everyone' | 'member';
+  action?: string;
   enabled?: boolean;
   is_group?: boolean;
   has_conflict?: boolean;
@@ -482,18 +546,51 @@ export type CommandItemEnvelope = {
   [key: string]: unknown;
 };
 
-export type McpServerConfig = {
+export type McpServerConfig = (
+  | unknown
+  | {
+      transport: 'streamable_http';
+    }
+) & {
   name: string;
   active?: boolean;
-  transport?: 'stdio' | 'sse' | 'streamable_http';
+  transport?: 'stdio' | 'streamable_http';
   command?: string;
   args?: Array<string>;
   url?: string;
   headers?: {
     [key: string]: string;
   };
-  timeout?: number;
-  [key: string]: unknown;
+  env?: {
+    [key: string]: string;
+  };
+  allow_private_network?: boolean;
+  connect_timeout_seconds?: number;
+  read_timeout_seconds?: number;
+  terminate_on_close?: boolean;
+  auth_ref?: string;
+};
+
+export type McpResourceReadRequest = {
+  uri: string;
+};
+
+export type McpPromptGetRequest = {
+  arguments?: {
+    [key: string]: string;
+  };
+};
+
+export type McpCompletionRequest = {
+  reference: {
+    [key: string]: unknown;
+  };
+  argument: {
+    [key: string]: string;
+  };
+  context_arguments?: {
+    [key: string]: string;
+  };
 };
 
 export type ModelScopeSyncRequest = {
@@ -780,6 +877,33 @@ export type SubAgentConfigRequest = {
   }>;
 };
 
+export type AuthorizationStepUpRequestWritable = {
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  config_id?: string;
+  password?: string;
+  code?: string;
+};
+
+export type AuthorizationBindingBatchRevokeRequestWritable = {
+  binding_ids: Array<string>;
+  password?: string;
+  code?: string;
+};
+
+export type DashboardAccountCreateRequestWritable = {
+  username: string;
+  password: string;
+  role?: 'operator' | 'root';
+};
+
+export type DashboardAccountUpdateRequestWritable = {
+  username?: string;
+  password?: string;
+  is_active?: boolean;
+};
+
 export type AppearanceWallpaperId = string;
 
 export type ExtensionId = string;
@@ -1050,6 +1174,180 @@ export type DeleteApiKeyResponses = {
 
 export type DeleteApiKeyResponse =
   DeleteApiKeyResponses[keyof DeleteApiKeyResponses];
+
+export type ListAuthorizationRoleBindingsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings';
+};
+
+export type ListAuthorizationRoleBindingsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListAuthorizationRoleBindingsResponse =
+  ListAuthorizationRoleBindingsResponses[keyof ListAuthorizationRoleBindingsResponses];
+
+export type GrantAuthorizationRoleBindingData = {
+  body: AuthorizationBindingRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings';
+};
+
+export type GrantAuthorizationRoleBindingResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GrantAuthorizationRoleBindingResponse =
+  GrantAuthorizationRoleBindingResponses[keyof GrantAuthorizationRoleBindingResponses];
+
+export type RevokeAuthorizationRoleBindingData = {
+  body?: never;
+  path: {
+    binding_id: string;
+  };
+  query?: never;
+  url: '/api/v1/authorization/role-bindings/{binding_id}/revoke';
+};
+
+export type RevokeAuthorizationRoleBindingResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type RevokeAuthorizationRoleBindingResponse =
+  RevokeAuthorizationRoleBindingResponses[keyof RevokeAuthorizationRoleBindingResponses];
+
+export type IssueAuthorizationBatchRevokeStepUpData = {
+  body: AuthorizationBindingBatchRevokeRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings/batch-revoke/step-up';
+};
+
+export type IssueAuthorizationBatchRevokeStepUpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type IssueAuthorizationBatchRevokeStepUpResponse =
+  IssueAuthorizationBatchRevokeStepUpResponses[keyof IssueAuthorizationBatchRevokeStepUpResponses];
+
+export type RevokeAuthorizationRoleBindingsData = {
+  body: AuthorizationBindingBatchRevokeRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings/batch-revoke';
+};
+
+export type RevokeAuthorizationRoleBindingsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type RevokeAuthorizationRoleBindingsResponse =
+  RevokeAuthorizationRoleBindingsResponses[keyof RevokeAuthorizationRoleBindingsResponses];
+
+export type IssueAuthorizationStepUpData = {
+  body: AuthorizationStepUpRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/step-up';
+};
+
+export type IssueAuthorizationStepUpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type IssueAuthorizationStepUpResponse =
+  IssueAuthorizationStepUpResponses[keyof IssueAuthorizationStepUpResponses];
+
+export type ListAuthorizationAuditData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/audit';
+};
+
+export type ListAuthorizationAuditResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListAuthorizationAuditResponse =
+  ListAuthorizationAuditResponses[keyof ListAuthorizationAuditResponses];
+
+export type ListAuthorizationAccountsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/accounts';
+};
+
+export type ListAuthorizationAccountsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListAuthorizationAccountsResponse =
+  ListAuthorizationAccountsResponses[keyof ListAuthorizationAccountsResponses];
+
+export type CreateAuthorizationAccountData = {
+  body: DashboardAccountCreateRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/accounts';
+};
+
+export type CreateAuthorizationAccountResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CreateAuthorizationAccountResponse =
+  CreateAuthorizationAccountResponses[keyof CreateAuthorizationAccountResponses];
+
+export type UpdateAuthorizationAccountData = {
+  body: DashboardAccountUpdateRequestWritable;
+  path: {
+    account_id: string;
+  };
+  query?: never;
+  url: '/api/v1/authorization/accounts/{account_id}';
+};
+
+export type UpdateAuthorizationAccountResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UpdateAuthorizationAccountResponse =
+  UpdateAuthorizationAccountResponses[keyof UpdateAuthorizationAccountResponses];
 
 export type GetSystemConfigSchemaData = {
   body?: never;
@@ -2300,6 +2598,69 @@ export type AddChatProjectSessionResponses = {
 
 export type AddChatProjectSessionResponse =
   AddChatProjectSessionResponses[keyof AddChatProjectSessionResponses];
+
+export type ListChatProjectWorkspaceFilesData = {
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query?: {
+    path?: string;
+  };
+  url: '/api/v1/chat/projects/{project_id}/workspace/files';
+};
+
+export type ListChatProjectWorkspaceFilesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListChatProjectWorkspaceFilesResponse =
+  ListChatProjectWorkspaceFilesResponses[keyof ListChatProjectWorkspaceFilesResponses];
+
+export type GetChatProjectWorkspaceFileData = {
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query: {
+    path: string;
+  };
+  url: '/api/v1/chat/projects/{project_id}/workspace/file';
+};
+
+export type GetChatProjectWorkspaceFileResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetChatProjectWorkspaceFileResponse =
+  GetChatProjectWorkspaceFileResponses[keyof GetChatProjectWorkspaceFileResponses];
+
+export type DownloadChatProjectWorkspaceFileData = {
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query: {
+    path: string;
+  };
+  url: '/api/v1/chat/projects/{project_id}/workspace/file/download';
+};
+
+export type DownloadChatProjectWorkspaceFileResponses = {
+  /**
+   * Workspace file bytes
+   */
+  200: Blob | File;
+};
+
+export type DownloadChatProjectWorkspaceFileResponse =
+  DownloadChatProjectWorkspaceFileResponses[keyof DownloadChatProjectWorkspaceFileResponses];
 
 export type RemoveChatProjectSessionData = {
   body?: never;
@@ -3650,25 +4011,6 @@ export type SetToolParallelResponses = {
 export type SetToolParallelResponse =
   SetToolParallelResponses[keyof SetToolParallelResponses];
 
-export type SetToolPermissionData = {
-  body: ToolPermissionPatch;
-  path: {
-    tool_id: string;
-  };
-  query?: never;
-  url: '/api/v1/tools/{tool_id}/permission';
-};
-
-export type SetToolPermissionResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type SetToolPermissionResponse =
-  SetToolPermissionResponses[keyof SetToolPermissionResponses];
-
 export type ListMcpServersData = {
   body?: never;
   path?: never;
@@ -3761,11 +4103,7 @@ export type SetMcpServerEnabledResponse =
   SetMcpServerEnabledResponses[keyof SetMcpServerEnabledResponses];
 
 export type TestMcpServerData = {
-  body?: {
-    config?: {
-      [key: string]: unknown;
-    };
-  };
+  body?: McpServerConfig;
   path: {
     server_name: string;
   };
@@ -3782,6 +4120,204 @@ export type TestMcpServerResponses = {
 
 export type TestMcpServerResponse =
   TestMcpServerResponses[keyof TestMcpServerResponses];
+
+export type GetMcpCatalogData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/catalog';
+};
+
+export type GetMcpCatalogResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetMcpCatalogResponse =
+  GetMcpCatalogResponses[keyof GetMcpCatalogResponses];
+
+export type ListMcpResourcesData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/resources';
+};
+
+export type ListMcpResourcesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListMcpResourcesResponse =
+  ListMcpResourcesResponses[keyof ListMcpResourcesResponses];
+
+export type ListMcpResourceTemplatesData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/resources/templates';
+};
+
+export type ListMcpResourceTemplatesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListMcpResourceTemplatesResponse =
+  ListMcpResourceTemplatesResponses[keyof ListMcpResourceTemplatesResponses];
+
+export type ReadMcpResourceData = {
+  body: McpResourceReadRequest;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/resources/read';
+};
+
+export type ReadMcpResourceResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ReadMcpResourceResponse =
+  ReadMcpResourceResponses[keyof ReadMcpResourceResponses];
+
+export type ListMcpPromptsData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/prompts';
+};
+
+export type ListMcpPromptsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListMcpPromptsResponse =
+  ListMcpPromptsResponses[keyof ListMcpPromptsResponses];
+
+export type GetMcpPromptData = {
+  body?: McpPromptGetRequest;
+  path: {
+    server_name: string;
+    prompt_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/prompts/{prompt_name}/get';
+};
+
+export type GetMcpPromptResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetMcpPromptResponse =
+  GetMcpPromptResponses[keyof GetMcpPromptResponses];
+
+export type CompleteMcpData = {
+  body: McpCompletionRequest;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/completion';
+};
+
+export type CompleteMcpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CompleteMcpResponse =
+  CompleteMcpResponses[keyof CompleteMcpResponses];
+
+export type GetMcpOAuthStatusData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/oauth/status';
+};
+
+export type GetMcpOAuthStatusResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetMcpOAuthStatusResponse =
+  GetMcpOAuthStatusResponses[keyof GetMcpOAuthStatusResponses];
+
+export type StartMcpOAuthData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/oauth/start';
+};
+
+export type StartMcpOAuthResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type StartMcpOAuthResponse =
+  StartMcpOAuthResponses[keyof StartMcpOAuthResponses];
+
+export type RevokeMcpOAuthData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/oauth';
+};
+
+export type RevokeMcpOAuthResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type RevokeMcpOAuthResponse =
+  RevokeMcpOAuthResponses[keyof RevokeMcpOAuthResponses];
+
+export type CompleteMcpOAuthCallbackData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/mcp/oauth/callback';
+};
 
 export type SyncModelScopeMcpServersData = {
   body?: ModelScopeSyncRequest;
@@ -3812,9 +4348,9 @@ export type ListSkillsData = {
 
 export type ListSkillsResponses = {
   /**
-   * Standard AstrBot success response
+   * Skills inventory
    */
-  200: SuccessEnvelope;
+  200: SkillInventoryResponse;
 };
 
 export type ListSkillsResponse = ListSkillsResponses[keyof ListSkillsResponses];
@@ -5886,7 +6422,10 @@ export type RunCronJobResponse = RunCronJobResponses[keyof RunCronJobResponses];
 export type StreamLiveLogsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    category?: Array<string>;
+    privacy?: Array<string>;
+  };
   url: '/api/v1/logs/live';
 };
 
@@ -5903,7 +6442,10 @@ export type StreamLiveLogsResponse =
 export type GetLogHistoryData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    category?: Array<string>;
+    privacy?: Array<string>;
+  };
   url: '/api/v1/logs/history';
 };
 

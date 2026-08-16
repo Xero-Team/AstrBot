@@ -12,6 +12,7 @@ import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
 import defaultPluginIcon from '/favicon.svg';
 import { pluginApi } from '@/api/v1';
+import { useI18n } from '@/i18n/composables';
 import { usePluginI18n } from '@/utils/pluginI18n';
 import PluginPlatformChip from '@/components/shared/PluginPlatformChip.vue';
 
@@ -34,7 +35,8 @@ const props = defineProps({
   },
 });
 
-const { tm, router } = props.state;
+const { tm, router, getMarketCategoryLabel, getRaw } = props.state;
+const { locale } = useI18n();
 const { pluginName, pluginDesc: resolvePluginDesc } = usePluginI18n();
 
 const markdown = new MarkdownIt({
@@ -154,9 +156,16 @@ const categoryDisplay = computed(() => {
   const category = String(rawCategory || '').trim();
   if (!category) return '';
 
+  if (typeof getMarketCategoryLabel === 'function') {
+    return getMarketCategoryLabel(category, category);
+  }
+
   const normalized = category.toLowerCase().replace(/\s+/g, '_');
-  const label = tm(`market.categories.${normalized}`);
-  return label === `market.categories.${normalized}` ? category : label;
+  const translated =
+    typeof getRaw === 'function'
+      ? getRaw(`market.categories.${normalized}`)
+      : null;
+  return typeof translated === 'string' ? translated : category;
 });
 
 const authorWebsite = computed(() => {
@@ -228,6 +237,29 @@ const supportPlatformsDisplay = computed(() => {
   return platforms.filter((platform) => typeof platform === 'string');
 });
 
+const updatedAtDisplay = computed(() => {
+  if (!isMarketDetail.value) return '';
+
+  const value = firstPresentValue(
+    pluginData.value?.updated_at,
+    props.marketPlugin?.updated_at,
+  );
+  if (!value) return '';
+
+  const updatedAt = new Date(value);
+  if (Number.isNaN(updatedAt.getTime())) return '';
+
+  return new Intl.DateTimeFormat(locale.value, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(updatedAt);
+});
+
 const infoRows = computed(() => {
   const rows = [
     {
@@ -244,6 +276,11 @@ const infoRows = computed(() => {
     {
       label: tm('detail.info.stars'),
       value: starsDisplay.value,
+      optional: true,
+    },
+    {
+      label: tm('detail.info.updatedAt'),
+      value: updatedAtDisplay.value,
       optional: true,
     },
     {
@@ -773,7 +810,7 @@ onBeforeUnmount(() => {
       </h2>
     </div>
 
-    <v-card class="plugin-summary-card rounded-lg" variant="outlined">
+    <v-card class="plugin-summary-card" variant="outlined">
       <v-card-text class="plugin-summary-card__body">
         <img
           :src="logoSrc"
@@ -808,7 +845,7 @@ onBeforeUnmount(() => {
               group.components.length
             }}</span>
           </div>
-          <v-card class="rounded-lg handler-card" variant="outlined">
+          <v-card class="handler-card" variant="outlined">
             <v-table
               v-if="group.key === 'command'"
               class="detail-info-table detail-handler-table"
@@ -935,7 +972,7 @@ onBeforeUnmount(() => {
 
     <section class="detail-section">
       <h3 class="detail-section__title">{{ tm('detail.info.title') }}</h3>
-      <v-card class="rounded-lg" variant="outlined">
+      <v-card variant="outlined">
         <v-table class="detail-info-table">
           <tbody>
             <tr v-for="row in infoRows" :key="row.label">
@@ -985,7 +1022,7 @@ onBeforeUnmount(() => {
 
     <section v-if="showDocsSection" class="detail-section">
       <h3 class="detail-section__title">{{ tm('detail.docsTitle') }}</h3>
-      <v-card class="rounded-lg docs-card" variant="outlined">
+      <v-card class="docs-card" variant="outlined">
         <v-card-text>
           <div v-if="readmeLoading" class="docs-state">
             <v-progress-circular indeterminate color="primary" />
@@ -1006,7 +1043,7 @@ onBeforeUnmount(() => {
       <h3 class="detail-section__title">
         {{ tm('detail.changelogTitle') }}
       </h3>
-      <v-card class="rounded-lg docs-card" variant="outlined">
+      <v-card class="docs-card" variant="outlined">
         <v-card-text>
           <div v-if="changelogLoading" class="docs-state">
             <v-progress-circular indeterminate color="primary" />

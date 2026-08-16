@@ -1,6 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,6 +13,7 @@ from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class _MemoryPreferences:
@@ -126,6 +128,11 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     result = await ExecuteShellTool().call(
         FakeWrapper(), command="chromium https://example.com"
@@ -169,6 +176,11 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
     tool = ExecuteShellTool()
 
     await tool.call(FakeWrapper(), command="first")
@@ -213,6 +225,11 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
     original_env = {"FOO": "bar"}
 
     await ExecuteShellTool().call(FakeWrapper(), command="first", env=original_env)
@@ -254,6 +271,11 @@ async def test_execute_shell_accepts_timeout_alias(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     await ExecuteShellTool().call(FakeWrapper(), command="echo hi", timeout=12)
 
@@ -295,6 +317,11 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     command = "nohup firefox >/tmp/astrbot-firefox.log 2>&1 &"
     result = await ExecuteShellTool().call(
@@ -338,6 +365,11 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     command = "firefox & # already detached"
     result = await ExecuteShellTool().call(
@@ -400,6 +432,11 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     result = await ExecuteShellTool().call(FakeWrapper(), command="firefox")
 
@@ -416,6 +453,28 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
     assert extract_tool.name == "firecrawl_extract_web_page"
     assert manager.is_builtin_tool("web_search_firecrawl") is True
     assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+
+
+@pytest.mark.asyncio
+async def test_mcp_connection_test_uses_initial_catalog_without_subscription(monkeypatch):
+    seen = {}
+
+    async def fake_connect(self, config, name, *, watch_catalog=True):
+        seen["watch_catalog"] = watch_catalog
+        self.tools = [SimpleNamespace(name="demo")]
+
+    async def fake_cleanup(self):
+        return None
+
+    monkeypatch.setattr(ftm.MCPClient, "connect_to_server", fake_connect)
+    monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
+
+    result = await FunctionToolManager.test_mcp_server_connection(
+        {"url": "https://example.com/mcp"}
+    )
+
+    assert result == ["demo"]
+    assert seen == {"watch_catalog": False}
 
 
 @pytest.mark.asyncio
@@ -451,8 +510,8 @@ async def test_mcp_shutdown_cleanup_runs_in_lifecycle_task(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
-    """A cancellation arriving mid-cleanup must not abort the cleanup."""
+async def test_mcp_shutdown_propagates_cancellation(monkeypatch):
+    """Cancellation is not swallowed while a client is being closed."""
     manager = FunctionToolManager()
     cleanup_calls = []
 
@@ -472,9 +531,10 @@ async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
     monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
 
     await manager.enable_mcp_server("dummy", {"command": "python"}, timeout=5)
-    await manager.disable_mcp_server("dummy", timeout=5)
+    with pytest.raises(asyncio.CancelledError):
+        await manager.disable_mcp_server("dummy", timeout=5)
 
-    assert len(cleanup_calls) == 2
+    assert len(cleanup_calls) == 1
     assert "dummy" not in manager.mcp_server_runtime_view
 
 
@@ -495,7 +555,12 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
                     "mcp_server_list": [
                         {
                             "name": "valid",
-                            "operational_urls": [{"url": "https://example.com/mcp"}],
+                            "operational_urls": [
+                                {
+                                    "url": "https://example.com/mcp",
+                                    "transport": "streamable_http",
+                                }
+                            ],
                         },
                         {"name": "missing-url", "operational_urls": []},
                         {"name": "empty-url", "operational_urls": [{}]},
@@ -526,6 +591,11 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
     monkeypatch.setattr(manager, "load_mcp_config", lambda: default_config)
     monkeypatch.setattr(manager, "save_mcp_config", saved_configs.append)
     monkeypatch.setattr(manager, "enable_mcp_server", fake_enable_mcp_server)
+    monkeypatch.setattr(
+        manager,
+        "test_mcp_server_connection",
+        AsyncMock(return_value=["demo"]),
+    )
 
     await manager.sync_modelscope_mcp_servers("token")
 
@@ -535,9 +605,8 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             "mcpServers": {
                 "valid": {
                     "url": "https://example.com/mcp",
-                    "transport": "sse",
+                    "transport": "streamable_http",
                     "active": True,
-                    "provider": "modelscope",
                 }
             }
         }
@@ -547,9 +616,15 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             "valid",
             {
                 "url": "https://example.com/mcp",
-                "transport": "sse",
+                "transport": "streamable_http",
                 "active": True,
-                "provider": "modelscope",
             },
         )
     ]
+
+
+def test_shell_session_schema_supports_line_writes():
+    from astrbot.core.tools.computer_tools import ShellSessionTool
+
+    tool = ShellSessionTool()
+    assert "write_line" in tool.parameters["properties"]["action"]["enum"]

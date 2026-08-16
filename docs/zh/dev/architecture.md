@@ -21,7 +21,7 @@ outline: deep
 | 当前上游同步点          | `upstream-sync.yaml`                                                                          |
 | 版本化变更记录          | `changelogs/`；它记录已吸收的版本变更，不等同于 fork 已发布资产；更晚提交尚未纳入最新版本记录 |
 
-当前可复现开发与 CI 基线为 Python 3.14.6、Node.js 26.5.0 和 pnpm 11.15.1；Python 包元数据允许 3.14 及以上版本。
+当前可复现开发与 CI 基线为 Python 3.14.6、Node.js 26.5.0 和 pnpm 11.21.0；Python 包元数据允许 3.14 及以上版本。
 
 ## 启动流程
 
@@ -64,7 +64,7 @@ outline: deep
 
 `ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。
 
-群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中，旧的 `disable_builtin_commands` 只用于启动迁移，不再参与 Pipeline 过滤。
+群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。
 
 ### 指令解析子系统
 
@@ -78,7 +78,7 @@ outline: deep
 
 核心 Agent 运行时位于 `astrbot/core/agent/`，主 Agent 的请求组装位于 `astrbot/core/astr_main_agent.py`。Provider 抽象位于 `astrbot/core/provider/`；OpenAI、Anthropic、Gemini 等具体实现位于 `provider/sources/`，并通过 `provider_modules.py` 延迟注册。Dify、Coze、DashScope 和 DeerFlow 属于 `astrbot/core/agent/runners/` 下的外部 Agent Runner，不是普通模型 Provider。
 
-工具来源包括内置工具、插件工具和 MCP 工具。MCP 支持 stdio、SSE 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
+工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
 
 Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。
 

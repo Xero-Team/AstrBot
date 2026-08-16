@@ -5,14 +5,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mcp.types import Tool
 
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
-from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+from astrbot.core.agent.mcp_client import MCPTool, MCPToolNameAllocator
+from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Plain, Reply, Video
+from astrbot.core.message.components import Face, File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -236,12 +237,12 @@ def test_route_filter_uses_capability_default_for_malformed_assignment():
 def test_filter_mcp_tools_for_loop_keeps_only_assigned_servers():
     input_schema = {"type": "object", "properties": {}}
     conversation_tool = MCPTool(
-        SimpleNamespace(name="weather", description="weather", inputSchema=input_schema),
+        Tool(name="weather", description="weather", inputSchema=input_schema),
         MagicMock(),
         "weather-server",
     )
     work_tool = MCPTool(
-        SimpleNamespace(name="workspace", description="workspace", inputSchema=input_schema),
+        Tool(name="workspace", description="workspace", inputSchema=input_schema),
         MagicMock(),
         "workspace-server",
     )
@@ -261,13 +262,15 @@ def test_filter_mcp_tools_for_loop_keeps_only_assigned_servers():
     ama._filter_mcp_tools_for_loop(req, config)
 
     assert req.func_tool is not None
-    assert req.func_tool.names() == ["weather"]
+    assert req.func_tool.names() == [
+        MCPToolNameAllocator().allocate("weather-server", "weather")
+    ]
 
 
 def test_filter_mcp_tools_for_loop_defaults_unassigned_servers_to_work():
     input_schema = {"type": "object", "properties": {}}
     work_tool = MCPTool(
-        SimpleNamespace(name="workspace", description="workspace", inputSchema=input_schema),
+        Tool(name="workspace", description="workspace", inputSchema=input_schema),
         MagicMock(),
         "workspace-server",
     )
@@ -291,12 +294,16 @@ def test_filter_mcp_tools_for_loop_defaults_unassigned_servers_to_work():
     ama._filter_mcp_tools_for_loop(work_req, work_config)
 
     assert work_req.func_tool is not None
-    assert work_req.func_tool.names() == ["workspace"]
+    assert work_req.func_tool.names() == [
+        MCPToolNameAllocator().allocate("workspace-server", "workspace")
+    ]
 
 
 def test_filter_skills_for_loop_keeps_only_assigned_skills():
     skills = [
-        SkillInfo(name="chat-search", description="", path="chat/SKILL.md", active=True),
+        SkillInfo(
+            name="chat-search", description="", path="chat/SKILL.md", active=True
+        ),
         SkillInfo(
             name="workspace-edit",
             description="",
@@ -331,6 +338,40 @@ async def test_prepare_event_attachments_is_idempotent(mock_event, mock_context)
     append_direct.assert_awaited_once_with(mock_event, req, config)
     append_quoted.assert_not_awaited()
     assert req._attachments_prepared is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_event_attachments_adds_qq_face_context(mock_event, mock_context):
+    mock_event.message_obj.message = [Face(id=111)]
+    req = ProviderRequest()
+    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+
+    await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+
+    expected = "<Message Components>\n[QQ Face: 可怜 (id: 111)]\n</Message Components>"
+    assert req.message_component_context == expected
+    assert [part.text for part in req.extra_user_content_parts] == [expected]
+
+
+@pytest.mark.asyncio
+async def test_prompt_only_component_context_excludes_unrelated_attachment_paths():
+    event = SimpleNamespace(message_obj=SimpleNamespace(message=[]))
+    req = ProviderRequest(
+        prompt="hello",
+        message_component_context="<Message Components>\n[QQ Face: 可怜 (id: 111)]\n</Message Components>",
+        extra_user_content_parts=[
+            TextPart(text="[File Attachment: path /private/file]")
+        ],
+    )
+
+    await ama.append_message_component_context_to_prompt(
+        event,
+        req,
+        ama.MainAgentBuildConfig(tool_call_timeout=120),
+    )
+
+    assert "[QQ Face: 可怜 (id: 111)]" in (req.prompt or "")
+    assert "/private/file" not in (req.prompt or "")
 
 
 @pytest.mark.asyncio
@@ -484,6 +525,45 @@ def test_current_datetime_scope_only_marks_datetime_temp(mock_event):
     ]
     assert parts[0].is_temp is False
     assert parts[1].is_temp is True
+
+
+def test_local_mode_prompt_uses_windows_powershell_51():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
+    assert "PowerShell 7-only syntax" in prompt
+    assert "cmd.exe" not in prompt
+
+
+def test_local_mode_prompt_hints_pwsh_when_resolved():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="C:/Program Files/PowerShell/7/pwsh.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "PowerShell 7 (pwsh.exe)" in prompt
+    assert "Windows PowerShell 5.1" not in prompt
+    assert "Unix-like" not in prompt
+
+
+def test_local_mode_prompt_ignores_windows_shell_on_non_windows():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
 
 
 class TestMainAgentBuildConfig:

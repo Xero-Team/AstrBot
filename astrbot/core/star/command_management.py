@@ -7,7 +7,7 @@ from astrbot.core.db.po import CommandConfig
 from astrbot.core.db.protocols import CommandStore
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star_handler import HandlerRegistry, StarHandlerMetadata
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -35,7 +35,7 @@ class CommandDescriptor:
     signature: str = ""
     display_signature: str = ""
     aliases: list[str] = field(default_factory=list)
-    permission: str = "everyone"
+    action: str | None = None
     enabled: bool = True
     is_group: bool = False
     is_sub_command: bool = False
@@ -191,14 +191,14 @@ async def update_command_permission(
     preferences: SharedPreferences,
     handler_registry: HandlerRegistry,
     handler_full_name: str,
-    permission_type: str,
+    action: str,
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_registry, handler_full_name)
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+    if not action or "." not in action:
+        raise ValueError("Permission must be a stable authorization action.")
 
     handler = descriptor.handler
     found_plugin = handler_registry.plugins.get_by_module(handler.handler_module_path)
@@ -209,7 +209,8 @@ async def update_command_permission(
     alter_cmd_cfg = await preferences.global_get("alter_cmd", {})
     plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
     cfg = plugin_.get(handler.handler_name, {})
-    cfg["permission"] = permission_type
+    cfg["permission_action"] = action
+    cfg.pop("permission", None)
     plugin_[handler.handler_name] = cfg
     alter_cmd_cfg[found_plugin.name] = plugin_
 
@@ -217,18 +218,14 @@ async def update_command_permission(
 
     # 2. Update Runtime Filter
     found_permission_filter = False
-    target_perm_type = (
-        PermissionType.ADMIN if permission_type == "admin" else PermissionType.MEMBER
-    )
-
     for filter_ in handler.event_filters:
-        if isinstance(filter_, PermissionTypeFilter):
-            filter_.permission_type = target_perm_type
+        if isinstance(filter_, ActionPermissionFilter):
+            filter_.action = action
             found_permission_filter = True
             break
 
     if not found_permission_filter:
-        handler.event_filters.insert(0, PermissionTypeFilter(target_perm_type))
+        handler.event_filters.insert(0, ActionPermissionFilter(action))
 
     # Re-build descriptor to reflect changes
     return _build_descriptor(handler_registry, handler) or descriptor
@@ -408,7 +405,7 @@ def _build_descriptor(
             include_aliases=True,
         ),
         aliases=sorted(getattr(filter_ref, "alias", set())),
-        permission=_determine_permission(handler),
+        action=_determine_action(handler),
         enabled=handler.enabled,
         is_group=isinstance(filter_ref, CommandGroupFilter),
         is_sub_command=is_sub_command,
@@ -436,15 +433,11 @@ def _locate_primary_filter(
     return None
 
 
-def _determine_permission(handler: StarHandlerMetadata) -> str:
+def _determine_action(handler: StarHandlerMetadata) -> str | None:
     for filter_ref in handler.event_filters:
-        if isinstance(filter_ref, PermissionTypeFilter):
-            return (
-                "admin"
-                if filter_ref.permission_type == PermissionType.ADMIN
-                else "member"
-            )
-    return "everyone"
+        if isinstance(filter_ref, ActionPermissionFilter):
+            return filter_ref.action
+    return None
 
 
 def _resolve_group_parent_signature(
@@ -663,7 +656,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "signature": desc.signature,
         "display_signature": desc.display_signature,
         "aliases": desc.aliases,
-        "permission": desc.permission,
+        "action": desc.action,
         "enabled": desc.enabled,
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,

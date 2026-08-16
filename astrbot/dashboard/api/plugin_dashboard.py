@@ -28,7 +28,12 @@ from astrbot.dashboard.services.plugin_dashboard_service import (
 )
 from astrbot.dashboard.services.static_file_service import StaticFileService
 
-from .auth import require_dashboard_session_principal, use_secure_dashboard_cookie
+from .auth import (
+    AuthContext,
+    require_dashboard_control_plane_principal,
+    require_scope,
+    use_secure_dashboard_cookie,
+)
 
 router = APIRouter(tags=["Plugin Dashboard"])
 _DASHBOARD_SESSION_SECURITY = [{"DashboardBearerAuth": [], "DashboardCookieAuth": []}]
@@ -68,6 +73,30 @@ def get_service(request: Request) -> PluginDashboardService:
     return request.app.state.services.plugin_dashboard
 
 
+async def require_plugin_dashboard_read_scope(request: Request) -> AuthContext:
+    """Authorize Dashboard Extension catalog and page-session access."""
+
+    return await require_scope(
+        request,
+        "plugin",
+        action_override="extension.read",
+    )
+
+
+async def require_plugin_dashboard_action_scope(
+    request: Request,
+    service: PluginDashboardService,
+    extension_id: str,
+    action_id: str,
+) -> AuthContext:
+    """Authorize an extension Action by its declared stable API scope."""
+
+    return await require_scope(
+        request,
+        service.action_required_scope(extension_id, action_id),
+    )
+
+
 def require_plugin_ui_protocol(request: Request) -> None:
     static_folder = getattr(request.app.state, "dashboard_static_folder", None)
     if static_folder is None:
@@ -105,10 +134,13 @@ def _require_json_content_length(request: Request) -> None:
 async def get_plugin_dashboard_catalog(
     extension_id: str,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
+    await require_plugin_dashboard_read_scope(request)
     return ok(service.catalog(extension_id, principal))
 
 
@@ -122,10 +154,13 @@ async def create_plugin_page_session(
     page_id: str,
     payload: PluginDashboardSessionRequest,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
+    await require_plugin_dashboard_read_scope(request)
     _require_json_content_length(request)
     try:
         created = await service.create_page_session(
@@ -159,10 +194,18 @@ async def invoke_plugin_dashboard_action(
     action_id: str,
     payload: PluginDashboardActionRequest,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
+    await require_plugin_dashboard_action_scope(
+        request,
+        service,
+        extension_id,
+        action_id,
+    )
     _require_json_content_length(request)
     try:
         data = await service.invoke_json(
@@ -257,10 +300,18 @@ async def invoke_plugin_dashboard_upload(
     extension_id: str,
     action_id: str,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
+    await require_plugin_dashboard_action_scope(
+        request,
+        service,
+        extension_id,
+        action_id,
+    )
     metadata, upload = await _multipart_parts(request)
     try:
         data = await service.invoke_upload(
@@ -288,10 +339,18 @@ async def invoke_plugin_dashboard_file(
     action_id: str,
     payload: PluginDashboardFileRequest,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
+    await require_plugin_dashboard_action_scope(
+        request,
+        service,
+        extension_id,
+        action_id,
+    )
     _require_json_content_length(request)
     try:
         created = await service.invoke_file(

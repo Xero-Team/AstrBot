@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from astrbot import logger
+from astrbot.core.auth.models import AuthContext, Resource, Subject
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.db.protocols import OpenApiStore
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
@@ -55,10 +57,6 @@ class OpenApiKeyAuthContext:
     key_id: str
     scopes: tuple[str, ...]
 
-    @property
-    def allow_admin_username(self) -> bool:
-        return api_key_has_scope(self.scopes, "chat:admin")
-
 
 @dataclass
 class OpenApiWebSocketChatBridge:
@@ -80,6 +78,7 @@ class OpenApiService:
         astrbot_config: AstrBotConfig,
         platform_message_history_manager: PlatformMessageHistoryManager,
         webchat_run_coordinator: WebChatRunCoordinator,
+        authorization: AuthorizationService | None = None,
     ) -> None:
         self.db = db
         self.platform_manager = platform_manager
@@ -88,6 +87,7 @@ class OpenApiService:
         self.astrbot_config = astrbot_config
         self.webchat_run_coordinator = webchat_run_coordinator
         self.platform_history_mgr = platform_message_history_manager
+        self.authorization = authorization
 
     @staticmethod
     def resolve_open_username(
@@ -156,8 +156,6 @@ class OpenApiService:
         self,
         post_data: dict,
         conf_list: list[dict],
-        *,
-        allow_admin_username: bool = False,
     ) -> tuple[str, str, str | None]:
         effective_username, username_err = self.resolve_open_username(
             post_data.get("username")
@@ -166,19 +164,6 @@ class OpenApiService:
             raise OpenApiServiceError(username_err)
         if not effective_username:
             raise OpenApiServiceError("Invalid username")
-        if not allow_admin_username:
-            profiles = getattr(self.astrbot_config_mgr, "confs", {})
-            for profile in profiles.values():
-                if not isinstance(profile, dict):
-                    continue
-                admin_ids = profile.get("admins_id", [])
-                if isinstance(admin_ids, list) and any(
-                    str(admin_id) == effective_username for admin_id in admin_ids
-                ):
-                    raise OpenApiServiceError(
-                        "username is reserved for an AstrBot administrator"
-                    )
-
         raw_session_id = post_data.get("session_id")
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
         if not session_id:
@@ -285,6 +270,36 @@ class OpenApiService:
             await close(1008, message)
             return
 
+        # Authenticate the socket itself before accepting any caller-declared
+        # username/session payload. API-key scope is a capability check, never
+        # an implicit dashboard role.
+        if self.authorization is None:
+            await self.send_chat_ws_error(
+                send_json, "Authorization unavailable", "PROCESSING_ERROR"
+            )
+            await close(1011, "Authorization unavailable")
+            return
+        principal = Subject.api_key(auth.key_id)
+        socket_context = AuthContext(
+            subject=principal,
+            source="api_key",
+            authenticated=True,
+            api_scopes=auth.scopes,
+            metadata={"transport": "websocket"},
+        )
+        decision = await self.authorization.authorize(
+            principal,
+            "session.read",
+            Resource.named("webchat", "socket"),
+            socket_context,
+        )
+        if not decision.allowed:
+            await self.send_chat_ws_error(
+                send_json, "Insufficient API key scope", "FORBIDDEN"
+            )
+            await close(1008, "Insufficient API key scope")
+            return
+
         async def send_error(message: str, code: str) -> None:
             await self.send_chat_ws_error(send_json, message, code)
 
@@ -315,7 +330,10 @@ class OpenApiService:
                     chat_bridge=chat_bridge,
                     send_json=send_json,
                     send_error=send_error,
-                    allow_admin_username=auth.allow_admin_username,
+                    api_key_principal={
+                        "key_id": auth.key_id,
+                        "scopes": list(auth.scopes),
+                    },
                 )
         except Exception as exc:
             logger.debug("Open API WS connection closed: %s", safe_error("", exc))
@@ -377,7 +395,7 @@ class OpenApiService:
         chat_bridge: OpenApiWebSocketChatBridge,
         send_json: SendJson,
         send_error: Callable[[str, str], Awaitable[None]],
-        allow_admin_username: bool = False,
+        api_key_principal: dict | None = None,
     ) -> None:
         message = post_data.get("message")
         if message is None:
@@ -392,7 +410,6 @@ class OpenApiService:
             ) = await self.prepare_chat_send(
                 post_data,
                 conf_list,
-                allow_admin_username=allow_admin_username,
             )
         except OpenApiServiceError as exc:
             message = str(exc)
@@ -437,7 +454,7 @@ class OpenApiService:
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
-                    "_api_key_allow_admin_role": allow_admin_username,
+                    "_api_key_principal": api_key_principal,
                 },
             )
 

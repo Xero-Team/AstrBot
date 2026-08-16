@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from 'url';
 import { defineConfig, mergeConfig } from 'vitest/config';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 
 const baseConfig =
   typeof viteConfig === 'function'

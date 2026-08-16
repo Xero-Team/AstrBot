@@ -25,7 +25,7 @@
           <div class="provider-config-header">
             <div class="provider-config-headline">
               <div class="provider-config-title">
-                {{ selectedProviderSource.id }}
+                {{ getSourceDisplayName(selectedProviderSource) }}
               </div>
               <div class="provider-config-subtitle">
                 {{ selectedProviderSource.api_base || 'N/A' }}
@@ -39,7 +39,7 @@
                 :loading="savingSource"
                 :disabled="!isSourceModified"
                 variant="tonal"
-                rounded="xl"
+                rounded="md"
                 @click="saveProviderSource"
               >
                 {{ tm('providerSources.save') }}
@@ -60,6 +60,7 @@
                 v-if="basicSourceConfig"
                 :iterable="basicSourceConfig"
                 :metadata="providerSourceSchema"
+                :field-links="providerSourceFieldLinks"
                 metadata-key="provider"
                 :is-editing="true"
               />
@@ -111,7 +112,7 @@
         </div>
 
         <div v-else class="provider-empty-state">
-          <v-icon size="48" color="grey-lighten-1"
+          <v-icon size="48" color="on-surface-variant"
             >mdi-cursor-default-click</v-icon
           >
           <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
@@ -183,6 +184,14 @@
       </v-card>
     </v-dialog>
 
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
+
     <v-snackbar
       v-model="snackbar.show"
       :color="snackbar.color"
@@ -195,11 +204,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue';
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
 import { useProviderSources } from '@/composables/useProviderSources';
 
@@ -211,6 +222,14 @@ const props = defineProps({
 });
 
 const { tm } = useModuleI18n('features/provider');
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const snackbar = ref({
   show: false,
@@ -262,7 +281,19 @@ const {
   defaultTab: 'chat_completion',
   tm,
   showMessage,
+  requestStepUp,
 });
+
+const providerSourceFieldLinks = computed(() =>
+  selectedProviderSource.value?.provider === 'ssycloud'
+    ? {
+        key: {
+          label: tm('providerSources.getApiKey'),
+          href: 'https://www.shengsuanyun.com/?from=CH_T70U2X9L',
+        },
+      }
+    : {},
+);
 
 const showManualModelDialog = ref(false);
 

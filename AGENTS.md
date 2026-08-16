@@ -27,8 +27,8 @@ The reproducible development/CI baseline is:
 | ------------------- | ---------------------------------------------------------------------------- |
 | Python              | 3.14.6 in `.python-version`, CI, and `Dockerfile`; project floor is `>=3.14` |
 | Node.js             | 26.5.0 in CI and `Dockerfile`                                                |
-| root npm            | 12.0.1 in the root `package.json` `packageManager` field                     |
-| Dashboard/docs pnpm | 11.15.1 in their `package.json` `packageManager` fields                      |
+| root npm            | 12.0.2 in the root `package.json` `packageManager` field                     |
+| Dashboard/docs pnpm | 11.21.0 in their `package.json` `packageManager` fields                      |
 | Python manager      | `uv` (required, currently not patch-pinned)                                  |
 
 Use the globally installed `npm` and `pnpm` commands. Workflows may instead use a
@@ -44,7 +44,7 @@ make bootstrap
 ```
 
 `make doctor` is strict. It checks Python 3.14.x, `uv`, Node 26.x, and
-pnpm 11.15.x; on POSIX it also requires `shellcheck`, `shfmt`, and `hadolint`.
+pnpm 11.21.x; on POSIX it also requires `shellcheck`, `shfmt`, and `hadolint`.
 Docker is optional. Windows additionally needs GNU Make and PowerShell 7, while
 `check-ps` needs PSScriptAnalyzer; `doctor` does not currently validate those
 three items. `make bootstrap` installs the locked Python development
@@ -213,7 +213,7 @@ controls whether mentioning or replying to the bot wakes a group message, and
 `WakingCheckStage` records the selected `wake_reasons` on the event. Do not
 restore implicit mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
-flag exists only as a startup migration input and must not become a pipeline
+field is not migrated or read by runtime code and must not become a pipeline
 switch again.
 
 ### Agents, providers, and runners
@@ -455,14 +455,10 @@ head.
 ## Releases
 
 Release preparation is a source-management workflow, not proof that assets will
-be published. The jobs in `.github/workflows/release.yml` and the release-image
-jobs in `docker-image.yml` are currently guarded by
-`github.repository == 'AstrBotDevs/AstrBot'`; they do not publish GitHub assets,
-PyPI packages, or images for `Xero-Team/AstrBot`.
-
-`build-docs.yml` also listens for `v*` tags and is not repository-guarded.
-Before pushing a fork tag, verify that its deployment target and secrets are
-explicitly authorized, or adapt/disable that workflow for the fork.
+be published. This fork's `.github` workflows do not publish GitHub assets, PyPI
+packages, or container images. The documentation workflow only builds and uploads
+a short-lived CI artifact; it has no deployment credentials or external publish
+step.
 
 `scripts/prepare_release.py` uses the latest tag reachable from the selected
 base branch as its changelog lower bound. This fork currently has no
@@ -509,6 +505,6 @@ The generated changelog is only a draft of raw commit subjects. Before the PR:
 - add compare/release links only when both referenced fork tags really exist.
 
 After review, open the release branch PR to `master`. A post-merge tag does not
-by itself publish fork-owned PyPI, GitHub Release, or container artifacts, but
-it is not side-effect free: the current unguarded docs workflow may still
-deploy on a `v*` tag. Verify or disable that path before pushing.
+publish fork-owned PyPI, GitHub Release, or container artifacts; create a separate,
+explicitly authorized publication workflow only when the fork establishes those
+release targets and credentials.

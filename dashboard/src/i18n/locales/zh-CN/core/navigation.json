@@ -26,11 +26,13 @@
   "alkaidMemory": "Alkaid 记忆",
   "knowledgeBase": "知识库",
   "about": "关于",
+  "authorization": "授权管理",
   "settings": "设置",
   "changelog": "更新日志",
   "documentation": "官方文档",
   "faq": "FAQ",
   "github": "GitHub",
+  "toggleSidebar": "切换导航栏",
   "drag": "拖拽",
   "groups": {
     "more": "更多功能"

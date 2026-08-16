@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -17,7 +18,7 @@ from astrbot.dashboard.services.conversation_service import (
     ConversationServiceError,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, object_resource, require_resource_action, require_scope
 
 router = APIRouter(tags=["Conversations"])
 _EXPORT_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -35,7 +36,22 @@ def get_service(request: Request) -> ConversationService:
 
 
 async def require_data_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "data")
+    auth = await require_scope(request, "data")
+    user_id = request.query_params.get("user_id")
+    conversation_id = request.path_params.get("conversation_id")
+    if user_id and conversation_id:
+        resource = object_resource(
+            "conversation", user_id, conversation_id, config_id=None
+        )
+    else:
+        resource = Resource.named("conversation", "collection")
+    await require_resource_action(
+        request,
+        auth,
+        action="data.manage",
+        resource=resource,
+    )
+    return auth
 
 
 def _model_dict(payload) -> dict[str, Any]:
@@ -129,18 +145,39 @@ async def list_conversations(
 @router.post("/conversations/export", responses=_EXPORT_RESPONSE)
 async def export_conversations(
     payload: ConversationExportRequest,
-    _auth: AuthContext = Depends(require_data_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
+    # Exporting arbitrary users' conversations is a separate high-risk
+    # capability.  Keep the normal ``data`` scope for discovery and edits,
+    # but require an explicit control-plane authorization for this endpoint.
+    await require_resource_action(
+        request,
+        auth,
+        action="data.export_all",
+        resource=Resource.named("conversation", "export"),
+    )
     return await _export_conversations(_model_dict(payload), service)
 
 
 @router.post("/conversations/batch-delete")
 async def batch_delete_conversations(
     payload: ConversationBatchDeleteRequest,
-    _auth: AuthContext = Depends(require_data_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
+    for conversation in payload.conversations:
+        user_id = conversation.user_id
+        conversation_id = conversation.cid
+        if user_id and conversation_id:
+            await require_resource_action(
+                request,
+                auth,
+                action="data.manage",
+                resource=object_resource("conversation", user_id, conversation_id),
+            )
     return await _run(lambda: service.delete_conversation(_model_dict(payload)))
 
 
@@ -154,6 +191,8 @@ async def replace_conversation_messages(
 ):
     body = _model_dict(payload)
     body_user_id = body.pop("user_id", None) or user_id
+    if body_user_id != user_id:
+        raise ApiError("user_id does not match query parameter", status_code=400)
     if "messages" in body and "history" not in body:
         body["history"] = body.pop("messages")
     return await _run(
@@ -187,6 +226,8 @@ async def update_conversation(
 ):
     body = _model_dict(payload)
     body_user_id = body.pop("user_id", None) or user_id
+    if body_user_id != user_id:
+        raise ApiError("user_id does not match query parameter", status_code=400)
     return await _run(
         lambda: service.update_conversation(
             {"user_id": body_user_id, "cid": conversation_id, **body}

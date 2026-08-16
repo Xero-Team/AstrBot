@@ -103,6 +103,11 @@ const sidebarItem: menu[] = [
         to: '/session-management',
       },
       {
+        title: 'core.navigation.authorization',
+        icon: 'mdi-shield-account-outline',
+        to: '/authorization',
+      },
+      {
         title: 'core.navigation.cron',
         icon: 'mdi-clock-outline',
         to: '/cron',

@@ -354,11 +354,13 @@ class ChatService:
         umop_config_router: UmopConfigRouter,
         webchat_run_coordinator: WebChatRunCoordinator,
         active_event_control: ActiveEventControl,
+        authorization: object | None = None,
     ) -> None:
         self.db = db
         self.preferences = preferences
         self.webchat_run_coordinator = webchat_run_coordinator
         self.active_event_control = active_event_control
+        self.authorization = authorization
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
@@ -958,7 +960,8 @@ class ChatService:
         username: str,
         post_data: dict,
         *,
-        api_key_allow_admin_role: bool | None = None,
+        api_key_principal: dict[str, object] | None = None,
+        dashboard_principal: dict[str, str] | None = None,
     ) -> AsyncIterator[str]:
         if "message" not in post_data and "files" not in post_data:
             raise ChatServiceError("Missing key: message or files")
@@ -982,6 +985,11 @@ class ChatService:
             raise ChatServiceError(
                 "Message content is empty (reply only is not allowed)"
             )
+        await self._ensure_chat_history_owner(
+            username=username,
+            session_id=webchat_conv_id,
+            platform_history_id=platform_history_id,
+        )
 
         message_id = str(uuid.uuid4())
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
@@ -1030,8 +1038,10 @@ class ChatService:
                 "llm_checkpoint_id": llm_checkpoint_id,
                 "thread_selected_text": thread_selected_text,
             }
-            if isinstance(api_key_allow_admin_role, bool):
-                queue_payload["_api_key_allow_admin_role"] = api_key_allow_admin_role
+            if isinstance(api_key_principal, dict):
+                queue_payload["_api_key_principal"] = dict(api_key_principal)
+            if isinstance(dashboard_principal, dict):
+                queue_payload["_dashboard_principal"] = dict(dashboard_principal)
             await self.webchat_run_coordinator.dispatch(
                 webchat_run,
                 queue_payload,
@@ -1043,6 +1053,72 @@ class ChatService:
             raise
 
         return stream
+
+    async def _ensure_chat_history_owner(
+        self,
+        *,
+        username: str,
+        session_id: str,
+        platform_history_id: str,
+    ) -> None:
+        """Validate or create the persistent owner for a chat history stream."""
+        if platform_history_id == "webchat_thread":
+            thread = await self.db.get_webchat_thread_by_id(session_id)
+            if thread is None:
+                raise ChatServiceError("Chat thread not found")
+            if thread.creator != username:
+                raise ChatServiceError("Permission denied")
+            return
+
+        if platform_history_id != "webchat":
+            raise ChatServiceError("Invalid platform history")
+
+        try:
+            platform_session = await self.db.get_platform_session_by_id(session_id)
+        except Exception as exc:
+            logger.error(
+                "Failed to verify WebChat session %s: %s",
+                session_id,
+                safe_error("", exc),
+            )
+            raise ChatServiceError("Failed to verify chat session") from exc
+        if platform_session is not None:
+            if (
+                platform_session.platform_id != "webchat"
+                or platform_session.creator != username
+            ):
+                raise ChatServiceError("Permission denied")
+            return
+
+        try:
+            await self.db.create_platform_session(
+                creator=username,
+                platform_id="webchat",
+                session_id=session_id,
+                is_group=0,
+            )
+        except Exception as exc:
+            try:
+                existing = await self.db.get_platform_session_by_id(session_id)
+            except Exception as lookup_exc:
+                logger.error(
+                    "Failed to verify WebChat session %s after creation error: %s",
+                    session_id,
+                    safe_error("", lookup_exc),
+                )
+                raise ChatServiceError("Failed to create chat session") from exc
+            if (
+                existing is not None
+                and existing.platform_id == "webchat"
+                and existing.creator == username
+            ):
+                return
+            logger.error(
+                "Failed to create WebChat session %s: %s",
+                session_id,
+                safe_error("", exc),
+            )
+            raise ChatServiceError("Failed to create chat session") from exc
 
     async def stop_session(self, username: str, session_id: str) -> dict:
         session = await self.db.get_platform_session_by_id(session_id)

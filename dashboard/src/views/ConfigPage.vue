@@ -123,8 +123,12 @@
       scrollable
     >
       <v-card class="app-dialog config-editor-dialog">
-        <v-toolbar color="primary" dark>
-          <v-btn icon @click="codeEditorDialog = false">
+        <v-toolbar color="primary">
+          <v-btn
+            icon
+            :aria-label="tm('buttons.close')"
+            @click="codeEditorDialog = false"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
           <v-toolbar-title>{{ tm('codeEditor.title') }}</v-toolbar-title>
@@ -163,6 +167,7 @@
           <v-btn
             icon="mdi-close"
             variant="text"
+            :aria-label="tm('buttons.close')"
             @click="configManageDialog = false"
           ></v-btn>
         </v-card-title>
@@ -194,6 +199,7 @@
                     size="small"
                     variant="text"
                     color="primary"
+                    :aria-label="tm('configManagement.copyConfig')"
                     @click="startCopyConfig(config)"
                   ></v-btn>
                   <v-btn
@@ -202,6 +208,7 @@
                     size="small"
                     variant="text"
                     color="warning"
+                    :aria-label="tm('configManagement.editConfig')"
                     @click="startEditConfig(config)"
                   ></v-btn>
                   <v-btn
@@ -210,6 +217,7 @@
                     size="small"
                     variant="text"
                     color="error"
+                    :aria-label="tm('configManagement.deleteConfig')"
                     @click="confirmDeleteConfig(config)"
                   ></v-btn>
                 </div>
@@ -290,7 +298,12 @@
               {{ selectedConfigInfo.name }} ({{ testConfigId }})
             </div>
           </div>
-          <v-btn icon variant="text" @click="closeTestChat">
+          <v-btn
+            icon
+            variant="text"
+            :aria-label="tm('buttons.close')"
+            @click="closeTestChat"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>
@@ -303,6 +316,14 @@
 
     <!-- 未保存更改确认弹窗 -->
     <UnsavedChangesConfirmDialog ref="unsavedChangesDialog" />
+
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
   </div>
 </template>
 
@@ -329,6 +350,10 @@ import {
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
 import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 import { normalizeTextInput } from '@/utils/inputValue';
 
 defineOptions({
@@ -386,6 +411,14 @@ const router = useRouter();
 const { tm } = useModuleI18n('features/config');
 const { tm: tmMeta } = useModuleI18n('features/config-metadata');
 const confirmDialog = useConfirmDialog();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const unsavedChangesDialog = ref<UnsavedChangesDialogExposed | null>(null);
 
@@ -409,6 +442,7 @@ const configSave2faError = ref('');
 const configSave2faSaving = ref(false);
 const configSave2faRotationHint = ref('');
 const configSavePendingPostData = ref<ConfigPostData | null>(null);
+const configSavePendingHeaders = ref<Record<string, string>>({});
 const configType = ref<ConfigType>('normal');
 const configSearchKeyword = ref('');
 const isSystemConfig = ref(false);
@@ -737,19 +771,33 @@ async function saveAstrbotConfig(
 ): Promise<SaveResult> {
   try {
     const confId = postData.conf_id || 'default';
-    const requestConfig = {
-      headers,
-      validateStatus: (status: number) =>
-        (status >= 200 && status < 300) || status === 401,
-    };
-    const res = isSystemConfig.value
-      ? await systemConfigApi.update(postData.config, requestConfig)
-      : await configProfileApi.update(confId, postData.config, requestConfig);
+    const requestHeaders = { ...headers };
+    const res = await runConfigMutationWithStepUp(
+      (stepUp) => {
+        if (stepUp) {
+          Object.assign(requestHeaders, stepUpHeaders(stepUp));
+        }
+        const requestConfig = {
+          headers: requestHeaders,
+          validateStatus: (status: number) =>
+            (status >= 200 && status < 300) || status === 401,
+        };
+        return isSystemConfig.value
+          ? systemConfigApi.update(postData.config, requestConfig)
+          : configProfileApi.update(confId, postData.config, requestConfig);
+      },
+      confId,
+      requestStepUp,
+    );
+    if (!res) {
+      return { success: false };
+    }
 
     const responseData = asRecord(res.data.data);
     if (res.status === 401 && responseData?.totp_required === true) {
       if (allow2faPrompt && !headers['X-2FA-Code']) {
         configSavePendingPostData.value = deepClone(postData);
+        configSavePendingHeaders.value = { ...requestHeaders };
         configSave2faError.value = '';
         configSave2faRotationHint.value = getConfigSaveRotationHint(postData);
         configSave2faDialogVisible.value = true;
@@ -765,6 +813,7 @@ async function saveAstrbotConfig(
 
     if (res.data.status === 'ok') {
       configSavePendingPostData.value = null;
+      configSavePendingHeaders.value = {};
       configSave2faDialogVisible.value = false;
       configSave2faError.value = '';
       lastSavedConfigSnapshot.value = getConfigSnapshot(config_data.value);
@@ -790,7 +839,10 @@ async function handleConfigSave2faConfirm(payload: string) {
   try {
     await saveAstrbotConfig(
       deepClone(configSavePendingPostData.value),
-      { 'X-2FA-Code': payload },
+      {
+        ...configSavePendingHeaders.value,
+        'X-2FA-Code': payload,
+      },
       false,
     );
   } finally {
@@ -815,6 +867,7 @@ function handleConfigSave2faCancel() {
   }
 
   configSavePendingPostData.value = null;
+  configSavePendingHeaders.value = {};
   configSave2faError.value = '';
   configSave2faDialogVisible.value = false;
 }

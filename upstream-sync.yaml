@@ -5,41 +5,40 @@ upstream:
   branch: master
 
 last_synced:
-  commit: fa399cb0955585d5c8186aa5b10ac92ad17fe57f
-  synced_at_utc: 2026-08-16T13:58:31Z
+  commit: 7bad30ebe40aae21fb41e7ba8e4f9b6d5b8e6f8a
+  synced_at_utc: 2026-08-17T13:21:12Z
   sync_method: manual-adaptation
-  source_pr: '9570, 9612, 9636, 9643, 9644, 9646, 9648, 9655, 9658, 9659, 9665, 9688, 9690, 9699, 9701'
+  source_pr: ''
   note: >-
     Merged the Xero-Team/AstrBot sibling fork (remote `upstream`, tip
-    fa399cb09) into Zephirum via a single merge commit, bringing in 117
-    commits diverged since the previous marker 1e4a779e. The interval mixes
-    AstrBotDevs PRs (listed in source_pr) with the sibling fork's own
-    adaptation and sync commits, so source_pr lists only the PR-numbered
-    entries. Major upstream features: a unified authorization system with
-    per-action role checks and dashboard step-up for high-risk operations;
-    dashboard account identity with authoritative TOTP state in its
-    database; MCP SDK 2 protocol with stable, collision-free MCP tool
-    names; NapCat OneBot versioned contracts and chunked uploads; a group
-    message history tool; an SSYCloud provider; a managed shell-session
-    tool; selectable Docker feature builds; and an upstream-sync skill.
-    BTW was preserved and adapted where upstream intersected it. The 4
-    textual conflicts were resolved as follows: internal.py combined the
-    BTW detached-work follow-up guard with upstream's agent stop-callback
-    registry; docs/en and docs/zh took upstream's reflowed top-level table
-    and the updated dashboard/computer-use/admins_id notes while keeping
-    the fork's `btw` row and BTW dual-loop section; upstream-sync.yaml was
-    rewritten for this merge. Semantic adaptations beyond the textual
-    conflicts: added upstream's new ShellSessionTool to
-    `_CONVERSATION_FORBIDDEN_TOOL_TYPES` so the conversation loop's
-    computer/filesystem isolation backstop stays complete; taught the
-    unified authorization gate to treat an explicitly engaged BTW work
-    loop as an elevation equivalent to dashboard step-up, so IM operators
-    can run high-risk `tool.*` actions (shell, computer, file, browser) in
-    the work loop while the role check still restricts them to
-    operators/root and non-tool high-risk actions stay dashboard-only; and
-    updated the BTW MCP tool test fixtures to the SDK 2 `mcp.types.Tool`
-    shape and the new deterministic MCP tool-name allocator. The
-    `upstream.repo` field continues to point at AstrBotDevs/AstrBot per
-    fork convention even though this sync pulled from Xero-Team/AstrBot;
-    Zephirum operates as an independent fork and does not open PRs back
-    to either upstream.
+    7bad30ebe) into Zephirum via a merge commit, bringing in 9 commits
+    diverged since the previous marker fa399cb09. These are the sibling
+    fork's own commits (no AstrBotDevs PR numbers), so source_pr is empty.
+    Major upstream changes: completion of the dashboard Vuetify 4
+    migration; gating sensitive dashboard mutations behind step-up auth
+    with new configStepUp/botStepUp/providerStepUp utilities and tests;
+    aligning bot step-up resource identity; preserving dashboard step-up
+    config scope; and responsive dashboard layout / a11y test coverage.
+    The merge had zero textual conflicts (git auto-merged all 60 files).
+    Semantic review: upstream added `_resource_scoped_dashboard_context`
+    at the `authorize()` entry, but it only rewrites `source == dashboard`
+    contexts, so IM-sourced BTW work-loop contexts pass through unchanged
+    and the fork's `btw_work_elevation` + `btw_elevated_actions` elevation
+    path is intact. Upstream's new step-up tests coexist with the fork's
+    per-action elevation test. The fork's per-profile work-loop permission
+    matrix (committed as 45e54538d just before this merge) was preserved
+    unchanged; Vuetify 4 migration did not affect the
+    `BtwElevatedActionsSelector` component (standard v-table/v-switch/
+    v-tooltip). Validation: pytest 2278 passed / 5 skipped on the full
+    unit suite, dashboard vitest 159 passed, vue-tsc and ruff clean. Two
+    Windows+PowerShell-only shell tests in test_computer.py
+    (TestLocalShellComponent::test_exec_with_cwd / test_exec_with_env)
+    fail on this local Windows host due to a pre-existing test-helper
+    quoting mismatch (cmd-style list2cmdline vs the pwsh -Command
+    wrapping added by an earlier upstream batch); this batch did not
+    touch local.py or test_computer.py, the failures are unchanged from
+    the prior merge, do not run in CI (ubuntu-latest), and are unrelated
+    to BTW. The `upstream.repo` field continues to point at
+    AstrBotDevs/AstrBot per fork convention even though this sync pulled
+    from Xero-Team/AstrBot; Zephirum operates as an independent fork and
+    does not open PRs back to either upstream.

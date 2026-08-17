@@ -932,6 +932,10 @@
             "description": "Work-loop computer permission",
             "hint": "inherit uses the existing computer-use setting; local and sandbox are exposed only to the work loop."
           },
+          "elevated_actions": {
+            "description": "Work-loop high-risk tool elevation",
+            "hint": "The work loop reuses the conversation loop's permission subject and role. Select which high-risk tool actions the work loop auto-elevates for operator/root subjects when running from chat. Unlisted high-risk actions are denied as dashboard-only. The conversation loop hard-disables all of these and cannot be enabled here."
+          },
           "max_concurrent": {
             "description": "Maximum concurrent work loops",
             "hint": "Number of work tasks that may execute concurrently in this configuration profile."

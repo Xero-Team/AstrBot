@@ -137,6 +137,21 @@
     "emptyMcp": "当前没有已启用的 MCP 服务器。",
     "emptySkill": "当前没有已启用的 Skill。"
   },
+  "btwElevatedActionsSelector": {
+    "hint": "工作循环复用对话循环的权限主体与角色。选择工作循环可为 operator/root 主体自动提权的高风险工具动作；未选中的动作将按上游规则拒绝，角色检查仍然生效。",
+    "action": "高风险工具动作",
+    "workLoop": "工作循环",
+    "conversationLoop": "对话循环",
+    "conversationLocked": "对话循环硬性禁用本地、沙盒、浏览器和文件工具；高风险工具只能在工作循环执行。",
+    "actions": {
+      "tool.local_exec": "Shell 执行",
+      "tool.python_exec": "Python 执行",
+      "tool.file_write": "文件写入 / 编辑 / 上传 / 下载",
+      "tool.browser_control": "浏览器控制",
+      "tool.mcp_write": "MCP 写入（有副作用的工具调用）",
+      "tool.computer_use": "电脑使用（CUA）"
+    }
+  },
   "unsavedChangesWarning": {
     "dialogTitle": "未保存的更改",
     "leavePage": "当前配置有未保存的更改，切换前是否保存？",

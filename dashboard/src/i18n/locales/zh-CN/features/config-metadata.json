@@ -928,6 +928,10 @@
             "description": "工作循环电脑权限",
             "hint": "inherit 使用现有电脑使用配置；local 和 sandbox 只会暴露给工作循环。"
           },
+          "elevated_actions": {
+            "description": "工作循环高风险工具提权",
+            "hint": "工作循环复用对话循环的权限主体与角色。此处选择工作循环在聊天中执行时可自动提权的高风险工具动作，仍受 operator/root 角色限制；未选中的高风险动作将按上游规则拒绝。对话循环对高风险工具硬隔离，不可在此开启。"
+          },
           "max_concurrent": {
             "description": "工作循环最大并发数",
             "hint": "同一配置文件中可同时执行的工作任务数量。"

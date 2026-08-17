@@ -113,14 +113,10 @@ class WorkLoop:
         event.set_extra("btw_work_session_id", session_id)
         event.set_extra("btw_loop", "work")
         event.set_extra("btw_agent_lock_key", f"{event.unified_msg_origin}:work")
-        # The work loop is an explicit, user-initiated elevation for high-risk
-        # tool execution (shell, computer, file, browser).  Mark the
-        # authorization context so the unified authorization gate treats
-        # ``tool.*`` high-risk actions as elevated, like a dashboard step-up,
-        # while the role check still restricts them to operators/root.
-        auth_context = getattr(event, "auth_context", None)
-        if auth_context is not None:
-            auth_context.metadata["btw_work_elevation"] = True
+        # The per-profile high-risk elevation marker (``btw_work_elevation``
+        # and ``btw_elevated_actions``) is stamped on the auth context in
+        # ``InternalAgentSubStage._build_checked_agent_runner``, where the
+        # active profile config is available; this method only tags the loop.
 
     async def _execute(
         self,

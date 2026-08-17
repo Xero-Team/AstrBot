@@ -226,6 +226,14 @@ DEFAULT_CONFIG = {
             "provider_id": "",
             "computer_use_runtime": "inherit",
             "max_concurrent": 2,
+            "elevated_actions": [
+                "tool.local_exec",
+                "tool.python_exec",
+                "tool.file_write",
+                "tool.browser_control",
+                "tool.mcp_write",
+                "tool.computer_use",
+            ],
         },
         "work_session": {
             "max_age_seconds": 3600,
@@ -4216,6 +4224,13 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "options": ["inherit", "none", "local", "sandbox"],
                         "hint": "inherit 使用现有电脑使用配置；local 和 sandbox 只会暴露给工作循环。",
+                        "condition": {"btw.work_loop.enabled": True},
+                    },
+                    "btw.work_loop.elevated_actions": {
+                        "description": "工作循环高风险工具提权",
+                        "type": "list",
+                        "_special": "select_btw_elevated_actions",
+                        "hint": "工作循环复用对话循环的权限主体与角色；此处选择工作循环可在 IM 中自动提权执行的高风险工具动作，仍受 operator/root 角色限制。未选中的高风险动作将按上游规则拒绝。对话循环对高风险工具硬隔离，不可在此开启。",
                         "condition": {"btw.work_loop.enabled": True},
                     },
                     "btw.work_loop.max_concurrent": {

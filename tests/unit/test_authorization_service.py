@@ -692,9 +692,10 @@ async def test_btw_work_elevation_allows_high_risk_tools_for_im_operators(
 
     The work loop is an explicit, user-initiated elevation equivalent to a
     dashboard step-up.  Without the marker, an IM operator is denied high-risk
-    tool actions as dashboard-only; with the marker, the role check still
-    applies and operators may execute them.  The elevation is scoped to
-    ``tool.*`` actions: non-tool high-risk actions stay dashboard-only.
+    tool actions as dashboard-only; with the marker plus a per-profile
+    ``btw_elevated_actions`` set, the role check still applies and operators
+    may execute the listed actions.  Only the actions in the set are lifted:
+    unlisted tool actions and non-tool high-risk actions stay dashboard-only.
     """
     subject = Subject.im(
         platform_instance="napcat", bot_account_id="bot", sender_id="42"
@@ -708,31 +709,74 @@ async def test_btw_work_elevation_allows_high_risk_tools_for_im_operators(
         config_id="default",
         enforce_actor=False,
     )
-    tool_resource = Resource.named("tool", "astrbot_execute_shell", config_id="default")
+    shell_resource = Resource.named(
+        "tool", "astrbot_execute_shell", config_id="default"
+    )
+    file_resource = Resource.named(
+        "tool", "astrbot_file_write_tool", config_id="default"
+    )
 
+    # Without the marker, an IM operator is denied high-risk tool actions.
     denied = await authorization.authorize(
         subject,
         "tool.local_exec",
-        tool_resource,
+        shell_resource,
         _context(subject, "default"),
     )
     assert not denied.allowed
     assert denied.reason == "high_risk_dashboard_only"
 
+    # With the marker and the action listed, an operator may execute it.
     elevated = await authorization.authorize(
         subject,
         "tool.local_exec",
-        tool_resource,
-        _context(subject, "default", btw_work_elevation=True),
+        shell_resource,
+        _context(
+            subject,
+            "default",
+            btw_work_elevation=True,
+            btw_elevated_actions=("tool.local_exec",),
+        ),
     )
     assert elevated.allowed
 
-    # Non-tool high-risk actions are not lifted by the work-loop marker.
+    # A tool action not in the per-profile set is not lifted, even with the
+    # work-loop marker present.
+    unlisted = await authorization.authorize(
+        subject,
+        "tool.file_write",
+        file_resource,
+        _context(
+            subject,
+            "default",
+            btw_work_elevation=True,
+            btw_elevated_actions=("tool.local_exec",),
+        ),
+    )
+    assert not unlisted.allowed
+    assert unlisted.reason == "high_risk_dashboard_only"
+
+    # An empty elevation set denies every high-risk tool action.
+    empty_set = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        shell_resource,
+        _context(subject, "default", btw_work_elevation=True, btw_elevated_actions=()),
+    )
+    assert not empty_set.allowed
+    assert empty_set.reason == "high_risk_dashboard_only"
+
+    # Non-tool high-risk actions are never lifted by the work-loop marker.
     non_tool_denied = await authorization.authorize(
         subject,
         "provider.credentials.write",
         Resource.instance("default"),
-        _context(subject, "default", btw_work_elevation=True),
+        _context(
+            subject,
+            "default",
+            btw_work_elevation=True,
+            btw_elevated_actions=("tool.local_exec",),
+        ),
     )
     assert not non_tool_denied.allowed
     assert non_tool_denied.reason == "high_risk_dashboard_only"

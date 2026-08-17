@@ -1461,16 +1461,19 @@ class AuthorizationService:
                         requires_step_up=True,
                         audit_id=audit_id,
                     )
-            elif context.metadata.get("btw_work_elevation") and action.startswith(
-                "tool."
-            ):
+            elif context.metadata.get(
+                "btw_work_elevation"
+            ) and action in context.metadata.get("btw_elevated_actions", ()):
                 # The BTW work loop is an explicit, user-initiated elevation
                 # for high-risk tool execution (shell, computer, file, browser)
                 # and is equivalent to a dashboard step-up.  The role check
                 # above already restricted these ``tool.*`` actions to
                 # operators/root, so the work loop may execute them without a
-                # fresh interactive dashboard step-up.  Non-tool high-risk
-                # actions (system/identity/extension management) are unaffected.
+                # fresh interactive dashboard step-up.  The per-profile
+                # ``btw_elevated_actions`` set selects which high-risk tool
+                # actions the work loop elevates; unlisted tool actions and
+                # non-tool high-risk actions (system/identity/extension
+                # management) fall through to the dashboard-only deny.
                 pass
             else:
                 return Decision(

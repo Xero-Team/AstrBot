@@ -56,6 +56,23 @@ _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
 _STOP_HISTORY_USER_TEXT = "Stop output."
 _STOP_HISTORY_ASSISTANT_TEXT = "Output stopped."
 
+# High-risk ``tool.*`` actions the BTW work loop may auto-elevate for
+# operator/root subjects.  Mirrors ``HIGH_RISK_ACTIONS`` for tool actions and
+# the dashboard ``btw.work_loop.elevated_actions`` default.  Kept here so the
+# runtime stays consistent with the authorization gate without importing the
+# auth models into the pipeline.
+_BTW_WORK_ELEVATABLE_ACTIONS = frozenset(
+    {
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.file_write",
+        "tool.browser_control",
+        "tool.mcp_write",
+        "tool.computer_use",
+    }
+)
+_BTW_WORK_ELEVATED_ACTIONS_DEFAULT = tuple(sorted(_BTW_WORK_ELEVATABLE_ACTIONS))
+
 
 class InternalAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -161,6 +178,22 @@ class InternalAgentSubStage:
             "sandbox",
         }:
             self.work_computer_use_runtime = "inherit"
+        # High-risk tool actions the work loop may auto-elevate for operator
+        # operators/root.  Defaults to the full set; invalid entries are
+        # dropped and an empty/absent value keeps the prior behavior (all six).
+        raw_elevated_actions = work_loop_config.get(
+            "elevated_actions", _BTW_WORK_ELEVATED_ACTIONS_DEFAULT
+        )
+        elevated_actions = (
+            raw_elevated_actions
+            if isinstance(raw_elevated_actions, (list, tuple))
+            else _BTW_WORK_ELEVATED_ACTIONS_DEFAULT
+        )
+        self.work_elevated_actions = frozenset(
+            action
+            for action in elevated_actions
+            if isinstance(action, str) and action in _BTW_WORK_ELEVATABLE_ACTIONS
+        ) or frozenset(_BTW_WORK_ELEVATED_ACTIONS_DEFAULT)
 
         # Proactive capability configuration
         proactive_cfg = settings.get("proactive_capability", {})
@@ -267,6 +300,20 @@ class InternalAgentSubStage:
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
         loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        if loop_mode == "work":
+            # The work loop is an explicit, user-initiated elevation for
+            # high-risk tool execution (shell, computer, file, browser).
+            # Stamp the per-profile allowed action set onto the authorization
+            # context so the unified gate treats these ``tool.*`` actions as
+            # elevated, like a dashboard step-up, while the role check still
+            # restricts them to operators/root.  Carried on metadata because
+            # ``AuthorizationService`` has no access to profile config.
+            auth_context = getattr(event, "auth_context", None)
+            if auth_context is not None:
+                auth_context.metadata["btw_work_elevation"] = True
+                auth_context.metadata["btw_elevated_actions"] = tuple(
+                    self.work_elevated_actions
+                )
         if loop_mode == "conversation":
             computer_use_runtime = "none"
             provider_id_override = getattr(

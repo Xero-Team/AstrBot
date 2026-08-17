@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 264 icons */
+/* Auto-generated MDI subset – 265 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -646,6 +646,10 @@
 
 .mdi-lock-check-outline::before {
   content: "\F16A8";
+}
+
+.mdi-lock-off-outline::before {
+  content: "\F1672";
 }
 
 .mdi-lock-outline::before {

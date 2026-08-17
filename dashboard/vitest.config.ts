@@ -24,7 +24,9 @@ export default mergeConfig(
           // since the upstream favicon-as-default-icon change) to the file so
           // component tests can load it.
           find: /^\/favicon\.svg$/,
-          replacement: fileURLToPath(new URL('./public/favicon.svg', import.meta.url)),
+          replacement: fileURLToPath(
+            new URL('./public/favicon.svg', import.meta.url),
+          ),
         },
       ],
     },

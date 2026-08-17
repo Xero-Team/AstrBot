@@ -10,15 +10,21 @@
           <th>{{ tm('btwElevatedActionsSelector.workLoop') }}</th>
           <th>
             <v-icon size="small" icon="mdi-lock-outline" />
-            <span class="ml-1">{{ tm('btwElevatedActionsSelector.conversationLoop') }}</span>
+            <span class="ml-1">{{
+              tm('btwElevatedActionsSelector.conversationLoop')
+            }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="action in ACTIONS" :key="action.value">
           <td>
-            <div>{{ tm(`btwElevatedActionsSelector.actions.${action.value}`) }}</div>
-            <div class="text-medium-emphasis text-body-2">{{ action.value }}</div>
+            <div>
+              {{ tm(`btwElevatedActionsSelector.actions.${action.value}`) }}
+            </div>
+            <div class="text-medium-emphasis text-body-2">
+              {{ action.value }}
+            </div>
           </td>
           <td class="btw-elevated-actions-selector__control">
             <v-switch
@@ -101,7 +107,10 @@ function setEnabled(action: string, value: unknown) {
   // toggled off here — but an operator may legitimately disable all six; an
   // empty list is emitted as-is so the backend deny applies.  We only guard
   // the *default/unknown* case above, not an explicit all-off choice.
-  emit('update:modelValue', ALL_ACTIONS.filter((a) => next.has(a)));
+  emit(
+    'update:modelValue',
+    ALL_ACTIONS.filter((a) => next.has(a)),
+  );
 }
 </script>
 

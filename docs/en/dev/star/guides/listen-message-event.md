@@ -74,6 +74,10 @@ For inbound `Face` segments from OneBot v11 and NapCat, AstrBot adds readable QQ
 
 This enrichment covers the current message, quoted messages, forwarded messages, and group-chat context, and is also passed to built-in third-party Agent Runners that accept text prompts only. It does not modify `event.message_str`, the original `Face` component, or outbound messages. Plugins that need ID-based handling can continue to inspect `Face.id` directly.
 
+#### Group-chat JSON cards
+
+Group-chat JSON cards are recorded into group context, and when a proactive reply or ordinary LLM request has no text prompt they are sent as a `[Shared Card]` summary instead of the raw JSON blob.
+
 ## Commands
 
 ![message-event-simple-command](https://files.astrbot.app/docs/en/dev/star/guides/message-event-simple-command.svg)
@@ -146,6 +150,7 @@ Plugin commands should follow these conventions:
 - Treat handler annotations as the parameter schema. Use only supported scalars, `Enum`, `Literal`, Optional, `GreedyStr`, and `Annotated[..., option(...)]`; an unsupported signature fails when the plugin registers.
 - Apply the same naming constraints to aliases and reserve them for genuine synonymous entries. Help text and documentation should use the primary name.
 - Give each handler a short, self-contained docstring; Telegram and Discord use it for native command descriptions. An entry outside a platform's naming constraints can still work in text messages but is not registered as that platform's native command.
+- After a command handler replies, it should stop event propagation (`stop_event()`) so later stages do not keep processing the same message.
 
 For example, a resource-oriented plugin can expose `/project list`, `/project show <name>`, `/project create <name> --template <id>`, and `/project delete <name> --force`. When `$`, `#`, globs, URL query strings, or operators are data, the caller quotes them according to Orbit rules. The plugin receives the deterministically tokenized value and must not perform shell expansion.
 
@@ -350,16 +355,36 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
 
 In the current version, `PlatformAdapterType` supports the following values: `AIOCQHTTP`, `QQOFFICIAL`, `QQOFFICIAL_WEBHOOK`, `TELEGRAM`, `WECOM`, `WECOM_AI_BOT`, `LARK`, `DINGTALK`, `DISCORD`, `SLACK`, `KOOK`, `VOCECHAT`, `WEIXIN_OFFICIAL_ACCOUNT`, `SATORI`, `MISSKEY`, `LINE`, `MATRIX`, `WEIXIN_OC`, `MATTERMOST`, `WEBCHAT`, `ALL`.
 
-#### Admin Commands
+#### Permissions and actions
 
 ```python
-@filter.permission_type(filter.PermissionType.ADMIN)
+@filter.permission("session.manage")
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     pass
 ```
 
-Only admins can use the `test` command.
+`@filter.permission("session.manage")` is resolved by the pipeline through
+`AuthorizationService.authorize()`. It allows the current session's
+`session_admin` / `session_owner`, or a scoped `instance_operator` /
+Dashboard `operator` / `root`. A platform group owner or administrator only
+affects the current `(config_id, UMO)` and never becomes a global operator.
+
+Plugin-owned actions must use the plugin namespace and call the core
+authorization service:
+
+```python
+decision = await self.context.authz.authorize(
+    event,
+    "plugin:example:publish",
+    self.context.authz.session_resource(event),
+)
+if not decision.allowed:
+    return
+```
+
+Do not use the removed `PermissionType` enum or `@filter.permission_type`.
+`event.is_admin()` is always `False` and is not an authorization check. See [Architecture](/en/dev/architecture#unified-authorization) for the full model.
 
 ### Multiple Filters
 
@@ -375,7 +400,7 @@ async def helloworld(self, event: AstrMessageEvent):
 ### Event Hooks
 
 > [!TIP]
-> Event hooks do not support being used together with @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, or @filter.permission_type.
+> Event hooks do not support being used together with @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, or @filter.permission.
 
 #### On Bot Initialization Complete
 

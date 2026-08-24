@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from astrbot.core.auth.models import Resource
+from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS, Resource
 from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
 from astrbot.dashboard.services.chat_service import (
@@ -92,7 +92,7 @@ async def _build_streaming_chat_response(
     post_data: dict[str, Any],
     *,
     api_key_principal: dict[str, object] | None = None,
-    dashboard_principal: dict[str, str] | None = None,
+    dashboard_principal: dict[str, object] | None = None,
 ) -> StreamingResponse | JSONResponse:
     try:
         stream = await chat_service.build_chat_stream(
@@ -130,6 +130,18 @@ async def _open_api_chat_response(
                 "username": auth.username,
                 "auth_strength": auth.auth_strength,
             }
+            raw_tokens = post_data.get(
+                "_webchat_step_up_tokens",
+                post_data.get("webchat_step_up_tokens"),
+            )
+            if isinstance(raw_tokens, dict):
+                dashboard_principal["step_up_tokens"] = {
+                    action: token
+                    for action, token in raw_tokens.items()
+                    if action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                    and isinstance(token, str)
+                    and 0 < len(token) <= 512
+                }
         return await _build_streaming_chat_response(
             chat_service,
             auth.username,
@@ -149,6 +161,13 @@ async def _open_api_chat_response(
         )
     except OpenApiServiceError as exc:
         return _open_api_error(str(exc))
+
+    if not auth.api_key_id or not await open_api_service.authorize_declared_chat_user(
+        key_id=auth.api_key_id,
+        action="session.manage",
+        username=effective_username,
+    ):
+        raise ApiError("Authorization denied", status_code=403)
 
     config_err = await open_api_service.update_session_config_route(
         username=effective_username,

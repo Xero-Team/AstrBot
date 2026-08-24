@@ -50,18 +50,20 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 常用字段如下：
 
-| 键                                          | 默认值                      | 说明                                                                                                        |
-| ------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
-| `rate_limit`                                | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
-| `enable_id_white_list`                      | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
-| `reply_prefix`                              | `""`                        | 所有回复的前缀。                                                                                            |
-| `reply_with_mention` / `reply_with_quote`   | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
-| `forward_threshold`                         | `1500`                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
-| `segmented_reply`                           | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
-| `path_mapping`                              | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
-| `friend_message_needs_wake_prefix`          | `false`                     | 私聊是否也要求唤醒前缀。                                                                                    |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                     | 忽略机器人自身消息或全体提及。                                                                              |
+| 键                                          | 默认值                                      | 说明                                                                                                        |
+| ------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `unique_session`                            | `false`                                     | 是否为群内成员拆分独立会话。                                                                                |
+| `group_sender_concurrency`                  | `false`                                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
+| `rate_limit`                                | `60` 秒 / `30` 条 / `stall`                 | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
+| `enable_id_white_list`                      | `true`                                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
+| `reply_prefix`                              | `""`                                        | 所有回复的前缀。                                                                                            |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
+| `forward_threshold`                         | `1500`                                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
+| `segmented_reply`                           | 见默认配置                                  | 非流式结果的分段、间隔、清理规则。                                                                          |
+| `path_mapping`                              | `[]`                                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
+| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | 群聊是否因 @ 机器人或回复机器人而唤醒。两项默认都关闭。唤醒前缀由顶层 `wake_prefix` 控制，默认 `["/"]`。    |
+| `friend_message_needs_wake_prefix`          | `false`                                     | 私聊是否也要求唤醒前缀。                                                                                    |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | 忽略机器人自身消息或全体提及。                                                                              |
 
 `path_mapping` 示例：
 
@@ -86,7 +88,9 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 - `fallback_chat_models`：主模型失败时按顺序尝试的聊天模型 ID。
 - `request_max_retries`：单个模型请求最大重试次数，默认 `5`；fallback 与单模型重试是不同层次。
 - `provider_pool`：本配置档可用 Provider 范围，`["*"]` 表示全部。
-- `default_image_caption_provider_id` 和 `image_caption_prompt`：为不支持图片的流程生成图片描述。
+- `default_image_caption_provider_id` 和 `image_caption_prompt`：主 Agent 当前请求和引用图片的转述，不受群聊历史限流影响。
+- `provider_ltm_settings.image_caption_*`：只作用于群聊历史上下文转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
+- 群聊 JSON 卡片会进入群聊上下文，并在主动回复或普通 LLM 请求缺少文本 prompt 时作为 `[Shared Card]` 卡片摘要。
 
 API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志或备份提交到 Git；日志和 Trace 也可能包含 Provider ID、请求错误或工具输出。
 
@@ -131,6 +135,7 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 
 - `streaming_response`：启用 Provider 流式响应。
 - `unsupported_streaming_strategy`：平台不支持原生流式回复时，使用 `realtime_segmenting` 实时分段，或 `turn_off` 关闭该次流式回复。
+- 会话级 `/flow enable|disable|unset|status` 可覆盖全局值。有效优先级为 `event.extra["enable_streaming"]` > 会话覆盖 > `provider_settings.streaming_response`。请求开始时固定有效值，运行中的 Agent 不会因中途执行 `/flow` 改变模式。
 
 旧字段 `provider_settings.streaming_segmented` 已删除，不要重新加入。
 
@@ -212,7 +217,10 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 
 - `t2i`、`t2i_word_threshold`：将超过阈值的**输出结果**渲染为图片；`t2i_active_template` 由模板管理页面维护。
 - `t2i_use_file_service`：用文件 token URL 暴露渲染结果，需要正确设置 `callback_api_base`。
-- `http_proxy` / `no_proxy`：为出站 HTTP 设置代理和直连范围。
+- `http_proxy` / `no_proxy`：全局出站代理和直连名单。它们不再写入进程级 `HTTP_PROXY`。
+- Provider / Platform 使用三态 `proxy_mode`：`inherit` 跟随全局配置，`direct` 明确直连并忽略环境变量代理，`custom` 只使用本项 `proxy_url`。空字符串不再同时表示继承和直连。
+- GitHub 镜像默认不提供。插件 `download_url` 和镜像前缀必须是公开 HTTPS origin，私网和非 HTTPS 会被拒绝。
+- `platform_settings.segmented_reply` 仍是默认关闭的体验分段。Telegram / Discord / 企业微信的平台硬限制分段由发送层负责，二者不要混用。
 - `log_level`、`log_file_*`：控制台和轮转文件日志。
 - `trace_enable`：Trace 采集总开关；`trace_log_*` 控制独立 Trace 文件。
 - `temp_dir_max_size`：`data/temp` 上限（MiB），默认 `1024`；后台定期清理旧文件。

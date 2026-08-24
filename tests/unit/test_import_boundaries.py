@@ -338,16 +338,14 @@ def test_totp_runtime_state_has_no_module_singleton() -> None:
         target.id
         for node in tree.body
         if isinstance(node, (ast.Assign, ast.AnnAssign))
-        for target in (
-            node.targets if isinstance(node, ast.Assign) else (node.target,)
-        )
+        for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
         if isinstance(target, ast.Name)
     }
     assert not forbidden_names & assigned_names
 
-    runtime_services = (
-        ROOT / "astrbot" / "core" / "runtime_services.py"
-    ).read_text(encoding="utf-8")
+    runtime_services = (ROOT / "astrbot" / "core" / "runtime_services.py").read_text(
+        encoding="utf-8"
+    )
     assert "totp_runtime_state: TotpRuntimeState" in runtime_services
     assert "totp_runtime_state = TotpRuntimeState()" in runtime_services
     assert "totp_runtime_state=totp_runtime_state" in runtime_services
@@ -443,6 +441,57 @@ async def outer(config):
     )
 
     assert _sync_config_saves_in_async_functions(tree) == [(3, 4), (7, 12), (9, 8)]
+
+
+def _runtime_imports(path: Path) -> set[str]:
+    """Return absolute imports that execute at runtime, skipping TYPE_CHECKING."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    modules: set[str] = set()
+    relative = path.relative_to(ROOT).with_suffix("")
+    package_parts = list(relative.parts[:-1])
+    if path.name == "__init__.py":
+        package_parts = list(relative.parts)
+
+    def is_type_checking(test: ast.AST) -> bool:
+        return isinstance(test, ast.Name) and test.id == "TYPE_CHECKING"
+
+    class Visitor(ast.NodeVisitor):
+        def visit_If(self, node: ast.If) -> None:  # noqa: N802
+            if is_type_checking(node.test):
+                for statement in node.orelse:
+                    self.visit(statement)
+                return
+            self.generic_visit(node)
+
+        def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+            modules.update(alias.name for alias in node.names)
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+            if node.level == 0:
+                if node.module:
+                    modules.add(node.module)
+                return
+            parent_count = node.level - 1
+            if parent_count > len(package_parts):
+                return
+            base_parts = package_parts[: len(package_parts) - parent_count]
+            if node.module:
+                base_parts.extend(node.module.split("."))
+            if base_parts:
+                modules.add(".".join(base_parts))
+
+    Visitor().visit(tree)
+    return modules
+
+
+def test_builtin_commands_do_not_import_astrbot_core_at_runtime() -> None:
+    root = ROOT / "astrbot" / "builtin_stars" / "builtin_commands"
+    violations: list[str] = []
+    for path in root.rglob("*.py"):
+        for module in _runtime_imports(path):
+            if module == "astrbot.core" or module.startswith("astrbot.core."):
+                violations.append(f"{path.relative_to(ROOT)} imports {module}")
+    assert not violations, "\n".join(violations)
 
 
 def test_public_sdk_and_core_leaf_imports_remain_available() -> None:

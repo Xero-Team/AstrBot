@@ -34,14 +34,14 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         )
         self.timeout = int(provider_config.get("timeout", 20))
         self.model = provider_config.get(
-            "embedding_model", "nvidia/llama-nemotron-embed-1b-v2"
+            "embedding_model", "nvidia/nemotron-3-embed-1b"
         )
         self.input_type = provider_config.get("input_type", "passage")
 
-        proxy = provider_config.get("proxy", "")
-        self.proxy = proxy
-        if proxy:
-            logger.info("[NVIDIA Embedding] Using configured proxy")
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self._route = resolve_proxy_route(local_config=provider_config)
+        self.proxy = self._route.proxy_url or ""
 
         self.client = None
         self.set_model(self.model)
@@ -57,6 +57,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
             self.client = aiohttp.ClientSession(
                 headers=headers,
                 timeout=timeout,
+                trust_env=False,
             )
         return self.client
 

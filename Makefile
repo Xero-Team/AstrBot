@@ -3,7 +3,7 @@
 	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
-	check check-all check-all-platforms format format-all test test-all \
+	check check-all check-all-platforms format format-all test test-all test-blocking \
 	check-py check-py-all check-py-format check-py-lint \
 	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier \
 	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
@@ -163,7 +163,11 @@ napcat-codegen: napcat-models-ob11-event-src
 
 napcat-test:
 	uv run pytest \
-		tests/unit/test_napcat_adapter.py \
+		tests/unit/platform/test_napcat_ws_lifecycle.py \
+		tests/unit/platform/test_napcat_inbound_parse.py \
+		tests/unit/platform/test_napcat_inbound_events.py \
+		tests/unit/platform/test_napcat_notices.py \
+		tests/unit/platform/test_napcat_outbound.py \
 		tests/unit/test_onebot_contracts.py \
 		tests/unit/test_onebot_capability.py \
 		tests/unit/test_napcat_codegen_scripts.py \
@@ -188,7 +192,9 @@ quality-bandit: quality-sync
 	PYTHONIOENCODING=utf-8 uv run bandit -ll -ii -r $(QUALITY_SECURITY_TARGETS) -c pyproject.toml
 
 quality-audit: quality-sync
-	uv run pip-audit --strict
+	# Local checkout is an unpublished editable install. --strict treats that
+	# skip as a collection failure, so only skip-editable is used.
+	uv run pip-audit --skip-editable
 
 quality-web-audit:
 	cd $(DASHBOARD_DIR) && $(PNPM) install --frozen-lockfile
@@ -219,7 +225,7 @@ quality-report-bandit: quality-sync
 	PYTHONIOENCODING=utf-8 uv run bandit -ll -ii -r astrbot -c pyproject.toml
 
 quality-report-audit: quality-sync
-	uv run pip-audit --strict
+	uv run pip-audit --skip-editable
 
 quality-report-radon-cc: quality-sync
 	uv run radon cc astrbot -s -n C
@@ -265,6 +271,10 @@ test: test-all
 test-all:
 	@echo "==> [test] pytest"
 	uv run pytest
+
+test-blocking:
+	@echo "==> [test] pytest --test-profile blocking"
+	uv run pytest --test-profile blocking
 
 check-py:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-py-all

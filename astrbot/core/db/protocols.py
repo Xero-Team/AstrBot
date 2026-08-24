@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from astrbot.core.db.po import (
         ApiKey,
         Attachment,
+        AuthCapability,
         ChatUIProject,
         CommandConfig,
         CommandConflict,
@@ -575,6 +576,18 @@ class ApiKeyStore(Protocol):
 
     async def delete_api_key(self, key_id: str) -> bool: ...
 
+    async def upsert_capability(
+        self,
+        *,
+        subject_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        config_id: str | None = None,
+        created_by: str | None = None,
+        expires_at: datetime.datetime | None = None,
+    ) -> AuthCapability: ...
+
 
 @runtime_checkable
 class PersonaStore(Protocol):
@@ -689,6 +702,10 @@ class CommandStore(Protocol):
         self, handler_full_name: str
     ) -> CommandConfig | None: ...
 
+    async def get_command_config_by_command_id(
+        self, command_id: str
+    ) -> CommandConfig | None: ...
+
     async def upsert_command_config(
         self,
         handler_full_name: str,
@@ -696,9 +713,10 @@ class CommandStore(Protocol):
         module_path: str,
         original_command: str,
         *,
+        command_id: str | None = None,
+        previous_handler_full_name: str | None = None,
         resolved_command: str | None = None,
         enabled: bool | None = None,
-        keep_original_alias: bool | None = None,
         conflict_key: str | None = None,
         resolution_strategy: str | None = None,
         note: str | None = None,
@@ -721,6 +739,7 @@ class CommandStore(Protocol):
         handler_full_name: str,
         plugin_name: str,
         *,
+        command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
         resolved_command: str | None = None,

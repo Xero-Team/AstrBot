@@ -10,22 +10,26 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFTEST_PATH = PROJECT_ROOT / "tests" / "conftest.py"
 PLATFORM_TEST_MODULES = (
-    "tests/test_dingtalk_adapter.py",
-    "tests/test_discord_adapter.py",
-    "tests/test_lark_adapter.py",
-    "tests/test_line_adapter.py",
-    "tests/test_mattermost_adapter.py",
-    "tests/test_platform_audio_media_resolver.py",
-    "tests/test_platform_image_format_preservation.py",
-    "tests/test_slack_adapter.py",
-    "tests/test_telegram_adapter.py",
-    "tests/test_wecom_adapter.py",
-    "tests/test_wecom_ai_bot_adapter.py",
-    "tests/test_weixin_oc_adapter.py",
-    "tests/test_weixin_official_account_adapter.py",
+    "tests/unit/platform/test_dingtalk_adapter.py",
+    "tests/unit/platform/test_discord_adapter.py",
+    "tests/unit/platform/test_lark_adapter.py",
+    "tests/unit/platform/test_line_adapter.py",
+    "tests/unit/platform/test_mattermost_adapter.py",
+    "tests/unit/platform/test_platform_audio_media_resolver.py",
+    "tests/unit/platform/test_platform_image_format_preservation.py",
+    "tests/unit/platform/test_slack_adapter.py",
+    "tests/unit/platform/test_telegram_adapter.py",
+    "tests/unit/platform/test_wecom_adapter.py",
+    "tests/unit/platform/test_wecom_ai_bot_adapter.py",
+    "tests/unit/platform/test_weixin_oc_adapter.py",
+    "tests/unit/platform/test_weixin_official_account_adapter.py",
     "tests/unit/test_aiocqhttp_adapter.py",
     "tests/unit/test_misskey_adapter.py",
-    "tests/unit/test_napcat_adapter.py",
+    "tests/unit/platform/test_napcat_ws_lifecycle.py",
+    "tests/unit/platform/test_napcat_inbound_parse.py",
+    "tests/unit/platform/test_napcat_inbound_events.py",
+    "tests/unit/platform/test_napcat_notices.py",
+    "tests/unit/platform/test_napcat_outbound.py",
     "tests/unit/test_satori_adapter.py",
 )
 
@@ -88,6 +92,7 @@ def test_blocking_profile_excludes_all_non_blocking_domains() -> None:
         _item("tests/unit/test_provider.py", "provider"),
         _item("tests/unit/test_platform.py", "platform"),
         _item("tests/unit/test_slow.py", "slow"),
+        _item("tests/unit/test_live.py", "live"),
         _item("tests/test_api.py", "integration"),
         _item("tests/e2e/test_browser.py"),
     ]
@@ -95,11 +100,14 @@ def test_blocking_profile_excludes_all_non_blocking_domains() -> None:
 
     conftest.pytest_collection_modifyitems(None, config, items)
 
-    assert [item.path.name for item in items] == ["test_core.py"]
-    assert {item.path.name for item in config.hook.deselected} == {
+    assert [item.path.name for item in items] == [
+        "test_core.py",
         "test_provider.py",
         "test_platform.py",
+    ]
+    assert {item.path.name for item in config.hook.deselected} == {
         "test_slow.py",
+        "test_live.py",
         "test_api.py",
         "test_browser.py",
     }
@@ -139,7 +147,7 @@ def test_command_line_profile_takes_precedence_over_environment(monkeypatch) -> 
     assert conftest.get_test_profile(_FakeConfig("all")) == "all"
 
 
-def test_platform_adapter_suites_are_explicitly_excluded_from_blocking() -> None:
+def test_platform_adapter_suites_keep_platform_domain_tag() -> None:
     for relative_path in PLATFORM_TEST_MODULES:
         module = ast.parse((PROJECT_ROOT / relative_path).read_text(encoding="utf-8"))
         markers = [
@@ -161,3 +169,22 @@ def test_platform_adapter_suites_are_explicitly_excluded_from_blocking() -> None
             and marker.value.value.id == "pytest"
             for marker in markers
         ), relative_path
+
+
+def test_mocked_platform_and_provider_suites_stay_in_blocking() -> None:
+    conftest = _load_conftest_module()
+    items = [
+        _item("tests/unit/platform/test_telegram_adapter.py", "platform"),
+        _item("tests/unit/test_openai_embedding_contract.py", "provider"),
+        _item("tests/unit/test_core.py"),
+    ]
+    config = _FakeConfig("blocking")
+
+    conftest.pytest_collection_modifyitems(None, config, items)
+
+    assert [item.path.name for item in items] == [
+        "test_telegram_adapter.py",
+        "test_openai_embedding_contract.py",
+        "test_core.py",
+    ]
+    assert config.hook.deselected == []

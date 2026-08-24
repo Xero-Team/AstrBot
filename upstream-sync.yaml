@@ -5,40 +5,67 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 7bad30ebe40aae21fb41e7ba8e4f9b6d5b8e6f8a
-  synced_at_utc: 2026-08-17T13:21:12Z
-  sync_method: manual-adaptation
+  commit: ceb53f8c52685211a87c3d7e82f836642dde22b2
+  synced_at_utc: 2026-08-24T12:30:00Z
+  sync_method: merge
   source_pr: ''
   note: >-
-    Merged the Xero-Team/AstrBot sibling fork (remote `upstream`, tip
-    7bad30ebe) into Zephirum via a merge commit, bringing in 9 commits
-    diverged since the previous marker fa399cb09. These are the sibling
-    fork's own commits (no AstrBotDevs PR numbers), so source_pr is empty.
-    Major upstream changes: completion of the dashboard Vuetify 4
-    migration; gating sensitive dashboard mutations behind step-up auth
-    with new configStepUp/botStepUp/providerStepUp utilities and tests;
-    aligning bot step-up resource identity; preserving dashboard step-up
-    config scope; and responsive dashboard layout / a11y test coverage.
-    The merge had zero textual conflicts (git auto-merged all 60 files).
-    Semantic review: upstream added `_resource_scoped_dashboard_context`
-    at the `authorize()` entry, but it only rewrites `source == dashboard`
-    contexts, so IM-sourced BTW work-loop contexts pass through unchanged
-    and the fork's `btw_work_elevation` + `btw_elevated_actions` elevation
-    path is intact. Upstream's new step-up tests coexist with the fork's
-    per-action elevation test. The fork's per-profile work-loop permission
-    matrix (committed as 45e54538d just before this merge) was preserved
-    unchanged; Vuetify 4 migration did not affect the
-    `BtwElevatedActionsSelector` component (standard v-table/v-switch/
-    v-tooltip). Validation: pytest 2278 passed / 5 skipped on the full
-    unit suite, dashboard vitest 159 passed, vue-tsc and ruff clean. Two
-    Windows+PowerShell-only shell tests in test_computer.py
-    (TestLocalShellComponent::test_exec_with_cwd / test_exec_with_env)
-    fail on this local Windows host due to a pre-existing test-helper
-    quoting mismatch (cmd-style list2cmdline vs the pwsh -Command
-    wrapping added by an earlier upstream batch); this batch did not
-    touch local.py or test_computer.py, the failures are unchanged from
-    the prior merge, do not run in CI (ubuntu-latest), and are unrelated
-    to BTW. The `upstream.repo` field continues to point at
-    AstrBotDevs/AstrBot per fork convention even though this sync pulled
-    from Xero-Team/AstrBot; Zephirum operates as an independent fork and
-    does not open PRs back to either upstream.
+    Merged `docs/community-files` (Xero-Team/AstrBot sibling fork, tip
+    ceb53f8c5 == upstream/master, plus the fork's community-docs commit
+    f0247df01) into Zephirum `master` via a merge commit. This pulls in
+    ~50 sibling-fork commits diverged since the previous marker, including
+    the command_id identity cutover, stable command IDs, the knowledge-base
+    nested-upload feature, group-sender concurrency, shared-card JSON
+    summarization, the WebChat high-risk tool step-up path, the main SQLite
+    schema split, and a large dashboard test/coverage refactor. Eight files
+    conflicted and were resolved to protect BTW (the fork's differentiating
+    dual-loop feature), per the established protect-BTW sync policy.
+    `astrbot/core/auth/service.py`: kept the fork's `btw_work_elevation`
+    + per-profile `btw_elevated_actions` step-up bypass branch and grafted
+    upstream's new webchat source path (`WEBCHAT_INSTANCE_TOOL_ACTIONS`
+    + `_webchat_step_up_cached`) alongside it; non-dashboard/non-webchat/
+    non-BTW-elevated high-risk actions still deny with
+    `high_risk_dashboard_only`. `astrbot/core/pipeline/.../internal.py`:
+    adopted upstream's `resolve_streaming_response()` (a superset of the
+    fork's `enable_streaming` extra) and group-sender concurrency
+    (`_prepare_group_sender_concurrency`/`_register_follow_up_runner`/
+    `turn_cm`), but kept the fork's `btw_detached_work` flag (skips
+    follow-up capture + runner registration for detached work tasks) and
+    honored the `btw_agent_lock_key` extra to override the group lock key
+    so related BTW work turns share one agent lock. `tests/unit/`:
+    accepted upstream's split of the giant `test_agent_sub_stages.py` into
+    domain files (`test_agent_internal_process.py` etc. +
+    `agent_sub_stage_support.py`) and ported the fork's
+    `test_internal_builder_applies_model_and_permission_per_btw_loop` into
+    `test_agent_internal_process.py`; kept the fork's `get_extra`/`set_extra`
+    event stub in `test_astr_agent_tool_exec.py` (returns real extras) so
+    the `btw_loop` BTW tests still pass (upstream's stub returned defaults).
+    Dashboard mdi icon subset (css/woff/woff2): kept the fork's
+    regenerated subset. `CODE_OF_CONDUCT.md`: merged cleanly; the fork's
+    trimmed pledge (no identity-attribute listing) is preserved because
+    upstream still carried the original Contributor Covenant text. The
+    `upstream.repo` field continues to point at AstrBotDevs/AstrBot per
+    fork convention even though this sync pulled from Xero-Team/AstrBot;
+    Zephirum operates as an independent fork and does not open PRs back to
+    either upstream. Two extra test-fixture adaptations were needed for
+    upstream's new required-context gate and pipeline tests: upstream
+    added an `origin_session` required-context check (`_missing_policy_context`
+    in `auth/service.py`, `required_context` in `auth/registry.py`) that
+    fires `missing_context_origin_session` for IM/webchat tool actions
+    without an `origin_session_resource_id`; production IM events set this
+    in `waking_check/stage.py`, so BTW is unaffected, but
+    `test_btw_work_elevation_allows_high_risk_tools_for_im_operators` built
+    its context with the minimal `_context()` helper, so it was rebound to a
+    session resource (mirroring production). Upstream's new
+    `test_pipeline_scheduler_order.py` uses a `PipelineEvent` stub without
+    `get_extra`/`set_extra`, which the fork's `btw_detached_work` cleanup in
+    `scheduler.py` calls; added those methods to the stub. Validation:
+    144 BTW/auth/pipeline/scheduler/group-sender/streaming tests pass; full
+    unit suite 4209 passed / 5 skipped; the only failures (13 -> 12 after
+    the scheduler fix) are pre-existing or Windows-only shell/fs/CRLF/path
+    environment issues (`TestSyncSkillsToSandbox`, `TestLocalShellComponent`,
+    `test_local_shell_component`, `test_computer_fs_tools` CRLF, and the
+    `test_sanitize_upload_filename` Windows drive-letter case) that fail on
+    this Windows host but pass in CI (ubuntu-latest) and are unrelated to
+    BTW; `TestSyncSkillsToSandbox` was confirmed to also fail on pre-merge
+    master.

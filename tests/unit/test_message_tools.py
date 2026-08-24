@@ -25,7 +25,6 @@ def _make_context(
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
     cfg = {
         "provider_settings": {
-            "computer_use_require_admin": require_admin,
             "computer_use_runtime": runtime,
         }
     }
@@ -74,6 +73,7 @@ class _DummyRespondEvent:
             "_send_message_to_user_current_session_plain_texts": sent_plain_texts,
         }
         self._result = MessageEventResult().message(result_text)
+        self.unified_msg_origin = "test:FriendMessage:user-1"
         self._call_order: list[str] = []
         self.send = AsyncMock(side_effect=self._record_send)
         self.send_streaming = AsyncMock(side_effect=self._record_send_streaming)

@@ -78,10 +78,46 @@ ACTIONS = frozenset(
         "tool.mcp_write",
         "tool.computer_use",
         "dashboard.account.manage",
+        "filesystem.read",
+        "filesystem.write",
+        "filesystem.manage",
     }
 )
 
 GLOBAL_SCOPE_ID = "__global__"
+ANY_CONFIG_SCOPE_ID = "__any_config__"
+
+
+def persist_capability_config_id(config_id: str | None) -> str:
+    """Normalize a domain config id for capability uniqueness.
+
+    Args:
+        config_id: Domain config id, or None when the capability applies to every
+            config.
+
+    Returns:
+        A non-null persistence key. Unspecified domain config becomes
+        ``ANY_CONFIG_SCOPE_ID``.
+    """
+    if config_id is None:
+        return ANY_CONFIG_SCOPE_ID
+    return config_id
+
+
+def restore_capability_config_id(config_id: str | None) -> str | None:
+    """Restore a persisted capability config key to domain meaning.
+
+    Args:
+        config_id: Stored config key, including ``ANY_CONFIG_SCOPE_ID``.
+
+    Returns:
+        The concrete config id, or None when the capability applies to every
+        config.
+    """
+    if config_id is None or config_id == ANY_CONFIG_SCOPE_ID:
+        return None
+    return config_id
+
 
 HIGH_RISK_ACTIONS = frozenset(
     {
@@ -101,6 +137,21 @@ HIGH_RISK_ACTIONS = frozenset(
         "provider.credentials.write",
         "identity.manage",
         "dashboard.account.manage",
+        "filesystem.manage",
+    }
+)
+
+# WebChat may use only these instance-scoped tools after a fresh Dashboard
+# factor verification.  Keep this separate from HIGH_RISK_ACTIONS: global
+# control-plane mutations must remain Dashboard-only.
+WEBCHAT_INSTANCE_TOOL_ACTIONS = frozenset(
+    {
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.file_write",
+        "tool.browser_control",
+        "tool.mcp_write",
+        "tool.computer_use",
     }
 )
 
@@ -270,6 +321,26 @@ class Subject:
         )
 
     @classmethod
+    def plugin(cls, plugin_id: str) -> Subject:
+        """Return an execution-component identity. It never inherits caller root."""
+
+        return cls(
+            id=f"plugin:{_validate_identifier(plugin_id, 'plugin id')}",
+            kind="plugin",
+            authenticated=True,
+        )
+
+    @classmethod
+    def agent(cls, agent_id: str) -> Subject:
+        """Return an execution-component identity. It never inherits caller root."""
+
+        return cls(
+            id=f"agent:{_validate_identifier(agent_id, 'agent id')}",
+            kind="agent",
+            authenticated=True,
+        )
+
+    @classmethod
     def guest(cls, label: str = "anonymous") -> Subject:
         return cls(
             id=f"guest:{_validate_identifier(label, 'guest id')}",
@@ -418,6 +489,8 @@ class Decision:
     requires_step_up: bool = False
     audit_id: str | None = None
     step_up_id: str | None = None
+    matched_relations: tuple[str, ...] = ()
+    relation_sources: tuple[str, ...] = ()
 
 
 def utc_now() -> datetime:

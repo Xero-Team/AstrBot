@@ -58,4 +58,4 @@ Skills 提供了 Agent 操作说明书，并且内容通常包含 Python 代码�
 你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。
 
 > [!NOTE]
-> 需要说明的是，如果您使用 Local 作为执行环境，AstrBot 目前仅允许 **AstrBot 管理员**请求时才真正让 Agent 操作你的本地环境，普通用户将会被禁止，Agent 将无法通过 Shell、Python 等 Tool 在本地环境执行代码，会收到相应的权限限制提示，如 `Sorry, I cannot execute code on your local environment due to permission restrictions.`。
+> 需要说明的是，如果您使用 Local 作为执行环境，Shell、Python 和本机文件写入分别按 `tool.local_exec`、`tool.python_exec` 和 `tool.file_write` 授权。已认证 Dashboard 驱动的 WebChat 可在当前 session/config 内通过 WebChat step-up 使用这些高风险动作；全局控制面仍仅限 Dashboard，匿名 WebChat、IM、插件、Agent 和 API Key 不会继承 Dashboard 角色。普通用户会收到权限限制提示，例如 `Sorry, I cannot execute code on your local environment due to permission restrictions.`。

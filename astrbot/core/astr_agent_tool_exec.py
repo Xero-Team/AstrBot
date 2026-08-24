@@ -7,6 +7,7 @@ import uuid
 from collections.abc import AsyncGenerator as AsyncGeneratorABC
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from dataclasses import replace
 
 import mcp
 
@@ -564,7 +565,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
-        stream = prov_settings.get("streaming_response", False)
+        from astrbot.core.streaming_override import resolve_streaming_response
+
+        stream = await resolve_streaming_response(
+            event,
+            ctx.get_config(umo=umo),
+            getattr(ctx, "preferences", None),
+            default=bool(prov_settings.get("streaming_response", False)),
+        )
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -769,12 +777,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         cron_event.subject = getattr(event, "subject", None)
         cron_event.resource = getattr(event, "resource", None)
-        cron_event.auth_context = getattr(event, "auth_context", None)
+        auth_context = getattr(event, "auth_context", None)
+        if auth_context is not None:
+            # A background notification is a new event/run.  Do not carry a
+            # consumed WebChat proof (or its raw token) into the later agent
+            # invocation; otherwise the per-run cache becomes unbounded by
+            # the lifetime of the original AuthContext object.
+            metadata = {
+                key: value
+                for key, value in auth_context.metadata.items()
+                if key not in {"webchat_step_up_tokens", "_webchat_step_up_consumed"}
+            }
+            cron_event.auth_context = replace(
+                auth_context,
+                request_id=str(uuid.uuid4()),
+                step_up_token=None,
+                metadata=metadata,
+            )
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
+        from astrbot.core.streaming_override import resolve_streaming_response
+
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=bool(provider_settings.get("streaming_response", False)),
+            streaming_response=await resolve_streaming_response(
+                cron_event,
+                cfg,
+                getattr(ctx, "preferences", None),
+            ),
             provider_settings=provider_settings,
         )
 

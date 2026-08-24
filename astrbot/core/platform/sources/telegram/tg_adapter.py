@@ -31,6 +31,20 @@ from astrbot.core.star.star_handler import EventType
 from .tg_event import TelegramPlatformEvent
 
 
+def _telegram_member_status(raw_message: object) -> str | None:
+    if raw_message is None:
+        return None
+    for attr in ("chat_member", "my_chat_member"):
+        change = getattr(raw_message, attr, None)
+        new_member = (
+            getattr(change, "new_chat_member", None) if change is not None else None
+        )
+        status = getattr(new_member, "status", None)
+        if status is not None:
+            return str(getattr(status, "value", status))
+    return None
+
+
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
     def __init__(
@@ -516,6 +530,15 @@ class TelegramPlatformAdapter(Platform):
                 )
             )
             message.message.append(record)
+        elif telegram_message.audio:
+            record = Comp.Record(file="")
+            record.set_source_resolver(
+                lambda audio=telegram_message.audio: (
+                    self._resolve_telegram_attachment_file_path(audio)
+                )
+            )
+            message.message.append(record)
+            self._apply_telegram_caption(message, telegram_message)
         elif telegram_message.photo:
             photo = telegram_message.photo[-1]
             image = Comp.Image(file="")
@@ -794,13 +817,22 @@ class TelegramPlatformAdapter(Platform):
         Returns:
             Created Telegram message event.
         """
-        return TelegramPlatformEvent(
+        event = TelegramPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
+        if not event.is_private_chat():
+            status = _telegram_member_status(getattr(message, "raw_message", None))
+            if status == "restricted":
+                status = "member"
+            event.set_platform_member_role(
+                status if status is not None else "unknown",
+                source="adapter",
+            )
+        return event
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))

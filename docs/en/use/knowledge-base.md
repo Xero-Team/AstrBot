@@ -36,10 +36,13 @@ Fill in the relevant information. In the embedding model dropdown menu, you will
 
 ## Uploading Files
 
-After creating a knowledge base, you can upload documents to it. There is no longer a 10-file batch limit, and each file can be up to 128 MB.
+After creating a knowledge base, you can upload documents to it. Select multiple files, or drop/choose a whole folder (for example a tree of Markdown files). Nested directories are collected recursively. There is no longer a 10-file batch limit, and each file can be up to 128 MB.
 
 ![Upload Files](https://files.astrbot.app/docs/en/use/image-4.png)
 
 ## Using the Knowledge Base
 
 In the configuration file, you can specify different knowledge bases for different configuration profiles.
+
+> [!WARNING]
+> Knowledge-base storage is a SQLite document store in the runtime directory plus local FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. After you choose an embedding model, do not change the model or vector dimension; recall will break, and existing indexes are not migrated automatically. Failed uploads run compensating cleanup, so a reported API failure must not leave a partially queryable document. If the built-in NVIDIA embedding or rerank defaults change, saved provider configuration and existing indexes are also not migrated automatically.

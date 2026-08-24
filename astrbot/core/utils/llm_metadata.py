@@ -28,6 +28,43 @@ class LLMMetadata(TypedDict):
     limit: LLMLimit
 
 
+LLM_METADATA_URLS = (
+    "https://models.dev/api.json",
+    "https://models.opencode.ai/api.json",
+)
+
+
+def _parse_llm_metadata(data: object) -> dict[str, LLMMetadata]:
+    """Validate and normalize one metadata catalog response."""
+    if not isinstance(data, Mapping):
+        raise ValueError("LLM metadata response must be a JSON object")
+
+    models: dict[str, LLMMetadata] = {}
+    for info in data.values():
+        if not isinstance(info, Mapping):
+            raise ValueError("LLM metadata provider must be an object")
+        provider_models = info.get("models", {})
+        if not isinstance(provider_models, Mapping):
+            raise ValueError("LLM metadata models must be an object")
+        for model in provider_models.values():
+            if not isinstance(model, Mapping):
+                raise ValueError("LLM metadata model must be an object")
+            model_id = model.get("id")
+            if not isinstance(model_id, str) or not model_id:
+                continue
+            models[model_id] = LLMMetadata(
+                id=model_id,
+                reasoning=model.get("reasoning", False),
+                tool_call=model.get("tool_call", False),
+                knowledge=model.get("knowledge", "none"),
+                release_date=model.get("release_date", ""),
+                modalities=model.get("modalities", {"input": [], "output": []}),
+                open_weights=model.get("open_weights", False),
+                limit=model.get("limit", {"context": 0, "output": 0}),
+            )
+    return models
+
+
 class LLMMetadataCatalog:
     """Runtime-owned metadata fetched from the public model catalog."""
 
@@ -44,30 +81,42 @@ class LLMMetadataCatalog:
 
     async def refresh(self) -> None:
         """Fetch and publish the latest model metadata without sharing global state."""
-        url = "https://models.dev/api.json"
+        from astrbot.core.utils.proxy_route import (
+            create_aiohttp_session,
+            current_aiohttp_proxy,
+        )
+
+        last_error: Exception | None = None
         try:
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=build_tls_connector()
+            async with create_aiohttp_session(
+                connector=build_tls_connector()
             ) as session:
-                async with session.get(url) as response:
-                    data = await response.json()
-            models: dict[str, LLMMetadata] = {}
-            for info in data.values():
-                for model in info.get("models", {}).values():
-                    model_id = model.get("id")
-                    if not model_id:
+                for url in LLM_METADATA_URLS:
+                    try:
+                        async with session.get(
+                            url,
+                            proxy=current_aiohttp_proxy(),
+                        ) as response:
+                            response.raise_for_status()
+                            data = await response.json()
+                            models = _parse_llm_metadata(data)
+
+                            self.replace(models)
+                            logger.info(
+                                "Successfully fetched metadata for %s LLMs from %s.",
+                                len(models),
+                                url,
+                            )
+                            return
+                    except (TimeoutError, aiohttp.ClientError, ValueError) as exc:
+                        last_error = exc
+                        logger.warning(
+                            "Endpoint %s failed: %s, trying next...",
+                            url,
+                            exc,
+                        )
                         continue
-                    models[model_id] = LLMMetadata(
-                        id=model_id,
-                        reasoning=model.get("reasoning", False),
-                        tool_call=model.get("tool_call", False),
-                        knowledge=model.get("knowledge", "none"),
-                        release_date=model.get("release_date", ""),
-                        modalities=model.get("modalities", {"input": [], "output": []}),
-                        open_weights=model.get("open_weights", False),
-                        limit=model.get("limit", {"context": 0, "output": 0}),
-                    )
-            self.replace(models)
-            logger.info("Successfully fetched metadata for %s LLMs.", len(models))
         except Exception as exc:
-            logger.error("Failed to fetch LLM metadata: %s", exc)
+            last_error = exc
+
+        logger.error("All metadata endpoints failed: %s", last_error)

@@ -75,6 +75,8 @@ pnpm dev
 
 Runtime state is written under `data/` in the current runtime root. Tests and temporary checks must not read from or write to a developer's real `data/`; use pytest temporary fixtures or a separate `ASTRBOT_ROOT`.
 
+The main SQLite schema is locked by SQLModel tables, `po/registry.py`, and `tests/unit/db/test_schema.py`. `initialize()` does not add columns to an existing `data/data_v4.db`. Locally, stop the process, delete `data/data_v4.db*`, and start again; tests use temporary databases. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
+
 ## Tests
 
 ```bash
@@ -83,9 +85,10 @@ uv run pytest tests/unit
 uv run pytest tests/unit/test_event_bus.py
 uv run pytest tests/unit/test_event_bus.py::TestEventBusDispatch::test_dispatch_processes_event
 uv run pytest --test-profile blocking
+make test-blocking
 ```
 
-The `blocking` profile runs deterministic tests without the `slow`, `platform`, `provider`, or `integration` markers. Tests under `tests/integration/` and `tests/e2e/` are classified as integration automatically; use the named markers explicitly for other test locations. Put regression coverage beside the closest existing tests instead of assuming every focused test belongs in `tests/unit/`.
+The `blocking` profile excludes tests marked `slow`, `integration`, or `live`. `platform` and `provider` are domain tags and do not remove tests from the blocking gate. Tests under `tests/integration/` and `tests/e2e/` are classified as integration automatically; mark real outbound HTTP, vendor SDK, or required-secret tests as `live`. Put regression coverage beside the closest existing tests instead of assuming every focused test belongs in `tests/unit/`.
 
 The Dashboard uses Vitest:
 
@@ -106,8 +109,10 @@ pnpm test:e2e
 ```
 
 The specs live in `dashboard/tests/e2e/`, and the isolated backend entry point
-is `tests/e2e/plugin_ui_test_server.py`. Linux CI uses `playwright install
---with-deps` to install system dependencies as well.
+is `tests/e2e/plugin_ui_test_server.py`. PR and push CI run the Chromium
+project only. Firefox and WebKit stay defined in `playwright.config.ts` and
+run on `workflow_dispatch`. Linux CI uses `playwright install --with-deps`
+to install system dependencies as well.
 
 ## Formatting, Checks, and Quality Gates
 
@@ -117,6 +122,7 @@ Common commands:
 make check       # strict checks for the current host platform
 make quality     # typing, security, audit, and complexity gates
 make test        # full pytest suite
+make test-blocking  # pytest --test-profile blocking
 make pr-test-full
 ```
 

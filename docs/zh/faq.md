@@ -91,13 +91,19 @@ cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
 
-更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。
+更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。Dashboard 一键 Core 更新当前没有 fork 发布资产，不要用它安装上游 zip。
+
+### 升级到 4.27.5 后主库无法启动
+
+4.27.5 以当前 SQLModel 表重建主 SQLite schema，不做旧库 `ALTER TABLE` 或数据迁移。`create_all` 只创建缺失表，不会给已有 `data_v4.db` 加列或补索引。
+
+停进程并备份 `data/` 后，删除 runtime root 下的 `data/data_v4.db`、`data/data_v4.db-wal` 和 `data/data_v4.db-shm`，再启动。会话、长期记忆、授权绑定和 API Key 等主库记录不会从旧文件迁出。`data/knowledge_base/` 不受这次切库影响。架构说明见[项目架构](/dev/architecture#主-sqlite-库)。
 
 ## Agent、权限与输出
 
 ### 群聊中机器人不回复
 
-为避免群消息泛滥，默认需要 @ 机器人或使用唤醒前缀，例如 `/你好`。同时检查：
+为避免群消息泛滥，默认不会因 @ 机器人或回复机器人而唤醒。需要发送唤醒前缀（默认 `/`），或在当前配置档打开 `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot`。同时检查：
 
 - 当前配置档是否绑定到该消息会话；
 - 平台和 Provider 是否启用；
@@ -106,7 +112,11 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 管理员指令提示无权限
 
-使用 `/session info` 查看当前用户 ID，然后通过 Dashboard 权限页面或 `/admin grant` 授予当前会话范围的管理员绑定。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+使用 `/session info` 查看当前用户 ID，然后通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+
+### 以前的 `/plugin ls`、`/reset` 等指令无效
+
+内置指令已改为完整 CLI 路径，例如 `/plugin list`、`/conversation reset`。旧短名不是别名，不会匹配。用 `/help` 查看当前启用的声明名；Dashboard 里手动重命名过的名字仍然有效。详见[内置指令](/use/command)。
 
 ### 如何使用电脑能力
 
@@ -116,7 +126,7 @@ uv run python scripts/sync_dashboard_dist.py
 - `sandbox`：使用配置的 Shipyard Neo 或 CUA 沙箱；
 - `none`：关闭，默认值。
 
-电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`），高风险动作还需要新鲜的 step-up/elevation。沙箱只提供运行隔离，不会改变授权策略。详见 [使用电脑能力](./use/computer) 和 [Agent 沙箱](./use/astrbot-agent-sandbox)。
+电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`）。已认证 Dashboard 驱动的 WebChat 在当前 session/config 内，经 WebChat 一次性 step-up 后可使用实例级高风险工具；全局控制面仍 Dashboard-only，匿名 WebChat、IM、插件、Agent 和 API Key 不会继承 Dashboard 角色。沙箱只提供运行隔离，不会改变授权策略。详见 [使用电脑能力](./use/computer) 和 [Agent 沙箱](./use/astrbot-agent-sandbox)。
 
 ### T2I 中文乱码
 
@@ -140,6 +150,14 @@ font-family: 'Maple Mono', 'Noto Sans CJK SC', sans-serif;
 6. fallback 模型是否来自真正独立的端点。
 
 不要用关闭 TLS 验证的方式“修复”连接。必要时重置会话或降低历史轮数，并参考 [上下文压缩](./use/context-compress)。
+
+### 市场插件安装后加载失败
+
+Dashboard 默认市场源是上游 `AstrBotDevs/AstrBot_Plugins_Collection`，不是本 fork 的官方市场。本分支要求 Python 3.14+，且不提供旧插件 API 或旧 Dashboard 页面兼容。安装前核对该插件的 `astrbot_version` 和 `requires.dashboard_extension`。失败时用 URL 安装已知兼容的插件，或查看插件加载错误，不要假定上游市场插件能在本分支运行。详见 [插件](/use/plugin) 和 [插件开发指南](/dev/star/plugin-new)。
+
+### 如何关闭长期记忆
+
+当前源码会在运行时无条件初始化长期记忆，并在本地 Agent 对话完成后排队写回；WebUI 和配置档没有按用户或按配置档关闭的开关。处理敏感数据前先阅读 [长期记忆](/use/long-term-memory)。不要把 WebUI 软删除当成数据擦除。
 
 ## 插件
 

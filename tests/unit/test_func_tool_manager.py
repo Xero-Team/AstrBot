@@ -456,7 +456,9 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
 
 
 @pytest.mark.asyncio
-async def test_mcp_connection_test_uses_initial_catalog_without_subscription(monkeypatch):
+async def test_mcp_connection_test_uses_initial_catalog_without_subscription(
+    monkeypatch,
+):
     seen = {}
 
     async def fake_connect(self, config, name, *, watch_catalog=True):
@@ -587,7 +589,7 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
     async def fake_enable_mcp_server(name, config):
         enabled_servers.append((name, config))
 
-    monkeypatch.setattr(ftm.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(ftm.aiohttp, "ClientSession", lambda **kwargs: FakeSession())
     monkeypatch.setattr(manager, "load_mcp_config", lambda: default_config)
     monkeypatch.setattr(manager, "save_mcp_config", saved_configs.append)
     monkeypatch.setattr(manager, "enable_mcp_server", fake_enable_mcp_server)
@@ -621,6 +623,17 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             },
         )
     ]
+
+
+def test_log_safe_mcp_debug_config_redacts_command_and_url():
+    manager = FunctionToolManager()
+    manager._log_safe_mcp_debug_config(
+        {"command": ["uv", "run", "secret-token"], "args": ["--token", "abc"]}
+    )
+    manager._log_safe_mcp_debug_config(
+        {"url": "https://user:pass@example.com:8080/mcp?token=1"}
+    )
+    manager._log_safe_mcp_debug_config({"url": "not a url"})
 
 
 def test_shell_session_schema_supports_line_writes():

@@ -115,18 +115,30 @@ uv run pytest tests/unit
 uv run pytest tests/unit/test_event_bus.py
 uv run pytest tests/unit/test_event_bus.py::TestEventBusDispatch::test_dispatch_processes_event
 uv run pytest --test-profile blocking
+make test-blocking
 ```
 
+Python function coverage for the `astrbot` package is gated at 99% via
+`scripts/check_function_coverage.py` in the coverage CI job. Typing-only
+`@overload` signatures are excluded from that denominator. Dashboard
+Vitest gates `src/**/*.ts` (excluding generated OpenAPI, `main.ts`, and
+page-orchestration modules) in `dashboard/vitest.config.ts`. Vue SFC
+smoke tests stay under `dashboard/tests/` but are not in that 95%
+denominator because v8 counts template closures.
+
 Tests use `pytest-asyncio`; mark async tests explicitly. `tests/conftest.py`
-sets test-mode environment flags, prioritizes unit tests, and classifies slow,
-provider/platform, and integration tests into tiers. Put a regression test next
-to the nearest existing coverage (`tests/unit/`, `tests/test_*.py`,
-`tests/agent/`, or a specialist directory). Dashboard Vitest files live under
-`dashboard/tests/` as `*.vitest.ts`. Browser-level Dashboard tests live under
-`dashboard/tests/e2e/` and use `dashboard/playwright.config.ts`; the plugin UI
-suite starts its isolated backend through `tests/e2e/plugin_ui_test_server.py`.
-Install the required Playwright browsers before running `pnpm
-test:e2e` from `dashboard/`.
+sets test-mode environment flags and classifies tests into `--test-profile`
+tiers. The `blocking` profile excludes `slow`, `integration`, and `live`.
+`platform` and `provider` are domain tags and do not remove tests from the
+blocking gate. Put a regression test next to the nearest existing coverage
+(`tests/unit/`, `tests/agent/`, or a specialist directory).
+Dashboard Vitest files live under `dashboard/tests/` as `*.vitest.ts`.
+Browser-level Dashboard tests live under `dashboard/tests/e2e/` and use
+`dashboard/playwright.config.ts`; the plugin UI suite starts its isolated
+backend through `tests/e2e/plugin_ui_test_server.py`. Install the required
+Playwright browsers before running `pnpm test:e2e` from `dashboard/`. CI runs
+the Chromium project; Firefox and WebKit stay in `playwright.config.ts` and
+run on workflow_dispatch.
 
 The repository gates are deliberately separate:
 
@@ -134,6 +146,7 @@ The repository gates are deliberately separate:
 make check                 # host-platform format/lint/build gate
 make check-all-platforms   # add PowerShell validation on POSIX
 make test                  # full pytest suite
+make test-blocking         # pytest --test-profile blocking
 make quality               # focused pyright/security/audit/complexity gates
 make quality-report        # broader report; not currently a required CI gate
 ```
@@ -177,9 +190,11 @@ adapter.
   installs the certifi-backed verified aiohttp CA context. Keep imports above
   that call minimal.
 - The `astrbot` console entry point has its own CLI initialization and
-  Dashboard checks and does not currently invoke the root `runtime_bootstrap`
-  path. When changing startup behavior, inspect and test both entry points
-  instead of assuming they are identical.
+  Dashboard checks. `astrbot/cli/__main__.py` and `astrbot run` both call
+  `runtime_bootstrap.initialize_runtime_bootstrap()`. They still differ from
+  `main.py`: the CLI requires the `.astrbot` marker, uses a separate Dashboard
+  asset path, and has no `--webui-dir`. When changing startup behavior, inspect
+  and test both entry points instead of assuming they are identical.
 - Startup-only environment flags are applied before core imports. Runtime paths
   and Dashboard assets are resolved before `create_runtime_services()` builds
   the runtime-owned configuration, SQLite database, preferences, Playwright
@@ -202,8 +217,8 @@ adapter.
    dispatches it under bounded concurrency while retaining task references.
 3. `astrbot/core/pipeline/stage_order.py` defines the fixed sequence from
    `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`, `RateLimit`,
-   `ContentSafetyCheck`, `PreProcess`, `Process`, `ResultDecorate`, and finally
-   `Respond`.
+   `ContentSafetyCheck`, `PreProcess`, `GroupMessageHistory`, `Process`,
+   `ResultDecorate`, and finally `Respond`.
 
 The scheduler supports async stages and async-generator onion middleware.
 Preserve stage ordering, stop-propagation, and cancellation semantics.
@@ -214,7 +229,12 @@ controls whether mentioning or replying to the bot wakes a group message, and
 restore implicit mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
 field is not migrated or read by runtime code and must not become a pipeline
-switch again.
+switch again. Command identity is `command_id`
+(`{plugin}:{original path with dots}`). Do not restore handler-name or fossil
+short-name lookup for `alter_cmd` or `command_configs`. Built-in names and
+aliases stay as declared unless the row has `resolution_strategy=manual_rename`.
+Unmatched command_config rows are deleted. Drop unused `keep_original_alias` in
+a separate transaction; a drop failure must not roll back schema creation.
 
 ### Agents, providers, and runners
 

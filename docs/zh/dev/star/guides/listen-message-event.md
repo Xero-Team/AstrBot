@@ -74,6 +74,10 @@ class AstrBotMessage:
 
 这项补全覆盖当前消息、引用消息、合并转发和群聊上下文，也会传给仅接受文本 prompt 的内置第三方 Agent Runner。它不会修改 `event.message_str`、原始 `Face` 组件或出站消息；插件如需按编号处理表情，仍可直接检查 `Face.id`。
 
+#### 群聊 JSON 卡片
+
+群聊 JSON 卡片会记入群聊上下文，并在主动回复或普通 LLM 请求没有文本 prompt 时作为 `[Shared Card]` 卡片摘要进入模型输入，而不会把原始 JSON 整段塞进 prompt。
+
 ## 指令
 
 ![message-event-simple-command](https://files.astrbot.app/docs/zh/dev/star/guides/message-event-simple-command.svg)
@@ -146,6 +150,7 @@ Orbit 只定义已注册指令头之后的参数语言；唤醒前缀、根指�
 - handler 的类型标注就是参数 schema。只使用受支持的标量、`Enum`、`Literal`、Optional、`GreedyStr` 和 `Annotated[..., option(...)]`；不支持的签名会在插件注册时失败。
 - 别名也应遵守同样的命名约束，并只用于真实同义入口。帮助文本和文档应始终使用主名称。
 - 为 handler 编写简短、可独立理解的 docstring；Telegram 和 Discord 会用它生成原生指令描述。不满足平台名称约束的入口仍可用于文本消息，但不会注册为对应平台的原生指令。
+- 指令 handler 回复后应终止事件传播（`stop_event()`），避免后续阶段继续处理同一条消息。
 
 例如，资源型插件可以使用 `/project list`、`/project show <name>`、`/project create <name> --template <id>` 和 `/project delete <name> --force`。参数中的 `$`、`#`、glob、URL 查询串或 operator 是数据时，由调用者按 Orbit 规则引用；插件收到的是已经完成确定性分词的值，不应再进行 shell 展开。
 
@@ -350,16 +355,35 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
 
 当前版本下，`PlatformAdapterType` 支持以下值：`AIOCQHTTP`、`QQOFFICIAL`、`QQOFFICIAL_WEBHOOK`、`TELEGRAM`、`WECOM`、`WECOM_AI_BOT`、`LARK`、`DINGTALK`、`DISCORD`、`SLACK`、`KOOK`、`VOCECHAT`、`WEIXIN_OFFICIAL_ACCOUNT`、`SATORI`、`MISSKEY`、`LINE`、`MATRIX`、`WEIXIN_OC`、`MATTERMOST`、`WEBCHAT`、`ALL`。
 
-#### 管理员指令
+#### 权限与动作
 
 ```python
-@filter.permission_type(filter.PermissionType.ADMIN)
+@filter.permission("session.manage")
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     pass
 ```
 
-仅管理员才能使用 `test` 指令。
+`@filter.permission("session.manage")` 会在管道里调用统一授权入口
+`AuthorizationService.authorize()`。只有当前会话的 `session_admin` /
+`session_owner`，或作用域匹配的 `instance_operator` / Dashboard
+`operator` / `root`，才能执行该指令。平台群主/群管理员只影响当前
+`(config_id, UMO)`，不会变成全局 operator。
+
+插件自定义动作必须使用自己的命名空间，并再次调用核心授权：
+
+```python
+decision = await self.context.authz.authorize(
+    event,
+    "plugin:example:publish",
+    self.context.authz.session_resource(event),
+)
+if not decision.allowed:
+    return
+```
+
+不要再使用已删除的 `PermissionType` 或 `@filter.permission_type`。
+`event.is_admin()` 恒为 `False`，不能当作授权依据。完整模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ### 多个过滤器
 
@@ -375,7 +399,7 @@ async def helloworld(self, event: AstrMessageEvent):
 ### 事件钩子
 
 > [!TIP]
-> 事件钩子不支持与上面的 @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission_type 一起使用。
+> 事件钩子不支持与上面的 @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission 一起使用。
 
 #### Bot 初始化完成时
 

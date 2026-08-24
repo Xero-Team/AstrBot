@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
         "unique_session": False,
+        "group_sender_concurrency": False,
         "rate_limit": {
             "time": 60,
             "count": 30,
@@ -260,6 +261,12 @@ DEFAULT_CONFIG = {
         "group_message_history_max_cnt": 700,
         "image_caption": False,
         "image_caption_provider_id": "",
+        "image_caption_scope": "all",
+        "image_caption_groups": [],
+        "image_caption_min_interval": 0,
+        "image_caption_max_concurrency": 2,
+        "image_caption_cache_ttl": 0,
+        "image_caption_lazy": False,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -491,7 +498,8 @@ CONFIG_METADATA_2 = {
                         "type": "discord",
                         "enable": True,
                         "discord_token": "",
-                        "discord_proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "discord_command_register": True,
                         "discord_activity_name": "",
                         "discord_allow_bot_messages": False,
@@ -940,10 +948,15 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "在此处填入你的Discord Bot Token",
                     },
-                    "discord_proxy": {
-                        "description": "Discord 代理地址",
+                    "proxy_mode": {
+                        "description": "代理模式",
                         "type": "string",
-                        "hint": "可选的代理地址：http://ip:port",
+                        "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。",
+                    },
+                    "proxy_url": {
+                        "description": "自定义代理 URL",
+                        "type": "string",
+                        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890",
                     },
                     "discord_command_register": {
                         "description": "注册 Discord 指令",
@@ -1034,6 +1047,9 @@ CONFIG_METADATA_2 = {
                 "type": "object",
                 "items": {
                     "unique_session": {
+                        "type": "bool",
+                    },
+                    "group_sender_concurrency": {
                         "type": "bool",
                     },
                     "rate_limit": {
@@ -1203,7 +1219,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "OpenAI Responses": {
@@ -1227,7 +1244,8 @@ CONFIG_METADATA_2 = {
                             "include_sources": True,
                             "include_raw_results": False,
                         },
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Google Gemini": {
@@ -1250,7 +1268,8 @@ CONFIG_METADATA_2 = {
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
                         "gm_thinking_config": {"budget": 0, "level": "HIGH"},
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Anthropic": {
                         "id": "anthropic",
@@ -1261,7 +1280,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
@@ -1274,7 +1294,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.kimi.com/coding",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
@@ -1287,7 +1308,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "MiniMax": {
@@ -1299,7 +1321,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.minimaxi.com/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "MiniMax Token Plan": {
@@ -1311,7 +1334,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.minimaxi.com/anthropic",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
@@ -1324,7 +1348,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.xiaomimimo.com/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Xiaomi Token Plan": {
@@ -1336,7 +1361,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
@@ -1349,7 +1375,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                         "xai_native_search": False,
                     },
@@ -1362,7 +1389,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Zhipu": {
@@ -1374,7 +1402,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "LongCat": {
@@ -1386,7 +1415,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.longcat.chat/openai",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "AIHubMix": {
@@ -1398,7 +1428,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://aihubmix.com/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "OpenRouter": {
@@ -1410,7 +1441,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://openrouter.ai/api/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "SSYCloud(胜算云)": {
@@ -1422,7 +1454,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://router.shengsuanyun.com/api/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {"X-Title": "AstrBot"},
                     },
                     "NVIDIA": {
@@ -1434,7 +1467,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://integrate.api.nvidia.com/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Azure OpenAI": {
@@ -1447,7 +1481,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Ollama": {
@@ -1458,7 +1493,8 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://127.0.0.1:11434/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                         "ollama_disable_thinking": False,
                     },
@@ -1470,7 +1506,8 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://127.0.0.1:1234/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Gemini_OpenAI_API": {
@@ -1482,7 +1519,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Groq": {
@@ -1494,7 +1532,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.groq.com/openai/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "302.AI": {
@@ -1506,7 +1545,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "SiliconFlow": {
@@ -1518,7 +1558,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.siliconflow.cn/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "PPIO": {
@@ -1530,7 +1571,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.ppinfra.com/v3/openai",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "TokenPony": {
@@ -1542,7 +1584,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.tokenpony.cn/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Compshare": {
@@ -1554,7 +1597,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.modelverse.cn/v1",
                         "timeout": 120,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "ModelScope": {
@@ -1566,7 +1610,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                     },
                     "Dify": {
@@ -1582,7 +1627,8 @@ CONFIG_METADATA_2 = {
                         "dify_query_input_key": "astrbot_text_query",
                         "variables": {},
                         "timeout": 60,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Coze": {
                         "id": "coze",
@@ -1594,7 +1640,8 @@ CONFIG_METADATA_2 = {
                         "bot_id": "",
                         "coze_api_base": "https://api.coze.cn",
                         "timeout": 60,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         # "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
@@ -1613,7 +1660,8 @@ CONFIG_METADATA_2 = {
                         },
                         "variables": {},
                         "timeout": 60,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "DeerFlow": {
                         "id": "deerflow",
@@ -1632,7 +1680,8 @@ CONFIG_METADATA_2 = {
                         "deerflow_max_concurrent_subagents": 3,
                         "deerflow_recursion_limit": 1000,
                         "timeout": 300,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "FastGPT": {
                         "id": "fastgpt",
@@ -1643,7 +1692,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.fastgpt.in/api/v1",
                         "timeout": 60,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                         "custom_headers": {},
                         "custom_extra_body": {},
                     },
@@ -1656,7 +1706,8 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "",
                         "model": "whisper-1",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "MiMo STT(API)": {
                         "id": "mimo_stt",
@@ -1668,7 +1719,8 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.xiaomimimo.com/v1",
                         "model": "mimo-v2.5-asr",
                         "timeout": "20",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Whisper(Local)": {
                         "provider": "openai",
@@ -1699,7 +1751,8 @@ CONFIG_METADATA_2 = {
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "MiMo TTS(API)": {
                         "id": "mimo_tts",
@@ -1716,7 +1769,8 @@ CONFIG_METADATA_2 = {
                         "mimo-tts-dialect": "",
                         "mimo-tts-seed-text": "Hello, MiMo, have you had lunch?",
                         "timeout": "20",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Genie TTS": {
                         "id": "genie_tts",
@@ -1802,7 +1856,8 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "阿里云百炼 TTS(API)": {
                         "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
@@ -1829,7 +1884,8 @@ CONFIG_METADATA_2 = {
                         "azure_tts_volume": "100",
                         "azure_tts_subscription_key": "",
                         "azure_tts_region": "eastus",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
@@ -1852,7 +1908,8 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
@@ -1867,7 +1924,8 @@ CONFIG_METADATA_2 = {
                         "volcengine_speed_ratio": 1.0,
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Gemini TTS": {
                         "id": "gemini_tts",
@@ -1881,7 +1939,8 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_model": "gemini-2.5-flash-preview-tts",
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "ElevenLabs TTS(API)": {
                         "hint": "API Key 从 https://elevenlabs.io/app/settings/api-keys 获取。Voice ID 可在 https://elevenlabs.io/app/voice-library 浏览选择。",
@@ -1900,7 +1959,8 @@ CONFIG_METADATA_2 = {
                         "elevenlabs-tts-style": "",
                         "elevenlabs-tts-use-speaker-boost": True,
                         "timeout": "20",
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
@@ -1915,7 +1975,8 @@ CONFIG_METADATA_2 = {
                         "embedding_dimensions": 1024,
                         "embedding_dimensions_mode": "auto",
                         "timeout": 20,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Gemini Embedding": {
                         "id": "gemini_embedding",
@@ -1929,7 +1990,8 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "gemini-embedding-exp-03-07",
                         "embedding_dimensions": 768,
                         "timeout": 20,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "NVIDIA Embedding": {
                         "id": "nvidia_embedding",
@@ -1940,11 +2002,12 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "https://integrate.api.nvidia.com/v1",
-                        "embedding_model": "nvidia/llama-nemotron-embed-1b-v2",
+                        "embedding_model": "nvidia/nemotron-3-embed-1b",
                         "input_type": "passage",
-                        "embedding_dimensions": 1024,
+                        "embedding_dimensions": 2048,
                         "timeout": 20,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "Ollama Embedding": {
                         "id": "ollama_embedding",
@@ -1957,7 +2020,8 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "nomic-embed-text",
                         "embedding_dimensions": 768,
                         "timeout": 60,
-                        "proxy": "",
+                        "proxy_mode": "inherit",
+                        "proxy_url": "",
                     },
                     "vLLM Rerank": {
                         "id": "vllm_rerank",
@@ -2004,7 +2068,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "nvidia_rerank_api_key": "",
                         "nvidia_rerank_api_base": "https://ai.api.nvidia.com/v1/retrieval",
-                        "nvidia_rerank_model": "nv-rerank-qa-mistral-4b:1",
+                        "nvidia_rerank_model": "nvidia/llama-nemotron-rerank-vl-1b-v2",
                         "nvidia_rerank_model_endpoint": "/reranking",
                         "timeout": 20,
                         "nvidia_rerank_truncate": "",
@@ -2826,10 +2890,15 @@ CONFIG_METADATA_2 = {
                         "description": "API Base URL",
                         "type": "string",
                     },
-                    "proxy": {
-                        "description": "provider_group.provider.proxy.description",
+                    "proxy_mode": {
+                        "description": "provider_group.provider.proxy_mode.description",
                         "type": "string",
-                        "hint": "provider_group.provider.proxy.hint",
+                        "hint": "provider_group.provider.proxy_mode.hint",
+                    },
+                    "proxy_url": {
+                        "description": "provider_group.provider.proxy_url.description",
+                        "type": "string",
+                        "hint": "provider_group.provider.proxy_url.hint",
                     },
                     "model": {
                         "description": "模型 ID",
@@ -3102,6 +3171,25 @@ CONFIG_METADATA_2 = {
                     },
                     "image_caption_provider_id": {
                         "type": "string",
+                    },
+                    "image_caption_scope": {
+                        "type": "string",
+                    },
+                    "image_caption_groups": {
+                        "type": "list",
+                        "items": {"type": "string"},
+                    },
+                    "image_caption_min_interval": {
+                        "type": "float",
+                    },
+                    "image_caption_max_concurrency": {
+                        "type": "int",
+                    },
+                    "image_caption_cache_ttl": {
+                        "type": "float",
+                    },
+                    "image_caption_lazy": {
+                        "type": "bool",
                     },
                     "image_caption_prompt": {
                         "type": "string",
@@ -3970,6 +4058,11 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "启用后，群成员的上下文独立。",
                     },
+                    "platform_settings.group_sender_concurrency": {
+                        "description": "群发送者并发（实验性）",
+                        "type": "bool",
+                        "hint": "实验性，默认关闭。同群不同发送者可并行生成，但整轮发送仍按群排队；与隔离会话互斥；会关闭同群流式，分段/合并转发可能交错。",
+                    },
                     "wake_prefix": {
                         "description": "唤醒词",
                         "type": "list",
@@ -4368,6 +4461,56 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_scope": {
+                        "description": "群聊图片转述范围",
+                        "type": "string",
+                        "options": ["all", "allowlist", "denylist"],
+                        "hint": "all 允许全部群；allowlist 仅完整 UMO 列表；denylist 拒绝列表中的完整 UMO。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_groups": {
+                        "description": "群聊图片转述 UMO 列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "只接受完整 unified_msg_origin，例如 aiocqhttp:GroupMessage:123456:bot_987654。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_min_interval": {
+                        "description": "群聊图片转述最小间隔（秒）",
+                        "type": "float",
+                        "hint": "同一群两次历史图片转述之间的最小间隔。0 表示不限流。通过 claim 后即使转述失败也消耗额度。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_max_concurrency": {
+                        "description": "群聊图片转述最大并发",
+                        "type": "int",
+                        "hint": "限制群聊历史图片转述的全局并发，不影响主 Agent 当前请求或引用图片。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_cache_ttl": {
+                        "description": "群聊图片转述缓存 TTL（秒）",
+                        "type": "float",
+                        "hint": "按 UMO+图片内容缓存转述结果。0 表示关闭，默认关闭且不同会话不共享。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_lazy": {
+                        "description": "延迟群聊图片转述",
+                        "type": "bool",
+                        "hint": "开启后先记录占位，仅在真正唤醒 LLM 时转述。默认关闭。",
                         "condition": {
                             "provider_ltm_settings.image_caption": True,
                         },

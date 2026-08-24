@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 import tempfile
 import uuid
@@ -12,6 +13,11 @@ import httpx
 import yaml
 
 from astrbot.core.utils.io import extract_zip_safely
+from astrbot.core.utils.outbound_http import (
+    DEFAULT_PLUGIN_MARKET_URLS,
+    PLUGIN_REGISTRY,
+    fetch_json,
+)
 from astrbot.utils.version_comparator import VersionComparator
 
 
@@ -66,21 +72,30 @@ def _resolve_download_url(url: str, proxy: str | None = None) -> str:
 
     Args:
         url: Repository URL or direct archive URL.
-        proxy: Optional proxy prefix or HTTP proxy address.
+        proxy: Optional GitHub URL-prefix mirror origin.
 
     Returns:
         The archive URL to download.
     """
+    from astrbot.core.utils.outbound_http import (
+        JSON_FETCH,
+        validate_github_mirror_origin,
+        validate_outbound_url,
+    )
+
+    if proxy:
+        validate_github_mirror_origin(proxy)
     repo_namespace = url.split("/")[-2:]
     if len(repo_namespace) != 2:
         return url
 
     author, repo = repo_namespace
     release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
+    validate_outbound_url(release_url, JSON_FETCH)
     try:
         with httpx.Client(
-            proxy=proxy if proxy else None,
-            follow_redirects=True,
+            trust_env=False,
+            follow_redirects=False,
         ) as client:
             resp = client.get(release_url)
             resp.raise_for_status()
@@ -109,20 +124,51 @@ def _download_plugin_archive(
     Returns:
         Downloaded archive bytes wrapped in ``BytesIO``.
     """
-    if proxy:
-        download_url = f"{proxy}/{download_url}"
+    import asyncio
+    import tempfile
 
-    with httpx.Client(
-        proxy=proxy if proxy else None,
-        follow_redirects=True,
-    ) as client:
-        resp = client.get(download_url)
-        if resp.status_code == 404 and "archive/refs/heads/master.zip" in download_url:
-            alt_url = download_url.replace("master.zip", "main.zip")
-            click.echo("Branch 'master' not found, trying 'main' branch")
-            resp = client.get(alt_url)
-        resp.raise_for_status()
-        return BytesIO(resp.content)
+    from astrbot.core.utils.outbound_http import (
+        PLUGIN_DOWNLOAD_URL,
+        PLUGIN_REPOSITORY,
+        compose_github_mirror_url,
+        download_to_path,
+        policy_for_github_mirror_download,
+        validate_github_mirror_origin,
+        validate_outbound_url,
+    )
+
+    policy = PLUGIN_DOWNLOAD_URL
+    if proxy:
+        mirror = validate_github_mirror_origin(proxy)
+        if download_url.startswith("https://github.com/") or download_url.startswith(
+            "https://codeload.github.com/"
+        ):
+            policy = policy_for_github_mirror_download(mirror.hostname)
+            download_url = compose_github_mirror_url(proxy, download_url)
+        else:
+            validate_outbound_url(download_url, PLUGIN_DOWNLOAD_URL)
+    else:
+        try:
+            validate_outbound_url(download_url, PLUGIN_REPOSITORY)
+            policy = PLUGIN_REPOSITORY
+        except Exception:
+            validate_outbound_url(download_url, PLUGIN_DOWNLOAD_URL)
+
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as handle:
+        temp_path = Path(handle.name)
+    try:
+        try:
+            asyncio.run(download_to_path(download_url, temp_path, policy))
+        except Exception:
+            if "archive/refs/heads/master.zip" in download_url:
+                alt_url = download_url.replace("master.zip", "main.zip")
+                click.echo("Branch 'master' not found, trying 'main' branch")
+                asyncio.run(download_to_path(alt_url, temp_path, policy))
+            else:
+                raise
+        return BytesIO(temp_path.read_bytes())
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
@@ -213,16 +259,26 @@ def _load_local_plugin(plugin_dir: Path) -> PluginRecord | None:
 
 def _fetch_online_plugins() -> dict[str, PluginRecord]:
     online_plugins: dict[str, PluginRecord] = {}
-    try:
-        with httpx.Client() as client:
-            resp = client.get("https://api.soulter.top/astrbot/plugins")
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        click.echo(f"Failed to get online plugin list: {e}", err=True)
+    data = None
+    last_error: Exception | None = None
+    for url in DEFAULT_PLUGIN_MARKET_URLS:
+        try:
+            payload = asyncio.run(fetch_json(url, PLUGIN_REGISTRY))
+        except Exception as e:
+            last_error = e
+            continue
+        if not isinstance(payload, dict):
+            last_error = ValueError("response is not a JSON object")
+            continue
+        data = payload
+        break
+    if not isinstance(data, dict):
+        click.echo(f"Failed to get online plugin list: {last_error}", err=True)
         return online_plugins
 
     for plugin_id, plugin_info in data.items():
+        if plugin_id == "$meta" or not isinstance(plugin_info, dict):
+            continue
         online_plugins[str(plugin_id)] = _build_plugin_record(
             name=str(plugin_id),
             desc=str(plugin_info.get("desc", "")),

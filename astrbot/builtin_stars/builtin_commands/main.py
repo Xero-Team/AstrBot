@@ -8,6 +8,7 @@ from .commands import (
     AdminCommands,
     ChatCommands,
     ConversationCommands,
+    FlowCommands,
     HelpCommand,
     PersonaCommands,
     PluginCommands,
@@ -24,6 +25,7 @@ class Main(star.Star):
         self.admin_c = AdminCommands(self.context)
         self.chat_c = ChatCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
+        self.flow_c = FlowCommands(self.context)
         self.help_c = HelpCommand(self.context)
         self.persona_c = PersonaCommands(self.context)
         self.plugin_c = PluginCommands(self.context)
@@ -37,7 +39,7 @@ class Main(star.Star):
         event: AstrMessageEvent,
         image: Annotated[bool, option("--image", "-i")] = False,
     ) -> None:
-        """Show help message"""
+        """Show help for enabled built-in commands"""
         await self.help_c.help(event, image=image)
 
     @filter.command_group("session")
@@ -46,13 +48,13 @@ class Main(star.Star):
 
     @filter.permission("session.read")
     @session.command("info")
-    async def sid(self, event: AstrMessageEvent) -> None:
+    async def session_info(self, event: AstrMessageEvent) -> None:
         """Show IDs and metadata for the current session"""
         await self.session_c.info(event)
 
     @filter.permission("session.manage")
     @session.command("name")
-    async def name(
+    async def session_name(
         self, event: AstrMessageEvent, alias: GreedyStr = GreedyStr("")
     ) -> None:
         """Show or set the display name for the current session"""
@@ -64,7 +66,7 @@ class Main(star.Star):
 
     @filter.permission("session.manage")
     @conversation.command("reset")
-    async def reset(self, message: AstrMessageEvent) -> None:
+    async def conversation_reset(self, message: AstrMessageEvent) -> None:
         """Reset conversation history"""
         await self.conversation_c.reset(message)
 
@@ -74,25 +76,25 @@ class Main(star.Star):
 
     @filter.permission("session.manage")
     @task.command("stop")
-    async def stop(self, message: AstrMessageEvent) -> None:
+    async def task_stop(self, message: AstrMessageEvent) -> None:
         """Stop running tasks in the current session"""
         await self.conversation_c.stop(message)
 
     @filter.permission("session.manage")
     @conversation.command("create")
-    async def new_conv(self, message: AstrMessageEvent) -> None:
-        """Create new conversation"""
+    async def conversation_create(self, message: AstrMessageEvent) -> None:
+        """Create a new conversation"""
         await self.conversation_c.create(message)
 
     @filter.permission("session.read")
     @conversation.command("stats")
-    async def stats(self, message: AstrMessageEvent) -> None:
-        """Show token usage statistics for the current conversation"""
+    async def conversation_stats(self, message: AstrMessageEvent) -> None:
+        """Show token usage for the current conversation"""
         await self.conversation_c.stats(message)
 
     @filter.permission("session.read")
     @conversation.command("history")
-    async def history(
+    async def conversation_history(
         self,
         event: AstrMessageEvent,
         page: Annotated[int, option("--page", "-p")] = 1,
@@ -102,7 +104,7 @@ class Main(star.Star):
 
     @filter.permission("session.read")
     @conversation.command("list")
-    async def convs(
+    async def conversation_list(
         self,
         event: AstrMessageEvent,
         page: Annotated[int, option("--page", "-p")] = 1,
@@ -110,20 +112,23 @@ class Main(star.Star):
         """List conversations"""
         await self.conversation_c.list_conversations(event, page)
 
+    @filter.permission("session.assign")
     @conversation.command("create-for")
-    async def groupnew(self, event: AstrMessageEvent, session_id: str) -> None:
+    async def conversation_create_for(
+        self, event: AstrMessageEvent, session_id: str
+    ) -> None:
         """Create a conversation for a target group session"""
         await self.conversation_c.create_for(event, session_id)
 
     @filter.permission("session.manage")
     @conversation.command("switch")
-    async def switch(self, event: AstrMessageEvent, index: int) -> None:
+    async def conversation_switch(self, event: AstrMessageEvent, index: int) -> None:
         """Switch to a listed conversation"""
         await self.conversation_c.switch(event, index)
 
     @filter.permission("session.manage")
     @conversation.command("rename")
-    async def rename(
+    async def conversation_rename(
         self,
         event: AstrMessageEvent,
         title: GreedyStr,
@@ -133,7 +138,7 @@ class Main(star.Star):
 
     @filter.permission("session.manage")
     @conversation.command("delete")
-    async def delete(self, event: AstrMessageEvent) -> None:
+    async def conversation_delete(self, event: AstrMessageEvent) -> None:
         """Delete the current conversation"""
         await self.conversation_c.delete(event)
 
@@ -153,19 +158,19 @@ class Main(star.Star):
 
     @filter.permission("provider.use")
     @provider_set.command("llm")
-    async def provider_llm(self, event: AstrMessageEvent, index: int) -> None:
+    async def provider_set_llm(self, event: AstrMessageEvent, index: int) -> None:
         """Switch the LLM provider"""
         await self.provider_c.set_llm_provider(event, index)
 
     @filter.permission("provider.use")
     @provider_set.command("tts")
-    async def provider_tts(self, event: AstrMessageEvent, index: int) -> None:
+    async def provider_set_tts(self, event: AstrMessageEvent, index: int) -> None:
         """Switch the TTS provider"""
         await self.provider_c.set_tts_provider(event, index)
 
     @filter.permission("provider.use")
     @provider_set.command("stt")
-    async def provider_stt(self, event: AstrMessageEvent, index: int) -> None:
+    async def provider_set_stt(self, event: AstrMessageEvent, index: int) -> None:
         """Switch the STT provider"""
         await self.provider_c.set_stt_provider(event, index)
 
@@ -193,14 +198,14 @@ class Main(star.Star):
 
     @filter.permission("session.manage")
     @variable.command("set")
-    async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
-        """Set session variable"""
+    async def variable_set(self, event: AstrMessageEvent, key: str, value: str) -> None:
+        """Set a session variable"""
         await self.variable_c.set_variable(event, key, value)
 
     @filter.permission("session.manage")
     @variable.command("unset")
-    async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
-        """Unset session variable"""
+    async def variable_unset(self, event: AstrMessageEvent, key: str) -> None:
+        """Remove a session variable"""
         await self.variable_c.unset_variable(event, key)
 
     @filter.command_group("chat")
@@ -225,6 +230,34 @@ class Main(star.Star):
         """Disable LLM chat for the current session"""
         await self.chat_c.set_enabled(event, False)
 
+    @filter.command_group("flow")
+    def flow(self) -> None:
+        """Manage session streaming override"""
+
+    @filter.permission("session.manage")
+    @flow.command("enable")
+    async def flow_enable(self, event: AstrMessageEvent) -> None:
+        """Force streaming for the current session"""
+        await self.flow_c.set_override(event, True)
+
+    @filter.permission("session.manage")
+    @flow.command("disable")
+    async def flow_disable(self, event: AstrMessageEvent) -> None:
+        """Force non-streaming for the current session"""
+        await self.flow_c.set_override(event, False)
+
+    @filter.permission("session.manage")
+    @flow.command("unset")
+    async def flow_unset(self, event: AstrMessageEvent) -> None:
+        """Remove the session streaming override"""
+        await self.flow_c.unset(event)
+
+    @filter.permission("session.manage")
+    @flow.command("status")
+    async def flow_status(self, event: AstrMessageEvent) -> None:
+        """Show the session streaming override"""
+        await self.flow_c.status(event)
+
     @filter.command_group("admin")
     def admin(self) -> None:
         """Manage administrators"""
@@ -237,13 +270,13 @@ class Main(star.Star):
 
     @filter.permission("identity.manage")
     @admin.command("grant")
-    async def op(self, event: AstrMessageEvent, user_id: str) -> None:
+    async def admin_grant(self, event: AstrMessageEvent, user_id: str) -> None:
         """Grant administrator permission"""
         await self.admin_c.grant(event, user_id)
 
     @filter.permission("identity.manage")
     @admin.command("revoke")
-    async def deop(self, event: AstrMessageEvent, user_id: str) -> None:
+    async def admin_revoke(self, event: AstrMessageEvent, user_id: str) -> None:
         """Revoke administrator permission"""
         await self.admin_c.revoke(event, user_id)
 
@@ -271,7 +304,7 @@ class Main(star.Star):
 
     @filter.permission("agent.manage")
     @persona.command("show")
-    async def persona_view(
+    async def persona_show(
         self, event: AstrMessageEvent, persona_id: GreedyStr
     ) -> None:
         """View persona details"""
@@ -289,30 +322,32 @@ class Main(star.Star):
 
     @filter.permission("extension.read")
     @plugin.command("list")
-    async def plugin_ls(self, event: AstrMessageEvent) -> None:
+    async def plugin_list(self, event: AstrMessageEvent) -> None:
         """List loaded plugins"""
         await self.plugin_c.list_plugins(event)
 
     @filter.permission("extension.manage")
     @plugin.command("disable")
-    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str) -> None:
+    async def plugin_disable(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Disable a plugin"""
         await self.plugin_c.disable(event, plugin_name)
 
     @filter.permission("extension.manage")
     @plugin.command("enable")
-    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str) -> None:
+    async def plugin_enable(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Enable a plugin"""
         await self.plugin_c.enable(event, plugin_name)
 
     @filter.permission("extension.plugin_install")
     @plugin.command("install")
-    async def plugin_get(self, event: AstrMessageEvent, repository_url: str) -> None:
+    async def plugin_install(
+        self, event: AstrMessageEvent, repository_url: str
+    ) -> None:
         """Install a plugin"""
         await self.plugin_c.install(event, repository_url)
 
     @filter.permission("extension.read")
     @plugin.command("show")
-    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str) -> None:
+    async def plugin_show(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Show plugin help"""
         await self.plugin_c.show(event, plugin_name)

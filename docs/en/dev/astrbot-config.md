@@ -48,18 +48,20 @@ Object layouts inside `provider_sources`, `provider`, and `platform` come from t
 
 ## `platform_settings`
 
-| Key                                         | Default                                | Meaning                                                                                                                                     |
-| ------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                                | Split separate sessions for members inside a group.                                                                                         |
-| `rate_limit`                                | `60` seconds / `30` messages / `stall` | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                           |
-| `enable_id_white_list`                      | `true`                                 | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                   |
-| `reply_prefix`                              | `""`                                   | Prefix added to replies.                                                                                                                    |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                | Mention the sender or quote the source message when supported by the adapter.                                                               |
-| `forward_threshold`                         | `1500`                                 | Long-reply forwarding threshold on platforms that support forwarded messages.                                                               |
-| `segmented_reply`                           | See current defaults                   | Non-streaming segmentation, timing, and cleanup rules.                                                                                      |
-| `path_mapping`                              | `[]`                                   | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline. |
-| `friend_message_needs_wake_prefix`          | `false`                                | Require a wake prefix in direct messages.                                                                                                   |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                | Ignore the bot's own messages or mass mentions.                                                                                             |
+| Key                                         | Default                                     | Meaning                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unique_session`                            | `false`                                     | Split separate sessions for members inside a group.                                                                                                              |
+| `group_sender_concurrency`                  | `false`                                     | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on.           |
+| `rate_limit`                                | `60` seconds / `30` messages / `stall`      | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                                |
+| `enable_id_white_list`                      | `true`                                      | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                                        |
+| `reply_prefix`                              | `""`                                        | Prefix added to replies.                                                                                                                                         |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                     | Mention the sender or quote the source message when supported by the adapter.                                                                                    |
+| `forward_threshold`                         | `1500`                                      | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                                    |
+| `segmented_reply`                           | See current defaults                        | Non-streaming segmentation, timing, and cleanup rules.                                                                                                           |
+| `path_mapping`                              | `[]`                                        | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.                      |
+| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | Whether mentioning the bot or replying to the bot wakes a group message. Both default to false. The wake prefix is the top-level `wake_prefix`, default `["/"]`. |
+| `friend_message_needs_wake_prefix`          | `false`                                     | Require a wake prefix in direct messages.                                                                                                                        |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | Ignore the bot's own messages or mass mentions.                                                                                                                  |
 
 Example path mapping:
 
@@ -84,7 +86,9 @@ This is a partial illustration and must not replace the complete file. Because W
 - `fallback_chat_models` lists chat-model IDs tried in order after the primary model fails.
 - `request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
 - `provider_pool` limits Providers available to this profile; `["*"]` means all.
-- `default_image_caption_provider_id` and `image_caption_prompt` create descriptions for flows that cannot consume images directly.
+- `default_image_caption_provider_id` and `image_caption_prompt` caption images in the current main-agent request and quoted messages. They are not affected by group-history caption limits.
+- `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency. `image_caption_cache_ttl` defaults to `0` (off) and is scoped by UMO plus content id. `image_caption_lazy` defaults to off.
+- Group-chat JSON cards enter group context and are used as a `[Shared Card]` summary when a proactive reply or ordinary LLM request has no text prompt.
 
 API keys are sensitive configuration. Never commit a real `cmd_config.json`, screenshots, logs, or backups. Logs and Trace data can also contain Provider IDs, request errors, and tool output.
 
@@ -129,6 +133,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 
 - `streaming_response` enables Provider streaming.
 - `unsupported_streaming_strategy` uses `realtime_segmenting` on platforms without native streaming or `turn_off` to disable streaming for that response.
+- Session `/flow enable|disable|unset|status` can override the global value. Priority is `event.extra["enable_streaming"]` > session override > `provider_settings.streaming_response`. The effective value is pinned when a request starts.
 
 The old `provider_settings.streaming_segmented` field has been removed. Do not add it back.
 
@@ -210,7 +215,10 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 
 - `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
 - `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
-- `http_proxy` / `no_proxy` configure outbound HTTP proxying and bypasses.
+- `http_proxy` / `no_proxy` are the global outbound proxy and bypass list. They are no longer exported as process `HTTP_PROXY`.
+- Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
+- No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
+- `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
 - `log_level` and `log_file_*` control console and rotating file logs.
 - `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.

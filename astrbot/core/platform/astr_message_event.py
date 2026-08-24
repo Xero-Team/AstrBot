@@ -13,7 +13,7 @@ from astrbot import logger
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.auth.models import AuthContext, Resource, Subject
-from astrbot.core.db.po import Conversation
+from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import (
     RPS,
     Anonymous,
@@ -899,6 +899,18 @@ class AstrMessageEvent(abc.ABC):
             message (MessageChain): 消息链，具体使用方式请参考文档。
 
         """
+        from astrbot.core.group_sender_concurrency import (
+            current_concurrent_turn,
+        )
+
+        turn = current_concurrent_turn()
+        gate = self.get_extra("_group_outbound_gate")
+        umo = self.get_extra("_group_outbound_umo")
+        if turn is not None:
+            await turn.gate.hold_turn(turn.umo, turn.event)
+        elif gate is not None and umo:
+            await gate.hold_turn(umo, self)
+
         # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))

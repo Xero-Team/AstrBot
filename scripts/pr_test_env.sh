@@ -30,6 +30,7 @@ Options:
 
 Environment:
   PYTEST_ARGS           Extra args appended to pytest command
+  PYTEST_DEBUG          If set, enable pytest log_cli at DEBUG
 EOF
 }
 
@@ -155,15 +156,19 @@ if [[ -n "${PYTEST_ARGS:-}" ]]; then
 fi
 if [[ "$PROFILE" == "neo" ]]; then
   NEO_TESTS=(
-    "tests/test_neo_skill_sync.py"
-    "tests/test_neo_skill_tools.py"
-    "tests/test_computer_skill_sync.py"
-    "tests/test_skill_manager_sandbox_cache.py"
-    "tests/test_dashboard.py::test_neo_skills_routes"
+    "tests/unit/test_neo_skill_sync.py"
+    "tests/unit/test_neo_skill_tools.py"
+    "tests/unit/test_computer_skill_sync.py"
+    "tests/unit/test_skill_manager_sandbox_cache.py"
+    "tests/unit/dashboard/test_dashboard.py::test_neo_skills_routes"
   )
   uv run pytest -q "${NEO_TESTS[@]}" "${pytest_args[@]}"
 else
-  uv run pytest --cov=. -v -o log_cli=true -o log_level=DEBUG "${pytest_args[@]}"
+  pytest_cmd=(uv run pytest --cov=astrbot --cov-branch -v)
+  if [[ -n "${PYTEST_DEBUG:-}" ]]; then
+    pytest_cmd+=(-o log_cli=true -o log_level=DEBUG)
+  fi
+  "${pytest_cmd[@]}" "${pytest_args[@]}"
 fi
 
 run_smoke_test() {

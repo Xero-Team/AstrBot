@@ -615,12 +615,18 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
 
     import aiohttp
 
+    from astrbot.core.utils.proxy_route import (
+        create_aiohttp_session,
+        current_aiohttp_proxy,
+    )
+
     health_url = f"{endpoint}/health"
     try:
-        async with aiohttp.ClientSession() as session:
+        async with create_aiohttp_session() as session:
             async with session.get(
                 health_url,
                 timeout=aiohttp.ClientTimeout(total=5),
+                proxy=current_aiohttp_proxy(),
             ) as resp:
                 if resp.status != 200:
                     return (
@@ -1120,9 +1126,26 @@ class ConfigFileService:
         )
         if errors:
             raise DashboardValidationError(f"格式校验未通过: {errors}")
+        try:
+            previous = copy.deepcopy(dict(metadata.config))
+        except TypeError, ValueError:
+            previous = None
         committed = await metadata.config.save_config_async(post_configs)
         _require_config_save_commit(committed)
-        await self.plugin_lifecycle.reload(plugin_name)
+        try:
+            await self.plugin_lifecycle.reload(plugin_name)
+        except Exception:
+            if previous is None:
+                raise
+            try:
+                rollback_committed = await metadata.config.save_config_async(previous)
+                _require_config_save_commit(rollback_committed)
+                await self.plugin_lifecycle.reload(plugin_name)
+            except Exception:
+                logger.error(
+                    "Failed to roll back plugin configuration after reload failure"
+                )
+            raise
 
     async def upload_config_file(
         self,

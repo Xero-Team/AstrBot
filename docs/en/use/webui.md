@@ -79,8 +79,57 @@ ChatUI supports these common workflows:
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes.
 
+### High-risk tools in ChatUI
+
+The shield-key button beside the message box enables high-risk tools for one
+ChatUI run. It is available only when the signed-in Dashboard account has an
+`instance_operator` (or stronger) binding for the selected configuration
+profile. The confirmation dialog asks for the current password or TOTP code.
+
+The confirmation grants only the following instance-scoped tool actions:
+
+- local shell and Python execution;
+- local file writes;
+- browser and Computer Use control;
+- write-capable MCP tools.
+
+The proof is held only in browser memory and is bound to the active WebChat
+conversation and configuration profile. It is used once when the next run
+starts, then discarded; change the conversation or profile, wait for it to
+expire, or click the button again to disable it. Enable it again before another
+high-risk run.
+
+This does not grant access to global Dashboard operations such as changing
+accounts, providers, plugins, system settings, exports, or restarts. The
+account's Persona, tool, sandbox, and path restrictions still apply. Anonymous
+WebChat, API keys, IM messages, plugins, and background continuations cannot
+reuse this authorization. Live Voice is also excluded because it does not use
+the same persistent ChatUI conversation.
+
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
+
+## Accounts and authorization
+
+WebUI supports multiple Dashboard accounts. First startup creates a bootstrap `root` account (username is usually `astrbot`). Control-plane identity comes from the account table and role bindings; a username never implies `root`.
+
+**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
+
+Fixed roles:
+
+| Role                | Scope                | Typical use                                    |
+| ------------------- | -------------------- | ---------------------------------------------- |
+| `root`              | global control plane | accounts, core updates, restarts, pip installs |
+| `operator`          | global control plane | config, providers, plugins, data operations    |
+| `instance_operator` | one config profile   | management actions for that profile            |
+| `session_owner`     | current group/DM     | session management and in-session model choice |
+| `session_admin`     | current session      | limited management such as stopping a task     |
+| `member`            | current session      | ordinary chat                                  |
+| `guest`             | unauthenticated      | anonymous WebChat                              |
+
+Plugin installs, credential writes, full conversation export, core updates, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
+
+The developer model is in [Architecture](/en/dev/architecture#unified-authorization).
 
 ## Visual Configuration
 
@@ -100,13 +149,13 @@ After editing, first click `Apply This Configuration`, which will apply the conf
 
 In the admin panel, you can view installed plugins and install new plugins through the `Plugins` section in the left sidebar.
 
-Click the Plugin Market tab to browse plugins officially listed by AstrBot.
+Click the Plugin Market tab to browse plugins from the default marketplace source. That source points at upstream `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN/compatibility mirrors; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
 
 You can also click the + button in the bottom right corner to manually install plugins via URL or file upload.
 
-> Due to the plugin update mechanism, the AstrBot Team cannot fully guarantee the security of plugins in the plugin market. Please carefully verify them. The AstrBot Team is not responsible for any losses caused by plugins.
+> Neither this fork nor the upstream AstrBot Team guarantees the security or compatibility of these plugins. Maintainers are not responsible for losses caused by plugins.
 
 ### Handling Plugin Load Failures
 
@@ -126,6 +175,26 @@ Filter by plugin, type (command / command group / subcommand), permission, and s
 
 You can enable/disable, rename, and edit aliases for each command. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
 
+Commands are identified by a stable `command_id` of the form `plugin-name:original-command-path` with spaces replaced by dots, for example `builtin_commands:plugin.list`. Permission overrides are read and written only under that key; Python method names and historical short-name keys are ignored. Built-in commands without an explicit Dashboard rename keep their current declared names. Unmatched `command_configs` rows that cannot be claimed by `handler_full_name` or `command_id` are deleted during sync.
+
+## Data files
+
+**More → Data files** opens `/data` to browse and edit the active runtime `data/` directory. It is not a remote IDE: there is no terminal, code execution, Git, or arbitrary host-path access.
+
+On desktop the left pane is a directory tree and the center holds file tabs plus a Monaco editor. The URL stores only a relative path such as `/data?path=skills/demo/SKILL.md`, never file contents or credentials. An invalid path falls back to the `data/` root. Hidden files are shown. Leaving a dirty tab prompts for confirmation.
+
+`operator` and `root` can browse ordinary text and save it. Editable text is capped at 1 MiB; larger files become read-only downloads. You can create, rename, move, and delete files and directories, upload a file up to 32 MiB, and search by filename (not contents). Images and audio can be previewed; databases, archives, and unknown binaries expose metadata and download only.
+
+Protected paths have a separate policy:
+
+- `plugins/` is read-only until a root `filesystem.manage` step-up.
+- `dist/`, `site-packages/`, and live databases plus WAL/SHM are never writable.
+- Raw reads of `cmd_config.json` and `config/` require root; ordinary configuration still belongs on the structured config pages.
+- Demo mode is read-only.
+- API keys cannot open this page.
+
+Concurrent saves use an etag; a changed file on disk returns a conflict with **Keep local** or **Reload**. The developer model is in [Architecture](/en/dev/architecture#data-file-manager).
+
 ## Trace
 
 In the `Trace` page of the admin panel, you can view the real-time execution trace of AstrBot. This is useful for debugging model call paths, tool invocation processes, etc.
@@ -137,7 +206,7 @@ You can enable or disable trace recording using the switch at the top of the pag
 
 ## Updating the Admin Panel
 
-This fork does not currently publish an independent downloadable Dashboard release. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
+This fork does not publish downloadable Core or independent Dashboard releases. The in-app version check queries GitHub Releases for `Xero-Team/AstrBot`; when that list is empty the UI reports that no Core Release is published. Do not use the Dashboard one-click updater to install an upstream zip. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
 
 Message commands and the `astrbot` CLI never download, install, or update Dashboard assets. Upstream Dashboard static files are incompatible with this fork's backend API and frontend behavior and must not be copied into `data/dist`. Startup uses only an explicit `--webui-dir`, a build from the current source tree, bundled assets, or a version-matched `data/dist`. Without a compatible build, the backend continues to run but the WebUI is unavailable.
 

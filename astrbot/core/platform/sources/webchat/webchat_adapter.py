@@ -277,9 +277,10 @@ class WebChatAdapter(Platform):
                     "selected_provider", payload.get("selected_provider")
                 )
                 message_event.set_extra("selected_model", payload.get("selected_model"))
-                message_event.set_extra(
-                    "enable_streaming", payload.get("enable_streaming", True)
-                )
+                if "enable_streaming" in payload:
+                    message_event.set_extra(
+                        "enable_streaming", payload.get("enable_streaming")
+                    )
                 message_event.set_extra("action_type", payload.get("action_type"))
                 message_event.set_extra(
                     "llm_checkpoint_id", payload.get("llm_checkpoint_id")
@@ -287,6 +288,12 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )
+                parent_session_id = payload.get("webchat_parent_session_id")
+                if isinstance(parent_session_id, str) and parent_session_id:
+                    message_event.set_extra(
+                        "webchat_parent_session_id",
+                        parent_session_id,
+                    )
                 api_key_principal = payload.get("_api_key_principal")
                 if isinstance(api_key_principal, dict):
                     message_event.set_extra(

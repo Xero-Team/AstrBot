@@ -4,6 +4,28 @@ export type ClientOptions = {
   baseURL: 'http://localhost:6185' | (string & {});
 };
 
+export type DataFileContentRequest = {
+  content: string;
+  expected_etag?: string;
+  encoding?: 'utf-8';
+};
+
+export type DataFileEntryRequest = {
+  path: string;
+  type?: 'file' | 'directory';
+  content?: string;
+};
+
+export type DataFileMoveRequest = {
+  source_path: string;
+  target_path: string;
+};
+
+export type DataFileDeleteRequest = {
+  path: string;
+  recursive?: boolean;
+};
+
 export type SuccessEnvelope = {
   status: 'ok' | 'warning';
   message?: string;
@@ -475,6 +497,10 @@ export type AuthorizationStepUpRequest = {
   config_id?: string;
 };
 
+export type WebChatStepUpRequest = {
+  session_id: string;
+};
+
 export type AuthorizationBindingBatchRevokeRequest = {
   binding_ids: Array<string>;
 };
@@ -501,6 +527,13 @@ export type CommandSummary = {
 };
 
 export type CommandItem = {
+  /**
+   * Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
+   */
+  command_id: string;
+  /**
+   * Runtime handler locator. Read-only.
+   */
   handler_full_name?: string;
   handler_name?: string;
   plugin?: string;
@@ -613,6 +646,12 @@ export type NeoCandidateActionRequest = {
 
 export type NeoReleaseActionRequest = {
   release_id: string;
+  [key: string]: unknown;
+};
+
+export type NeoSyncRequest = unknown & {
+  release_id?: string;
+  skill_key?: string;
   [key: string]: unknown;
 };
 
@@ -877,11 +916,78 @@ export type SubAgentConfigRequest = {
   }>;
 };
 
+export type ChatRequestWritable = {
+  /**
+   * Caller-declared WebChat sender/session owner.
+   */
+  username?: string;
+  session_id?: string;
+  message: string | Array<MessagePart>;
+  config_id?: string;
+  config_name?: string;
+  selected_provider?: string;
+  selected_model?: string;
+  enable_streaming?: boolean;
+  /**
+   * Internal WebUI flag for edit/regenerate flows.
+   */
+  _skip_user_history?: boolean;
+  /**
+   * Internal WebUI checkpoint override.
+   */
+  _llm_checkpoint_id?: string;
+  /**
+   * Internal WebUI platform history override.
+   */
+  _platform_history_id?: string;
+  /**
+   * Internal WebUI side-thread context.
+   */
+  _thread_selected_text?: string;
+  /**
+   * Internal WebUI in-memory WebChat step-up proofs.
+   */
+  _webchat_step_up_tokens?: {
+    [key: string]: string;
+  };
+};
+
+export type ChatMessageRegenerateRequestWritable = {
+  selected_provider?: string;
+  selected_model?: string;
+  enable_streaming?: boolean;
+  /**
+   * Internal WebUI in-memory WebChat step-up proofs.
+   */
+  _webchat_step_up_tokens?: {
+    [key: string]: string;
+  };
+};
+
+export type ChatThreadMessageRequestWritable = {
+  message: string | Array<MessagePart>;
+  selected_provider?: string;
+  selected_model?: string;
+  enable_streaming?: boolean;
+  /**
+   * Internal WebUI in-memory WebChat step-up proofs.
+   */
+  _webchat_step_up_tokens?: {
+    [key: string]: string;
+  };
+};
+
 export type AuthorizationStepUpRequestWritable = {
   action: string;
   resource_type: string;
   resource_id: string;
   config_id?: string;
+  password?: string;
+  code?: string;
+};
+
+export type WebChatStepUpRequestWritable = {
+  session_id: string;
   password?: string;
   code?: string;
 };
@@ -904,6 +1010,8 @@ export type DashboardAccountUpdateRequestWritable = {
   is_active?: boolean;
 };
 
+export type DataFilePath = string;
+
 export type AppearanceWallpaperId = string;
 
 export type ExtensionId = string;
@@ -921,7 +1029,7 @@ export type BotId = string;
 export type ChunkId = string;
 
 /**
- * URL-encoded command handler full name.
+ * Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
  */
 export type CommandId = string;
 
@@ -978,6 +1086,207 @@ export type ToolId = string;
 export type Umo = string;
 
 export type WebhookUuid = string;
+
+export type ListDataFileTreeData = {
+  body?: never;
+  path?: never;
+  query?: {
+    path?: string;
+  };
+  url: '/api/v1/data-files/tree';
+};
+
+export type ListDataFileTreeResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListDataFileTreeResponse =
+  ListDataFileTreeResponses[keyof ListDataFileTreeResponses];
+
+export type GetDataFileMetadataData = {
+  body?: never;
+  path?: never;
+  query: {
+    path: string;
+  };
+  url: '/api/v1/data-files/metadata';
+};
+
+export type GetDataFileMetadataResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetDataFileMetadataResponse =
+  GetDataFileMetadataResponses[keyof GetDataFileMetadataResponses];
+
+export type GetDataFileContentData = {
+  body?: never;
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/content/{path}';
+};
+
+export type GetDataFileContentResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetDataFileContentResponse =
+  GetDataFileContentResponses[keyof GetDataFileContentResponses];
+
+export type UpdateDataFileContentData = {
+  body: DataFileContentRequest;
+  headers?: {
+    'If-Match'?: string;
+  };
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/content/{path}';
+};
+
+export type UpdateDataFileContentErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  409: ErrorEnvelope;
+};
+
+export type UpdateDataFileContentError =
+  UpdateDataFileContentErrors[keyof UpdateDataFileContentErrors];
+
+export type UpdateDataFileContentResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UpdateDataFileContentResponse =
+  UpdateDataFileContentResponses[keyof UpdateDataFileContentResponses];
+
+export type DownloadDataFileData = {
+  body?: never;
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/download/{path}';
+};
+
+export type DownloadDataFileResponses = {
+  /**
+   * Raw file download
+   */
+  200: Blob | File;
+};
+
+export type DownloadDataFileResponse =
+  DownloadDataFileResponses[keyof DownloadDataFileResponses];
+
+export type MoveDataFileEntryData = {
+  body: DataFileMoveRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/data-files/entries';
+};
+
+export type MoveDataFileEntryResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type MoveDataFileEntryResponse =
+  MoveDataFileEntryResponses[keyof MoveDataFileEntryResponses];
+
+export type CreateDataFileEntryData = {
+  body: DataFileEntryRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/data-files/entries';
+};
+
+export type CreateDataFileEntryResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CreateDataFileEntryResponse =
+  CreateDataFileEntryResponses[keyof CreateDataFileEntryResponses];
+
+export type DeleteDataFileEntryData = {
+  body?: DataFileDeleteRequest;
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/entries/{path}';
+};
+
+export type DeleteDataFileEntryResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type DeleteDataFileEntryResponse =
+  DeleteDataFileEntryResponses[keyof DeleteDataFileEntryResponses];
+
+export type UploadDataFileData = {
+  body: {
+    path: string;
+    file: Blob | File;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/v1/data-files/upload';
+};
+
+export type UploadDataFileResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UploadDataFileResponse =
+  UploadDataFileResponses[keyof UploadDataFileResponses];
+
+export type SearchDataFilesData = {
+  body?: never;
+  path?: never;
+  query: {
+    q: string;
+    path?: string;
+  };
+  url: '/api/v1/data-files/search';
+};
+
+export type SearchDataFilesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type SearchDataFilesResponse =
+  SearchDataFilesResponses[keyof SearchDataFilesResponses];
 
 export type LoginData = {
   body: LoginRequest;
@@ -1278,6 +1587,23 @@ export type IssueAuthorizationStepUpResponses = {
 
 export type IssueAuthorizationStepUpResponse =
   IssueAuthorizationStepUpResponses[keyof IssueAuthorizationStepUpResponses];
+
+export type IssueWebChatAuthorizationStepUpData = {
+  body: WebChatStepUpRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/webchat-step-up';
+};
+
+export type IssueWebChatAuthorizationStepUpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type IssueWebChatAuthorizationStepUpResponse =
+  IssueWebChatAuthorizationStepUpResponses[keyof IssueWebChatAuthorizationStepUpResponses];
 
 export type ListAuthorizationAuditData = {
   body?: never;
@@ -2142,7 +2468,7 @@ export type GetProviderEmbeddingDimensionResponse =
   GetProviderEmbeddingDimensionResponses[keyof GetProviderEmbeddingDimensionResponses];
 
 export type SendChatMessageData = {
-  body: ChatRequest;
+  body: ChatRequestWritable;
   path?: never;
   query?: never;
   url: '/api/v1/chat';
@@ -2359,7 +2685,7 @@ export type UpdateChatMessageResponse =
   UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
 
 export type RegenerateChatMessageData = {
-  body?: ChatMessageRegenerateRequest;
+  body?: ChatMessageRegenerateRequestWritable;
   path: {
     session_id: string;
     message_id: string;
@@ -2451,7 +2777,7 @@ export type GetChatThreadResponse =
   GetChatThreadResponses[keyof GetChatThreadResponses];
 
 export type SendChatThreadMessageData = {
-  body: ChatThreadMessageRequest;
+  body: ChatThreadMessageRequestWritable;
   path: {
     thread_id: string;
   };
@@ -3885,7 +4211,7 @@ export type UpdateCommandData = {
   body: CommandPatchRequest;
   path: {
     /**
-     * URL-encoded command handler full name.
+     * Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
      */
     command_id: string;
   };
@@ -4626,7 +4952,7 @@ export type RollbackNeoSkillReleaseResponse =
   RollbackNeoSkillReleaseResponses[keyof RollbackNeoSkillReleaseResponses];
 
 export type SyncNeoSkillReleaseData = {
-  body: NeoReleaseActionRequest;
+  body: NeoSyncRequest;
   path?: never;
   query?: never;
   url: '/api/v1/skills/neo/sync';

@@ -104,12 +104,8 @@ def test_btw_capability_route_assignments_survive_config_integrity(temp_config_p
         default_config=default_config,
     )
 
-    assert config["btw"]["plugin_routes"] == [
-        {"plugin_id": "example", "loop": "both"}
-    ]
-    assert config["btw"]["mcp_routes"] == [
-        {"server_name": "workspace", "loop": "work"}
-    ]
+    assert config["btw"]["plugin_routes"] == [{"plugin_id": "example", "loop": "both"}]
+    assert config["btw"]["mcp_routes"] == [{"server_name": "workspace", "loop": "work"}]
     assert config["btw"]["skill_routes"] == [
         {"skill_name": "workspace-edit", "loop": "work"}
     ]

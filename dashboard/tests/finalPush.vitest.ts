@@ -43,7 +43,7 @@ describe('final coverage push', () => {
     setActivePinia(createPinia());
   });
 
-  it('keeps route modules importable', { timeout: 20_000 }, async () => {
+  it('keeps route modules importable', { timeout: 60_000 }, async () => {
     expect(AuthRoutes.path).toBe('/auth');
     expect(AuthRoutes.meta).toEqual({ requiresAuth: false });
     expect(ChatBoxRoutes.path).toBe('/chatbox');

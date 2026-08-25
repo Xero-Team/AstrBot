@@ -5,67 +5,51 @@ upstream:
   branch: master
 
 last_synced:
-  commit: ceb53f8c52685211a87c3d7e82f836642dde22b2
-  synced_at_utc: 2026-08-24T12:30:00Z
+  commit: 15fe5213521ca7cea5d47336c7a6fbe47895c800
+  synced_at_utc: 2026-08-25T00:00:00Z
   sync_method: merge
   source_pr: ''
   note: >-
-    Merged `docs/community-files` (Xero-Team/AstrBot sibling fork, tip
-    ceb53f8c5 == upstream/master, plus the fork's community-docs commit
-    f0247df01) into Zephirum `master` via a merge commit. This pulls in
-    ~50 sibling-fork commits diverged since the previous marker, including
-    the command_id identity cutover, stable command IDs, the knowledge-base
-    nested-upload feature, group-sender concurrency, shared-card JSON
-    summarization, the WebChat high-risk tool step-up path, the main SQLite
-    schema split, and a large dashboard test/coverage refactor. Eight files
-    conflicted and were resolved to protect BTW (the fork's differentiating
-    dual-loop feature), per the established protect-BTW sync policy.
-    `astrbot/core/auth/service.py`: kept the fork's `btw_work_elevation`
-    + per-profile `btw_elevated_actions` step-up bypass branch and grafted
-    upstream's new webchat source path (`WEBCHAT_INSTANCE_TOOL_ACTIONS`
-    + `_webchat_step_up_cached`) alongside it; non-dashboard/non-webchat/
-    non-BTW-elevated high-risk actions still deny with
-    `high_risk_dashboard_only`. `astrbot/core/pipeline/.../internal.py`:
-    adopted upstream's `resolve_streaming_response()` (a superset of the
-    fork's `enable_streaming` extra) and group-sender concurrency
-    (`_prepare_group_sender_concurrency`/`_register_follow_up_runner`/
-    `turn_cm`), but kept the fork's `btw_detached_work` flag (skips
-    follow-up capture + runner registration for detached work tasks) and
-    honored the `btw_agent_lock_key` extra to override the group lock key
-    so related BTW work turns share one agent lock. `tests/unit/`:
-    accepted upstream's split of the giant `test_agent_sub_stages.py` into
-    domain files (`test_agent_internal_process.py` etc. +
-    `agent_sub_stage_support.py`) and ported the fork's
-    `test_internal_builder_applies_model_and_permission_per_btw_loop` into
-    `test_agent_internal_process.py`; kept the fork's `get_extra`/`set_extra`
-    event stub in `test_astr_agent_tool_exec.py` (returns real extras) so
-    the `btw_loop` BTW tests still pass (upstream's stub returned defaults).
-    Dashboard mdi icon subset (css/woff/woff2): kept the fork's
-    regenerated subset. `CODE_OF_CONDUCT.md`: merged cleanly; the fork's
-    trimmed pledge (no identity-attribute listing) is preserved because
-    upstream still carried the original Contributor Covenant text. The
-    `upstream.repo` field continues to point at AstrBotDevs/AstrBot per
-    fork convention even though this sync pulled from Xero-Team/AstrBot;
-    Zephirum operates as an independent fork and does not open PRs back to
-    either upstream. Two extra test-fixture adaptations were needed for
-    upstream's new required-context gate and pipeline tests: upstream
-    added an `origin_session` required-context check (`_missing_policy_context`
-    in `auth/service.py`, `required_context` in `auth/registry.py`) that
-    fires `missing_context_origin_session` for IM/webchat tool actions
-    without an `origin_session_resource_id`; production IM events set this
-    in `waking_check/stage.py`, so BTW is unaffected, but
-    `test_btw_work_elevation_allows_high_risk_tools_for_im_operators` built
-    its context with the minimal `_context()` helper, so it was rebound to a
-    session resource (mirroring production). Upstream's new
-    `test_pipeline_scheduler_order.py` uses a `PipelineEvent` stub without
-    `get_extra`/`set_extra`, which the fork's `btw_detached_work` cleanup in
-    `scheduler.py` calls; added those methods to the stub. Validation:
-    144 BTW/auth/pipeline/scheduler/group-sender/streaming tests pass; full
-    unit suite 4209 passed / 5 skipped; the only failures (13 -> 12 after
-    the scheduler fix) are pre-existing or Windows-only shell/fs/CRLF/path
-    environment issues (`TestSyncSkillsToSandbox`, `TestLocalShellComponent`,
-    `test_local_shell_component`, `test_computer_fs_tools` CRLF, and the
-    `test_sanitize_upload_filename` Windows drive-letter case) that fail on
-    this Windows host but pass in CI (ubuntu-latest) and are unrelated to
-    BTW; `TestSyncSkillsToSandbox` was confirmed to also fail on pre-merge
-    master.
+    Merged upstream/master (Xero-Team/AstrBot) tip 15fe52135 into Zephirum
+    `master` via a merge commit, advancing from the previous marker
+    ceb53f8c5. Sixteen sibling-fork commits in this interval add: a grouped
+    `/bot` command (status/enable/disable/leave) with stable command_ids and
+    `session.read`/`session.manage` permissions; a `SessionStatusCheckStage`
+    passthrough so activated `/bot status` and `/bot enable` run while the
+    session is off; Slack non-image file-download authentication; the
+    Anthropic httpx/httpx2 module rename; per-knowledge-base BM25 fallback
+    index caching; shared-preference and live-TTS write-queue bounding;
+    removal of the unsupported Kubernetes manifests and `privileged` Compose
+    mode; pinning Hypercorn and dropping unused deps; the conversation-detail
+    edit-mode double-scrollbar fix; and bounding hung dynamic imports in
+    dashboard coverage tests. The fork's community-files PR (f0247df01) was
+    merged upstream as e10794d5c; upstream follow-ups 7c426dd0d (route support
+    to GitHub, label Discord/QQ and docs.astrbot.app as upstream) and
+    06b9ef197 (reject discriminatory remarks targeting AI) were taken.
+    CODE_OF_CONDUCT.md auto-merged: the fork's trimmed pledge (no
+    identity-attribute listing) is preserved, and the new AI-discrimination
+    clause is about AI contributions, not a protected-attribute diversity
+    listing, so it is accepted. Five files conflicted and were resolved per
+    the protect-BTW policy: `.github/ISSUE_TEMPLATE/config.yml` and
+    `SUPPORT.md` took upstream's fork-aware routing; `CHANGELOG.md` took
+    upstream's index (adds v4.27.5 as WIP); `dashboard/tests/finalPush.vitest.ts`
+    kept the fork's 60s `timeout` (CI fix upstream lacks); `upstream-sync.yaml`
+    kept the fork's tracking record. No BTW-core files conflicted: the `/bot`
+    command and `session_status_check/stage.py` are additive and were adopted
+    as-is, and the fork's `btw_work_elevation`, `btw_detached_work`,
+    `btw_agent_lock_key`, per-profile `btw_elevated_actions`, and dual-loop
+    agent/conversation machinery are untouched. The `upstream.repo` field
+    continues to point at AstrBotDevs/AstrBot per fork convention even though
+    this sync pulled from Xero-Team/AstrBot; Zephirum operates as an
+    independent fork and does not open PRs back to either upstream.
+    Validation: ruff check + ruff format --check both pass; 272 focused
+    BTW/auth/pipeline/bot/scheduler tests pass; 148 new upstream unit tests
+    (slack, anthropic, kb sparse retriever, shared_preferences, container
+    contracts, agent_run_util) pass; 24 affected dashboard vitest cases
+    (finalPush, coverageMounts, viewDialogLayouts) pass; full unit suite 4237
+    passed / 5 skipped. The 12 failures are exactly the pre-existing
+    Windows-only shell/fs/CRLF/drive-letter cases (TestLocalShellComponent,
+    TestSyncSkillsToSandbox, test_local_shell_component, test_computer_fs_tools,
+    test_sanitize_upload_filename) documented at the previous marker; the merge
+    did not modify those test files or their sources (0-line diff vs pre-merge
+    master), and they pass in CI on ubuntu-latest.

@@ -1,5 +1,6 @@
 """Regression coverage for local container build entry points."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,40 @@ def test_compose_keeps_astrbot_as_a_local_source_build(compose_name: str) -> Non
     assert "./data:/AstrBot/data" in astrbot["volumes"]
 
 
+def _is_unprivileged(service: dict) -> bool:
+    return service.get("privileged") in (None, False)
+
+
+def test_default_compose_astrbot_is_unprivileged() -> None:
+    """Default `docker compose up` must not run AstrBot as privileged."""
+    compose = _load_compose("compose.yml")
+    astrbot = compose["services"]["astrbot"]
+    assert _is_unprivileged(astrbot)
+    assert not any(
+        "docker.sock" in str(volume) for volume in astrbot.get("volumes", [])
+    )
+
+
+def test_compose_computer_profile_mounts_docker_sock() -> None:
+    """Computer-tool Docker access is an explicit Compose profile."""
+    compose = _load_compose("compose.yml")
+    computer = compose["services"]["computer"]
+    assert computer["profiles"] == ["computer"]
+    assert "./data:/AstrBot/data" in computer["volumes"]
+    assert "/var/run/docker.sock:/var/run/docker.sock" in computer["volumes"]
+    assert _is_unprivileged(computer)
+    assert computer["image"] == "astrbot:local"
+
+
+def test_napcat_compose_keeps_astrbot_unprivileged_and_napcat_privileged() -> None:
+    compose = _load_compose("compose-with-napcat.yml")
+    astrbot = compose["services"]["astrbot"]
+    napcat = compose["services"]["napcat"]
+    assert _is_unprivileged(astrbot)
+    assert "/var/run/docker.sock:/var/run/docker.sock" in astrbot["volumes"]
+    assert napcat["privileged"] is True
+
+
 @pytest.mark.parametrize("compose_name", ["compose.yml", "compose-with-napcat.yml"])
 def test_compose_docs_service_uses_the_local_docs_image(compose_name: str) -> None:
     """Documentation uses the checked-out Dockerfile and remains read-only."""
@@ -41,6 +76,28 @@ def test_compose_docs_service_uses_the_local_docs_image(compose_name: str) -> No
     assert docs["read_only"] is True
     assert docs["security_opt"] == ["no-new-privileges:true"]
     assert docs["tmpfs"] == ["/tmp:mode=1777"]
+
+
+def test_dockerfile_playwright_version_matches_requirements() -> None:
+    """Image Playwright must match the locked runtime specifier, not downgrade it."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    docker_match = re.search(
+        r"^    PLAYWRIGHT_VERSION=([0-9]+\.[0-9]+\.[0-9]+) \\$",
+        dockerfile,
+        re.MULTILINE,
+    )
+    assert docker_match is not None
+    docker_version = docker_match.group(1)
+
+    requirements = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    req_match = re.search(
+        r"^playwright>=([0-9]+\.[0-9]+\.[0-9]+)$",
+        requirements,
+        re.MULTILINE,
+    )
+    assert req_match is not None
+    assert docker_version == req_match.group(1)
+    assert docker_version.startswith("1.62.")
 
 
 def test_runtime_image_copies_changelogs() -> None:

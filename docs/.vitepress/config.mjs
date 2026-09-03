@@ -197,7 +197,6 @@ export default defineConfig({
                   { text: '会话控制器', link: '/guides/session-control' },
                   { text: 'OneBot 插件 API', link: '/guides/onebot' },
                   { text: '杂项', link: '/guides/other' },
-                  { text: '发布插件', link: '/plugin-publish' },
                 ],
               },
               {
@@ -449,7 +448,6 @@ export default defineConfig({
                   { text: 'HTML to Image', link: '/guides/html-to-pic' },
                   { text: 'Session Control', link: '/guides/session-control' },
                   { text: 'OneBot Plugin API', link: '/guides/onebot' },
-                  { text: 'Publish Plugin', link: '/plugin-publish' },
                 ],
               },
               {

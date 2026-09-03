@@ -334,17 +334,6 @@ const updateDialogPluginLogo = computed(() => {
         >
           {{ tm('market.devDocs') }}
         </v-btn>
-        <div class="extension-page__market-divider"></div>
-        <v-btn
-          variant="text"
-          prepend-icon="mdi-github"
-          href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection"
-          target="_blank"
-          color="primary"
-          class="text-none"
-        >
-          {{ tm('market.submitRepo') }}
-        </v-btn>
       </div>
     </v-col>
   </v-row>
@@ -1168,12 +1157,6 @@ const updateDialogPluginLogo = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--astrbot-space-2);
-}
-
-.extension-page__market-divider {
-  width: 1px;
-  height: 24px;
-  background: rgb(var(--v-theme-outline-variant));
 }
 
 .extension-detail-width {

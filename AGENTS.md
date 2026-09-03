@@ -183,6 +183,8 @@ make quality-report        # broader report; not currently a required CI gate
 read-only: the Dashboard build writes `dashboard/dist/` and may regenerate the
 tracked MDI subset assets. `make quality-report` is not a required CI gate at
 present, but its commands still propagate non-zero exit codes.
+`quality-web-audit` runs Dashboard `pnpm audit --audit-level=low` with
+`--ignore-registry-errors`, so a registry timeout does not fail `make quality`.
 
 The native POSIX linters (`shellcheck`, `shfmt`, and `hadolint`) are required,
 not optional. PowerShell checks require PowerShell 7 and PSScriptAnalyzer.

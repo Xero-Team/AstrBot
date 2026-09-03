@@ -155,7 +155,9 @@ Commit plugin files only when the user explicitly asks and the plugin tree is
 inside this repository. Out-of-tree plugin packages are not AstrBot commits.
 Follow `.agents/shared/conventional-commit/REFERENCE.md`, including the
 `AI-Generated` and `Generated-At` footers. You may push a feature branch and
-open a PR as part of that request. Do not merge. End the PR with
+open a PR against `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot` as part
+of that request. Do not open it on `AstrBotDevs/AstrBot` unless the user
+explicitly confirms that upstream target. Do not merge. End the PR with
 `## Agent note` (or ask the human author for `## Human note`).
 
 ## Bundled resources

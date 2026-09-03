@@ -19,7 +19,7 @@ AI **可以**：
 
 - 阅读仓库、跑检查、写代码、写测试、写文档。
 - 在功能分支上 commit、push。
-- 开启开发用 Issue 与 Pull Request，在讨论中评论，请求评审。
+- 开启开发用 Issue 与 Pull Request（目标仓库 `Xero-Team/AstrBot`；`gh` 必须带 `--repo Xero-Team/AstrBot`），在讨论中评论，请求评审。
 - 按 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [`.agents/shared/conventional-commit/REFERENCE.md`](.agents/shared/conventional-commit/REFERENCE.md) 生成提交说明。
 
 AI **不可以**：
@@ -29,6 +29,7 @@ AI **不可以**：
 - 打 tag、创建 GitHub Release、发布 PyPI / 容器镜像 / 其他发行资产。
 - 修改分支保护、仓库密钥、组织设置。
 - 把安全漏洞写成公开 Issue 或公开 PR 描述。安全报告只走 [SECURITY.md](SECURITY.md)。
+- 未经用户明确确认，把 Issue 或 PR 开到上游 `AstrBotDevs/AstrBot`。
 - 代维护者在 PR 上点 Approve，或伪造他人的评审。
 
 ## 合并门槛
@@ -94,7 +95,8 @@ An agent **may**:
 
 - Read the repository, run checks, write code, tests, and documentation.
 - Commit and push on feature branches.
-- Open development issues and pull requests, comment, and request review.
+- Open development issues and pull requests on `Xero-Team/AstrBot` (`gh` must
+  pass `--repo Xero-Team/AstrBot`), comment, and request review.
 - Generate commit messages per [CONTRIBUTING.md](CONTRIBUTING.md) and
   [`.agents/shared/conventional-commit/REFERENCE.md`](.agents/shared/conventional-commit/REFERENCE.md).
 
@@ -107,6 +109,8 @@ An agent **must not**:
 - Change branch protection, repository secrets, or organization settings.
 - File a public issue or public PR description for a security vulnerability.
   Use [SECURITY.md](SECURITY.md) only.
+- Open an Issue or PR on upstream `AstrBotDevs/AstrBot` unless the user
+  explicitly confirms that target.
 - Approve a pull request in a maintainer's name, or fabricate another person's
   review.
 

@@ -13,7 +13,7 @@
 
 ### 问题与反馈
 
-本 fork 不运营用户支持队列。开发用 Issue（缺陷、功能、任务模板）跟踪代码工作，不是客服。安全漏洞按 [SECURITY.md](SECURITY.md) 私密报告，不要开公开 Issue。AI 使用与合并门槛见 [AI_POLICY.md](AI_POLICY.md)：智能体可以开 Issue/PR，但不得合并、推送 `master`、打 tag 或发布；合入需要人类维护者评审加上另一次 AI 辅助评审。
+本 fork 不运营用户支持队列。开发用 Issue（缺陷、功能、任务模板）跟踪代码工作，不是客服。安全漏洞按 [SECURITY.md](SECURITY.md) 私密报告，不要开公开 Issue。AI 使用与合并门槛见 [AI_POLICY.md](AI_POLICY.md)：智能体可以在 `Xero-Team/AstrBot` 开 Issue/PR（`gh` 必须带 `--repo Xero-Team/AstrBot`），但不得合并、推送 `master`、打 tag 或发布；合入需要人类维护者评审加上另一次 AI 辅助评审。未经明确确认，不要开到上游 `AstrBotDevs/AstrBot`。
 
 开发 Issue 使用标签 `bug`、`enhancement`、`task`。长期跟进可加 `no-stale` 或 `waiting-on-review`，以免被 stale 工作流关闭。该工作流只处理带 `bug` 的 Issue，不会自动关闭功能或任务 Issue。
 
@@ -69,7 +69,7 @@ uv run python docs/scripts/update_openapi_json.py
   | `refactor`、`perf`、`style`     | `.github/PULL_REQUEST_TEMPLATE/refactor.md` |
   | `chore`、`build`、`ops`、`test` | `.github/PULL_REQUEST_TEMPLATE/chore.md`    |
 
-  未指定分型模板时，GitHub 会填入 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)。示例：`gh pr create --template .github/PULL_REQUEST_TEMPLATE/fix.md`。
+  未指定分型模板时，GitHub 会填入 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)。示例：`gh pr create --repo Xero-Team/AstrBot --template .github/PULL_REQUEST_TEMPLATE/fix.md`。`gh` 在 fork 上可能默认指向上游，必须带 `--repo Xero-Team/AstrBot`，并确认创建出的 URL 属于 `github.com/Xero-Team/AstrBot`。未经明确确认，不要把 Issue/PR 开到 `AstrBotDevs/AstrBot`。
 
 - 不要把“兼容旧版本”的文案或代码路径重新带回仓库。
 - 不要合并自己的 PR，也不要把提交直接推到 `master`。
@@ -110,9 +110,12 @@ This fork does not operate a user-support queue. Development Issues (bug,
 feature, and task templates) track code work; they are not a helpdesk.
 Security reports go through [SECURITY.md](SECURITY.md); do not file a public
 Issue for a vulnerability. AI use and the merge bar are in
-[AI_POLICY.md](AI_POLICY.md): agents may open Issues and PRs; they must not
-merge, push `master`, tag, or release. Landing on `master` requires a human
-maintainer review plus a separate AI-assisted review.
+[AI_POLICY.md](AI_POLICY.md): agents may open Issues and PRs on
+`Xero-Team/AstrBot` (`gh` must pass `--repo Xero-Team/AstrBot`); they must not
+merge, push `master`, tag, or release. Do not file against
+`AstrBotDevs/AstrBot` without explicit confirmation for that upstream target.
+Landing on `master` requires a human maintainer review plus a separate
+AI-assisted review.
 
 Development Issues use the `bug`, `enhancement`, and `task` labels. Add
 `no-stale` or `waiting-on-review` to keep a long-running Issue open. The stale
@@ -171,7 +174,7 @@ uv run python docs/scripts/update_openapi_json.py
   | `refactor`, `perf`, `style`     | `.github/PULL_REQUEST_TEMPLATE/refactor.md` |
   | `chore`, `build`, `ops`, `test` | `.github/PULL_REQUEST_TEMPLATE/chore.md`    |
 
-  GitHub fills in [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) when no typed template is selected. Example: `gh pr create --template .github/PULL_REQUEST_TEMPLATE/fix.md`.
+  GitHub fills in [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) when no typed template is selected. Example: `gh pr create --repo Xero-Team/AstrBot --template .github/PULL_REQUEST_TEMPLATE/fix.md`. On a fork, `gh` may default to upstream; always pass `--repo Xero-Team/AstrBot` and confirm the created URL is under `github.com/Xero-Team/AstrBot`. Do not open an Issue or PR on `AstrBotDevs/AstrBot` without explicit confirmation for that upstream target.
 
 - Do not reintroduce legacy compatibility narratives or old code paths.
 - Do not merge your own pull request, and do not push commits to `master`.

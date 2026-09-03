@@ -22,5 +22,8 @@ contact_links:
   - name: AI contribution policy / AI 使用政策
     url: https://github.com/Xero-Team/AstrBot/blob/master/AI_POLICY.md
     about: |
-      Agents may open development Issues and PRs. They must not merge.
-      智能体可以开开发 Issue 与 PR，不得自行合并。
+      Agents may open development Issues and PRs on Xero-Team/AstrBot
+      (`gh --repo Xero-Team/AstrBot`). They must not merge, and must not
+      file on AstrBotDevs/AstrBot without explicit confirmation.
+      智能体可以在 Xero-Team/AstrBot 开开发 Issue 与 PR，不得自行合并；
+      未经确认不要开到上游 AstrBotDevs/AstrBot。

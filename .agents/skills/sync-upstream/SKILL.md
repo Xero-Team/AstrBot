@@ -25,6 +25,10 @@ opening a branch, Issue, or PR. Paste-ready apply prompt:
 - Do not merge the resulting PR, push `master`, tag, or release. A human
   maintainer does those actions; do not treat a verbal exception as
   authorization.
+- Open absorb PRs against `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`.
+  Confirm the created URL is under `github.com/Xero-Team/AstrBot`. Do not open
+  an Issue or PR on `AstrBotDevs/AstrBot` unless the user explicitly confirms
+  that upstream target.
 
 ## Open
 
@@ -37,6 +41,8 @@ session, unless the user already froze the plan in this conversation.
 - Combine several upstream feature/fix commits into one implementation commit.
 - Re-run an interval whose SHAs are already in the ledger.
 - File a public security Issue for an upstream vuln; follow `SECURITY.md`.
+- Open an Issue or PR on `AstrBotDevs/AstrBot` without explicit user
+  confirmation for that upstream target.
 - Invent a `pending` field in `upstream-sync.yaml`. Apply only the plan the
   user approved in this conversation.
 
@@ -53,8 +59,9 @@ session, unless the user already froze the plan in this conversation.
   return a focused plan. Do not cherry-pick, edit files, commit, or push.
 - **Apply mode:** enter only after the user explicitly asks to execute the
   approved plan. Apply commits oldest-first, one at a time, and record each
-  final decision. Stay on a feature branch. You may open a pull request. Do
-  not merge, push `master`, release, or tag.
+  final decision. Stay on a feature branch. You may open a pull request on
+  `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`. Do not merge, push
+  `master`, release, or tag.
 
 ## Preflight
 

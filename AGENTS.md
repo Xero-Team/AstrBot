@@ -27,6 +27,12 @@ forward-looking instead of extending compatibility indefinitely.
   authorization. A PR lands only after a human maintainer review **and** a
   separate AI-assisted review. Follow [AI_POLICY.md](AI_POLICY.md) and
   `.agents/shared/ai-contribution/REFERENCE.md`.
+- Open Issues and Pull Requests against `Xero-Team/AstrBot` only. Do not open
+  them on upstream `AstrBotDevs/AstrBot`. `gh` may default to the `upstream`
+  remote; pass `--repo Xero-Team/AstrBot` (or set `GH_REPO=Xero-Team/AstrBot`)
+  and confirm the created URL is under `github.com/Xero-Team/AstrBot` before
+  treating the action as done. Opening an Issue or PR on upstream requires
+  explicit user confirmation for that target.
 
 ## Toolchain and setup
 
@@ -177,6 +183,8 @@ make quality-report        # broader report; not currently a required CI gate
 read-only: the Dashboard build writes `dashboard/dist/` and may regenerate the
 tracked MDI subset assets. `make quality-report` is not a required CI gate at
 present, but its commands still propagate non-zero exit codes.
+`quality-web-audit` runs Dashboard `pnpm audit --audit-level=low` with
+`--ignore-registry-errors`, so a registry timeout does not fail `make quality`.
 
 The native POSIX linters (`shellcheck`, `shfmt`, and `hadolint`) are required,
 not optional. PowerShell checks require PowerShell 7 and PSScriptAnalyzer.
@@ -473,7 +481,9 @@ diff with its runtime/test changes.
   `date -u '+%Y-%m-%dT%H:%M:%SZ'` and append `AI-Generated: true` plus
   `Generated-At: <result>` as footers. Agents may commit, push a feature
   branch, and open a PR as maintenance. They must not merge, push `master`,
-  or tag. Agent-authored PRs end with `## Agent note`. Human-authored PRs
+  or tag. Open fork Issues/PRs with `--repo Xero-Team/AstrBot`. Do not file
+  against `AstrBotDevs/AstrBot` without explicit user confirmation for that
+  upstream target. Agent-authored PRs end with `## Agent note`. Human-authored PRs
   end with `## Human note`. Use the typed file under
   `.github/PULL_REQUEST_TEMPLATE/` that matches the Conventional Commit
   type (`feat.md`, `fix.md`, `docs.md`; group `perf`/`style` with

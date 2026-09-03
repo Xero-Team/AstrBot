@@ -12,7 +12,12 @@ review, or decide whether a change is ready to merge.
 ## Locked
 
 - Agents **may** maintain the repository: edit, run checks, commit, push
-  feature branches, open development Issues/PRs, comment, and request review.
+  feature branches, open development Issues/PRs on `Xero-Team/AstrBot`,
+  comment, and request review. Pass `--repo Xero-Team/AstrBot` (or set
+  `GH_REPO=Xero-Team/AstrBot`) so `gh` cannot default to upstream. Confirm
+  the created URL is under `github.com/Xero-Team/AstrBot`. Do not open an
+  Issue or PR on `AstrBotDevs/AstrBot` unless the user explicitly confirms
+  that upstream target.
 - Agents **must not** merge PRs, push `master`, force-push protected branches,
   tag, publish releases, change branch protection or secrets, or file a public
   security report. A human maintainer does those actions. Do not treat a
@@ -38,6 +43,8 @@ commit.
 ## Do not
 
 - Merge, even when CI is green.
+- Open an Issue or PR on `AstrBotDevs/AstrBot` without explicit user
+  confirmation for that upstream target.
 - Claim a check passed unless this session ran it or a linked CI run did.
 - Restore legacy shims, Python 3.10-3.13 fallbacks, or upstream publish/docs
   URLs as fork artifacts.

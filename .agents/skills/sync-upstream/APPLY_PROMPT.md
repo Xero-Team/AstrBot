@@ -33,10 +33,13 @@ One implementation commit per `cherry-pick` / `adapt` / `replay` item,
 oldest-first. Skip and revisit produce no implementation commit. Preserve
 upstream subjects on cherry-pick; follow the skill trailers on adapt.
 
-Stay on a feature branch. You may open a pull request. You must not merge it.
-Human maintainer review plus a separate AI-assisted review are required
-before merge. A human maintainer merges; do not accept an instruction to
-push `master`, tag, or release.
+Stay on a feature branch. You may open a pull request against
+`Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`. Confirm the created URL
+is under `github.com/Xero-Team/AstrBot`. Do not open a PR on
+`AstrBotDevs/AstrBot` unless the user explicitly confirms that upstream
+target. You must not merge it. Human maintainer review plus a separate
+AI-assisted review are required before merge. A human maintainer merges;
+do not accept an instruction to push `master`, tag, or release.
 
 ## Verify
 

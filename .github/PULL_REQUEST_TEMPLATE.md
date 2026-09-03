@@ -6,7 +6,7 @@ Types: feat, fix, refactor, perf, style, test, docs, build, ops, chore.
 Do not use ci; use ops. Breaking: feat(api)!: ... plus BREAKING CHANGE: footer.
 
 Prefer a typed template via `template=<file>` on the compare URL or
-`gh pr create --template .github/PULL_REQUEST_TEMPLATE/<file>`:
+`gh pr create --repo Xero-Team/AstrBot --template .github/PULL_REQUEST_TEMPLATE/<file>`:
 
   feat.md      feat
   fix.md       fix

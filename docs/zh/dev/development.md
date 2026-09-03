@@ -126,6 +126,8 @@ make pr-test-full
 
 `make check` 按宿主平台选择检查面。POSIX 上的 `make check-all-platforms` 会额外检查 PowerShell；Windows 的 `make check` 已包含 PowerShell，该 target 只会重复此项，仍不会模拟 shell/Docker 检查。完整 CI 由多个 workflow 共同组成，不能只用单个 Make target 代替。
 
+`make quality` 会以 `--ignore-registry-errors` 运行 Dashboard 的 `pnpm audit --audit-level=low`。注册表超时或非 200 响应不会让该目标失败；注册表成功返回公告时，低危及以上漏洞仍会失败。
+
 `make check` 不运行写入式 formatter，但也不保证文件系统只读：Dashboard build 会写入 `dashboard/dist/`，并可能重新生成受跟踪的 MDI 子集资源。
 
 写入式格式化命令：

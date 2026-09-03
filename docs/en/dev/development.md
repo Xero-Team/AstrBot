@@ -128,6 +128,8 @@ make pr-test-full
 
 `make check` selects checks by host platform. On POSIX, `make check-all-platforms` adds PowerShell validation. On Windows, `make check` already includes PowerShell, so that target repeats it and still does not emulate shell/Docker checks. Full CI is composed of several workflows and is not equivalent to a single Make target.
 
+`make quality` runs Dashboard `pnpm audit --audit-level=low` with `--ignore-registry-errors`. A registry timeout or non-200 response does not fail that target; a successful advisory response still fails on low-or-higher vulnerabilities.
+
 `make check` does not run writing formatters, but it is not filesystem read-only: the Dashboard build writes `dashboard/dist/` and may regenerate the tracked MDI subset assets.
 
 Writing format targets include:

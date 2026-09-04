@@ -14,6 +14,10 @@ import PluginDetailPage from './extension/PluginDetailPage.vue';
 import { useExtensionPage } from './extension/useExtensionPage';
 import { computed } from 'vue';
 import { docsHref } from '@/utils/docsHref';
+import {
+  readRoutePluginId,
+  resolveSelectedMarketPlugin,
+} from '@/utils/marketPluginKey';
 import defaultPluginIcon from '/favicon.svg';
 import { usePluginI18n } from '@/utils/pluginI18n';
 
@@ -114,10 +118,9 @@ const logLevelItems = computed(() => [
   { title: 'CRITICAL', value: 'CRITICAL' },
 ]);
 
-const selectedPluginId = computed(() => {
-  const pluginId = route.params.pluginId;
-  return Array.isArray(pluginId) ? pluginId[0] : pluginId || '';
-});
+const selectedPluginId = computed(() =>
+  readRoutePluginId(route.params.pluginId),
+);
 
 const selectedDetailTab = computed(
   () => extractTabFromHash(route.hash) || 'installed',
@@ -138,21 +141,12 @@ const selectedMarketPlugin = computed(() => {
   const market = Array.isArray(pluginMarketData.value)
     ? pluginMarketData.value
     : [];
-  const installedPlugin = selectedInstalledPlugin.value;
-  const repo = installedPlugin?.repo?.toLowerCase();
-  for (const item of market) {
-    if (item.name === selectedPluginId.value) {
-      return item;
-    }
-  }
-  if (repo) {
-    for (const item of market) {
-      if (item.repo?.toLowerCase() === repo) {
-        return item;
-      }
-    }
-  }
-  return null;
+  return resolveSelectedMarketPlugin(
+    market,
+    selectedPluginId.value,
+    selectedDetailTab.value,
+    selectedInstalledPlugin.value,
+  );
 });
 
 const selectedDetailPlugin = computed(() => {

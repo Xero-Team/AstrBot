@@ -14,6 +14,12 @@ import { getValidHashTab, replaceTabRoute } from '@/utils/hashRouteTabs';
 import { getPlatformDisplayName } from '@/utils/platformUtils';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import {
+  getMarketPluginId,
+  indexMarketPluginsById,
+  marketPluginIdFields,
+  toRoutePluginIdParam,
+} from '@/utils/marketPluginKey';
+import {
   buildSearchQuery,
   matchesPluginSearch,
   normalizeStr,
@@ -556,11 +562,9 @@ export const useExtensionPage = () => {
     const allPlugins = pluginMarketData.value;
     if (allPlugins.length === 0) return [];
 
-    const pluginsByName = new Map(
-      allPlugins.map((plugin) => [plugin.name, plugin]),
-    );
+    const pluginsById = indexMarketPluginsById(allPlugins);
     const selected = randomPluginNames.value
-      .map((name) => pluginsByName.get(name))
+      .map((key) => pluginsById.get(key))
       .filter((plugin): plugin is PluginMarketItem => Boolean(plugin));
 
     if (selected.length > 0) {
@@ -585,8 +589,9 @@ export const useExtensionPage = () => {
   const refreshRandomPlugins = () => {
     const shuffled = shufflePlugins(pluginMarketData.value);
     randomPluginNames.value = shuffled
-      .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
-      .map((plugin) => plugin.name);
+      .map((plugin) => getMarketPluginId(plugin))
+      .filter(Boolean)
+      .slice(0, RANDOM_PLUGINS_COUNT);
   };
 
   // 分页计算属性
@@ -1215,7 +1220,7 @@ export const useExtensionPage = () => {
     if (!plugin?.name) return;
     void router.push({
       name: 'ExtensionDetails',
-      params: { pluginId: plugin.name },
+      params: { pluginId: toRoutePluginIdParam(plugin.name) },
       hash: '#plugin-components',
     });
   };
@@ -1755,17 +1760,22 @@ export const useExtensionPage = () => {
       return pluginApi.installUpload(formData, stepUp);
     }
 
+    const marketIdFields = marketPluginIdFields(
+      selectedMarketInstallPlugin.value,
+    );
     const urlPayload: Parameters<typeof pluginApi.installUrl>[0] = {
       url: extension_url.value,
       download_url: selectedInstallDownloadUrl.value,
       proxy: selectedInstallDownloadUrl.value ? '' : getSelectedGitHubProxy(),
       ignore_version_check: shouldIgnoreVersionCheck,
+      ...marketIdFields,
     };
     const githubPayload: Parameters<typeof pluginApi.installGithub>[0] = {
       repository: extension_url.value,
       download_url: selectedInstallDownloadUrl.value,
       proxy: selectedInstallDownloadUrl.value ? '' : getSelectedGitHubProxy(),
       ignore_version_check: shouldIgnoreVersionCheck,
+      ...marketIdFields,
     };
 
     return installUsesGithubSource.value

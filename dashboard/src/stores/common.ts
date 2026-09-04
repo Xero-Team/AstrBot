@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { logApi, pluginApi, statsApi } from '@/api/v1';
 import { fetchWithAuth } from '@/api/http';
 import type { PluginMarketItem } from '@/types/extensions';
+import { getMarketPluginId, isMarketMetaKey } from '@/utils/marketPluginKey';
 
 interface LogEntry {
   uuid: string;
@@ -25,7 +26,10 @@ const normalizePluginMarketData = (marketData: unknown): PluginMarketItem[] => {
     return [];
   }
 
-  return Object.entries(marketData).map(([key, rawPlugin]) => {
+  return Object.entries(marketData).flatMap(([key, rawPlugin]) => {
+    if (isMarketMetaKey(key)) {
+      return [];
+    }
     const pluginData =
       rawPlugin && typeof rawPlugin === 'object'
         ? (rawPlugin as Record<string, unknown>)
@@ -45,12 +49,14 @@ const normalizePluginMarketData = (marketData: unknown): PluginMarketItem[] => {
       );
     }
 
-    return {
-      ...pluginData,
-      name:
-        typeof pluginData.name === 'string' && pluginData.name.trim()
-          ? pluginData.name
-          : key,
+    const name =
+      typeof pluginData.name === 'string' && pluginData.name.trim()
+        ? pluginData.name
+        : key;
+    const { market_plugin_id: _ignoredMarketPluginId, ...record } = pluginData;
+    const item: PluginMarketItem = {
+      ...record,
+      name,
       desc: typeof pluginData.desc === 'string' ? pluginData.desc : undefined,
       short_desc:
         typeof pluginData.short_desc === 'string' ? pluginData.short_desc : '',
@@ -93,6 +99,11 @@ const normalizePluginMarketData = (marketData: unknown): PluginMarketItem[] => {
         typeof pluginData.category === 'string' ? pluginData.category : '',
       support_platforms: supportPlatforms,
     };
+    const marketPluginId = getMarketPluginId(item);
+    if (marketPluginId) {
+      item.market_plugin_id = marketPluginId;
+    }
+    return [item];
   });
 };
 

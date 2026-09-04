@@ -34,7 +34,7 @@ const MainRoutes = {
     },
     {
       name: EXTENSION_DETAILS_ROUTE_NAME,
-      path: '/extension/:pluginId',
+      path: '/extension/:pluginId+',
       component: () => import('@/views/ExtensionPage.vue'),
     },
     {

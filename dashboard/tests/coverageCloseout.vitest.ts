@@ -136,6 +136,10 @@ describe('coverage closeout', () => {
     api.pluginApi.market.mockResolvedValue({
       data: {
         data: {
+          $meta: {
+            schema_version: 1,
+            name: 'Example Market',
+          },
           broken: null,
           from_platform: {
             platform: ['wechat', 1],
@@ -146,6 +150,7 @@ describe('coverage closeout', () => {
           },
           from_support: {
             support_platform: ['qq'],
+            author: 'owner',
             name: 'Support',
             desc: 'd',
             short_desc: 's',
@@ -174,9 +179,13 @@ describe('coverage closeout', () => {
     expect(await common.fetchAstrBotVersion()).toBe('2.0.0');
     const market = await common.getPluginCollections(true);
     expect(market.some((item) => item.name === 'broken')).toBe(true);
+    expect(market.some((item) => item.name === '$meta')).toBe(false);
     expect(
       market.find((item) => item.name === 'Support')?.support_platforms,
     ).toEqual(['qq']);
+    expect(
+      market.find((item) => item.name === 'Support')?.market_plugin_id,
+    ).toBe('owner/Support');
     expect(await common.getPluginCollections()).toBe(common.pluginMarketData);
     await common.getPluginCollections(false, 'https://registry.example');
     expect(api.pluginApi.market).toHaveBeenCalledWith({

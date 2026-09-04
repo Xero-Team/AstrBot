@@ -199,7 +199,7 @@ On desktop the left pane is a directory tree and the center holds file tabs plus
 Protected paths have a separate policy:
 
 - `plugins/` is read-only until a root `filesystem.manage` step-up.
-- `dist/`, `site-packages/`, and live databases plus WAL/SHM are never writable.
+- `dist/`, `site-packages/`, `astrbot.lock`, and live databases plus WAL/SHM are never writable.
 - Raw reads of `cmd_config.json` and `config/` require root; ordinary configuration still belongs on the structured config pages.
 - Demo mode is read-only.
 - API keys cannot open this page.

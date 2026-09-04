@@ -3,7 +3,6 @@ import os
 import sys
 
 import click
-from filelock import FileLock, Timeout
 
 from ..utils.basic import check_astrbot_root, get_astrbot_root
 
@@ -58,16 +57,9 @@ def run(reload: bool, port: str | None, reset_password: bool) -> None:
         if reset_password:
             os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
 
-        lock_file = astrbot_root / "astrbot.lock"
-        lock = FileLock(lock_file, timeout=5)
-        with lock.acquire():
-            asyncio.run(_run_application())
+        asyncio.run(_run_application())
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
-    except Timeout:
-        raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
-        )
     except click.ClickException:
         raise
     except Exception as exc:

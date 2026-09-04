@@ -87,3 +87,20 @@ def test_init_without_yes_keeps_install_directory_confirmation(
     assert result.exit_code == 0, result.output
     assert len(confirmed) == 1
     assert (tmp_path / ".astrbot").is_file()
+
+
+def test_init_abort_before_lock_does_not_create_lock_file(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.delenv(cmd_init.DASHBOARD_INITIAL_PASSWORD_ENV, raising=False)
+    monkeypatch.setattr(
+        "astrbot.cli.utils.basic.get_astrbot_root",
+        lambda: tmp_path,
+    )
+
+    result = CliRunner().invoke(cmd_init.init, input="n\n")
+
+    assert result.exit_code != 0
+    assert not (tmp_path / "data" / "astrbot.lock").exists()
+    assert not (tmp_path / ".astrbot").exists()

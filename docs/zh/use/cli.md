@@ -32,6 +32,8 @@ uv run astrbot run
 
 `init` 会创建 `.astrbot` 标记、`data/` 子目录并检查 Dashboard。`astrbot init --yes`（或 `-y`）仅跳过首次安装目录确认，不会跳过文件锁、初始密码设置或其他后续确认。直接使用 `uv run main.py` 的源码启动流程不要求这个标记。
 
+`astrbot run`、`uv run main.py` 和镜像 `CMD` 共用 `data/astrbot.lock`。一个 `data/` 只允许一个进程；第二个实例会在打开数据库前失败退出。这是咨询锁（advisory lock）：进程退出后由操作系统释放，磁盘上残留的锁文件本身不占锁。`astrbot init` 在确认安装目录之后使用同一把锁。
+
 `run` 常用选项：
 
 | 选项                | 用途                                 |

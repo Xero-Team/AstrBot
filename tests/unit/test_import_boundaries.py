@@ -224,6 +224,16 @@ assert not loaded, loaded
     assert result.returncode == 0, result.stderr
 
 
+def test_runtime_instance_lock_module_does_not_import_core() -> None:
+    """The shared lock helper must stay importable from CLI without core."""
+    modules = _imports(ROOT / "astrbot" / "runtime_instance_lock.py")
+    assert "filelock" in modules
+    assert not any(
+        module == "astrbot.core" or module.startswith("astrbot.core.")
+        for module in modules
+    )
+
+
 def test_runtime_entry_points_use_the_shared_application_runner() -> None:
     """Both process entry points must delegate runtime construction centrally."""
     main_path = ROOT / "main.py"
@@ -234,6 +244,14 @@ def test_runtime_entry_points_use_the_shared_application_runner() -> None:
         assert "astrbot.application" in modules
         assert not any(module.startswith("astrbot.core") for module in modules)
         assert "run_application" in path.read_text(encoding="utf-8")
+
+    cli_run_source = cli_run_path.read_text(encoding="utf-8")
+    assert "FileLock" not in cli_run_source
+    assert "filelock" not in cli_run_source
+    application_source = (ROOT / "astrbot" / "application.py").read_text(
+        encoding="utf-8"
+    )
+    assert "runtime_instance_lock" in application_source
 
 
 def test_core_execution_context_replaces_legacy_star_context_module() -> None:

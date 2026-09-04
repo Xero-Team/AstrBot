@@ -28,7 +28,8 @@ outline: deep
 源码入口和 CLI 入口的前置流程并不相同，但最后都会显式创建 `RuntimeServices` 并交给 `InitialLoader`：
 
 - 根目录 `main.py` 先调用 `runtime_bootstrap.initialize_runtime_bootstrap()` 配置受信任 CA，再导入核心模块、应用启动环境参数并校验 Python 与运行目录。Dashboard 解析优先使用显式 `--webui-dir`，然后依次检查版本匹配的源码树 `dashboard/dist`、运行目录 `data/dist` 和包内置资源。它不访问网络，也不会使用版本失配或不完整的静态资源；没有兼容构建时只停用 WebUI。
-- `astrbot` CLI 先解析并锁定 CLI runtime root，要求存在 `.astrbot` 标记。`astrbot/cli/__main__.py` 与 `astrbot run` 都会调用 `runtime_bootstrap.initialize_runtime_bootstrap()` 安装受信任 CA。CLI 的 `init` 和 `run` 不下载、不更新 Dashboard，也没有 `main.py` 的 `--webui-dir`。因此修改启动安全、runtime root 或 Dashboard 静态资源解析时，仍必须分别检查 `main.py` 与 CLI 两条路径。
+- `astrbot` CLI 先解析 CLI runtime root，要求存在 `.astrbot` 标记。`astrbot/cli/__main__.py` 与 `astrbot run` 都会调用 `runtime_bootstrap.initialize_runtime_bootstrap()` 安装受信任 CA。CLI 的 `init` 和 `run` 不下载、不更新 Dashboard，也没有 `main.py` 的 `--webui-dir`。因此修改启动安全、runtime root 或 Dashboard 静态资源解析时，仍必须分别检查 `main.py` 与 CLI 两条路径。
+- `main.py`、`astrbot run` 和镜像 `CMD` 都进入 `run_application()`。该函数在 `prepare_runtime_environment()` 之后、解析 Dashboard 资源并调用 `create_runtime_services()` 之前，对 `data/astrbot.lock` 获取一把咨询锁（advisory lock）。同一 `data/` 只允许一个进程；获取失败立即退出，不会打开数据库或加载适配器。进程退出后由操作系统释放锁，磁盘上残留的 `astrbot.lock` 文件本身不占锁。`astrbot init` 在用户确认安装目录之后使用同一把锁。Compose 把 `./data` 挂到多个完整实例时，第二个容器会启动失败，这是预期行为。
 - 两条路径随后都调用 `create_runtime_services()` 创建配置、数据库、共享偏好、HTML 渲染器、文件 token 服务和依赖安装器等实例，再由 `InitialLoader` 初始化 `AstrBotCoreLifecycle`，并行运行核心任务与 FastAPI Dashboard。
 - 初始化中途失败时会调用生命周期清理；停止逻辑必须能处理“只初始化了一部分”的状态并允许重复调用。导入 `astrbot.core` 本身不得创建运行时服务或访问用户数据。
 
@@ -305,7 +306,7 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 
 路由使用独立的 `Data Files` OpenAPI tag，不加入 `PUBLIC_OPEN_API_TAGS`。认证复用 `require_dashboard_session_principal`；API Key 一律 403。授权动作为 `filesystem.read`、`filesystem.write` 和 `filesystem.manage`，集合资源是 `Resource.named("filesystem", "collection")`，单路径使用 `object_resource("filesystem", relative_path)`。
 
-`DataFileService` 通过 `get_astrbot_data_path()` 解析根目录。用户路径只接受相对 `data/` 的片段：拒绝绝对路径、空片段、`.`/`..`、控制字符和 Windows 保留名；符号链接只显示元数据，不遍历逃出根目录的目标。分类路径前缀优先于扩展名：`plugins/` 默认只读，需 `filesystem.manage` + step-up 才可写；`plugin_data/` 按普通数据目录处理；`dist/`、`site-packages/`、活跃数据库及其 WAL/SHM 硬只读。root Dashboard session 可以读取 `cmd_config.json` 和 `config/` 原文；`operator` 不能借文件读取绕过 Config API 脱敏。托管配置保存必须走解析、验证、既有配置服务持久化和关联 reload，不能直接写字节。
+`DataFileService` 通过 `get_astrbot_data_path()` 解析根目录。用户路径只接受相对 `data/` 的片段：拒绝绝对路径、空片段、`.`/`..`、控制字符和 Windows 保留名；符号链接只显示元数据，不遍历逃出根目录的目标。分类路径前缀优先于扩展名：`plugins/` 默认只读，需 `filesystem.manage` + step-up 才可写；`plugin_data/` 按普通数据目录处理；`dist/`、`site-packages/`、`astrbot.lock`、活跃数据库及其 WAL/SHM 硬只读。root Dashboard session 可以读取 `cmd_config.json` 和 `config/` 原文；`operator` 不能借文件读取绕过 Config API 脱敏。托管配置保存必须走解析、验证、既有配置服务持久化和关联 reload，不能直接写字节。
 
 已实现目录树、元数据、UTF-8 文本读写、创建/重命名/移动/删除、上传下载、二进制预览和递归文件名搜索。文本上限 1 MiB，目录首屏 200 项，单文件上传 32 MiB，单次上传请求 64 MiB。搜索只匹配 basename 和相对路径，最多 100 项，inode 预算 5000，超时 3 秒。读写使用 SHA-256 etag 和同目录临时文件原子替换；冲突返回 409。隐藏文件会显示。demo mode 只读。审计只记录相对路径摘要，不记录文件内容。
 
@@ -325,6 +326,7 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 
 - `cmd_config.json` 与 `config/`
 - `data_v4.db`
+- `astrbot.lock`（运行时实例咨询锁；文件残留不表示进程仍在运行）
 - `plugins/` 与 `plugin_data/`
 - `skills/` 与 `workspaces/`
 - `knowledge_base/`

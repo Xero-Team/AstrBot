@@ -202,6 +202,88 @@ def test_managed_config_accepts_utf8_bom(tmp_path: Path):
     assert saved == [{"dashboard": {"host": "127.0.0.1"}}]
 
 
+def test_runtime_instance_lock_file_is_hard_readonly(tmp_path: Path):
+    from astrbot.runtime_instance_lock import LOCK_FILENAME
+
+    svc = service(tmp_path)
+    lock_path = svc.root / LOCK_FILENAME
+    lock_path.write_bytes(b"held")
+    entry = svc.metadata(
+        LOCK_FILENAME,
+        can_read=True,
+        can_write=True,
+        can_manage=True,
+        is_root=True,
+    )
+    assert entry["protected"] is True
+    assert entry["writable"] is False
+    assert entry["deletable"] is False
+    assert svc.path_is_hard_restricted(LOCK_FILENAME)
+    assert svc.path_is_protected(LOCK_FILENAME)
+
+    with pytest.raises(DataFileServiceError) as delete_error:
+        svc.delete(
+            LOCK_FILENAME,
+            recursive=False,
+            is_root=True,
+            can_write=True,
+            can_manage=True,
+        )
+    assert delete_error.value.status_code == 403
+    assert lock_path.exists()
+
+    with pytest.raises(DataFileServiceError) as move_error:
+        svc.move(
+            LOCK_FILENAME,
+            "moved.lock",
+            is_root=True,
+            can_write=True,
+            can_manage=True,
+        )
+    assert move_error.value.status_code == 403
+    assert lock_path.exists()
+
+    with pytest.raises(DataFileServiceError) as write_error:
+        svc.write_text(
+            LOCK_FILENAME,
+            "overwrite",
+            expected_etag="sha256:0",
+            is_root=True,
+            can_write=True,
+            can_manage=True,
+        )
+    assert write_error.value.status_code == 403
+    assert lock_path.read_bytes() == b"held"
+
+    upload = UploadFile(file=BytesIO(b"new"), filename=LOCK_FILENAME)
+
+    async def _upload() -> None:
+        await svc.upload(
+            LOCK_FILENAME,
+            upload,
+            is_root=True,
+            can_write=True,
+            can_manage=True,
+        )
+
+    with pytest.raises(DataFileServiceError) as upload_error:
+        __import__("asyncio").run(_upload())
+    assert upload_error.value.status_code == 403
+    assert lock_path.read_bytes() == b"held"
+
+    lock_path.unlink()
+    with pytest.raises(DataFileServiceError) as create_error:
+        svc.create(
+            LOCK_FILENAME,
+            "file",
+            is_root=True,
+            can_write=True,
+            can_manage=True,
+        )
+    assert create_error.value.status_code == 403
+    assert not lock_path.exists()
+
+
 def test_hard_readonly_and_move_cannot_wash_restricted_files(tmp_path: Path):
     svc = service(tmp_path)
     (svc.root / "dist").mkdir()

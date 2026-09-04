@@ -9,6 +9,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from filelock import Timeout
+
 from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.initial_loader import InitialLoader
@@ -33,6 +35,10 @@ from astrbot.core.utils.io import (
     should_use_bundled_dashboard_dist,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
+from astrbot.runtime_instance_lock import (
+    runtime_instance_lock,
+    runtime_instance_lock_path,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,17 +166,27 @@ async def resolve_dashboard_assets(webui_dir: str | None = None) -> str | None:
 async def run_application(options: ApplicationOptions) -> None:
     """Create and supervise one complete AstrBot runtime instance."""
     prepare_runtime_environment()
-    webui_dir = await resolve_dashboard_assets(options.webui_dir)
-    if webui_dir is None:
-        logger.warning(
-            "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请构建当前 checkout 的 dashboard/dist，运行 "
-            "scripts/sync_dashboard_dist.py，或手动指定 --webui-dir。",
-        )
+    data_dir = Path(get_astrbot_data_path())
+    try:
+        with runtime_instance_lock(data_dir):
+            webui_dir = await resolve_dashboard_assets(options.webui_dir)
+            if webui_dir is None:
+                logger.warning(
+                    "管理面板文件检查失败，WebUI 功能将不可用。"
+                    "请构建当前 checkout 的 dashboard/dist，运行 "
+                    "scripts/sync_dashboard_dist.py，或手动指定 --webui-dir。",
+                )
 
-    log_broker = LogBroker()
-    LogManager.set_queue_handler(logger, log_broker)
-    services = create_runtime_services()
-    logger.info(_LOGO)
-    loader = InitialLoader(services, log_broker, webui_dir=webui_dir)
-    await loader.start()
+            log_broker = LogBroker()
+            LogManager.set_queue_handler(logger, log_broker)
+            services = create_runtime_services()
+            logger.info(_LOGO)
+            loader = InitialLoader(services, log_broker, webui_dir=webui_dir)
+            await loader.start()
+    except Timeout:
+        logger.error(
+            "Cannot acquire runtime lock at %s. Another AstrBot instance "
+            "already owns this data directory.",
+            runtime_instance_lock_path(data_dir),
+        )
+        raise SystemExit(1) from None

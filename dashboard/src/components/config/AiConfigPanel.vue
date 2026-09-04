@@ -2,7 +2,10 @@
   <section class="ai-config-panel">
     <header class="ai-config-panel__header">
       <div class="ai-config-panel__heading">
-        <h2 class="ai-config-panel__title">{{ tm('aiSettings.title') }}</h2>
+        <h2 class="ai-config-panel__title">
+          {{ tm('aiSettings.title') }}
+          <ConfigDocsLink docs="use/agent-runner.html" />
+        </h2>
         <p class="ai-config-panel__subtitle">{{ currentRunner.summary }}</p>
       </div>
 
@@ -230,6 +233,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useModuleI18n } from '@/i18n/composables';
@@ -508,6 +512,9 @@ function confirmRunnerChange() {
 }
 
 .ai-config-panel__title {
+  align-items: center;
+  display: flex;
+  gap: 4px;
   margin: 0;
   color: rgb(var(--v-theme-on-surface));
   font-size: 1.34rem;

@@ -34,6 +34,7 @@
           <header class="config-standard-section__heading">
             <h2 class="config-standard-section__title">
               {{ sharedTm('pluginSetSelector.title') }}
+              <ConfigDocsLink docs="use/plugin.html" />
             </h2>
             <p class="config-plugin-section__subtitle">
               {{ sharedTm('pluginSetSelector.subtitle') }}
@@ -93,6 +94,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import AiConfigPanel from '@/components/config/AiConfigPanel.vue';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import PluginSetSelector from '@/components/shared/PluginSetSelector.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -334,6 +336,9 @@ function getSectionIcon(sectionKey: string) {
 }
 
 .config-standard-section__title {
+  align-items: center;
+  display: flex;
+  gap: 4px;
   margin: 0;
   font-size: 20px;
   font-weight: 700;

@@ -1,5 +1,5 @@
 .PHONY: worktree worktree-add worktree-rm bootstrap doctor pr-test-neo pr-test-full pr-test-full-fast \
-	build build-all build-backend build-dashboard build-docs dev run run-backend run-dashboard \
+	build build-all build-backend build-dashboard build-docs sync-webui-dist dev run run-backend run-dashboard \
 	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
@@ -100,24 +100,28 @@ bootstrap: doctor
 
 build: build-all
 
-build-all: build-backend build-dashboard build-docs
+build-all: build-backend build-docs
 
 build-backend:
 	uv sync --locked
 
+sync-webui-dist:
+	uv run python scripts/sync_dashboard_dist.py
+
 build-dashboard:
 	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DASHBOARD_DIR) && $(PNPM) build
-	uv run python scripts/sync_dashboard_dist.py
+	@$(MAKE) --no-print-directory sync-webui-dist
 
 build-docs: build-dashboard
 	cd $(DOCS_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DOCS_DIR) && ASTRBOT_DOCS_BASE=/help/ $(PNPM) run docs:build
-	uv run python scripts/sync_dashboard_dist.py
+	@$(MAKE) --no-print-directory sync-webui-dist
 
 dev: run-backend run-dashboard status
 
 run: build
+	@$(MAKE) --no-print-directory sync-webui-dist
 	@$(MAKE) --no-print-directory run-backend
 	@$(MAKE) --no-print-directory run-dashboard
 	@$(MAKE) --no-print-directory status
@@ -314,6 +318,7 @@ check-web-all: $(CHECK_WEB_TARGETS)
 check-web-build:
 	@echo "==> [web] build"
 	cd $(DASHBOARD_DIR) && $(PNPM) build
+	@$(MAKE) --no-print-directory sync-webui-dist
 
 check-web-eslint:
 	@echo "==> [web] eslint"

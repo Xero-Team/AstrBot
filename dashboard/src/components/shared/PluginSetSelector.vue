@@ -528,6 +528,10 @@ function cancelSelection() {
   white-space: nowrap;
 }
 
+.inline-plugin-selector :deep(.v-selection-control) {
+  flex: none;
+}
+
 .inline-plugin-card :deep(.v-selection-control) {
   min-height: 32px;
 }

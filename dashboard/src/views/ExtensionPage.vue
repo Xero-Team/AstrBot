@@ -13,6 +13,7 @@ import MarketPluginsTab from './extension/MarketPluginsTab.vue';
 import PluginDetailPage from './extension/PluginDetailPage.vue';
 import { useExtensionPage } from './extension/useExtensionPage';
 import { computed } from 'vue';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import { docsHref } from '@/utils/docsHref';
 import {
   readRoutePluginId,
@@ -259,7 +260,10 @@ const updateDialogPluginLogo = computed(() => {
           <div v-if="activeTab === 'components'">
             <div class="mb-4 pt-4 pb-4">
               <div class="inline-control-row">
-                <h2 class="text-h2 mb-0">{{ tm('tabs.handlersOperation') }}</h2>
+                <h2 class="text-h2 mb-0 d-flex align-center">
+                  {{ tm('tabs.handlersOperation') }}
+                  <ConfigDocsLink docs="use/function-calling.html" />
+                </h2>
               </div>
             </div>
             <v-card class="extension-page__section" variant="flat">
@@ -274,8 +278,9 @@ const updateDialogPluginLogo = computed(() => {
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
                 <div class="extension-page__section-heading">
-                  <h2 class="text-h2 mb-0">
+                  <h2 class="text-h2 mb-0 d-flex align-center">
                     {{ tm('tabs.installedMcpServers') }}
+                    <ConfigDocsLink docs="use/mcp.html" />
                   </h2>
                   <div class="text-body-2 text-medium-emphasis">
                     {{ t('features.tooluse.mcpServers.description') }}
@@ -295,7 +300,10 @@ const updateDialogPluginLogo = computed(() => {
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
                 <div class="extension-page__section-heading">
-                  <h2 class="text-h2 mb-0">{{ tm('tabs.skills') }}</h2>
+                  <h2 class="text-h2 mb-0 d-flex align-center">
+                    {{ tm('tabs.skills') }}
+                    <ConfigDocsLink docs="use/skills.html" />
+                  </h2>
                   <div class="text-body-2 text-medium-emphasis">
                     {{ tm('skills.runtimeHint') }}
                   </div>
@@ -319,7 +327,7 @@ const updateDialogPluginLogo = computed(() => {
       <div class="d-flex align-center justify-center mt-4 mb-4 gap-4">
         <v-btn
           variant="text"
-          prepend-icon="mdi-book-open-variant"
+          prepend-icon="mdi-help-circle-outline"
           :href="docsHref('dev/star/plugin-new.html')"
           rel="noopener noreferrer"
           target="_blank"

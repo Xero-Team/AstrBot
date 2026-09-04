@@ -28,24 +28,24 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 ## 顶层结构
 
-| 键                                                | 用途                                                                                         |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `config_version`                                  | 当前核心配置结构版本，默认 `3`，不要手动降级。                                               |
-| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                                         |
-| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                         |
-| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                           |
-| `agent_runner`                                    | 当前配置档的 Agent 执行器类型及其内联配置。                                                  |
-| `provider_settings`                               | 当前配置档的 AI 开关、检索、流式输出、Computer Use 等共用行为。                              |
-| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                        |
-| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                       |
-| `provider_ltm_settings`                           | 旧名称下的群聊上下文和图片转述设置；不是 Alkaid 长期记忆的数据开关。群聊随机主动回复已移除。 |
-| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                                           |
-| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。              |
-| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                      |
-| `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                     |
-| `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=open`、`group=prefix`、`prefixes=["/"]`。 |
-| `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                  |
-| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                |
+| 键                                                | 用途                                                                                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `config_version`                                  | 当前核心配置结构版本，默认 `3`，不要手动降级。                                                                                                                     |
+| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                                                                                                               |
+| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                                                                                               |
+| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                                                                                                 |
+| `agent_runner`                                    | 当前配置档的 Agent 执行器类型及其内联配置。                                                                                                                        |
+| `provider_settings`                               | 当前配置档的 AI 开关、检索、流式输出、Computer Use 等共用行为。                                                                                                    |
+| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                                                                                              |
+| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                                                                                             |
+| `provider_ltm_settings`                           | [群聊上下文感知](../use/group-chat-context)（内存群聊上下文、图片转述、持久化群消息历史）。JSON 键仍为历史名称；不是 Alkaid 长期记忆开关。群聊随机主动回复已移除。 |
+| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                                                                                                                 |
+| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。                                                                                    |
+| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                                                                                            |
+| `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                                                                                           |
+| `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=open`、`group=prefix`、`prefixes=["/"]`。                                                                       |
+| `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                                                                                        |
+| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                                                                                      |
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
 
@@ -147,7 +147,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 - `enable`：是否启用 AI Provider 处理，默认 `true`。
 - `provider_pool`：本配置档可用 Provider 范围，`["*"]` 表示全部。
 - `default_image_caption_provider_id` 和 `image_caption_prompt`：主 Agent 当前请求和引用图片的转述，不受群聊历史限流影响。
-- `provider_ltm_settings.image_caption_*`：只作用于群聊历史上下文转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
+- `provider_ltm_settings.image_caption_*`：只作用于[群聊上下文感知](../use/group-chat-context)的历史图片转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
 - 群聊 JSON 卡片会进入群聊上下文，并在普通 LLM 请求缺少文本 prompt 时作为 `[Shared Card]` 卡片摘要。
 
 API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志或备份提交到 Git；日志和 Trace 也可能包含 Provider ID、请求错误或工具输出。
@@ -198,7 +198,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 - `kb_names`、`kb_fusion_top_k`、`kb_final_top_k`：默认知识库和检索数量。
 - `kb_agentic_mode`：将知识库检索作为工具交给模型自主调用。
 
-Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置；不要把 `provider_ltm_settings` 当作长期记忆开关。
+Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置；不要把 `provider_ltm_settings` 当作长期记忆开关。群聊近期消息注入见 [群聊上下文感知](../use/group-chat-context)。
 
 ## WebUI 与认证
 

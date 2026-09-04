@@ -3236,6 +3236,7 @@ CONFIG_METADATA_3 = {
             "agent_runner": {
                 "description": "Agent 执行方式",
                 "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
+                "docs": "use/agent-runner.html",
                 "type": "object",
                 "items": {
                     "provider_settings.enable": {
@@ -3606,6 +3607,7 @@ CONFIG_METADATA_3 = {
             "persona": {
                 "description": "人格",
                 "hint": "",
+                "docs": "use/persona.html",
                 "type": "object",
                 "items": {
                     "agent_runner.config.persona.persona_id": {
@@ -3637,6 +3639,7 @@ CONFIG_METADATA_3 = {
             "knowledgebase": {
                 "description": "知识库",
                 "hint": "",
+                "docs": "use/knowledge-base.html",
                 "type": "object",
                 "items": {
                     "kb_names": {
@@ -3670,6 +3673,7 @@ CONFIG_METADATA_3 = {
             "websearch": {
                 "description": "网页搜索",
                 "hint": "",
+                "docs": "use/websearch.html",
                 "type": "object",
                 "items": {
                     "provider_settings.web_search": {
@@ -3789,6 +3793,7 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
+                        "docs": "use/astrbot-agent-sandbox.html",
                         "type": "string",
                         "options": ["shipyard_neo", "cua"],
                         "labels": ["Shipyard Neo", "CUA"],
@@ -4438,6 +4443,7 @@ CONFIG_METADATA_3 = {
         "metadata": {
             "plugin": {
                 "description": "插件",
+                "docs": "use/plugin.html",
                 "type": "object",
                 "items": {
                     "plugin_set": {
@@ -4522,7 +4528,8 @@ CONFIG_METADATA_3 = {
                 },
             },
             "ltm": {
-                "description": "群聊上下文感知（原聊天记忆增强）",
+                "description": "群聊上下文感知",
+                "docs": "use/group-chat-context.html",
                 "type": "object",
                 "items": {
                     "provider_ltm_settings.group_icl_enable": {

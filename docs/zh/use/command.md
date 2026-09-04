@@ -68,7 +68,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 ### 对话
 
 - `/conversation create`：创建并切换到新对话。
-- `/conversation reset`：清空当前对话上下文，同时清理对应的第三方 Agent Runner 会话状态。
+- `/conversation reset`：清空当前对话上下文，同时清理对应的第三方 Agent Runner 会话状态和该会话的[群聊上下文感知](./group-chat-context)内存缓存。
 - `/conversation stats`：显示当前对话的输入、缓存输入和输出 Token 统计。
 - `/conversation history [--page N|-p N]`：显示当前对话历史。
 - `/conversation list [--page N|-p N]`：列出对话。

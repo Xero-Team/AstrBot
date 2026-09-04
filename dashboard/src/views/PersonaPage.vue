@@ -4,8 +4,9 @@
       <!-- 页面标题 -->
       <v-row class="d-flex justify-space-between align-center py-3 pb-6">
         <div>
-          <h1 class="text-h2 mb-1">
+          <h1 class="text-h2 mb-1 d-flex align-center">
             {{ t('core.navigation.persona') }}
+            <ConfigDocsLink docs="use/persona.html" />
           </h1>
           <p class="text-body-2 text-medium-emphasis mb-0">
             {{ tm('page.description') }}
@@ -20,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { PersonaManager } from '@/views/persona';
 

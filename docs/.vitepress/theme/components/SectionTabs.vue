@@ -1,44 +1,83 @@
 <script setup>
-import { computed } from 'vue'
-import { useData, useRoute } from 'vitepress'
+import { computed } from 'vue';
+import { useData, useRoute, withBase } from 'vitepress';
+import {
+  isDocsHomePath,
+  isEnglishDocsPath,
+  stripSiteBase,
+} from '../docsPath.js';
 
-const route = useRoute()
-const { frontmatter } = useData()
+const route = useRoute();
+const { frontmatter, site } = useData();
 
-const isEnglish = computed(() => route.path.startsWith('/en/'))
+const pagePath = computed(() => stripSiteBase(route.path, site.value.base));
+const isEnglish = computed(() =>
+  isEnglishDocsPath(route.path, site.value.base),
+);
 
 const zhTabs = [
   {
     text: '简介和部署',
     link: '/what-is-astrbot',
-    matchers: ['/what-is-astrbot', '/community', '/faq', '/deploy/', '/others/', '/community-events/']
+    matchers: [
+      '/what-is-astrbot',
+      '/community',
+      '/faq',
+      '/deploy/',
+      '/others/',
+      '/community-events/',
+    ],
   },
   { text: '接入消息平台', link: '/platform/start', matchers: ['/platform/'] },
   { text: '接入 AI', link: '/providers/start', matchers: ['/providers/'] },
   { text: '使用', link: '/use/webui', matchers: ['/use/'] },
-  { text: '开发', link: '/dev/star/plugin-new', matchers: ['/dev/'] }
-]
+  { text: '开发', link: '/dev/star/plugin-new', matchers: ['/dev/'] },
+];
 
 const enTabs = [
   {
     text: 'Intro & Deploy',
     link: '/en/what-is-astrbot',
-    matchers: ['/en/what-is-astrbot', '/en/community', '/en/faq', '/en/deploy/', '/en/others/', '/en/community-events/']
+    matchers: [
+      '/en/what-is-astrbot',
+      '/en/community',
+      '/en/faq',
+      '/en/deploy/',
+      '/en/others/',
+      '/en/community-events/',
+    ],
   },
-  { text: 'Messaging Platforms', link: '/en/platform/start', matchers: ['/en/platform/'] },
-  { text: 'AI Integration', link: '/en/providers/start', matchers: ['/en/providers/'] },
+  {
+    text: 'Messaging Platforms',
+    link: '/en/platform/start',
+    matchers: ['/en/platform/'],
+  },
+  {
+    text: 'AI Integration',
+    link: '/en/providers/start',
+    matchers: ['/en/providers/'],
+  },
   { text: 'Usage', link: '/en/use/webui', matchers: ['/en/use/'] },
-  { text: 'Development', link: '/en/dev/star/plugin-new', matchers: ['/en/dev/'] }
-]
+  {
+    text: 'Development',
+    link: '/en/dev/star/plugin-new',
+    matchers: ['/en/dev/'],
+  },
+];
 
-const tabs = computed(() => (isEnglish.value ? enTabs : zhTabs))
+const tabs = computed(() => (isEnglish.value ? enTabs : zhTabs));
 
-const isHome = computed(() => route.path === '/' || route.path === '/en/')
+const isHome = computed(() => isDocsHomePath(route.path, site.value.base));
 
-const shouldShow = computed(() => frontmatter.value.layout !== false && frontmatter.value.layout !== 'home' && !isHome.value)
+const shouldShow = computed(
+  () =>
+    frontmatter.value.layout !== false &&
+    frontmatter.value.layout !== 'home' &&
+    !isHome.value,
+);
 
 function isActive(tab) {
-  return tab.matchers.some(prefix => route.path.startsWith(prefix))
+  return tab.matchers.some((prefix) => pagePath.value.startsWith(prefix));
 }
 </script>
 
@@ -52,7 +91,7 @@ function isActive(tab) {
           :key="tab.link"
           class="tab"
           :class="{ active: isActive(tab) }"
-          :href="tab.link"
+          :href="withBase(tab.link)"
         >
           {{ tab.text }}
         </a>
@@ -105,7 +144,9 @@ function isActive(tab) {
     line-height: 20px;
     color: var(--vp-c-text-2);
     white-space: nowrap;
-    transition: color 0.2s ease, background-color 0.2s ease;
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease;
   }
 
   .tab:hover {

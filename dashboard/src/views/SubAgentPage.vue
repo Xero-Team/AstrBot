@@ -4,7 +4,10 @@
       <div class="dashboard-header">
         <div class="dashboard-header-main">
           <div class="subagent-page__title-row">
-            <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
+            <h1 class="dashboard-title">
+              {{ tm('page.title') }}
+              <ConfigDocsLink docs="use/subagent.html" />
+            </h1>
             <v-chip size="x-small" color="warning" variant="tonal" label>
               {{ tm('page.beta') }}
             </v-chip>
@@ -291,6 +294,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { useTheme } from 'vuetify';
 import { subagentApi } from '@/api/v1';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue';
 import PersonaSelector from '@/components/shared/PersonaSelector.vue';
 import ProviderSelector from '@/components/shared/ProviderSelector.vue';

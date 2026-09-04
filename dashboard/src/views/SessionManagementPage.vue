@@ -4,14 +4,7 @@
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('customRules.title') }}</span>
-          <v-btn
-            icon="mdi-information-outline"
-            size="small"
-            variant="text"
-            :aria-label="tm('customRules.title')"
-            :href="docsHref('use/custom-rules.html')"
-            target="_blank"
-          ></v-btn>
+          <ConfigDocsLink docs="use/custom-rules.html" />
           <v-chip size="small" class="ml-1"
             >{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip
           >
@@ -1081,9 +1074,9 @@ import type {
   DynamicConfig,
   UmoListRequest,
 } from '@/api/generated/openapi-v1';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { docsHref } from '@/utils/docsHref';
 import { getPlatformColor as resolvePlatformColor } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,

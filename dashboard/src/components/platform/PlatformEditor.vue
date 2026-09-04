@@ -76,7 +76,7 @@
           </div>
           <v-btn
             size="small"
-            prepend-icon="mdi-book-open-variant"
+            prepend-icon="mdi-help-circle-outline"
             variant="text"
             @click="openTutorial"
           >

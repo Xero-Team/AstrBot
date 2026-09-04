@@ -22,6 +22,7 @@
             <v-icon :icon="type.icon" size="16" />
             <span>{{ type.label }}</span>
           </button>
+          <ConfigDocsLink docs="providers/start.html" />
         </div>
       </div>
 
@@ -347,6 +348,7 @@
 import { computed, nextTick, ref, unref, watch } from 'vue';
 import { providerApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue';
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue';

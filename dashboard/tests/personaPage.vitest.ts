@@ -14,6 +14,9 @@ describe('PersonaPage', () => {
     const wrapper = mountWithVuetify(PersonaPage);
 
     expect(wrapper.get('h1').text().length).toBeGreaterThan(0);
+    expect(wrapper.get('.config-docs-link').attributes('href')).toBe(
+      '/help/en/use/persona.html',
+    );
     expect(wrapper.get('[data-testid="persona-manager"]').exists()).toBe(true);
   });
 });

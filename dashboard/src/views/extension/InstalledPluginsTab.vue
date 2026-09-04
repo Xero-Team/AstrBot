@@ -1,4 +1,5 @@
 <script setup>
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import ExtensionCard from '@/components/shared/ExtensionCard.vue';
 import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
@@ -105,6 +106,7 @@ const togglePinnedExtension = (extension) => {
     <div class="page-header">
       <h2 class="page-header__title">
         {{ tm('titles.installedAstrBotPlugins') }}
+        <ConfigDocsLink docs="use/plugin.html" />
       </h2>
 
       <div class="inline-control-row">

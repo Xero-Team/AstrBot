@@ -152,6 +152,7 @@ export default defineConfig({
               { text: '技能 Skills', link: '/skills' },
               { text: 'Persona 人格设定', link: '/persona' },
               { text: '长期记忆', link: '/long-term-memory' },
+              { text: '群聊上下文感知', link: '/group-chat-context' },
               { text: '使用电脑能力', link: '/computer' },
               { text: 'SubAgent 编排', link: '/subagent' },
               { text: '主动型 Agent 能力', link: '/proactive-agent' },
@@ -398,6 +399,10 @@ export default defineConfig({
               { text: 'Skills', link: '/skills' },
               { text: 'Personas', link: '/persona' },
               { text: 'Long-term Memory', link: '/long-term-memory' },
+              {
+                text: 'Group Chat Context Awareness',
+                link: '/group-chat-context',
+              },
               { text: 'Computer Use', link: '/computer' },
               { text: 'SubAgent Orchestration', link: '/subagent' },
               { text: 'Proactive Tasks', link: '/proactive-agent' },

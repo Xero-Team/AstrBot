@@ -137,9 +137,25 @@ def test_config_metadata_locale_trees_match() -> None:
 def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
     converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
     ai_sections = converted["ai_group"]["metadata"]
+    assert ai_sections["agent_runner"]["docs"] == "use/agent-runner.html"
+    assert ai_sections["persona"]["docs"] == "use/persona.html"
+    assert ai_sections["knowledgebase"]["docs"] == "use/knowledge-base.html"
+    assert ai_sections["websearch"]["docs"] == "use/websearch.html"
     assert ai_sections["agent_computer_use"]["docs"] == "use/computer.html"
+    assert (
+        ai_sections["agent_computer_use"]["items"]["provider_settings.sandbox.booter"][
+            "docs"
+        ]
+        == "use/astrbot-agent-sandbox.html"
+    )
     assert ai_sections["proactive_capability"]["docs"] == "use/proactive-agent.html"
     assert ai_sections["truncate_and_compress"]["docs"] == "use/context-compress.html"
+    assert converted["plugin_group"]["metadata"]["plugin"]["docs"] == (
+        "use/plugin.html"
+    )
+    assert converted["ext_group"]["metadata"]["ltm"]["docs"] == (
+        "use/group-chat-context.html"
+    )
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):

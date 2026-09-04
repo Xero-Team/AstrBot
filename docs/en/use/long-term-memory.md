@@ -75,3 +75,4 @@ Deployments that require permanent erasure, user opt-out, or retention limits mu
 - Audit facts, profiles, episode counts, and operation logs regularly instead of checking only Agent response quality.
 - Fact extraction and retrieval are currently lightweight rules and text matching, so memories can be missed, misclassified, or become stale. Do not rely on memory alone for important decisions.
 - A [Persona](./persona) defines role and permissions; long-term memory is stored by user and message session. They are separate data sets.
+- [Group chat context awareness](./group-chat-context) injects recent group messages into the next LLM request. It is not long-term memory. The `provider_ltm_settings` key belongs to that feature.

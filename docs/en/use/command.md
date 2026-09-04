@@ -68,7 +68,7 @@ The user ID from `/session info` can be granted current-session `session_admin` 
 ### Conversations
 
 - `/conversation create`: Create and switch to a new conversation.
-- `/conversation reset`: Clear the current context and corresponding third-party Agent Runner state.
+- `/conversation reset`: Clear the current context, corresponding third-party Agent Runner state, and this session's [group chat context awareness](./group-chat-context) in-memory cache.
 - `/conversation stats`: Show input, cached-input, and output token statistics.
 - `/conversation history [--page N|-p N]`: Show conversation history.
 - `/conversation list [--page N|-p N]`: List conversations.

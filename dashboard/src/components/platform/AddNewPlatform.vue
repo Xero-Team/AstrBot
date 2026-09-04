@@ -127,7 +127,7 @@
                           class="mt-2"
                           @click="openTutorial"
                         >
-                          <v-icon start>mdi-book-open-variant</v-icon>
+                          <v-icon start>mdi-help-circle-outline</v-icon>
                           {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
@@ -193,7 +193,7 @@
                           class="mt-2"
                           @click="openTutorial"
                         >
-                          <v-icon start>mdi-book-open-variant</v-icon>
+                          <v-icon start>mdi-help-circle-outline</v-icon>
                           {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
@@ -259,7 +259,7 @@
                           class="mt-2"
                           @click="openTutorial"
                         >
-                          <v-icon start>mdi-book-open-variant</v-icon>
+                          <v-icon start>mdi-help-circle-outline</v-icon>
                           {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
@@ -303,7 +303,7 @@
                         class="mt-2"
                         @click="openTutorial"
                       >
-                        <v-icon start>mdi-book-open-variant</v-icon>
+                        <v-icon start>mdi-help-circle-outline</v-icon>
                         {{ tm('dialog.viewTutorial') }}
                       </v-btn>
                     </div>

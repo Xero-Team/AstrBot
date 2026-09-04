@@ -141,8 +141,21 @@ def test_makefile_builds_docs_into_dashboard_help() -> None:
     """Local production builds must use the in-app /help/ base path."""
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 
+    assert "build-all: build-backend build-docs" in makefile
     assert "build-docs: build-dashboard" in makefile
     assert "ASTRBOT_DOCS_BASE=/help/ $(PNPM) run docs:build" in makefile
+    docs_build_at = makefile.index("ASTRBOT_DOCS_BASE=/help/ $(PNPM) run docs:build")
+    docs_sync_at = makefile.index(
+        "@$(MAKE) --no-print-directory sync-webui-dist",
+        docs_build_at,
+    )
+    run_at = makefile.index("\nrun:")
+    run_sync_at = makefile.index(
+        "@$(MAKE) --no-print-directory sync-webui-dist",
+        run_at,
+    )
+    assert docs_sync_at > docs_build_at
+    assert run_sync_at > run_at
     assert "Dockerfile.docs" not in makefile
 
 

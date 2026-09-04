@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n/composables';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { useToast } from '@/utils/toast';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 
 type AuditRecord = {
   audit_id: string;
@@ -431,7 +432,10 @@ onMounted(refresh);
   <v-container fluid class="pa-6">
     <div class="d-flex align-center mb-5">
       <div>
-        <h1 class="text-h5">{{ t('features.authorization.title') }}</h1>
+        <h1 class="text-h5 d-flex align-center">
+          {{ t('features.authorization.title') }}
+          <ConfigDocsLink docs="use/authorization.html" />
+        </h1>
         <p class="text-body-2 text-medium-emphasis mb-0">
           {{ t('features.authorization.description') }}
         </p>

@@ -103,16 +103,16 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 群聊中机器人不回复
 
-为避免群消息泛滥，普通消息需要满足配置档的 `llm_access.group` 策略（默认是 `prefix`，`llm_access.prefixes` 默认值为 `["/"]`）。如需把“回复机器人”作为额外触发条件，请启用 `llm_access.reply_to_bot`。同时检查：
+为避免群消息泛滥，普通消息需要满足配置档的 `llm_access.group` 策略（默认是 `prefix`，`llm_access.prefixes` 默认值为 `["/"]`）。如需把“回复机器人”作为额外触发条件，请启用 `llm_access.reply_to_bot`。完整策略、隔离会话和唤醒之后仍可能被白名单丢掉的说明见 [群聊何时会理我](/use/group-wake)。同时检查：
 
-- 当前配置档是否绑定到该消息会话；
+- 当前配置档是否绑定到该消息会话，见 [配置文件](/use/config-profiles)；
 - 平台和 Provider 是否启用；
-- 白名单、管理员绕过和限流；
+- 白名单、管理员绕过和限流，见 [平台处理](/use/platform-settings)；
 - `ignore_at_all`、机器人自身消息过滤及平台权限。
 
 ### 管理员指令提示无权限
 
-群聊仍需要通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。私聊对端已经是当前会话的 `session_owner`，无需预先绑定 `session_admin` 即可 `/conversation reset`。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。使用 `/session info` 可查看当前用户 ID。
+群聊仍需要通过 Dashboard [权限页面](/use/authorization)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。私聊对端已经是当前会话的 `session_owner`，无需预先绑定 `session_admin` 即可 `/conversation reset`。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。使用 `/session info` 可查看当前用户 ID。
 
 ### 以前的 `/plugin ls`、`/reset` 等指令无效
 

@@ -117,6 +117,11 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: '服务提供商配置', link: '/llm' },
+                  {
+                    text: '自定义模型参数',
+                    base: '/config',
+                    link: '/model-config',
+                  },
                   { text: 'MiraRouter', link: '/mirarouter' },
                   { text: '胜算云', link: '/shengsuanyun' },
                   { text: 'Ollama', link: '/provider-ollama' },
@@ -145,6 +150,10 @@ export default defineConfig({
             base: '/use',
             items: [
               { text: 'WebUI', link: '/webui' },
+              { text: '配置文件', link: '/config-profiles' },
+              { text: '群聊何时会理我', link: '/group-wake' },
+              { text: '授权管理', link: '/authorization' },
+              { text: '平台处理', link: '/platform-settings' },
               { text: 'CLI 指令', link: '/cli' },
               { text: '插件', link: '/plugin' },
               { text: '内置指令', link: '/command' },
@@ -153,6 +162,7 @@ export default defineConfig({
               { text: 'Persona 人格设定', link: '/persona' },
               { text: '长期记忆', link: '/long-term-memory' },
               { text: '群聊上下文感知', link: '/group-chat-context' },
+              { text: '语音 STT / TTS', link: '/speech' },
               { text: '使用电脑能力', link: '/computer' },
               { text: 'SubAgent 编排', link: '/subagent' },
               { text: '主动型 Agent 能力', link: '/proactive-agent' },
@@ -229,6 +239,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '异常诊断', link: '/diagnostics' },
+              { text: 'IPv6', link: '/ipv6' },
               {
                 text: '插件下载不了?试试自建 GitHub 加速服务',
                 link: '/github-proxy',
@@ -363,6 +374,11 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: 'Provider Configuration', link: '/llm' },
+                  {
+                    text: 'Custom model parameters',
+                    base: '/en/config',
+                    link: '/model-config',
+                  },
                   { text: 'MiraRouter', link: '/mirarouter' },
                   { text: 'ShengSuanYun', link: '/shengsuanyun' },
                   { text: 'Ollama', link: '/provider-ollama' },
@@ -392,6 +408,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'WebUI', link: '/webui' },
+              { text: 'Configuration profiles', link: '/config-profiles' },
+              { text: 'When the bot replies in groups', link: '/group-wake' },
+              { text: 'Authorization', link: '/authorization' },
+              { text: 'Platform handling', link: '/platform-settings' },
               { text: 'CLI Commands', link: '/cli' },
               { text: 'Plugins', link: '/plugin' },
               { text: 'Built-in Commands', link: '/command' },
@@ -403,6 +423,7 @@ export default defineConfig({
                 text: 'Group Chat Context Awareness',
                 link: '/group-chat-context',
               },
+              { text: 'Speech STT / TTS', link: '/speech' },
               { text: 'Computer Use', link: '/computer' },
               { text: 'SubAgent Orchestration', link: '/subagent' },
               { text: 'Proactive Tasks', link: '/proactive-agent' },
@@ -453,6 +474,7 @@ export default defineConfig({
                   { text: 'HTML to Image', link: '/guides/html-to-pic' },
                   { text: 'Session Control', link: '/guides/session-control' },
                   { text: 'OneBot Plugin API', link: '/guides/onebot' },
+                  { text: 'Miscellaneous', link: '/guides/other' },
                 ],
               },
               {
@@ -482,7 +504,11 @@ export default defineConfig({
             text: 'Others',
             base: '/en/others',
             collapsed: true,
-            items: [{ text: 'Diagnostics', link: '/diagnostics' }],
+            items: [
+              { text: 'Diagnostics', link: '/diagnostics' },
+              { text: 'IPv6', link: '/ipv6' },
+              { text: 'GitHub mirrors', link: '/github-proxy' },
+            ],
           },
           {
             text: 'Open Source Summer',

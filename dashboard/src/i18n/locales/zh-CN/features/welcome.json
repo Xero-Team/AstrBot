@@ -39,5 +39,13 @@
     "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
     "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
     "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。"
+  },
+  "help": {
+    "title": "使用帮助",
+    "subtitle": "文档由 Dashboard 在 /help/ 提供。聊天、统计、日志、追踪和数据文件见 WebUI 页。",
+    "configProfiles": "配置文件",
+    "groupWake": "群聊何时会理我",
+    "authorization": "授权管理",
+    "webui": "WebUI"
   }
 }

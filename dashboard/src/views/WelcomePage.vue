@@ -147,6 +147,32 @@
           </v-card>
         </v-col>
       </v-row>
+
+      <v-row class="px-4">
+        <v-col cols="12">
+          <v-card class="welcome-card pa-6" elevation="0" border>
+            <div class="mb-4 text-h3 font-weight-bold">
+              {{ tm('help.title') }}
+            </div>
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              {{ tm('help.subtitle') }}
+            </p>
+            <div class="d-flex flex-wrap ga-2">
+              <v-btn
+                v-for="item in helpLinks"
+                :key="item.path"
+                variant="tonal"
+                rounded="md"
+                :href="docsHref(item.path, locale)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ tm(item.labelKey) }}
+              </v-btn>
+            </div>
+          </v-card>
+        </v-col>
+      </v-row>
     </v-container>
 
     <AddNewPlatform
@@ -188,7 +214,8 @@ import { computed, ref, watch, onMounted } from 'vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { useToast } from '@/utils/toast';
 
@@ -241,8 +268,16 @@ interface ProviderTemplatePayload {
   provider_sources?: ProviderSourceEntry[];
 }
 
+const { locale } = useI18n();
 const { tm } = useModuleI18n('features/welcome');
 const { success: showSuccess, error: showError } = useToast();
+
+const helpLinks = [
+  { path: 'use/config-profiles.html', labelKey: 'help.configProfiles' },
+  { path: 'use/group-wake.html', labelKey: 'help.groupWake' },
+  { path: 'use/authorization.html', labelKey: 'help.authorization' },
+  { path: 'use/webui.html', labelKey: 'help.webui' },
+] as const;
 
 const showAddPlatformDialog = ref(false);
 const showProviderDialog = ref(false);

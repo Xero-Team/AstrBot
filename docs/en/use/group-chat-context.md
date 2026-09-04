@@ -1,6 +1,6 @@
 # Group Chat Context Awareness
 
-Group chat context awareness records group messages after the bot's last reply and injects them as extra context on the next LLM wake. It applies to group chats only and is off by default.
+Group chat context awareness records group messages after the bot's last reply and injects them as extra context on the next LLM wake. It applies to group chats only and is off by default. It does not decide whether a message wakes the bot. Wake policy is in [When the bot replies in groups](./group-wake).
 
 The settings live under **Config → Ext. → Group Chat Context Awareness**. The JSON key is still the historical name `provider_ltm_settings`. Do not treat it as the switch for Alkaid [Long-term Memory](./long-term-memory).
 

@@ -3563,6 +3563,7 @@ CONFIG_METADATA_3 = {
                         "description": "语音识别",
                         "type": "bool",
                         "hint": "使用语音转文字模型将用户语音转述为文本，方便模型理解。",
+                        "docs": "use/speech.html",
                     },
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
@@ -3577,6 +3578,7 @@ CONFIG_METADATA_3 = {
                         "description": "语音回复",
                         "type": "bool",
                         "hint": "使用文字转语音模型将文字转为语音回复。",
+                        "docs": "use/speech.html",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
@@ -4187,9 +4189,11 @@ CONFIG_METADATA_3 = {
     },
     "platform_group": {
         "name": "平台配置",
+        "docs": "use/group-wake.html",
         "metadata": {
             "general": {
                 "description": "基本",
+                "docs": "use/group-wake.html",
                 "type": "object",
                 "items": {
                     "platform_settings.unique_session": {
@@ -4272,6 +4276,7 @@ CONFIG_METADATA_3 = {
             },
             "whitelist": {
                 "description": "白名单",
+                "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
                     "platform_settings.enable_id_white_list": {
@@ -4302,6 +4307,7 @@ CONFIG_METADATA_3 = {
             },
             "rate_limit": {
                 "description": "速率限制",
+                "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
                     "platform_settings.rate_limit.time": {
@@ -4321,6 +4327,7 @@ CONFIG_METADATA_3 = {
             },
             "content_safety": {
                 "description": "内容安全",
+                "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
                     "content_safety.also_use_in_response": {
@@ -4367,6 +4374,7 @@ CONFIG_METADATA_3 = {
             },
             "t2i": {
                 "description": "文本转图像",
+                "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
                     "t2i": {
@@ -4381,6 +4389,7 @@ CONFIG_METADATA_3 = {
             },
             "others": {
                 "description": "其他配置",
+                "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
                     "platform_settings.ignore_bot_self_message": {
@@ -4461,6 +4470,7 @@ CONFIG_METADATA_3 = {
         "metadata": {
             "segmented_reply": {
                 "description": "分段回复",
+                "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
                     "platform_settings.segmented_reply.enable": {

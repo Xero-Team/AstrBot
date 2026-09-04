@@ -39,5 +39,13 @@
     "computerAccessAllowed": "Agent is now allowed to access and use the computer",
     "computerAccessDenied": "Agent is no longer allowed to access and use the computer",
     "step3HelpItem3": "For more detailed control, configure the Computer Access options under Settings -> General -> Computer Access."
+  },
+  "help": {
+    "title": "Help",
+    "subtitle": "Docs are served from the Dashboard at /help/. Chat, stats, logs, traces, and data files are covered on the WebUI page.",
+    "configProfiles": "Configuration profiles",
+    "groupWake": "When the bot replies in groups",
+    "authorization": "Authorization",
+    "webui": "WebUI"
   }
 }

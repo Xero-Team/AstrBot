@@ -133,27 +133,13 @@ IM 消息、插件和后台续跑不能复用该授权。
 
 WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账户（用户名通常为 `astrbot`）。控制面身份来自账户表和角色绑定，不能凭用户名推断 `root`。
 
-侧栏 **更多 → 权限** 打开 `/authorization`，用于查看和修改角色绑定。账户 CRUD、授予 `root`/`operator`、停用账户都要求当前 `root` 绑定加上一次性密码或 TOTP step-up，并保留最后一个 `root` 保护。已认证 IM 私聊对端是该一对一会话的运行时 owner（来源 `private_session`），不是 Dashboard 绑定。当前会话的 IM owner 只能通过 `/admin grant` 或权限页管理本会话的 `session_admin` / `member`，不能把 IM 用户变成全局 operator。
-
-固定角色：
-
-| 角色                | 范围            | 典型用途                       |
-| ------------------- | --------------- | ------------------------------ |
-| `root`              | 全局控制面      | 账户管理、重启、pip 安装       |
-| `operator`          | 全局控制面      | 配置、Provider、插件、数据运维 |
-| `instance_operator` | 单个配置档      | 该配置档的管理动作             |
-| `session_owner`     | 当前群/私聊会话 | 会话管理、会话内模型选择       |
-| `session_admin`     | 当前会话        | 有限管理，例如停任务、改会话名 |
-| `member`            | 当前会话        | 普通对话                       |
-| `guest`             | 未认证          | 匿名 WebChat                   |
-
-安装插件、写入凭据、导出全部对话、pip 安装和重启都会弹出 step-up。凭证只用于当前操作一次，不能放入 URL。对话导出要求精确的 `conversation:export` 资源与 `data.export_all`；普通 `data` scope 的 API Key 会被拒绝。备份下载走已认证 Blob 请求，不会把 Dashboard JWT 放进查询参数。
+侧栏 **更多 → 权限** 打开 `/authorization`。Dashboard 账户、IM 会话 owner 和 `/admin grant` 不是同一套身份；群聊授权、二次验证（step-up）和角色表见 [授权管理](./authorization)。
 
 开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ## 可视化配置
 
-在管理面板中，你可以通过可视化配置来配置 AstrBot 的插件。点击左栏 `配置` 即可进入配置页面。
+在管理面板中，你可以通过可视化配置来配置 AstrBot 的插件。点击左栏 `配置` 即可进入配置页面。配置档、会话绑定以及和自定义规则的优先级见 [配置文件](./config-profiles)。
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-3.png)
 
@@ -167,7 +153,7 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 ## 插件
 
-在管理面板中，你可以通过左栏的 `插件` 来查看已安装的插件，以及安装新插件。
+在管理面板中，你可以通过左栏的 `插件` 来查看已安装的插件，以及安装新插件。市场源、`astrbot_version` 和 Dashboard Extension 见 [插件](./plugin)。
 
 点击插件市场标签栏，可以浏览默认市场源中的插件。该源先指向上游 `cloud.astrbot.app` 市场 JSON，失败后再回退到 `AstrBotDevs/AstrBot_Plugins_Collection` 及其 CDN；不是 Xero-Team 运营或审核的市场。本 fork 要求 Python 3.14+ 且不兼容旧插件 API，因此列表里的插件可能安装失败或加载失败。
 

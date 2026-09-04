@@ -51,7 +51,7 @@ Object layouts inside `provider_sources`, `provider`, and `platform` come from t
 
 ## Inbound routing
 
-`command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
+User-facing steps are in [When the bot replies in groups](../use/group-wake). `command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
 
 | Key                                  | Values                                                      | Meaning                                                                                                           |
 | ------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |

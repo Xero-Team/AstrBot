@@ -34,7 +34,7 @@ Declared options can appear before or after positional arguments and support `--
 
 ## Command and LLM routing
 
-Commands are framed by the profile's `command_prefixes` (default `["/"]`) and matched against the enabled command catalog. Command matching happens before LLM access: a matched command always wins, a bare command group shows its help, and an unknown subcommand returns an Orbit diagnostic instead of becoming an LLM prompt. Non-command messages follow the profile's `llm_access` policy. Its prefixes are complete user-typed strings; they are not automatically combined with `command_prefixes`.
+Commands are framed by the profile's `command_prefixes` (default `["/"]`) and matched against the enabled command catalog. Command matching happens before LLM access: a matched command always wins, a bare command group shows its help, and an unknown subcommand returns an Orbit diagnostic instead of becoming an LLM prompt. Non-command messages follow the profile's `llm_access` policy. Its prefixes are complete user-typed strings; they are not automatically combined with `command_prefixes`. When a group message reaches the LLM is in [When the bot replies in groups](./group-wake).
 
 Enabled command paths, aliases, descendants, and non-empty LLM prefix roots share one scoped namespace. A conflict is rejected or excluded from the runtime catalog until Dashboard rename leaves one owner, or the command-update API records a takeover. Dashboard highlights conflicts and exposes rename; it does not offer a takeover button. The built-in LLM state commands are `/llm status`, `/llm enable`, and `/llm disable`; `/chat` is not their compatibility alias.
 
@@ -122,7 +122,7 @@ These commands require `session.manage`. There is no argument-less toggle.
 - `/admin grant <user-id>`: Grant `session_admin` for the current session, not a global operator.
 - `/admin revoke <user-id>`: Revoke `session_admin` for the current session.
 
-All three subcommands require `identity.manage`. A current session owner may manage `session_admin` and `member` in that session only and cannot delegate ownership. See [WebUI](/en/use/webui#accounts-and-authorization) for the role model.
+All three subcommands require `identity.manage`. A current session owner may manage `session_admin` and `member` in that session only and cannot delegate ownership. See [Authorization](./authorization) for the role model.
 
 ### Personas
 

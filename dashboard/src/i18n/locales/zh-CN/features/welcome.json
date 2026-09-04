@@ -42,10 +42,14 @@
   },
   "help": {
     "title": "使用帮助",
-    "subtitle": "文档由 Dashboard 在 /help/ 提供。聊天、统计、日志、追踪和数据文件见 WebUI 页。",
+    "subtitle": "配完引导后，可以按专题查阅文档。",
     "configProfiles": "配置文件",
+    "configProfilesDesc": "多配置档、会话绑定，以及和自定义规则的优先级。",
     "groupWake": "群聊何时会理我",
+    "groupWakeDesc": "LLM 前缀、@、回复机器人和隔离会话。",
     "authorization": "授权管理",
-    "webui": "WebUI"
+    "authorizationDesc": "Dashboard 账户、IM 会话 owner 和二次验证。",
+    "webui": "WebUI",
+    "webuiDesc": "登录、ChatUI、统计、日志、追踪和数据文件。"
   }
 }

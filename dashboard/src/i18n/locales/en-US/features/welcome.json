@@ -42,10 +42,14 @@
   },
   "help": {
     "title": "Help",
-    "subtitle": "Docs are served from the Dashboard at /help/. Chat, stats, logs, traces, and data files are covered on the WebUI page.",
+    "subtitle": "After onboarding, open a topic in the in-app docs.",
     "configProfiles": "Configuration profiles",
+    "configProfilesDesc": "Profiles, session binding, and priority versus custom rules.",
     "groupWake": "When the bot replies in groups",
+    "groupWakeDesc": "LLM prefixes, mentions, replies to the bot, and isolated sessions.",
     "authorization": "Authorization",
-    "webui": "WebUI"
+    "authorizationDesc": "Dashboard accounts, IM session owners, and step-up.",
+    "webui": "WebUI",
+    "webuiDesc": "Sign-in, ChatUI, stats, logs, traces, and data files."
   }
 }

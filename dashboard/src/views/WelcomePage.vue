@@ -148,27 +148,36 @@
         </v-col>
       </v-row>
 
-      <v-row class="px-4">
+      <v-row class="px-4 mt-4">
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
-            <div class="mb-4 text-h3 font-weight-bold">
+            <div class="mb-2 text-h3 font-weight-bold">
               {{ tm('help.title') }}
             </div>
             <p class="text-body-2 text-medium-emphasis mb-4">
               {{ tm('help.subtitle') }}
             </p>
-            <div class="d-flex flex-wrap ga-2">
-              <v-btn
+            <div class="welcome-help-grid">
+              <a
                 v-for="item in helpLinks"
                 :key="item.path"
-                variant="tonal"
-                rounded="md"
+                class="welcome-help-tile surface"
                 :href="docsHref(item.path, locale)"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {{ tm(item.labelKey) }}
-              </v-btn>
+                <v-icon size="28" class="welcome-help-tile__icon">
+                  {{ item.icon }}
+                </v-icon>
+                <div class="welcome-help-tile__body">
+                  <div class="welcome-help-tile__title">
+                    {{ tm(item.titleKey) }}
+                  </div>
+                  <p class="welcome-help-tile__desc">
+                    {{ tm(item.descKey) }}
+                  </p>
+                </div>
+              </a>
             </div>
           </v-card>
         </v-col>
@@ -273,10 +282,30 @@ const { tm } = useModuleI18n('features/welcome');
 const { success: showSuccess, error: showError } = useToast();
 
 const helpLinks = [
-  { path: 'use/config-profiles.html', labelKey: 'help.configProfiles' },
-  { path: 'use/group-wake.html', labelKey: 'help.groupWake' },
-  { path: 'use/authorization.html', labelKey: 'help.authorization' },
-  { path: 'use/webui.html', labelKey: 'help.webui' },
+  {
+    path: 'use/config-profiles.html',
+    titleKey: 'help.configProfiles',
+    descKey: 'help.configProfilesDesc',
+    icon: 'mdi-cog-outline',
+  },
+  {
+    path: 'use/group-wake.html',
+    titleKey: 'help.groupWake',
+    descKey: 'help.groupWakeDesc',
+    icon: 'mdi-chat',
+  },
+  {
+    path: 'use/authorization.html',
+    titleKey: 'help.authorization',
+    descKey: 'help.authorizationDesc',
+    icon: 'mdi-shield-account-outline',
+  },
+  {
+    path: 'use/webui.html',
+    titleKey: 'help.webui',
+    descKey: 'help.webuiDesc',
+    icon: 'mdi-book-open-variant',
+  },
 ] as const;
 
 const showAddPlatformDialog = ref(false);
@@ -591,6 +620,59 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 
 .welcome-card {
   border-radius: 16px;
+}
+
+.welcome-help-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--astrbot-space-4);
+}
+
+.welcome-help-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--astrbot-space-3);
+  padding: var(--astrbot-space-4);
+  color: inherit;
+  text-decoration: none;
+}
+
+.welcome-help-tile:hover {
+  background: rgb(var(--v-theme-extension-surface));
+}
+
+.welcome-help-tile:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.welcome-help-tile__icon {
+  flex-shrink: 0;
+  color: rgb(var(--v-theme-primary));
+}
+
+.welcome-help-tile__body {
+  min-width: 0;
+}
+
+.welcome-help-tile__title {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.welcome-help-tile__desc {
+  margin: var(--astrbot-space-1) 0 0;
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 14px;
+  line-height: 20px;
+}
+
+@media (max-width: 960px) {
+  .welcome-help-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .welcome-announcement-markdown {

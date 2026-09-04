@@ -26,6 +26,9 @@ from astrbot.core.utils.error_redaction import safe_error
 
 from .forward_node_splitter import split_long_text_node
 
+_EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
+_SPLIT_SEND_INTERVAL_SECONDS = 0.5
+
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
@@ -222,6 +225,54 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     )
 
     @classmethod
+    async def _dispatch_standard_segments(
+        cls,
+        bot: CQHttp,
+        event: Event | None,
+        is_group: bool,
+        session_id: str | None,
+        segments: list[BaseMessageComponent],
+        *,
+        sent_any: bool,
+    ) -> bool:
+        if not segments:
+            return False
+        messages = await cls._parse_onebot_json(MessageChain(segments))
+        if not messages:
+            return False
+        if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+            await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+        await cls._dispatch_send(bot, event, is_group, session_id, messages)
+        return True
+
+    @classmethod
+    async def _send_forward_segment(
+        cls,
+        bot: CQHttp,
+        segment: Node | Nodes,
+        event: Event | None,
+        is_group: bool,
+        session_id: str | None,
+        forward_message_max_retries: int,
+        forward_message_fallback_enabled: bool,
+    ) -> None:
+        nodes = segment if isinstance(segment, Nodes) else Nodes([segment])
+        payload = await nodes.to_dict()
+        if forward_message_fallback_enabled:
+            await cls._send_forward_with_fallback(
+                bot,
+                payload,
+                event,
+                is_group,
+                session_id,
+                forward_message_max_retries,
+            )
+            return
+        action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
+        payload["group_id" if is_group else "user_id"] = session_id
+        await bot.call_action(action, **payload)
+
+    @classmethod
     async def send_message(
         cls,
         bot: CQHttp,
@@ -242,51 +293,54 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             session_id (str | None, optional): 会话 ID（群号或 QQ 号
 
         """
-        # 转发消息、文件消息不能和普通消息混在一起发送
-        send_one_by_one = any(
-            isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
-        )
-        if not send_one_by_one:
-            ret = await cls._parse_onebot_json(message_chain)
-            if not ret:
-                return
-            await cls._dispatch_send(bot, event, is_group, session_id, ret)
-            return
+        # 转发、文件、语音、视频不能和普通消息混在同一条 OneBot 消息里发送。
+        # 连续可混排段（文本、图片等）仍合并为一次发送。
+        pending: list[BaseMessageComponent] = []
+        sent_any = False
         for seg in message_chain.chain:
-            if isinstance(seg, Node | Nodes):
-                # 合并转发消息
-                if isinstance(seg, Node):
-                    nodes = Nodes([seg])
-                    seg = nodes
-
-                payload = await seg.to_dict()
-
-                if forward_message_fallback_enabled:
-                    await cls._send_forward_with_fallback(
+            if isinstance(seg, _EXCLUSIVE_OUTBOUND_SEGMENTS):
+                if await cls._dispatch_standard_segments(
+                    bot,
+                    event,
+                    is_group,
+                    session_id,
+                    pending,
+                    sent_any=sent_any,
+                ):
+                    sent_any = True
+                pending.clear()
+                if isinstance(seg, Node | Nodes):
+                    if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                        await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+                    await cls._send_forward_segment(
                         bot,
-                        payload,
+                        seg,
                         event,
                         is_group,
                         session_id,
                         forward_message_max_retries,
+                        forward_message_fallback_enabled,
                     )
-                else:
-                    action = (
-                        "send_group_forward_msg"
-                        if is_group
-                        else "send_private_forward_msg"
-                    )
-                    payload["group_id" if is_group else "user_id"] = session_id
-                    await bot.call_action(action, **payload)
-            elif isinstance(seg, File):
-                d = await cls._from_segment_to_dict(seg)
-                await cls._dispatch_send(bot, event, is_group, session_id, [d])
-            else:
-                messages = await cls._parse_onebot_json(MessageChain([seg]))
-                if not messages:
-                    continue
-                await cls._dispatch_send(bot, event, is_group, session_id, messages)
-                await asyncio.sleep(0.5)
+                    sent_any = True
+                elif await cls._dispatch_standard_segments(
+                    bot,
+                    event,
+                    is_group,
+                    session_id,
+                    [seg],
+                    sent_any=sent_any,
+                ):
+                    sent_any = True
+                continue
+            pending.append(seg)
+        await cls._dispatch_standard_segments(
+            bot,
+            event,
+            is_group,
+            session_id,
+            pending,
+            sent_any=sent_any,
+        )
 
     async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息"""

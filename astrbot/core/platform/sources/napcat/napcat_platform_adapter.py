@@ -154,6 +154,9 @@ from .types import (
     NapCatVersionInfo,
 )
 
+_EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
+_SPLIT_SEND_INTERVAL_SECONDS = 0.5
+
 
 class NapCatOutboundProtocol:
     """Own the OneBot outbound transport protocol for an adapter instance."""
@@ -1055,7 +1058,8 @@ class NapCatPlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         if any(
-            isinstance(component, Node | Nodes) for component in message_chain.chain
+            isinstance(component, _EXCLUSIVE_OUTBOUND_SEGMENTS)
+            for component in message_chain.chain
         ):
             await self._send_mixed_outbound_message(session, message_chain)
         else:
@@ -1075,23 +1079,39 @@ class NapCatPlatformAdapter(Platform):
         message_chain: MessageChain,
     ) -> None:
         pending_standard: list[BaseMessageComponent] = []
+        sent_any = False
+
+        async def emit_standard(segments: list[BaseMessageComponent]) -> None:
+            nonlocal sent_any
+            if not segments:
+                return
+            if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+            await self._send_standard_message(
+                session,
+                message_chain.derive(chain=list(segments)),
+            )
+            sent_any = True
+
+        async def emit_forward(component: Node | Nodes) -> None:
+            nonlocal sent_any
+            if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+            await self._send_forward_component(session, component)
+            sent_any = True
+
         for component in message_chain.chain:
-            if isinstance(component, Node | Nodes):
-                if pending_standard:
-                    await self._send_standard_message(
-                        session,
-                        message_chain.derive(chain=list(pending_standard)),
-                    )
-                    pending_standard.clear()
-                await self._send_forward_component(session, component)
+            if isinstance(component, _EXCLUSIVE_OUTBOUND_SEGMENTS):
+                await emit_standard(pending_standard)
+                pending_standard.clear()
+                if isinstance(component, Node | Nodes):
+                    await emit_forward(component)
+                else:
+                    await emit_standard([component])
                 continue
             pending_standard.append(component)
 
-        if pending_standard:
-            await self._send_standard_message(
-                session,
-                message_chain.derive(chain=pending_standard),
-            )
+        await emit_standard(pending_standard)
 
     async def _send_forward_component(
         self,

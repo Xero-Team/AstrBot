@@ -29,6 +29,13 @@ class StaticFileService:
         ),
         re.compile(r"^/extension/[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"),
     )
+    DASHBOARD_STATIC_HEADERS = {"Cache-Control": "no-store"}
+    HELP_STATIC_HEADERS = {
+        "Cache-Control": "no-store",
+        # files.astrbot.app hotlink-protects by Referer. Dashboard /help/
+        # pages must omit the referrer so hosted doc images are not 403.
+        "Referrer-Policy": "no-referrer",
+    }
     NOT_FOUND_MESSAGE = (
         "404 Not found. If this is the first time you opened the panel, "
         "build the WebUI from this checkout (`make run`) and retry. "
@@ -80,6 +87,21 @@ class StaticFileService:
             self.get_plugin_ui_protocol_version(static_folder)
             == self.PLUGIN_UI_PROTOCOL_VERSION
         )
+
+    def headers_for_static_path(self, requested_path: str) -> dict[str, str]:
+        """Return cache and referrer headers for a Dashboard static path.
+
+        Args:
+            requested_path: Path relative to the WebUI dist root.
+
+        Returns:
+            Response headers. ``/help/`` pages omit the referrer so
+            ``files.astrbot.app`` hotlink protection does not reject images.
+        """
+        normalized = requested_path.replace("\\", "/").strip("/")
+        if normalized == "help" or normalized.startswith("help/"):
+            return dict(self.HELP_STATIC_HEADERS)
+        return dict(self.DASHBOARD_STATIC_HEADERS)
 
     def resolve_static_file(
         self,

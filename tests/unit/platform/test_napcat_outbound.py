@@ -331,6 +331,46 @@ async def test_napcat_send_by_session_supports_forward_nodes():
 
 
 @pytest.mark.asyncio
+async def test_napcat_send_by_session_splits_video_from_text_and_image():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock()
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Plain("before"),
+                Image.fromURL("https://example.com/a.jpg"),
+                Video.fromURL("https://example.com/a.mp4"),
+                Plain("after"),
+            ]
+        ),
+    )
+
+    assert adapter.client.send_group_message.await_count == 3
+    first, video, last = adapter.client.send_group_message.await_args_list
+    assert [segment.to_dict()["type"] for segment in first.kwargs["message"]] == [
+        "text",
+        "image",
+    ]
+    assert [segment.to_dict()["type"] for segment in video.kwargs["message"]] == [
+        "video"
+    ]
+    assert (
+        video.kwargs["message"][0].to_dict()["data"]["file"]
+        == "https://example.com/a.mp4"
+    )
+    assert [segment.to_dict()["type"] for segment in last.kwargs["message"]] == ["text"]
+    assert last.kwargs["message"][0].to_dict()["data"]["text"] == "after"
+
+
+@pytest.mark.asyncio
 async def test_napcat_get_group_returns_group_details():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)

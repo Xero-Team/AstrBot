@@ -112,7 +112,8 @@ Comp.Video.fromURL("https://example.com/video.mp4")
 ```
 
 A local file must exist in the AstrBot runtime environment. The target platform
-must also support the URL and video format.
+must also support the URL and video format. OneBot v11 and NapCat send each
+video as its own message, separate from mixable text and image segments.
 
 ## Group Forward Messages
 

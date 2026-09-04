@@ -102,6 +102,7 @@ Comp.Video.fromURL("https://example.com/video.mp4")
 ```
 
 本地文件必须存在于 AstrBot 运行环境中。URL 与视频格式还需要目标平台支持。
+OneBot v11 与 NapCat 会把视频拆成单独一条发送，不会和图文混排段放在同一条消息里。
 
 ## 发送群合并转发消息
 

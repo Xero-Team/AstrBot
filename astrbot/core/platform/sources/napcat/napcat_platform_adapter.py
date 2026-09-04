@@ -1055,7 +1055,8 @@ class NapCatPlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         if any(
-            isinstance(component, Node | Nodes) for component in message_chain.chain
+            isinstance(component, Node | Nodes | Video)
+            for component in message_chain.chain
         ):
             await self._send_mixed_outbound_message(session, message_chain)
         else:
@@ -1076,14 +1077,20 @@ class NapCatPlatformAdapter(Platform):
     ) -> None:
         pending_standard: list[BaseMessageComponent] = []
         for component in message_chain.chain:
-            if isinstance(component, Node | Nodes):
+            if isinstance(component, Node | Nodes | Video):
                 if pending_standard:
                     await self._send_standard_message(
                         session,
                         message_chain.derive(chain=list(pending_standard)),
                     )
                     pending_standard.clear()
-                await self._send_forward_component(session, component)
+                if isinstance(component, Video):
+                    await self._send_standard_message(
+                        session,
+                        message_chain.derive(chain=[component]),
+                    )
+                else:
+                    await self._send_forward_component(session, component)
                 continue
             pending_standard.append(component)
 

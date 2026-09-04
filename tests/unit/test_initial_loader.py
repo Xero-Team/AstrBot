@@ -164,3 +164,77 @@ async def test_core_self_cancellation_cancels_dashboard_and_stops_lifecycle(
 
     assert dashboard_cancelled.is_set()
     lifecycle.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_real_lifecycle_event_bus_failure_cancels_dashboard(monkeypatch):
+    """A real start() must end when dispatch fails despite default diagnostics."""
+    from astrbot.core.agent.follow_up import FollowUpCoordinator
+    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+    from astrbot.core.runtime_catalogs import RuntimeCatalogs
+    from astrbot.core.webchat.queue_manager import WebChatQueueManager
+    from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
+
+    config = MagicMock()
+    config.get = MagicMock(return_value="")
+    webchat_queue_manager = WebChatQueueManager()
+    services = SimpleNamespace(
+        config=config,
+        db=MagicMock(),
+        preferences=MagicMock(),
+        html_renderer=MagicMock(),
+        file_token_service=MagicMock(),
+        pip_installer=MagicMock(),
+        catalogs=RuntimeCatalogs(),
+        webchat_queue_manager=webchat_queue_manager,
+        webchat_run_coordinator=WebChatRunCoordinator(webchat_queue_manager),
+        follow_up_coordinator=FollowUpCoordinator(),
+        llm_metadata_catalog=MagicMock(),
+        metrics=MagicMock(),
+        computer_runtime=MagicMock(),
+        tool_image_cache=MagicMock(),
+        demo_mode=False,
+    )
+    lifecycle = AstrBotCoreLifecycle(MagicMock(), services)
+    dashboard_cancelled = asyncio.Event()
+    stop_calls = 0
+    real_stop = lifecycle.stop
+
+    async def initialize() -> None:
+        lifecycle._initialized = True
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle._runtime = SimpleNamespace(
+            dashboard_shutdown_event=lifecycle.dashboard_shutdown_event,
+        )
+        lifecycle.event_bus = MagicMock()
+        lifecycle.event_bus.shutdown = AsyncMock()
+
+        async def fail_dispatch() -> None:
+            raise RuntimeError("event bus failed")
+
+        lifecycle.event_bus.dispatch = fail_dispatch
+        lifecycle.execution_context = MagicMock()
+        lifecycle.execution_context._register_tasks = []
+        lifecycle.cron_manager = None
+        lifecycle.temp_dir_cleaner = None
+
+    async def tracking_stop() -> None:
+        nonlocal stop_calls
+        stop_calls += 1
+        await real_stop()
+
+    async def dashboard_run() -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            dashboard_cancelled.set()
+
+    lifecycle.initialize = initialize
+    lifecycle.stop = tracking_stop
+    loader = _loader(monkeypatch, lifecycle, dashboard_run)
+
+    with pytest.raises(RuntimeError, match="event bus failed"):
+        await loader.start()
+
+    assert dashboard_cancelled.is_set()
+    assert stop_calls == 1

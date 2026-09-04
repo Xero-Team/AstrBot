@@ -18,20 +18,18 @@ def test_load_event_loop_diagnostic_settings_defaults():
     assert settings.watchdog_log_max_bytes == diagnostics.DEFAULT_WATCHDOG_LOG_MAX_BYTES
 
 
-@pytest.mark.asyncio
-async def test_create_event_loop_diagnostic_tasks_defaults():
-    """Default diagnostics should create both event loop diagnostic tasks."""
-    tasks = diagnostics.create_event_loop_diagnostic_tasks()
-
+def test_create_event_loop_diagnostic_jobs_defaults():
+    """Default diagnostics should describe both jobs without creating tasks."""
+    jobs = diagnostics.create_event_loop_diagnostic_jobs()
     try:
-        assert [task.get_name() for task in tasks] == [
+        assert [name for name, _job in jobs] == [
             "event_loop_lag_monitor",
             "event_loop_faulthandler_watchdog",
         ]
+        assert all(asyncio.iscoroutine(job) for _name, job in jobs)
     finally:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        for _name, job in jobs:
+            job.close()
 
 
 @pytest.mark.asyncio

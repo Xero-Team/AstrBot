@@ -48,9 +48,13 @@ from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.event_loop_diagnostics import (
-    create_event_loop_diagnostic_tasks,
+    create_event_loop_diagnostic_jobs,
 )
-from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
+from astrbot.core.utils.task_utils import (
+    await_first_terminal_task,
+    cancel_tracked_tasks,
+    create_tracked_task,
+)
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
 from astrbot.core.utils.trace import configure_trace
 
@@ -610,86 +614,50 @@ class AstrBotCoreLifecycle:
             start_time=self.start_time,
         )
 
-    def _load(self) -> None:
-        """加载事件总线和任务并初始化."""
+    async def _load(self) -> None:
+        """Start bootstrap work, then spawn critical and auxiliary tasks."""
         event_bus = self.event_bus
         execution_context = self.execution_context
         if event_bus is None or execution_context is None:
             raise RuntimeError("AstrBot core lifecycle is not initialized")
 
-        # 创建一个异步任务来执行事件总线的 dispatch() 方法
-        # dispatch是一个无限循环的协程, 从事件队列中获取事件并处理
-        event_bus_task = asyncio.create_task(
-            event_bus.dispatch(),
-            name="event_bus",
-        )
+        self._register_cleanup("event bus", event_bus.shutdown)
         cron_manager = self.cron_manager
-        cron_task = None
-        if cron_manager is not None:
-            cron_task = asyncio.create_task(
-                cron_manager.start(execution_context),
-                name="cron_manager",
-            )
-        temp_dir_cleaner = self.temp_dir_cleaner
-        temp_dir_cleaner_task = None
-        if temp_dir_cleaner is not None:
-            temp_dir_cleaner_task = asyncio.create_task(
-                temp_dir_cleaner.run(),
-                name="temp_dir_cleaner",
-            )
-        diagnostic_tasks = create_event_loop_diagnostic_tasks()
-
-        # 把插件中注册的所有协程函数注册到事件总线中并执行
-        extra_tasks = []
-        for task in execution_context._register_tasks:
-            extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
-
-        tasks_ = [
-            event_bus_task,
-            *diagnostic_tasks,
-            *(extra_tasks if extra_tasks else []),
-        ]
-        if cron_task:
-            tasks_.append(cron_task)
-        if temp_dir_cleaner_task:
-            tasks_.append(temp_dir_cleaner_task)
-        for task in tasks_:
-            self.curr_tasks.append(
-                asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
-            )
-
         if cron_manager is not None:
             self._register_cleanup("cron manager", cron_manager.shutdown)
-        self._register_cleanup("event bus", event_bus.shutdown)
+        temp_dir_cleaner = self.temp_dir_cleaner
         if temp_dir_cleaner is not None:
             self._register_cleanup(
                 "temporary directory cleaner",
                 temp_dir_cleaner.stop,
             )
 
-    async def _task_wrapper(self, task: asyncio.Task) -> None:
-        """异步任务包装器, 用于处理异步任务执行中出现的各种异常.
+        if cron_manager is not None:
+            await cron_manager.start(execution_context)
 
-        Args:
-            task (asyncio.Task): 要执行的异步任务
+        event_bus_task = asyncio.create_task(
+            event_bus.dispatch(),
+            name="event_bus",
+        )
+        self.curr_tasks.append(event_bus_task)
 
-        """
-        try:
-            await task
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            # 获取完整的异常堆栈信息, 按行分割并记录到日志中
-            logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
-            for line in traceback.format_exc().split("\n"):
-                logger.error(f"|    {line}")
-            logger.error("-------")
+        for name, job in create_event_loop_diagnostic_jobs():
+            create_tracked_task(self._background_tasks, job, name=name)
+        if temp_dir_cleaner is not None:
+            create_tracked_task(
+                self._background_tasks,
+                temp_dir_cleaner.run(),
+                name="temp_dir_cleaner",
+            )
+        for extra in execution_context._register_tasks:
+            create_tracked_task(
+                self._background_tasks,
+                extra,
+                name=getattr(extra, "__name__", "register_task"),
+            )
 
     async def start(self) -> None:
-        """启动 AstrBot 核心生命周期管理类.
-
-        用load加载事件总线和任务并初始化, 执行启动完成事件钩子
-        """
+        """Start the core event bus and fail if that critical task ends."""
         if self._stopped:
             raise RuntimeError("AstrBot core lifecycle has already been stopped")
         if not self._initialized:
@@ -699,10 +667,9 @@ class AstrBotCoreLifecycle:
         if self._started:
             raise RuntimeError("AstrBot core lifecycle has already been started")
         self._started = True
-        self._load()
+        await self._load()
         logger.info("AstrBot started.")
 
-        # 执行启动完成事件钩子
         handlers = self.services.catalogs.handlers.get_handlers_by_event_type(
             EventType.OnAstrBotLoadedEvent,
         )
@@ -724,8 +691,8 @@ class AstrBotCoreLifecycle:
             except Exception:
                 logger.error(traceback.format_exc())
 
-        # 同时运行curr_tasks中的所有任务
-        await asyncio.gather(*self.curr_tasks, return_exceptions=True)
+        await await_first_terminal_task(self.curr_tasks)
+        raise RuntimeError("AstrBot event bus exited unexpectedly")
 
     async def stop(self) -> None:
         """Stop initialized resources once, including partially initialized state."""

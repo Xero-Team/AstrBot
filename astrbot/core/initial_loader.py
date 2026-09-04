@@ -11,6 +11,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.log import LogBroker
 from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
+from astrbot.core.utils.task_utils import await_first_terminal_task
 from astrbot.dashboard.server import AstrBotDashboard
 
 
@@ -42,36 +43,8 @@ class InitialLoader:
 
     @staticmethod
     async def _wait_for_runtime_tasks(tasks: list[asyncio.Task[None]]) -> None:
-        """Wait until a runtime task completes or surface its failure.
-
-        ``asyncio.FIRST_EXCEPTION`` does not wake when a child task is
-        cancelled.  Runtime task cancellation must still enter ``start()``'s
-        cleanup path so that the sibling task cannot outlive the lifecycle.
-        A normal return is terminal too: a Dashboard without its Core (or a
-        Core without its Dashboard) must not keep serving independently.
-        """
-        pending = set(tasks)
-        while pending:
-            done, pending = await asyncio.wait(
-                pending,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            # Preserve a concrete task failure over a simultaneous sibling
-            # cancellation. Iterate in creation order rather than set order.
-            for task in tasks:
-                if task not in done or task.cancelled():
-                    continue
-                exception = task.exception()
-                if exception is not None:
-                    raise exception
-
-            if any(task.cancelled() for task in done):
-                raise asyncio.CancelledError
-
-            # A normal exit still ends this process-wide supervision scope.
-            # ``start()``'s ``finally`` block cancels and joins any sibling.
-            return
+        """Wait until a runtime task completes or surface its failure."""
+        await await_first_terminal_task(tasks)
 
     @staticmethod
     async def _cancel_and_join(tasks: list[asyncio.Task[None]]) -> None:

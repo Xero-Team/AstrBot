@@ -5,6 +5,10 @@ import PluginSortControl from '@/components/extension/PluginSortControl.vue';
 import defaultPluginIcon from '/favicon.svg';
 import { computed } from 'vue';
 import { normalizeTextInput } from '@/utils/inputValue';
+import {
+  getMarketPluginId,
+  toRoutePluginIdParam,
+} from '@/utils/marketPluginKey';
 
 const props = defineProps({
   state: {
@@ -65,10 +69,11 @@ const marketCategorySelectItems = computed(() =>
 );
 
 const openMarketPluginDetail = (plugin) => {
-  if (!plugin?.name) return;
+  const pluginId = getMarketPluginId(plugin);
+  if (!pluginId) return;
   router.push({
     name: 'ExtensionDetails',
-    params: { pluginId: plugin.name },
+    params: { pluginId: toRoutePluginIdParam(pluginId) },
     hash: '#market',
   });
 };
@@ -172,7 +177,7 @@ const openMarketPluginDetail = (plugin) => {
       <v-row class="market-plugin-grid" density="comfortable">
         <v-col
           v-for="plugin in paginatedPlugins"
-          :key="plugin.name"
+          :key="getMarketPluginId(plugin) || plugin.name"
           cols="12"
           md="6"
           lg="4"
@@ -217,7 +222,7 @@ const openMarketPluginDetail = (plugin) => {
           <v-row class="mb-6" density="comfortable">
             <v-col
               v-for="plugin in randomPlugins"
-              :key="`random-${plugin.name}`"
+              :key="getMarketPluginId(plugin) || plugin.name"
               cols="12"
               lg="4"
               class="pb-2"

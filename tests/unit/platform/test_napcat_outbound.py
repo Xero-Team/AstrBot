@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
+from astrbot.core.platform.sources.napcat import (
+    napcat_platform_adapter as napcat_adapter,
+)
 from tests.unit.platform.napcat_adapter_support import *  # noqa: F403
 
 pytestmark = pytest.mark.platform
+
+
+def _zero_split_send_interval(monkeypatch) -> None:
+    monkeypatch.setattr(napcat_adapter, "_SPLIT_SEND_INTERVAL_SECONDS", 0.0)
+
+
+def _napcat_types(call) -> list[str]:
+    return [segment.to_dict()["type"] for segment in call.kwargs["message"]]
 
 
 @pytest.mark.asyncio
@@ -270,7 +283,8 @@ async def test_napcat_outbound_builder_supports_forward_segments():
 
 
 @pytest.mark.asyncio
-async def test_napcat_send_by_session_supports_forward_nodes():
+async def test_napcat_send_by_session_supports_forward_nodes(monkeypatch):
+    _zero_split_send_interval(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.send_group_message = AsyncMock()
@@ -331,7 +345,8 @@ async def test_napcat_send_by_session_supports_forward_nodes():
 
 
 @pytest.mark.asyncio
-async def test_napcat_send_by_session_splits_video_from_text_and_image():
+async def test_napcat_send_by_session_splits_video_from_text_and_image(monkeypatch):
+    _zero_split_send_interval(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.send_group_message = AsyncMock()
@@ -355,19 +370,182 @@ async def test_napcat_send_by_session_splits_video_from_text_and_image():
 
     assert adapter.client.send_group_message.await_count == 3
     first, video, last = adapter.client.send_group_message.await_args_list
-    assert [segment.to_dict()["type"] for segment in first.kwargs["message"]] == [
-        "text",
-        "image",
-    ]
-    assert [segment.to_dict()["type"] for segment in video.kwargs["message"]] == [
-        "video"
-    ]
+    assert _napcat_types(first) == ["text", "image"]
+    assert _napcat_types(video) == ["video"]
     assert (
         video.kwargs["message"][0].to_dict()["data"]["file"]
         == "https://example.com/a.mp4"
     )
-    assert [segment.to_dict()["type"] for segment in last.kwargs["message"]] == ["text"]
+    assert _napcat_types(last) == ["text"]
     assert last.kwargs["message"][0].to_dict()["data"]["text"] == "after"
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_splits_record_from_text_and_image(monkeypatch):
+    _zero_split_send_interval(monkeypatch)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock()
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Plain("before"),
+                Image.fromURL("https://example.com/a.jpg"),
+                Record.fromURL("https://example.com/a.wav"),
+                Plain("after"),
+            ]
+        ),
+    )
+
+    assert adapter.client.send_group_message.await_count == 3
+    first, record, last = adapter.client.send_group_message.await_args_list
+    assert _napcat_types(first) == ["text", "image"]
+    assert _napcat_types(record) == ["record"]
+    assert (
+        record.kwargs["message"][0].to_dict()["data"]["file"]
+        == "https://example.com/a.wav"
+    )
+    assert _napcat_types(last) == ["text"]
+    assert last.kwargs["message"][0].to_dict()["data"]["text"] == "after"
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_keeps_mixable_neighbors_around_file(
+    monkeypatch,
+):
+    _zero_split_send_interval(monkeypatch)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock()
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Plain("before"),
+                Image.fromURL("https://example.com/a.jpg"),
+                File(name="demo.bin", url="https://example.com/demo.bin"),
+                Plain("after"),
+            ]
+        ),
+    )
+
+    assert adapter.client.send_group_message.await_count == 3
+    first, file_call, last = adapter.client.send_group_message.await_args_list
+    assert _napcat_types(first) == ["text", "image"]
+    assert _napcat_types(file_call) == ["file"]
+    assert (
+        file_call.kwargs["message"][0].to_dict()["data"]["file"]
+        == "https://example.com/demo.bin"
+    )
+    assert _napcat_types(last) == ["text"]
+    assert last.kwargs["message"][0].to_dict()["data"]["text"] == "after"
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_splits_consecutive_videos(monkeypatch):
+    _zero_split_send_interval(monkeypatch)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock()
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Video.fromURL("https://example.com/a.mp4"),
+                Video.fromURL("https://example.com/b.mp4"),
+            ]
+        ),
+    )
+
+    assert adapter.client.send_group_message.await_count == 2
+    first, second = adapter.client.send_group_message.await_args_list
+    assert _napcat_types(first) == ["video"]
+    assert first.kwargs["message"][0].to_dict()["data"]["file"] == (
+        "https://example.com/a.mp4"
+    )
+    assert _napcat_types(second) == ["video"]
+    assert second.kwargs["message"][0].to_dict()["data"]["file"] == (
+        "https://example.com/b.mp4"
+    )
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_splits_video_on_private_messages(monkeypatch):
+    _zero_split_send_interval(monkeypatch)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock()
+    adapter.client.send_private_message = AsyncMock()
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.FRIEND_MESSAGE,
+        session_id="123456",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Plain("caption"),
+                Video.fromURL("https://example.com/a.mp4"),
+            ]
+        ),
+    )
+
+    assert adapter.client.send_private_message.await_count == 2
+    adapter.client.send_group_message.assert_not_awaited()
+    first, video = adapter.client.send_private_message.await_args_list
+    assert _napcat_types(first) == ["text"]
+    assert _napcat_types(video) == ["video"]
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_paces_consecutive_split_messages(monkeypatch):
+    monkeypatch.setattr(napcat_adapter, "_SPLIT_SEND_INTERVAL_SECONDS", 0.5)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    sleep = AsyncMock()
+    monkeypatch.setattr(napcat_adapter, "asyncio", SimpleNamespace(sleep=sleep))
+    adapter.client.send_group_message = AsyncMock()
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Plain("before"),
+                Video.fromURL("https://example.com/a.mp4"),
+                Plain("after"),
+            ]
+        ),
+    )
+
+    assert adapter.client.send_group_message.await_count == 3
+    assert sleep.await_count == 2
+    assert all(call.args == (0.5,) for call in sleep.await_args_list)
 
 
 @pytest.mark.asyncio

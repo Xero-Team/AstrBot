@@ -1,3 +1,4 @@
+import asyncio
 import re
 from collections.abc import AsyncGenerator
 
@@ -24,6 +25,9 @@ from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 
 from .forward_node_splitter import split_long_text_node
+
+_EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
+_SPLIT_SEND_INTERVAL_SECONDS = 0.5
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -228,13 +232,18 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
         segments: list[BaseMessageComponent],
-    ) -> None:
+        *,
+        sent_any: bool,
+    ) -> bool:
         if not segments:
-            return
+            return False
         messages = await cls._parse_onebot_json(MessageChain(segments))
         if not messages:
-            return
+            return False
+        if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+            await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
         await cls._dispatch_send(bot, event, is_group, session_id, messages)
+        return True
 
     @classmethod
     async def _send_forward_segment(
@@ -284,16 +293,25 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             session_id (str | None, optional): 会话 ID（群号或 QQ 号
 
         """
-        # 转发、文件、视频不能和普通消息混在同一条 OneBot 消息里发送。
+        # 转发、文件、语音、视频不能和普通消息混在同一条 OneBot 消息里发送。
         # 连续可混排段（文本、图片等）仍合并为一次发送。
         pending: list[BaseMessageComponent] = []
+        sent_any = False
         for seg in message_chain.chain:
-            if isinstance(seg, Node | Nodes | File | Video):
-                await cls._dispatch_standard_segments(
-                    bot, event, is_group, session_id, pending
-                )
+            if isinstance(seg, _EXCLUSIVE_OUTBOUND_SEGMENTS):
+                if await cls._dispatch_standard_segments(
+                    bot,
+                    event,
+                    is_group,
+                    session_id,
+                    pending,
+                    sent_any=sent_any,
+                ):
+                    sent_any = True
                 pending.clear()
                 if isinstance(seg, Node | Nodes):
+                    if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                        await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
                     await cls._send_forward_segment(
                         bot,
                         seg,
@@ -303,13 +321,26 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         forward_message_max_retries,
                         forward_message_fallback_enabled,
                     )
-                else:
-                    await cls._dispatch_standard_segments(
-                        bot, event, is_group, session_id, [seg]
-                    )
+                    sent_any = True
+                elif await cls._dispatch_standard_segments(
+                    bot,
+                    event,
+                    is_group,
+                    session_id,
+                    [seg],
+                    sent_any=sent_any,
+                ):
+                    sent_any = True
                 continue
             pending.append(seg)
-        await cls._dispatch_standard_segments(bot, event, is_group, session_id, pending)
+        await cls._dispatch_standard_segments(
+            bot,
+            event,
+            is_group,
+            session_id,
+            pending,
+            sent_any=sent_any,
+        )
 
     async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息"""

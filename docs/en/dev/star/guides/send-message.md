@@ -82,6 +82,8 @@ async def picture(self, event: AstrMessageEvent):
 Some platforms split or degrade unsupported components. OneBot adapters may
 also trim leading and trailing whitespace from plain-text segments. If that
 whitespace is essential, place a zero-width space (`\u200b`) at the boundary.
+OneBot v11 and NapCat send file, voice, video, and forward nodes as separate
+messages; consecutive split sends are spaced 0.5 seconds apart.
 
 ### Files
 
@@ -89,7 +91,8 @@ whitespace is essential, place a zero-width space (`\u200b`) at the boundary.
 Comp.File(name="file.txt", file="path/to/file.txt")
 ```
 
-File messages are not supported by every platform.
+File messages are not supported by every platform. OneBot v11 and NapCat send
+each file as its own message, separate from mixable text and image segments.
 
 ### Audio Records
 
@@ -102,7 +105,8 @@ Comp.Record.fromBase64(encoded_audio)
 The `Record` component is not globally restricted to WAV input. AstrBot
 resolves or converts audio where needed, but usable formats depend on the target
 adapter and the runtime media toolchain. WAV is usually the safest
-cross-platform input.
+cross-platform input. OneBot v11 and NapCat send each voice record as its own
+message, separate from mixable text and image segments.
 
 ### Video
 

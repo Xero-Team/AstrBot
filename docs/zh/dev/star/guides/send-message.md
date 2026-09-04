@@ -73,7 +73,8 @@ async def picture(self, event: AstrMessageEvent):
 ```
 
 部分平台会拆分或降级不支持的组件。OneBot 适配器还可能清理纯文本首尾空白；确实
-需要保留时，可以在文本边界加入零宽空格 `\u200b`。
+需要保留时，可以在文本边界加入零宽空格 `\u200b`。OneBot v11 与 NapCat 把文件、
+语音、视频和合并转发拆成独立消息，连续拆分发送之间间隔 0.5 秒。
 
 ### 文件
 
@@ -81,7 +82,8 @@ async def picture(self, event: AstrMessageEvent):
 Comp.File(name="file.txt", file="path/to/file.txt")
 ```
 
-文件消息并非所有平台都支持。
+文件消息并非所有平台都支持。OneBot v11 与 NapCat 会把文件拆成单独一条发送，
+不会和图文混排段放在同一条消息里。
 
 ### 语音
 
@@ -93,6 +95,7 @@ Comp.Record.fromBase64(encoded_audio)
 
 `Record` 组件本身并非全局仅接受 WAV。AstrBot 会在需要时解析或转换音频，但实际
 可用格式取决于目标适配器以及运行环境的媒体工具链；WAV 通常是跨平台最稳妥的输入。
+OneBot v11 与 NapCat 会把语音拆成单独一条发送，不会和图文混排段放在同一条消息里。
 
 ### 视频
 

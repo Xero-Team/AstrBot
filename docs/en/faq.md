@@ -73,7 +73,7 @@ Publishing container port `6185` also requires this bind override. See [Docker D
 
 The runtime root defaults to the process working directory, and runtime data lives at `<root>/data`. Running `uv run main.py` from the repository root normally uses `AstrBot/data`.
 
-With `ASTRBOT_ROOT` set, data lives at `$ASTRBOT_ROOT/data`. Configuration, the SQLite database, plugins, Skills, knowledge bases, temporary files, and backups can all live there, so back up the directory as a unit before an upgrade.
+With `ASTRBOT_ROOT` set, data lives at `$ASTRBOT_ROOT/data`. Configuration, the SQLite database, plugins, Skills, knowledge bases, temporary files, and backups can all live there, so back up the directory as a unit before an upgrade. See [Backup, restore, and upgrade drills](./deploy/astrbot/backup).
 
 This fork does not provide an independent Desktop or Launcher distribution. Directory layouts chosen by external launchers are outside this repository's guarantees.
 
@@ -91,11 +91,11 @@ cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
 
-Read the intervening files under `changelogs/` and current unreleased commits first. Do not use `uv tool upgrade astrbot` for this fork; the `astrbot` package on PyPI is upstream. The Dashboard one-click Core updater currently has no fork release assets; do not use it to install an upstream zip.
+Read the intervening files under `changelogs/` and current unreleased commits first. Do not use `uv tool upgrade astrbot` for this fork; the `astrbot` package on PyPI is upstream. This fork does not provide a Dashboard one-click Core updater.
 
 ### The main database fails to start after upgrading to 4.27.5
 
-4.27.5 rebuilds the main SQLite schema from the current SQLModel tables. It does not run `ALTER TABLE` on an old file or migrate data. `create_all` creates missing tables only; it does not add columns or indexes to an existing `data_v4.db`.
+4.27.5 rebuilds the main SQLite schema from the current SQLModel tables. It does not run `ALTER TABLE` on an old file or migrate data. `create_all` creates missing tables only; leftover columns and indexes on an existing `data_v4.db` stay in place.
 
 Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.db-wal`, and `data/data_v4.db-shm` under the runtime root before starting again. Conversations, long-term memory, authorization bindings, and API keys in the old main database are not migrated. `data/knowledge_base/` is not part of this cutover. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
 
@@ -103,7 +103,7 @@ Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.
 
 ### The bot does not answer in a group
 
-To avoid flooding group chats, mentioning the bot or replying to the bot does not wake it by default. Send a wake prefix (default `/`), or enable `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot` on the current profile. Also check:
+To avoid flooding group chats, ordinary messages require the configured `llm_access.group` policy (the default is `prefix`, with `llm_access.prefixes` defaulting to `["/"]`). To allow replies to the bot as an additional trigger, enable `llm_access.reply_to_bot`. Also check:
 
 - which profile is bound to the message session;
 - whether the platform and Provider are enabled;
@@ -112,7 +112,7 @@ To avoid flooding group chats, mentioning the bot or replying to the bot does no
 
 ### An administrator command says permission denied
 
-Use `/session info` to inspect the current user ID, then grant current-session `session_admin` through the Dashboard [authorization page](/en/use/webui#accounts-and-authorization) or `/admin grant`. That is not a global operator. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
+Group chats still need a Dashboard [authorization page](/en/use/webui#accounts-and-authorization) binding or `/admin grant` for current-session `session_admin`. That is not a global operator. A private-chat peer already owns the current session and does not need a pre-bound `session_admin` to `/conversation reset`. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session. Use `/session info` to inspect the current user ID.
 
 ### Older commands such as `/plugin ls` or `/reset` do nothing
 
@@ -153,7 +153,7 @@ Do not “fix” connectivity by disabling TLS verification. Reset the conversat
 
 ### A marketplace plugin fails to load after install
 
-The Dashboard default marketplace source is upstream `AstrBotDevs/AstrBot_Plugins_Collection`, not an official market for this fork. This branch requires Python 3.14+ and does not keep legacy plugin APIs or legacy Dashboard pages. Check the plugin's `astrbot_version` and `requires.dashboard_extension` before installing. If it fails, install a known-compatible plugin by URL or inspect the load error; do not assume an upstream marketplace plugin will run here. See [Plugins](/en/use/plugin) and [Plugin development](/en/dev/star/plugin-new).
+The Dashboard default marketplace source is the upstream `cloud.astrbot.app` market JSON, with a fallback to `AstrBotDevs/AstrBot_Plugins_Collection`. It is not an official market for this fork. This branch requires Python 3.14+ and does not keep legacy plugin APIs or legacy Dashboard pages. Check the plugin's `astrbot_version` and `requires.dashboard_extension` before installing. If it fails, install a known-compatible plugin by URL or inspect the load error; do not assume an upstream marketplace plugin will run here. See [Plugins](/en/use/plugin) and [Plugin development](/en/dev/star/plugin-new).
 
 ### How do I disable long-term memory?
 

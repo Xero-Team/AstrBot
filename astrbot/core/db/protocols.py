@@ -1,7 +1,5 @@
 """Narrow structural database contracts grouped by domain."""
 
-from __future__ import annotations
-
 import datetime
 import typing as T
 from contextlib import AbstractAsyncContextManager
@@ -390,6 +388,8 @@ class ConversationStore(Protocol):
         **kwargs,
     ) -> tuple[list[ConversationV2], int]: ...
 
+    async def get_conversation_platform_ids(self) -> list[str]: ...
+
     async def create_conversation(
         self,
         user_id: str,
@@ -731,6 +731,7 @@ class CommandStore(Protocol):
     async def list_command_conflicts(
         self,
         status: str | None = None,
+        config_id: str | None = None,
     ) -> list[CommandConflict]: ...
 
     async def upsert_command_conflict(
@@ -739,6 +740,7 @@ class CommandStore(Protocol):
         handler_full_name: str,
         plugin_name: str,
         *,
+        config_id: str | None = None,
         command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
@@ -806,7 +808,6 @@ class PlatformSessionStore(Protocol):
         platform_id: str = "webchat",
         session_id: str | None = None,
         display_name: str | None = None,
-        is_group: int = 0,
     ) -> PlatformSession: ...
 
     async def get_platform_session_by_id(
@@ -854,6 +855,13 @@ class UmoAliasStore(Protocol):
         auto_name: str | None,
         user_alias: str | None,
     ) -> UmoAlias: ...
+
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None: ...
 
     async def get_umo_alias(self, umo: str) -> UmoAlias | None: ...
 
@@ -948,8 +956,10 @@ class SessionManagementStore(UmoAliasStore, DatabaseSessionStore, Protocol):
 
 
 @runtime_checkable
-class StatisticsSessionStore(StatisticsStore, DatabaseSessionStore, Protocol):
-    """Compose statistics queries and scoped SQL access."""
+class StatisticsSessionStore(
+    StatisticsStore, DatabaseSessionStore, UmoAliasStore, Protocol
+):
+    """Compose statistics queries, UMO aliases, and scoped SQL access."""
 
 
 @runtime_checkable
@@ -975,6 +985,7 @@ class DashboardStore(
     ApiKeyStore,
     ChatStore,
     CommandStore,
+    ConversationStore,
     DatabaseSessionStore,
     MemoryStore,
     StatisticsStore,

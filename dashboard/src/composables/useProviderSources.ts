@@ -1,6 +1,9 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { providerApi } from '@/api/v1';
-import { getProviderIcon } from '@/utils/providerUtils';
+import {
+  getProviderIcon,
+  isMonochromeProviderIcon,
+} from '@/utils/providerUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
@@ -100,13 +103,6 @@ export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase();
 
   if (
-    normalized.startsWith('select_agent_runner_provider') ||
-    normalized === 'agent_runner'
-  ) {
-    return 'agent_runner';
-  }
-
-  if (
     normalized === 'select_provider_stt' ||
     normalized === 'speech_to_text' ||
     normalized.includes('stt')
@@ -155,6 +151,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const editableProviderSource = ref<ProviderSourceItem | null>(null);
   const availableModels = ref<AvailableModelItem[]>([]);
   const modelMetadata = ref<Record<string, ProviderModelMetadata | null>>({});
+  const loadingSources = ref(true);
   const loadingModels = ref(false);
   const savingSource = ref(false);
   const savingProviderToggles = ref<string[]>([]);
@@ -173,11 +170,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       value: 'chat_completion',
       label: tm('providers.tabs.chatCompletion'),
       icon: 'mdi-message-text',
-    },
-    {
-      value: 'agent_runner',
-      label: tm('providers.tabs.agentRunner'),
-      icon: 'mdi-robot',
     },
     {
       value: 'speech_to_text',
@@ -210,7 +202,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return [];
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = [];
+    const types: Array<{
+      value: string;
+      label: string;
+      icon: string;
+      isMonochrome: boolean;
+    }> = [];
     for (const [templateName, template] of Object.entries(
       providerTemplates.value,
     )) {
@@ -219,6 +216,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           value: templateName,
           label: templateName,
           icon: getProviderIcon(template.provider || ''),
+          isMonochrome: isMonochromeProviderIcon(template.provider || ''),
         });
       }
     }
@@ -452,10 +450,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return getProviderIcon(source.provider || '') || '';
   }
 
+  function isMonochromeSourceIcon(
+    source: ProviderSourceItem | null | undefined,
+  ) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ''));
+  }
+
   function getSourceDisplayName(source: ProviderSourceItem | null | undefined) {
     if (!source) return '';
     if (source.isPlaceholder) return source.templateKey || source.id || '';
-    if (source.id === 'ssycloud') return 'ssycloud(胜算云)';
     return source.id || '';
   }
 
@@ -878,22 +881,24 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   async function deleteProvider(provider: ProviderItem) {
     if (!provider.id) {
       showMessage(tm('models.deleteError'), 'error');
-      return;
+      return false;
     }
     const confirmed = await askForConfirmation(
       tm('models.deleteConfirm', { id: provider.id }),
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     try {
       await providerApi.delete(String(provider.id));
       providers.value = providers.value.filter((p) => p.id !== provider.id);
       showMessage(tm('models.deleteSuccess'));
+      return true;
     } catch (error: unknown) {
       showMessage(
         resolveErrorMessage(error, tm('models.deleteError')),
         'error',
       );
+      return false;
     } finally {
       await loadConfig();
     }
@@ -964,6 +969,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadProviderTemplate() {
+    loadingSources.value = true;
     try {
       const response = await providerApi.schema();
       if (response.data.status === 'ok') {
@@ -981,6 +987,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error) {
       console.error('Failed to load provider template:', error);
+    } finally {
+      loadingSources.value = false;
     }
   }
 
@@ -1003,6 +1011,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectedProviderSourceOriginalId,
     editableProviderSource,
     availableModels,
+    loadingSources,
     modelMetadata,
     loadingModels,
     savingSource,
@@ -1029,6 +1038,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,

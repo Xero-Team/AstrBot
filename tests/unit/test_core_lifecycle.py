@@ -335,7 +335,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         provider_a = self._make_provider("openai_source/model-a")
         provider_b = self._make_provider("openai_source/model-b")
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[provider_a, provider_b],
         )
 
@@ -349,7 +349,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     def test_warns_only_once_per_lifecycle(self, mock_log_broker, mock_db):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -368,7 +368,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[self._make_provider("openai_source/model-a")],
             curr_provider_inst=self._make_provider("openai_source/model-a"),
         )
@@ -383,7 +383,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": "openai_source/model-a"},
+            default_chat_provider_id="openai_source/model-a",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -403,7 +403,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
         provider_a = self._make_provider("openai_source/model-a")
         provider_b = self._make_provider("openai_source/model-b")
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": ""},
+            default_chat_provider_id="",
             provider_insts=[provider_a, provider_b],
             curr_provider_inst=None,
         )
@@ -420,7 +420,7 @@ class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock(
-            provider_settings={"default_provider_id": "non-existent-id"},
+            default_chat_provider_id="non-existent-id",
             provider_insts=[
                 self._make_provider("openai_source/model-a"),
                 self._make_provider("openai_source/model-b"),
@@ -562,7 +562,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_pipeline_scheduler,
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
+                "astrbot.core.core_lifecycle.ProcessRebooter",
                 return_value=mock_astrbot_updator,
             ),
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
@@ -1109,7 +1109,7 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.dashboard_shutdown_event = asyncio.Event()
 
-        lifecycle.astrbot_updator = MagicMock()
+        lifecycle.process_rebooter = MagicMock()
         mock_html_renderer = MagicMock()
         mock_html_renderer.terminate = AsyncMock()
 

@@ -1,7 +1,7 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
 
 from collections.abc import AsyncGenerator
-from contextlib import nullcontext
+from contextlib import AbstractAsyncContextManager, nullcontext
 from copy import deepcopy
 from dataclasses import replace
 
@@ -25,9 +25,9 @@ from astrbot.core.assistant_history import (
 )
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
-    MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
+    local_agent_runtime_from_profile,
 )
 from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.group_sender_concurrency import (
@@ -59,7 +59,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
+from .....astr_agent_run_util import AgentRunner, run_agent
 from ....context import PipelineContext, call_event_hook
 
 _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
@@ -114,17 +114,6 @@ class InternalAgentSubStage:
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = settings.get("max_agent_step", 30)
-        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
-        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
-            logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
-                self.tool_schema_mode,
-            )
-            self.tool_schema_mode = "full"
-        if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.buffer_intermediate_messages: bool = settings.get(
@@ -132,54 +121,6 @@ class InternalAgentSubStage:
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = settings.get(
-            "sanitize_context_by_modalities",
-            False,
-        )
-        self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
-
-        file_extract_conf: dict = settings.get("file_extract", {})
-        self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
-        self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
-        self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
-        )
-
-        # 上下文管理相关
-        self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
-        )
-        self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
-        )
-        self.llm_compress_keep_recent_ratio: float = settings.get(
-            "llm_compress_keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
-        )
-        self.max_context_length = settings["max_context_length"]  # int
-        configured_dequeue_context_length = max(1, settings["dequeue_context_length"])
-        if self.max_context_length == -1:
-            self.dequeue_context_length = configured_dequeue_context_length
-        else:
-            self.dequeue_context_length = min(
-                configured_dequeue_context_length,
-                self.max_context_length - 1,
-            )
-        if self.dequeue_context_length <= 0:
-            self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
-        )
-
-        self.llm_safety_mode = settings.get("llm_safety_mode", True)
-        self.safety_mode_strategy = settings.get(
-            "safety_mode_strategy", "system_prompt"
-        )
-
-        self.computer_use_runtime = settings.get("computer_use_runtime")
-        self.sandbox_cfg = settings.get("sandbox", {})
 
         btw_config = conf.get("btw", {})
         btw_config = btw_config if isinstance(btw_config, dict) else {}
@@ -226,61 +167,57 @@ class InternalAgentSubStage:
             if isinstance(action, str) and action in _BTW_WORK_ELEVATABLE_ACTIONS
         ) or frozenset(_BTW_WORK_ELEVATED_ACTIONS_DEFAULT)
 
-        # Proactive capability configuration
-        proactive_cfg = settings.get("proactive_capability", {})
-        self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
-
         self.conv_manager = ctx.execution_context.conversation_manager
-
-        self.main_agent_cfg = MainAgentBuildConfig(
-            tool_call_timeout=self.tool_call_timeout,
-            tool_schema_mode=self.tool_schema_mode,
-            sanitize_context_by_modalities=self.sanitize_context_by_modalities,
-            kb_agentic_mode=self.kb_agentic_mode,
-            file_extract_enabled=self.file_extract_enabled,
-            file_extract_prov=self.file_extract_prov,
-            file_extract_msh_api_key=self.file_extract_msh_api_key,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
-            llm_safety_mode=self.llm_safety_mode,
-            safety_mode_strategy=self.safety_mode_strategy,
-            computer_use_runtime=self.computer_use_runtime,
-            sandbox_cfg=self.sandbox_cfg,
-            add_cron_tools=self.add_cron_tools,
-            provider_settings=settings,
-            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
+        self.main_agent_cfg, self.max_step = local_agent_runtime_from_profile(
+            conf,
             btw_plugin_routes=(
-                conf.get("btw", {}).get("plugin_routes", [])
-                if isinstance(conf.get("btw", {}), dict)
+                btw_config.get("plugin_routes", [])
+                if isinstance(btw_config, dict)
                 else []
             ),
             btw_mcp_routes=(
-                conf.get("btw", {}).get("mcp_routes", [])
-                if isinstance(conf.get("btw", {}), dict)
-                else []
+                btw_config.get("mcp_routes", []) if isinstance(btw_config, dict) else []
             ),
             btw_skill_routes=(
-                conf.get("btw", {}).get("skill_routes", [])
-                if isinstance(conf.get("btw", {}), dict)
+                btw_config.get("skill_routes", [])
+                if isinstance(btw_config, dict)
                 else []
             ),
             conversation_provider_id=self.conversation_provider_id,
             work_provider_id=self.work_provider_id,
             work_computer_use_runtime=self.work_computer_use_runtime,
             timezone=self.ctx.execution_context.get_config().get("timezone"),
-            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+        self.tool_call_timeout = self.main_agent_cfg.tool_call_timeout
+        self.tool_schema_mode = self.main_agent_cfg.tool_schema_mode
+        self.sanitize_context_by_modalities = (
+            self.main_agent_cfg.sanitize_context_by_modalities
+        )
+        self.kb_agentic_mode = self.main_agent_cfg.kb_agentic_mode
+        self.context_limit_reached_strategy = (
+            self.main_agent_cfg.context_limit_reached_strategy
+        )
+        self.llm_compress_instruction = self.main_agent_cfg.llm_compress_instruction
+        self.llm_compress_keep_recent_ratio = (
+            self.main_agent_cfg.llm_compress_keep_recent_ratio
+        )
+        self.llm_compress_provider_id = self.main_agent_cfg.llm_compress_provider_id
+        self.max_context_length = self.main_agent_cfg.max_context_length
+        self.dequeue_context_length = self.main_agent_cfg.dequeue_context_length
+        self.fallback_max_context_tokens = (
+            self.main_agent_cfg.fallback_max_context_tokens
+        )
+        self.llm_safety_mode = self.main_agent_cfg.llm_safety_mode
+        self.safety_mode_strategy = self.main_agent_cfg.safety_mode_strategy
+        self.computer_use_runtime = self.main_agent_cfg.computer_use_runtime
+        self.sandbox_cfg = self.main_agent_cfg.sandbox_cfg
+        self.add_cron_tools = self.main_agent_cfg.add_cron_tools
 
     def _prepare_group_sender_concurrency(
         self,
         event: AstrMessageEvent,
         streaming_response: bool,
-    ) -> tuple[bool, str, object, bool]:
+    ) -> tuple[bool, str, AbstractAsyncContextManager[None], bool]:
         concurrent = is_group_sender_concurrent(event, self._profile_config(event))
         if concurrent:
             streaming_response = False
@@ -294,7 +231,7 @@ class InternalAgentSubStage:
             "group_outbound_gate",
             None,
         )
-        turn_cm: object = nullcontext()
+        turn_cm: AbstractAsyncContextManager[None] = nullcontext()
         if concurrent and outbound_gate is not None:
             turn_cm = bind_concurrent_turn(
                 ConcurrentTurn(
@@ -367,7 +304,6 @@ class InternalAgentSubStage:
         req: ProviderRequest,
         agent_runner: AgentRunner,
         *,
-        action_type: str | None,
         history_saved: bool,
     ) -> None:
         """Record Agent facts, then finalize accepted assistant history separately."""
@@ -408,7 +344,6 @@ class InternalAgentSubStage:
     async def _build_checked_agent_runner(
         self,
         event: AstrMessageEvent,
-        provider_wake_prefix: str,
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
@@ -432,7 +367,6 @@ class InternalAgentSubStage:
             provider_id_override = getattr(
                 self.main_agent_cfg, "conversation_provider_id", ""
             )
-            file_extract_enabled = False
         else:
             computer_use_runtime = getattr(
                 self.main_agent_cfg, "work_computer_use_runtime", "inherit"
@@ -444,9 +378,6 @@ class InternalAgentSubStage:
             if computer_use_runtime not in {"none", "local", "sandbox"}:
                 computer_use_runtime = "none"
             provider_id_override = getattr(self.main_agent_cfg, "work_provider_id", "")
-            file_extract_enabled = bool(
-                getattr(self.main_agent_cfg, "file_extract_enabled", False)
-            )
 
         configured_provider_settings = getattr(
             self.main_agent_cfg, "provider_settings", {}
@@ -457,24 +388,13 @@ class InternalAgentSubStage:
             else {}
         )
         provider_settings["computer_use_runtime"] = computer_use_runtime
-        if loop_mode == "conversation":
-            file_extract_settings = provider_settings.get("file_extract", {})
-            file_extract_settings = (
-                dict(file_extract_settings)
-                if isinstance(file_extract_settings, dict)
-                else {}
-            )
-            file_extract_settings["enable"] = False
-            provider_settings["file_extract"] = file_extract_settings
 
         build_cfg = replace(
             self.main_agent_cfg,
-            provider_wake_prefix=provider_wake_prefix,
             streaming_response=streaming_response,
             loop_mode=loop_mode,
             provider_id_override=provider_id_override,
             computer_use_runtime=computer_use_runtime,
-            file_extract_enabled=file_extract_enabled,
             provider_settings=provider_settings,
         )
         build_result = await build_main_agent(
@@ -500,9 +420,7 @@ class InternalAgentSubStage:
                 return None
         return build_result
 
-    async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -624,7 +542,6 @@ class InternalAgentSubStage:
                 try:
                     build_result = await self._build_checked_agent_runner(
                         event,
-                        provider_wake_prefix,
                         streaming_response,
                     )
                     if build_result is None:
@@ -693,8 +610,6 @@ class InternalAgentSubStage:
                     if not is_detached_work:
                         self._register_follow_up_runner(event, agent_runner, concurrent)
                         runner_registered = True
-                    action_type = event.get_extra("action_type")
-
                     event.trace.record(
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
@@ -706,47 +621,7 @@ class InternalAgentSubStage:
                         },
                     )
 
-                    # 检测 Live Mode
-                    if action_type == "live":
-                        # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
-
-                        # 获取 TTS Provider
-                        tts_provider = (
-                            self.ctx.execution_context.get_using_tts_provider(
-                                event.unified_msg_origin
-                            )
-                        )
-
-                        if not tts_provider:
-                            logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
-                            )
-
-                        # 使用 run_live_agent，总是使用流式响应
-                        event.set_result(
-                            MessageEventResult()
-                            .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                            .set_async_stream(
-                                self._stream_with_pending_history(
-                                    event,
-                                    req,
-                                    agent_runner,
-                                    run_live_agent(
-                                        agent_runner,
-                                        tts_provider,
-                                        self.max_step,
-                                        self.show_tool_use,
-                                        self.show_tool_call_result,
-                                        show_reasoning=self.show_reasoning,
-                                        buffer_intermediate_messages=self.buffer_intermediate_messages,
-                                    ),
-                                ),
-                            ),
-                        )
-                        yield
-
-                    elif streaming_response and not stream_to_general:
+                    if streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
                             MessageEventResult()
@@ -802,7 +677,6 @@ class InternalAgentSubStage:
                         event,
                         req,
                         agent_runner,
-                        action_type=action_type,
                         history_saved=history_saved,
                     )
                 finally:
@@ -1009,8 +883,10 @@ class InternalAgentSubStage:
         receipt = event.get_extra("delivery_receipt")
         if not isinstance(receipt, DeliveryReceipt):
             get_platform_id = getattr(event, "get_platform_id", None)
-            platform_id = get_platform_id() if callable(get_platform_id) else ""
-            receipt = DeliveryReceipt.skipped(platform_id=platform_id)
+            platform_id = get_platform_id() if callable(get_platform_id) else None
+            receipt = DeliveryReceipt.skipped(
+                platform_id=platform_id if isinstance(platform_id, str) else ""
+            )
         projection = make_projection(receipt)
         committer = getattr(
             self.ctx.execution_context,

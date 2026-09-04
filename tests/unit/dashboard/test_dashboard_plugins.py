@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
@@ -283,7 +281,6 @@ async def test_get_chat_session_rejects_session_owned_by_another_user(
         platform_id="webchat",
         session_id=session_id,
         display_name="Foreign Session",
-        is_group=0,
     )
     await core_lifecycle_td.platform_message_history_manager.insert(
         platform_id="webchat",

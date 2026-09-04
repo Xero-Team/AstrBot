@@ -563,8 +563,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
-        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        config = ctx.get_config(umo=umo)
+        prov_settings: dict = config.get("provider_settings", {})
+        agent_max_step = int(
+            config.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 30)
+        )
         from astrbot.core.streaming_override import resolve_streaming_response
 
         stream = await resolve_streaming_response(
@@ -742,9 +748,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         extra_result_fields: dict[str, T.Any] | None = None,
     ) -> None:
         from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
             _get_session_conv,
             build_main_agent,
+            local_agent_runtime_from_profile,
         )
 
         event = run_context.context.event
@@ -795,31 +801,22 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 metadata=metadata,
             )
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
-        provider_settings = cfg.get("provider_settings") or {}
         from astrbot.core.streaming_override import resolve_streaming_response
 
-        config = MainAgentBuildConfig(
+        config, max_agent_step = local_agent_runtime_from_profile(
+            cfg,
             tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=await resolve_streaming_response(
                 cron_event,
                 cfg,
                 getattr(ctx, "preferences", None),
             ),
-            provider_settings=provider_settings,
         )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
-        context = load_sanitized_history(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
+        req.contexts = load_sanitized_history(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
@@ -847,7 +844,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        max_agent_step = int(provider_settings.get("max_agent_step", 30))
         async for _ in runner.step_until_done(max_agent_step):
             # agent will send message to user via using tools
             pass
@@ -975,11 +971,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
 async def call_local_llm_tool(
     context: ContextWrapper[AstrAgentContext],
-    handler: T.Callable[
-        ...,
-        T.Awaitable[MessageEventResult | mcp.types.CallToolResult | str | None]
-        | T.AsyncGenerator[MessageEventResult | str | None],
-    ],
+    handler: T.Callable[..., T.Any],
     method_name: str,
     *args,
     **kwargs,

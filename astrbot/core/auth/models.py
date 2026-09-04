@@ -1,7 +1,5 @@
 """Pure authorization value objects and resource canonicalization."""
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import json
@@ -62,7 +60,6 @@ ACTIONS = frozenset(
         "data.manage",
         "data.export_all",
         "system.manage",
-        "system.update",
         "system.restart",
         "system.pip_install",
         "identity.read",
@@ -123,7 +120,6 @@ HIGH_RISK_ACTIONS = frozenset(
     {
         "identity.operator.write",
         "identity.root.write",
-        "system.update",
         "system.restart",
         "system.pip_install",
         "extension.plugin_install",

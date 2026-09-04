@@ -1,63 +1,73 @@
 <script setup>
-import { useRoute } from 'vitepress'
-import { computed, provide, useSlots, watch } from 'vue'
-import VPBackdrop from 'vitepress/dist/client/theme-default/components/VPBackdrop.vue'
-import VPContent from 'vitepress/dist/client/theme-default/components/VPContent.vue'
-import VPFooter from 'vitepress/dist/client/theme-default/components/VPFooter.vue'
-import VPLocalNav from 'vitepress/dist/client/theme-default/components/VPLocalNav.vue'
-import VPNav from 'vitepress/dist/client/theme-default/components/VPNav.vue'
-import VPSidebar from 'vitepress/dist/client/theme-default/components/VPSidebar.vue'
-import VPSkipLink from 'vitepress/dist/client/theme-default/components/VPSkipLink.vue'
-import { useData } from 'vitepress/dist/client/theme-default/composables/data'
-import { useCloseSidebarOnEscape, useSidebar } from 'vitepress/dist/client/theme-default/composables/sidebar'
-import SectionTabs from './SectionTabs.vue'
+import { useRoute } from 'vitepress';
+import { computed, provide, useSlots, watch } from 'vue';
+import { stripSiteBase } from '../docsPath.js';
+import VPBackdrop from 'vitepress/dist/client/theme-default/components/VPBackdrop.vue';
+import VPContent from 'vitepress/dist/client/theme-default/components/VPContent.vue';
+import VPFooter from 'vitepress/dist/client/theme-default/components/VPFooter.vue';
+import VPLocalNav from 'vitepress/dist/client/theme-default/components/VPLocalNav.vue';
+import VPNav from 'vitepress/dist/client/theme-default/components/VPNav.vue';
+import VPSidebar from 'vitepress/dist/client/theme-default/components/VPSidebar.vue';
+import VPSkipLink from 'vitepress/dist/client/theme-default/components/VPSkipLink.vue';
+import { useData } from 'vitepress/dist/client/theme-default/composables/data';
+import {
+  useCloseSidebarOnEscape,
+  useSidebar,
+} from 'vitepress/dist/client/theme-default/composables/sidebar';
+import SectionTabs from './SectionTabs.vue';
 
 const {
   isOpen: isSidebarOpen,
   open: openSidebar,
-  close: closeSidebar
-} = useSidebar()
+  close: closeSidebar,
+} = useSidebar();
 
-const route = useRoute()
-watch(() => route.path, closeSidebar)
+const route = useRoute();
+watch(() => route.path, closeSidebar);
 
-useCloseSidebarOnEscape(isSidebarOpen, closeSidebar)
+useCloseSidebarOnEscape(isSidebarOpen, closeSidebar);
 
-const { frontmatter } = useData()
+const { frontmatter, site } = useData();
 
 const sidebarScopeClass = computed(() => {
-  const path = route.path
-  const normalizedPath = path
-    .replace(/\.html$/, '')
-    .replace(/\/$/, '') || '/'
+  const path = stripSiteBase(route.path, site.value.base);
+  const normalizedPath = path.replace(/\.html$/, '').replace(/\/$/, '') || '/';
 
   if (
-    normalizedPath === '/what-is-astrbot' || normalizedPath === '/community' || normalizedPath === '/faq'
-    || path.startsWith('/deploy/') || path.startsWith('/others/') || path.startsWith('/community-events/')
-    || normalizedPath === '/en/what-is-astrbot' || normalizedPath === '/en/community' || normalizedPath === '/en/faq'
-    || path.startsWith('/en/deploy/') || path.startsWith('/en/others/') || path.startsWith('/en/community-events/')
+    normalizedPath === '/what-is-astrbot' ||
+    normalizedPath === '/community' ||
+    normalizedPath === '/faq' ||
+    path.startsWith('/deploy/') ||
+    path.startsWith('/others/') ||
+    path.startsWith('/community-events/') ||
+    normalizedPath === '/en/what-is-astrbot' ||
+    normalizedPath === '/en/community' ||
+    normalizedPath === '/en/faq' ||
+    path.startsWith('/en/deploy/') ||
+    path.startsWith('/en/others/') ||
+    path.startsWith('/en/community-events/')
   )
-    return 'sidebar-scope-intro-deploy'
+    return 'sidebar-scope-intro-deploy';
 
   if (path.startsWith('/platform/') || path.startsWith('/en/platform/'))
-    return 'sidebar-scope-platform'
+    return 'sidebar-scope-platform';
 
   if (path.startsWith('/providers/') || path.startsWith('/en/providers/'))
-    return 'sidebar-scope-providers'
+    return 'sidebar-scope-providers';
 
   if (path.startsWith('/use/') || path.startsWith('/en/use/'))
-    return 'sidebar-scope-use'
+    return 'sidebar-scope-use';
 
   if (path.startsWith('/dev/') || path.startsWith('/en/dev/'))
-    return 'sidebar-scope-dev'
+    return 'sidebar-scope-dev';
 
-  return ''
-})
+  return '';
+});
 
-const slots = useSlots()
-const heroImageSlotExists = computed(() => !!slots['home-hero-image'])
+const slots = useSlots();
+const heroImageSlotExists = computed(() => !!slots['home-hero-image']);
 
-provide('hero-image-slot-exists', heroImageSlotExists)
+provide('hero-image-slot-exists', heroImageSlotExists);
 </script>
 
 <template>
@@ -70,12 +80,24 @@ provide('hero-image-slot-exists', heroImageSlotExists)
     <VPSkipLink />
     <VPBackdrop class="backdrop" :show="isSidebarOpen" @click="closeSidebar" />
     <VPNav>
-      <template #nav-bar-title-before><slot name="nav-bar-title-before" /></template>
-      <template #nav-bar-title-after><slot name="nav-bar-title-after" /></template>
-      <template #nav-bar-content-before><slot name="nav-bar-content-before" /></template>
-      <template #nav-bar-content-after><slot name="nav-bar-content-after" /></template>
-      <template #nav-screen-content-before><slot name="nav-screen-content-before" /></template>
-      <template #nav-screen-content-after><slot name="nav-screen-content-after" /></template>
+      <template #nav-bar-title-before
+        ><slot name="nav-bar-title-before"
+      /></template>
+      <template #nav-bar-title-after
+        ><slot name="nav-bar-title-after"
+      /></template>
+      <template #nav-bar-content-before
+        ><slot name="nav-bar-content-before"
+      /></template>
+      <template #nav-bar-content-after
+        ><slot name="nav-bar-content-after"
+      /></template>
+      <template #nav-screen-content-before
+        ><slot name="nav-screen-content-before"
+      /></template>
+      <template #nav-screen-content-after
+        ><slot name="nav-screen-content-after"
+      /></template>
     </VPNav>
 
     <SectionTabs />
@@ -83,7 +105,9 @@ provide('hero-image-slot-exists', heroImageSlotExists)
     <VPLocalNav :open="isSidebarOpen" @open-menu="openSidebar" />
 
     <VPSidebar :open="isSidebarOpen">
-      <template #sidebar-nav-before><slot name="sidebar-nav-before" /></template>
+      <template #sidebar-nav-before
+        ><slot name="sidebar-nav-before"
+      /></template>
       <template #sidebar-nav-after><slot name="sidebar-nav-after" /></template>
     </VPSidebar>
 
@@ -93,14 +117,24 @@ provide('hero-image-slot-exists', heroImageSlotExists)
 
       <template #not-found><slot name="not-found" /></template>
       <template #home-hero-before><slot name="home-hero-before" /></template>
-      <template #home-hero-info-before><slot name="home-hero-info-before" /></template>
+      <template #home-hero-info-before
+        ><slot name="home-hero-info-before"
+      /></template>
       <template #home-hero-info><slot name="home-hero-info" /></template>
-      <template #home-hero-info-after><slot name="home-hero-info-after" /></template>
-      <template #home-hero-actions-after><slot name="home-hero-actions-after" /></template>
+      <template #home-hero-info-after
+        ><slot name="home-hero-info-after"
+      /></template>
+      <template #home-hero-actions-after
+        ><slot name="home-hero-actions-after"
+      /></template>
       <template #home-hero-image><slot name="home-hero-image" /></template>
       <template #home-hero-after><slot name="home-hero-after" /></template>
-      <template #home-features-before><slot name="home-features-before" /></template>
-      <template #home-features-after><slot name="home-features-after" /></template>
+      <template #home-features-before
+        ><slot name="home-features-before"
+      /></template>
+      <template #home-features-after
+        ><slot name="home-features-after"
+      /></template>
 
       <template #doc-footer-before><slot name="doc-footer-before" /></template>
       <template #doc-before><slot name="doc-before" /></template>
@@ -110,8 +144,12 @@ provide('hero-image-slot-exists', heroImageSlotExists)
 
       <template #aside-top><slot name="aside-top" /></template>
       <template #aside-bottom><slot name="aside-bottom" /></template>
-      <template #aside-outline-before><slot name="aside-outline-before" /></template>
-      <template #aside-outline-after><slot name="aside-outline-after" /></template>
+      <template #aside-outline-before
+        ><slot name="aside-outline-before"
+      /></template>
+      <template #aside-outline-after
+        ><slot name="aside-outline-after"
+      /></template>
       <template #aside-ads-before><slot name="aside-ads-before" /></template>
       <template #aside-ads-after><slot name="aside-ads-after" /></template>
     </VPContent>

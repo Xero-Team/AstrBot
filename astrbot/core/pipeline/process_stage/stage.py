@@ -40,7 +40,7 @@ class ProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> AsyncGenerator[None]:
         """处理事件"""
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
@@ -71,10 +71,10 @@ class ProcessStage(Stage):
 
         if (
             not event._has_send_oper
-            and event.is_at_or_wake_command
+            and event.get_extra("should_run_llm")
             and not event.call_llm
         ):
-            # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
+            # Skip the default Agent after a handler has already produced output.
             if (
                 event.get_result() and not event.is_stopped()
             ) or not event.get_result():

@@ -4,7 +4,10 @@
       <div class="cron-detail-width">
         <div class="cron-header mb-4 pb-4">
           <div class="cron-header-copy">
-            <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
+            <h1 class="dashboard-title">
+              {{ tm('page.title') }}
+              <ConfigDocsLink docs="use/proactive-agent.html" />
+            </h1>
             <div class="dashboard-subtitle">
               {{ tm('page.subtitle') }}
               <v-btn
@@ -451,6 +454,7 @@ import { useTheme } from 'vuetify';
 import { botApi, cronApi, sessionApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformColor as resolvePlatformColor } from '@/utils/platformUtils';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';

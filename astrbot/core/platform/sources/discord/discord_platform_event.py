@@ -19,8 +19,16 @@ from astrbot.core.message.components import (
     Reply,
 )
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform import (
+    AstrBotMessage,
+    Group,
+    MessageMember,
+    MessageType,
+    PlatformMetadata,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     MediaResolver,
@@ -133,6 +141,149 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if chunks.truncated:
             logger.warning("[Discord] Reached the maximum number of hard-limit chunks.")
         return await super().send(message)
+
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
+        """Get Discord channel and guild metadata without fetching all members.
+
+        AstrBot treats a Discord channel or thread as the group. Guild metadata is
+        attached for context, while members are exposed only when the local cache is
+        known to be complete.
+
+        Args:
+            group_id: Discord channel or thread ID. Defaults to the current group.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Enriched group metadata, or ``None`` when no group ID is available.
+        """
+        if group_id is None and self.message_obj.type != MessageType.GROUP_MESSAGE:
+            return None
+
+        requested_group_id = str(group_id or self.get_group_id())
+        if not requested_group_id:
+            return None
+
+        group = Group.from_inbound(self.message_obj.group, requested_group_id)
+        try:
+            channel_id = int(requested_group_id)
+        except ValueError:
+            logger.warning("[Discord] Invalid group channel ID: %s", requested_group_id)
+            return group
+
+        channel = self._client.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self._client.fetch_channel(channel_id)
+            except Exception as exc:
+                logger.warning(
+                    "[Discord] Failed to get group channel %s: %s",
+                    requested_group_id,
+                    safe_error("", exc),
+                )
+                return group
+
+        channel_name = getattr(channel, "name", None)
+        if isinstance(channel_name, str):
+            group.group_name = channel_name
+
+        guild = getattr(channel, "guild", None)
+        guild_name = getattr(guild, "name", None)
+        if not isinstance(guild_name, str):
+            guild_id = getattr(channel, "guild_id", None) or getattr(guild, "id", None)
+            try:
+                resolved_guild_id = int(guild_id) if guild_id is not None else None
+            except TypeError, ValueError:
+                resolved_guild_id = None
+            if resolved_guild_id is not None:
+                cached_guild = self._client.get_guild(resolved_guild_id)
+                if cached_guild is not None:
+                    guild = cached_guild
+                else:
+                    try:
+                        guild = await self._client.fetch_guild(resolved_guild_id)
+                    except Exception as exc:
+                        logger.warning(
+                            "[Discord] Failed to get guild %s: %s",
+                            resolved_guild_id,
+                            safe_error("", exc),
+                        )
+                guild_name = getattr(guild, "name", None)
+
+        if guild is None:
+            return group
+
+        if isinstance(guild_name, str) and isinstance(channel_name, str):
+            group.group_name = f"{guild_name}-{channel_name}"
+        elif isinstance(guild_name, str):
+            group.group_name = guild_name
+
+        icon = getattr(guild, "icon", None)
+        icon_url = getattr(icon, "url", None) if icon else None
+        if icon_url:
+            group.group_avatar = str(icon_url)
+
+        owner_id = getattr(guild, "owner_id", None)
+        if owner_id is not None:
+            group.group_owner = str(owner_id)
+
+        member_count = getattr(guild, "member_count", None)
+        if isinstance(member_count, int):
+            group.member_count = member_count
+
+        cached_members = getattr(guild, "members", None)
+        members_intent = bool(
+            getattr(getattr(self._client, "intents", None), "members", False)
+        )
+        cache_complete = bool(
+            members_intent
+            and cached_members is not None
+            and (
+                getattr(guild, "chunked", False)
+                or (
+                    group.member_count is not None
+                    and len(cached_members) >= group.member_count
+                )
+            )
+        )
+        if not cache_complete or cached_members is None:
+            return group
+
+        over_cap = group_member_lookup_over_cap(pages=1, members=len(cached_members))
+        group_admins: list[str] = []
+        group.group_admins = group_admins
+        visible_members: list[MessageMember] | None = (
+            None if over_cap or isinstance(channel, discord.Thread) else []
+        )
+        group.members = visible_members
+        for member in cached_members:
+            member_id = getattr(member, "id", None)
+            if member_id is None:
+                continue
+            guild_permissions = getattr(member, "guild_permissions", None)
+            if (
+                getattr(guild_permissions, "administrator", False)
+                and str(member_id) != group.group_owner
+            ):
+                group_admins.append(str(member_id))
+            if visible_members is None:
+                continue
+            if not isinstance(channel, discord.abc.GuildChannel):
+                continue
+            try:
+                if not channel.permissions_for(member).view_channel:
+                    continue
+            except Exception:
+                continue
+            visible_members.append(
+                MessageMember(
+                    user_id=str(member_id),
+                    nickname=getattr(member, "display_name", None),
+                )
+            )
+
+        return group
 
     async def send_streaming(
         self, generator: AsyncGenerator[MessageChain], use_fallback: bool = False

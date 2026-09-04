@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 
 import pytest
@@ -482,26 +480,13 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
 
 
 @pytest.mark.asyncio
-async def test_third_party_process_returns_early_when_wake_prefix_does_not_match():
-    stage = third_party.ThirdPartyAgentSubStage.__new__(
-        third_party.ThirdPartyAgentSubStage
-    )
-    event = FakeInternalProcessEvent(message_str="hello")
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-
-    assert yielded == []
-    assert event.result_history == []
-
-
-@pytest.mark.asyncio
 async def test_third_party_process_uses_json_card_summary_when_prompt_is_empty(
     monkeypatch,
 ):
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -554,7 +539,7 @@ async def test_third_party_process_uses_json_card_summary_when_prompt_is_empty(
     )
     _set_metrics_upload(stage, AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -571,13 +556,13 @@ async def test_third_party_process_returns_early_when_request_has_no_prompt_or_m
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider": [{"id": "runner-1"}]}
-    event = FakeInternalProcessEvent(message_str="ask", message_components=[])
+    event = FakeInternalProcessEvent(message_str="", message_components=[])
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     assert event.result_history == []
@@ -588,7 +573,7 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "unknown"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -605,7 +590,7 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
 
     with pytest.raises(ValueError, match="Unsupported third party agent runner type"):
-        async for _ in stage.process(event, provider_wake_prefix="ask"):
+        async for _ in stage.process(event):
             pass
 
 
@@ -616,7 +601,7 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -675,7 +660,7 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
     _set_metrics_upload(stage, metric_upload)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -692,7 +677,7 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "turn_off"
@@ -749,7 +734,7 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
     _set_metrics_upload(stage, metric_upload)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -766,7 +751,7 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -837,7 +822,7 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
     _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="stream setup failed"):
-        async for _ in stage.process(event, provider_wake_prefix="ask"):
+        async for _ in stage.process(event):
             pass
 
     assert runner.close.await_count == 1
@@ -853,7 +838,7 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -898,7 +883,7 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
     _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="reset failed"):
-        async for _ in stage.process(event, provider_wake_prefix="ask"):
+        async for _ in stage.process(event):
             pass
 
     assert runner.close.await_count == 1
@@ -912,7 +897,7 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -963,7 +948,7 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="non-streaming failed"):
-        async for _ in stage.process(event, provider_wake_prefix="ask"):
+        async for _ in stage.process(event):
             pass
 
     assert runner.close.await_count == 1
@@ -971,61 +956,11 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
 
 
 @pytest.mark.asyncio
-async def test_third_party_process_returns_early_when_provider_id_missing(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(
-        third_party.ThirdPartyAgentSubStage
-    )
-    stage.prov_id = ""
-    stage.runner_type = "dify"
-    stage.streaming_response = False
-    stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = _pipeline_context(SimpleNamespace())
-    stage.conf = {"provider_settings": {}}
-    event = FakeInternalProcessEvent(message_str="ask hello")
-    logger_error = MagicMock()
-
-    stage.conf["provider"] = []
-    monkeypatch.setattr(third_party.logger, "error", logger_error)
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-
-    assert yielded == []
-    logger_error.assert_called_once()
-    assert event.result_history == []
-
-
-@pytest.mark.asyncio
-async def test_third_party_process_returns_early_when_provider_config_missing(
-    monkeypatch,
-):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(
-        third_party.ThirdPartyAgentSubStage
-    )
-    stage.prov_id = "runner-1"
-    stage.runner_type = "dify"
-    stage.streaming_response = False
-    stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = _pipeline_context(SimpleNamespace())
-    stage.conf = {"provider_settings": {}}
-    event = FakeInternalProcessEvent(message_str="ask hello")
-    logger_error = MagicMock()
-
-    stage.conf["provider"] = []
-    monkeypatch.setattr(third_party.logger, "error", logger_error)
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-
-    assert yielded == []
-    logger_error.assert_called_once()
-    assert event.result_history == []
-
-
-@pytest.mark.asyncio
 async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatch):
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -1052,7 +987,7 @@ async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatc
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=True))
     monkeypatch.setattr(third_party, "DifyAgentRunner", FakeDifyRunner)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     assert event.result_history == []
@@ -1065,7 +1000,7 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -1121,7 +1056,7 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
     _set_metrics_upload(stage, metric_upload)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1140,7 +1075,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -1152,7 +1087,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     record = MagicMock(spec=Record)
     record.convert_to_file_path = AsyncMock(return_value="/tmp/audio.wav")
     event = FakeInternalProcessEvent(
-        message_str="ask",
+        message_str="",
         message_components=[image, record],
     )
     metric_upload = AsyncMock()
@@ -1199,7 +1134,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     )
     _set_metrics_upload(stage, metric_upload)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1220,7 +1155,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -1228,7 +1163,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(
-        message_str="askhello",
+        message_str="hello",
         message_components=[
             Face(id=111),
             Reply(id="quoted-face", chain=[Face(id=111)], message_str=""),
@@ -1276,7 +1211,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
     )
     _set_metrics_upload(stage, metric_upload)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == [None]
     req = runner.reset.await_args.kwargs["request"]
@@ -1290,7 +1225,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
         "</Quoted Message>"
     )
     assert request_hook.await_args.args[2] is req
-    assert event.message_str == "askhello"
+    assert event.message_str == "hello"
     assert event.message_obj.message[0].id == 111
 
 
@@ -1301,7 +1236,7 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -1350,7 +1285,7 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
     )
     _set_metrics_upload(stage, metric_upload)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]

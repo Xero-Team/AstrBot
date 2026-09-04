@@ -30,7 +30,8 @@ class AstrBotMessage:
     self_id: str  # Bot's identification ID
     session_id: str  # Session ID. Depends on the unique_session setting.
     message_id: str  # Message ID
-    group_id: str = ""  # Group ID, empty if it's a private chat
+    group: Group | None  # Group metadata; None for private chats
+    group_id: str = ""  # Group ID derived from group.group_id; empty for private chats
     sender: MessageMember  # Sender
     message: List[
         BaseMessageComponent
@@ -41,6 +42,20 @@ class AstrBotMessage:
 ```
 
 Here, `raw_message` is the **raw message object** from the messaging platform adapter.
+
+`AstrBotMessage.group` is the inbound `Group`. Common fields:
+
+- `group_id`: group, channel, or room ID
+- `group_name`: display name
+- `group_avatar`: avatar URL
+- `group_owner`: owner ID
+- `group_admins`: admin ID list
+- `members`: member list; `None` when incomplete or over the lookup cap
+- `member_count`: platform-provided total, even when the member list is missing
+
+`member_count` is platform-defined. LINE excludes the bot; other platforms may include it.
+
+`await event.get_group()` may call platform APIs to enrich those fields. It returns a copy of the inbound `Group` and does not mutate the original. When member pagination exceeds 10 pages or 2000 members, `members` is omitted and a known `member_count` is kept. LINE `get_group` fills name and member count only and does not enumerate members. Use `member_count` when `members` is `None`.
 
 ### Message Chain
 
@@ -76,7 +91,7 @@ This enrichment covers the current message, quoted messages, forwarded messages,
 
 #### Group-chat JSON cards
 
-Group-chat JSON cards are recorded into group context, and when a proactive reply or ordinary LLM request has no text prompt they are sent as a `[Shared Card]` summary instead of the raw JSON blob.
+Group-chat JSON cards are recorded into group context, and when an ordinary LLM request has no text prompt they are sent as a `[Shared Card]` summary instead of the raw JSON blob.
 
 ## Commands
 
@@ -367,8 +382,10 @@ async def test(self, event: AstrMessageEvent):
 `@filter.permission("session.manage")` is resolved by the pipeline through
 `AuthorizationService.authorize()`. It allows the current session's
 `session_admin` / `session_owner`, or a scoped `instance_operator` /
-Dashboard `operator` / `root`. A platform group owner or administrator only
-affects the current `(config_id, UMO)` and never becomes a global operator.
+Dashboard `operator` / `root`. An authenticated IM private-chat peer is
+`session_owner` of the origin session via the runtime fact `private_session`.
+A platform group owner or administrator only affects the current
+`(config_id, UMO)` and never becomes a global operator.
 
 Plugin-owned actions must use the plugin namespace and call the core
 authorization service:

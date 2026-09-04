@@ -13,6 +13,12 @@ import MarketPluginsTab from './extension/MarketPluginsTab.vue';
 import PluginDetailPage from './extension/PluginDetailPage.vue';
 import { useExtensionPage } from './extension/useExtensionPage';
 import { computed } from 'vue';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
+import { docsHref } from '@/utils/docsHref';
+import {
+  readRoutePluginId,
+  resolveSelectedMarketPlugin,
+} from '@/utils/marketPluginKey';
 import defaultPluginIcon from '/favicon.svg';
 import { usePluginI18n } from '@/utils/pluginI18n';
 
@@ -113,10 +119,9 @@ const logLevelItems = computed(() => [
   { title: 'CRITICAL', value: 'CRITICAL' },
 ]);
 
-const selectedPluginId = computed(() => {
-  const pluginId = route.params.pluginId;
-  return Array.isArray(pluginId) ? pluginId[0] : pluginId || '';
-});
+const selectedPluginId = computed(() =>
+  readRoutePluginId(route.params.pluginId),
+);
 
 const selectedDetailTab = computed(
   () => extractTabFromHash(route.hash) || 'installed',
@@ -137,21 +142,12 @@ const selectedMarketPlugin = computed(() => {
   const market = Array.isArray(pluginMarketData.value)
     ? pluginMarketData.value
     : [];
-  const installedPlugin = selectedInstalledPlugin.value;
-  const repo = installedPlugin?.repo?.toLowerCase();
-  for (const item of market) {
-    if (item.name === selectedPluginId.value) {
-      return item;
-    }
-  }
-  if (repo) {
-    for (const item of market) {
-      if (item.repo?.toLowerCase() === repo) {
-        return item;
-      }
-    }
-  }
-  return null;
+  return resolveSelectedMarketPlugin(
+    market,
+    selectedPluginId.value,
+    selectedDetailTab.value,
+    selectedInstalledPlugin.value,
+  );
 });
 
 const selectedDetailPlugin = computed(() => {
@@ -264,7 +260,10 @@ const updateDialogPluginLogo = computed(() => {
           <div v-if="activeTab === 'components'">
             <div class="mb-4 pt-4 pb-4">
               <div class="inline-control-row">
-                <h2 class="text-h2 mb-0">{{ tm('tabs.handlersOperation') }}</h2>
+                <h2 class="text-h2 mb-0 d-flex align-center">
+                  {{ tm('tabs.handlersOperation') }}
+                  <ConfigDocsLink docs="use/function-calling.html" />
+                </h2>
               </div>
             </div>
             <v-card class="extension-page__section" variant="flat">
@@ -279,8 +278,9 @@ const updateDialogPluginLogo = computed(() => {
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
                 <div class="extension-page__section-heading">
-                  <h2 class="text-h2 mb-0">
+                  <h2 class="text-h2 mb-0 d-flex align-center">
                     {{ tm('tabs.installedMcpServers') }}
+                    <ConfigDocsLink docs="use/mcp.html" />
                   </h2>
                   <div class="text-body-2 text-medium-emphasis">
                     {{ t('features.tooluse.mcpServers.description') }}
@@ -300,7 +300,10 @@ const updateDialogPluginLogo = computed(() => {
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
                 <div class="extension-page__section-heading">
-                  <h2 class="text-h2 mb-0">{{ tm('tabs.skills') }}</h2>
+                  <h2 class="text-h2 mb-0 d-flex align-center">
+                    {{ tm('tabs.skills') }}
+                    <ConfigDocsLink docs="use/skills.html" />
+                  </h2>
                   <div class="text-body-2 text-medium-emphasis">
                     {{ tm('skills.runtimeHint') }}
                   </div>
@@ -324,25 +327,14 @@ const updateDialogPluginLogo = computed(() => {
       <div class="d-flex align-center justify-center mt-4 mb-4 gap-4">
         <v-btn
           variant="text"
-          prepend-icon="mdi-book-open-variant"
-          href="https://docs.astrbot.app/dev/star/plugin-new.html"
+          prepend-icon="mdi-help-circle-outline"
+          :href="docsHref('dev/star/plugin-new.html')"
           rel="noopener noreferrer"
           target="_blank"
           color="primary"
           class="text-none"
         >
           {{ tm('market.devDocs') }}
-        </v-btn>
-        <div class="extension-page__market-divider"></div>
-        <v-btn
-          variant="text"
-          prepend-icon="mdi-github"
-          href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection"
-          target="_blank"
-          color="primary"
-          class="text-none"
-        >
-          {{ tm('market.submitRepo') }}
         </v-btn>
       </div>
     </v-col>
@@ -1167,12 +1159,6 @@ const updateDialogPluginLogo = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--astrbot-space-2);
-}
-
-.extension-page__market-divider {
-  width: 1px;
-  height: 24px;
-  background: rgb(var(--v-theme-outline-variant));
 }
 
 .extension-detail-width {

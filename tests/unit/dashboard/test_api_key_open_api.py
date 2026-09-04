@@ -14,10 +14,7 @@ from astrbot.core.auth.models import AuthContext as CoreAuthContext
 from astrbot.core.auth.models import Resource, Subject
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.log import LogBroker
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
-    hash_md5_dashboard_password,
-)
+from astrbot.core.utils.auth_password import hash_dashboard_password
 from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
@@ -124,9 +121,7 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
             hash_dashboard_password(dashboard_password)
         )
-        core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_md5_dashboard_password(dashboard_password)
-        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = ""
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",
@@ -777,7 +772,6 @@ async def test_open_chat_send_auto_session_id_and_username(
         creator="bob_auto_session",
         platform_id="webchat",
         session_id="open_api_existing_bob_session",
-        is_group=0,
     )
     another_user_session_res = await test_client.post(
         "/api/v1/chat",
@@ -1100,14 +1094,12 @@ async def test_open_chat_sessions_pagination(
             platform_id="webchat",
             session_id=f"open_api_paginated_{idx}",
             display_name=f"Open API Session {idx}",
-            is_group=0,
         )
     await core_lifecycle_td.db.create_platform_session(
         creator=other_creator,
         platform_id="webchat",
         session_id=f"open_api_paginated_bob_{uuid.uuid4().hex[:8]}",
         display_name="Open API Session Bob",
-        is_group=0,
     )
 
     page_1_res = await test_client.get(
@@ -1465,14 +1457,12 @@ async def test_open_chat_sessions_input_validation_and_filtering(
         platform_id="webchat",
         session_id=webchat_sid,
         display_name="Bounds Webchat",
-        is_group=0,
     )
     await core_lifecycle_td.db.create_platform_session(
         creator=creator,
         platform_id="telegram",
         session_id=telegram_sid,
         display_name="Bounds Telegram",
-        is_group=0,
     )
 
     invalid_page_res = await test_client.get(

@@ -1,7 +1,5 @@
 """Frozen action, relation, and risk registry for authorization v1/v2."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -94,7 +92,6 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "data.manage": _SESSION_AND_ABOVE,
     "data.export_all": _INSTANCE_AND_ABOVE,
     "system.manage": _ROOT_ONLY,
-    "system.update": _ROOT_ONLY,
     "system.restart": _ROOT_ONLY,
     "system.pip_install": _ROOT_ONLY,
     "identity.read": _INSTANCE_AND_ABOVE,

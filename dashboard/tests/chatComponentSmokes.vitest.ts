@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import ChatInput from '@/components/chat/ChatInput.vue';
-import LiveOrb from '@/components/chat/LiveOrb.vue';
 import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
@@ -72,7 +71,8 @@ describe('chat component smokes', () => {
         status: 'ok',
         data: {
           items: [],
-          wake_prefix: ['/'],
+          command_prefixes: ['/'],
+          llm_access: { prefixes: ['/'] },
         },
       },
     });
@@ -110,7 +110,6 @@ describe('chat component smokes', () => {
         },
         currentSession: {
           platform_id: 'webchat',
-          is_group: false,
         },
       },
     });
@@ -119,7 +118,9 @@ describe('chat component smokes', () => {
 
     expect(wrapper.find('.reply-preview').exists()).toBe(true);
     expect(wrapper.find('.attachments-preview').exists()).toBe(true);
-    expect(wrapper.find('.input-container').attributes('style')).toBeUndefined();
+    expect(
+      wrapper.find('.input-container').attributes('style'),
+    ).toBeUndefined();
     expect(wrapper.text()).toContain('quoted message');
     expect(
       warnSpy.mock.calls.some((args) =>
@@ -130,17 +131,14 @@ describe('chat component smokes', () => {
     ).toBe(false);
   });
 
-  it('does not oscillate between single-line and multiline input layouts', async () => {
-    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(
-      function (this: Element) {
-        return this instanceof HTMLInputElement ? 40 : 100;
-      },
-    );
-    vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(
-      function (this: Element) {
-        return this instanceof HTMLInputElement ? 80 : 100;
-      },
-    );
+  it('keeps a textarea and only expands the composer for multiline prompts', async () => {
+    vi.spyOn(
+      HTMLTextAreaElement.prototype,
+      'scrollHeight',
+      'get',
+    ).mockImplementation(function (this: HTMLTextAreaElement) {
+      return this.value.includes('\n') ? 96 : 52;
+    });
 
     const wrapper = mountWithVuetify(ChatInput, {
       props: {
@@ -155,22 +153,32 @@ describe('chat component smokes', () => {
     });
 
     await flushPromises();
-    expect(wrapper.find('.chat-text-input').exists()).toBe(true);
-    expect(wrapper.find('.chat-textarea').exists()).toBe(false);
-
-    await wrapper.setProps({ prompt: 'content that overflows' });
-    await flushPromises();
-    expect(wrapper.find('.chat-text-input').exists()).toBe(false);
     expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.chat-text-input').exists()).toBe(false);
+    expect(wrapper.find('.input-container').classes()).not.toContain(
+      'is-multiline',
+    );
+
+    await wrapper.setProps({ prompt: 'first line\nsecond line' });
+    await flushPromises();
+    expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.input-container').classes()).toContain(
+      'is-multiline',
+    );
 
     await wrapper.setProps({ prompt: 'short' });
     await flushPromises();
     expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.input-container').classes()).toContain(
+      'is-multiline',
+    );
 
     await wrapper.setProps({ prompt: '' });
     await flushPromises();
-    expect(wrapper.find('.chat-text-input').exists()).toBe(true);
-    expect(wrapper.find('.chat-textarea').exists()).toBe(false);
+    expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.input-container').classes()).not.toContain(
+      'is-multiline',
+    );
   });
 
   it('renders ReasoningBlock streaming preview and expands inline timeline', async () => {
@@ -178,7 +186,6 @@ describe('chat component smokes', () => {
       props: {
         parts: [{ type: 'think', think: 'First line\nSecond line' }],
         isStreaming: true,
-        openInSidebar: false,
       },
     });
 
@@ -192,22 +199,33 @@ describe('chat component smokes', () => {
 
     expect(wrapper.find('.reasoning-content').exists()).toBe(true);
     expect(wrapper.find('.reasoning-timeline-stub').text()).toBe('1|');
+    expect(wrapper.emitted('open')).toBeUndefined();
   });
 
-  it('renders LiveOrb in code mode without crashing', async () => {
-    const wrapper = mountWithVuetify(LiveOrb, {
+  it('opens the sidebar from the dedicated button and hides inline content', async () => {
+    const wrapper = mountWithVuetify(ReasoningBlock, {
       props: {
-        energy: 0.6,
-        mode: 'processing',
-        codeMode: true,
-        nervousMode: false,
+        parts: [{ type: 'think', think: 'First line\nSecond line' }],
+        showSidebarAction: true,
       },
     });
 
+    await wrapper.find('.reasoning-header').trigger('click');
     await flushPromises();
+    expect(wrapper.find('.reasoning-content').exists()).toBe(true);
+    expect(wrapper.emitted('open')).toBeUndefined();
 
-    expect(wrapper.findAll('.eye')).toHaveLength(2);
-    expect(wrapper.findAll('.code-rain-container')).toHaveLength(2);
-    expect(wrapper.findAll('.code-column').length).toBeGreaterThan(0);
+    await wrapper.find('.reasoning-sidebar-btn').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('open')).toHaveLength(1);
+    expect(wrapper.find('.reasoning-content').exists()).toBe(false);
+
+    await wrapper.setProps({ sidebarActive: true });
+    await wrapper.find('.reasoning-header').trigger('click');
+    await flushPromises();
+    expect(
+      wrapper.find('.reasoning-header').attributes('disabled'),
+    ).toBeDefined();
+    expect(wrapper.find('.reasoning-content').exists()).toBe(false);
   });
 });

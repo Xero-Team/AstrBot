@@ -3,9 +3,11 @@ from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 from .misskey_utils import (
     add_at_mention_if_needed,
@@ -136,3 +138,136 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             use_fallback=use_fallback,
             sentence_pattern=re.compile(r"[^。？！~…]+[。？！~…]+"),
         )
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Retrieve Misskey chat room information and all room members.
+
+        Args:
+            group_id: Room ID to query. Defaults to the current room ID.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Room information, or ``None`` when no room ID is available. If the
+            instance does not support the room APIs, returns the basic room
+            information already present on the incoming message.
+        """
+        del kwargs
+        room_id = str(group_id or self.get_group_id() or "")
+        if not room_id:
+            return None
+
+        fallback_group = Group.from_inbound(self.message_obj.group, room_id)
+        cached_room = getattr(self._client, "_user_cache", {}).get(
+            f"room:{room_id}",
+            {},
+        )
+        if not fallback_group.group_name:
+            fallback_group.group_name = cached_room.get("room_name") or None
+        if not fallback_group.group_owner:
+            fallback_group.group_owner = str(cached_room.get("owner_id") or "") or None
+
+        api = getattr(self._client, "api", None)
+        if api is None or not hasattr(api, "_make_request"):
+            return fallback_group
+
+        members_incomplete = False
+        memberships: list[dict] = []
+        try:
+            room = await api._make_request(
+                "chat/rooms/show",
+                {"roomId": room_id},
+            )
+            if not isinstance(room, dict):
+                raise TypeError("Misskey room response must be an object")
+
+            until_id = None
+            page_count = 0
+            while True:
+                if group_member_lookup_over_cap(
+                    pages=page_count + 1,
+                    members=len(memberships),
+                ):
+                    members_incomplete = True
+                    break
+                payload = {"roomId": room_id, "limit": 100}
+                if until_id:
+                    payload["untilId"] = until_id
+                page = await api._make_request("chat/rooms/members", payload)
+                if not isinstance(page, list):
+                    raise TypeError("Misskey room members response must be a list")
+                page_count += 1
+                page_items = [
+                    membership for membership in page if isinstance(membership, dict)
+                ]
+                if group_member_lookup_over_cap(
+                    pages=page_count,
+                    members=len(memberships) + len(page_items),
+                ):
+                    members_incomplete = True
+                    break
+                memberships.extend(page_items)
+                if len(page) < 100:
+                    break
+                next_until_id = page[-1].get("id")
+                if not next_until_id or next_until_id == until_id:
+                    raise ValueError(
+                        "Misskey room members pagination cursor is missing"
+                    )
+                until_id = next_until_id
+        except Exception as exc:
+            logger.warning(
+                "[MisskeyEvent] Failed to retrieve room information for %s: %s",
+                room_id,
+                safe_error("", exc),
+            )
+            return fallback_group
+
+        owner_id = str(room.get("ownerId") or fallback_group.group_owner or "")
+        fallback_group.group_name = room.get("name") or fallback_group.group_name
+        fallback_group.group_owner = owner_id or None
+        if members_incomplete:
+            fallback_group.members = None
+            return fallback_group
+
+        members = []
+        member_ids = set()
+        for membership in memberships:
+            user = membership.get("user")
+            user = user if isinstance(user, dict) else {}
+            user_id = str(membership.get("userId") or user.get("id") or "")
+            if not user_id or user_id in member_ids:
+                continue
+            member_ids.add(user_id)
+            members.append(
+                MessageMember(
+                    user_id=user_id,
+                    nickname=user.get("name") or user.get("username") or None,
+                ),
+            )
+
+        # Misskey does not create a membership record for the room owner.
+        if owner_id and owner_id not in member_ids:
+            owner = room.get("owner")
+            owner = owner if isinstance(owner, dict) else {}
+            members.append(
+                MessageMember(
+                    user_id=owner_id,
+                    nickname=owner.get("name") or owner.get("username") or None,
+                ),
+            )
+
+        fallback_group.group_admins = []
+        member_count = len(members)
+        if group_member_lookup_over_cap(pages=page_count, members=member_count):
+            fallback_group.members = None
+            if fallback_group.member_count is None:
+                fallback_group.member_count = member_count
+            return fallback_group
+
+        fallback_group.members = members
+        fallback_group.member_count = member_count
+        return fallback_group

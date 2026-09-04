@@ -11,6 +11,7 @@
           :available-source-types="availableSourceTypes"
           :tm="tm"
           :resolve-source-icon="resolveSourceIcon"
+          :is-monochrome-source-icon="isMonochromeSourceIcon"
           :get-source-display-name="getSourceDisplayName"
           @add-provider-source="addProviderSource"
           @select-provider-source="selectProviderSource"
@@ -260,6 +261,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,
@@ -362,6 +364,7 @@ async function confirmManualModel() {
   background: rgb(var(--v-theme-surface));
   display: grid;
   grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -390,6 +393,8 @@ async function confirmManualModel() {
 
 .provider-workbench__main {
   display: flex;
+  flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -597,18 +598,20 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
 
 @pytest.mark.asyncio
-async def test_background_wakeup_passes_provider_settings_to_main_agent(
+async def test_background_wakeup_passes_history_and_provider_settings_to_main_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
     provider_settings = {
-        "fallback_chat_models": ["fallback-provider"],
-        "request_max_retries": 3,
         "streaming_response": True,
     }
+    history = [
+        {"role": "user", "content": "old question"},
+        {"role": "assistant", "content": "old answer"},
+    ]
     captured: dict = {}
 
     async def _fake_get_session_conv(**_kwargs):
-        return SimpleNamespace(history="[]")
+        return SimpleNamespace(history=json.dumps(history))
 
     async def _fake_build_main_agent(**kwargs):
         captured.update(kwargs)
@@ -633,7 +636,22 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_config=lambda **_kwargs: {
+            "provider_settings": provider_settings,
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "model": {
+                        "fallback_provider_ids": ["fallback-provider"],
+                        "request_max_retries": 3,
+                    },
+                    "misc": {
+                        "max_steps": 30,
+                        "tool_call_timeout": 120,
+                    },
+                },
+            },
+        },
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
         ),
@@ -676,12 +694,117 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
     config = captured["config"]
     assert config.tool_call_timeout == 456
     assert config.streaming_response == provider_settings["streaming_response"]
+    assert config.fallback_provider_ids == ["fallback-provider"]
+    assert config.request_max_retries == 3
     assert config.provider_settings == provider_settings
-    assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+    request = captured["req"]
+    assert "old question" not in request.system_prompt
+    assert "old answer" not in request.system_prompt
+    assert request.contexts == history
     cron_context = captured["event"].auth_context
     assert cron_context is not event.auth_context
     assert cron_context.request_id != event.auth_context.request_id
     assert cron_context.metadata == {"dashboard_session_id": "sid-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("misc_config", "expected_max_step"),
+    [
+        pytest.param({"max_steps": 50}, 50, id="configured"),
+        pytest.param({}, 30, id="missing_falls_back_to_default"),
+        pytest.param({"max_steps": True}, 30, id="boolean_falls_back_to_default"),
+        pytest.param({"max_steps": "50"}, 50, id="numeric_string_coerced"),
+        pytest.param({"max_steps": 0}, 1, id="zero_clamped_to_min"),
+    ],
+)
+async def test_background_wakeup_applies_max_agent_step(
+    monkeypatch: pytest.MonkeyPatch,
+    misc_config: dict,
+    expected_max_step: int,
+):
+    class _StepCapturingRunner:
+        def __init__(self):
+            self.captured_max_step = None
+
+        async def step_until_done(self, max_step):
+            self.captured_max_step = max_step
+            if False:
+                yield
+
+        def get_final_llm_resp(self):
+            return SimpleNamespace(role="assistant", completion_text="done")
+
+    runner = _StepCapturingRunner()
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**_kwargs):
+        return SimpleNamespace(agent_runner=runner)
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        AsyncMock(),
+    )
+
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="send",
+        parameters={"type": "object", "properties": {}},
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": dict(misc_config),
+                },
+            },
+        },
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+    )
+    event = _DummyEvent([])
+    subject = Subject.dashboard_account("account-1", "user")
+    resource = Resource.session("default", "webchat:FriendMessage:webchat!user!session")
+    event.subject = subject
+    event.resource = resource
+    event.auth_context = AuthContext(
+        subject=subject,
+        source="webchat",
+        config_id="default",
+        authenticated=True,
+        origin_session_resource_id=resource.id,
+        metadata={"dashboard_session_id": "sid-1"},
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=context),
+        tool_call_timeout=120,
+    )
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="long_tool",
+        result_text="ok",
+        tool_args={},
+        note="task finished",
+        summary_name="BackgroundTask",
+    )
+
+    assert runner.captured_max_step == expected_max_step
 
 
 @pytest.mark.asyncio

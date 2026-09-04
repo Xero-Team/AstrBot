@@ -1,5 +1,6 @@
 import pytest
 
+from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.message.components import Json
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 
@@ -23,7 +24,7 @@ async def test_internal_process_skips_empty_messages_without_provider_request(
     try_capture = MagicMock()
     stage.ctx.execution_context.follow_up_coordinator.try_capture = try_capture
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     try_capture.assert_not_called()
@@ -89,7 +90,7 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -122,7 +123,7 @@ async def test_internal_process_stops_when_follow_up_ticket_was_consumed(monkeyp
     )
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_not_awaited()
@@ -176,7 +177,7 @@ async def test_internal_process_sends_error_message_and_finalizes_follow_up_on_e
     finalize = AsyncMock()
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -218,7 +219,7 @@ async def test_internal_process_finalizes_follow_up_when_waiting_hook_blocks(
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -261,7 +262,7 @@ async def test_internal_process_sends_llm_error_message_when_build_returns_none(
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_awaited_once()
@@ -310,7 +311,7 @@ async def test_internal_process_build_none_finalizes_follow_up_capture(monkeypat
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_awaited_once()
@@ -353,7 +354,7 @@ async def test_internal_process_skips_send_when_build_returns_none_without_llm_e
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_not_awaited()
@@ -399,7 +400,7 @@ async def test_internal_process_closes_reset_coro_when_llm_request_hook_blocks(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     reset_coro.close.assert_called_once_with()
@@ -454,7 +455,7 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
     )
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     reset_coro.close.assert_called_once_with()
@@ -485,7 +486,7 @@ async def test_internal_process_stops_when_waiting_hook_blocks(monkeypatch):
     build_main_agent = AsyncMock()
     monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -525,7 +526,7 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
     monkeypatch.setattr(internal.logger, "warning", logger_warning)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_awaited_once()
@@ -557,7 +558,7 @@ async def test_internal_process_swallows_stop_typing_failures(monkeypatch):
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
     monkeypatch.setattr(internal.logger, "warning", logger_warning)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -611,7 +612,7 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
         register_runner
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     register_runner.assert_not_called()
@@ -699,7 +700,7 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -766,7 +767,7 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -829,282 +830,12 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
     assert reset_flag.awaited is True
     save_to_history.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypatch):
-    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
-    stage.streaming_response = False
-    stage.show_tool_use = True
-    stage.show_tool_call_result = False
-    stage.show_reasoning = False
-    stage.buffer_intermediate_messages = False
-    stage.max_step = 5
-    stage.unsupported_streaming_strategy = "turn_off"
-    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.main_agent_cfg = object()
-    stage.ctx = _pipeline_context(_internal_plugin_context("tts-provider"))
-    event = FakeInternalProcessEvent(
-        message_str="hello",
-        extras={"action_type": "live"},
-    )
-    runner = FakeInternalRunner()
-    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-live"))
-    build_result = SimpleNamespace(
-        agent_runner=runner,
-        provider_request=req,
-        provider=runner.provider,
-        reset_coro=None,
-    )
-    save_to_history = AsyncMock()
-    metric_upload = AsyncMock()
-    scheduled_tasks: list[asyncio.Task] = []
-
-    async def fake_run_live_agent(*args, **kwargs):
-        yield MessageChain().message("live chunk")
-
-    def fake_create_task(coro, *, name=None):
-        task = asyncio.get_running_loop().create_task(coro, name=name)
-        scheduled_tasks.append(task)
-        return task
-
-    monkeypatch.setattr(
-        stage.ctx.execution_context.session_lock_manager,
-        "acquire_lock",
-        lambda _umo: _AsyncLockContext(),
-    )
-    monkeypatch.setattr(
-        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
-    )
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        internal, "build_main_agent", AsyncMock(return_value=build_result)
-    )
-    monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
-    monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, metric_upload)
-    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-    await asyncio.gather(*scheduled_tasks)
-
-    assert yielded == [None]
-    assert (
-        event.result_history[-1].result_content_type
-        == ResultContentType.STREAMING_RESULT
-    )
-    streamed_chunks = [
-        chain.get_plain_text() async for chain in event.result_history[-1].async_stream
-    ]
-    assert streamed_chunks == ["live chunk"]
-    save_to_history.assert_awaited_once()
-    assert save_to_history.await_args.args[0] is event
-    assert save_to_history.await_args.args[1] is req
-    assert save_to_history.await_args.kwargs["user_aborted"] is False
-    assert metric_upload.await_count == 1
-
-
-@pytest.mark.asyncio
-async def test_internal_process_live_mode_skips_history_when_runner_not_done(
-    monkeypatch,
-):
-    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
-    stage.streaming_response = False
-    stage.show_tool_use = True
-    stage.show_tool_call_result = False
-    stage.show_reasoning = False
-    stage.buffer_intermediate_messages = False
-    stage.max_step = 5
-    stage.unsupported_streaming_strategy = "turn_off"
-    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.main_agent_cfg = object()
-    stage.ctx = _pipeline_context(_internal_plugin_context())
-    event = FakeInternalProcessEvent(
-        message_str="hello",
-        extras={"action_type": "live"},
-    )
-    runner = FakeInternalRunner(done=False)
-    build_result = SimpleNamespace(
-        agent_runner=runner,
-        provider_request=ProviderRequest(
-            conversation=SimpleNamespace(cid="conv-live-skip")
-        ),
-        provider=runner.provider,
-        reset_coro=None,
-    )
-    save_to_history = AsyncMock()
-    scheduled_tasks: list[asyncio.Task] = []
-
-    async def fake_run_live_agent(*args, **kwargs):
-        yield MessageChain().message("live chunk")
-
-    def fake_create_task(coro, *, name=None):
-        task = asyncio.get_running_loop().create_task(coro, name=name)
-        scheduled_tasks.append(task)
-        return task
-
-    monkeypatch.setattr(
-        stage.ctx.execution_context.session_lock_manager,
-        "acquire_lock",
-        lambda _umo: _AsyncLockContext(),
-    )
-    monkeypatch.setattr(
-        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
-    )
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        internal, "build_main_agent", AsyncMock(return_value=build_result)
-    )
-    monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
-    monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
-    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-    await asyncio.gather(*scheduled_tasks)
-
-    assert yielded == [None]
-    save_to_history.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_internal_process_live_mode_skips_history_when_event_stopped_without_abort(
-    monkeypatch,
-):
-    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
-    stage.streaming_response = False
-    stage.show_tool_use = True
-    stage.show_tool_call_result = False
-    stage.show_reasoning = False
-    stage.buffer_intermediate_messages = False
-    stage.max_step = 5
-    stage.unsupported_streaming_strategy = "turn_off"
-    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.main_agent_cfg = object()
-    stage.ctx = _pipeline_context(_internal_plugin_context("tts-provider"))
-    event = FakeInternalProcessEvent(
-        message_str="hello",
-        extras={"action_type": "live"},
-        stopped=True,
-    )
-    runner = FakeInternalRunner(done=True, aborted=False)
-    build_result = SimpleNamespace(
-        agent_runner=runner,
-        provider_request=ProviderRequest(
-            conversation=SimpleNamespace(cid="conv-live-stopped")
-        ),
-        provider=runner.provider,
-        reset_coro=None,
-    )
-    save_to_history = AsyncMock()
-    scheduled_tasks: list[asyncio.Task] = []
-
-    async def fake_run_live_agent(*args, **kwargs):
-        yield MessageChain().message("live chunk")
-
-    def fake_create_task(coro, *, name=None):
-        task = asyncio.get_running_loop().create_task(coro, name=name)
-        scheduled_tasks.append(task)
-        return task
-
-    monkeypatch.setattr(
-        stage.ctx.execution_context.session_lock_manager,
-        "acquire_lock",
-        lambda _umo: _AsyncLockContext(),
-    )
-    monkeypatch.setattr(
-        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
-    )
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        internal, "build_main_agent", AsyncMock(return_value=build_result)
-    )
-    monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
-    monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
-    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-    await asyncio.gather(*scheduled_tasks)
-
-    assert yielded == [None]
-    save_to_history.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_internal_process_live_mode_saves_history_when_event_stopped_but_runner_aborted(
-    monkeypatch,
-):
-    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
-    stage.streaming_response = False
-    stage.show_tool_use = True
-    stage.show_tool_call_result = False
-    stage.show_reasoning = False
-    stage.buffer_intermediate_messages = False
-    stage.max_step = 5
-    stage.unsupported_streaming_strategy = "turn_off"
-    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.main_agent_cfg = object()
-    stage.ctx = _pipeline_context(_internal_plugin_context("tts-provider"))
-    event = FakeInternalProcessEvent(
-        message_str="hello",
-        extras={"action_type": "live"},
-        stopped=True,
-    )
-    runner = FakeInternalRunner(done=True, aborted=True)
-    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-live-aborted"))
-    build_result = SimpleNamespace(
-        agent_runner=runner,
-        provider_request=req,
-        provider=runner.provider,
-        reset_coro=None,
-    )
-    save_to_history = AsyncMock()
-    scheduled_tasks: list[asyncio.Task] = []
-
-    async def fake_run_live_agent(*args, **kwargs):
-        yield MessageChain().message("live chunk")
-
-    def fake_create_task(coro, *, name=None):
-        task = asyncio.get_running_loop().create_task(coro, name=name)
-        scheduled_tasks.append(task)
-        return task
-
-    monkeypatch.setattr(
-        stage.ctx.execution_context.session_lock_manager,
-        "acquire_lock",
-        lambda _umo: _AsyncLockContext(),
-    )
-    monkeypatch.setattr(
-        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
-    )
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        internal, "build_main_agent", AsyncMock(return_value=build_result)
-    )
-    monkeypatch.setattr(internal, "run_live_agent", fake_run_live_agent)
-    monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
-    monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
-
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
-    await asyncio.gather(*scheduled_tasks)
-
-    assert yielded == [None]
-    save_to_history.assert_awaited_once()
-    assert save_to_history.await_args.args[0] is event
-    assert save_to_history.await_args.args[1] is req
-    assert save_to_history.await_args.kwargs["user_aborted"] is True
 
 
 @pytest.mark.asyncio
@@ -1160,7 +891,7 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1215,7 +946,7 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1284,7 +1015,7 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
         lambda _event: "Error occurred during AI execution.",
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1363,7 +1094,7 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
         lambda _event: "Error occurred during AI execution.",
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == [None]
     save_to_history.assert_not_awaited()
@@ -1449,7 +1180,7 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         lambda _event: "Error occurred during AI execution.",
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -1470,14 +1201,10 @@ async def test_internal_builder_applies_model_and_permission_per_btw_loop(
 ):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.ctx = _pipeline_context(_internal_plugin_context())
-    stage.main_agent_cfg = internal.MainAgentBuildConfig(
+    stage.main_agent_cfg = MainAgentBuildConfig(
         tool_call_timeout=60,
-        file_extract_enabled=True,
         computer_use_runtime="local",
-        provider_settings={
-            "computer_use_runtime": "local",
-            "file_extract": {"enable": True},
-        },
+        provider_settings={"computer_use_runtime": "local"},
         conversation_provider_id="conversation-model",
         work_provider_id="work-model",
         work_computer_use_runtime="sandbox",
@@ -1494,7 +1221,6 @@ async def test_internal_builder_applies_model_and_permission_per_btw_loop(
     assert (
         await stage._build_checked_agent_runner(
             conversation_event,
-            provider_wake_prefix="",
             streaming_response=True,
         )
         is build_result
@@ -1503,8 +1229,6 @@ async def test_internal_builder_applies_model_and_permission_per_btw_loop(
     assert conversation_config.loop_mode == "conversation"
     assert conversation_config.provider_id_override == "conversation-model"
     assert conversation_config.computer_use_runtime == "none"
-    assert not conversation_config.file_extract_enabled
-    assert conversation_config.provider_settings["file_extract"]["enable"] is False
     assert conversation_config.btw_mcp_routes == [
         {"server_name": "workspace", "loop": "work"}
     ]
@@ -1516,7 +1240,6 @@ async def test_internal_builder_applies_model_and_permission_per_btw_loop(
     assert (
         await stage._build_checked_agent_runner(
             work_event,
-            provider_wake_prefix="",
             streaming_response=False,
         )
         is build_result
@@ -1525,5 +1248,4 @@ async def test_internal_builder_applies_model_and_permission_per_btw_loop(
     assert work_config.loop_mode == "work"
     assert work_config.provider_id_override == "work-model"
     assert work_config.computer_use_runtime == "sandbox"
-    assert work_config.file_extract_enabled
     assert work_config.provider_settings["computer_use_runtime"] == "sandbox"

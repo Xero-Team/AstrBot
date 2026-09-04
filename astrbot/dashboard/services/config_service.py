@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.agent_runner import (
+    get_agent_runner_config_default,
+    normalize_agent_runner,
+)
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -659,6 +663,16 @@ async def save_config_async(
 
     if is_core:
         _log_computer_config_changes(current_config, post_config)
+        try:
+            post_config["agent_runner"] = normalize_agent_runner(
+                post_config.get("agent_runner")
+                or {
+                    "runner_type": "local",
+                    "config": get_agent_runner_config_default("local"),
+                }
+            )
+        except ValueError as exc:
+            raise DashboardValidationError(str(exc)) from exc
 
     try:
         if is_core:
@@ -692,6 +706,33 @@ def _require_config_save_commit(committed: bool) -> None:
         )
 
 
+def _llm_access_occupancy_error(
+    config: dict,
+    config_id: str,
+    plugin_catalog,
+) -> dict | None:
+    """Reject LLM prefixes that occupy an enabled command root."""
+    if plugin_catalog is None:
+        return None
+    from astrbot.core.command.occupancy import (
+        collect_command_roots,
+        llm_prefix_conflict,
+    )
+    from astrbot.core.pipeline.turn_router import command_prefixes_from_config
+
+    llm_access = config.get("llm_access") or {}
+    prefixes = llm_access.get("prefixes") or []
+    plugin_set = config.get("plugin_set", ["*"])
+    plugin_names = None if plugin_set == ["*"] else plugin_set
+    store = plugin_catalog.get_command_catalog(config_id, plugin_names)
+    return llm_prefix_conflict(
+        prefixes,
+        command_prefixes_from_config(config),
+        collect_command_roots(store.snapshot),
+        config_id=config_id,
+    )
+
+
 class ConfigProfileService:
     def __init__(
         self,
@@ -700,12 +741,14 @@ class ConfigProfileService:
         core_control: CoreControl,
         totp_runtime_state: TotpRuntimeState,
         db: DatabaseSessionStore | None = None,
+        plugin_catalog=None,
     ) -> None:
         self.core_control = core_control
         self.acm = config_manager
         self.config_router = config_router
         self.db = db
         self.totp_runtime_state = totp_runtime_state
+        self.plugin_catalog = plugin_catalog
 
     def get_profile_schema(self) -> dict:
         return {
@@ -753,7 +796,15 @@ class ConfigProfileService:
         name: str | None,
         config: dict | None,
     ) -> dict:
-        conf_id = await self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
+        profile_config = copy.deepcopy(config or DEFAULT_CONFIG)
+        if "agent_runner" in profile_config:
+            try:
+                profile_config["agent_runner"] = normalize_agent_runner(
+                    profile_config["agent_runner"]
+                )
+            except ValueError as exc:
+                raise DashboardValidationError(str(exc)) from exc
+        conf_id = await self.acm.create_conf(name=name, config=profile_config)
         await self.core_control.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
@@ -803,6 +854,18 @@ class ConfigProfileService:
         if not _get_nested_value(config, ("dashboard", "totp", "enable")):
             _set_nested_value(config, ("dashboard", "totp", "secret"), "")
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
+
+        occupancy_error = _llm_access_occupancy_error(
+            config,
+            config_id,
+            self.plugin_catalog,
+        )
+        if occupancy_error is not None:
+            raise ApiError(
+                "LLM 触发前缀与指令根冲突。",
+                status_code=409,
+                data=occupancy_error,
+            )
 
         committed = await save_config_async(
             config,
@@ -1756,6 +1819,8 @@ class ProviderConfigService:
         providers = []
         model_metadata = {}
         for provider in self.provider_manager.providers_config:
+            if provider.get("provider_type") == "agent_runner":
+                continue
             if (
                 provider_source_id
                 and provider.get("provider_source_id") != provider_source_id

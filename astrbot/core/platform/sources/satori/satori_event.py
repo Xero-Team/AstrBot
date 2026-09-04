@@ -14,9 +14,11 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -54,6 +56,135 @@ class SatoriPlatformEvent(AstrMessageEvent):
             self.platform = login.get("platform")
             user = login.get("user", {})
             self.user_id = user.get("id") if user else None
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Get Satori guild information and all available members.
+
+        Args:
+            group_id: Guild ID to query. Defaults to the current message guild.
+            **kwargs: Reserved for compatibility with the common event interface.
+
+        Returns:
+            Enriched guild information, a basic guild when APIs are unavailable,
+            or None when no guild ID is available.
+        """
+        del kwargs
+        target_id = str(group_id or self.get_group_id())
+        if not target_id:
+            return None
+
+        group = Group.from_inbound(self.message_obj.group, target_id)
+
+        features = None
+        for login in getattr(self._adapter, "logins", []):
+            login_user = login.get("user") or {}
+            if (
+                login.get("platform") == self.platform
+                and login_user.get("id") == self.user_id
+            ):
+                features = login.get("features")
+                break
+
+        if features is None or "guild.get" in features:
+            try:
+                guild = await self._adapter.send_http_request(
+                    "POST",
+                    "/guild.get",
+                    {"guild_id": target_id},
+                    self.platform,
+                    self.user_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Satori] Failed to get guild %s: %s",
+                    target_id,
+                    safe_error("", exc),
+                )
+                guild = {}
+            if guild:
+                group.group_name = guild.get("name") or group.group_name
+                group.group_avatar = guild.get("avatar") or group.group_avatar
+
+        if features is not None and "guild.member.list" not in features:
+            return group
+
+        members: list[MessageMember] = []
+        member_count = 0
+        next_token = None
+        seen_tokens: set[str] = set()
+        page_count = 0
+        members_incomplete = False
+        members_complete = False
+        while True:
+            if group_member_lookup_over_cap(
+                pages=page_count + 1,
+                members=len(members),
+            ):
+                members_incomplete = True
+                break
+            data = {"guild_id": target_id}
+            if next_token:
+                data["next"] = next_token
+            try:
+                response = await self._adapter.send_http_request(
+                    "POST",
+                    "/guild.member.list",
+                    data,
+                    self.platform,
+                    self.user_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Satori] Failed to get members for guild %s: %s",
+                    target_id,
+                    safe_error("", exc),
+                )
+                break
+            if not response or not isinstance(response.get("data"), list):
+                break
+
+            page_count += 1
+            page_items: list[MessageMember] = []
+            for member in response["data"]:
+                user = member.get("user") or {}
+                user_id = user.get("id")
+                if not user_id:
+                    continue
+                page_items.append(
+                    MessageMember(
+                        user_id=str(user_id),
+                        nickname=member.get("nick")
+                        or user.get("nick")
+                        or user.get("name"),
+                    ),
+                )
+            if group_member_lookup_over_cap(
+                pages=page_count,
+                members=len(members) + len(page_items),
+            ):
+                members_incomplete = True
+                break
+            members.extend(page_items)
+            member_count += len(response["data"])
+
+            next_token = response.get("next")
+            if not next_token:
+                members_complete = True
+                break
+            if next_token in seen_tokens:
+                break
+            seen_tokens.add(next_token)
+
+        if members_complete:
+            group.members = members
+            group.member_count = member_count
+        elif members_incomplete:
+            group.members = None
+        return group
 
     @staticmethod
     async def _image_to_data_url(component: Image) -> str | None:

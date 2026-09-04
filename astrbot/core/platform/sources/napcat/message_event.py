@@ -1,15 +1,16 @@
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from astrbot import logger
 from astrbot.core.message.components import Forward, OnlineFile
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 if TYPE_CHECKING:
     from .napcat_platform_adapter import NapCatPlatformAdapter
@@ -818,15 +819,20 @@ class NapCatMessageEvent(AstrMessageEvent):
         return await self._adapter.client.get_forward_message(resolved_id)
 
     async def get_group(self, group_id=None, **kwargs):
+        """Get OneBot group details while preserving inbound data on failures.
+
+        Args:
+            group_id: Optional OneBot group identifier.
+            **kwargs: Optional ``no_cache`` forwarded to member-list lookup.
+
+        Returns:
+            Enriched group information, or a basic group when an API is unavailable.
+        """
         resolved_group_id = str(group_id) if group_id else self.get_group_id()
         if not resolved_group_id:
             return None
 
-        info = await self._adapter.client.get_group_info(group_id=resolved_group_id)
-        members = await self._adapter.client.get_group_member_list(
-            resolved_group_id,
-            no_cache=kwargs.get("no_cache"),
-        )
+        group = Group.from_inbound(self.message_obj.group, resolved_group_id)
 
         def _value(item: object, field: str):
             if isinstance(item, Mapping):
@@ -837,38 +843,88 @@ class NapCatMessageEvent(AstrMessageEvent):
                 None if value is None or value.__class__.__name__ == "Unset" else value
             )
 
+        try:
+            info = await self._adapter.client.get_group_info(group_id=resolved_group_id)
+        except Exception as exc:
+            logger.warning(
+                "[napcat] Failed to get group information for %s: %s",
+                resolved_group_id,
+                safe_error("", exc),
+            )
+            info = None
+
+        if info is not None:
+            info_group_id = _value(info, "group_id")
+            info_group_name = _value(info, "group_name")
+            if isinstance(info_group_id, float | int):
+                group.group_id = str(int(info_group_id))
+            if info_group_name is not None:
+                group.group_name = str(info_group_name)
+            member_count = _value(info, "member_count")
+            if member_count is not None:
+                try:
+                    group.member_count = int(member_count)
+                except TypeError, ValueError:
+                    logger.warning(
+                        "[napcat] Invalid member_count for group %s",
+                        resolved_group_id,
+                    )
+
+        if group.member_count is not None and group_member_lookup_over_cap(
+            pages=1,
+            members=group.member_count,
+        ):
+            group.members = None
+            return group
+
+        try:
+            members = await self._adapter.client.get_group_member_list(
+                resolved_group_id,
+                no_cache=kwargs.get("no_cache"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[napcat] Failed to get members for group %s: %s",
+                resolved_group_id,
+                safe_error("", exc),
+            )
+            return group
+        if not isinstance(members, list):
+            return group
+
         owner_id = None
         admin_ids: list[str] = []
-        group_members: list[MessageMember] = []
+        parsed_members: list[tuple[str, str | None]] = []
         for member in members:
             user_id = _value(member, "user_id")
             if user_id is None:
                 continue
+            user_id_str = str(int(user_id))
             role = _value(member, "role")
             if role == "owner":
-                owner_id = str(int(user_id))
+                owner_id = user_id_str
             elif role == "admin":
-                admin_ids.append(str(int(user_id)))
-
+                admin_ids.append(user_id_str)
             nickname = _value(member, "card") or _value(member, "nickname")
-            group_members.append(
-                MessageMember(
-                    user_id=str(int(user_id)),
-                    nickname=str(nickname) if nickname is not None else None,
-                )
+            parsed_members.append(
+                (user_id_str, str(nickname) if nickname is not None else None)
             )
 
-        info_group_id = _value(info, "group_id")
-        info_group_name = _value(info, "group_name")
-        return Group(
-            group_id=str(int(info_group_id))
-            if isinstance(info_group_id, float | int)
-            else resolved_group_id,
-            group_name=str(info_group_name) if info_group_name is not None else None,
-            group_owner=owner_id,
-            group_admins=admin_ids,
-            members=group_members,
-        )
+        group.group_owner = owner_id
+        group.group_admins = admin_ids
+        member_count = len(parsed_members)
+        if group_member_lookup_over_cap(pages=1, members=member_count):
+            group.members = None
+            if group.member_count is None:
+                group.member_count = member_count
+            return group
+        group.members = [
+            MessageMember(user_id=user_id, nickname=nickname)
+            for user_id, nickname in parsed_members
+        ]
+        if group.member_count is None:
+            group.member_count = member_count
+        return group
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         return await self.send_non_streaming_response(

@@ -395,9 +395,9 @@ class CronJobManager:
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
             _get_session_conv,
             build_main_agent,
+            local_agent_runtime_from_profile,
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
@@ -425,29 +425,15 @@ class CronJobManager:
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
 
-        provider_settings = cfg.get("provider_settings", {})
-        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
-        config = MainAgentBuildConfig(
-            tool_call_timeout=tool_call_timeout,
+        config, max_agent_step = local_agent_runtime_from_profile(
+            cfg,
             llm_safety_mode=False,
             streaming_response=False,
-            provider_settings=provider_settings,
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
-        context = load_sanitized_history(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
-            )
+        req.contexts = load_sanitized_history(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
@@ -473,7 +459,6 @@ class CronJobManager:
             return
 
         runner = result.agent_runner
-        max_agent_step = int(provider_settings.get("max_agent_step", 30))
         async for _ in runner.step_until_done(max_agent_step):
             # agent will send message to user via using tools
             pass

@@ -1,7 +1,5 @@
 """Regression coverage for runtime-owned dynamic capability catalogs."""
 
-from __future__ import annotations
-
 import sys
 from types import ModuleType
 
@@ -166,6 +164,7 @@ def test_builtin_pipeline_stage_order_is_a_fixed_tuple() -> None:
         "WakingCheckStage",
         "WhitelistCheckStage",
         "SessionStatusCheckStage",
+        "TurnCoalesceStage",
         "RateLimitStage",
         "ContentSafetyCheckStage",
         "PreProcessStage",

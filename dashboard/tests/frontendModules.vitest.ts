@@ -89,7 +89,11 @@ import {
   toInitials,
   toPinyinText,
 } from '@/utils/pluginSearch';
-import { getProviderDescription, getProviderIcon } from '@/utils/providerUtils';
+import {
+  getProviderDescription,
+  getProviderIcon,
+  isMonochromeProviderIcon,
+} from '@/utils/providerUtils';
 import { restartAstrBot } from '@/utils/restartAstrBot';
 import { stepUpHeaders } from '@/utils/stepUp';
 
@@ -131,9 +135,7 @@ describe('frontend modules', () => {
     setStoredSelectedChatConfigId('profile-1');
     expect(getStoredDashboardUsername()).toBe('alice');
     expect(getStoredSelectedChatConfigId()).toBe('profile-1');
-    expect(buildWebchatUmoDetails('sess-1', true).umo).toContain(
-      'GroupMessage',
-    );
+    expect(buildWebchatUmoDetails('sess-1').umo).toContain('FriendMessage');
     expect(buildWebchatUmoDetails('sess-2').umo).toContain('FriendMessage');
     Object.defineProperty(window, 'isSecureContext', {
       configurable: true,
@@ -147,6 +149,8 @@ describe('frontend modules', () => {
     expect(normalizeTextInput('ok')).toBe('ok');
     expect(stepUpHeaders('tok')['X-AstrBot-Step-Up']).toBe('tok');
     expect(getProviderIcon('openai')).toContain('openai');
+    expect(isMonochromeProviderIcon('openai')).toBe(true);
+    expect(isMonochromeProviderIcon('google')).toBe(false);
     expect(
       getProviderDescription(
         { type: 'openai_chat_completions' },
@@ -234,7 +238,6 @@ describe('frontend modules', () => {
             updated_at: '',
             platform_id: 'webchat',
             creator: 'u',
-            is_group: 0,
             created_at: '',
           },
         ],

@@ -1180,27 +1180,10 @@ paths:
         '101':
           description: WebSocket upgrade accepted
 
-  /api/v1/live-chat/ws:
-    get:
-      tags: [Chat]
-      summary: Open the live voice chat WebSocket
-      operationId: openLiveChatWebSocket
-      x-websocket: true
-      x-astrbot-scope: chat
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '101':
-          description: WebSocket upgrade accepted
-
   /api/v1/unified-chat/ws:
     get:
       tags: [Chat]
-      summary: Open the unified live/chat WebSocket
+      summary: Open the unified chat WebSocket
       operationId: openUnifiedChatWebSocket
       x-websocket: true
       x-astrbot-scope: chat
@@ -4119,6 +4102,50 @@ paths:
           schema:
             type: string
           description: Comma-separated platforms to exclude.
+        - name: keyword
+          in: query
+          schema:
+            type: string
+          description: Match conversation titles or message content.
+        - name: umo
+          in: query
+          schema:
+            type: string
+          description: Match the unified message origin.
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, updated_at]
+            default: created_at
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: group_by_session
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Paginate by UMO and return all conversation summaries for each selected session.
+        - name: include_history
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Include serialized message history in list results.
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/conversations/filter-options:
+    get:
+      tags: [Conversations]
+      summary: List available conversation filters
+      operationId: getConversationFilterOptions
+      x-astrbot-scope: data
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -4604,56 +4631,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/BackupImportRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/check:
-    get:
-      tags: [Updates]
-      summary: Check for updates
-      operationId: checkUpdate
-      x-astrbot-scope: system
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/releases:
-    get:
-      tags: [Updates]
-      summary: List releases
-      operationId: listReleases
-      x-astrbot-scope: system
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/core:
-    post:
-      tags: [Updates]
-      summary: Update AstrBot core
-      operationId: updateCore
-      x-astrbot-scope: system
-      x-astrbot-action: system.update
-      x-astrbot-step-up: required
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/progress/{task_id}:
-    get:
-      tags: [Updates]
-      summary: Get update progress
-      operationId: getUpdateProgress
-      x-astrbot-scope: system
-      parameters:
-        - $ref: '#/components/parameters/TaskId'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -6226,6 +6203,10 @@ components:
             type: string
         action:
           type: string
+        takeover:
+          type: boolean
+        config_id:
+          type: string
       additionalProperties: false
 
     AuthorizationBindingRequest:
@@ -6419,6 +6400,9 @@ components:
           nullable: true
         enabled:
           type: boolean
+        plugin_activated:
+          type: boolean
+          description: Whether the owning plugin is currently activated.
         is_group:
           type: boolean
         has_conflict:
@@ -6438,10 +6422,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommandItem'
-        wake_prefix:
+        command_prefixes:
           type: array
           items:
             type: string
+        llm_access:
+          type: object
+          properties:
+            prefixes:
+              type: array
+              items:
+                type: string
+          additionalProperties: true
         summary:
           $ref: '#/components/schemas/CommandSummary'
       additionalProperties: true
@@ -7065,19 +7057,6 @@ components:
         confirmed:
           type: boolean
           default: true
-      additionalProperties: false
-
-    UpdateRequest:
-      type: object
-      properties:
-        version:
-          type: string
-        proxy:
-          type: string
-        reboot:
-          type: boolean
-        progress_id:
-          type: string
       additionalProperties: false
 
     PipInstallRequest:

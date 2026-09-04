@@ -15,7 +15,6 @@
 <br>
 
 <a href="./docs/en/index.md">Documentation</a> ｜
-<a href="https://github.com/Xero-Team/AstrBot/issues">Issue Tracker</a> ｜
 <a href="./docs/en/dev/development.md">Development Guide</a>
 
 </div>
@@ -90,6 +89,8 @@ docker compose up -d --build
 docker compose logs -f astrbot
 ```
 
+After login, documentation is served from the WebUI at `/help/`.
+
 Compose builds the complete runtime by default. To omit optional browser,
 document-conversion, media, OCR, Node.js, or Docker CLI assets, set the
 `ASTRBOT_FEATURES` build argument and rebuild the image:
@@ -146,23 +147,23 @@ This table reflects the current built-in adapter discovery map. Plugins can add 
 
 ## Supported Model Services
 
-| Service type       | Current built-in range                                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat models        | OpenAI Chat Completions/Responses and compatible APIs, Anthropic, Gemini, Zhipu, Xiaomi, MiniMax, Kimi Code, xAI, Groq, OpenRouter, and others |
-| Local models       | Ollama and LM Studio through their supported APIs                                                                                              |
-| Agent Runners      | Built-in local Agent plus Dify, Coze, Alibaba Cloud Bailian applications, and DeerFlow                                                         |
-| Speech             | Whisper, SenseVoice, Xiaomi MiMo, Xinference, OpenAI/Gemini/Edge/Azure/ElevenLabs TTS, GPT-SoVITS, FishAudio, DashScope, and others            |
-| Embedding / Rerank | OpenAI, Gemini, NVIDIA, Ollama, vLLM, Xinference, and Alibaba Cloud Bailian                                                                    |
+| Service type       | Current built-in range                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat models        | OpenAI Chat Completions/Responses and compatible APIs, Anthropic, Gemini, Zhipu, Xiaomi, MiniMax, Kimi Code, xAI, Groq, OpenRouter, MiraRouter, and others |
+| Local models       | Ollama and LM Studio through their supported APIs                                                                                                          |
+| Agent Runners      | Built-in local Agent plus Dify, Coze, Alibaba Cloud Bailian applications, and DeerFlow                                                                     |
+| Speech             | Whisper, SenseVoice, Xiaomi MiMo, Xinference, OpenAI/Gemini/Edge/Azure/ElevenLabs TTS, GPT-SoVITS, FishAudio, DashScope, and others                        |
+| Embedding / Rerank | OpenAI, Gemini, NVIDIA, Ollama, vLLM, Xinference, and Alibaba Cloud Bailian                                                                                |
 
 Provider templates come from the code registry and evolve over time. Treat **Providers → Add Provider Source** in the running WebUI as authoritative; see [Model Providers](docs/en/providers/start.md).
 
 ## ❤️ Contributing
 
-Issues and Pull Requests are always welcome. Please target this fork's repository and keep documentation aligned with the current branch behavior rather than upstream historical behavior.
+Pull Requests that match this fork's current branch are welcome. Keep documentation aligned with the current branch behavior rather than upstream historical behavior. This fork does not operate a user-support queue. Development Issues track defects and features; they are not a helpdesk. See [AI_POLICY.md](AI_POLICY.md).
 
 ### How to Contribute
 
-You can contribute by reviewing issues or helping with pull request reviews. Any issues or PRs are welcome to encourage community participation. Of course, these are just suggestions—you can contribute in any way you like. For adding new features, please discuss through an Issue first.
+Open a development Issue and/or a Pull Request against `Xero-Team/AstrBot`. Do not file user-support tickets. Security reports go through [SECURITY.md](SECURITY.md). Agents may open Issues and PRs; they must not merge.
 
 ### Development Environment
 

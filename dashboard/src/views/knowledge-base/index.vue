@@ -21,14 +21,7 @@
         </h1>
         <p class="text-body-2 text-medium-emphasis">{{ t('list.subtitle') }}</p>
       </div>
-      <v-btn
-        icon="mdi-information-outline"
-        variant="text"
-        size="small"
-        :aria-label="t('list.subtitle')"
-        href="https://docs.astrbot.app/use/knowledge-base.html"
-        target="_blank"
-      />
+      <ConfigDocsLink docs="use/knowledge-base.html" />
     </div>
 
     <router-view @title-change="detailTitle = $event" />
@@ -38,6 +31,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index');

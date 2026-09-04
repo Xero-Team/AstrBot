@@ -68,21 +68,22 @@ astrbot/core/db/
     mixins.py              # TimestampMixin
     ...                    # Table modules split by domain
   stores/
+    mixin.py               # Typed session helper shared by store mixins
     session.py             # Session and transaction-scope helpers
     ...                    # One mixin per domain protocol
 ```
 
 `po/__init__.py` re-exporting table models is a package entry point. New code may import `from astrbot.core.db.po.memory import MemoryFact`; `from astrbot.core.db.po import MemoryFact` stays valid. Model registration is owned by `po.registry.import_all_models()` and must not rely on a business module happening to import models. `schema.py` must call it before `SQLModel.metadata.create_all`. `tests/unit/db/test_schema.py` compares initialized table names with a source-level `EXPECTED_TABLE_NAMES` constant (currently 35 tables); a registry omission must fail the test.
 
-`initialize()` only:
+`initialize()` performs the following in order:
 
 1. `import_all_models()`
 2. `SQLModel.metadata.create_all`
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-It does not probe `PRAGMA table_info` and does not run `ALTER TABLE`. `create_all` creates missing tables only; it does not add columns to existing tables. After a schema change, rebuild an empty database: stop the process, delete `data/data_v4.db*`, then start again. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to 4.27.5 means deleting `data/data_v4.db*` and starting from an empty file. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
 
-Mixins obtain sessions only through `self.get_db()` and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
+Mixins obtain sessions through the typed `store_session(self)` helper and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
 
 ### Protocol-to-table map
 
@@ -143,25 +144,30 @@ The order in `astrbot/core/pipeline/stage_order.py` is:
 1. `WakingCheckStage`
 2. `WhitelistCheckStage`
 3. `SessionStatusCheckStage`
-4. `RateLimitStage`
-5. `ContentSafetyCheckStage`
-6. `PreProcessStage`
-7. `GroupMessageHistoryStage`
-8. `ProcessStage`
-9. `ResultDecorateStage`
-10. `RespondStage`
+4. `TurnCoalesceStage`
+5. `RateLimitStage`
+6. `ContentSafetyCheckStage`
+7. `PreProcessStage`
+8. `GroupMessageHistoryStage`
+9. `ProcessStage`
+10. `ResultDecorateStage`
+11. `RespondStage`
 
 `GroupMessageHistoryStage` persists inbound group messages other than WebChat before any plugin handles the event, for `GetGroupMessageHistoryTool`. Direct messages and WebChat skip this stage. `ProcessStage` runs plugin handlers and the Agent. `ResultDecorateStage` applies prefixes, segmentation, TTS, local text-to-image rendering, quoting, and related transformations. `RespondStage` uses the platform's unified send API. The scheduler supports both ordinary async stages and async-generator onion middleware; preserve stop-propagation and finalization semantics. `SessionStatusCheckStage` stops events when the session is disabled, except for activated `/bot status` and `/bot enable` so the session can be turned back on from chat.
 
-Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. The unused `keep_original_alias` column is dropped in a separate transaction; a drop failure does not block startup.
+Inbound routing is a single decision in `WakingCheckStage`: command, LLM, passthrough, or drop. It writes `should_run_command`, `should_run_llm`, `route_kind`, and the explicit `wake_reasons` set onto the event. Command matching runs before LLM access; a matched command wins, a bare command group emits help, and an unknown subcommand emits the Orbit diagnostic without falling through to the LLM. LLM access is selected from the event's configuration profile through `llm_access`; `command_prefixes` only frames command headers. The derived `is_wake` and `is_at_or_wake_command` attributes are not pipeline gates.
 
-`platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, live mode, cron jobs, and proactive replies keep the original UMO lock.
+`TurnCoalesceStage` runs after the allow-list and session checks. When enabled, it hands eligible private-message LLM fragments to the lifecycle-owned, bounded `TurnWindowManager` without waiting in the pipeline. The manager merges fragments, pauses on NapCat typing notices, discards a buffered turn when a command arrives, and requeues one signed flush event through rate limiting and the remaining stages. Adapter-supplied flush flags are stripped; only manager-created events can carry `route_kind=turn_flush`. Notice and request events remain passthrough events, so ephemeral `input_status` never becomes an LLM message.
+
+Group LLM access is controlled by `llm_access.group`, `llm_access.reply_to_bot`, and continuation state. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. Unused columns such as `keep_original_alias` are absent from the models; they are not dropped from an old file.
+
+`platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, and cron jobs keep the original UMO lock.
 
 ### Command Parsing Subsystem
 
 Command arguments are handled by the Orbit Command Syntax subsystem under `astrbot/core/command/`. `catalog.py` builds an immutable longest-match index for enabled commands, groups, and aliases at every level. `lexer.py` implements a deterministic POSIX word subset without expansions or operators. `schema.py` compiles handler signatures during registration, `binder.py` handles positionals, options, defaults, and conversion, and `engine.py` provides the resolve, lex, and bind flow.
 
-The plugin manager explicitly owns a `CommandCatalogStore` for each Pipeline configuration. Plugin load, unload, reload, enablement changes, and Dashboard command enablement, rename, or alias updates build a new snapshot and atomically replace the reference. The `WakingCheckStage` hot path only reads the snapshot: it removes the wake prefix, performs longest command-header matching, lexes once after a match, and binds every matching handler independently by `handler_full_name`. A completely unknown root never enters Orbit, so ordinary LLM prompts containing `$`, URLs, or incomplete quotes are not intercepted by command parsing.
+The plugin manager explicitly owns a `CommandCatalogStore` for each Pipeline configuration. Plugin load, unload, reload, enablement changes, and Dashboard command enablement, rename, or alias updates build a new snapshot and atomically replace the reference. The `WakingCheckStage` hot path only reads the snapshot: it removes the configured command prefix, performs longest command-header matching, lexes once after a match, and binds every matching handler independently by `handler_full_name`. A completely unknown root never enters Orbit, so ordinary LLM prompts containing `$`, URLs, or incomplete quotes are not intercepted by command parsing. Enabled command paths, aliases, descendants, and the first token of each non-empty LLM prefix share one scoped namespace; conflicting paths are excluded until Dashboard rename leaves one owner, or the command-update API records a takeover. Dashboard highlights conflicts and exposes rename; takeover is not a Dashboard button. The built-in LLM state group is `/llm` (`status`, `enable`, and `disable`).
 
 Core diagnostics retain only stable error codes, Unicode code-point spans, parameters, and hint codes. The zh-CN/en-US message and source caret are rendered at the presentation boundary. Supported plugin entry points are `astrbot.api.command` and `option`/`GreedyStr` from `astrbot.api.event.filter`; the internal catalog, engine, and handler metadata are not plugin APIs.
 
@@ -226,15 +232,15 @@ Session resources use the versioned canonical string `session:v1:<encoded-config
 
 A role names who the subject is; the scope decides where that authority applies. The live relation table interprets `session_owner`/`session_admin` as `owner`/`admin`. `viewer`, `editor`, `executor`, and `caller` remain reserved.
 
-| Role                | Scope                       | Meaning                                                       |
-| ------------------- | --------------------------- | ------------------------------------------------------------- |
-| `root`              | global                      | Highest Dashboard identity; account CRUD needs root + step-up |
-| `operator`          | global                      | Global Dashboard operations                                   |
-| `instance_operator` | `instance:<config-id>`      | One configuration profile                                     |
-| `session_owner`     | `session:<config-id>/<umo>` | Current-session owner; platform guild owners map only here    |
-| `session_admin`     | `session:<config-id>/<umo>` | Limited current-session management                            |
-| `member`            | `session:<config-id>/<umo>` | Identified user                                               |
-| `guest`             | session or none             | Unauthenticated or anonymous WebChat                          |
+| Role                | Scope                       | Meaning                                                                                                                                                               |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `root`              | global                      | Highest Dashboard identity; account CRUD needs root + step-up                                                                                                         |
+| `operator`          | global                      | Global Dashboard operations                                                                                                                                           |
+| `instance_operator` | `instance:<config-id>`      | One configuration profile                                                                                                                                             |
+| `session_owner`     | `session:<config-id>/<umo>` | Current-session owner: a mapped group owner, or the authenticated IM private-chat peer (runtime fact `private_session`, origin session only, not a Dashboard binding) |
+| `session_admin`     | `session:<config-id>/<umo>` | Limited current-session management                                                                                                                                    |
+| `member`            | `session:<config-id>/<umo>` | Identified user                                                                                                                                                       |
+| `guest`             | session or none             | Unauthenticated or anonymous WebChat                                                                                                                                  |
 
 `root` and `operator` bind only to valid Dashboard accounts and never become IM group authority from a same-named message subject. A current-session owner may grant or revoke `session_admin` or `member` in that session only, and cannot delegate ownership. Platform owner/admin facts have a TTL, degrade after expiry, and never write global or instance bindings.
 
@@ -242,34 +248,34 @@ A role names who the subject is; the scope decides where that authority applies.
 
 Actions use `domain.verb`. Built-in commands declare them with `@filter.permission("session.manage")` and still call `authorize()`. High-risk actions are never inherited silently from a parent action.
 
-| Action                                                    | Default roles                                  | High risk                          |
-| --------------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
-| `session.read`                                            | member+ on the current session                 | no                                 |
-| `session.manage`                                          | session_admin+                                 | no                                 |
-| `session.assign`                                          | session_owner+                                 | yes across sessions                |
-| `provider.use` / `provider.read`                          | member+                                        | no; credentials are never returned |
-| `provider.manage`                                         | instance_operator+                             | no                                 |
-| `provider.credentials.write`                              | instance_operator+                             | yes                                |
-| `platform.manage`                                         | instance_operator+                             | yes                                |
-| `agent.manage`                                            | session_owner+                                 | partial                            |
-| `extension.read` / `extension.manage`                     | member+ / instance_operator+                   | partial                            |
-| `extension.plugin_install`                                | instance_operator+ with Dashboard step-up      | yes                                |
-| `data.manage` / `data.export_all`                         | owner / instance_operator+                     | full export is high risk           |
-| `system.manage`                                           | root; limited read for operator                | no                                 |
-| `system.update` / `system.restart` / `system.pip_install` | root + step-up                                 | yes                                |
-| `identity.manage`                                         | session_owner+ within scope                    | yes                                |
-| `identity.operator.write` / `identity.root.write`         | root + step-up                                 | yes                                |
-| `dashboard.account.manage`                                | root + step-up                                 | yes                                |
-| `filesystem.read` / `filesystem.write`                    | operator, root                                 | no                                 |
-| `filesystem.manage`                                       | root + step-up                                 | yes                                |
-| `tool.file_read` / `tool.mcp_read`                        | member+                                        | no                                 |
-| instance tools such as `tool.local_exec`                  | instance_operator+; WebChat also needs step-up | yes                                |
+| Action                                            | Default roles                                  | High risk                          |
+| ------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
+| `session.read`                                    | member+ on the current session                 | no                                 |
+| `session.manage`                                  | session_admin+                                 | no                                 |
+| `session.assign`                                  | session_owner+                                 | yes across sessions                |
+| `provider.use` / `provider.read`                  | member+                                        | no; credentials are never returned |
+| `provider.manage`                                 | instance_operator+                             | no                                 |
+| `provider.credentials.write`                      | instance_operator+                             | yes                                |
+| `platform.manage`                                 | instance_operator+                             | yes                                |
+| `agent.manage`                                    | session_owner+                                 | partial                            |
+| `extension.read` / `extension.manage`             | member+ / instance_operator+                   | partial                            |
+| `extension.plugin_install`                        | instance_operator+ with Dashboard step-up      | yes                                |
+| `data.manage` / `data.export_all`                 | owner / instance_operator+                     | full export is high risk           |
+| `system.manage`                                   | root; limited read for operator                | no                                 |
+| `system.restart` / `system.pip_install`           | root + step-up                                 | yes                                |
+| `identity.manage`                                 | session_owner+ within scope                    | yes                                |
+| `identity.operator.write` / `identity.root.write` | root + step-up                                 | yes                                |
+| `dashboard.account.manage`                        | root + step-up                                 | yes                                |
+| `filesystem.read` / `filesystem.write`            | operator, root                                 | no                                 |
+| `filesystem.manage`                               | root + step-up                                 | yes                                |
+| `tool.file_read` / `tool.mcp_read`                | member+                                        | no                                 |
+| instance tools such as `tool.local_exec`          | instance_operator+; WebChat also needs step-up | yes                                |
 
 Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.authz.authorize()` again. Undeclared plugin writes are denied. Tool authority is the intersection of user authorization, Persona tool policy, and the tool's own policy. Sub-agent handoff cannot escalate the caller.
 
 ### Step-up, audit, and API keys
 
-Global high-risk operations accept only a one-time Dashboard password/TOTP step-up bound to the account, Dashboard `sid`, action, resource, and context digest. TTL is at most five minutes, and the token is consumed atomically. Dashboard-driven WebChat uses `/authorization/webchat-step-up` for six instance tools only: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`. Live Voice does not reuse that proof.
+Global high-risk operations accept only a one-time Dashboard password/TOTP step-up bound to the account, Dashboard `sid`, action, resource, and context digest. TTL is at most five minutes, and the token is consumed atomically. Dashboard-driven WebChat uses `/authorization/webchat-step-up` for six instance tools only: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`.
 
 Denials, high-risk allows, step-up, and binding mutations write redacted audit events. A full bounded audit queue fails closed for high-risk allows. Binding mutations and step-up issuance commit in the same business transaction.
 
@@ -287,7 +293,7 @@ Ordinary JSON APIs use a `status` / `message` / `data` envelope. Common statuses
 
 `astrbot/dashboard/api/router.py` assembles all `/api/v1` routes. The source specification is `openspec/openapi-v1.yaml`; both the Hey API Dashboard client and `docs/public/openapi.json` are generated from it. Do not hand-edit generated clients.
 
-Live Chat WebSockets can run multiple requests concurrently on one connection. A unique `message_id` correlates each task, response, and interrupt. Follow-up capture, `run_started`, and per-call `agent_stats` must retain the originating request identity; do not reduce the protocol to a session-wide busy flag and one serialized request.
+Unified Chat WebSockets can run multiple requests concurrently on one connection. A unique `message_id` correlates each task, response, and interrupt. Follow-up capture, `run_started`, and per-call `agent_stats` must retain the originating request identity; do not reduce the protocol to a session-wide busy flag and one serialized request.
 
 ### Data file manager
 
@@ -348,7 +354,7 @@ Runtime-root helpers in `astrbot.core.utils.astrbot_path` currently return strin
 | Dashboard API              | `astrbot/dashboard/api/`, `services/`, `schemas.py`          | OpenAPI, generated client, backend/frontend tests                       |
 | Authorization              | `astrbot/core/auth/`                                         | action registry, step-up, platform facts, audit, plugin `context.authz` |
 | Data file manager          | `data_files.py`, `data_file_service.py`, `DataFilesPage.vue` | path escape, symlinks, etag, step-up, OpenAPI tag allowlist             |
-| Live Chat protocol         | `live_chat_service.py`, `webchat/`                           | request identity, concurrency, interrupts, frontend state tests         |
+| Unified Chat protocol      | `webchat_service.py`, `webchat/`                             | request identity, concurrency, interrupts, frontend state tests         |
 | Plugin SDK/page protocol   | `astrbot/api/`, `astrbot/core/star/`                         | import boundaries, plugin docs, Vitest, Playwright                      |
 | Configuration persistence  | `astrbot/core/config/`                                       | defaults/metadata, revisions, concurrent-save tests                     |
 | Main SQLite database       | `astrbot/core/db/`                                           | domain protocols, SQLModel tables, schema init, `tests/unit/db/`        |

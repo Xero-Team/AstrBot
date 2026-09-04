@@ -1,3 +1,4 @@
+import type { RouteLocationGeneric } from 'vue-router';
 import {
   EXTENSION_DETAILS_ROUTE_NAME,
   EXTENSION_ROUTE_NAME,
@@ -33,7 +34,7 @@ const MainRoutes = {
     },
     {
       name: EXTENSION_DETAILS_ROUTE_NAME,
-      path: '/extension/:pluginId',
+      path: '/extension/:pluginId+',
       component: () => import('@/views/ExtensionPage.vue'),
     },
     {
@@ -57,22 +58,41 @@ const MainRoutes = {
       component: () => import('@/views/ConfigPage.vue'),
     },
     {
-      path: '/normal',
-      redirect: '/config',
-    },
-    {
-      path: '/system',
-      redirect: '/settings#system-config',
-    },
-    {
-      name: 'Stats',
-      path: '/dashboard/default',
-      component: () => import('@/views/stats/StatsPage.vue'),
-    },
-    {
-      name: 'Conversation',
-      path: '/conversation',
-      component: () => import('@/views/ConversationPage.vue'),
+      name: 'DashboardWorkspace',
+      path: '/dashboard',
+      component: () => import('@/views/DashboardWorkspacePage.vue'),
+      redirect: (to: RouteLocationGeneric) => ({
+        name: 'Stats',
+        query: to.query,
+        hash: to.hash,
+      }),
+      children: [
+        {
+          name: 'Stats',
+          path: 'statistics',
+          component: () => import('@/views/stats/StatsPage.vue'),
+          meta: { dataTab: 'statistics' },
+        },
+        {
+          name: 'Conversation',
+          path: 'conversations',
+          component: () =>
+            import('@/views/conversation/ConversationWorkspacePage.vue'),
+          meta: { dataTab: 'conversations' },
+        },
+        {
+          name: 'Logs',
+          path: 'logs',
+          component: () => import('@/views/LogsPage.vue'),
+          meta: { dataTab: 'logs' },
+        },
+        {
+          name: 'Trace',
+          path: 'trace',
+          component: () => import('@/views/TracePage.vue'),
+          meta: { dataTab: 'trace' },
+        },
+      ],
     },
     {
       name: 'SessionManagement',
@@ -98,16 +118,6 @@ const MainRoutes = {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue'),
-    },
-    {
-      name: 'Console',
-      path: '/console',
-      component: () => import('@/views/ConsolePage.vue'),
-    },
-    {
-      name: 'Trace',
-      path: '/trace',
-      component: () => import('@/views/TracePage.vue'),
     },
     {
       name: 'DataFiles',

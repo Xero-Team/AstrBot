@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
@@ -894,10 +892,7 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
             core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
             changed_password,
         )
-        assert verify_dashboard_password(
-            core_lifecycle_td.astrbot_config["dashboard"]["password"],
-            changed_password,
-        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["password"] == ""
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -942,8 +937,9 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
         assert data["status"] == "error"
         assert data["message"].startswith("Incorrect username or password.")
         assert "请参考" in data["message"]
-        assert "https://docs.astrbot.app/en/faq.html" in data["message"]
-        assert "https://docs.astrbot.app/faq.html" in data["message"]
+        assert "/help/en/faq.html" in data["message"]
+        assert "/help/faq.html" in data["message"]
+        assert "docs.astrbot.app" not in data["message"]
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -1288,10 +1284,7 @@ async def test_local_setup_can_skip_default_password_auth(
             core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
             setup_password,
         )
-        assert verify_dashboard_password(
-            core_lifecycle_td.astrbot_config["dashboard"]["password"],
-            setup_password,
-        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["password"] == ""
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -1348,10 +1341,7 @@ async def test_authenticated_default_password_login_can_complete_setup(
             core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
             setup_password,
         )
-        assert verify_dashboard_password(
-            core_lifecycle_td.astrbot_config["dashboard"]["password"],
-            setup_password,
-        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["password"] == ""
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,

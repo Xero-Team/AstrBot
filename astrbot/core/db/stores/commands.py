@@ -2,10 +2,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select, text
 
 from astrbot.core.db.po import CommandConfig, CommandConflict
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 from astrbot.core.db.stores.session import run_in_tx
 
 
-class CommandStoreMixin:
+class CommandStoreMixin(DatabaseStoreMixin):
     @staticmethod
     def _apply_updates(model, **updates) -> None:
         for field, value in updates.items():
@@ -52,6 +53,7 @@ class CommandStoreMixin:
         handler_full_name: str,
         plugin_name: str,
         *,
+        config_id: str | None = None,
         command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
@@ -61,9 +63,10 @@ class CommandStoreMixin:
         auto_generated: bool | None = None,
     ) -> CommandConflict:
         return CommandConflict(
+            config_id=config_id or "",
             conflict_key=conflict_key,
             handler_full_name=handler_full_name,
-            command_id=command_id,
+            command_id=command_id or "",
             plugin_name=plugin_name,
             status=status or "pending",
             resolution=resolution,
@@ -74,7 +77,7 @@ class CommandStoreMixin:
         )
 
     async def get_command_configs(self) -> list[CommandConfig]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(select(CommandConfig))
             return list(result.scalars().all())
@@ -83,7 +86,7 @@ class CommandStoreMixin:
         self,
         handler_full_name: str,
     ) -> CommandConfig | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             return await session.get(CommandConfig, handler_full_name)
 
@@ -91,7 +94,7 @@ class CommandStoreMixin:
         self,
         command_id: str,
     ) -> CommandConfig | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(CommandConfig).where(CommandConfig.command_id == command_id),
@@ -193,12 +196,15 @@ class CommandStoreMixin:
     async def list_command_conflicts(
         self,
         status: str | None = None,
+        config_id: str | None = None,
     ) -> list[CommandConflict]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(CommandConflict)
             if status:
                 query = query.where(CommandConflict.status == status)
+            if config_id is not None:
+                query = query.where(CommandConflict.config_id == config_id)
             result = await session.execute(query)
             return list(result.scalars().all())
 
@@ -208,6 +214,7 @@ class CommandStoreMixin:
         handler_full_name: str,
         plugin_name: str,
         *,
+        config_id: str | None = None,
         command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
@@ -217,19 +224,31 @@ class CommandStoreMixin:
         auto_generated: bool | None = None,
     ) -> CommandConflict:
         async def _op(session: AsyncSession) -> CommandConflict:
+            scope_id = config_id or ""
+            resolved_id = command_id or ""
             result = await session.execute(
                 select(CommandConflict).where(
+                    CommandConflict.config_id == scope_id,
                     CommandConflict.conflict_key == conflict_key,
-                    CommandConflict.handler_full_name == handler_full_name,
+                    CommandConflict.command_id == resolved_id,
                 ),
             )
             record = result.scalar_one_or_none()
+            if record is None:
+                result = await session.execute(
+                    select(CommandConflict).where(
+                        CommandConflict.conflict_key == conflict_key,
+                        CommandConflict.handler_full_name == handler_full_name,
+                    ),
+                )
+                record = result.scalar_one_or_none()
             if not record:
                 record = self._new_command_conflict(
                     conflict_key,
                     handler_full_name,
                     plugin_name,
-                    command_id=command_id,
+                    config_id=scope_id,
+                    command_id=resolved_id,
                     status=status,
                     resolution=resolution,
                     resolved_command=resolved_command,
@@ -241,8 +260,10 @@ class CommandStoreMixin:
             else:
                 self._apply_updates(
                     record,
-                    command_id=command_id,
+                    config_id=scope_id,
+                    command_id=resolved_id or None,
                     plugin_name=plugin_name,
+                    handler_full_name=handler_full_name,
                     status=status,
                     resolution=resolution,
                     resolved_command=resolved_command,

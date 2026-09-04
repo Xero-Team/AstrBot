@@ -253,13 +253,6 @@ class BackupRenameRequest(OpenModel):
     new_name: str | None = None
 
 
-class UpdateRequest(OpenModel):
-    version: str | None = None
-    proxy: str | None = None
-    reboot: bool | None = None
-    progress_id: str | None = None
-
-
 class PipInstallRequest(OpenModel):
     package: str | None = None
     mirror: str | None = None
@@ -329,6 +322,8 @@ class CommandUpdateRequest(BaseModel):
     alias: str | None = None
     aliases: list[str] | None = None
     action: str | None = Field(default=None, min_length=3, max_length=128)
+    takeover: bool | None = None
+    config_id: str | None = None
 
 
 class CommandToggleRequest(BaseModel):
@@ -344,6 +339,7 @@ class CommandRenameRequest(BaseModel):
     command_id: str
     new_name: str
     aliases: list[str] | None = None
+    config_id: str | None = None
 
 
 class CommandPermissionRequest(BaseModel):

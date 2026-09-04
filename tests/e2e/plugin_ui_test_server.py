@@ -1,7 +1,5 @@
 """Minimal HTTP server for Dashboard plugin Page browser transport tests."""
 
-from __future__ import annotations
-
 import argparse
 import base64
 import ipaddress
@@ -408,7 +406,11 @@ class SpikeHandler(BaseHTTPRequestHandler):
                     {
                         "status": "ok",
                         "message": None,
-                        "data": {"items": [], "wake_prefix": ["/"]},
+                        "data": {
+                            "items": [],
+                            "command_prefixes": ["/"],
+                            "llm_access": {"prefixes": ["/"]},
+                        },
                     }
                 )
                 return

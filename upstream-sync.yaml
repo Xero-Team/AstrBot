@@ -5,51 +5,65 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 15fe5213521ca7cea5d47336c7a6fbe47895c800
-  synced_at_utc: 2026-08-25T00:00:00Z
+  commit: 2831fd9c96183a6f14ee9564c5f9aa1aaeee55de
+  synced_at_utc: 2026-09-04T12:00:00Z
   sync_method: merge
   source_pr: ''
   note: >-
-    Merged upstream/master (Xero-Team/AstrBot) tip 15fe52135 into Zephirum
+    Merged upstream/master (Xero-Team/AstrBot) tip 2831fd9c into Zephirum
     `master` via a merge commit, advancing from the previous marker
-    ceb53f8c5. Sixteen sibling-fork commits in this interval add: a grouped
-    `/bot` command (status/enable/disable/leave) with stable command_ids and
-    `session.read`/`session.manage` permissions; a `SessionStatusCheckStage`
-    passthrough so activated `/bot status` and `/bot enable` run while the
-    session is off; Slack non-image file-download authentication; the
-    Anthropic httpx/httpx2 module rename; per-knowledge-base BM25 fallback
-    index caching; shared-preference and live-TTS write-queue bounding;
-    removal of the unsupported Kubernetes manifests and `privileged` Compose
-    mode; pinning Hypercorn and dropping unused deps; the conversation-detail
-    edit-mode double-scrollbar fix; and bounding hung dynamic imports in
-    dashboard coverage tests. The fork's community-files PR (f0247df01) was
-    merged upstream as e10794d5c; upstream follow-ups 7c426dd0d (route support
-    to GitHub, label Discord/QQ and docs.astrbot.app as upstream) and
-    06b9ef197 (reject discriminatory remarks targeting AI) were taken.
-    CODE_OF_CONDUCT.md auto-merged: the fork's trimmed pledge (no
-    identity-attribute listing) is preserved, and the new AI-discrimination
-    clause is about AI contributions, not a protected-attribute diversity
-    listing, so it is accepted. Five files conflicted and were resolved per
-    the protect-BTW policy: `.github/ISSUE_TEMPLATE/config.yml` and
-    `SUPPORT.md` took upstream's fork-aware routing; `CHANGELOG.md` took
-    upstream's index (adds v4.27.5 as WIP); `dashboard/tests/finalPush.vitest.ts`
-    kept the fork's 60s `timeout` (CI fix upstream lacks); `upstream-sync.yaml`
-    kept the fork's tracking record. No BTW-core files conflicted: the `/bot`
-    command and `session_status_check/stage.py` are additive and were adopted
-    as-is, and the fork's `btw_work_elevation`, `btw_detached_work`,
-    `btw_agent_lock_key`, per-profile `btw_elevated_actions`, and dual-loop
-    agent/conversation machinery are untouched. The `upstream.repo` field
-    continues to point at AstrBotDevs/AstrBot per fork convention even though
-    this sync pulled from Xero-Team/AstrBot; Zephirum operates as an
-    independent fork and does not open PRs back to either upstream.
-    Validation: ruff check + ruff format --check both pass; 272 focused
-    BTW/auth/pipeline/bot/scheduler tests pass; 148 new upstream unit tests
-    (slack, anthropic, kb sparse retriever, shared_preferences, container
-    contracts, agent_run_util) pass; 24 affected dashboard vitest cases
-    (finalPush, coverageMounts, viewDialogLayouts) pass; full unit suite 4237
-    passed / 5 skipped. The 12 failures are exactly the pre-existing
-    Windows-only shell/fs/CRLF/drive-letter cases (TestLocalShellComponent,
-    TestSyncSkillsToSandbox, test_local_shell_component, test_computer_fs_tools,
-    test_sanitize_upload_filename) documented at the previous marker; the merge
-    did not modify those test files or their sources (0-line diff vs pre-merge
-    master), and they pass in CI on ubuntu-latest.
+    15fe52135. 175 sibling-fork commits in this interval: the agent_runner
+    configuration refactor (runner type and inline local/third-party config
+    move from provider_settings to a top-level `agent_runner` object with
+    load-time migration in astrbot/core/config/agent_runner_migration.py;
+    local_agent_runtime_from_profile in astr_main_agent.py replaces the
+    InternalAgentSubStage settings fan-out); the pure inbound turn router
+    (turn_router.py/turn_window.py/turn_coalesce/) replacing wake_prefix and
+    group_wake_policy with command_prefixes + llm_access + inbound_coalesce
+    keys and a should_run_llm extra consumed by process/star_request stages;
+    exclusive command occupancy, takeover, and scoped conflicts; unified
+    provider management and redesigned bot management workspace; masked
+    secret config fields; dark-mode provider icons; per-UMO rate-limit
+    isolation; AnySearch web search provider; QQ Official unique-session
+    group routing, OneBot split video/media sends, and pacing; private-chat
+    peers granted current-session ownership in auth (skip_platform_elevation
+    for friend-type origins); UMO alias atomic upsert and auto-name writer
+    respawn; plugin market same-name detail mix-up fix; removal of live
+    chat/voice (LiveChatService, live_chat.py, LiveMode.vue, VAD recording,
+    run_live_agent, LIVE_MODE_SYSTEM_PROMPT), file_extract (moonshotai),
+    toml_parser, boxlite/shipyard_fs booters, KB fixed_size chunker + text
+    parser, the core self-updater (updator.py -> process_reboot.py, one-click
+    core update UI), the root pnpm-lock.yaml, the public GitHub issue
+    tracker, legacy SPA paths (/conversation, /console renamed to
+    /dashboard/logs), and random group active replies; in-app docs links
+    (ConfigDocsLink) on feature pages; docs workspace with a build-docs make
+    target and check-web-i18n; archify skill assets under .agents/; PEP 758
+    py3.14 style adopted upstream (except-clauses without parentheses);
+    4.27.6/4.28.0-beta.1 sync checkpoints and dependency bumps.
+    No textual conflicts in BTW-core runtime paths: conversation_loop.py,
+    the btw/ package, the auth/service.py btw_work_elevation branch,
+    astr_agent_tool_exec.py loop routing, and scheduler.py
+    configure_detached_work/deliver_detached_result/finalize_detached_event
+    machinery are untouched by the merge; the fork keeps ProcessStage on
+    ConversationLoop (not upstream's AgentRequestSubStage) so BTW
+    classification and detached-work dispatch stay intact, while adopting
+    upstream's should_run_llm/should_run_command routing extras and the
+    skip_empty_completion coalesce guard. Eight files conflicted and were
+    resolved per the protect-BTW policy: astr_main_agent.py dropped the
+    fork's file_extract call (feature deleted upstream) and dropped
+    action_type/live-mode handling (live chat deleted upstream), keeping
+    local_agent_runtime_from_profile plus the fork's loop_mode/
+    provider_id_override/BTW route filters; internal.py now builds
+    main_agent_cfg via local_agent_runtime_from_profile with the fork's
+    btw plugin/mcp/skill routes and work_elevated_actions overrides, and
+    keeps the detached-work follow-up-registration guard;
+    test_config.py and test_pipeline_scheduler_order.py combine both
+    sides; both astrbot-config.md docs take upstream's agent_runner/
+    inbound-routing rewrite plus the fork's BTW sections (file-extract
+    wording dropped); upstream-sync.yaml keeps the fork's tracking record.
+    The regenerated MDI icon subset (273 icons) covers both the fork's
+    mdi-lock-off-outline (BtwElevatedActionsSelector) and upstream's new
+    icons. The `upstream.repo` field continues to point at AstrBotDevs/
+    AstrBot per fork convention even though this sync pulled from
+    Xero-Team/AstrBot; Zephirum operates as an independent fork and does
+    not open PRs back to either upstream.

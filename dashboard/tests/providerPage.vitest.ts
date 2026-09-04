@@ -78,6 +78,7 @@ vi.mock('@/components/shared/ItemCard.vue', () => ({
 
 vi.mock('@/utils/providerUtils', () => ({
   getProviderIcon: (provider: string) => `/icons/${provider}.svg`,
+  isMonochromeProviderIcon: () => false,
 }));
 
 function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
@@ -91,6 +92,7 @@ function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
     }),
     availableModels: ref([{ id: 'openai-main/gpt-4.1-mini' }]),
     loadingModels: ref(false),
+    loadingSources: ref(false),
     savingSource: ref(false),
     testingProviders: ref([]),
     isSourceModified: computed(() => false),
@@ -130,6 +132,7 @@ function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
     advancedSourceConfig: computed(() => ({ proxy: 'http://localhost:7890' })),
     manualProviderId: computed(() => 'openai-main/'),
     resolveSourceIcon: () => '/icons/openai.svg',
+    isMonochromeSourceIcon: () => false,
     getSourceDisplayName: (source: { id?: string; templateKey?: string }) =>
       source.id || source.templateKey || 'unknown',
     supportsImageInput: computed(() => true),
@@ -147,6 +150,7 @@ function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
     deleteProvider: vi.fn(),
     modelAlreadyConfigured: vi.fn(() => false),
     testProvider: vi.fn(),
+    toggleProviderEnable: vi.fn(),
     loadConfig: vi.fn(),
     ...overrides,
   };
@@ -198,15 +202,14 @@ describe('ProviderPage', () => {
       advancedSourceConfig: computed(() => null),
     });
 
-    const wrapper = mountWithVuetify(ProviderPage, {
-    });
+    const wrapper = mountWithVuetify(ProviderPage, {});
 
     await flushPromises();
 
     expect(wrapper.find('.provider-empty-state').exists()).toBe(true);
   });
 
-  it('renders non-chat provider cards on alternate tabs', async () => {
+  it('renders the non-chat workbench on alternate tabs', async () => {
     testState.providerSourcesState = createProviderSourcesState({
       selectedProviderType: ref('speech_to_text'),
     });
@@ -219,8 +222,9 @@ describe('ProviderPage', () => {
 
     await flushPromises();
 
-    expect(wrapper.findAll('.item-card-stub')).toHaveLength(1);
-    expect(wrapper.text()).toContain('whisper-main');
+    expect(wrapper.find('.item-card-stub').exists()).toBe(false);
+    expect(wrapper.find('.provider-empty-state').exists()).toBe(true);
+    expect(wrapper.find('.provider-tabs').exists()).toBe(true);
   });
 
   it('keeps the configured-model edit dialog in a scrollable card layout', async () => {
@@ -241,8 +245,12 @@ describe('ProviderPage', () => {
 
     await flushPromises();
 
-    expect(document.body.querySelector('.provider-form-dialog__card')).not.toBeNull();
-    expect(document.body.querySelector('.provider-form-dialog__content')).not.toBeNull();
+    expect(
+      document.body.querySelector('.provider-form-dialog__card'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('.provider-form-dialog__content'),
+    ).not.toBeNull();
     expect(
       document.body.querySelector(
         '.provider-form-dialog__content .astrbot-config-stub',

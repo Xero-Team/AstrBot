@@ -1,7 +1,9 @@
 <script setup>
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import ExtensionCard from '@/components/shared/ExtensionCard.vue';
 import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
+import { toRoutePluginIdParam } from '@/utils/marketPluginKey';
 import {
   readPinnedExtensions,
   writePinnedExtensions,
@@ -42,7 +44,7 @@ const openPluginDetail = (extension) => {
   if (!extension?.name) return;
   router.push({
     name: 'ExtensionDetails',
-    params: { pluginId: extension.name },
+    params: { pluginId: toRoutePluginIdParam(extension.name) },
     hash: '#installed',
   });
 };
@@ -104,6 +106,7 @@ const togglePinnedExtension = (extension) => {
     <div class="page-header">
       <h2 class="page-header__title">
         {{ tm('titles.installedAstrBotPlugins') }}
+        <ConfigDocsLink docs="use/plugin.html" />
       </h2>
 
       <div class="inline-control-row">

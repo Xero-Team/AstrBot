@@ -61,9 +61,35 @@ AstrBot WebUI 支持基于 TOTP（Time-based One-Time Password）的双因素认
 
 配置文件页面仍用于不同会话路由的 Agent、模型、平台处理和插件配置。不要把“设置”中的系统级网络/安全选项与“配置文件”中的对话行为混为一谈。
 
-## 运行统计
+## 数据工作区
 
-**统计**页面包含本地文转图运行状态区，展示进程内 Chromium 连接状态、渲染成功与失败次数、活动页面、耗时、可复用浏览器上下文和累计输出大小。这些数值会在 AstrBot 重启后归零，且不会包含模板、渲染内容、文件路径或用户数据。
+点击侧栏 **更多 → 数据**，可以在 `/dashboard` 通过顶部标签切换 `统计`、`对话`、`日志` 和 `追踪`。运行时 `data/` 文件管理器仍在 `/data`，见[数据文件](#数据文件)。
+
+### 统计
+
+`统计` 页面汇总平台实例、消息、模型调用、Tokens 和运行时间，并展示消息趋势、平台消息排名、模型调用趋势、模型用量排名以及会话模型用量排名。页面可以切换 1 天、3 天或 1 周的统计范围。会话用量会显示 UMO 别名，并可复制原始 UMO，也可以跳转到该 UMO 的对话列表。
+
+该页还包含本地文转图运行状态区，展示进程内 Chromium 连接状态、渲染成功与失败次数、活动页面、耗时、可复用浏览器上下文和累计输出大小。这些数值会在 AstrBot 重启后归零，且不会包含模板、渲染内容、文件路径或用户数据。
+
+### 对话
+
+`对话` 页面用于检索和管理已经保存的对话记录：
+
+- 可以按关键词、机器人 ID、私聊/群聊类型和 UMO 筛选，并按创建时间或更新时间排序。
+- 对话列表默认按每页 30 条从服务端分页加载；开启“按会话分组”后，分页单位会切换为 UMO 会话，展开后可查看该会话下的全部对话。只有选中某条对话后，才会加载并在右侧显示完整消息。
+- 支持编辑标题、多选导出和多选删除。导出需要二次验证（step-up）。
+- 右侧预览顶部的 `{}` 按钮可以在只读 Monaco 编辑器中查看自动换行的原始 `history` JSON。
+
+### 日志
+
+`日志` 页面显示 AstrBot 的实时运行日志，可以按日志级别筛选，也可以从页面中安装缺失的 Pip 库。安装 Pip 库需要二次验证。需要查看 DEBUG 日志时，请先在设置中开启控制台 DEBUG 日志级别。
+
+### 追踪
+
+`追踪` 页面实时显示 AstrBot 的运行追踪记录，适合调试模型调用路径和工具调用过程。可以通过页面顶部的开关启用或禁用追踪记录。
+
+> [!NOTE]
+> 当前仅记录部分 AstrBot 主 Agent 的模型调用路径，后续会不断完善。
 
 ## ChatUI
 
@@ -77,7 +103,7 @@ ChatUI 支持以下常用能力：
 - 查看模型思考过程、工具调用状态、知识库或网页搜索引用来源，以及每条回复的 Token 和耗时统计。
 - 对已有回复执行复制、重新生成，或使用其他模型重新生成。
 - 编辑用户消息后从该消息继续生成，也可以针对某段内容开启分支追问。
-- 切换流式/普通响应模式，以及 SSE/WebSocket 通信模式。
+- 切换流式/普通响应模式，以及 SSE/WebSocket 通信模式。触摸或粗指针设备上，传输模式和语言的二级菜单改为点击打开，避免悬停无法展开。
 
 ### ChatUI 中的高风险工具
 
@@ -98,8 +124,7 @@ Dashboard 账户在所选配置文件上拥有 `instance_operator` 或更高角�
 
 此功能不会授予修改账户、提供商、插件、系统设置、导出或重启等全局 Dashboard
 操作权限。账户现有的 Persona、工具、沙箱和路径限制仍然生效。匿名 WebChat、API Key、
-IM 消息、插件和后台续跑不能复用该授权；Live Voice 也不适用，因为它不使用同一个持久
-ChatUI 会话。
+IM 消息、插件和后台续跑不能复用该授权。
 
 > [!NOTE]
 > 为保证消息接收顺序，同一浏览器会话建议只保留一个 ChatUI 页面。如果你在多个标签页中同时打开聊天页面，系统可能会提示需要重新建立连接。
@@ -108,21 +133,21 @@ ChatUI 会话。
 
 WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账户（用户名通常为 `astrbot`）。控制面身份来自账户表和角色绑定，不能凭用户名推断 `root`。
 
-侧栏 **更多 → 权限** 打开 `/authorization`，用于查看和修改角色绑定。账户 CRUD、授予 `root`/`operator`、停用账户都要求当前 `root` 绑定加上一次性密码或 TOTP step-up，并保留最后一个 `root` 保护。当前会话的 IM owner 只能通过 `/admin grant` 或权限页管理本会话的 `session_admin` / `member`，不能把 IM 用户变成全局 operator。
+侧栏 **更多 → 权限** 打开 `/authorization`，用于查看和修改角色绑定。账户 CRUD、授予 `root`/`operator`、停用账户都要求当前 `root` 绑定加上一次性密码或 TOTP step-up，并保留最后一个 `root` 保护。已认证 IM 私聊对端是该一对一会话的运行时 owner（来源 `private_session`），不是 Dashboard 绑定。当前会话的 IM owner 只能通过 `/admin grant` 或权限页管理本会话的 `session_admin` / `member`，不能把 IM 用户变成全局 operator。
 
 固定角色：
 
-| 角色                | 范围            | 典型用途                           |
-| ------------------- | --------------- | ---------------------------------- |
-| `root`              | 全局控制面      | 账户管理、系统更新、重启、pip 安装 |
-| `operator`          | 全局控制面      | 配置、Provider、插件、数据运维     |
-| `instance_operator` | 单个配置档      | 该配置档的管理动作                 |
-| `session_owner`     | 当前群/私聊会话 | 会话管理、会话内模型选择           |
-| `session_admin`     | 当前会话        | 有限管理，例如停任务、改会话名     |
-| `member`            | 当前会话        | 普通对话                           |
-| `guest`             | 未认证          | 匿名 WebChat                       |
+| 角色                | 范围            | 典型用途                       |
+| ------------------- | --------------- | ------------------------------ |
+| `root`              | 全局控制面      | 账户管理、重启、pip 安装       |
+| `operator`          | 全局控制面      | 配置、Provider、插件、数据运维 |
+| `instance_operator` | 单个配置档      | 该配置档的管理动作             |
+| `session_owner`     | 当前群/私聊会话 | 会话管理、会话内模型选择       |
+| `session_admin`     | 当前会话        | 有限管理，例如停任务、改会话名 |
+| `member`            | 当前会话        | 普通对话                       |
+| `guest`             | 未认证          | 匿名 WebChat                   |
 
-安装插件、写入凭据、导出全部对话、更新核心、pip 安装和重启都会弹出 step-up。凭证只用于当前操作一次，不能放入 URL。对话导出要求精确的 `conversation:export` 资源与 `data.export_all`；普通 `data` scope 的 API Key 会被拒绝。备份下载走已认证 Blob 请求，不会把 Dashboard JWT 放进查询参数。
+安装插件、写入凭据、导出全部对话、pip 安装和重启都会弹出 step-up。凭证只用于当前操作一次，不能放入 URL。对话导出要求精确的 `conversation:export` 资源与 `data.export_all`；普通 `data` scope 的 API Key 会被拒绝。备份下载走已认证 Blob 请求，不会把 Dashboard JWT 放进查询参数。
 
 开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
@@ -144,7 +169,7 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 在管理面板中，你可以通过左栏的 `插件` 来查看已安装的插件，以及安装新插件。
 
-点击插件市场标签栏，可以浏览默认市场源中的插件。该源指向上游 `AstrBotDevs/AstrBot_Plugins_Collection` 及其 CDN/兼容源，不是 Xero-Team 运营或审核的市场。本 fork 要求 Python 3.14+ 且不兼容旧插件 API，因此列表里的插件可能安装失败或加载失败。
+点击插件市场标签栏，可以浏览默认市场源中的插件。该源先指向上游 `cloud.astrbot.app` 市场 JSON，失败后再回退到 `AstrBotDevs/AstrBot_Plugins_Collection` 及其 CDN；不是 Xero-Team 运营或审核的市场。本 fork 要求 Python 3.14+ 且不兼容旧插件 API，因此列表里的插件可能安装失败或加载失败。
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
 
@@ -168,7 +193,7 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 支持按插件、类型（指令 / 指令组 / 子指令）、权限与状态过滤，配合搜索框快速定位。指令组行可展开查看子指令，徽章显示子指令数量，子指令行会缩进区分层级。
 
-可以对每个指令启用/禁用、重命名并修改别名。保存后，插件生命周期持有的不可变指令 catalog 会立即重建；已启用原生命令注册的 Telegram 和 Discord 适配器也会立即刷新菜单或 slash commands，不需要等待下一次消息处理。
+可以对每个指令启用/禁用、重命名并修改别名。所属插件未启用时，指令行会显示为「未启用」，启用/禁用和重命名会禁用，但仍可查看详情；这些指令也不参与冲突检测。保存后，插件生命周期持有的不可变指令 catalog 会立即重建；已启用原生命令注册的 Telegram 和 Discord 适配器也会立即刷新菜单或 slash commands，不需要等待下一次消息处理。
 
 指令以稳定 `command_id` 标识，格式为 `插件名:原指令路径`（空格换成点），例如 `builtin_commands:plugin.list`。权限覆盖只读写该键；Python 方法名和历史短名键会被忽略。未在 Dashboard 手动重命名的内置指令始终使用当前声明名。无法按 `handler_full_name` 或 `command_id` 认领的旧 `command_configs` 行会在同步时删除。
 
@@ -190,18 +215,9 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 并发保存使用 etag：磁盘内容变化时返回冲突，可选择保留本地或重新加载。开发模型见[项目架构](/dev/architecture#数据文件管理器)。
 
-## 追踪 (Trace)
-
-在管理面板的 `Trace` 页面中，你可以实时查看 AstrBot 的运行追踪记录。这对于调试模型调用路径、工具调用过程等非常有用。
-
-你可以通过页面顶部的开关来启用或禁用追踪记录。
-
-> [!NOTE]
-> 当前仅记录部分 AstrBot 主 Agent 的模型调用路径，后续会不断完善。
-
 ## 更新管理面板
 
-当前 fork 不发布可供 Dashboard 下载的 Core 或独立 Dashboard Release。版本检查请求 `Xero-Team/AstrBot` 的 GitHub Releases；列表为空时界面提示未发布 Core Release，不要用面板一键更新去安装上游 zip。源码部署应在更新 checkout 后重新构建 `dashboard/dist`，再运行 `uv run python scripts/sync_dashboard_dist.py`，具体命令见[源码部署](/deploy/astrbot/cli#更新-checkout)。
+本 fork 不提供 Dashboard 一键 Core 更新。源码部署应在更新 checkout 后重新构建 `dashboard/dist`，再运行 `uv run python scripts/sync_dashboard_dist.py`，具体命令见[源码部署](/deploy/astrbot/cli#更新-checkout)。
 
 消息指令和 `astrbot` CLI 都不会下载、安装或更新 Dashboard。上游 Dashboard 静态资源与当前 fork 的后端 API 和前端功能不兼容，不应复制到 `data/dist`。启动时只使用显式 `--webui-dir`、当前源码树构建产物、随包资源或版本匹配的 `data/dist`；没有兼容构建时，后端继续运行，但 WebUI 不可用。
 

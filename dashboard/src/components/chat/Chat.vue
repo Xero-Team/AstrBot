@@ -166,7 +166,8 @@
             <v-menu
               location="end"
               offset="8"
-              open-on-hover
+              :open-on-hover="!isTouchDevice"
+              :open-on-click="isTouchDevice"
               :close-on-content-click="true"
             >
               <template #activator="{ props: transportMenuProps }">
@@ -218,7 +219,8 @@
             <v-menu
               location="end"
               offset="8"
-              open-on-hover
+              :open-on-hover="!isTouchDevice"
+              :open-on-click="isTouchDevice"
               :close-on-content-click="true"
             >
               <template #activator="{ props: languageMenuProps }">
@@ -397,6 +399,17 @@
               "
               enable-regenerate
               enable-thread-selection
+              :is-touch-device="isTouchDevice"
+              :sidebar-reasoning-message-id="
+                reasoningPanelOpen
+                  ? (activeReasoningTarget?.message.id ?? null)
+                  : null
+              "
+              :sidebar-reasoning-block-index="
+                reasoningPanelOpen
+                  ? (activeReasoningTarget?.blockIndex ?? null)
+                  : null
+              "
               :manage-refs-sidebar="false"
               :editing-message-id="editingMessage?.id || null"
               :saving-edit="savingMessageEdit"
@@ -414,6 +427,15 @@
         </section>
 
         <section class="composer-shell">
+          <button
+            v-if="showScrollToBottom"
+            class="scroll-to-bottom-btn"
+            type="button"
+            :aria-label="tm('input.scrollToBottom')"
+            @click="scrollToBottom"
+          >
+            <v-icon size="20">mdi-chevron-down</v-icon>
+          </button>
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -507,6 +529,7 @@
       v-model="threadPanelOpen"
       :thread="activeThread"
       :is-dark="isDark"
+      :is-touch-device="isTouchDevice"
       :deleting="deletingThread"
       :web-chat-step-up-tokens="webChatStepUpTokens"
       @delete="deleteThread"
@@ -846,6 +869,13 @@ const transportMode = ref<TransportMode>(
     ? 'websocket'
     : 'sse',
 );
+
+const pointerMediaQuery = window.matchMedia('(pointer: coarse)');
+const isTouchDevice = ref<boolean>(pointerMediaQuery.matches);
+const handlePointerChange = (event: MediaQueryListEvent) => {
+  isTouchDevice.value = event.matches;
+};
+pointerMediaQuery.addEventListener('change', handlePointerChange);
 const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
   { value: 'sse', labelKey: 'transport.sse' },
   { value: 'websocket', labelKey: 'transport.websocket' },
@@ -983,6 +1013,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  pointerMediaQuery.removeEventListener('change', handlePointerChange);
   cleanupMediaCache();
 });
 
@@ -1621,6 +1652,13 @@ async function stopRecording() {
   }
 }
 
+const showScrollToBottom = computed(
+  () =>
+    !shouldStickToBottom.value &&
+    activeMessages.value.length > 0 &&
+    !loadingMessages.value,
+);
+
 function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
@@ -1668,7 +1706,10 @@ function toggleTheme() {
   --chat-border: rgb(var(--v-theme-outline-variant));
   --chat-muted: rgb(var(--v-theme-on-surface-variant));
   display: flex;
+  flex: 1 1 0%;
+  width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--chat-page-bg);
@@ -1893,12 +1934,16 @@ function toggleTheme() {
 }
 
 .chat-main {
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
+  min-height: 0;
   height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
+  align-self: stretch;
 }
 
 .chat-drop-overlay {
@@ -2033,6 +2078,30 @@ function toggleTheme() {
   z-index: 1;
   background: var(--chat-page-bg);
   padding: 0 0 18px;
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 50%;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 2px 4px rgb(24 33 43 / 10%);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .composer-shell::before {

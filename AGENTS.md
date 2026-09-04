@@ -18,6 +18,21 @@ forward-looking instead of extending compatibility indefinitely.
 - `compose.yml` and `compose-with-napcat.yml` intentionally build this checkout
   with `build:` and tag it `astrbot:local`. Preserve that source-build contract;
   do not replace it with `soulter/astrbot` or another upstream prebuilt image.
+  Documentation is served from the Dashboard at `/help/`; do not restore a
+  separate docs container or `docs.astrbot.app` links.
+- Agents may maintain this repository. They may commit, push feature branches,
+  open development Issues, and open Pull Requests. They must not merge, push
+  `master`, force-push protected branches, tag, or publish releases. A human
+  maintainer does those actions; do not treat a verbal exception as
+  authorization. A PR lands only after a human maintainer review **and** a
+  separate AI-assisted review. Follow [AI_POLICY.md](AI_POLICY.md) and
+  `.agents/shared/ai-contribution/REFERENCE.md`.
+- Open Issues and Pull Requests against `Xero-Team/AstrBot` only. Do not open
+  them on upstream `AstrBotDevs/AstrBot`. `gh` may default to the `upstream`
+  remote; pass `--repo Xero-Team/AstrBot` (or set `GH_REPO=Xero-Team/AstrBot`)
+  and confirm the created URL is under `github.com/Xero-Team/AstrBot` before
+  treating the action as done. Opening an Issue or PR on upstream requires
+  explicit user confirmation for that target.
 
 ## Toolchain and setup
 
@@ -62,10 +77,12 @@ make stop
 Windows uses `scripts/make_dev.ps1`; POSIX uses `scripts/make_dev.sh`. PID files
 live in `.make/`, with backend logs in `backend_run*.log` and Dashboard logs in
 `frontend_run*.log`. `make dev` starts source-mode servers without a production
-Dashboard build. `make run` first syncs the locked runtime environment, builds
-the Dashboard, and copies `dashboard/dist` into `data/dist`; it does not build a
-Python wheel or sdist. The Vite command uses `--host`, so treat port 3000 as a
-development-only surface rather than a production endpoint.
+Dashboard or documentation build. `make run` first syncs the locked runtime
+environment, builds the Dashboard and documentation, and copies `dashboard/dist`
+(including `help/`) into `data/dist`; it does not build a Python wheel or sdist.
+`make build-docs` is the focused documentation target. `make docs` starts a
+standalone VitePress preview with base `/`. The Vite command uses `--host`, so
+treat port 3000 as a development-only surface rather than a production endpoint.
 
 For focused work, use the component directly:
 
@@ -75,10 +92,11 @@ uv run main.py
 
 cd dashboard
 pnpm install --frozen-lockfile
-pnpm dev
-pnpm build
-pnpm test
-cd ..
+  pnpm dev
+  pnpm build
+  pnpm test
+  pnpm i18n:check
+  cd ..
 
 cd docs
 pnpm install --frozen-lockfile
@@ -103,9 +121,8 @@ Keep each dependency surface with its actual installer:
 
 Runtime Python dependency changes must update `pyproject.toml`,
 `requirements.txt`, and `uv.lock`: local/quality jobs consume the uv lock, while
-the Docker and smoke-test paths still install `requirements.txt`. The historical
-root `pnpm-lock.yaml` is not used by the Makefile or CI for root tooling; do not
-treat it as authoritative or update it instead of `package-lock.json`.
+the Docker and smoke-test paths still install `requirements.txt`. Do not
+reintroduce a root `pnpm-lock.yaml`; root tooling uses `package-lock.json`.
 
 ## Tests, checks, and formatting
 
@@ -166,6 +183,8 @@ make quality-report        # broader report; not currently a required CI gate
 read-only: the Dashboard build writes `dashboard/dist/` and may regenerate the
 tracked MDI subset assets. `make quality-report` is not a required CI gate at
 present, but its commands still propagate non-zero exit codes.
+`quality-web-audit` runs Dashboard `pnpm audit --audit-level=low` with
+`--ignore-registry-errors`, so a registry timeout does not fail `make quality`.
 
 The native POSIX linters (`shellcheck`, `shfmt`, and `hadolint`) are required,
 not optional. PowerShell checks require PowerShell 7 and PSScriptAnalyzer.
@@ -216,25 +235,27 @@ adapter.
 2. `EventBus` chooses the `PipelineScheduler` for the event's config id and
    dispatches it under bounded concurrency while retaining task references.
 3. `astrbot/core/pipeline/stage_order.py` defines the fixed sequence from
-   `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`, `RateLimit`,
-   `ContentSafetyCheck`, `PreProcess`, `GroupMessageHistory`, `Process`,
-   `ResultDecorate`, and finally `Respond`.
+   `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`,
+   `TurnCoalesce`, `RateLimit`, `ContentSafetyCheck`, `PreProcess`,
+   `GroupMessageHistory`, `Process`, `ResultDecorate`, and finally `Respond`.
 
 The scheduler supports async stages and async-generator onion middleware.
 Preserve stage ordering, stop-propagation, and cancellation semantics.
 
-Group wake behavior is explicit. `platform_settings.group_wake_policy`
-controls whether mentioning or replying to the bot wakes a group message, and
-`WakingCheckStage` records the selected `wake_reasons` on the event. Do not
-restore implicit mention/reply wakeups. Built-in command availability is stored
+Group wake behavior is explicit. `llm_access.group`, `llm_access.reply_to_bot`,
+and continuation state control whether mentioning or replying to the bot wakes
+a group message, and `WakingCheckStage` records the selected `wake_reasons` on
+the event. Do not restore `platform_settings.group_wake_policy` or implicit
+mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
 field is not migrated or read by runtime code and must not become a pipeline
 switch again. Command identity is `command_id`
 (`{plugin}:{original path with dots}`). Do not restore handler-name or fossil
 short-name lookup for `alter_cmd` or `command_configs`. Built-in names and
 aliases stay as declared unless the row has `resolution_strategy=manual_rename`.
-Unmatched command_config rows are deleted. Drop unused `keep_original_alias` in
-a separate transaction; a drop failure must not roll back schema creation.
+Unmatched command_config rows are deleted. Startup does not patch leftover
+columns onto an existing main database; upgrading deletes `data/data_v4.db*`
+and recreates an empty file from the current models.
 
 ### Agents, providers, and runners
 
@@ -289,7 +310,7 @@ a separate transaction; a drop failure must not roll back schema creation.
 - The contract source is `openspec/openapi-v1.yaml`. Runtime routes, the source
   spec, generated clients/docs, frontend call sites, and backend/frontend tests
   must change together.
-- Live Chat WebSockets multiplex concurrent chat runs by unique `message_id`.
+- Unified Chat WebSockets multiplex concurrent chat runs by unique `message_id`.
   Request tasks, interrupts, follow-up capture, `run_started`, and streamed
   `agent_stats` metadata are request-scoped. Do not reintroduce a session-wide
   busy flag or emit a response without the originating request identity.
@@ -387,8 +408,13 @@ index. During an uncommitted deletion, its wrapper may also pass the removed
 tracked path to Prettier, so use an existing-file-filtered invocation for the
 local check and still verify the post-commit target in CI.
 
-Do not commit `docs/.vitepress/dist`, and do not create ad-hoc summary/report
-Markdown files.
+The production Dashboard serves the VitePress build at `/help/`. `make run`,
+`make build-docs`, and the runtime image copy `docs/.vitepress/dist` into the
+WebUI `help/` directory with `ASTRBOT_DOCS_BASE=/help/`. Do not commit that
+generated tree, and do not create ad-hoc summary/report Markdown files. Do not
+point Dashboard, API errors, changelogs, plugin READMEs, or config hints at
+`docs.astrbot.app`. Do not restore `Dockerfile.docs` or a separate docs
+Compose service.
 
 ### NapCat generated models
 
@@ -437,8 +463,33 @@ diff with its runtime/test changes.
   `soulter`, and other upstream links are allowed only when deliberately citing
   provenance, the upstream sync source, or a service the fork still consumes;
   label that relationship instead of implying fork ownership.
-- **Commits/PRs:** use English conventional commits (`feat:`, `fix:`,
-  `refactor:`, `chore:`), with titles under about 70 characters.
+- **Skills:** load from `.agents/skills/`. Policy vs facts stay split
+  (`SKILL.md` vs `REFERENCE.md` / shared files). Catalog:
+  `.agents/skills/README.md`. Cite those files; do not paste them.
+  `archify` is a checkout-only maintainer renderer; hatch sdist excludes
+  `/.agents`, and the runtime image must not copy it.
+- **Commits/PRs:** follow
+  `.agents/shared/conventional-commit/REFERENCE.md` when generating,
+  reviewing, or classifying commit messages. Use English Conventional
+  Commits: `<type>(<optional scope>): <description>`. Allowed types are
+  `feat`, `fix`, `refactor`, `perf`, `style`, `test`, `docs`, `build`,
+  `ops`, and `chore`. Write a lowercase imperative description without a
+  trailing period; keep the header under about 70 characters. Mark
+  breaking changes with `!` before `:` and a `BREAKING CHANGE:` footer.
+  Put issue IDs in footers (`Fixes #123`), never as scopes. When an
+  agent generates or finalizes the message, run
+  `date -u '+%Y-%m-%dT%H:%M:%SZ'` and append `AI-Generated: true` plus
+  `Generated-At: <result>` as footers. Agents may commit, push a feature
+  branch, and open a PR as maintenance. They must not merge, push `master`,
+  or tag. Open fork Issues/PRs with `--repo Xero-Team/AstrBot`. Do not file
+  against `AstrBotDevs/AstrBot` without explicit user confirmation for that
+  upstream target. Agent-authored PRs end with `## Agent note`. Human-authored PRs
+  end with `## Human note`. Use the typed file under
+  `.github/PULL_REQUEST_TEMPLATE/` that matches the Conventional Commit
+  type (`feat.md`, `fix.md`, `docs.md`; group `perf`/`style` with
+  `refactor.md`; group `build`/`ops`/`test` with `chore.md`). Preserve
+  upstream subjects verbatim on cherry-pick/adapt; see the sync-upstream
+  skill.
 
 ## Upstream synchronization
 

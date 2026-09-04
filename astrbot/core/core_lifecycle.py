@@ -34,8 +34,10 @@ from astrbot.core.memory import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.pipeline.turn_window import TurnWindowManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.process_reboot import ProcessRebooter
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.skills.skill_manager import SkillManager
@@ -43,7 +45,6 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.event_loop_diagnostics import (
@@ -272,8 +273,7 @@ class AstrBotCoreLifecycle:
         if len(providers) == 0:
             return
 
-        provider_settings = getattr(pm, "provider_settings", None) or {}
-        default_id = provider_settings.get("default_provider_id")
+        default_id = getattr(pm, "default_chat_provider_id", "")
         fallback = providers[0]
         fallback_id = fallback.provider_config.get("id") or "unknown"
 
@@ -282,7 +282,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -294,7 +294,7 @@ class AstrBotCoreLifecycle:
         if not found:
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Configured `default_provider_id` is `%s` but no enabled provider matches that ID. "
+                "Configured Agent Runner model provider ID `%s` does not match an enabled provider. "
                 "AstrBot will use `%s` as the fallback chat provider. "
                 "Please check the WebUI configuration page.",
                 default_id,
@@ -304,7 +304,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、ProcessRebooter等。
         """
         if self._stopped:
             raise RuntimeError(
@@ -344,6 +344,8 @@ class AstrBotCoreLifecycle:
 
         self._register_cleanup("database", self.db.close)
         authorization = self.services.authorization
+        if authorization is None:
+            raise RuntimeError("AuthorizationService is required")
         if isinstance(self.db, SQLiteDatabase):
             self._register_cleanup("authorization", authorization.close)
         self._register_cleanup(
@@ -388,6 +390,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化事件队列
         self.event_queue = Queue(maxsize=EVENT_QUEUE_MAXSIZE)
+        self.turn_window_manager = TurnWindowManager(self._enqueue_turn_event)
 
         # 初始化人格管理器
         self.persona_mgr = PersonaManager(
@@ -473,6 +476,12 @@ class AstrBotCoreLifecycle:
         self.execution_context = execution_context
         execution_context.persona_runtime_manager = self.persona_runtime_manager
         execution_context.memory_manager = self.memory_manager
+        execution_context.turn_window_manager = self.turn_window_manager
+        self.platform_manager.typing_signal = self._on_typing_signal
+        self._register_cleanup(
+            "turn window manager",
+            self.turn_window_manager.terminate,
+        )
         self._register_cleanup(
             "follow-up coordinator",
             self.services.follow_up_coordinator.terminate,
@@ -522,8 +531,7 @@ class AstrBotCoreLifecycle:
         # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
-        # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator()
+        self.process_rebooter = ProcessRebooter()
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -600,7 +608,6 @@ class AstrBotCoreLifecycle:
             event_bus=self.event_bus,
             dashboard_shutdown_event=self.dashboard_shutdown_event,
             start_time=self.start_time,
-            updater=self.astrbot_updator,
         )
 
     def _load(self) -> None:
@@ -767,7 +774,7 @@ class AstrBotCoreLifecycle:
         await self.services.html_renderer.terminate()
         dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=self.process_rebooter.reboot,
             name="restart",
             daemon=True,
         ).start()
@@ -809,6 +816,21 @@ class AstrBotCoreLifecycle:
             mapping[conf_id] = scheduler
         return mapping
 
+    def _on_typing_signal(self, key: str, event_type: int) -> None:
+        """Pause or resume turn flush from an adapter typing notice."""
+        if event_type == 1:
+            self.turn_window_manager.pause_typing(key)
+            return
+        self.turn_window_manager.resume_typing(key)
+
+    def _enqueue_turn_event(self, event) -> bool:
+        """Requeue a manager-built flush event from the waking stage."""
+        try:
+            self.event_queue.put_nowait(event)
+        except Exception:
+            return False
+        return True
+
     async def reload_pipeline_scheduler(self, conf_id: str) -> None:
         """重新加载消息事件流水线调度器.
 
@@ -844,6 +866,9 @@ class AstrBotCoreLifecycle:
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler
+        manager = getattr(self, "turn_window_manager", None)
+        if manager is not None:
+            manager.discard_all(f"reload pipeline {conf_id}")
 
     async def remove_pipeline_scheduler(self, conf_id: str) -> None:
         """Remove the scheduler associated with a deleted configuration profile."""

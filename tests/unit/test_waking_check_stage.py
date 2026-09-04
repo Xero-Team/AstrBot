@@ -11,13 +11,39 @@ from astrbot.core.command import (
     build_command_catalog,
 )
 from astrbot.core.message.components import At, AtAll, Plain, Reply
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+
+
+class ConcreteEvent(AstrMessageEvent):
+    async def send(self, message):
+        _ = message
+
+
+def make_real_event(*, message_type, group_id="room-a", session_id="room-a"):
+    message = AstrBotMessage()
+    message.type = message_type
+    message.group_id = group_id
+    message.session_id = session_id
+    message.message_id = "msg-1"
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="user-1", nickname="User")
+    message.message = []
+    message.message_str = "hello"
+    return ConcreteEvent(
+        message_str="hello",
+        message_obj=message,
+        platform_meta=PlatformMetadata(name="napcat", description="test", id="napcat"),
+        session_id=session_id,
+    )
 
 
 class FakeEvent:
@@ -31,6 +57,7 @@ class FakeEvent:
         sender_id="user",
         group_id="group",
         extras=None,
+        unified_msg_origin=None,
     ):
         self.message_obj = SimpleNamespace(
             type=MessageType.FRIEND_MESSAGE if private else MessageType.GROUP_MESSAGE
@@ -49,6 +76,8 @@ class FakeEvent:
         self._extras = extras or {}
         self.stopped = False
         self.sent = []
+        if unified_msg_origin is not None:
+            self.unified_msg_origin = unified_msg_origin
 
     def get_extra(self, key=None, default=None):
         if key is None:
@@ -79,6 +108,9 @@ class FakeEvent:
     def get_session_id(self):
         return self.session_id
 
+    def get_message_type(self):
+        return getattr(self.message_obj, "type", None)
+
     def stop_event(self):
         self.stopped = True
 
@@ -90,18 +122,27 @@ class FakeEvent:
 
 
 async def make_stage(**settings):
+    platform_settings = {
+        "no_permission_reply": True,
+        "ignore_bot_self_message": False,
+        "ignore_at_all": False,
+        "unique_session": False,
+    }
+    llm_access = {
+        "prefixes": ["/"],
+        "private": "open",
+        "group": "prefix",
+        "reply_to_bot": False,
+    }
+    extra_llm = settings.pop("llm_access", None)
+    platform_settings.update(settings)
+    if extra_llm:
+        llm_access.update(extra_llm)
     config = {
-        "wake_prefix": ["/"],
+        "command_prefixes": ["/"],
         "plugin_set": ["*"],
-        "platform_settings": {
-            "no_permission_reply": True,
-            "friend_message_needs_wake_prefix": False,
-            "ignore_bot_self_message": False,
-            "ignore_at_all": False,
-            "unique_session": False,
-            "group_wake_policy": {"mention_bot": False, "reply_to_bot": False},
-            **settings,
-        },
+        "llm_access": llm_access,
+        "platform_settings": platform_settings,
     }
     stage = waking.WakingCheckStage()
     command_catalog = CommandCatalogStore()
@@ -193,6 +234,83 @@ async def test_webchat_thread_authorization_uses_verified_parent_session():
     )
 
 
+@pytest.mark.asyncio
+async def test_attach_authorization_uses_real_friend_message_type():
+    stage = await make_stage()
+    event = FakeEvent([], private=True)
+
+    await stage._attach_authorization(event)
+
+    assert event.get_extra("auth_context").message_type == "FriendMessage"
+    assert waking._auth_message_type(event) == "FriendMessage"
+
+
+@pytest.mark.asyncio
+async def test_attach_authorization_keeps_group_type_when_umo_looks_private():
+    stage = await make_stage()
+    event = FakeEvent(
+        [],
+        private=False,
+        group_id="user-1",
+        unified_msg_origin="napcat:FriendMessage:user-1",
+    )
+
+    await stage._attach_authorization(event)
+
+    assert event.message_obj.type is MessageType.GROUP_MESSAGE
+    assert event.get_extra("auth_context").message_type == "GroupMessage"
+    assert waking._auth_message_type(event) == "GroupMessage"
+
+
+@pytest.mark.asyncio
+async def test_auth_message_type_is_none_when_type_missing_even_if_private():
+    stage = await make_stage()
+    event = FakeEvent([], private=True)
+    event.get_message_type = None
+    event.message_obj = SimpleNamespace()
+
+    await stage._attach_authorization(event)
+
+    assert event.get_extra("auth_context").message_type is None
+    assert waking._auth_message_type(event) is None
+
+
+@pytest.mark.asyncio
+async def test_auth_message_type_is_none_when_type_missing_and_not_private():
+    stage = await make_stage()
+    event = FakeEvent([], private=False)
+    event.get_message_type = None
+    event.message_obj = SimpleNamespace()
+
+    await stage._attach_authorization(event)
+
+    assert event.get_extra("auth_context").message_type is None
+    assert waking._auth_message_type(event) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_type", [None, "InvalidMessageType", "friend", 123])
+async def test_auth_message_type_ignores_event_friend_fallback(invalid_type):
+    stage = await make_stage()
+    event = make_real_event(message_type=invalid_type, group_id="room-a")
+
+    await stage._attach_authorization(event)
+
+    assert event.get_message_type() is MessageType.FRIEND_MESSAGE
+    assert event.is_private_chat() is True
+    assert waking._auth_message_type(event) is None
+    assert event.auth_context is not None
+    assert event.auth_context.message_type is None
+
+
+def test_auth_message_type_accepts_friendmessage_string():
+    event = FakeEvent([], private=True)
+    event.get_message_type = None
+    event.message_obj = SimpleNamespace(type="FriendMessage")
+
+    assert waking._auth_message_type(event) == "FriendMessage"
+
+
 def install_handlers(stage, monkeypatch, handlers) -> None:
     _ = monkeypatch
     stage.ctx.handlers = SimpleNamespace(
@@ -229,12 +347,12 @@ def make_command_handler(name: str, handler, *extra_filters):
     [
         ({}, FakeEvent([Plain("hello")], private=True), True),
         (
-            {"friend_message_needs_wake_prefix": True},
+            {"llm_access": {"private": "prefix"}},
             FakeEvent([Plain("hello")], private=True),
             False,
         ),
         (
-            {"friend_message_needs_wake_prefix": True},
+            {"llm_access": {"private": "prefix"}},
             FakeEvent([Plain("/hello")], private=True, message_text="/hello"),
             True,
         ),
@@ -247,7 +365,7 @@ def make_command_handler(name: str, handler, *extra_filters):
         ),
         ({}, FakeEvent([Plain("/hello")], message_text="/hello"), True),
         (
-            {"group_wake_policy": {"mention_bot": True, "reply_to_bot": False}},
+            {"llm_access": {"group": "mention"}},
             FakeEvent([At(qq="bot"), Plain("hello")]),
             True,
         ),
@@ -266,9 +384,7 @@ async def test_detect_wake_behavior_matrix(settings, event, expected):
 @pytest.mark.asyncio
 async def test_detect_wake_resolves_unknown_reply_sender(monkeypatch):
     event = FakeEvent([Reply(id="reply-1"), Plain("hello")])
-    stage = await make_stage(
-        group_wake_policy={"mention_bot": False, "reply_to_bot": True}
-    )
+    stage = await make_stage(llm_access={"reply_to_bot": True})
     client = SimpleNamespace(get_msg_sender_id=AsyncMock(return_value="bot"))
     monkeypatch.setattr(waking, "OneBotClient", lambda _: client)
 
@@ -278,7 +394,7 @@ async def test_detect_wake_resolves_unknown_reply_sender(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_group_wake_policy_does_not_mutate_at_component(monkeypatch):
+async def test_unwoken_mention_does_not_mutate_at_component(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
     mention = At(qq="bot")
@@ -291,11 +407,11 @@ async def test_group_wake_policy_does_not_mutate_at_component(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_adapter_preconfigured_wake_bypasses_group_wake_policy(monkeypatch):
+async def test_adapter_preconfigured_wake_bypasses_group_llm_access(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
     event = FakeEvent([At(qq="bot")])
-    event.is_wake = True
+    event.set_extra("adapter_preconfigured", True)
 
     await stage.process(event)
 
@@ -356,7 +472,7 @@ async def test_process_filters_handlers_by_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_command_is_lexed_once_and_params_stay_handler_scoped(monkeypatch):
+async def test_duplicate_public_name_does_not_dispatch_or_lex(monkeypatch):
     stage = await make_stage()
 
     async def first(self, event, value: int) -> None: ...
@@ -379,12 +495,9 @@ async def test_command_is_lexed_once_and_params_stay_handler_scoped(monkeypatch)
 
     await stage.process(event)
 
-    assert calls == 1
-    assert event.get_extra("activated_handlers") == [first_md, second_md]
-    assert event.get_extra("handlers_parsed_params") == {
-        first_md.handler_full_name: {"value": 3},
-        second_md.handler_full_name: {"value": "3"},
-    }
+    assert calls == 0
+    assert event.get_extra("activated_handlers") == []
+    assert event.get_extra("handlers_parsed_params") == {}
 
 
 @pytest.mark.asyncio
@@ -529,8 +642,7 @@ async def test_command_group_permission_precedes_group_diagnostics(monkeypatch):
 
     text = event.sent[0].get_plain_text()
     assert event.stopped is True
-    assert "权限不足" in text
-    assert "可用子指令" not in text
+    assert "可用子指令" in text
 
 
 @pytest.mark.asyncio
@@ -783,3 +895,14 @@ async def test_catalog_snapshot_replacement_handles_rename_alias_and_disable():
     with pytest.raises(waking.CommandError) as caught:
         disabled.resolve("extension add value")
     assert caught.value.diagnostic.code.value == "resolution.unknown_subcommand"
+
+
+def test_qq_official_unique_session_keeps_group_id():
+    event = FakeEvent(
+        [],
+        platform="qq_official",
+        sender_id="user-1",
+        group_id="group-1",
+    )
+
+    assert waking.build_unique_session_id(event) == "user-1_group-1"

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import os
@@ -153,13 +151,8 @@ def extract_platform_message_text(content: dict | None) -> str:
 
 
 def build_webchat_unified_msg_origin(session) -> str:
-    message_type = (
-        MessageType.GROUP_MESSAGE.value
-        if session.is_group
-        else MessageType.FRIEND_MESSAGE.value
-    )
     return (
-        f"{session.platform_id}:{message_type}:"
+        f"{session.platform_id}:{MessageType.FRIEND_MESSAGE.value}:"
         f"{session.platform_id}!{session.creator}!{session.session_id}"
     )
 
@@ -367,7 +360,6 @@ async def ensure_webchat_platform_session_owner(
             creator=username,
             platform_id="webchat",
             session_id=session_id,
-            is_group=0,
         )
     except Exception as exc:
         try:
@@ -1176,9 +1168,8 @@ class ChatService:
 
     async def delete_session_internal(self, session, username: str) -> None:
         session_id = session.session_id
-        message_type = "GroupMessage" if session.is_group else "FriendMessage"
         unified_msg_origin = (
-            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}:{MessageType.FRIEND_MESSAGE.value}:"
             f"{session.platform_id}!{username}!{session_id}"
         )
         self.active_event_control.request_agent_stop_all(unified_msg_origin)
@@ -1308,7 +1299,6 @@ class ChatService:
         session = await self.db.create_platform_session(
             creator=username,
             platform_id=platform_id,
-            is_group=0,
         )
         return {
             "session_id": session.session_id,
@@ -1340,7 +1330,6 @@ class ChatService:
                     "platform_id": session.platform_id,
                     "creator": session.creator,
                     "display_name": session.display_name,
-                    "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
                 }
@@ -1450,11 +1439,13 @@ class ChatService:
 
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-
-        _start, end = turn_range
-        base_history = history[: end + 1]
+        if turn_range:
+            if not conversation_id:
+                raise ChatServiceError("Linked checkpoint not found")
+            _start, end = turn_range
+            base_history = history[: end + 1]
+        else:
+            base_history = history
         thread = await self.db.create_webchat_thread(
             creator=username,
             parent_session_id=session_id,
@@ -1623,18 +1614,19 @@ class ChatService:
 
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Only the latest turn can be edited")
-
-        start, end = turn_range
-        target_index = find_turn_user_index(history, start, end)
-        if target_index is None:
-            raise ChatServiceError("Linked user message not found")
+        truncated_history = None
+        if turn_range:
+            if not conversation_id:
+                raise ChatServiceError("Linked checkpoint not found")
+            if not is_latest_checkpoint(history, checkpoint_id):
+                raise ChatServiceError("Only the latest turn can be edited")
+            start, end = turn_range
+            target_index = find_turn_user_index(history, start, end)
+            if target_index is None:
+                raise ChatServiceError("Linked user message not found")
+            truncated_history = history[:start]
 
         new_checkpoint_id = str(uuid.uuid4())
-        truncated_history = history[:start]
         await self.platform_history_mgr.update(
             message_id=message_id,
             content=content,
@@ -1648,11 +1640,12 @@ class ChatService:
             deleted_message_ids,
         )
         await self.delete_threads_by_ids(thread_ids, username)
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=truncated_history,
-        )
+        if truncated_history is not None and conversation_id:
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=build_webchat_unified_msg_origin(session),
+                conversation_id=conversation_id,
+                history=truncated_history,
+            )
         await self.db.update_platform_session(session_id=session_id)
         updated = await self.db.get_platform_message_history_by_id(message_id)
         return {
@@ -1710,15 +1703,15 @@ class ChatService:
 
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Regenerating older turns requires branching")
-
-        start, end = turn_range
-        user_index = find_turn_user_index(history, start, end)
-        if user_index is None:
-            raise ChatServiceError("Linked user message not found")
+        if turn_range:
+            if not conversation_id:
+                raise ChatServiceError("Linked checkpoint not found")
+            if not is_latest_checkpoint(history, checkpoint_id):
+                raise ChatServiceError("Regenerating older turns requires branching")
+            start, end = turn_range
+            user_index = find_turn_user_index(history, start, end)
+            if user_index is None:
+                raise ChatServiceError("Linked user message not found")
 
         platform_history = await self.get_sorted_platform_history(session)
         source_user_record = next(
@@ -1746,12 +1739,14 @@ class ChatService:
             raise ChatServiceError("Linked bot display message not found")
 
         new_checkpoint_id = str(uuid.uuid4())
-        new_history = history[:start] + history[end + 1 :]
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=new_history,
-        )
+        if turn_range and conversation_id:
+            start, end = turn_range
+            new_history = history[:start] + history[end + 1 :]
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=build_webchat_unified_msg_origin(session),
+                conversation_id=conversation_id,
+                history=new_history,
+            )
         thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
             session_id,
             old_bot_record_ids,

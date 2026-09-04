@@ -32,6 +32,12 @@ Quote or escape these characters when they are data:
 
 Declared options can appear before or after positional arguments and support `--name=value`. `--` stops option parsing; for example, `/session name -- -x` passes `-x` as data. Negative numeric positionals such as `-1` do not require the terminator.
 
+## Command and LLM routing
+
+Commands are framed by the profile's `command_prefixes` (default `["/"]`) and matched against the enabled command catalog. Command matching happens before LLM access: a matched command always wins, a bare command group shows its help, and an unknown subcommand returns an Orbit diagnostic instead of becoming an LLM prompt. Non-command messages follow the profile's `llm_access` policy. Its prefixes are complete user-typed strings; they are not automatically combined with `command_prefixes`.
+
+Enabled command paths, aliases, descendants, and non-empty LLM prefix roots share one scoped namespace. A conflict is rejected or excluded from the runtime catalog until Dashboard rename leaves one owner, or the command-update API records a takeover. Dashboard highlights conflicts and exposes rename; it does not offer a takeover button. The built-in LLM state commands are `/llm status`, `/llm enable`, and `/llm disable`; `/chat` is not their compatibility alias.
+
 ## Command Reference
 
 ### Help
@@ -47,7 +53,7 @@ Declared options can appear before or after positional arguments and support `--
 - `/bot leave`: Prompt for leave confirmation. Requires `session.manage` and only works in group chats.
 - `/bot leave --confirm` or `/bot leave -c`: Leave the current group after confirmation. Rejected when the platform does not declare `leave_group`.
 
-Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the current UMO, same scope as `/chat`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. A bare `/bot` only shows the subcommand tree.
+Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the current UMO, same scope as `/llm`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. A bare `/bot` only shows the subcommand tree.
 
 ### Session Information
 
@@ -55,12 +61,14 @@ Both `enable` and `disable` are idempotent. They write the existing `session_ena
 - `/session name`: Show the current auto name and saved alias; requires `session.manage`.
 - `/session name <name>`: Set the current UMO display alias; requires `session.manage`. `GreedyStr` allows spaces.
 
+After the waking stage finalizes `is_wake`, the automatic name is written to storage. A manual alias takes priority; automatic upserts do not overwrite `user_alias`.
+
 The user ID from `/session info` can be granted current-session `session_admin` with `/admin grant`. That is not a global operator. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
 
 ### Conversations
 
 - `/conversation create`: Create and switch to a new conversation.
-- `/conversation reset`: Clear the current context and corresponding third-party Agent Runner state.
+- `/conversation reset`: Clear the current context, corresponding third-party Agent Runner state, and this session's [group chat context awareness](./group-chat-context) in-memory cache.
 - `/conversation stats`: Show input, cached-input, and output token statistics.
 - `/conversation history [--page N|-p N]`: Show conversation history.
 - `/conversation list [--page N|-p N]`: List conversations.
@@ -69,7 +77,7 @@ The user ID from `/session info` can be granted current-session `session_admin` 
 - `/conversation delete`: Delete the current conversation.
 - `/conversation create-for <session-id>`: Create a conversation for another group session; requires `session.assign` and `session.manage`.
 
-`reset` and `delete` may require `session.manage` in groups without session isolation. Dashboard command permissions take precedence over defaults.
+`reset`, `delete`, `create`, `switch`, and `rename` always declare `session.manage`. A private-chat peer is the current-session owner, so `/conversation reset` and other `session.manage` builtins work in that DM. Groups still need `session_admin` or above. Dashboard command permissions take precedence over defaults.
 
 ### Running Tasks
 
@@ -93,11 +101,11 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 
 ### LLM Chat State
 
-- `/chat status`: Show whether LLM chat is enabled for the current session.
-- `/chat enable`: Enable LLM chat for the current session.
-- `/chat disable`: Disable LLM chat for the current session.
+- `/llm status`: Show whether LLM chat is enabled for the current session.
+- `/llm enable`: Enable LLM chat for the current session.
+- `/llm disable`: Disable LLM chat for the current session.
 
-These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/chat` only controls whether the LLM is enabled; it does not change streaming mode.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode.
 
 ### Session streaming
 

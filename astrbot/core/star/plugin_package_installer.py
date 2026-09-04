@@ -1,7 +1,5 @@
 """Download, stage, validate, and update plugin packages."""
 
-from __future__ import annotations
-
 import asyncio
 import os
 import tempfile
@@ -279,6 +277,7 @@ class PluginPackageInstaller:
         *,
         proxy: str = "",
         download_url: str = "",
+        repo_url: str = "",
         loader: PluginLoaderPort,
         reload_plugin: ReloadPlugin,
     ) -> None:
@@ -289,7 +288,12 @@ class PluginPackageInstaller:
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
-        await self._updator.update(plugin, proxy=proxy, download_url=download_url)
+        await self._updator.update(
+            plugin,
+            proxy=proxy,
+            download_url=download_url,
+            repo_url=repo_url,
+        )
         if plugin.root_dir_name:
             plugin_dir_path = os.path.join(
                 self._plugin_store_path, plugin.root_dir_name

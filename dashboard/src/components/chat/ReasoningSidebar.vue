@@ -8,7 +8,7 @@
             icon="mdi-close"
             size="small"
             variant="text"
-            aria-label="Close reasoning sidebar"
+            :aria-label="t('core.common.close')"
             @click="close"
           />
         </div>
@@ -36,7 +36,7 @@ import {
   reasoningActivityTitle,
 } from '@/composables/useMessages';
 import type { MessagePart } from '@/domain/chat';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 
 const props = defineProps<{
@@ -50,6 +50,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
 
+const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 
 const activityCounts = computed(() =>
@@ -66,15 +67,28 @@ function close() {
 </script>
 
 <style scoped>
+.reasoning-sidebar-root {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .reasoning-sidebar {
   width: 380px;
   height: 100%;
+  max-height: 100%;
+  min-height: 0;
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .slide-left-enter-active,

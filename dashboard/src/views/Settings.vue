@@ -255,6 +255,7 @@
           <div class="settings-section__heading">
             <div class="settings-section__title">
               {{ tm('sections.security.title') }}
+              <ConfigDocsLink docs="use/webui.html" />
             </div>
           </div>
           <div class="settings-section__content">
@@ -354,7 +355,7 @@
                           variant="text"
                           class="ml-2"
                           :aria-label="tm('apiKey.docsLink')"
-                          href="https://docs.astrbot.app/dev/openapi.html"
+                          :href="docsHref('dev/openapi.html')"
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -557,6 +558,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { apiKeyApi, systemConfigApi } from '@/api/v1';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
@@ -572,6 +574,7 @@ import { stepUpHeaders } from '@/utils/stepUp';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
 import { useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 import { useTheme } from 'vuetify';
 import { applyUserThemeColors, defaultThemeColors } from '@/design/theme';
 import { useToastStore } from '@/stores/toast';
@@ -1411,9 +1414,12 @@ onUnmounted(() => {
 }
 
 .settings-section__title {
+  align-items: center;
   color: rgb(var(--v-theme-on-surface));
+  display: flex;
   font-size: 1.34rem;
   font-weight: 780;
+  gap: 4px;
   letter-spacing: 0;
   line-height: 1.25;
 }

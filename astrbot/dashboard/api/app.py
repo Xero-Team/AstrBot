@@ -39,7 +39,6 @@ from astrbot.dashboard.services.cron_service import CronService
 from astrbot.dashboard.services.data_file_service import DataFileService
 from astrbot.dashboard.services.file_service import FileService
 from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
-from astrbot.dashboard.services.live_chat_service import LiveChatService
 from astrbot.dashboard.services.log_service import LogService
 from astrbot.dashboard.services.memory_service import MemoryService
 from astrbot.dashboard.services.open_api_service import OpenApiService
@@ -66,6 +65,7 @@ from astrbot.dashboard.services.update_service import (
     UpdateService,
     call_pip_install,
 )
+from astrbot.dashboard.services.webchat_service import WebChatService
 
 from .error_handling import internal_error_response
 from .plugin_files import router as plugin_files_router
@@ -235,6 +235,7 @@ def create_dashboard_asgi_app(
             core_control,
             runtime.services.totp_runtime_state,
             db,
+            runtime.plugin_manager.catalog,
         ),
         config_display=ConfigDisplayService(
             runtime.astrbot_config,
@@ -272,16 +273,19 @@ def create_dashboard_asgi_app(
             runtime.platform_manager,
             runtime.astrbot_config_mgr,
         ),
-        conversations=ConversationService(db, runtime.conversation_manager),
+        conversations=ConversationService(
+            db,
+            runtime.conversation_manager,
+            runtime.astrbot_config,
+        ),
         cron=CronService(runtime.cron_manager, runtime.astrbot_config_mgr),
         files=FileService(runtime.services.file_token_service),
         knowledge_bases=KnowledgeBaseService(runtime.knowledge_base_manager),
         memory=MemoryService(db, runtime.memory_manager),
-        live_chat=LiveChatService(
+        webchat=WebChatService(
             db,
             preferences=runtime.services.preferences,
             config=runtime.astrbot_config,
-            provider_manager=runtime.provider_manager,
             platform_message_history_manager=runtime.platform_message_history_manager,
             webchat_run_coordinator=runtime.webchat_run_coordinator,
             mcp_interaction_coordinator=getattr(
@@ -377,8 +381,6 @@ def create_dashboard_asgi_app(
             runtime.catalogs.plugins,
         ),
         updates=UpdateService(
-            runtime.updater,
-            core_control,
             pip_install_func=lambda *args, **kwargs: call_pip_install(
                 runtime.services.pip_installer, *args, **kwargs
             ),

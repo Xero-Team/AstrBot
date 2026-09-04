@@ -111,6 +111,10 @@ def test_btw_capability_route_assignments_survive_config_integrity(temp_config_p
     ]
 
 
+def test_default_config_omits_group_active_reply():
+    assert "active_reply" not in DEFAULT_CONFIG["provider_ltm_settings"]
+
+
 def test_platform_templates_prioritize_current_adapters_without_public_defaults():
     """Platform templates keep their intended order and loopback listeners."""
     templates = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
@@ -271,6 +275,21 @@ class TestAstrBotConfigLoad:
         assert config2.check_exist() is True
         assert os.path.exists(non_existent_path)
 
+    def test_partial_config_load_does_not_mutate_default_dashboard_password(
+        self, temp_config_path
+    ):
+        """Filling missing keys from DEFAULT_CONFIG must not alias nested dicts."""
+        original_password = DEFAULT_CONFIG["dashboard"]["pbkdf2_password"]
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump({"config_version": 3, "provider": []}, f)
+
+        config = AstrBotConfig(config_path=temp_config_path)
+
+        assert DEFAULT_CONFIG["dashboard"]["pbkdf2_password"] == original_password
+        assert config["dashboard"] is not DEFAULT_CONFIG["dashboard"]
+        assert config["dashboard"]["pbkdf2_password"] != original_password
+        assert config["dashboard"]["pbkdf2_password"].startswith("pbkdf2_sha256$")
+
     def test_empty_dashboard_password_generates_random_password(self, temp_config_path):
         """Test that an empty dashboard password is replaced with a random password."""
         default_config = {
@@ -305,10 +324,7 @@ class TestAstrBotConfigLoad:
             config["dashboard"]["pbkdf2_password"],
             DEFAULT_DASHBOARD_PASSWORD,
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"],
-            generated_password,
-        )
+        assert config["dashboard"]["password"] == ""
 
     def test_empty_dashboard_password_uses_initial_password_env(
         self, temp_config_path, monkeypatch
@@ -333,10 +349,7 @@ class TestAstrBotConfigLoad:
             config["dashboard"]["pbkdf2_password"],
             env_password,
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"],
-            env_password,
-        )
+        assert config["dashboard"]["password"] == ""
         assert config["dashboard"]["password_change_required"] is True
 
     def test_initial_dashboard_password_env_must_be_valid(
@@ -481,9 +494,7 @@ class TestAstrBotConfigLoad:
         assert not verify_dashboard_password(
             config["dashboard"]["pbkdf2_password"], old_password
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"], generated_password
-        )
+        assert config["dashboard"]["password"] == ""
 
     def test_legacy_astrbot_user_without_change_flag_keeps_legacy_password(
         self, temp_config_path
@@ -604,6 +615,35 @@ class TestConfigValidation:
         )
 
         assert "unknown_key" not in config
+
+    def test_strips_legacy_active_reply_from_provider_ltm_settings(
+        self, temp_config_path
+    ):
+        default_config = {
+            "provider_ltm_settings": {
+                "group_icl_enable": False,
+            },
+        }
+        existing_config = {
+            "provider_ltm_settings": {
+                "group_icl_enable": True,
+                "active_reply": {
+                    "enable": True,
+                    "method": "possibility_reply",
+                    "possibility_reply": 1.0,
+                    "whitelist": [],
+                },
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=default_config
+        )
+
+        assert config["provider_ltm_settings"]["group_icl_enable"] is True
+        assert "active_reply" not in config["provider_ltm_settings"]
 
     def test_nested_config_validation(self, temp_config_path):
         """Test validation of nested config structures."""
@@ -1098,3 +1138,48 @@ class TestConfigMetadataI18n:
             result["group"]["metadata"]["section"]["items"]["field"]["name"]
             == "group.section.field.name"
         )
+
+    def test_convert_to_i18n_keys_preserves_group_and_docs_fields(self):
+        metadata = {
+            "ai_group": {
+                "name": "AI Settings",
+                "docs": "use/webui.html",
+                "custom_flag": True,
+                "metadata": {
+                    "computer": {
+                        "description": "Computer use",
+                        "hint": "Hint text",
+                        "docs": "use/computer.html",
+                        "type": "object",
+                        "items": {
+                            "runtime": {
+                                "description": "Runtime",
+                                "docs": "use/computer.html",
+                                "type": "string",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+
+        result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
+
+        assert result["ai_group"]["docs"] == "use/webui.html"
+        assert result["ai_group"]["custom_flag"] is True
+        assert result["ai_group"]["name"] == "ai_group.name"
+        computer = result["ai_group"]["metadata"]["computer"]
+        assert computer["docs"] == "use/computer.html"
+        assert computer["hint"] == "ai_group.computer.hint"
+        assert computer["items"]["runtime"]["docs"] == "use/computer.html"
+        assert (
+            computer["items"]["runtime"]["description"]
+            == "ai_group.computer.runtime.description"
+        )
+
+    def test_convert_to_i18n_keys_preserves_non_dict_groups(self):
+        metadata = {"note": "keep me"}
+
+        result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
+
+        assert result["note"] == "keep me"

@@ -56,7 +56,7 @@ It starts the backend and Vite Dashboard without a production build first:
 - backend: `http://127.0.0.1:6185`
 - Dashboard dev server: `http://localhost:3000`
 
-`make run` synchronizes the locked runtime environment, builds the Dashboard, copies it to `data/dist`, and then starts both processes. It does not build a Python wheel or sdist. Use `make status` to inspect the processes and `make stop` to stop them.
+`make run` synchronizes the locked runtime environment, builds the Dashboard and documentation, copies them to `data/dist` (docs under `help/`), and then starts both processes. It does not build a Python wheel or sdist. Use `make status` to inspect the processes and `make stop` to stop them. `make build-docs` only builds and syncs documentation; `make docs` starts a standalone VitePress preview with base `/`.
 
 `make clean` is not an ordinary process-control command. It stops the processes and broadly removes generated content including `dashboard/dist`, `data/dist`, `.tmp`, build/dist directories, logs, test/format caches, and `__pycache__`. Inspect the worktree and any local artifacts you need before running it.
 
@@ -75,7 +75,7 @@ pnpm dev
 
 Runtime state is written under `data/` in the current runtime root. Tests and temporary checks must not read from or write to a developer's real `data/`; use pytest temporary fixtures or a separate `ASTRBOT_ROOT`.
 
-The main SQLite schema is locked by SQLModel tables, `po/registry.py`, and `tests/unit/db/test_schema.py`. `initialize()` does not add columns to an existing `data/data_v4.db`. Locally, stop the process, delete `data/data_v4.db*`, and start again; tests use temporary databases. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
+The main SQLite schema is locked by SQLModel tables, `po/registry.py`, and `tests/unit/db/test_schema.py`. `initialize()` does not add or drop columns on an existing `data/data_v4.db`. Locally, stop the process, delete `data/data_v4.db*`, and start again; tests use temporary databases. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
 
 ## Tests
 
@@ -128,6 +128,8 @@ make pr-test-full
 
 `make check` selects checks by host platform. On POSIX, `make check-all-platforms` adds PowerShell validation. On Windows, `make check` already includes PowerShell, so that target repeats it and still does not emulate shell/Docker checks. Full CI is composed of several workflows and is not equivalent to a single Make target.
 
+`make quality` runs Dashboard `pnpm audit --audit-level=low` with `--ignore-registry-errors`. A registry timeout or non-200 response does not fail that target; a successful advisory response still fails on low-or-higher vulnerabilities.
+
 `make check` does not run writing formatters, but it is not filesystem read-only: the Dashboard build writes `dashboard/dist/` and may regenerate the tracked MDI subset assets.
 
 Writing format targets include:
@@ -150,7 +152,7 @@ Ordinary Dashboard JSON APIs follow this layout:
 - request models: `astrbot/dashboard/schemas.py`
 - source specification: `openspec/openapi-v1.yaml`
 
-After changing routes, request/response schemas, or OpenAPI, regenerate both the frontend client and public docs:
+After changing routes, request/response schemas, or OpenAPI, regenerate both the frontend client and the in-app OpenAPI JSON:
 
 ```bash
 cd dashboard
@@ -174,7 +176,7 @@ pnpm run docs:dev
 pnpm run docs:build
 ```
 
-The production build validates internal links. Do not edit `docs/.vitepress/dist/`; it is generated. `make check-md` enumerates only Git-tracked Markdown, so run Prettier and markdownlint explicitly for new pages that have not yet been added to the index.
+The production build validates internal links. Do not edit `docs/.vitepress/dist/`; it is generated. Production builds use base `/help/` and are served from the Dashboard. `make check-md` enumerates only Git-tracked Markdown, so run Prettier and markdownlint explicitly for new pages that have not yet been added to the index.
 
 ## Dependency Changes
 
@@ -196,4 +198,4 @@ make check
 make quality
 ```
 
-For Dashboard, startup, cross-platform script, or release-artifact changes, also run `make pr-test-full`. Use English Conventional Commit titles for commits and pull requests.
+For Dashboard, startup, cross-platform script, or release-artifact changes, also run `make pr-test-full`. Use English Conventional Commits for commit and pull-request titles. Types, description rules, and breaking-change markers are in [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md) at the repository root. Pick a typed template under `.github/PULL_REQUEST_TEMPLATE/`. AI-assisted commit messages must also follow `.agents/shared/conventional-commit/REFERENCE.md`.

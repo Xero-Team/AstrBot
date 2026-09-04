@@ -61,9 +61,35 @@ System-wide settings have moved from the old Config → System Config route to *
 
 Config profiles still control routed Agent, model, message-processing, and plugin behavior. Do not confuse profile settings with the system-level network and security controls under Settings.
 
-## Runtime Statistics
+## Data workspace
 
-The **Statistics** page includes a local text-to-image section. It shows the in-process Chromium connection, render successes and failures, active pages, timing, reusable browser contexts, and aggregate output size. These values reset when AstrBot restarts and never include templates, rendered content, file paths, or user data.
+**More → Data** opens `/dashboard` with tabs for Statistics, Conversations, Logs, and Trace. The runtime `data/` file manager remains at `/data`; see [Data files](#data-files).
+
+### Statistics
+
+The Statistics tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform rankings, model-call trends, model usage rankings, and session token rankings. You can switch the window between 1 day, 3 days, and 1 week. Session rankings show UMO aliases, can copy the raw UMO, and can open that UMO in the Conversations tab.
+
+The same page includes a local text-to-image section. It shows the in-process Chromium connection, render successes and failures, active pages, timing, reusable browser contexts, and aggregate output size. These values reset when AstrBot restarts and never include templates, rendered content, file paths, or user data.
+
+### Conversations
+
+The Conversations tab searches and manages saved conversation history:
+
+- Filter by keyword, bot ID, private/group type, and UMO, and sort by created or updated time.
+- The list paginates 30 rows at a time. Group-by-session paginates by UMO and expands to every conversation in that session. Full messages load only after you select a conversation.
+- You can edit titles and bulk-export or bulk-delete. Export requires step-up reauthentication.
+- The `{}` control in the preview opens a read-only Monaco editor for the wrapped raw `history` JSON.
+
+### Logs
+
+The Logs tab shows live AstrBot logs. You can filter by level and install a missing Pip package from the page. Pip install requires step-up. Enable DEBUG logs in Settings before looking for DEBUG output.
+
+### Trace
+
+The Trace tab shows live execution traces for debugging model-call paths and tool invocations. Use the switch at the top to enable or disable recording.
+
+> [!NOTE]
+> Currently only some AstrBot main-agent model-call paths are recorded. Coverage will grow.
 
 ## ChatUI
 
@@ -77,7 +103,7 @@ ChatUI supports these common workflows:
 - View model thinking, tool-call status, knowledge-base or web-search references, and per-message token and latency statistics.
 - Copy or regenerate existing replies, including regenerating with another model.
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
-- Switch between streaming/normal response modes and SSE/WebSocket transport modes.
+- Switch between streaming/normal response modes and SSE/WebSocket transport modes. On touch or other coarse-pointer devices, the nested Transport and Language menus open on click instead of hover.
 
 ### High-risk tools in ChatUI
 
@@ -103,8 +129,7 @@ This does not grant access to global Dashboard operations such as changing
 accounts, providers, plugins, system settings, exports, or restarts. The
 account's Persona, tool, sandbox, and path restrictions still apply. Anonymous
 WebChat, API keys, IM messages, plugins, and background continuations cannot
-reuse this authorization. Live Voice is also excluded because it does not use
-the same persistent ChatUI conversation.
+reuse this authorization.
 
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
@@ -113,13 +138,13 @@ the same persistent ChatUI conversation.
 
 WebUI supports multiple Dashboard accounts. First startup creates a bootstrap `root` account (username is usually `astrbot`). Control-plane identity comes from the account table and role bindings; a username never implies `root`.
 
-**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
+**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An authenticated IM private-chat peer is the runtime owner of that DM session (source `private_session`), not a Dashboard binding. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
 
 Fixed roles:
 
 | Role                | Scope                | Typical use                                    |
 | ------------------- | -------------------- | ---------------------------------------------- |
-| `root`              | global control plane | accounts, core updates, restarts, pip installs |
+| `root`              | global control plane | accounts, restarts, pip installs               |
 | `operator`          | global control plane | config, providers, plugins, data operations    |
 | `instance_operator` | one config profile   | management actions for that profile            |
 | `session_owner`     | current group/DM     | session management and in-session model choice |
@@ -127,7 +152,7 @@ Fixed roles:
 | `member`            | current session      | ordinary chat                                  |
 | `guest`             | unauthenticated      | anonymous WebChat                              |
 
-Plugin installs, credential writes, full conversation export, core updates, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
+Plugin installs, credential writes, full conversation export, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
 
 The developer model is in [Architecture](/en/dev/architecture#unified-authorization).
 
@@ -149,7 +174,7 @@ After editing, first click `Apply This Configuration`, which will apply the conf
 
 In the admin panel, you can view installed plugins and install new plugins through the `Plugins` section in the left sidebar.
 
-Click the Plugin Market tab to browse plugins from the default marketplace source. That source points at upstream `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN/compatibility mirrors; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
+Click the Plugin Market tab to browse plugins from the default marketplace source. That source first requests the upstream `cloud.astrbot.app` market JSON, then falls back to `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
 
@@ -173,7 +198,7 @@ Use the `Command Management` menu on the left to centrally manage all registered
 
 Filter by plugin, type (command / command group / subcommand), permission, and status, and combine with the search box for quick lookup. Command group rows can expand to show subcommands, badges display the subcommand count, and subcommand rows are indented to indicate hierarchy.
 
-You can enable/disable, rename, and edit aliases for each command. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
+You can enable/disable, rename, and edit aliases for each command. Commands from a deactivated plugin appear as Plugin off: enable/disable and rename stay blocked until the plugin is enabled, but details remain available, and those commands are excluded from conflict detection. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
 
 Commands are identified by a stable `command_id` of the form `plugin-name:original-command-path` with spaces replaced by dots, for example `builtin_commands:plugin.list`. Permission overrides are read and written only under that key; Python method names and historical short-name keys are ignored. Built-in commands without an explicit Dashboard rename keep their current declared names. Unmatched `command_configs` rows that cannot be claimed by `handler_full_name` or `command_id` are deleted during sync.
 
@@ -195,18 +220,9 @@ Protected paths have a separate policy:
 
 Concurrent saves use an etag; a changed file on disk returns a conflict with **Keep local** or **Reload**. The developer model is in [Architecture](/en/dev/architecture#data-file-manager).
 
-## Trace
-
-In the `Trace` page of the admin panel, you can view the real-time execution trace of AstrBot. This is useful for debugging model call paths, tool invocation processes, etc.
-
-You can enable or disable trace recording using the switch at the top of the page.
-
-> [!NOTE]
-> Currently only recording partial model call paths from AstrBot main Agent. More coverage will be added.
-
 ## Updating the Admin Panel
 
-This fork does not publish downloadable Core or independent Dashboard releases. The in-app version check queries GitHub Releases for `Xero-Team/AstrBot`; when that list is empty the UI reports that no Core Release is published. Do not use the Dashboard one-click updater to install an upstream zip. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
+This fork does not provide a Dashboard one-click Core updater. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
 
 Message commands and the `astrbot` CLI never download, install, or update Dashboard assets. Upstream Dashboard static files are incompatible with this fork's backend API and frontend behavior and must not be copied into `data/dist`. Startup uses only an explicit `--webui-dir`, a build from the current source tree, bundled assets, or a version-matched `data/dist`. Without a compatible build, the backend continues to run but the WebUI is unavailable.
 

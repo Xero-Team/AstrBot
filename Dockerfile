@@ -367,7 +367,6 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install \
         bandit[toml] \
-        commitizen \
         pip-audit \
         pyright \
         pytest \
@@ -446,7 +445,11 @@ RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
 
 WORKDIR /AstrBot/docs
 RUN --mount=type=cache,target=/pnpm/store,sharing=locked \
-    CI=true pnpm install --frozen-lockfile --offline --prefer-offline --trust-lockfile
+    CI=true pnpm install --frozen-lockfile --offline --prefer-offline --trust-lockfile \
+    && ASTRBOT_DOCS_BASE=/help/ pnpm run docs:build \
+    && mkdir -p /AstrBot/astrbot/dashboard/dist/help /AstrBot/dashboard/dist/help \
+    && cp -a /AstrBot/docs/.vitepress/dist/. /AstrBot/astrbot/dashboard/dist/help/ \
+    && cp -a /AstrBot/docs/.vitepress/dist/. /AstrBot/dashboard/dist/help/
 
 WORKDIR /AstrBot
 

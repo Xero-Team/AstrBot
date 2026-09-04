@@ -6,12 +6,14 @@ import logging
 import os
 import tempfile
 import threading
+from pathlib import Path
 
+from astrbot.core.config.agent_runner import normalize_agent_runner_for_load
+from astrbot.core.config.agent_runner_migration import migrate_config_on_load
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
-    hash_md5_dashboard_password,
     validate_dashboard_password,
 )
 
@@ -77,6 +79,14 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self._migrate_openai_chat_completions_type(conf)
+        if default_config is DEFAULT_CONFIG:
+            has_new |= migrate_config_on_load(conf, Path(config_path))
+            normalized_runner = normalize_agent_runner_for_load(
+                conf.get("agent_runner")
+            )
+            if conf.get("agent_runner") != normalized_runner:
+                conf["agent_runner"] = normalized_runner
+                has_new = True
         has_new |= self.check_config_integrity(default_config, conf)
         if self._should_reset_dashboard_password(conf):
             self._reset_generated_dashboard_password(conf)
@@ -118,7 +128,7 @@ class AstrBotConfig(dict):
     def _ensure_config_file(self, default_config: dict) -> None:
         if self.check_exist():
             return
-        self.update(default_config)
+        self.update(copy.deepcopy(default_config))
         self.save_config(indent=4)
         object.__setattr__(self, "first_deploy", True)
 
@@ -147,7 +157,7 @@ class AstrBotConfig(dict):
         conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
             generated_password
         )
-        conf["dashboard"]["password"] = hash_md5_dashboard_password(generated_password)
+        conf["dashboard"]["password"] = ""
         conf["dashboard"]["password_storage_upgraded"] = True
         conf["dashboard"]["password_change_required"] = True
         object.__setattr__(
@@ -240,19 +250,23 @@ class AstrBotConfig(dict):
             current_path = path + "." + key if path else key
             if key not in conf:
                 logger.info("Config key missing; added default.")
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
                 continue
             if conf[key] is None:
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
                 continue
             if not isinstance(value, dict):
                 new_conf[key] = conf[key]
                 continue
             if not isinstance(conf[key], dict):
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
+                continue
+            if current_path == "agent_runner.config":
+                # Runner config is normalized according to runner_type when saved.
+                new_conf[key] = conf[key]
                 continue
             child_has_new = self.check_config_integrity(value, conf[key], current_path)
             new_conf[key] = conf[key]

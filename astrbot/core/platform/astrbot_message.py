@@ -19,6 +19,23 @@ class MessageMember:
         )
 
 
+GROUP_MEMBER_PAGE_LIMIT = 10
+GROUP_MEMBER_HARD_CAP = 2000
+
+
+def group_member_lookup_over_cap(*, pages: int, members: int) -> bool:
+    """Return whether member pagination crossed the hard lookup limits.
+
+    Args:
+        pages: Pages that would be or have been fetched.
+        members: Members that would be or have been collected.
+
+    Returns:
+        True when either limit is exceeded and the member list must be omitted.
+    """
+    return pages > GROUP_MEMBER_PAGE_LIMIT or members > GROUP_MEMBER_HARD_CAP
+
+
 @dataclass
 class Group:
     group_id: str
@@ -33,6 +50,41 @@ class Group:
     """群管理员 id"""
     members: list[MessageMember] | None = None
     """所有群成员"""
+    member_count: int | None = None
+    """Total members, available even when the member list is incomplete."""
+
+    def copy(self) -> Group:
+        """Return a copy that does not share mutable member collections.
+
+        Returns:
+            A new group with copied ``group_admins`` and ``members`` lists.
+        """
+        return Group(
+            group_id=self.group_id,
+            group_name=self.group_name,
+            group_avatar=self.group_avatar,
+            group_owner=self.group_owner,
+            group_admins=(
+                list(self.group_admins) if self.group_admins is not None else None
+            ),
+            members=list(self.members) if self.members is not None else None,
+            member_count=self.member_count,
+        )
+
+    @classmethod
+    def from_inbound(cls, current: Group | None, group_id: str) -> Group:
+        """Copy inbound group data when the ID matches, otherwise start empty.
+
+        Args:
+            current: Group attached to the inbound message, if any.
+            group_id: Group identifier being queried.
+
+        Returns:
+            A new group object that callers may mutate without changing inbound state.
+        """
+        if current is not None and current.group_id == group_id:
+            return current.copy()
+        return cls(group_id=group_id)
 
     def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
@@ -42,6 +94,7 @@ class Group:
             f"Avatar: {self.group_avatar if self.group_avatar else 'N/A'}\n"
             f"Owner ID: {self.group_owner if self.group_owner else 'N/A'}\n"
             f"Admin IDs: {self.group_admins if self.group_admins else 'N/A'}\n"
+            f"Member Count: {self.member_count if self.member_count is not None else 'N/A'}\n"
             f"Members Len: {len(self.members) if self.members else 0}\n"
             f"First Member: {self.members[0] if self.members else 'N/A'}\n"
         )

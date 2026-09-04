@@ -26,6 +26,14 @@ const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
   () => route.path === '/chat' || route.path.startsWith('/chat/'),
 );
+const isProviderPageRoute = computed(() => route.path === '/providers');
+const isPlatformPageRoute = computed(() => route.path === '/platforms');
+const isViewportLockedRoute = computed(
+  () =>
+    isCurrentChatRoute.value ||
+    isProviderPageRoute.value ||
+    isPlatformPageRoute.value,
+);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -111,12 +119,16 @@ onMounted(() => {
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main
         class="dashboard-main"
-        :class="{ 'dashboard-main--chat': isCurrentChatRoute }"
+        :class="{ 'dashboard-main--chat': isViewportLockedRoute }"
       >
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
+          :class="{
+            'chat-mode-container': isCurrentChatRoute,
+            'viewport-locked-container':
+              isProviderPageRoute || isPlatformPageRoute,
+          }"
         >
           <div class="chat-layout-content">
             <div

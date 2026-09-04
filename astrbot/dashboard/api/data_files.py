@@ -1,9 +1,7 @@
 """Dashboard-session-only runtime data file manager API."""
 
-from __future__ import annotations
-
 import os
-from typing import Any
+from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -125,7 +123,7 @@ async def _authorize_path(
     return decision, rights, normalized
 
 
-def _raise(exc: DataFileServiceError) -> None:
+def _raise(exc: DataFileServiceError) -> NoReturn:
     raise ApiError(str(exc), status_code=exc.status_code) from exc
 
 

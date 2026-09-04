@@ -28,40 +28,58 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 ## Top-level structure
 
-| Key                                               | Purpose                                                                                                                                |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `2`. Do not downgrade it manually.                                                         |
-| `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                     |
-| `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                  |
-| `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                 |
-| `provider_settings`                               | Agent, default-model, Persona, retrieval, context, and tool behavior for this profile.                                                 |
-| `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                        |
-| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                       |
-| `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                         |
-| `provider_ltm_settings`                           | Group-context, image-caption, and proactive-reply settings under a historical name; it is not the Alkaid long-term-memory switch.      |
-| `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                   |
-| `dashboard`                                       | WebUI listening, authentication, rate limiting, and TLS; Dashboard account identity and authoritative TOTP state live in its database. |
-| `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                              |
-| Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                            |
+| Key                                               | Purpose                                                                                                                                                                                                                                                         |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config_version`                                  | Current core configuration version, default `3`. Do not downgrade it manually.                                                                                                                                                                                  |
+| `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                                                                                                                                              |
+| `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                                                                                                                                           |
+| `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                                                                                                                                          |
+| `agent_runner`                                    | Agent Runner type and inline configuration for this profile.                                                                                                                                                                                                    |
+| `provider_settings`                               | Shared AI switch, retrieval, streaming, and Computer Use behavior for this profile.                                                                                                                                                                             |
+| `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                                                                                                                                                 |
+| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                                                                                                                                                |
+| `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                                                                                                                                                  |
+| `provider_ltm_settings`                           | [Group chat context awareness](../use/group-chat-context) (in-memory group context, image captions, persisted group history). The JSON key is still historical; it is not the Alkaid long-term-memory switch. Random group proactive replies have been removed. |
+| `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                                                                                                                                            |
+| `dashboard`                                       | WebUI listening, authentication, rate limiting, and TLS; Dashboard account identity and authoritative TOTP state live in its database.                                                                                                                          |
+| `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                                                                                                                                                       |
+| `command_prefixes`                                | Command framing prefixes; default `["/"]`.                                                                                                                                                                                                                      |
+| `llm_access`                                      | Per-profile LLM access policy for direct and group messages; defaults to `private=open`, `group=prefix`, `prefixes=["/"]`.                                                                                                                                      |
+| `inbound_coalesce`                                | Optional bounded merging of consecutive private-message LLM fragments; disabled by default.                                                                                                                                                                     |
+| Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                                                                                                                                                     |
 
 Object layouts inside `provider_sources`, `provider`, and `platform` come from the currently registered type templates. Do not copy old objects from documentation. Create them in the WebUI and inspect the saved result if necessary. A model references its source through `provider_source_id`; use the WebUI when renaming or deleting a source so references are updated together.
 
+## Inbound routing
+
+`command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
+
+| Key                                  | Values                                                      | Meaning                                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `llm_access.private`                 | `open` / `prefix` / `off`                                   | Direct messages always pass, require an LLM prefix, or never open a new LLM turn. A continuation may still pass.  |
+| `llm_access.group`                   | `open` / `prefix` / `mention` / `prefix_or_mention` / `off` | Base gate for group LLM access. Mention and reply behavior are not inferred from command framing.                 |
+| `llm_access.reply_to_bot`            | `true` / `false`                                            | Adds replying to the bot as an explicit OR condition for group LLM access.                                        |
+| `inbound_coalesce.enable`            | `true` / `false`                                            | Enables the bounded turn window; disabled by default. The current implementation coalesces private messages only. |
+| `inbound_coalesce.wait_seconds`      | Number                                                      | Quiet-period delay before a buffered turn is flushed.                                                             |
+| `inbound_coalesce.max_total_seconds` | Number                                                      | Maximum lifetime of a buffered turn, regardless of new fragments.                                                 |
+| `inbound_coalesce.max_typing_wait`   | Number                                                      | Guard that resumes a paused turn when a typing-stop notice is lost.                                               |
+
+Routing checks commands before LLM access. A matched command wins; a bare command group emits help; an unknown subcommand emits the Orbit diagnostic and never falls through to the LLM. Otherwise the event either passes the LLM gate or is dropped. Notices and requests are passthrough events. When coalescing is enabled, later private fragments continue an open turn without repeating the LLM prefix, while a command discards the buffered turn. NapCat `input_status` notices stay out of the message pipeline and only pause or resume the turn window.
+
 ## `platform_settings`
 
-| Key                                         | Default                                     | Meaning                                                                                                                                                          |
-| ------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                                     | Split separate sessions for members inside a group.                                                                                                              |
-| `group_sender_concurrency`                  | `false`                                     | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on.           |
-| `rate_limit`                                | `60` seconds / `30` messages / `stall`      | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                                |
-| `enable_id_white_list`                      | `true`                                      | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                                        |
-| `reply_prefix`                              | `""`                                        | Prefix added to replies.                                                                                                                                         |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                     | Mention the sender or quote the source message when supported by the adapter.                                                                                    |
-| `forward_threshold`                         | `1500`                                      | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                                    |
-| `segmented_reply`                           | See current defaults                        | Non-streaming segmentation, timing, and cleanup rules.                                                                                                           |
-| `path_mapping`                              | `[]`                                        | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.                      |
-| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | Whether mentioning the bot or replying to the bot wakes a group message. Both default to false. The wake prefix is the top-level `wake_prefix`, default `["/"]`. |
-| `friend_message_needs_wake_prefix`          | `false`                                     | Require a wake prefix in direct messages.                                                                                                                        |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | Ignore the bot's own messages or mass mentions.                                                                                                                  |
+| Key                                         | Default                                | Meaning                                                                                                                                                |
+| ------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unique_session`                            | `false`                                | Split separate sessions for members inside a group.                                                                                                    |
+| `group_sender_concurrency`                  | `false`                                | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on. |
+| `rate_limit`                                | `60` seconds / `30` messages / `stall` | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                      |
+| `enable_id_white_list`                      | `true`                                 | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                              |
+| `reply_prefix`                              | `""`                                   | Prefix added to replies.                                                                                                                               |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                | Mention the sender or quote the source message when supported by the adapter.                                                                          |
+| `forward_threshold`                         | `1500`                                 | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                          |
+| `segmented_reply`                           | See current defaults                   | Non-streaming segmentation, timing, and cleanup rules.                                                                                                 |
+| `path_mapping`                              | `[]`                                   | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.            |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                | Ignore the bot's own messages or mass mentions.                                                                                                        |
 
 Example path mapping:
 
@@ -77,57 +95,75 @@ Example path mapping:
 
 This is a partial illustration and must not replace the complete file. Because Windows drive letters contain a colon, configure mappings in the WebUI and validate them against real platform events.
 
+## `agent_runner`
+
+This is the profile AI execution object: `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`. Chat model, Persona, compression, and step caps live here. Do not put them back under `provider_settings`.
+
+### Model selection and retries
+
+- `agent_runner.config.model.provider_id` selects the local Agent's default chat model.
+- `agent_runner.config.model.fallback_provider_ids` lists chat-model IDs tried in order after the primary model fails.
+- `agent_runner.config.model.request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
+
+### Persona
+
+- Local runner: `agent_runner.config.persona.persona_id`.
+- Third-party runners: `agent_runner.config.persona_id`.
+- Safety mode: `agent_runner.config.persona.safety_mode`.
+
+See [Personas](../use/persona) for selection priority and permission semantics.
+
+### Context compression
+
+These fields live under `agent_runner.config.compression`:
+
+| Key                   | Default                         | Meaning                                                                       |
+| --------------------- | ------------------------------- | ----------------------------------------------------------------------------- |
+| `overflow_strategy`   | `llm_compress`                  | `llm_compress` or `truncate_by_turns`.                                        |
+| `keep_recent_ratio`   | `0.15`                          | Exact recent-context token ratio, clamped to `0`–`0.3`.                       |
+| `provider_id`         | `""`                            | Empty means the chat model active for the current session.                    |
+| `instruction`         | Built-in five-point instruction | Summary prompt.                                                               |
+| `max_turns`           | `-1`                            | Conversation turns kept before compression; `-1` disables this turn limit.    |
+| `trim_turns`          | `1`                             | Turns removed per turn-based truncation pass.                                 |
+| `fallback_max_tokens` | Runtime default `128000`        | Fallback window when neither model config nor built-in metadata supplies one. |
+
+See [Automatic Context Compression](../use/context-compress) for the full behavior.
+
+### Steps, tools, and proxy
+
+- `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
+- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `30`, and also applies to current SubAgent executions.
+- `agent_runner.config.max_steps` is the third-party runner step cap, default `30`.
+- `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
+- `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
+- `agent_runner.config.misc.sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.
+- `agent_runner.config.proxy_mode` / `proxy_url` control third-party outbound proxies: `inherit` follows the global proxy, `direct` connects without environment proxies, and `custom` uses only `proxy_url`.
+
 ## `provider_settings`
 
 ### Provider selection and retries
 
 - `enable` enables AI Provider processing and defaults to `true`.
-- `default_provider_id` selects the default chat model.
-- `fallback_chat_models` lists chat-model IDs tried in order after the primary model fails.
-- `request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
 - `provider_pool` limits Providers available to this profile; `["*"]` means all.
 - `default_image_caption_provider_id` and `image_caption_prompt` caption images in the current main-agent request and quoted messages. They are not affected by group-history caption limits.
-- `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency. `image_caption_cache_ttl` defaults to `0` (off) and is scoped by UMO plus content id. `image_caption_lazy` defaults to off.
-- Group-chat JSON cards enter group context and are used as a `[Shared Card]` summary when a proactive reply or ordinary LLM request has no text prompt.
+- `provider_ltm_settings.image_caption_*` applies only to [group chat context awareness](../use/group-chat-context) history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency. `image_caption_cache_ttl` defaults to `0` (off) and is scoped by UMO plus content id. `image_caption_lazy` defaults to off.
+- Group-chat JSON cards enter group context and are used as a `[Shared Card]` summary when an ordinary LLM request has no text prompt.
 
 API keys are sensitive configuration. Never commit a real `cmd_config.json`, screenshots, logs, or backups. Logs and Trace data can also contain Provider IDs, request errors, and tool output.
 
 ### Persona, prompts, and sessions
 
-- `default_personality` selects the default Persona ID.
 - `persona_pool` limits selectable Personas; `["*"]` means all.
 - `prompt_prefix` is the user-prompt template. Keep `{{prompt}}` if the original input must be included.
-- profile-level `wake_prefix` is distinct from the top-level global command/wake-prefix list.
 - `identifier`, `group_name_display`, and `datetime_system_prompt` add user identity, group name, or current time to the prompt.
 
-See [Personas](../use/persona) for selection priority and permission semantics.
+The default Persona ID is configured on `agent_runner`. See [Personas](../use/persona) for selection priority.
 
-### Context management
+### Tool display
 
-| Key                              | Default                         | Meaning                                                                       |
-| -------------------------------- | ------------------------------- | ----------------------------------------------------------------------------- |
-| `context_limit_reached_strategy` | `llm_compress`                  | `llm_compress` or `truncate_by_turns`.                                        |
-| `llm_compress_keep_recent_ratio` | `0.15`                          | Exact recent-context token ratio, clamped to `0`–`0.3`.                       |
-| `llm_compress_provider_id`       | `""`                            | Empty means the chat model active for the current session.                    |
-| `llm_compress_instruction`       | Built-in five-point instruction | Summary prompt.                                                               |
-| `max_context_length`             | `-1`                            | Conversation turns kept before compression; `-1` disables this turn limit.    |
-| `dequeue_context_length`         | `1`                             | Turns removed per turn-based truncation pass.                                 |
-| `fallback_max_context_tokens`    | Runtime default `128000`        | Fallback window when neither model config nor built-in metadata supplies one. |
-
-See [Automatic Context Compression](../use/context-compress) for the full behavior.
-
-### Agent Runner and tools
-
-- `agent_runner_type` selects the built-in `local` Agent or a configured Dify, Coze, DashScope, or DeerFlow runner.
-- `*_agent_runner_provider_id` selects the Provider record for an external runner.
-- `max_agent_step` defaults to `30` and also applies to current SubAgent executions.
-- `tool_call_timeout` is the per-tool timeout in seconds, default `120`.
-- `tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
 - `show_tool_use_status` / `show_tool_call_result` expose tool state and a result preview to users.
 - `buffer_intermediate_messages` combines intermediate text during non-streaming multi-step runs.
-- `sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.
 - `proactive_capability.add_cron_tools` exposes proactive/Cron tools to the local Agent.
-- `file_extract` is experimental document extraction currently templated for the Moonshot API.
 
 ### Streaming
 
@@ -166,7 +202,7 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 - `btw.mcp_routes` uses the same choice for every enabled MCP server. No saved entry also defaults to **Work only**, so execution-oriented servers such as `mcp__codex__codex` do not silently enter the conversation loop.
 - `btw.skill_routes` uses the same choice for every enabled Skill. Ordinary Skills default to both loops, while workspace Skills remain work-loop-only.
 
-The conversation loop forcibly disables local computer, sandbox, browser, and filesystem tools, and it also disables file-content extraction. Only the work loop can receive those capabilities. Plugin assignments filter plugin LLM tools, MCP assignments filter all tools provided by each MCP server, and Skill assignments filter which Skill prompts are injected. Existing subagent handoffs receive the same tool routes and cannot regain computer tools from the conversation loop. LLM tools registered by external Claude Code, Self Code, HAPI, Codex app-server, and OpenCode plugins therefore default to the work loop.
+The conversation loop forcibly disables local computer, sandbox, browser, and filesystem tools. Only the work loop can receive those capabilities. Plugin assignments filter plugin LLM tools, MCP assignments filter all tools provided by each MCP server, and Skill assignments filter which Skill prompts are injected. Existing subagent handoffs receive the same tool routes and cannot regain computer tools from the conversation loop. LLM tools registered by external Claude Code, Self Code, HAPI, Codex app-server, and OpenCode plugins therefore default to the work loop.
 
 Plugin Pipeline/Star handlers and explicit commands such as `/hapi`, `/codexdev`, `/vibe`, and `/oc` retain the plugin's existing priority and are outside LLM tool routing. Moving those commands into detached work sessions requires explicit plugin support or a future command-execution protocol; a work-only plugin tool assignment does not migrate the entire plugin.
 
@@ -184,7 +220,7 @@ These settings belong to a configuration profile. Check the BTW switches, concur
 - `kb_names`, `kb_fusion_top_k`, and `kb_final_top_k` select default knowledge bases and retrieval counts.
 - `kb_agentic_mode` exposes knowledge-base retrieval as a model-controlled tool.
 
-Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disable configuration. Do not treat `provider_ltm_settings` as its switch.
+Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disable configuration. Do not treat `provider_ltm_settings` as its switch. For recent group-message injection, see [Group Chat Context Awareness](../use/group-chat-context).
 
 ## WebUI and authentication
 
@@ -201,7 +237,7 @@ Important `dashboard` defaults:
 | `totp.*`                 | Managed by WebUI | Dashboard TOTP snapshot retained for configuration export; it is not the authority for account authentication.                   |
 | `ssl.enable`             | `false`          | Terminate TLS in AstrBot using the certificate, key, and optional CA path fields.                                                |
 
-Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. `password` is a migration-era hash field. Never write plaintext into either field or manually exchange hashes. To recover access, run:
+Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. New writes leave `password` empty. Existing MD5 values in `password` are still accepted until the next password change. Never write plaintext into either field or manually exchange hashes. To recover access, run:
 
 ```bash
 uv run astrbot run --reset-password
@@ -219,7 +255,7 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 - Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
 - No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
 - `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
-- `log_level` and `log_file_*` control console and rotating file logs.
+- `log_level` and `log_file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log_level` applies to terminal output, not only the file sink.
 - `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.
 - `timezone` is an IANA timezone and defaults to `Asia/Shanghai`.

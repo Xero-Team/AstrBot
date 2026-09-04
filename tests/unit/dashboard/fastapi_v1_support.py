@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import copy
 import json
 from dataclasses import dataclass
@@ -127,6 +125,9 @@ class FakeDb:
 
     async def get_umo_aliases(self, _umos: list[str] | None = None) -> list[object]:
         return []
+
+    async def get_conversation_platform_ids(self) -> list[str]:
+        return ["webchat-main"]
 
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
         key_id = f"key-{raw_key}"
@@ -364,6 +365,11 @@ class FakeConversation:
 class FakeConversationManager:
     def __init__(self) -> None:
         user_id = "webchat:FriendMessage:webchat!user!session-1"
+        self.last_keyword_query = ""
+        self.last_umo_query = ""
+        self.last_sort = ("created_at", "desc")
+        self.last_group_by_session = False
+        self.last_include_history = True
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -381,7 +387,19 @@ class FakeConversationManager:
         search_query: str,
         exclude_ids: list[str],
         exclude_platforms: list[str],
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
+        include_history: bool = True,
+        **_kwargs,
     ):
+        self.last_keyword_query = keyword_query
+        self.last_umo_query = umo_query
+        self.last_sort = (sort_by, sort_order)
+        self.last_group_by_session = group_by_session
+        self.last_include_history = include_history
         conversations = list(self.conversations.values())
         if platforms:
             conversations = [
@@ -401,12 +419,29 @@ class FakeConversationManager:
                 for conversation in conversations
                 if search_query in conversation.title
             ]
+        if keyword_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if keyword_query in conversation.title
+                or keyword_query in conversation.history
+            ]
+        if umo_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if umo_query in conversation.user_id
+            ]
         conversations = [
             conversation
             for conversation in conversations
             if conversation.cid not in exclude_ids
             and conversation.platform_id not in exclude_platforms
         ]
+        conversations.sort(
+            key=lambda conversation: getattr(conversation, sort_by),
+            reverse=sort_order == "desc",
+        )
         start = (page - 1) * page_size
         return conversations[start : start + page_size], len(conversations)
 
@@ -626,23 +661,6 @@ class FakeUmopConfigRouter:
         return self.umop_to_conf_id.get(umo)
 
 
-class FakeAstrBotUpdator:
-    async def check_update(self, *_args, **_kwargs):
-        return None
-
-    async def get_releases(self):
-        return []
-
-    async def update(self, *_args, **_kwargs) -> None:
-        return None
-
-    async def download_update_package(self, *_args, **kwargs):
-        return kwargs.get("path", "temp.zip")
-
-    def apply_update_package(self, *_args, **_kwargs) -> None:
-        return None
-
-
 class FakeAstrBotConfig(dict):
     def save_config(self, post_config: dict | None = None, *, indent: int = 2) -> None:
         _ = indent
@@ -847,7 +865,6 @@ def fake_core_lifecycle(fake_db: FakeDb):
             llm_metadata_catalog=LLMMetadataCatalog(),
             totp_runtime_state=TotpRuntimeState(),
         ),
-        updater=FakeAstrBotUpdator(),
         catalogs=catalogs,
         webchat_run_coordinator=webchat_run_coordinator,
         start_time=1234567890,

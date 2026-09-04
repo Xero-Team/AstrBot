@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
 
+from astrbot import logger
 from astrbot.core.message.components import (
     At,
     BaseMessageComponent,
@@ -19,9 +20,14 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 from .forward_node_splitter import split_long_text_node
+
+_EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
+_SPLIT_SEND_INTERVAL_SECONDS = 0.5
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -219,6 +225,54 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     )
 
     @classmethod
+    async def _dispatch_standard_segments(
+        cls,
+        bot: CQHttp,
+        event: Event | None,
+        is_group: bool,
+        session_id: str | None,
+        segments: list[BaseMessageComponent],
+        *,
+        sent_any: bool,
+    ) -> bool:
+        if not segments:
+            return False
+        messages = await cls._parse_onebot_json(MessageChain(segments))
+        if not messages:
+            return False
+        if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+            await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+        await cls._dispatch_send(bot, event, is_group, session_id, messages)
+        return True
+
+    @classmethod
+    async def _send_forward_segment(
+        cls,
+        bot: CQHttp,
+        segment: Node | Nodes,
+        event: Event | None,
+        is_group: bool,
+        session_id: str | None,
+        forward_message_max_retries: int,
+        forward_message_fallback_enabled: bool,
+    ) -> None:
+        nodes = segment if isinstance(segment, Nodes) else Nodes([segment])
+        payload = await nodes.to_dict()
+        if forward_message_fallback_enabled:
+            await cls._send_forward_with_fallback(
+                bot,
+                payload,
+                event,
+                is_group,
+                session_id,
+                forward_message_max_retries,
+            )
+            return
+        action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
+        payload["group_id" if is_group else "user_id"] = session_id
+        await bot.call_action(action, **payload)
+
+    @classmethod
     async def send_message(
         cls,
         bot: CQHttp,
@@ -239,51 +293,54 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             session_id (str | None, optional): 会话 ID（群号或 QQ 号
 
         """
-        # 转发消息、文件消息不能和普通消息混在一起发送
-        send_one_by_one = any(
-            isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
-        )
-        if not send_one_by_one:
-            ret = await cls._parse_onebot_json(message_chain)
-            if not ret:
-                return
-            await cls._dispatch_send(bot, event, is_group, session_id, ret)
-            return
+        # 转发、文件、语音、视频不能和普通消息混在同一条 OneBot 消息里发送。
+        # 连续可混排段（文本、图片等）仍合并为一次发送。
+        pending: list[BaseMessageComponent] = []
+        sent_any = False
         for seg in message_chain.chain:
-            if isinstance(seg, Node | Nodes):
-                # 合并转发消息
-                if isinstance(seg, Node):
-                    nodes = Nodes([seg])
-                    seg = nodes
-
-                payload = await seg.to_dict()
-
-                if forward_message_fallback_enabled:
-                    await cls._send_forward_with_fallback(
+            if isinstance(seg, _EXCLUSIVE_OUTBOUND_SEGMENTS):
+                if await cls._dispatch_standard_segments(
+                    bot,
+                    event,
+                    is_group,
+                    session_id,
+                    pending,
+                    sent_any=sent_any,
+                ):
+                    sent_any = True
+                pending.clear()
+                if isinstance(seg, Node | Nodes):
+                    if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                        await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+                    await cls._send_forward_segment(
                         bot,
-                        payload,
+                        seg,
                         event,
                         is_group,
                         session_id,
                         forward_message_max_retries,
+                        forward_message_fallback_enabled,
                     )
-                else:
-                    action = (
-                        "send_group_forward_msg"
-                        if is_group
-                        else "send_private_forward_msg"
-                    )
-                    payload["group_id" if is_group else "user_id"] = session_id
-                    await bot.call_action(action, **payload)
-            elif isinstance(seg, File):
-                d = await cls._from_segment_to_dict(seg)
-                await cls._dispatch_send(bot, event, is_group, session_id, [d])
-            else:
-                messages = await cls._parse_onebot_json(MessageChain([seg]))
-                if not messages:
-                    continue
-                await cls._dispatch_send(bot, event, is_group, session_id, messages)
-                await asyncio.sleep(0.5)
+                    sent_any = True
+                elif await cls._dispatch_standard_segments(
+                    bot,
+                    event,
+                    is_group,
+                    session_id,
+                    [seg],
+                    sent_any=sent_any,
+                ):
+                    sent_any = True
+                continue
+            pending.append(seg)
+        await cls._dispatch_standard_segments(
+            bot,
+            event,
+            is_group,
+            session_id,
+            pending,
+            sent_any=sent_any,
+        )
 
     async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息"""
@@ -315,50 +372,103 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         )
 
     async def get_group(self, group_id=None, **kwargs):
-        if isinstance(group_id, str) and group_id.isdigit():
-            group_id = int(group_id)
-        elif self.get_group_id():
-            group_id = int(self.get_group_id())
-        else:
+        """Get OneBot group details while preserving inbound data on failures.
+
+        Args:
+            group_id: Optional OneBot group identifier.
+            **kwargs: Reserved compatibility arguments.
+
+        Returns:
+            Enriched group information, or a basic group when an API is unavailable.
+        """
+        resolved_group_id = group_id or self.get_group_id()
+        if not resolved_group_id:
             return None
+        resolved_group_id = str(resolved_group_id)
+        api_group_id = (
+            int(resolved_group_id) if resolved_group_id.isdigit() else resolved_group_id
+        )
+
+        group = Group.from_inbound(self.message_obj.group, resolved_group_id)
 
         routing_params = {}
         if getattr(self.message_obj, "self_id", None):
             routing_params["self_id"] = self.message_obj.self_id
 
-        info: dict = await self._bot.call_action(
-            "get_group_info",
-            group_id=group_id,
-            **routing_params,
-        )
+        try:
+            info = await self._bot.call_action(
+                "get_group_info",
+                group_id=api_group_id,
+                **routing_params,
+            )
+            if isinstance(info, dict):
+                group.group_name = info.get("group_name") or group.group_name
+                member_count = info.get("member_count")
+                if member_count is not None:
+                    try:
+                        group.member_count = int(member_count)
+                    except TypeError, ValueError:
+                        logger.warning(
+                            "[aiocqhttp] Invalid member_count for group %s",
+                            resolved_group_id,
+                        )
+        except Exception as exc:
+            logger.warning(
+                "[aiocqhttp] Failed to get group information for %s: %s",
+                resolved_group_id,
+                safe_error("", exc),
+            )
 
-        members: list[dict] = await self._bot.call_action(
-            "get_group_member_list",
-            group_id=group_id,
-            **routing_params,
-        )
+        if group.member_count is not None and group_member_lookup_over_cap(
+            pages=1,
+            members=group.member_count,
+        ):
+            group.members = None
+            return group
+
+        try:
+            members = await self._bot.call_action(
+                "get_group_member_list",
+                group_id=api_group_id,
+                **routing_params,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[aiocqhttp] Failed to get members for group %s: %s",
+                resolved_group_id,
+                safe_error("", exc),
+            )
+            return group
+        if not isinstance(members, list):
+            return group
 
         owner_id = None
-        admin_ids = []
+        admin_ids: list[str] = []
+        valid_members: list[dict] = []
         for member in members:
+            if not isinstance(member, dict) or member.get("user_id") is None:
+                continue
             if member.get("role") == "owner":
-                owner_id = member["user_id"]
+                owner_id = str(member["user_id"])
             if member.get("role") == "admin":
-                admin_ids.append(member["user_id"])
+                admin_ids.append(str(member["user_id"]))
+            valid_members.append(member)
 
-        group = Group(
-            group_id=str(group_id),
-            group_name=info.get("group_name"),
-            group_avatar="",
-            group_admins=admin_ids,
-            group_owner=str(owner_id) if owner_id is not None else "",
-            members=[
-                MessageMember(
-                    user_id=member["user_id"],
-                    nickname=member.get("nickname") or member.get("card"),
-                )
-                for member in members
-            ],
-        )
-
+        group.group_admins = admin_ids
+        group.group_owner = owner_id
+        member_count = len(valid_members)
+        if group_member_lookup_over_cap(pages=1, members=member_count):
+            group.members = None
+            if group.member_count is None:
+                group.member_count = member_count
+            return group
+        group.members = [
+            MessageMember(
+                user_id=str(member["user_id"]),
+                nickname=member.get("nickname") or member.get("card"),
+            )
+            for member in valid_members
+        ]
+        if group.member_count is None:
+            group.member_count = member_count
         return group

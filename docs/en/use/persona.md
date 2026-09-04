@@ -19,7 +19,7 @@ The local Agent Runner resolves a Persona in this order:
 
 1. a forced Persona configured for the message session under **Session Management**;
 2. the Persona selected on the current conversation record;
-3. `provider_settings.default_personality` from the active profile.
+3. the profile default Persona: `agent_runner.config.persona.persona_id` for the local runner, or `agent_runner.config.persona_id` for a third-party runner.
 
 Session rules are useful for pinning a role to a platform, group, or user. Without a forced rule, WebChat can select a Persona per conversation. Explicitly selecting no Persona prevents the profile default from being applied.
 
@@ -65,7 +65,7 @@ During import:
 > [!WARNING]
 > Persona JSON is prompt input. Review third-party files before importing them, then immediately configure tools and Skills; otherwise the imported Persona inherits every currently available capability. The export is not a complete backup.
 
-Use AstrBot runtime-data backup for a complete migration instead of relying on Persona JSON alone. After restoration, verify that referenced plugins, MCP servers, Skills, and Providers still exist because a Persona stores their names rather than their implementations.
+Use AstrBot [runtime-data backup](../deploy/astrbot/backup) for a complete migration instead of relying on Persona JSON alone. After restoration, verify that referenced plugins, MCP servers, Skills, and Providers still exist because a Persona stores their names rather than their implementations.
 
 ## Related features
 

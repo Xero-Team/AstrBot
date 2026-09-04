@@ -1,5 +1,5 @@
 <template>
-  <MarkdownCodeBlockNode
+  <CodeBlockNode
     :key="themeRenderKey"
     v-bind="forwardedBindings"
     @copy="handleCopy"
@@ -7,20 +7,21 @@
     <template v-for="(_, slotName) in $slots" #[slotName]="slotProps">
       <slot :name="slotName" v-bind="slotProps || {}" />
     </template>
-  </MarkdownCodeBlockNode>
+  </CodeBlockNode>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, type Ref, useAttrs } from 'vue';
-import { MarkdownCodeBlockNode } from 'markstream-vue';
+import { CodeBlockNode, type CodeBlockNodeProps } from 'markstream-vue';
 import { copyToClipboard } from '@/utils/clipboard';
+import { isFenceLanguageSettled } from '@/utils/shikiLimitedBundle';
 
 defineOptions({
   inheritAttrs: false,
 });
 
 const props = defineProps<{
-  node: Record<string, unknown>;
+  node: CodeBlockNodeProps['node'];
   isDark?: boolean;
 }>();
 
@@ -52,9 +53,15 @@ const effectiveIsDark = computed(
 );
 
 const attrs = useAttrs();
+const settledNode = computed(() => {
+  const node = props.node;
+  if (!node || isFenceLanguageSettled(node)) return node;
+  return { ...node, language: 'text' };
+});
 const forwardedBindings = computed(() => ({
   ...attrs,
   ...props,
+  node: settledNode.value,
   isDark: effectiveIsDark.value,
 }));
 const themeRenderKey = computed(() =>

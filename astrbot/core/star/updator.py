@@ -9,9 +9,9 @@ from astrbot.core.utils.io import ensure_dir, extract_zip_safely, remove_dir
 from astrbot.core.utils.outbound_http import PLUGIN_DOWNLOAD_URL
 
 from ..star.star import StarMetadata
-from ..updator import RepoZipUpdator
+from ..zip_updator import RepoZipUpdator
 
-PLUGIN_METADATA_FILENAMES = ("metadata.yaml", "metadata.yml")
+PLUGIN_METADATA_FILENAME = "metadata.yaml"
 PLUGIN_METADATA_REQUIRED_FIELDS = ("name", "desc", "version", "author")
 
 
@@ -41,9 +41,13 @@ class PluginUpdator(RepoZipUpdator):
         return plugin_path
 
     async def update(
-        self, plugin: StarMetadata, proxy="", download_url: str = ""
+        self,
+        plugin: StarMetadata,
+        proxy="",
+        download_url: str = "",
+        repo_url: str = "",
     ) -> str:
-        repo_url = plugin.repo
+        repo_url = str(repo_url or "").strip() or str(plugin.repo or "").strip()
 
         if not repo_url and not download_url:
             raise Exception(
@@ -105,12 +109,9 @@ class PluginUpdator(RepoZipUpdator):
             entries_by_portable_path[portable_entry] = entry
 
         metadata_candidates = (
-            [
-                f"{portable_update_dir}/{filename}"
-                for filename in PLUGIN_METADATA_FILENAMES
-            ]
+            [f"{portable_update_dir}/{PLUGIN_METADATA_FILENAME}"]
             if portable_update_dir
-            else list(PLUGIN_METADATA_FILENAMES)
+            else [PLUGIN_METADATA_FILENAME]
         )
         for candidate in metadata_candidates:
             if candidate in entries_by_portable_path:
@@ -174,7 +175,7 @@ class PluginUpdator(RepoZipUpdator):
                 metadata_entry = cls.find_plugin_metadata_entry(z.namelist())
                 if metadata_entry is None:
                     raise ValueError(
-                        "压缩包不是合法的 AstrBot 插件：未找到 metadata.yaml 或 metadata.yml。"
+                        "压缩包不是合法的 AstrBot 插件：未找到 metadata.yaml。"
                     )
 
                 try:

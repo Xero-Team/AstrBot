@@ -28,42 +28,59 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 ## 顶层结构
 
-| 键                                                | 用途                                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `config_version`                                  | 当前核心配置结构版本，默认 `2`，不要手动降级。                                  |
-| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                            |
-| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                            |
-| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                              |
-| `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                 |
-| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                           |
-| `btw`                                             | 对话循环入口、规则任务分类、工作循环，以及插件、MCP、Skill 的循环分配。         |
-| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                          |
-| `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。  |
-| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                              |
-| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。 |
-| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                         |
-| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                   |
+| 键                                                | 用途                                                                                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `config_version`                                  | 当前核心配置结构版本，默认 `3`，不要手动降级。                                                                                                                     |
+| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                                                                                                               |
+| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                                                                                               |
+| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                                                                                                 |
+| `agent_runner`                                    | 当前配置档的 Agent 执行器类型及其内联配置。                                                                                                                        |
+| `provider_settings`                               | 当前配置档的 AI 开关、检索、流式输出、Computer Use 等共用行为。                                                                                                    |
+| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                                                                                              |
+| `btw`                                             | 对话循环入口、规则任务分类、工作循环，以及插件、MCP、Skill 的循环分配。                                                                                             |
+| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                                                                                             |
+| `provider_ltm_settings`                           | [群聊上下文感知](../use/group-chat-context)（内存群聊上下文、图片转述、持久化群消息历史）。JSON 键仍为历史名称；不是 Alkaid 长期记忆开关。群聊随机主动回复已移除。 |
+| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                                                                                                                 |
+| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。                                                                                    |
+| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                                                                                            |
+| `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                                                                                           |
+| `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=open`、`group=prefix`、`prefixes=["/"]`。                                                                       |
+| `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                                                                                        |
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
+
+## 入站路由
+
+`command_prefixes` 和 `llm_access` 都读取事件实际选中的配置档。`command_prefixes` 只负责指令头，不会与 LLM 前缀自动拼接。`llm_access.prefixes` 的每一项都是用户实际输入的完整字符串，按词边界和最长匹配处理。非空 LLM 前缀会在同一配置档占用其第一个指令根；如果与已启用指令冲突，Dashboard 会拒绝保存。
+
+| 键                                   | 可选值                                                      | 说明                                                                     |
+| ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `llm_access.private`                 | `open` / `prefix` / `off`                                   | 私聊始终允许、必须带 LLM 前缀，或不打开新的 LLM 回合；已有续片仍可继续。 |
+| `llm_access.group`                   | `open` / `prefix` / `mention` / `prefix_or_mention` / `off` | 群聊 LLM 的基础门禁；不会从指令前缀推断提及或回复条件。                  |
+| `llm_access.reply_to_bot`            | `true` / `false`                                            | 将“回复机器人”作为群聊 LLM 访问的额外 OR 条件。                          |
+| `inbound_coalesce.enable`            | `true` / `false`                                            | 启用有界回合窗口，默认关闭；当前实现只合并私聊消息。                     |
+| `inbound_coalesce.wait_seconds`      | 数字                                                        | 缓冲回合的静默等待时间。                                                 |
+| `inbound_coalesce.max_total_seconds` | 数字                                                        | 缓冲回合的最长生命周期，不因新片段而延长。                               |
+| `inbound_coalesce.max_typing_wait`   | 数字                                                        | 输入停止通知丢失时，自动恢复暂停回合的保护时间。                         |
+
+路由顺序是先匹配指令，再判断 LLM 访问。命中指令时只执行指令；裸指令组输出帮助；未知子指令输出 Orbit 诊断且不会回落到 LLM。否则事件通过 LLM 门禁或被丢弃。通知和请求属于透传事件。启用合并后，私聊窗口中的后续片段不再要求重复 LLM 前缀；收到指令会丢弃缓冲回合。NapCat 的 `input_status` 只暂停或恢复回合窗口，不会进入消息 Pipeline。
 
 ## `platform_settings`
 
 常用字段如下：
 
-| 键                                          | 默认值                                      | 说明                                                                                                        |
-| ------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                                     | 是否为群内成员拆分独立会话。                                                                                |
-| `group_sender_concurrency`                  | `false`                                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
-| `rate_limit`                                | `60` 秒 / `30` 条 / `stall`                 | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
-| `enable_id_white_list`                      | `true`                                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
-| `reply_prefix`                              | `""`                                        | 所有回复的前缀。                                                                                            |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
-| `forward_threshold`                         | `1500`                                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
-| `segmented_reply`                           | 见默认配置                                  | 非流式结果的分段、间隔、清理规则。                                                                          |
-| `path_mapping`                              | `[]`                                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
-| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | 群聊是否因 @ 机器人或回复机器人而唤醒。两项默认都关闭。唤醒前缀由顶层 `wake_prefix` 控制，默认 `["/"]`。    |
-| `friend_message_needs_wake_prefix`          | `false`                                     | 私聊是否也要求唤醒前缀。                                                                                    |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | 忽略机器人自身消息或全体提及。                                                                              |
+| 键                                          | 默认值                      | 说明                                                                                                        |
+| ------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `unique_session`                            | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
+| `group_sender_concurrency`                  | `false`                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
+| `rate_limit`                                | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
+| `enable_id_white_list`                      | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
+| `reply_prefix`                              | `""`                        | 所有回复的前缀。                                                                                            |
+| `reply_with_mention` / `reply_with_quote`   | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
+| `forward_threshold`                         | `1500`                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
+| `segmented_reply`                           | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
+| `path_mapping`                              | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                     | 忽略机器人自身消息或全体提及。                                                                              |
 
 `path_mapping` 示例：
 
@@ -79,57 +96,75 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 这是局部示意，不应覆盖完整文件。Windows 驱动器号本身含冒号，建议通过 WebUI 配置并在实际平台消息上验证。
 
+## `agent_runner`
+
+配置档的 AI 执行入口。形状为 `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`。聊天模型、Persona、压缩和步数上限都写在这里，不要再放到 `provider_settings`。
+
+### 模型选择与重试
+
+- `agent_runner.config.model.provider_id`：本地 Agent 的默认聊天模型 ID。
+- `agent_runner.config.model.fallback_provider_ids`：主模型失败时按顺序尝试的聊天模型 ID。
+- `agent_runner.config.model.request_max_retries`：单个模型请求最大重试次数，默认 `5`；fallback 与单模型重试是不同层次。
+
+### Persona
+
+- 本地 Runner：`agent_runner.config.persona.persona_id`。
+- 第三方 Runner：`agent_runner.config.persona_id`。
+- 健康模式：`agent_runner.config.persona.safety_mode`。
+
+选择优先级和权限语义见 [Persona 人格设定](../use/persona)。
+
+### 上下文压缩
+
+这些字段位于 `agent_runner.config.compression`：
+
+| 键                    | 默认值              | 说明                                                    |
+| --------------------- | ------------------- | ------------------------------------------------------- |
+| `overflow_strategy`   | `llm_compress`      | `llm_compress` 或 `truncate_by_turns`。                 |
+| `keep_recent_ratio`   | `0.15`              | 原样保留最近上下文的 token 比例，范围限制为 `0`–`0.3`。 |
+| `provider_id`         | `""`                | 留空时使用当前会话聊天模型。                            |
+| `instruction`         | 内置五点指令        | 摘要提示词。                                            |
+| `max_turns`           | `-1`                | 压缩前最多保留的对话轮数；`-1` 不限制。                 |
+| `trim_turns`          | `1`                 | 按轮截断时一次丢弃的轮数。                              |
+| `fallback_max_tokens` | 运行时默认 `128000` | 模型未配置窗口且内置元数据无法识别时的兜底值。          |
+
+完整行为见 [自动上下文压缩](../use/context-compress)。
+
+### 步数、工具与代理
+
+- `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
+- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `30`，也适用于当前子代理执行。
+- `agent_runner.config.max_steps`：第三方 Runner 的 step 上限，默认 `30`。
+- `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
+- `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
+- `agent_runner.config.misc.sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。
+- `agent_runner.config.proxy_mode` / `proxy_url`：第三方 Runner 的出站代理；`inherit` 跟随全局代理，`direct` 明确直连，`custom` 仅使用 `proxy_url`。
+
 ## `provider_settings`
 
 ### Provider 选择与重试
 
 - `enable`：是否启用 AI Provider 处理，默认 `true`。
-- `default_provider_id`：默认聊天模型 ID。
-- `fallback_chat_models`：主模型失败时按顺序尝试的聊天模型 ID。
-- `request_max_retries`：单个模型请求最大重试次数，默认 `5`；fallback 与单模型重试是不同层次。
 - `provider_pool`：本配置档可用 Provider 范围，`["*"]` 表示全部。
 - `default_image_caption_provider_id` 和 `image_caption_prompt`：主 Agent 当前请求和引用图片的转述，不受群聊历史限流影响。
-- `provider_ltm_settings.image_caption_*`：只作用于群聊历史上下文转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
-- 群聊 JSON 卡片会进入群聊上下文，并在主动回复或普通 LLM 请求缺少文本 prompt 时作为 `[Shared Card]` 卡片摘要。
+- `provider_ltm_settings.image_caption_*`：只作用于[群聊上下文感知](../use/group-chat-context)的历史图片转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
+- 群聊 JSON 卡片会进入群聊上下文，并在普通 LLM 请求缺少文本 prompt 时作为 `[Shared Card]` 卡片摘要。
 
 API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志或备份提交到 Git；日志和 Trace 也可能包含 Provider ID、请求错误或工具输出。
 
 ### Persona、提示词与会话
 
-- `default_personality`：默认 Persona ID。
 - `persona_pool`：本配置档可选 Persona，`["*"]` 表示全部。
 - `prompt_prefix`：用户提示词模板，必须保留 `{{prompt}}` 才能包含原始输入。
-- `wake_prefix`：配置档级唤醒前缀；顶层 `wake_prefix` 仍是全局命令/唤醒前缀列表。
 - `identifier`、`group_name_display`、`datetime_system_prompt`：向提示词加入用户 ID、群名或当前时间。
 
-Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/persona)。
+默认 Persona ID 在 `agent_runner` 中配置。选择优先级见 [Persona 人格设定](../use/persona)。
 
-### 上下文管理
+### 工具展示
 
-| 键                               | 默认值              | 说明                                                    |
-| -------------------------------- | ------------------- | ------------------------------------------------------- |
-| `context_limit_reached_strategy` | `llm_compress`      | `llm_compress` 或 `truncate_by_turns`。                 |
-| `llm_compress_keep_recent_ratio` | `0.15`              | 原样保留最近上下文的 token 比例，范围限制为 `0`–`0.3`。 |
-| `llm_compress_provider_id`       | `""`                | 留空时使用当前会话聊天模型。                            |
-| `llm_compress_instruction`       | 内置五点指令        | 摘要提示词。                                            |
-| `max_context_length`             | `-1`                | 压缩前最多保留的对话轮数；`-1` 不限制。                 |
-| `dequeue_context_length`         | `1`                 | 按轮截断时一次丢弃的轮数。                              |
-| `fallback_max_context_tokens`    | 运行时默认 `128000` | 模型未配置窗口且内置元数据无法识别时的兜底值。          |
-
-完整行为见 [自动上下文压缩](../use/context-compress)。
-
-### Agent Runner 与工具
-
-- `agent_runner_type`：`local` 使用内置 Agent；也可选择已配置的 Dify、Coze、DashScope 或 DeerFlow Runner。
-- `*_agent_runner_provider_id`：对应外部 Runner 的 Provider ID。
-- `max_agent_step`：单次 Agent 运行最大 step，默认 `30`，也适用于当前子代理执行。
-- `tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
-- `tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
 - `show_tool_use_status` / `show_tool_call_result`：向用户显示工具状态及结果摘要。
 - `buffer_intermediate_messages`：非流式多 step 运行时合并中间文本。
-- `sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。
 - `proactive_capability.add_cron_tools`：向本地 Agent 提供主动任务/Cron 工具。
-- `file_extract`：实验性文档提取配置，目前模板面向 Moonshot API。
 
 ### 流式输出
 
@@ -168,7 +203,7 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 - `btw.mcp_routes`：为每个已启用 MCP 服务器做相同的循环选择。未保存条目也默认“仅工作循环”，因此 `mcp__codex__codex` 等执行型 MCP 不会自动进入对话循环。
 - `btw.skill_routes`：为每个已启用 Skill 做相同的循环选择。普通 Skill 未保存时默认注入两个循环；工作区 Skill 仍只会注入工作循环。
 
-对话循环会强制禁用本地电脑、沙盒、浏览器和文件工具，并关闭文件内容提取；这些能力只可能由工作循环获得。插件分配过滤插件注册给 LLM 的工具，MCP 分配过滤每个 MCP 服务器提供的全部工具，Skill 分配过滤注入的 Skill 提示。既有的子代理 handoff 也会应用相同的工具分配，且无法在对话循环重新获得电脑工具。Claude Code、Self Code、HAPI、Codex app-server、OpenCode 等外部插件注册的 LLM 工具因此默认只在工作循环可用。
+对话循环会强制禁用本地电脑、沙盒、浏览器和文件工具；这些能力只可能由工作循环获得。插件分配过滤插件注册给 LLM 的工具，MCP 分配过滤每个 MCP 服务器提供的全部工具，Skill 分配过滤注入的 Skill 提示。既有的子代理 handoff 也会应用相同的工具分配，且无法在对话循环重新获得电脑工具。Claude Code、Self Code、HAPI、Codex app-server、OpenCode 等外部插件注册的 LLM 工具因此默认只在工作循环可用。
 
 插件的 Pipeline/Star 处理器和 `/hapi`、`/codexdev`、`/vibe`、`/oc` 等显式命令仍按插件既有优先级运行，不属于 LLM 工具路由。要让这类插件命令也采用后台工作会话，需要插件侧或后续的命令执行协议显式支持；不要把“插件工具仅工作循环”理解为整个插件都被迁移。
 
@@ -186,7 +221,7 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 - `kb_names`、`kb_fusion_top_k`、`kb_final_top_k`：默认知识库和检索数量。
 - `kb_agentic_mode`：将知识库检索作为工具交给模型自主调用。
 
-Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置；不要把 `provider_ltm_settings` 当作长期记忆开关。
+Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置；不要把 `provider_ltm_settings` 当作长期记忆开关。群聊近期消息注入见 [群聊上下文感知](../use/group-chat-context)。
 
 ## WebUI 与认证
 
@@ -203,7 +238,7 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 | `totp.*`                 | 由 WebUI 管理 | 为配置导出保留的 Dashboard TOTP 快照，不是账户认证的权威来源。                          |
 | `ssl.enable`             | `false`       | 由 AstrBot 直接终止 TLS；证书、私钥和可选 CA 使用对应路径字段。                         |
 
-密码以 PBKDF2 哈希存放在 `pbkdf2_password`。`password` 是迁移期使用的哈希字段，不要在 JSON 中写明文，也不要手工生成或交换哈希。忘记密码时使用：
+密码以 PBKDF2 哈希存放在 `pbkdf2_password`。新写入会把 `password` 留空。已有部署里 `password` 中的 MD5 值仍可用于登录，直到下次改密。不要在 JSON 中写明文，也不要手工生成或交换哈希。忘记密码时使用：
 
 ```bash
 uv run astrbot run --reset-password
@@ -221,7 +256,7 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 - Provider / Platform 使用三态 `proxy_mode`：`inherit` 跟随全局配置，`direct` 明确直连并忽略环境变量代理，`custom` 只使用本项 `proxy_url`。空字符串不再同时表示继承和直连。
 - GitHub 镜像默认不提供。插件 `download_url` 和镜像前缀必须是公开 HTTPS origin，私网和非 HTTPS 会被拒绝。
 - `platform_settings.segmented_reply` 仍是默认关闭的体验分段。Telegram / Discord / 企业微信的平台硬限制分段由发送层负责，二者不要混用。
-- `log_level`、`log_file_*`：控制台和轮转文件日志。
+- `log_level`、`log_file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log_level` 会同步到终端输出，不只写文件。
 - `trace_enable`：Trace 采集总开关；`trace_log_*` 控制独立 Trace 文件。
 - `temp_dir_max_size`：`data/temp` 上限（MiB），默认 `1024`；后台定期清理旧文件。
 - `timezone`：IANA 时区名称，默认 `Asia/Shanghai`。

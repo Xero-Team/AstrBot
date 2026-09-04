@@ -32,6 +32,12 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 已声明的 option 可以位于位置参数前后，支持 `--name=value`。`--` 会终止 option 解析，例如 `/session name -- -x` 会把 `-x` 当作普通参数。`-1` 等负数可以直接用于数值位置参数。
 
+## 指令与 LLM 路由
+
+指令由配置档的 `command_prefixes`（默认 `["/"]`）标记，并在已启用的指令 catalog 中匹配。路由总是先匹配指令，再判断 LLM 访问：命中指令时只执行指令，裸指令组显示帮助，未知子指令返回 Orbit 诊断，不会被当作 LLM 提示词。非指令消息遵循当前配置档的 `llm_access` 策略；其中的前缀是用户实际输入的完整字符串，不会与 `command_prefixes` 自动拼接。
+
+已启用的指令路径、别名、子路径和非空 LLM 前缀根共享同一作用域命名空间。发生冲突时，路径会被拒绝或从运行时 catalog 排除，直到 Dashboard 重命名只剩一个所有者，或指令更新 API 记录接管。Dashboard 会高亮冲突并提供重命名，没有接管按钮。内置 LLM 状态指令是 `/llm status`、`/llm enable` 和 `/llm disable`；`/chat` 不是它们的兼容别名。
+
 ## 指令列表
 
 ### 帮助
@@ -47,7 +53,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/bot leave`：提示退群确认。需要 `session.manage`，且只能在群聊中使用。
 - `/bot leave --confirm` 或 `/bot leave -c`：确认后退出当前群。当前平台未声明 `leave_group` 时会拒绝。
 
-`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是当前 UMO（与 `/chat` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。裸 `/bot` 只显示子指令树。
+`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是当前 UMO（与 `/llm` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。裸 `/bot` 只显示子指令树。
 
 ### 会话信息
 
@@ -55,12 +61,14 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session name`：显示当前自动名称和已保存别名，需要 `session.manage`。
 - `/session name <名称>`：设置当前 UMO 的展示别名，需要 `session.manage`。名称由 `GreedyStr` 接收，可以包含空格。
 
+唤醒阶段在 `is_wake` 确定后会把自动名写入存储；手动别名优先，自动 upsert 不覆盖 `user_alias`。
+
 使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
 
 ### 对话
 
 - `/conversation create`：创建并切换到新对话。
-- `/conversation reset`：清空当前对话上下文，同时清理对应的第三方 Agent Runner 会话状态。
+- `/conversation reset`：清空当前对话上下文，同时清理对应的第三方 Agent Runner 会话状态和该会话的[群聊上下文感知](./group-chat-context)内存缓存。
 - `/conversation stats`：显示当前对话的输入、缓存输入和输出 Token 统计。
 - `/conversation history [--page N|-p N]`：显示当前对话历史。
 - `/conversation list [--page N|-p N]`：列出对话。
@@ -69,7 +77,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/conversation delete`：删除当前对话。
 - `/conversation create-for <会话 ID>`：为指定群会话创建新对话，需要 `session.assign` 和 `session.manage`。
 
-`reset` 和 `delete` 在未开启群聊会话隔离时可能要求 `session.manage`；Dashboard 中的指令权限配置优先于默认行为。
+`reset`、`delete`、`create`、`switch`、`rename` 始终声明 `session.manage`。私聊对端是当前会话的 `session_owner`，因此可以直接 `/conversation reset` 等管理指令；群聊仍需要 `session_admin` 及以上。Dashboard 中的指令权限配置优先于默认行为。
 
 ### 运行任务
 
@@ -93,11 +101,11 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### LLM 聊天状态
 
-- `/chat status`：显示当前会话是否启用 LLM 聊天。
-- `/chat enable`：启用当前会话的 LLM 聊天。
-- `/chat disable`：停用当前会话的 LLM 聊天。
+- `/llm status`：显示当前会话是否启用 LLM 聊天。
+- `/llm enable`：启用当前会话的 LLM 聊天。
+- `/llm disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/chat` 只控制是否启用 LLM，与流式模式无关。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。
 
 ### 会话流式输出
 

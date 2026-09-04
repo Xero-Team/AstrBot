@@ -6,11 +6,9 @@ context stays internal; this module adapts its narrowly scoped operations into
 plugin-facing capabilities.
 """
 
-from __future__ import annotations
-
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
@@ -642,9 +640,7 @@ class ConversationCapability:
     def third_party_agent_runner(self, umo: str) -> str | None:
         """Return the third-party agent runner type for a session, if any."""
         cfg = self._execution_context.astrbot_config_mgr.get_conf(umo)
-        runner = str(
-            cfg.get("provider_settings", {}).get("agent_runner_type", "") or ""
-        )
+        runner = str(cfg.get("agent_runner", {}).get("runner_type", "") or "")
         if runner in self._THIRD_PARTY_AGENT_RUNNER_KEYS:
             return runner
         return None
@@ -665,7 +661,6 @@ class ConversationCapability:
 
     async def _cleanup_deerflow_thread(self, umo: str) -> None:
         from astrbot.core.agent.runners.deerflow.constants import (
-            DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
             DEERFLOW_THREAD_ID_KEY,
         )
         from astrbot.core.agent.runners.deerflow.deerflow_api_client import (
@@ -682,33 +677,20 @@ class ConversationCapability:
             if not thread_id:
                 return
             cfg = self._execution_context.astrbot_config_mgr.get_conf(umo)
-            provider_id = cfg["provider_settings"].get(
-                DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-                "",
-            )
-            if not provider_id:
+            agent_runner = cfg.get("agent_runner", {})
+            if agent_runner.get("runner_type") != "deerflow":
                 return
-            merged_provider_config = (
-                self._execution_context.provider_manager.get_provider_config_by_id(
-                    provider_id,
-                    merged=True,
-                )
-            )
-            if not merged_provider_config:
-                logger.warning(
-                    "Failed to resolve DeerFlow provider config for remote thread cleanup: provider_id=%s",
-                    provider_id,
-                )
+            runner_config = agent_runner.get("config", {})
+            if not isinstance(runner_config, dict):
                 return
             client = DeerFlowAPIClient(
-                api_base=merged_provider_config.get(
+                api_base=runner_config.get(
                     "deerflow_api_base",
                     "http://127.0.0.1:2026",
                 ),
-                api_key=merged_provider_config.get("deerflow_api_key", ""),
-                auth_header=merged_provider_config.get("deerflow_auth_header", ""),
-                proxy=resolve_proxy_route(local_config=merged_provider_config).proxy_url
-                or "",
+                api_key=runner_config.get("deerflow_api_key", ""),
+                auth_header=runner_config.get("deerflow_auth_header", ""),
+                proxy=resolve_proxy_route(local_config=runner_config).proxy_url or "",
             )
             try:
                 await client.delete_thread(thread_id)
@@ -758,14 +740,12 @@ class PersonaCapability:
         umo: str,
         conversation_persona_id: str | None,
         platform_name: str,
-        provider_settings: dict,
     ) -> tuple[str | None, Any, str | None, Any]:
         """Resolve the effective persona under session routing rules."""
         return await self._manager.resolve_selected_persona(
             umo=umo,
             conversation_persona_id=conversation_persona_id,
             platform_name=platform_name,
-            provider_settings=provider_settings,
         )
 
 
@@ -952,6 +932,16 @@ class SessionCapability:
         )
 
 
+class AuthBindingView(Protocol):
+    """Plugin-visible authorization binding fields."""
+
+    subject_id: str
+    role: str
+    scope_type: str
+    binding_id: str
+    scope_id: str
+
+
 class AuthorizationCapability:
     """Event-bound authorization access without exposing database tables."""
 
@@ -1073,7 +1063,7 @@ class AuthorizationCapability:
             event.auth_context.config_id, umo or event.unified_msg_origin
         )
 
-    async def list_bindings(self, event: AstrMessageEvent) -> list[object]:
+    async def list_bindings(self, event: AstrMessageEvent) -> Sequence[AuthBindingView]:
         """List bindings visible to the caller's authorized scope.
 
         Session owners may inspect the bindings for their current session, while
@@ -1084,6 +1074,8 @@ class AuthorizationCapability:
 
         if self._plugin_id is not None and not self._allow_core_actions:
             raise PermissionError("Plugin cannot manage authorization bindings")
+        if event.auth_context is None or not event.auth_context.config_id:
+            raise PermissionError("Authorization context is unavailable")
         decision = await self.authorize(event, "identity.manage")
         if not decision.allowed:
             raise PermissionError("Authorization denied")
@@ -1114,6 +1106,8 @@ class AuthorizationCapability:
             raise PermissionError("Authorization denied")
         assert self._authorization is not None
         assert event.resource is not None
+        if event.subject is None:
+            raise PermissionError("Authorization context is unavailable")
         target = Subject.im(
             platform_instance=event.get_platform_id(),
             bot_account_id=event.get_self_id() or "default",
@@ -1141,6 +1135,8 @@ class AuthorizationCapability:
             raise PermissionError("Authorization denied")
         assert self._authorization is not None
         assert event.resource is not None
+        if event.subject is None:
+            raise PermissionError("Authorization context is unavailable")
         target = Subject.im(
             platform_instance=event.get_platform_id(),
             bot_account_id=event.get_self_id() or "default",

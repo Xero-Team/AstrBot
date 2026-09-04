@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Create a minimal AstrBot plugin from the current source checkout."""
 
-from __future__ import annotations
-
 import argparse
 import keyword
 import re
@@ -177,6 +175,8 @@ class {class_name(args.name)}(Star):
 - Replace the placeholder `/{args.command}` handler and add focused tests before publishing.
 
 This plugin uses only the public `astrbot.api` SDK. Keep persistent files under the plugin data directory, not in this source tree.
+
+See the in-app documentation at `/help/` after starting AstrBot.
 """,
     )
     print(f"Created {output}")

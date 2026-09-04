@@ -1,11 +1,17 @@
 import { defineConfig } from 'vitepress';
 import { head } from './config/head';
 
+const isDevCommand = process.argv.includes('dev');
+const docsBase =
+  process.env.ASTRBOT_DOCS_BASE ?? (isDevCommand ? '/' : '/help/');
+const normalizedDocsBase = docsBase.endsWith('/') ? docsBase : `${docsBase}/`;
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+  base: normalizedDocsBase,
   title: 'AstrBot',
   description: 'Documentation for the current Xero-Team AstrBot fork',
-  head: head,
+  head: head(normalizedDocsBase),
 
   rewrites: {
     'zh/:rest*': ':rest*',
@@ -20,10 +26,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'GitHub', link: 'https://github.com/Xero-Team/AstrBot' },
-          {
-            text: 'Issue',
-            link: 'https://github.com/Xero-Team/AstrBot/issues',
-          },
           { text: 'HTTP API', link: '/scalar.html' },
         ],
         sidebar: [
@@ -42,6 +44,7 @@ export default defineConfig({
             items: [
               { text: '源码部署', link: '/astrbot/cli' },
               { text: 'Docker 部署', link: '/astrbot/docker' },
+              { text: '备份与恢复', link: '/astrbot/backup' },
             ],
           },
           {
@@ -114,6 +117,7 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: '服务提供商配置', link: '/llm' },
+                  { text: 'MiraRouter', link: '/mirarouter' },
                   { text: '胜算云', link: '/shengsuanyun' },
                   { text: 'Ollama', link: '/provider-ollama' },
                   { text: 'LMStudio', link: '/provider-lmstudio' },
@@ -148,6 +152,7 @@ export default defineConfig({
               { text: '技能 Skills', link: '/skills' },
               { text: 'Persona 人格设定', link: '/persona' },
               { text: '长期记忆', link: '/long-term-memory' },
+              { text: '群聊上下文感知', link: '/group-chat-context' },
               { text: '使用电脑能力', link: '/computer' },
               { text: 'SubAgent 编排', link: '/subagent' },
               { text: '主动型 Agent 能力', link: '/proactive-agent' },
@@ -193,7 +198,6 @@ export default defineConfig({
                   { text: '会话控制器', link: '/guides/session-control' },
                   { text: 'OneBot 插件 API', link: '/guides/onebot' },
                   { text: '杂项', link: '/guides/other' },
-                  { text: '发布插件', link: '/plugin-publish' },
                 ],
               },
               {
@@ -266,10 +270,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'GitHub', link: 'https://github.com/Xero-Team/AstrBot' },
-          {
-            text: 'Issues',
-            link: 'https://github.com/Xero-Team/AstrBot/issues',
-          },
           { text: 'HTTP API', link: '/scalar.html' },
         ],
         sidebar: [
@@ -288,6 +288,7 @@ export default defineConfig({
             items: [
               { text: 'Source Deployment', link: '/astrbot/cli' },
               { text: 'Docker', link: '/astrbot/docker' },
+              { text: 'Backup and restore', link: '/astrbot/backup' },
             ],
           },
           {
@@ -362,6 +363,7 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: 'Provider Configuration', link: '/llm' },
+                  { text: 'MiraRouter', link: '/mirarouter' },
                   { text: 'ShengSuanYun', link: '/shengsuanyun' },
                   { text: 'Ollama', link: '/provider-ollama' },
                   { text: 'LMStudio', link: '/provider-lmstudio' },
@@ -397,6 +399,10 @@ export default defineConfig({
               { text: 'Skills', link: '/skills' },
               { text: 'Personas', link: '/persona' },
               { text: 'Long-term Memory', link: '/long-term-memory' },
+              {
+                text: 'Group Chat Context Awareness',
+                link: '/group-chat-context',
+              },
               { text: 'Computer Use', link: '/computer' },
               { text: 'SubAgent Orchestration', link: '/subagent' },
               { text: 'Proactive Tasks', link: '/proactive-agent' },
@@ -447,7 +453,6 @@ export default defineConfig({
                   { text: 'HTML to Image', link: '/guides/html-to-pic' },
                   { text: 'Session Control', link: '/guides/session-control' },
                   { text: 'OneBot Plugin API', link: '/guides/onebot' },
-                  { text: 'Publish Plugin', link: '/plugin-publish' },
                 ],
               },
               {

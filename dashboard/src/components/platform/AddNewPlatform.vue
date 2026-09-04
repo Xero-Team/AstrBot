@@ -127,7 +127,7 @@
                           class="mt-2"
                           @click="openTutorial"
                         >
-                          <v-icon start>mdi-book-open-variant</v-icon>
+                          <v-icon start>mdi-help-circle-outline</v-icon>
                           {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
@@ -193,7 +193,7 @@
                           class="mt-2"
                           @click="openTutorial"
                         >
-                          <v-icon start>mdi-book-open-variant</v-icon>
+                          <v-icon start>mdi-help-circle-outline</v-icon>
                           {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
@@ -259,7 +259,7 @@
                           class="mt-2"
                           @click="openTutorial"
                         >
-                          <v-icon start>mdi-book-open-variant</v-icon>
+                          <v-icon start>mdi-help-circle-outline</v-icon>
                           {{ tm('dialog.viewTutorial') }}
                         </v-btn>
                       </div>
@@ -303,7 +303,7 @@
                         class="mt-2"
                         @click="openTutorial"
                       >
-                        <v-icon start>mdi-book-open-variant</v-icon>
+                        <v-icon start>mdi-help-circle-outline</v-icon>
                         {{ tm('dialog.viewTutorial') }}
                       </v-btn>
                     </div>
@@ -975,7 +975,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:show': [value: boolean];
   'show-toast': [payload: ToastPayload];
-  'refresh-config': [];
+  'refresh-config': [platformId?: string];
 }>();
 
 const { tm } = useModuleI18n('features/platform');
@@ -1593,7 +1593,7 @@ async function savePlatform() {
     state.loading = false;
     showDialog.value = false;
     resetForm();
-    emit('refresh-config');
+    emit('refresh-config', platformId);
     showSuccess(res.data.message || tm('messages.addSuccessWithConfig'));
   } catch (error) {
     state.loading = false;

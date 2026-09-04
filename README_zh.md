@@ -13,7 +13,6 @@
 <br>
 
 <a href="./docs/zh/index.md">文档</a> ｜
-<a href="https://github.com/Xero-Team/AstrBot/issues">问题提交</a> ｜
 <a href="./docs/zh/dev/development.md">开发指南</a>
 
 </div>
@@ -88,6 +87,8 @@ docker compose up -d --build
 docker compose logs -f astrbot
 ```
 
+登录 WebUI 后，文档在 `/help/`。
+
 Compose 默认构建完整运行时。如果不需要浏览器、文档转换、媒体处理、OCR、Node.js
 或 Docker CLI，可以通过 `ASTRBOT_FEATURES` 缩小镜像；它是构建参数，修改后需要重新构建：
 
@@ -140,23 +141,23 @@ docker compose -f compose-with-napcat.yml up -d --build
 
 ## 支持的模型提供商
 
-| 服务类型           | 当前内置范围                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| 对话模型           | OpenAI Chat Completions/Responses 与兼容接口、Anthropic、Gemini、智谱、小米、MiniMax、Kimi Code、xAI、Groq、OpenRouter 等 |
-| 本地模型           | 通过受支持接口接入 Ollama、LM Studio                                                                                      |
-| Agent 执行器       | 内置本地 Agent，以及 Dify、Coze、阿里云百炼应用、DeerFlow                                                                 |
-| 语音               | Whisper、SenseVoice、小米 MiMo、Xinference、OpenAI/Gemini/Edge/Azure/ElevenLabs TTS、GPT-SoVITS、FishAudio、DashScope 等  |
-| Embedding / Rerank | OpenAI、Gemini、NVIDIA、Ollama、vLLM、Xinference、阿里云百炼                                                              |
+| 服务类型           | 当前内置范围                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 对话模型           | OpenAI Chat Completions/Responses 与兼容接口、Anthropic、Gemini、智谱、小米、MiniMax、Kimi Code、xAI、Groq、OpenRouter、MiraRouter 等 |
+| 本地模型           | 通过受支持接口接入 Ollama、LM Studio                                                                                                  |
+| Agent 执行器       | 内置本地 Agent，以及 Dify、Coze、阿里云百炼应用、DeerFlow                                                                             |
+| 语音               | Whisper、SenseVoice、小米 MiMo、Xinference、OpenAI/Gemini/Edge/Azure/ElevenLabs TTS、GPT-SoVITS、FishAudio、DashScope 等              |
+| Embedding / Rerank | OpenAI、Gemini、NVIDIA、Ollama、vLLM、Xinference、阿里云百炼                                                                          |
 
 Provider 模板来自代码注册表，后续版本可能变化；请以运行中 WebUI 的 **提供商 → 新增 Provider 来源** 为准。详见[模型 Provider](docs/zh/providers/start.md)。
 
 ## ❤️ 贡献
 
-欢迎任何 Issues/Pull Requests！只需要将你的更改提交到此项目 ：)
+欢迎向当前仓库提交 Pull Request。请以本分支现行行为为准，而不是上游历史行为。本 fork 不运营用户支持队列。开发 Issue 跟踪缺陷与功能，不是客服。见 [AI_POLICY.md](AI_POLICY.md)。
 
 ### 如何贡献
 
-你可以通过查看问题或帮助审核 PR（拉取请求）来贡献。任何问题或 PR 都欢迎参与，以促进社区贡献。当然，这些只是建议，你可以以任何方式进行贡献。对于新功能的添加，请先通过 Issue 讨论。
+向 `Xero-Team/AstrBot` 开开发 Issue 和/或 Pull Request。不要把这里当客服。安全漏洞按 [SECURITY.md](SECURITY.md) 私密报告。智能体可以开 Issue/PR，不得自行合并。
 
 ### 开发环境
 

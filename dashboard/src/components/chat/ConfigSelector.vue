@@ -117,8 +117,8 @@ interface ConfigChangedPayload {
 }
 
 interface DashboardConfigProfile {
-  provider_settings?: {
-    agent_runner_type?: string;
+  agent_runner?: {
+    runner_type?: string;
   };
 }
 
@@ -126,13 +126,11 @@ const props = withDefaults(
   defineProps<{
     sessionId?: string | null;
     platformId?: string;
-    isGroup?: boolean;
     initialConfigId?: string | null;
   }>(),
   {
     sessionId: null,
     platformId: 'webchat',
-    isGroup: false,
     initialConfigId: null,
   },
 );
@@ -159,9 +157,7 @@ const normalizedSessionId = computed(() => {
   return id ? id : null;
 });
 
-const messageType = computed(() =>
-  props.isGroup ? 'GroupMessage' : 'FriendMessage',
-);
+const messageType = computed(() => 'FriendMessage');
 
 const username = computed(() => getStoredDashboardUsername());
 
@@ -260,7 +256,7 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     const payload = res.data.data as
       { config?: DashboardConfigProfile } | undefined;
     const config = payload?.config || {};
-    const type = config?.provider_settings?.agent_runner_type || 'local';
+    const type = config?.agent_runner?.runner_type || 'local';
     configCache.value[confId] = type;
     return type;
   } catch (error) {
@@ -337,7 +333,7 @@ async function syncSelectionForSession() {
 }
 
 watch(
-  () => [props.sessionId, props.platformId, props.isGroup],
+  () => [props.sessionId, props.platformId],
   async () => {
     await syncSelectionForSession();
   },

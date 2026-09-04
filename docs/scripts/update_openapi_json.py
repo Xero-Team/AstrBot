@@ -34,7 +34,6 @@ PUBLIC_OPEN_API_TAGS = {
     "Subagents",
 }
 PUBLIC_OPEN_API_EXCLUDED_PATHS = {
-    "/api/v1/live-chat/ws",
     "/api/v1/unified-chat/ws",
 }
 COMPONENT_REF_PREFIX = "#/components/"
@@ -111,7 +110,7 @@ def filter_public_openapi(spec: dict[str, Any]) -> dict[str, Any]:
         spec: Full OpenAPI spec loaded from the YAML source.
 
     Returns:
-        A filtered OpenAPI spec for the public docs site.
+        A filtered OpenAPI spec for the in-app `/help/scalar.html` document.
     """
     output = dict(spec)
     output["tags"] = [

@@ -45,8 +45,8 @@ class FakeInternalAgentSubStage:
         self.process_calls = []
         self.responses = []
 
-    async def process(self, event, prefix):
-        self.process_calls.append((event, prefix))
+    async def process(self, event):
+        self.process_calls.append(event)
         for item in self.responses:
             yield item
 
@@ -57,8 +57,8 @@ class FakeThirdPartyAgentSubStage:
         self.process_calls = []
         self.responses = []
 
-    async def process(self, event, prefix):
-        self.process_calls.append((event, prefix))
+    async def process(self, event):
+        self.process_calls.append(event)
         for item in self.responses:
             yield item
 
@@ -78,6 +78,7 @@ sys.modules[
 agent_request = importlib.import_module(
     "astrbot.core.pipeline.process_stage.method.agent_request"
 )
+agent_request = importlib.reload(agent_request)
 
 if _original_process_stage_module is not None:
     sys.modules["astrbot.core.pipeline.process_stage.stage"] = (
@@ -141,7 +142,6 @@ def _ctx(
     *,
     agent_runner_type: str = "local",
     provider_enable: bool = True,
-    wake_prefix: str = "/bot ask",
 ):
     return SimpleNamespace(
         preferences=SimpleNamespace(
@@ -149,38 +149,57 @@ def _ctx(
             put_async=AsyncMock(),
         ),
         astrbot_config={
-            "wake_prefix": ["/bot ", "!"],
+            "command_prefixes": ["/"],
+            "llm_access": {
+                "prefixes": ["/"],
+                "private": "open",
+                "group": "prefix",
+                "reply_to_bot": False,
+            },
             "provider_settings": {
                 "enable": provider_enable,
-                "wake_prefix": wake_prefix,
-                "agent_runner_type": agent_runner_type,
+                "streaming_response": False,
+                "unsupported_streaming_strategy": "turn_off",
+            },
+            "agent_runner": {
+                "runner_type": agent_runner_type,
+                "config": {},
             },
         },
     )
 
 
 @pytest.mark.asyncio
-async def test_initialize_uses_internal_stage_and_strips_overlapping_wake_prefix():
+async def test_initialize_uses_internal_stage_for_local_runner():
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type="local", wake_prefix="/bot ask")
+    ctx = _ctx(agent_runner_type="local")
 
     await stage.initialize(ctx)
 
-    assert isinstance(stage.agent_sub_stage, FakeInternalAgentSubStage)
-    assert stage.prov_wake_prefix == "ask"
+    assert type(stage.agent_sub_stage).__name__ == "FakeInternalAgentSubStage"
     stage.agent_sub_stage.initialize.assert_awaited_once_with(ctx)
 
 
 @pytest.mark.asyncio
 async def test_initialize_uses_third_party_stage_for_non_local_runner():
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type="remote", wake_prefix="!llm")
+    ctx = _ctx(agent_runner_type="dify")
 
     await stage.initialize(ctx)
 
-    assert isinstance(stage.agent_sub_stage, FakeThirdPartyAgentSubStage)
-    assert stage.prov_wake_prefix == "llm"
+    assert type(stage.agent_sub_stage).__name__ == "FakeThirdPartyAgentSubStage"
     stage.agent_sub_stage.initialize.assert_awaited_once_with(ctx)
+
+
+@pytest.mark.asyncio
+async def test_initialize_falls_back_to_local_for_unknown_runner_type():
+    stage = agent_request.AgentRequestSubStage()
+    ctx = _ctx(agent_runner_type="unknown-runner")
+
+    await stage.initialize(ctx)
+
+    assert ctx.astrbot_config["agent_runner"]["runner_type"] == "local"
+    assert type(stage.agent_sub_stage).__name__ == "FakeInternalAgentSubStage"
 
 
 @pytest.mark.asyncio
@@ -224,11 +243,11 @@ async def test_process_returns_early_when_session_llm_is_disabled(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_forwards_event_and_trimmed_prefix_to_selected_substage(
+async def test_process_forwards_event_to_selected_substage(
     monkeypatch,
 ):
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(wake_prefix="/bot ask")
+    ctx = _ctx()
     await stage.initialize(ctx)
     stage.agent_sub_stage.responses = ["umo-ok:ask", "done"]
 
@@ -244,30 +263,4 @@ async def test_process_forwards_event_and_trimmed_prefix_to_selected_substage(
 
     assert outputs == ["umo-ok:ask", "done"]
     should_process.assert_awaited_once_with(event)
-    assert stage.agent_sub_stage.process_calls == [(event, "ask")]
-
-
-@pytest.mark.parametrize("agent_runner_type", ["local", "remote"])
-@pytest.mark.asyncio
-async def test_process_ignores_provider_wake_prefix_for_webchat(
-    monkeypatch,
-    agent_runner_type,
-):
-    stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type=agent_runner_type, wake_prefix="ask")
-    await stage.initialize(ctx)
-    stage.agent_sub_stage.responses = ["done"]
-
-    should_process = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        agent_request.SessionServiceManager,
-        "should_process_llm_request",
-        should_process,
-    )
-    event = FakeEvent("webchat-umo", platform_name="webchat")
-
-    outputs = [item async for item in stage.process(event)]
-
-    assert outputs == ["done"]
-    should_process.assert_awaited_once_with(event)
-    assert stage.agent_sub_stage.process_calls == [(event, "")]
+    assert stage.agent_sub_stage.process_calls == [event]

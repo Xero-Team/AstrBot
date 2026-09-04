@@ -4,11 +4,14 @@ from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 
 from astrbot.api.message_components import Image, Record
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.astrbot_message import Group
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.sources.discord import (
     discord_platform_adapter,
@@ -215,6 +218,8 @@ async def test_discord_convert_message_maps_unknown_attachment_to_file_component
 
     abm = await adapter.convert_message({"message": message})
 
+    assert abm.type == MessageType.FRIEND_MESSAGE
+    assert abm.group_id == ""
     assert abm.message_str == "see file"
     assert abm.message[0].text == "see file"
     assert abm.message[1].name == "archive.zip"
@@ -283,8 +288,8 @@ async def test_discord_handle_msg_sets_wake_when_bot_role_is_mentioned(monkeypat
     def fake_create_event(_message, _followup_webhook=None):
         return SimpleNamespace(
             interaction_followup_webhook=None,
-            is_wake=False,
-            is_at_or_wake_command=False,
+            _extras={},
+            set_extra=MagicMock(),
         )
 
     adapter.create_event = fake_create_event
@@ -292,8 +297,10 @@ async def test_discord_handle_msg_sets_wake_when_bot_role_is_mentioned(monkeypat
     await adapter.handle_msg(message)
 
     assert len(committed_events) == 1
-    assert committed_events[0].is_wake is True
-    assert committed_events[0].is_at_or_wake_command is True
+    committed_events[0].set_extra.assert_called_once_with(
+        "adapter_preconfigured",
+        True,
+    )
 
 
 @pytest.mark.asyncio
@@ -368,8 +375,8 @@ async def test_discord_handle_msg_slash_command_wakes_without_mention_checks():
     def fake_create_event(_message, _followup_webhook=None):
         return SimpleNamespace(
             interaction_followup_webhook=object(),
-            is_wake=False,
-            is_at_or_wake_command=False,
+            _extras={},
+            set_extra=MagicMock(),
         )
 
     adapter.create_event = fake_create_event
@@ -377,8 +384,10 @@ async def test_discord_handle_msg_slash_command_wakes_without_mention_checks():
     await adapter.handle_msg(message, followup_webhook=object())
 
     assert len(committed_events) == 1
-    assert committed_events[0].is_wake is True
-    assert committed_events[0].is_at_or_wake_command is True
+    committed_events[0].set_extra.assert_called_once_with(
+        "adapter_preconfigured",
+        True,
+    )
 
 
 @pytest.mark.asyncio
@@ -457,7 +466,7 @@ async def test_discord_send_by_session_uses_friend_message_for_dm_channel():
 
     temp_event.send.assert_awaited_once()
     assert seen_messages[0].type == discord_platform_adapter.MessageType.FRIEND_MESSAGE
-    assert seen_messages[0].group_id == "321"
+    assert seen_messages[0].group_id == ""
     assert seen_messages[0].session_id == "321"
 
 
@@ -887,3 +896,293 @@ async def test_discord_group_owner_role_stays_in_current_session(tmp_path):
     finally:
         await service.close()
         await db.close()
+
+
+def _discord_guild_channel(**attrs):
+    channel = MagicMock(spec=discord.abc.GuildChannel)
+    for key, value in attrs.items():
+        setattr(channel, key, value)
+    return channel
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("guild_name", "channel_name", "expected_name"),
+    [(None, "general", "general"), ("AstrBot", None, "AstrBot")],
+)
+async def test_discord_get_group_name_falls_back_when_one_name_is_missing(
+    guild_name,
+    channel_name,
+    expected_name,
+):
+    guild = SimpleNamespace(
+        name=guild_name,
+        icon=None,
+        owner_id=None,
+        member_count=None,
+        members=[],
+        chunked=False,
+    )
+    channel = _discord_guild_channel(id=123, name=channel_name, guild=guild)
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="cached")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        intents=SimpleNamespace(members=False),
+    )
+
+    group = await event.get_group()
+
+    assert group is not inbound
+    assert group.group_name == expected_name
+    assert inbound.group_name == "cached"
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_fetches_uncached_guild_name():
+    channel = _discord_guild_channel(
+        id=123,
+        name="general",
+        guild=SimpleNamespace(id=456),
+    )
+    guild = SimpleNamespace(
+        id=456,
+        name="AstrBot",
+        icon=None,
+        owner_id=None,
+        member_count=None,
+        members=[],
+        chunked=False,
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: None,
+        fetch_channel=AsyncMock(return_value=channel),
+        get_guild=lambda guild_id: None,
+        fetch_guild=AsyncMock(return_value=guild),
+        intents=SimpleNamespace(members=False),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123"),
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "AstrBot-general"
+    client.fetch_channel.assert_awaited_once_with(123)
+    client.fetch_guild.assert_awaited_once_with(456)
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
+    members = [
+        SimpleNamespace(
+            id=1,
+            display_name="owner",
+            guild_permissions=SimpleNamespace(administrator=True),
+        ),
+        SimpleNamespace(
+            id=2,
+            display_name="admin",
+            guild_permissions=SimpleNamespace(administrator=True),
+        ),
+        SimpleNamespace(
+            id=3,
+            display_name="member",
+            guild_permissions=SimpleNamespace(administrator=False),
+        ),
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=3,
+        members=members,
+        chunked=True,
+    )
+    channel = _discord_guild_channel(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=lambda member: SimpleNamespace(view_channel=True),
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="general")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group is not inbound
+    assert group.group_id == "123"
+    assert group.group_name == "AstrBot-general"
+    assert group.group_avatar == "https://cdn.discordapp.com/guild.png"
+    assert group.group_owner == "1"
+    assert group.member_count == 3
+    assert group.group_admins == ["2"]
+    assert group.members is not None
+    assert [member.user_id for member in group.members] == ["1", "2", "3"]
+    assert inbound.members is None
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_omits_members_when_complete_cache_is_over_cap():
+    members = [
+        SimpleNamespace(
+            id=index,
+            display_name=f"member-{index}",
+            guild_permissions=SimpleNamespace(administrator=index == 2),
+        )
+        for index in range(1, 2002)
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=2001,
+        members=members,
+        chunked=True,
+    )
+    permission_checks = {"count": 0}
+
+    def permissions_for(member):
+        permission_checks["count"] += 1
+        return SimpleNamespace(view_channel=True)
+
+    channel = _discord_guild_channel(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=permissions_for,
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="general")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group is not inbound
+    assert group.group_name == "AstrBot-general"
+    assert group.group_avatar == "https://cdn.discordapp.com/guild.png"
+    assert group.group_owner == "1"
+    assert group.member_count == 2001
+    assert group.members is None
+    assert group.group_admins == ["2"]
+    assert permission_checks["count"] == 0
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_still_publishes_members_at_hard_cap():
+    members = [
+        SimpleNamespace(
+            id=index,
+            display_name=f"member-{index}",
+            guild_permissions=SimpleNamespace(administrator=False),
+        )
+        for index in range(1, 2001)
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=2000,
+        members=members,
+        chunked=True,
+    )
+    permission_checks = {"count": 0}
+
+    def permissions_for(member):
+        permission_checks["count"] += 1
+        return SimpleNamespace(view_channel=True)
+
+    channel = _discord_guild_channel(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=permissions_for,
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="general")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group.members is not None
+    assert len(group.members) == 2000
+    assert group.member_count == 2000
+    assert permission_checks["count"] == 2000
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_returns_none_for_private_message():
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.FRIEND_MESSAGE,
+        group=None,
+        group_id="123",
+    )
+    event._client = SimpleNamespace()
+
+    assert await event.get_group() is None
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_keeps_basic_metadata_when_channel_fetch_fails():
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: None,
+        fetch_channel=AsyncMock(side_effect=RuntimeError("channel unavailable")),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="general")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group is not inbound
+    assert group == Group(group_id="123", group_name="general")

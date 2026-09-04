@@ -2,7 +2,10 @@
   <section class="memory-page">
     <header class="memory-page__header">
       <div>
-        <h1 class="memory-page__title">{{ tm('title') }}</h1>
+        <h1 class="memory-page__title">
+          {{ tm('title') }}
+          <ConfigDocsLink docs="use/long-term-memory.html" />
+        </h1>
         <p class="memory-page__subtitle">{{ tm('subtitle') }}</p>
       </div>
       <v-btn
@@ -557,6 +560,7 @@ import {
   type MemoryProfileData,
   type MemoryStatsData,
 } from '@/api/v1';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { useToastStore } from '@/stores/toast';
 
@@ -848,8 +852,11 @@ onMounted(() => {
 }
 
 .memory-page__title {
+  align-items: center;
+  display: flex;
   font-size: 1.5rem;
   font-weight: 700;
+  gap: 4px;
   letter-spacing: 0;
   line-height: 1.2;
   margin: 0 0 4px;

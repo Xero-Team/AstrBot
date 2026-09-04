@@ -63,14 +63,12 @@ def test_unique_session_ignores_sender_concurrency():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"extras": {"action_type": "live"}},
-        {"extras": {"active_reply": True}},
         {"extras": {"cron_job": {"id": "1"}}},
         {"sender_id": ""},
         {"sender_id": "   "},
     ],
 )
-def test_live_proactive_and_missing_sender_stay_on_umo_lock(kwargs):
+def test_cron_and_missing_sender_stay_on_umo_lock(kwargs):
     extras = kwargs.get("extras")
     sender_id = kwargs.get("sender_id", "user-a")
     event = _group_event(sender_id=sender_id, extras=extras)
@@ -129,7 +127,7 @@ async def test_internal_process_uses_sender_lock_when_enabled(monkeypatch):
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    [item async for item in stage.process(event, provider_wake_prefix="")]
+    [item async for item in stage.process(event)]
 
     assert keys == [
         session_lock_key(event.unified_msg_origin, "user-a", concurrent=True)
@@ -164,7 +162,7 @@ async def test_internal_process_keeps_umo_lock_when_disabled(monkeypatch):
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    [item async for item in stage.process(event, provider_wake_prefix="")]
+    [item async for item in stage.process(event)]
 
     assert keys == [event.unified_msg_origin]
 

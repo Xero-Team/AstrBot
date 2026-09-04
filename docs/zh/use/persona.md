@@ -19,7 +19,7 @@ Persona 决定 Agent 在一次会话中采用的系统提示词、预设对话�
 
 1. **会话管理**中针对该消息会话设置的强制 Persona；
 2. 当前对话记录选择的 Persona；
-3. 当前配置档的 `provider_settings.default_personality`。
+3. 当前配置档的默认 Persona：本地 Runner 读取 `agent_runner.config.persona.persona_id`，第三方 Runner 读取 `agent_runner.config.persona_id`。
 
 会话规则适合为某个平台、群组或用户固定角色。没有强制规则时，WebChat 可以在对话级切换 Persona。显式选择“不使用 Persona”时，不会再应用配置档默认 Persona。
 
@@ -65,7 +65,7 @@ Persona 卡片菜单可以导出 JSON，页面顶部可以导入 JSON。当前�
 > [!WARNING]
 > Persona JSON 属于提示词输入，导入第三方文件前应先人工审阅。导入后立即重新配置工具和 Skills；否则该 Persona 会继承所有当前可用能力。导出文件也不能作为完整备份。
 
-完整迁移应使用 AstrBot 的运行数据备份，而不是只导出 Persona JSON。恢复后还应核对插件、MCP、Skills 和 Provider 是否仍存在，因为 Persona 只保存这些能力的名称引用。
+完整迁移应使用 AstrBot 的[运行数据备份](../deploy/astrbot/backup)，而不是只导出 Persona JSON。恢复后还应核对插件、MCP、Skills 和 Provider 是否仍存在，因为 Persona 只保存这些能力的名称引用。
 
 ## 与其他功能的关系
 

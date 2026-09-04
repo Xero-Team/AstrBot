@@ -7,19 +7,45 @@ description: Create, extend, or repair an AstrBot plugin (Star) from a feature r
 
 Create a standalone plugin package that targets the current AstrBot checkout. Keep the plugin small, use only the public SDK, and leave AstrBot core files unchanged unless the user explicitly requests a core change.
 
+## Locked
+
+- Public SDK only (`astrbot.api`). No `astrbot.core`, Dashboard, or concrete adapter/provider imports.
+- Python floor from this checkout's `pyproject.toml`. No 3.10–3.13 branches.
+- In-app docs at `/help/`. Do not point READMEs at `docs.astrbot.app`.
+- Do not claim this fork publishes PyPI packages, images, or an official plugin market.
+- Agents may commit the plugin tree only when the user asked and the files are inside this checkout. They must not merge. See `.agents/shared/ai-contribution/REFERENCE.md` and `AI_POLICY.md`.
+
+## Open
+
+Plugin name, commands, platforms, secrets, and whether tests or a Dashboard Extension page are required — ask only when those decisions are missing.
+
+## Do not
+
+- Restore legacy `register` decorators, `event.bot`, `event.client`, or raw platform clients.
+- Overwrite an existing plugin directory unless the user passed `--force`.
+- Write disposable state into a developer's real `data/`.
+- Vendor a copy of this skill into a sibling plugin repo; call `scripts/check_plugin.py` from this checkout.
+
+## Handoff
+
+- Contract: `references/astrbot-plugin-contract.md`
+- Patterns: `references/feature-patterns.md` (load only the selected feature)
+- Checks: `references/verification.md`
+- Commit shape: `.agents/shared/conventional-commit/REFERENCE.md`
+
 ## Required preflight
 
 1. Read the repository `README.md` or `README_zh.md` and `pyproject.toml` before writing code.
 2. Treat `[project].requires-python` in `pyproject.toml` as the source of truth for the plugin's minimum Python version. Also read `.python-version` for the repository's tested interpreter pin. Never add Python 3.10–3.13 compatibility branches or hardcode a different floor.
-3. Read the relevant current-fork guide before choosing an API:
-   - [plugin development](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/plugin-new.md)
-   - [minimal plugin](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/simple.md)
-   - [events and Orbit commands](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/listen-message-event.md)
-   - [configuration](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/plugin-config.md)
-   - [storage](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/storage.md)
-   - [messages](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/send-message.md)
-   - [AI](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/ai.md)
-   - [Dashboard Extension](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/plugin-dashboard-extension.md)
+3. Read the relevant current-fork guide before choosing an API. Sources live under `docs/zh/dev/star/` in this checkout and are served in-app at `/help/dev/star/` after `make run`. Do not point generated READMEs at `docs.astrbot.app`.
+   - [plugin development](../../../docs/zh/dev/star/plugin-new.md)
+   - [minimal plugin](../../../docs/zh/dev/star/guides/simple.md)
+   - [events and Orbit commands](../../../docs/zh/dev/star/guides/listen-message-event.md)
+   - [configuration](../../../docs/zh/dev/star/guides/plugin-config.md)
+   - [storage](../../../docs/zh/dev/star/guides/storage.md)
+   - [messages](../../../docs/zh/dev/star/guides/send-message.md)
+   - [AI](../../../docs/zh/dev/star/guides/ai.md)
+   - [Dashboard Extension](../../../docs/zh/dev/star/plugin-dashboard-extension.md)
 4. Ask only for missing decisions that change the package shape: plugin name, behavior, command/event, supported platforms, secrets/configuration, third-party dependencies, and whether tests or a Dashboard page are required.
 5. Place a standalone plugin outside the AstrBot source tree when possible. Install it with `uv run astrbot plug install --editable <plugin-dir>` while developing.
 
@@ -100,7 +126,7 @@ For commands, follow the Orbit conventions: use a short lowercase root, explicit
 
 Test the behavior nearest its boundary: command parsing, empty and quoted arguments, config defaults and old config shapes, provider unavailable/timeout/cancellation, storage paths, and hot reload when applicable. Mock providers and external services unless an integration test is explicitly enabled.
 
-README content should state installation, commands, configuration, supported platforms, dependencies, and the exact Python floor read from the AstrBot checkout. Do not claim that the Xero-Team fork publishes PyPI packages, images, or an official plugin market.
+README content should state installation, commands, configuration, supported platforms, dependencies, and the exact Python floor read from the AstrBot checkout. Point users at the in-app documentation (`/help/` after starting AstrBot) rather than `docs.astrbot.app`. Do not claim that the Xero-Team fork publishes PyPI packages, images, or an official plugin market.
 
 ## Verification
 
@@ -122,6 +148,17 @@ uv run ruff format --check <plugin-dir>
 For an installation smoke test, run `uv run astrbot plug install --editable <plugin-dir>` from the intended AstrBot checkout or a disposable checkout. The CLI resolves its root from the current working directory, so do not assume setting `ASTRBOT_ROOT` alone isolates the CLI. Never write disposable state into the repository's real `data/`. If the plugin has tests, run the focused test file first and then the smallest relevant project test command.
 
 Before handing off, report the generated files, the synchronized Python constraint and source path, checks run, and any unresolved assumption. Never claim a runtime or platform integration was tested when only static checks ran.
+
+## Commits
+
+Commit plugin files only when the user explicitly asks and the plugin tree is
+inside this repository. Out-of-tree plugin packages are not AstrBot commits.
+Follow `.agents/shared/conventional-commit/REFERENCE.md`, including the
+`AI-Generated` and `Generated-At` footers. You may push a feature branch and
+open a PR against `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot` as part
+of that request. Do not open it on `AstrBotDevs/AstrBot` unless the user
+explicitly confirms that upstream target. Do not merge. End the PR with
+`## Agent note` (or ask the human author for `## Human note`).
 
 ## Bundled resources
 

@@ -1,7 +1,5 @@
 """Ensure Dashboard config-metadata i18n keys cover runtime metadata."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
@@ -132,6 +130,56 @@ def test_config_metadata_locale_trees_match() -> None:
     en_keys = set(_load_locale("en-US"))
     assert sorted(zh_keys - en_keys) == []
     assert sorted(en_keys - zh_keys) == []
+
+
+def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
+    converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+    ai_sections = converted["ai_group"]["metadata"]
+    assert ai_sections["agent_runner"]["docs"] == "use/agent-runner.html"
+    assert ai_sections["persona"]["docs"] == "use/persona.html"
+    assert ai_sections["knowledgebase"]["docs"] == "use/knowledge-base.html"
+    assert ai_sections["websearch"]["docs"] == "use/websearch.html"
+    assert ai_sections["agent_computer_use"]["docs"] == "use/computer.html"
+    assert (
+        ai_sections["agent_computer_use"]["items"]["provider_settings.sandbox.booter"][
+            "docs"
+        ]
+        == "use/astrbot-agent-sandbox.html"
+    )
+    assert ai_sections["proactive_capability"]["docs"] == "use/proactive-agent.html"
+    assert ai_sections["truncate_and_compress"]["docs"] == "use/context-compress.html"
+    assert converted["plugin_group"]["metadata"]["plugin"]["docs"] == (
+        "use/plugin.html"
+    )
+    assert converted["ext_group"]["metadata"]["ltm"]["docs"] == (
+        "use/group-chat-context.html"
+    )
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            docs = node.get("docs")
+            if docs is not None:
+                assert isinstance(docs, str)
+                assert docs
+                assert not docs.startswith("/")
+                assert not docs.startswith("help/")
+                assert not docs.startswith("en/")
+            for value in node.values():
+                walk(value)
+            return
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(converted)
+    walk(ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3_SYSTEM))
+
+
+def test_config_metadata_i18n_text_does_not_embed_help_paths() -> None:
+    for locale in LOCALES:
+        for key, value in _load_locale(locale).items():
+            if isinstance(value, str):
+                assert "/help/" not in value, f"{locale} {key}"
 
 
 def test_platform_adapter_i18n_resources_cover_metadata_fields() -> None:

@@ -73,7 +73,7 @@ Docker 发布 `6185` 端口也需要这个监听覆盖，详见 [Docker 部署](
 
 运行根目录默认是启动 AstrBot 时的当前工作目录，运行数据位于 `<root>/data`。源码仓库根目录执行 `uv run main.py` 时通常就是 `AstrBot/data`。
 
-设置 `ASTRBOT_ROOT` 后，数据位于 `$ASTRBOT_ROOT/data`。配置、SQLite 数据库、插件、Skills、知识库、临时文件和备份都可能在这里，升级前应整体备份。
+设置 `ASTRBOT_ROOT` 后，数据位于 `$ASTRBOT_ROOT/data`。配置、SQLite 数据库、插件、Skills、知识库、临时文件和备份都可能在这里，升级前应整体备份。步骤见 [备份、恢复与升级演练](./deploy/astrbot/backup)。
 
 当前 fork 不提供独立 Desktop 或 Launcher 部署；外部启动器的目录布局不属于本仓库保证范围。
 
@@ -91,11 +91,11 @@ cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
 
-更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。Dashboard 一键 Core 更新当前没有 fork 发布资产，不要用它安装上游 zip。
+更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。本 fork 不提供 Dashboard 一键 Core 更新。
 
 ### 升级到 4.27.5 后主库无法启动
 
-4.27.5 以当前 SQLModel 表重建主 SQLite schema，不做旧库 `ALTER TABLE` 或数据迁移。`create_all` 只创建缺失表，不会给已有 `data_v4.db` 加列或补索引。
+4.27.5 以当前 SQLModel 表重建主 SQLite schema，不做旧库 `ALTER TABLE` 或数据迁移。`create_all` 只创建缺失表；已有 `data_v4.db` 上的残留列和索引会留在原地。
 
 停进程并备份 `data/` 后，删除 runtime root 下的 `data/data_v4.db`、`data/data_v4.db-wal` 和 `data/data_v4.db-shm`，再启动。会话、长期记忆、授权绑定和 API Key 等主库记录不会从旧文件迁出。`data/knowledge_base/` 不受这次切库影响。架构说明见[项目架构](/dev/architecture#主-sqlite-库)。
 
@@ -103,7 +103,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 群聊中机器人不回复
 
-为避免群消息泛滥，默认不会因 @ 机器人或回复机器人而唤醒。需要发送唤醒前缀（默认 `/`），或在当前配置档打开 `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot`。同时检查：
+为避免群消息泛滥，普通消息需要满足配置档的 `llm_access.group` 策略（默认是 `prefix`，`llm_access.prefixes` 默认值为 `["/"]`）。如需把“回复机器人”作为额外触发条件，请启用 `llm_access.reply_to_bot`。同时检查：
 
 - 当前配置档是否绑定到该消息会话；
 - 平台和 Provider 是否启用；
@@ -112,7 +112,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 管理员指令提示无权限
 
-使用 `/session info` 查看当前用户 ID，然后通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+群聊仍需要通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。私聊对端已经是当前会话的 `session_owner`，无需预先绑定 `session_admin` 即可 `/conversation reset`。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。使用 `/session info` 可查看当前用户 ID。
 
 ### 以前的 `/plugin ls`、`/reset` 等指令无效
 
@@ -153,7 +153,7 @@ font-family: 'Maple Mono', 'Noto Sans CJK SC', sans-serif;
 
 ### 市场插件安装后加载失败
 
-Dashboard 默认市场源是上游 `AstrBotDevs/AstrBot_Plugins_Collection`，不是本 fork 的官方市场。本分支要求 Python 3.14+，且不提供旧插件 API 或旧 Dashboard 页面兼容。安装前核对该插件的 `astrbot_version` 和 `requires.dashboard_extension`。失败时用 URL 安装已知兼容的插件，或查看插件加载错误，不要假定上游市场插件能在本分支运行。详见 [插件](/use/plugin) 和 [插件开发指南](/dev/star/plugin-new)。
+Dashboard 默认市场源是上游 `cloud.astrbot.app` 市场 JSON（失败后回退到 `AstrBotDevs/AstrBot_Plugins_Collection`），不是本 fork 的官方市场。本分支要求 Python 3.14+，且不提供旧插件 API 或旧 Dashboard 页面兼容。安装前核对该插件的 `astrbot_version` 和 `requires.dashboard_extension`。失败时用 URL 安装已知兼容的插件，或查看插件加载错误，不要假定上游市场插件能在本分支运行。详见 [插件](/use/plugin) 和 [插件开发指南](/dev/star/plugin-new)。
 
 ### 如何关闭长期记忆
 

@@ -10,6 +10,48 @@ auditable without repeatedly loading the entire sync history into context.
 Treat `AGENTS.md` as the policy source of truth and
 `upstream-decisions.jsonl` as the durable decision ledger.
 
+Cite `.agents/shared/ai-contribution/REFERENCE.md` and `AI_POLICY.md` when
+opening a branch, Issue, or PR. Paste-ready apply prompt:
+`APPLY_PROMPT.md` in this folder.
+
+## Locked
+
+- Default method is **cherry-pick**, not merge of `upstream/master`.
+- One implementation commit per absorbed upstream commit. Skip/revisit make
+  none.
+- Preserve upstream subjects on `cherry-pick -x`. Adapt uses upstream author
+  plus hyphenated trailers.
+- Python 3.14+, no legacy shims, source-build compose, in-app `/help/` docs.
+- Do not merge the resulting PR, push `master`, tag, or release. A human
+  maintainer does those actions; do not treat a verbal exception as
+  authorization.
+- Open absorb PRs against `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`.
+  Confirm the created URL is under `github.com/Xero-Team/AstrBot`. Do not open
+  an Issue or PR on `AstrBotDevs/AstrBot` unless the user explicitly confirms
+  that upstream target.
+
+## Open
+
+Which commits to absorb in this window, and whether to open the PR in this
+session, unless the user already froze the plan in this conversation.
+
+## Do not
+
+- `git merge` / `rebase` onto `upstream/master`.
+- Combine several upstream feature/fix commits into one implementation commit.
+- Re-run an interval whose SHAs are already in the ledger.
+- File a public security Issue for an upstream vuln; follow `SECURITY.md`.
+- Open an Issue or PR on `AstrBotDevs/AstrBot` without explicit user
+  confirmation for that upstream target.
+- Invent a `pending` field in `upstream-sync.yaml`. Apply only the plan the
+  user approved in this conversation.
+
+## Handoff
+
+- Commit messages: `.agents/shared/conventional-commit/REFERENCE.md`.
+- Agent merge bar: `.agents/shared/ai-contribution/REFERENCE.md`.
+- Apply paste prompt: `.agents/skills/sync-upstream/APPLY_PROMPT.md`.
+
 ## Operating modes
 
 - **Review mode (default):** inspect the repository, fetch and compare
@@ -17,7 +59,9 @@ Treat `AGENTS.md` as the policy source of truth and
   return a focused plan. Do not cherry-pick, edit files, commit, or push.
 - **Apply mode:** enter only after the user explicitly asks to execute the
   approved plan. Apply commits oldest-first, one at a time, and record each
-  final decision. Do not push, merge, release, or tag unless separately asked.
+  final decision. Stay on a feature branch. You may open a pull request on
+  `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`. Do not merge, push
+  `master`, release, or tag.
 
 ## Preflight
 
@@ -81,6 +125,13 @@ suffix. If the upstream subject has no PR suffix, do not invent one. Change a
 subject only when the fork's user-visible semantics materially differ, and
 explain that change in the commit body.
 
+Generated or rewritten messages must follow
+`.agents/shared/conventional-commit/REFERENCE.md`, including
+`AI-Generated: true` and a UTC `Generated-At:` footer from
+`date -u '+%Y-%m-%dT%H:%M:%SZ'`. Do not rewrite a preserved upstream
+subject to satisfy that reference. Do not add AI metadata to a message
+that `git cherry-pick -x` kept verbatim.
+
 Use the following method for each disposition:
 
 - `cherry-pick`: use `git cherry-pick -x <full-upstream-sha>`. This preserves
@@ -124,13 +175,17 @@ Upstream-PR: AstrBotDevs#<number>
 Sync-Disposition: adapt
 Fork-Adaptation: <what changed for this fork>
 Tested: <command>
+AI-Generated: true
+Generated-At: <UTC ISO 8601 timestamp>
 ```
 
 The final cursor update is a separate metadata-only commit with subject
-`chore(sync): record upstream integration`. Do not hide implementation changes
-inside this cursor commit. A release/version bump that is intentionally skipped
-still advances the cursor only after its `skip` decision is recorded and the
-skip rationale is written to `upstream-sync.yaml`.
+`chore(sync): record upstream integration`. Generate that message from
+the conventional-commit reference, including a body and AI footers. Do
+not hide implementation changes inside this cursor commit. A
+release/version bump that is intentionally skipped still advances the
+cursor only after its `skip` decision is recorded and the skip rationale
+is written to `upstream-sync.yaml`.
 
 After each implementation commit, verify the mapping before moving on:
 
@@ -184,6 +239,8 @@ Before accepting a decision, check the affected contract:
 - update OpenAPI source, generated Dashboard client, public JSON, call sites,
   and tests together for Dashboard protocol changes;
 - update both `docs/en/` and `docs/zh/` for user-visible behavior;
+- keep documentation in-app at `/help/`; do not restore `Dockerfile.docs`, a
+  docs Compose service, or `docs.astrbot.app` links;
 - regenerate NapCat models only through `make napcat-check`;
 - preserve Python 3.14+, the security invariants, current ownership boundaries,
   source-build deployment, and the no-legacy policy;
@@ -244,7 +301,7 @@ metadata before advancing the cursor:
    absorbed fork changes when the repository's release convention calls for
    one.
 
-## Cursor and verification
+## Verify
 
 Advance `upstream-sync.yaml` only after every commit in the audited interval has
 an explicit disposition and the implementation/skip rationale is complete. Use

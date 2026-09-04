@@ -172,7 +172,6 @@ def _session(
         session_id=session_id,
         creator=creator,
         platform_id=platform_id,
-        is_group=0,
     )
 
 
@@ -1093,6 +1092,47 @@ async def test_update_message_truncates_latest_turn_and_returns_regenerate_flag(
 
 
 @pytest.mark.asyncio
+async def test_update_message_allows_failed_turn_without_conversation_checkpoint():
+    service = _service()
+    session = _session()
+    edited_content = {"type": "user", "message": [{"type": "plain", "text": "edited"}]}
+    record = _history_record(
+        10,
+        {"type": "user", "message": [{"type": "plain", "text": "old"}]},
+        checkpoint_id="ck-failed",
+    )
+    updated_record = _history_record(10, edited_content, checkpoint_id="new-ck")
+
+    service.db.get_platform_session_by_id = AsyncMock(return_value=session)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        side_effect=[record, updated_record]
+    )
+    service.get_sorted_platform_history = AsyncMock(return_value=[record])
+    service.load_current_conversation_history = AsyncMock(
+        return_value=(
+            "conv-1",
+            [
+                {"role": "user", "content": "older"},
+                {"role": "_checkpoint", "content": {"id": "older"}},
+            ],
+        )
+    )
+    service.delete_platform_history_after = AsyncMock(return_value=[11])
+    service.db.delete_webchat_threads_by_parent_message_ids = AsyncMock(return_value=[])
+    service.conv_mgr.update_conversation = AsyncMock()
+    service.db.update_platform_session = AsyncMock()
+    service.platform_history_mgr.update = AsyncMock()
+
+    result = await service.update_message(
+        "alice",
+        {"session_id": "session-1", "message_id": 10, "content": edited_content},
+    )
+
+    service.conv_mgr.update_conversation.assert_not_awaited()
+    assert result["needs_regenerate"] is True
+
+
+@pytest.mark.asyncio
 async def test_update_message_rejects_non_latest_user_message():
     service = _service()
     session = _session()
@@ -1214,6 +1254,61 @@ async def test_prepare_regenerate_message_payload_rewrites_latest_turn():
         "_skip_user_history": True,
         "_llm_checkpoint_id": update_kwargs["llm_checkpoint_id"],
     }
+
+
+@pytest.mark.asyncio
+async def test_prepare_regenerate_retries_failed_turn_without_conversation_checkpoint():
+    service = _service()
+    session = _session()
+    target_record = _history_record(
+        20,
+        {
+            "type": "bot",
+            "message": [
+                {"type": "plain", "text": "Error occurred during AI execution."}
+            ],
+        },
+        checkpoint_id="ck-failed",
+    )
+    source_user_record = _history_record(
+        19,
+        {"type": "user", "message": [{"type": "plain", "text": "你好"}]},
+        checkpoint_id="ck-failed",
+    )
+
+    service.db.get_platform_session_by_id = AsyncMock(return_value=session)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
+    service.load_current_conversation_history = AsyncMock(
+        return_value=(
+            "conv-1",
+            [
+                {"role": "user", "content": "older"},
+                {"role": "_checkpoint", "content": {"id": "older"}},
+            ],
+        )
+    )
+    service.get_sorted_platform_history = AsyncMock(
+        return_value=[source_user_record, target_record]
+    )
+    service.conv_mgr.update_conversation = AsyncMock()
+    service.db.delete_webchat_threads_by_parent_message_ids = AsyncMock(return_value=[])
+    service.platform_history_mgr.delete_by_id = AsyncMock()
+    service.platform_history_mgr.update = AsyncMock()
+
+    result = await service.prepare_regenerate_message_payload(
+        "alice",
+        {"session_id": "session-1", "message_id": 20},
+    )
+
+    service.conv_mgr.update_conversation.assert_not_awaited()
+    service.platform_history_mgr.delete_by_id.assert_awaited_once_with(20)
+    update_kwargs = service.platform_history_mgr.update.await_args.kwargs
+    assert update_kwargs["message_id"] == 19
+    assert result["message"] == [{"type": "plain", "text": "你好"}]
+    assert result["_skip_user_history"] is True
+    assert result["_llm_checkpoint_id"] == update_kwargs["llm_checkpoint_id"]
 
 
 @pytest.mark.asyncio
@@ -1393,6 +1488,63 @@ async def test_create_thread_returns_existing_thread_without_creating_conversati
     service.load_current_conversation_history.assert_not_called()
     service.db.create_webchat_thread.assert_not_awaited()
     service.conv_mgr.new_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_thread_uses_existing_history_when_checkpoint_missing():
+    service = _service()
+    session = _session()
+    parent_record = _history_record(
+        10,
+        {
+            "type": "bot",
+            "message": [
+                {"type": "plain", "text": "Error occurred during AI execution."}
+            ],
+        },
+        checkpoint_id="ck-failed",
+    )
+    created = SimpleNamespace(
+        thread_id="thread-2",
+        parent_session_id="session-1",
+        parent_message_id=10,
+        base_checkpoint_id="ck-failed",
+        selected_text="quoted",
+        creator="alice",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    older_history = [
+        {"role": "user", "content": "older"},
+        {"role": "_checkpoint", "content": {"id": "older"}},
+    ]
+    service.db.get_platform_session_by_id = AsyncMock(return_value=session)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=parent_record
+    )
+    service.db.get_webchat_thread_by_parent_message_and_text = AsyncMock(
+        return_value=None
+    )
+    service.load_current_conversation_history = AsyncMock(
+        return_value=("conv-1", older_history)
+    )
+    service.db.create_webchat_thread = AsyncMock(return_value=created)
+    service.conv_mgr.new_conversation = AsyncMock()
+
+    result = await service.create_thread(
+        "alice",
+        {
+            "session_id": "session-1",
+            "parent_message_id": 10,
+            "selected_text": "quoted",
+        },
+    )
+
+    assert result["thread_id"] == "thread-2"
+    service.conv_mgr.new_conversation.assert_awaited_once()
+    assert (
+        service.conv_mgr.new_conversation.await_args.kwargs["content"] == older_history
+    )
 
 
 @pytest.mark.asyncio

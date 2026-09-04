@@ -555,6 +555,8 @@ class WecomAIBotAdapter(Platform):
             if message_data.get("chattype") == "group"
             else MessageType.FRIEND_MESSAGE
         )
+        if abm.type == MessageType.GROUP_MESSAGE and message_data.get("chatid"):
+            abm.group_id = str(message_data["chatid"])
         abm.session_id = session_id
 
         # 消息内容
@@ -585,7 +587,7 @@ class WecomAIBotAdapter(Platform):
         if not self.webhook_client:
             raise RuntimeError(
                 "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。"
-                "详见文档: https://docs.astrbot.app/platform/wecom_ai_bot.html#%E9%85%8D%E7%BD%AE-astrbot。"
+                "详见 WebUI 文档: /help/platform/wecom_ai_bot.html。"
                 f"session_id={session.session_id}"
             )
 
@@ -677,8 +679,7 @@ class WecomAIBotAdapter(Platform):
             only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
             long_connection_sender=self._send_long_connection_respond_msg,
         )
-        message_event.is_at_or_wake_command = True
-        message_event.is_wake = True
+        message_event.set_extra("adapter_preconfigured", True)
         return message_event
 
     async def handle_msg(self, message: AstrBotMessage) -> None:

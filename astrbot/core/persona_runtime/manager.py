@@ -8,7 +8,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .injector import PersonaRuntimeInjector
 from .learners import BehaviorLearner, ExpressionLearner, JargonLearner
 from .models import PersonaRuntimeSignal
-from .proactive_scheduler import ProactiveScheduler
 from .signals import event_mentions_bot
 from .state_store import PersonaRuntimeStateStore
 
@@ -18,7 +17,6 @@ class PersonaRuntimeManager:
         self.db = db
         self.state_store = PersonaRuntimeStateStore(db)
         self.injector = PersonaRuntimeInjector()
-        self.proactive_scheduler = ProactiveScheduler()
         self.expression_learner = ExpressionLearner(db)
         self.jargon_learner = JargonLearner(db)
         self.behavior_learner = BehaviorLearner(db)

@@ -68,21 +68,22 @@ astrbot/core/db/
     mixins.py              # TimestampMixin
     ...                    # 按域拆分的表模块
   stores/
+    mixin.py               # store mixins 共用的带类型会话助手
     session.py             # 会话与事务作用域助手
     ...                    # 每个域协议一个 mixin
 ```
 
 `po/__init__.py` 再导出表模型，只是包入口。新代码可以写 `from astrbot.core.db.po.memory import MemoryFact`；`from astrbot.core.db.po import MemoryFact` 仍有效。模型注册由 `po.registry.import_all_models()` 显式完成，不能依赖业务模块碰巧导入。`schema.py` 必须先调用它，再执行 `SQLModel.metadata.create_all`。`tests/unit/db/test_schema.py` 用源码内固定的 `EXPECTED_TABLE_NAMES`（当前 35 张表）对照初始化后的数据库表名；registry 漏登时测试必须失败。
 
-`initialize()` 只做：
+`initialize()` 按以下顺序执行：
 
 1. `import_all_models()`
 2. `SQLModel.metadata.create_all`
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-它不探测 `PRAGMA table_info`，也不执行 `ALTER TABLE`。`create_all` 只创建缺失表，不会给已有表加列。schema 变更后需要空库重建：停进程，删除 `data/data_v4.db*`，再启动。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。升级到 4.27.5 需要删除 `data/data_v4.db*` 后从空文件启动。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
 
-Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
+Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
 
 ### 协议与表
 
@@ -143,25 +144,30 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 1. `WakingCheckStage`
 2. `WhitelistCheckStage`
 3. `SessionStatusCheckStage`
-4. `RateLimitStage`
-5. `ContentSafetyCheckStage`
-6. `PreProcessStage`
-7. `GroupMessageHistoryStage`
-8. `ProcessStage`
-9. `ResultDecorateStage`
-10. `RespondStage`
+4. `TurnCoalesceStage`
+5. `RateLimitStage`
+6. `ContentSafetyCheckStage`
+7. `PreProcessStage`
+8. `GroupMessageHistoryStage`
+9. `ProcessStage`
+10. `ResultDecorateStage`
+11. `RespondStage`
 
 `GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。`SessionStatusCheckStage` 在会话关闭时停止事件，但放行已激活的 `/bot status` 和 `/bot enable`，以便从聊天重新打开会话。
 
-群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
+入站路由在 `WakingCheckStage` 中一次完成：指令、LLM、透传或丢弃。阶段会把 `should_run_command`、`should_run_llm`、`route_kind` 和明确的 `wake_reasons` 集合写入事件。指令匹配优先于 LLM 访问：命中指令时只执行指令，裸指令组输出帮助，未知子指令输出 Orbit 诊断且不会回落到 LLM。LLM 访问从事件所属配置档的 `llm_access` 读取；`command_prefixes` 只负责指令头。派生属性 `is_wake` 和 `is_at_or_wake_command` 不能作为 Pipeline 门禁。
 
-`platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、live、定时任务和主动回复保持原 UMO 串行。
+`TurnCoalesceStage` 位于白名单和会话检查之后。启用时，它把符合条件的私聊 LLM 消息片段交给生命周期持有的有界 `TurnWindowManager`，不会在流水线中等待。管理器负责合并片段、根据 NapCat 输入状态暂停、收到指令时丢弃未完成回合，并重新排队一个带签名的 flush 事件，让它经过限流及后续阶段。适配器提供的 flush 标志会被清除，只有管理器创建的事件可以携带 `route_kind=turn_flush`。通知和请求保持透传，因此临时的 `input_status` 不会变成 LLM 消息。
+
+群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。`keep_original_alias` 等未使用列不在模型上，也不会从旧文件删除。
+
+`platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat 和定时任务保持原 UMO 串行。
 
 ### 指令解析子系统
 
 指令参数由 `astrbot/core/command/` 下的 Orbit Command Syntax 子系统处理。`catalog.py` 为已启用指令、指令组和各级别名建立不可变最长匹配索引；`lexer.py` 实现不执行 expansion 或 operator 的确定性 POSIX word 子集；`schema.py` 在 handler 注册期编译签名；`binder.py` 负责位置参数、option、默认值和类型转换；`engine.py` 统一执行 resolve、lex 和 bind。
 
-插件管理器按 Pipeline 配置显式拥有 `CommandCatalogStore`。插件加载、卸载、重载、启禁，以及 Dashboard 中的指令启禁、重命名和别名修改都会构建新 snapshot 并原子替换引用。`WakingCheckStage` 的消息热路径只读取 snapshot：先完成 wake prefix 移除和最长指令头匹配，命中后只 lex 一次，再按 `handler_full_name` 分别绑定所有匹配 handler。完全未知根指令不会进入 Orbit，因此带 `$`、URL 或不完整引号的普通 LLM prompt 不会被指令解析器拦截。
+插件管理器按 Pipeline 配置显式拥有 `CommandCatalogStore`。插件加载、卸载、重载、启禁，以及 Dashboard 中的指令启禁、重命名和别名修改都会构建新 snapshot 并原子替换引用。`WakingCheckStage` 的消息热路径只读取 snapshot：先完成配置的指令前缀移除和最长指令头匹配，命中后只 lex 一次，再按 `handler_full_name` 分别绑定所有匹配 handler。完全未知根指令不会进入 Orbit，因此带 `$`、URL 或不完整引号的普通 LLM prompt 不会被指令解析器拦截。已启用的指令路径、别名、子路径和每个非空 LLM 前缀的第一个 token 共享同一作用域命名空间；冲突路径会从 catalog 排除，直到 Dashboard 重命名只剩一个所有者，或指令更新 API 记录接管。Dashboard 会高亮冲突并提供重命名，接管不是 Dashboard 按钮。内置 LLM 状态组为 `/llm`（`status`、`enable`、`disable`）。
 
 核心结构化诊断只保存稳定错误码、Unicode code-point span、参数和 hint code；zh-CN/en-US 文本及源码 caret 在展示边界渲染。插件公开入口是 `astrbot.api.command` 以及 `astrbot.api.event.filter` 中的 `option`、`GreedyStr`，内部 catalog、engine 和 handler metadata 不属于插件 API。
 
@@ -226,15 +232,15 @@ guest:<id>
 
 角色只表达“主体是谁”，作用域决定“在哪些资源上有权”。当前关系表把 `session_owner`/`session_admin` 解释为 `owner`/`admin`；`viewer`、`editor`、`executor`、`caller` 仍是预留关系。
 
-| 角色                | 作用域                      | 语义                                                       |
-| ------------------- | --------------------------- | ---------------------------------------------------------- |
-| `root`              | 全局                        | Dashboard 控制面最高身份；账户 CRUD 受 root + step-up 保护 |
-| `operator`          | 全局                        | Dashboard 全局运维                                         |
-| `instance_operator` | `instance:<config-id>`      | 单个配置档运维                                             |
-| `session_owner`     | `session:<config-id>/<umo>` | 当前会话负责人；平台群主只映射到当前会话                   |
-| `session_admin`     | `session:<config-id>/<umo>` | 当前会话有限管理                                           |
-| `member`            | `session:<config-id>/<umo>` | 普通已识别用户                                             |
-| `guest`             | 会话或无资源                | 未认证或匿名 WebChat                                       |
+| 角色                | 作用域                      | 语义                                                                                                                  |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `root`              | 全局                        | Dashboard 控制面最高身份；账户 CRUD 受 root + step-up 保护                                                            |
+| `operator`          | 全局                        | Dashboard 全局运维                                                                                                    |
+| `instance_operator` | `instance:<config-id>`      | 单个配置档运维                                                                                                        |
+| `session_owner`     | `session:<config-id>/<umo>` | 当前会话负责人：映射的群主，或已认证 IM 私聊对端（运行时事实 `private_session`，仅当前发起会话，不是 Dashboard 绑定） |
+| `session_admin`     | `session:<config-id>/<umo>` | 当前会话有限管理                                                                                                      |
+| `member`            | `session:<config-id>/<umo>` | 普通已识别用户                                                                                                        |
+| `guest`             | 会话或无资源                | 未认证或匿名 WebChat                                                                                                  |
 
 `root` 与 `operator` 只能绑定有效 Dashboard 账户，不能因同名主体出现在 IM 消息中成为群管理权限。当前会话 owner 只可授予/撤销本会话的 `session_admin` 或 `member`，不能委派 owner。平台 owner/admin 事实带 TTL，过期后降级，且从不写入 global/instance binding。
 
@@ -242,34 +248,34 @@ guest:<id>
 
 动作使用 `domain.verb`。内置命令通过 `@filter.permission("session.manage")` 声明能力，最终仍调用 `authorize()`。高风险动作不能从父动作静默继承。
 
-| 动作                                                      | 默认允许角色                                   | 高风险             |
-| --------------------------------------------------------- | ---------------------------------------------- | ------------------ |
-| `session.read`                                            | member 及以上（当前会话）                      | 否                 |
-| `session.manage`                                          | session_admin 及以上                           | 否                 |
-| `session.assign`                                          | session_owner 及以上                           | 跨会话时需更高角色 |
-| `provider.use` / `provider.read`                          | member 及以上                                  | 否；凭据永不返回   |
-| `provider.manage`                                         | instance_operator 及以上                       | 否                 |
-| `provider.credentials.write`                              | instance_operator 及以上                       | 是                 |
-| `platform.manage`                                         | instance_operator 及以上                       | 是                 |
-| `agent.manage`                                            | session_owner 及以上                           | 部分               |
-| `extension.read` / `extension.manage`                     | member / instance_operator 及以上              | 部分               |
-| `extension.plugin_install`                                | instance_operator 及以上 + Dashboard step-up   | 是                 |
-| `data.manage` / `data.export_all`                         | 资源所有者 / instance_operator 及以上          | 全量导出是高风险   |
-| `system.manage`                                           | root；部分只读给 operator                      | 否                 |
-| `system.update` / `system.restart` / `system.pip_install` | root + step-up                                 | 是                 |
-| `identity.manage`                                         | session_owner 及以上（作用域受限）             | 是                 |
-| `identity.operator.write` / `identity.root.write`         | root + step-up                                 | 是                 |
-| `dashboard.account.manage`                                | root + step-up                                 | 是                 |
-| `filesystem.read` / `filesystem.write`                    | operator、root                                 | 否                 |
-| `filesystem.manage`                                       | root + step-up                                 | 是                 |
-| `tool.file_read` / `tool.mcp_read`                        | member 及以上                                  | 否                 |
-| `tool.local_exec` 等实例工具                              | instance_operator 及以上；WebChat 另需 step-up | 是                 |
+| 动作                                              | 默认允许角色                                   | 高风险             |
+| ------------------------------------------------- | ---------------------------------------------- | ------------------ |
+| `session.read`                                    | member 及以上（当前会话）                      | 否                 |
+| `session.manage`                                  | session_admin 及以上                           | 否                 |
+| `session.assign`                                  | session_owner 及以上                           | 跨会话时需更高角色 |
+| `provider.use` / `provider.read`                  | member 及以上                                  | 否；凭据永不返回   |
+| `provider.manage`                                 | instance_operator 及以上                       | 否                 |
+| `provider.credentials.write`                      | instance_operator 及以上                       | 是                 |
+| `platform.manage`                                 | instance_operator 及以上                       | 是                 |
+| `agent.manage`                                    | session_owner 及以上                           | 部分               |
+| `extension.read` / `extension.manage`             | member / instance_operator 及以上              | 部分               |
+| `extension.plugin_install`                        | instance_operator 及以上 + Dashboard step-up   | 是                 |
+| `data.manage` / `data.export_all`                 | 资源所有者 / instance_operator 及以上          | 全量导出是高风险   |
+| `system.manage`                                   | root；部分只读给 operator                      | 否                 |
+| `system.restart` / `system.pip_install`           | root + step-up                                 | 是                 |
+| `identity.manage`                                 | session_owner 及以上（作用域受限）             | 是                 |
+| `identity.operator.write` / `identity.root.write` | root + step-up                                 | 是                 |
+| `dashboard.account.manage`                        | root + step-up                                 | 是                 |
+| `filesystem.read` / `filesystem.write`            | operator、root                                 | 否                 |
+| `filesystem.manage`                               | root + step-up                                 | 是                 |
+| `tool.file_read` / `tool.mcp_read`                | member 及以上                                  | 否                 |
+| `tool.local_exec` 等实例工具                      | instance_operator 及以上；WebChat 另需 step-up | 是                 |
 
 插件自定义动作必须使用 `plugin:<plugin-id>:<action>` 命名空间，并通过 `self.context.authz.authorize()` 再次调用核心授权。未声明的插件写操作默认拒绝。工具最终权限是“用户授权 ∩ Persona 工具策略 ∩ 工具自身策略”；子 Agent handoff 不能提升调用者。
 
 ### Step-up、审计与 API Key
 
-全局高风险操作只接受 Dashboard 控制面的一次性密码/TOTP step-up，凭证绑定 account、Dashboard `sid`、action、资源和上下文摘要，TTL 不超过 5 分钟，只能原子消费一次。Dashboard 驱动的 WebChat 使用独立的 `/authorization/webchat-step-up`，只覆盖六个实例级工具：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。Live Voice 不复用该 proof。
+全局高风险操作只接受 Dashboard 控制面的一次性密码/TOTP step-up，凭证绑定 account、Dashboard `sid`、action、资源和上下文摘要，TTL 不超过 5 分钟，只能原子消费一次。Dashboard 驱动的 WebChat 使用独立的 `/authorization/webchat-step-up`，只覆盖六个实例级工具：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。
 
 拒绝、高风险 allow、step-up 和绑定变更写脱敏审计。高风险 allow 在有界审计队列已满时 fail closed；绑定变更与 step-up 签发在同一业务事务中落库。
 
@@ -287,7 +293,7 @@ Dashboard 后端是 FastAPI 应用，使用 Hypercorn 运行。普通 JSON 路�
 
 所有 `/api/v1` 路由由 `astrbot/dashboard/api/router.py` 汇总。源规范是 `openspec/openapi-v1.yaml`；Dashboard 的 Hey API 客户端和文档站的 `public/openapi.json` 都由它生成，禁止手工修改生成客户端。
 
-Live Chat WebSocket 允许同一连接并发运行多个请求，以唯一 `message_id` 关联任务、响应和 interrupt。follow-up 捕获、`run_started` 与每轮 `agent_stats` 都必须保留原请求身份；不能用 session 级 busy 标志把协议退回单请求串行模型。
+Unified Chat WebSocket 允许同一连接并发运行多个请求，以唯一 `message_id` 关联任务、响应和 interrupt。follow-up 捕获、`run_started` 与每轮 `agent_stats` 都必须保留原请求身份；不能用 session 级 busy 标志把协议退回单请求串行模型。
 
 ### 数据文件管理器
 
@@ -348,7 +354,7 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 | Dashboard API     | `astrbot/dashboard/api/`、`services/`、`schemas.py`          | OpenAPI、生成客户端、前后端测试                             |
 | 授权策略/绑定     | `astrbot/core/auth/`                                         | 动作注册表、step-up、平台事实、审计、插件 `context.authz`   |
 | 数据文件管理器    | `data_files.py`、`data_file_service.py`、`DataFilesPage.vue` | 路径穿越、符号链接、etag、step-up、OpenAPI tag 白名单       |
-| Live Chat 协议    | `live_chat_service.py`、`webchat/`                           | request identity、并发、interrupt、前端状态测试             |
+| Unified Chat 协议 | `webchat_service.py`、`webchat/`                             | request identity、并发、interrupt、前端状态测试             |
 | 插件 SDK/页面协议 | `astrbot/api/`、`astrbot/core/star/`                         | import boundary、插件指南、Vitest、Playwright               |
 | 配置持久化        | `astrbot/core/config/`                                       | 默认值/metadata、revision、并发保存测试                     |
 | 主 SQLite 库      | `astrbot/core/db/`                                           | 域协议、SQLModel 表、schema 初始化、`tests/unit/db/`        |

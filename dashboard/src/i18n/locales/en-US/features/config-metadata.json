@@ -3,13 +3,15 @@
     "name": "AI",
     "agent_runner": {
       "description": "Agent Runner",
-      "hint": "Select the runner for AI conversations. Defaults to AstrBot's built-in Agent runner, which supports knowledge base, persona, and tool calling features. You don't need to modify this section unless you plan to integrate third-party Agent runners like Dify, Coze, or DeerFlow.",
+      "hint": "Select the runner for AI conversations. Switching runners resets the configuration to the new type's defaults.",
       "provider_settings": {
         "enable": {
           "description": "Enable",
           "hint": "Master switch for AI conversations"
-        },
-        "agent_runner_type": {
+        }
+      },
+      "agent_runner": {
+        "runner_type": {
           "description": "Runner",
           "labels": [
             "Built-in Agent",
@@ -18,39 +20,212 @@
             "Alibaba Cloud Bailian Application",
             "DeerFlow"
           ]
-        },
-        "coze_agent_runner_provider_id": {
-          "description": "Coze Agent Runner Provider ID"
-        },
-        "dify_agent_runner_provider_id": {
-          "description": "Dify Agent Runner Provider ID"
-        },
-        "dashscope_agent_runner_provider_id": {
-          "description": "Alibaba Cloud Bailian Application Agent Runner Provider ID"
-        },
-        "deerflow_agent_runner_provider_id": {
-          "description": "DeerFlow Agent Runner Provider ID"
+        }
+      }
+    },
+    "dify_runner": {
+      "description": "Dify Configuration",
+      "agent_runner": {
+        "config": {
+          "dify_api_type": {
+            "description": "Application Type"
+          },
+          "dify_api_key": {
+            "description": "API Key"
+          },
+          "dify_api_base": {
+            "description": "API Base URL"
+          },
+          "dify_workflow_output_key": {
+            "description": "Workflow Output Variable"
+          },
+          "dify_query_input_key": {
+            "description": "Prompt Input Variable"
+          },
+          "variables": {
+            "description": "Variables"
+          },
+          "timeout": {
+            "description": "Timeout (seconds)"
+          },
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
+          }
+        }
+      }
+    },
+    "coze_runner": {
+      "description": "Coze Configuration",
+      "agent_runner": {
+        "config": {
+          "coze_api_key": {
+            "description": "API Key"
+          },
+          "bot_id": {
+            "description": "Bot ID"
+          },
+          "coze_api_base": {
+            "description": "API Base URL"
+          },
+          "auto_save_history": {
+            "description": "Let Coze Manage Conversation History"
+          },
+          "timeout": {
+            "description": "Timeout (seconds)"
+          },
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
+          }
+        }
+      }
+    },
+    "dashscope_runner": {
+      "description": "Alibaba Cloud Bailian Application Configuration",
+      "agent_runner": {
+        "config": {
+          "dashscope_app_type": {
+            "description": "Application Type"
+          },
+          "dashscope_api_key": {
+            "description": "API Key"
+          },
+          "dashscope_app_id": {
+            "description": "Application ID"
+          },
+          "rag_options": {
+            "pipeline_ids": {
+              "description": "Knowledge Base Pipeline IDs"
+            },
+            "file_ids": {
+              "description": "File IDs"
+            },
+            "output_reference": {
+              "description": "Include References"
+            }
+          },
+          "variables": {
+            "description": "Variables"
+          },
+          "timeout": {
+            "description": "Timeout (seconds)"
+          },
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
+          }
+        }
+      }
+    },
+    "deerflow_runner": {
+      "description": "DeerFlow Configuration",
+      "agent_runner": {
+        "config": {
+          "deerflow_api_base": {
+            "description": "API Base URL"
+          },
+          "deerflow_api_key": {
+            "description": "API Key"
+          },
+          "deerflow_auth_header": {
+            "description": "Authorization Header"
+          },
+          "deerflow_assistant_id": {
+            "description": "Assistant ID"
+          },
+          "deerflow_model_name": {
+            "description": "Model Name Override"
+          },
+          "deerflow_thinking_enabled": {
+            "description": "Enable Thinking Mode"
+          },
+          "deerflow_plan_mode": {
+            "description": "Enable Plan Mode"
+          },
+          "deerflow_subagent_enabled": {
+            "description": "Enable Subagents"
+          },
+          "deerflow_max_concurrent_subagents": {
+            "description": "Maximum Concurrent Subagents"
+          },
+          "deerflow_recursion_limit": {
+            "description": "Recursion Limit"
+          },
+          "timeout": {
+            "description": "Timeout (seconds)"
+          },
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
+          }
         }
       }
     },
     "ai": {
       "description": "Model",
-      "hint": "When using non-built-in Agent runners, the default chat model and default image caption model may not take effect, but some plugins rely on these settings to invoke AI capabilities.",
+      "hint": "Configure the built-in Agent's chat models and shared image caption and speech models.",
+      "agent_runner": {
+        "config": {
+          "model": {
+            "provider_id": {
+              "description": "Chat Model",
+              "hint": "Uses the first model when left empty"
+            },
+            "fallback_provider_ids": {
+              "description": "Fallback Chat Models",
+              "hint": "Try these chat models in order when the primary model request fails."
+            },
+            "request_max_retries": {
+              "description": "Retries on Error",
+              "hint": "Maximum attempts for a single model request when retryable errors occur."
+            }
+          }
+        }
+      },
       "provider_settings": {
-        "default_provider_id": {
-          "description": "Default Chat Model",
-          "hint": "Uses the first model when left empty"
-        },
-        "fallback_chat_models": {
-          "description": "Fallback chat model IDs",
-          "hint": "When the primary chat model request fails, fallback to these chat models in order."
-        },
-        "request_max_retries": {
-          "description": "Request Max Retries",
-          "hint": "Maximum attempts for a single model request when retryable errors occur."
-        },
         "default_image_caption_provider_id": {
-          "description": "Default Image Caption Model",
+          "description": "Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
         },
         "image_caption_prompt": {
@@ -59,8 +234,8 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Enable Speech-to-Text",
-          "hint": "Master switch for STT"
+          "description": "Speech Recognition",
+          "hint": "Use a speech-to-text model to transcribe user voice messages into text for the model to understand."
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
@@ -69,8 +244,8 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "Enable Text-to-Speech",
-          "hint": "Master switch for TTS"
+          "description": "Voice Replies",
+          "hint": "Use a text-to-speech model to turn text into voice replies."
         },
         "provider_id": {
           "description": "Default Text-to-Speech Model"
@@ -83,9 +258,21 @@
     "persona": {
       "description": "Persona",
       "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
-      "provider_settings": {
-        "default_personality": {
-          "description": "Default Persona"
+      "agent_runner": {
+        "config": {
+          "persona": {
+            "persona_id": {
+              "description": "Default Persona"
+            },
+            "safety_mode": {
+              "description": "Safety Mode",
+              "hint": "Guide the model toward safe content and away from harmful or sensitive topics."
+            },
+            "safety_mode_strategy": {
+              "description": "Safety Mode Strategy",
+              "hint": "Select how safety mode is applied."
+            }
+          }
         }
       }
     },
@@ -133,7 +320,11 @@
         },
         "websearch_exa_key": {
           "description": "Exa API Key",
-          "hint": "Multiple keys can be added for rotation."
+          "hint": "Multiple keys can be added for rotation. Get a key at https://dashboard.exa.ai"
+        },
+        "websearch_anysearch_key": {
+          "description": "AnySearch API Key",
+          "hint": "Multiple keys can be added for rotation. Leave empty to use anonymous mode with a daily free quota."
         },
         "websearch_firecrawl_key": {
           "description": "Firecrawl API Key",
@@ -145,32 +336,12 @@
         },
         "web_search_link": {
           "description": "Display Source Citations"
-        },
-        "websearch_exa_key": {
-          "description": "Exa API Key",
-          "hint": "Multiple keys can be added for rotation. Get a key at https://dashboard.exa.ai"
-        }
-      }
-    },
-    "file_extract": {
-      "description": "File Extract",
-      "provider_settings": {
-        "file_extract": {
-          "enable": {
-            "description": "Enable File Extract"
-          },
-          "provider": {
-            "description": "File Extract Provider"
-          },
-          "moonshotai_api_key": {
-            "description": "Moonshot AI API Key"
-          }
         }
       }
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks.",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
@@ -228,7 +399,7 @@
     },
     "proactive_capability": {
       "description": "Proactive Agent",
-      "hint": "AstrBot will wake up, run your tasks, and deliver the results to you. See [Proactive Agent](https://docs.astrbot.app/en/use/proactive-agent.html)",
+      "hint": "AstrBot will wake up, run your tasks, and deliver the results to you.",
       "provider_settings": {
         "proactive_capability": {
           "add_cron_tools": {
@@ -239,37 +410,41 @@
       }
     },
     "truncate_and_compress": {
-      "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
+      "hint": "How AstrBot manages working memory.",
       "description": "Context Management Strategy",
-      "provider_settings": {
-        "max_context_length": {
-          "description": "Max Turns Before Compression",
-          "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
-        },
-        "dequeue_context_length": {
-          "description": "Turns to Discard When Limit Exceeded",
-          "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
-        },
-        "context_limit_reached_strategy": {
-          "description": "Handling for History Limits or Context Window Pressure",
-          "labels": ["Truncate by Turns", "Compress by LLM"],
-          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
-        },
-        "llm_compress_instruction": {
-          "description": "Context Compression Instruction",
-          "hint": "If empty, the default prompt will be used."
-        },
-        "llm_compress_keep_recent_ratio": {
-          "description": "Recent Context Token Ratio to Keep",
-          "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
-        },
-        "llm_compress_provider_id": {
-          "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
-        },
-        "fallback_max_context_tokens": {
-          "description": "Fallback context window size",
-          "hint": "When max_context_tokens is 0 and the model is not in built-in metadata, use this value as the context window size. Default: 128000."
+      "agent_runner": {
+        "config": {
+          "compression": {
+            "max_turns": {
+              "description": "Max Turns Before Compression",
+              "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
+            },
+            "trim_turns": {
+              "description": "Turns to Discard When Limit Exceeded",
+              "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
+            },
+            "overflow_strategy": {
+              "description": "Handling for History Limits or Context Window Pressure",
+              "labels": ["Truncate by Turns", "Compress by LLM"],
+              "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
+            },
+            "instruction": {
+              "description": "Context Compression Instruction",
+              "hint": "If empty, the default prompt will be used."
+            },
+            "keep_recent_ratio": {
+              "description": "Recent Context Token Ratio to Keep",
+              "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
+            },
+            "provider_id": {
+              "description": "Model Provider ID for Context Compression",
+              "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
+            },
+            "fallback_max_tokens": {
+              "description": "Fallback context window size",
+              "hint": "When max_context_tokens is 0 and the model is not in built-in metadata, use this value as the context window size. Default: 128000."
+            }
+          }
         }
       }
     },
@@ -278,14 +453,6 @@
       "provider_settings": {
         "display_reasoning_text": {
           "description": "Display Reasoning Content"
-        },
-        "llm_safety_mode": {
-          "description": "Healthy Mode",
-          "hint": "Add safety guardrails to model replies."
-        },
-        "safety_mode_strategy": {
-          "description": "Healthy Mode Strategy",
-          "hint": "How to apply healthy mode."
         },
         "identifier": {
           "description": "User Identification",
@@ -300,19 +467,15 @@
           "hint": "When enabled, current time information will be appended to the system prompt."
         },
         "show_tool_use_status": {
-          "description": "Output Function Call Status"
+          "description": "Show Tool Call Information"
         },
         "show_tool_call_result": {
           "description": "Output Tool Call Results",
-          "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
+          "hint": "Only takes effect when \"Show Tool Call Information\" is enabled, and shows at most 70 characters."
         },
         "buffer_intermediate_messages": {
           "description": "Merge Agent Intermediate Messages",
           "hint": "When enabled, intermediate text generated during multi-step tool calls in non-streaming mode will be buffered and sent as a single merged reply after the Agent finishes."
-        },
-        "sanitize_context_by_modalities": {
-          "description": "Sanitize History by Modalities",
-          "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
         },
         "max_quoted_fallback_images": {
           "description": "Forwarded Image Fetch Limit",
@@ -336,17 +499,6 @@
             "hint": "When enabled, log warnings when all get_msg/get_forward_msg attempts fail."
           }
         },
-        "max_agent_step": {
-          "description": "Maximum Tool Call Rounds"
-        },
-        "tool_call_timeout": {
-          "description": "Tool Call Timeout (seconds)"
-        },
-        "tool_schema_mode": {
-          "description": "Tool Schema Mode",
-          "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
-          "labels": ["Skills-like (two-stage)", "Full schema"]
-        },
         "streaming_response": {
           "description": "Streaming Output"
         },
@@ -354,10 +506,6 @@
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
           "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
-        },
-        "wake_prefix": {
-          "description": "Additional LLM Chat Wake Prefix",
-          "hint": "Applies only to messaging platforms, not WebUI. If the wake prefix is / and the additional chat wake prefix is chat, then /chat is required to trigger LLM requests"
         },
         "prompt_prefix": {
           "description": "User Prompt",
@@ -388,6 +536,27 @@
         "dual_output": {
           "description": "Output Both Voice and Text When TTS is Enabled"
         }
+      },
+      "agent_runner": {
+        "config": {
+          "misc": {
+            "max_steps": {
+              "description": "Maximum Tool Call Rounds"
+            },
+            "tool_schema_mode": {
+              "description": "Tool Schema Mode",
+              "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
+              "labels": ["Skills-like (two-stage)", "Full schema"]
+            },
+            "tool_call_timeout": {
+              "description": "Tool Call Timeout (seconds)"
+            },
+            "sanitize_context_by_modalities": {
+              "description": "Sanitize History by Modalities",
+              "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
+            }
+          }
+        }
       }
     }
   },
@@ -401,6 +570,33 @@
       "appid": {
         "description": "App ID",
         "hint": "Required. App ID for the current messaging platform. See the platform integration docs for how to obtain it."
+      },
+      "app_secret": {
+        "description": "Application Secret"
+      },
+      "app_token": {
+        "description": "Slack App Token"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token"
+      },
+      "channel_access_token": {
+        "description": "LINE Channel Access Token"
+      },
+      "channel_secret": {
+        "description": "LINE Channel Secret"
+      },
+      "client_secret": {
+        "description": "Client Secret"
+      },
+      "encoding_aes_key": {
+        "description": "Message Encryption Key"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret"
+      },
+      "token": {
+        "description": "Callback Token"
       },
       "callback_server_host": {
         "description": "Callback Server Host",
@@ -788,9 +984,6 @@
           "description": "Group Sender Concurrency (Experimental)",
           "hint": "Experimental and off by default. Different group senders may generate in parallel, but a whole turn still sends one-at-a-time per group. Ignored when session isolation is on. Disables group streaming; segmented or forwarded replies may interleave."
         },
-        "friend_message_needs_wake_prefix": {
-          "description": "Private Messages Require Wake Word"
-        },
         "reply_prefix": {
           "description": "Reply Text Prefix"
         },
@@ -807,8 +1000,36 @@
           "description": "Trigger Waiting on Mention-only Messages"
         }
       },
-      "wake_prefix": {
-        "description": "Wake Word"
+      "command_prefixes": {
+        "description": "Command Prefixes"
+      },
+      "llm_access": {
+        "prefixes": {
+          "description": "LLM trigger prefixes"
+        },
+        "private": {
+          "description": "Direct-message LLM access"
+        },
+        "group": {
+          "description": "Group LLM access"
+        },
+        "reply_to_bot": {
+          "description": "Allow LLM when replying to the bot"
+        }
+      },
+      "inbound_coalesce": {
+        "enable": {
+          "description": "Enable inbound turn coalescing"
+        },
+        "wait_seconds": {
+          "description": "Turn wait seconds"
+        },
+        "max_total_seconds": {
+          "description": "Maximum turn wait seconds"
+        },
+        "max_typing_wait": {
+          "description": "Maximum typing pause seconds"
+        }
       }
     },
     "whitelist": {
@@ -1061,7 +1282,7 @@
       }
     },
     "ltm": {
-      "description": "Group Chat Context Awareness (formerly Chat Memory Enhancement)",
+      "description": "Group Chat Context Awareness",
       "provider_ltm_settings": {
         "group_icl_enable": {
           "description": "Enable Group Chat Context Awareness"
@@ -1106,22 +1327,6 @@
         "image_caption_lazy": {
           "description": "Lazy Group Chat Image Caption",
           "hint": "When enabled, store a placeholder first and caption only when the LLM is actually woken. Disabled by default."
-        },
-        "active_reply": {
-          "enable": {
-            "description": "Active Reply"
-          },
-          "method": {
-            "description": "Active Reply Method"
-          },
-          "possibility_reply": {
-            "description": "Reply Probability",
-            "hint": "Value between 0.0-1.0"
-          },
-          "whitelist": {
-            "description": "Active Reply Whitelist",
-            "hint": "Whitelist filtering is disabled when empty. Use /session info to get IDs."
-          }
         }
       }
     }
@@ -1289,6 +1494,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"
@@ -1913,11 +2127,8 @@
     }
   },
   "help": {
-    "documentation": "Official Documentation",
-    "support": "Join Support Group",
-    "helpText": "Don't understand the configuration? See {documentation} or {support}.",
-    "helpPrefix": "Don't understand the configuration? See",
-    "helpMiddle": "or",
+    "documentation": "in-app documentation",
+    "helpPrefix": "Don't understand the configuration? See the",
     "helpSuffix": "."
   }
 }

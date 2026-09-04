@@ -8,10 +8,7 @@ from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )
-from astrbot.core.agent.runners.deerflow.constants import (
-    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-    DEERFLOW_PROVIDER_TYPE,
-)
+from astrbot.core.agent.runners.deerflow.constants import DEERFLOW_PROVIDER_TYPE
 from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
@@ -50,12 +47,6 @@ from astrbot.core.utils.task_utils import create_tracked_task
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
 
-AGENT_RUNNER_TYPE_KEY = {
-    "dify": "dify_agent_runner_provider_id",
-    "coze": "coze_agent_runner_provider_id",
-    "dashscope": "dashscope_agent_runner_provider_id",
-    DEERFLOW_PROVIDER_TYPE: DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-}
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 RUNNER_NO_RESULT_FALLBACK_MESSAGE = DEFAULT_AGENT_ERROR_MESSAGE
@@ -184,11 +175,9 @@ class ThirdPartyAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
-        self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
-        self.prov_id = self.conf["provider_settings"].get(
-            AGENT_RUNNER_TYPE_KEY.get(self.runner_type, ""),
-            "",
-        )
+        agent_runner = self.conf["agent_runner"]
+        self.runner_type = agent_runner["runner_type"]
+        self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -205,10 +194,10 @@ class ThirdPartyAgentSubStage:
             source="Third-party runner config",
         )
         self.max_step: int = coerce_int_config(
-            settings.get("max_agent_step", 30),
+            self.runner_config.get("max_steps", 30),
             default=30,
             min_value=1,
-            field_name="max_agent_step",
+            field_name="max_steps",
             source="Third-party runner config",
         )
 
@@ -223,7 +212,6 @@ class ThirdPartyAgentSubStage:
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.execution_context.persona_manager,
-                provider_settings=self.conf["provider_settings"],
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
@@ -319,41 +307,26 @@ class ThirdPartyAgentSubStage:
         # Second yield keeps scheduler progress consistent after final result update.
         yield
 
-    async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         req: ProviderRequest | None = None
-
-        if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
-        ):
-            if event.message_str and event.message_str.strip():
-                return
-            provider_wake_prefix = ""
-
-        self.prov_cfg: dict = next(
-            (p for p in self.conf["provider"] if p["id"] == self.prov_id),
-            {},
-        )
-        if not self.prov_id:
-            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
-            return
-        if not self.prov_cfg:
-            logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
-            )
-            return
 
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = coalesce_prompt_with_json_cards(
             event,
-            event.message_str[len(provider_wake_prefix) :],
+            event.message_str,
         )
         settings = self.conf.get("provider_settings", {})
         build_config = MainAgentBuildConfig(
-            tool_call_timeout=int(settings.get("tool_call_timeout", 120)),
+            tool_call_timeout=coerce_int_config(
+                self.runner_config.get("timeout", 120),
+                default=120,
+                min_value=1,
+                field_name="timeout",
+                source="Third-party runner config",
+                warn=False,
+            ),
             provider_settings=settings,
         )
         await prepare_event_attachments(
@@ -445,7 +418,7 @@ class ThirdPartyAgentSubStage:
                     tool_call_timeout=120,
                 ),
                 "agent_hooks": MainAgentHooks(),
-                "provider_config": self.prov_cfg,
+                "provider_config": self.runner_config,
                 "streaming": streaming_response,
             }
             if preferences := getattr(self.ctx, "preferences", None):

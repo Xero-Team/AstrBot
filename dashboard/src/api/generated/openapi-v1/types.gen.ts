@@ -473,6 +473,8 @@ export type CommandPatchRequest = {
   alias?: string;
   aliases?: Array<string>;
   action?: string;
+  takeover?: boolean;
+  config_id?: string;
 };
 
 export type AuthorizationBindingRequest = {
@@ -551,6 +553,10 @@ export type CommandItem = {
   aliases?: Array<string>;
   action?: string;
   enabled?: boolean;
+  /**
+   * Whether the owning plugin is currently activated.
+   */
+  plugin_activated?: boolean;
   is_group?: boolean;
   has_conflict?: boolean;
   reserved?: boolean;
@@ -560,7 +566,11 @@ export type CommandItem = {
 
 export type CommandListData = {
   items?: Array<CommandItem>;
-  wake_prefix?: Array<string>;
+  command_prefixes?: Array<string>;
+  llm_access?: {
+    prefixes?: Array<string>;
+    [key: string]: unknown;
+  };
   summary?: CommandSummary;
   [key: string]: unknown;
 };
@@ -871,13 +881,6 @@ export type BackupRenameRequest = {
 
 export type BackupImportRequest = {
   confirmed?: boolean;
-};
-
-export type UpdateRequest = {
-  version?: string;
-  proxy?: string;
-  reboot?: boolean;
-  progress_id?: string;
 };
 
 export type PipInstallRequest = {
@@ -2492,15 +2495,6 @@ export type OpenChatWebSocketData = {
     key?: string;
   };
   url: '/api/v1/chat/ws';
-};
-
-export type OpenLiveChatWebSocketData = {
-  body?: never;
-  path?: never;
-  query: {
-    token: string;
-  };
-  url: '/api/v1/live-chat/ws';
 };
 
 export type OpenUnifiedChatWebSocketData = {
@@ -5963,6 +5957,24 @@ export type ListConversationsData = {
      * Comma-separated platforms to exclude.
      */
     exclude_platforms?: string;
+    /**
+     * Match conversation titles or message content.
+     */
+    keyword?: string;
+    /**
+     * Match the unified message origin.
+     */
+    umo?: string;
+    sort_by?: 'created_at' | 'updated_at';
+    sort_order?: 'asc' | 'desc';
+    /**
+     * Paginate by UMO and return all conversation summaries for each selected session.
+     */
+    group_by_session?: boolean;
+    /**
+     * Include serialized message history in list results.
+     */
+    include_history?: boolean;
   };
   url: '/api/v1/conversations';
 };
@@ -5976,6 +5988,23 @@ export type ListConversationsResponses = {
 
 export type ListConversationsResponse =
   ListConversationsResponses[keyof ListConversationsResponses];
+
+export type GetConversationFilterOptionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/conversations/filter-options';
+};
+
+export type GetConversationFilterOptionsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetConversationFilterOptionsResponse =
+  GetConversationFilterOptionsResponses[keyof GetConversationFilterOptionsResponses];
 
 export type BatchDeleteConversationsData = {
   body: ConversationBatchDeleteRequest;
@@ -6566,75 +6595,6 @@ export type ImportBackupResponses = {
 
 export type ImportBackupResponse =
   ImportBackupResponses[keyof ImportBackupResponses];
-
-export type CheckUpdateData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/check';
-};
-
-export type CheckUpdateResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type CheckUpdateResponse =
-  CheckUpdateResponses[keyof CheckUpdateResponses];
-
-export type ListReleasesData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/releases';
-};
-
-export type ListReleasesResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type ListReleasesResponse =
-  ListReleasesResponses[keyof ListReleasesResponses];
-
-export type UpdateCoreData = {
-  body?: UpdateRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/core';
-};
-
-export type UpdateCoreResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type UpdateCoreResponse = UpdateCoreResponses[keyof UpdateCoreResponses];
-
-export type GetUpdateProgressData = {
-  body?: never;
-  path: {
-    task_id: string;
-  };
-  query?: never;
-  url: '/api/v1/updates/progress/{task_id}';
-};
-
-export type GetUpdateProgressResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type GetUpdateProgressResponse =
-  GetUpdateProgressResponses[keyof GetUpdateProgressResponses];
 
 export type InstallPipPackageData = {
   body: PipInstallRequest;

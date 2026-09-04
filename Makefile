@@ -1,13 +1,13 @@
 .PHONY: worktree worktree-add worktree-rm bootstrap doctor pr-test-neo pr-test-full pr-test-full-fast \
-	build build-all build-backend build-dashboard dev run run-backend run-dashboard \
+	build build-all build-backend build-dashboard build-docs sync-webui-dist dev run run-backend run-dashboard \
 	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
 	check check-all check-all-platforms format format-all test test-all test-blocking \
 	check-py check-py-all check-py-format check-py-lint \
-	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier \
+	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier check-web-i18n \
 	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
-	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker \
+	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker check-archify \
 	format-py format-web format-data format-md format-toml format-yaml format-shell format-ps format-eol
 
 WORKTREE_DIR ?= ../astrbot_worktree
@@ -33,7 +33,7 @@ QUALITY_SECURITY_TARGETS := astrbot
 QUALITY_TARGETS := quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi
 QUALITY_REPORT_TARGETS := quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi
 CHECK_PY_TARGETS := check-py-format check-py-lint
-CHECK_WEB_TARGETS := check-web-build check-web-eslint check-web-smoke check-web-prettier
+CHECK_WEB_TARGETS := check-web-build check-web-eslint check-web-smoke check-web-prettier check-web-i18n
 CHECK_MD_TARGETS := check-md-prettier check-md-markdownlint
 CHECK_TOML_TARGETS := check-toml-format check-toml-lint
 CHECK_YAML_TARGETS := check-yaml-prettier check-yaml-lint
@@ -100,19 +100,28 @@ bootstrap: doctor
 
 build: build-all
 
-build-all: build-backend build-dashboard
+build-all: build-backend build-docs
 
 build-backend:
 	uv sync --locked
 
+sync-webui-dist:
+	uv run python scripts/sync_dashboard_dist.py
+
 build-dashboard:
 	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DASHBOARD_DIR) && $(PNPM) build
-	uv run python scripts/sync_dashboard_dist.py
+	@$(MAKE) --no-print-directory sync-webui-dist
+
+build-docs: build-dashboard
+	cd $(DOCS_DIR) && CI=true $(PNPM) install --frozen-lockfile
+	cd $(DOCS_DIR) && ASTRBOT_DOCS_BASE=/help/ $(PNPM) run docs:build
+	@$(MAKE) --no-print-directory sync-webui-dist
 
 dev: run-backend run-dashboard status
 
 run: build
+	@$(MAKE) --no-print-directory sync-webui-dist
 	@$(MAKE) --no-print-directory run-backend
 	@$(MAKE) --no-print-directory run-dashboard
 	@$(MAKE) --no-print-directory status
@@ -138,7 +147,7 @@ clean: stop
 	@$(DEV_RUNNER) clean
 
 docs:
-	cd $(DOCS_DIR) && $(PNPM) install
+	cd $(DOCS_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DOCS_DIR) && $(PNPM) run docs:dev
 
 napcat-schema-ob11-event:
@@ -176,6 +185,10 @@ napcat-test:
 napcat-check: napcat-codegen napcat-test
 	git diff --exit-code -- astrbot/core/platform/sources/napcat/generated/ob11_events.py
 
+check-archify:
+	@echo "==> [archify] checkout-only doctor and example showcase"
+	node .agents/skills/archify/scripts/check-checkout.mjs
+
 quality:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) quality-all
 
@@ -198,7 +211,10 @@ quality-audit: quality-sync
 
 quality-web-audit:
 	cd $(DASHBOARD_DIR) && $(PNPM) install --frozen-lockfile
-	cd $(DASHBOARD_DIR) && $(PNPM) audit --audit-level=low
+	# A hung npm advisory POST is a registry transport failure, not a
+	# vulnerability finding. --ignore-registry-errors still fails the gate
+	# when the registry returns advisories at --audit-level=low or above.
+	cd $(DASHBOARD_DIR) && $(PNPM) audit --audit-level=low --fetch-retries=1 --ignore-registry-errors
 
 quality-complexity: quality-sync
 	# Incremental ceiling: existing C901 debt stays visible in reports, while CI
@@ -302,18 +318,26 @@ check-web-all: $(CHECK_WEB_TARGETS)
 check-web-build:
 	@echo "==> [web] build"
 	cd $(DASHBOARD_DIR) && $(PNPM) build
+	@$(MAKE) --no-print-directory sync-webui-dist
 
 check-web-eslint:
 	@echo "==> [web] eslint"
 	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --concurrency=auto --max-warnings=0
 
-check-web-smoke:
+# The Dashboard build regenerates the tracked MDI subset assets.  Run smoke
+# tests after that write completes so Vitest cannot observe a half-written
+# font/CSS pair when check-web uses parallel submakes.
+check-web-smoke: check-web-build
 	@echo "==> [web] smoke tests"
 	cd $(DASHBOARD_DIR) && $(PNPM) run test:smoke
 
 check-web-prettier:
 	@echo "==> [web] prettier --check"
 	$(PRETTIER) --check "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
+
+check-web-i18n:
+	@echo "==> [web] i18n"
+	cd $(DASHBOARD_DIR) && $(PNPM) run i18n:check
 
 format-web:
 	@echo "==> [web] prettier + eslint --fix"
@@ -362,18 +386,21 @@ check-toml-all: $(CHECK_TOML_TARGETS)
 check-toml-format:
 	@echo "==> [toml] taplo fmt --check"
 	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
+		[ -f "$$f" ] || continue; \
 		$(TAPLO) fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
 	done
 
 check-toml-lint:
 	@echo "==> [toml] taplo lint"
 	@for f in $$(git ls-files '*.toml'); do \
+		[ -f "$$f" ] || continue; \
 		$(TAPLO) lint - < "$$f" || exit 1; \
 	done
 
 format-toml:
 	@echo "==> [toml] taplo fmt"
 	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
+		[ -f "$$f" ] || continue; \
 		tmp=$$(mktemp); \
 		$(TAPLO) fmt --stdin-filepath "$$f" - < "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
 	done
@@ -432,4 +459,4 @@ format-eol:
 check-docker:
 	@command -v hadolint >/dev/null 2>&1 || { echo "hadolint is required; run 'make doctor' for setup guidance." >&2; exit 2; }
 	@echo "==> [docker] hadolint"
-	@hadolint --config .hadolint.yaml Dockerfile Dockerfile.docs
+	@hadolint --config .hadolint.yaml Dockerfile

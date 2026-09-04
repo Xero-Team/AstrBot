@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import re
 import uuid
@@ -153,6 +151,9 @@ from .types import (
     NapCatStatus,
     NapCatVersionInfo,
 )
+
+_EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
+_SPLIT_SEND_INTERVAL_SECONDS = 0.5
 
 
 class NapCatOutboundProtocol:
@@ -1055,7 +1056,8 @@ class NapCatPlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         if any(
-            isinstance(component, Node | Nodes) for component in message_chain.chain
+            isinstance(component, _EXCLUSIVE_OUTBOUND_SEGMENTS)
+            for component in message_chain.chain
         ):
             await self._send_mixed_outbound_message(session, message_chain)
         else:
@@ -1075,23 +1077,39 @@ class NapCatPlatformAdapter(Platform):
         message_chain: MessageChain,
     ) -> None:
         pending_standard: list[BaseMessageComponent] = []
+        sent_any = False
+
+        async def emit_standard(segments: list[BaseMessageComponent]) -> None:
+            nonlocal sent_any
+            if not segments:
+                return
+            if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+            await self._send_standard_message(
+                session,
+                message_chain.derive(chain=list(segments)),
+            )
+            sent_any = True
+
+        async def emit_forward(component: Node | Nodes) -> None:
+            nonlocal sent_any
+            if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
+                await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
+            await self._send_forward_component(session, component)
+            sent_any = True
+
         for component in message_chain.chain:
-            if isinstance(component, Node | Nodes):
-                if pending_standard:
-                    await self._send_standard_message(
-                        session,
-                        message_chain.derive(chain=list(pending_standard)),
-                    )
-                    pending_standard.clear()
-                await self._send_forward_component(session, component)
+            if isinstance(component, _EXCLUSIVE_OUTBOUND_SEGMENTS):
+                await emit_standard(pending_standard)
+                pending_standard.clear()
+                if isinstance(component, Node | Nodes):
+                    await emit_forward(component)
+                else:
+                    await emit_standard([component])
                 continue
             pending_standard.append(component)
 
-        if pending_standard:
-            await self._send_standard_message(
-                session,
-                message_chain.derive(chain=pending_standard),
-            )
+        await emit_standard(pending_standard)
 
     async def _send_forward_component(
         self,
@@ -1487,8 +1505,24 @@ class NapCatPlatformAdapter(Platform):
 
     def _get_ignored_notice_event_reason(self, event: object) -> str | None:
         if isinstance(event, OneBot11InputStatus):
+            self._signal_typing(event)
             return "ephemeral notify:input_status"
         return None
+
+    def _signal_typing(self, notice: OneBot11InputStatus) -> None:
+        callback = getattr(self, "typing_signal", None)
+        if not callable(callback):
+            return
+        user_id = str(getattr(notice, "user_id", "") or "")
+        group_id = str(getattr(notice, "group_id", "") or "0")
+        platform_id = self.meta().id
+        if group_id not in {"", "0"}:
+            umo = f"{platform_id}:GroupMessage:{group_id}"
+        else:
+            umo = f"{platform_id}:FriendMessage:{user_id}"
+        key = f"{platform_id}:{umo}:{user_id}"
+        event_type = int(getattr(notice, "event_type", 2) or 2)
+        callback(key, event_type)
 
     async def _convert_message_event(
         self,

@@ -1,7 +1,5 @@
 """Central outbound URL validation, pinned resolution, and safe downloads."""
 
-from __future__ import annotations
-
 import asyncio
 import gzip
 import io
@@ -16,7 +14,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import aiohttp
 import certifi
-from aiohttp.abc import AbstractResolver
+from aiohttp.abc import AbstractResolver, ResolveResult
 
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.io import ensure_dir
@@ -25,7 +23,6 @@ ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 _DEFAULT_MAX_URL_LENGTH = 2048
 _PLUGIN_ARCHIVE_MAX_BYTES = 50 * 1024 * 1024
-_CORE_ARCHIVE_MAX_BYTES = 200 * 1024 * 1024
 _MIRROR_TEST_MAX_BYTES = 64 * 1024
 _JSON_MAX_BYTES = 8 * 1024 * 1024
 _DEFAULT_HTTPS_PORTS = frozenset({443})
@@ -78,16 +75,17 @@ GITHUB_RELATED_HOSTS = frozenset(
         "github.githubassets.com",
     }
 )
-SOULTER_REGISTRY_HOSTS = frozenset(
+UPSTREAM_REGISTRY_HOSTS = frozenset(
     {
         "api.soulter.top",
         "astrbot-registry.soulter.top",
+        "cloud.astrbot.app",
     }
 )
 DEFAULT_PLUGIN_MARKET_URLS = (
+    "https://cloud.astrbot.app/api/v1/market/plugins.json",
     "https://raw.githubusercontent.com/AstrBotDevs/AstrBot_Plugins_Collection/main/plugin_cache_original.json",
     "https://cdn.jsdelivr.net/gh/AstrBotDevs/AstrBot_Plugins_Collection@main/plugin_cache_original.json",
-    "https://api.soulter.top/astrbot/plugins",
 )
 _ARCHIVE_CONTENT_TYPES = frozenset(
     {
@@ -139,20 +137,9 @@ class ValidatedOutboundURL:
     addresses: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]
 
 
-CORE_UPDATE = OutboundRequestPolicy(
-    allowed_schemes=frozenset({"https"}),
-    allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,
-    allowed_ports=_DEFAULT_HTTPS_PORTS,
-    allow_private_network=False,
-    max_redirects=5,
-    max_url_length=_DEFAULT_MAX_URL_LENGTH,
-    max_response_bytes=_CORE_ARCHIVE_MAX_BYTES,
-    timeout_seconds=1800.0,
-    allowed_content_types=_ARCHIVE_CONTENT_TYPES,
-)
 PLUGIN_REPOSITORY = OutboundRequestPolicy(
     allowed_schemes=frozenset({"https"}),
-    allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,
+    allowed_hosts=GITHUB_RELATED_HOSTS | UPSTREAM_REGISTRY_HOSTS,
     allowed_ports=_DEFAULT_HTTPS_PORTS,
     allow_private_network=False,
     max_redirects=5,
@@ -207,7 +194,7 @@ MCP_REMOTE = OutboundRequestPolicy(
 )
 JSON_FETCH = OutboundRequestPolicy(
     allowed_schemes=frozenset({"https"}),
-    allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,
+    allowed_hosts=GITHUB_RELATED_HOSTS | UPSTREAM_REGISTRY_HOSTS,
     allowed_ports=_DEFAULT_HTTPS_PORTS,
     allow_private_network=False,
     max_redirects=2,
@@ -576,7 +563,7 @@ class ValidatingAiohttpResolver(AbstractResolver):
         host: str,
         port: int = 0,
         family: socket.AddressFamily = socket.AF_UNSPEC,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ResolveResult]:
         hostname = _normalize_hostname(host)
         if hostname in _LOCAL_HOSTNAMES and not self._policy.allow_private_network:
             raise OutboundRequestError(
@@ -607,7 +594,7 @@ class ValidatingAiohttpResolver(AbstractResolver):
             raise OutboundRequestError(
                 "The destination URL cannot target a private or reserved address."
             )
-        records: list[dict[str, Any]] = []
+        records: list[ResolveResult] = []
         for address in addresses:
             family_value = socket.AF_INET6 if address.version == 6 else socket.AF_INET
             if family not in {socket.AF_UNSPEC, family_value}:
@@ -968,11 +955,26 @@ async def fetch_text(
                     if policy.max_response_bytes is not None
                     else _JSON_MAX_BYTES
                 )
-                raw = await response.content.read(limit + 1)
-                if len(raw) > limit:
-                    raise OutboundSizeLimitError(
-                        "The response is larger than the allowed size."
-                    )
+                content_length = response.headers.get("Content-Length")
+                if content_length:
+                    try:
+                        declared = int(content_length)
+                    except ValueError:
+                        declared = -1
+                    if declared > limit:
+                        raise OutboundSizeLimitError(
+                            "The response is larger than the allowed size."
+                        )
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.content.iter_chunked(8192):
+                    total += len(chunk)
+                    if total > limit:
+                        raise OutboundSizeLimitError(
+                            "The response is larger than the allowed size."
+                        )
+                    chunks.append(chunk)
+                raw = b"".join(chunks)
                 try:
                     text = _decode_text_payload(raw, max_bytes=limit)
                 except UnicodeDecodeError as exc:
@@ -1046,7 +1048,9 @@ def pin_httpx_transport(transport: Any, policy: OutboundRequestPolicy) -> Any:
     """
 
     pool = getattr(transport, "_pool", None)
-    backend = getattr(pool, "_network_backend", None) if pool is not None else None
+    if pool is None:
+        return transport
+    backend = getattr(pool, "_network_backend", None)
     if backend is None:
         return transport
     pool._network_backend = PinnedAsyncNetworkBackend(backend, policy)

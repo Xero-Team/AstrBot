@@ -1,12 +1,12 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.db.po import PersonaSessionState
-from astrbot.core.persona_runtime import PersonaRuntimeManager, ProactiveScheduler
+from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.persona_runtime.injector import PersonaRuntimeInjector
 
 
@@ -20,21 +20,10 @@ def _state(**overrides) -> PersonaSessionState:
         "consecutive_idle_count": 0,
         "cooldown_until": None,
         "last_interaction_at": now,
-        "extra_state": {"proactive_enabled": True},
+        "extra_state": {},
     }
     values.update(overrides)
     return PersonaSessionState(**values)
-
-
-def test_proactive_scheduler_respects_cooldown_and_unread_threshold():
-    scheduler = ProactiveScheduler()
-    now = datetime.now(UTC)
-    cooling = _state(cooldown_until=now + timedelta(minutes=5))
-    assert scheduler.evaluate(cooling, now=now).reason == "cooldown"
-
-    ready = _state(cooldown_until=None)
-    assert scheduler.evaluate(ready, unread_count=3, now=now).should_enqueue is True
-    assert scheduler.evaluate(ready, unread_count=1, now=now).should_enqueue is False
 
 
 def test_injector_adds_transient_runtime_context():

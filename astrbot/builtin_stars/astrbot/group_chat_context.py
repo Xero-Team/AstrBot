@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import hashlib
-import random
 import re
 import time
 import uuid
@@ -106,12 +105,6 @@ class GroupChatContext:
             0.0,
         )
         lazy = bool(group_context_cfg.get("image_caption_lazy", False)) is True
-        active_reply = group_context_cfg["active_reply"]
-        enable_active_reply = active_reply.get("enable", False)
-        ar_method = active_reply["method"]
-        ar_possibility = active_reply["possibility_reply"]
-        ar_prompt = active_reply.get("prompt", "")
-        ar_whitelist = active_reply.get("whitelist", [])
         return {
             "group_message_max_cnt": _positive_int(
                 group_context_cfg.get(
@@ -129,11 +122,6 @@ class GroupChatContext:
             "image_caption_max_concurrency": max_concurrency,
             "image_caption_cache_ttl": cache_ttl,
             "image_caption_lazy": lazy,
-            "enable_active_reply": enable_active_reply,
-            "ar_method": ar_method,
-            "ar_possibility": ar_possibility,
-            "ar_prompt": ar_prompt,
-            "ar_whitelist": ar_whitelist,
         }
 
     def _sync_caption_semaphore(self, max_concurrency: int) -> None:
@@ -333,26 +321,6 @@ class GroupChatContext:
         # A valid provider response may carry tool calls or an empty completion.
         # Keep the group-context prompt text-only rather than rendering ``None``.
         return response.completion_text or ""
-
-    async def need_active_reply(self, event: AstrMessageEvent) -> bool:
-        cfg = self.cfg(event)
-        if not cfg["enable_active_reply"]:
-            return False
-        if event.get_message_type() != MessageType.GROUP_MESSAGE:
-            return False
-        if event.is_at_or_wake_command:
-            return False
-        if cfg["ar_whitelist"] and (
-            event.unified_msg_origin not in cfg["ar_whitelist"]
-            and (
-                event.get_group_id() and event.get_group_id() not in cfg["ar_whitelist"]
-            )
-        ):
-            return False
-        match cfg["ar_method"]:
-            case "possibility_reply":
-                return random.random() < cfg["ar_possibility"]
-        return False
 
     async def remove_session(self, event: AstrMessageEvent) -> int:
         umo = event.unified_msg_origin

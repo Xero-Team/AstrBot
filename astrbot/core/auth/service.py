@@ -40,6 +40,8 @@ from astrbot.core.db.po import (
     DashboardAccount,
 )
 from astrbot.core.db.protocols import ApiKeyStore, DatabaseSessionStore
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 _AUDIT_QUEUE_SIZE = 2048
@@ -134,6 +136,44 @@ def _webchat_step_up_cached(context: AuthContext, action: str) -> str | None:
         cached.pop(action, None)
         return None
     return credential_id
+
+
+def _session_umo_is_friend(session_scope: Resource | None) -> bool:
+    """Return whether the origin UMO parses as FriendMessage.
+
+    A FriendMessage UMO is never sufficient on its own. GroupMessage and
+    OtherMessage origins are never private-session owned. An unparseable UMO
+    is not a DM.
+    """
+
+    umo = None if session_scope is None else session_scope.umo
+    if not isinstance(umo, str) or not umo:
+        return False
+    try:
+        return MessageSession.from_str(umo).message_type is MessageType.FRIEND_MESSAGE
+    except ValueError, TypeError, AttributeError:
+        return False
+
+
+def _is_private_im_origin(
+    subject: Subject,
+    context: AuthContext,
+    *,
+    origin_matches: bool,
+    session_scope: Resource | None,
+) -> bool:
+    """Return whether the authenticated IM peer owns this 1:1 origin session."""
+
+    return (
+        subject.kind == "im"
+        and subject.authenticated
+        and context.source == "im"
+        and context.authenticated
+        and origin_matches
+        and session_scope is not None
+        and context.message_type == MessageType.FRIEND_MESSAGE.value
+        and _session_umo_is_friend(session_scope)
+    )
 
 
 def _control_plane_bindings_apply(subject: Subject, context: AuthContext) -> bool:
@@ -924,7 +964,7 @@ class AuthorizationService:
                         )
                         .values(revoked_at=now, revoked_by=actor.id)
                     )
-                    revoked = bool(result.rowcount)
+                    revoked = bool(getattr(result, "rowcount", 0))
                     if revoked:
                         audit_context = self._binding_audit_context(
                             actor, context, binding.config_id
@@ -1067,7 +1107,7 @@ class AuthorizationService:
                         )
                         .values(revoked_at=now, revoked_by=actor.id)
                     )
-                    if result.rowcount != len(binding_id_set):
+                    if getattr(result, "rowcount", 0) != len(binding_id_set):
                         raise AuthorizationValueError(
                             "Binding batch is no longer current"
                         )
@@ -1145,7 +1185,7 @@ class AuthorizationService:
                         < utc_now() - timedelta(days=max(1, retention_days))
                     )
                 )
-                return int(result.rowcount or 0)
+                return int(getattr(result, "rowcount", 0) or 0)
 
     async def authorize(
         self, subject: Subject, action: str, resource: Resource, context: AuthContext
@@ -1610,6 +1650,15 @@ class AuthorizationService:
             and session_scope is not None
         ):
             facts.append((Role.MEMBER, "default", session_scope))
+        private_im_origin = _is_private_im_origin(
+            subject,
+            context,
+            origin_matches=origin_matches,
+            session_scope=session_scope,
+        )
+        if private_im_origin and session_scope is not None:
+            facts.append((Role.SESSION_OWNER, "private_session", session_scope))
+        skip_platform_elevation = private_im_origin
         now = utc_now()
         async with self._db.get_db() as session:
             bindings = await session.execute(
@@ -1667,7 +1716,12 @@ class AuthorizationService:
                     continue
                 if self._binding_matches_resource(binding, resource):
                     facts.append((binding_role, "binding", resource))
-            if origin_matches and session_scope is not None and session_scope.umo:
+            if (
+                origin_matches
+                and session_scope is not None
+                and session_scope.umo
+                and not skip_platform_elevation
+            ):
                 fact = (
                     await session.execute(
                         select(AuthPlatformMembershipFact).where(
@@ -1692,7 +1746,8 @@ class AuthorizationService:
                         )
                     )
         if (
-            origin_matches
+            not skip_platform_elevation
+            and origin_matches
             and session_scope is not None
             and context.platform_member_role in {"owner", "admin"}
             and context.platform_role_source in {"adapter", "api", "cache"}
@@ -1893,7 +1948,7 @@ class AuthorizationService:
                         col(AuthStepUpCredential.consumed_at).is_(None),
                     )
                     .values(consumed_at=now)
-                    .returning(AuthStepUpCredential.expires_at)
+                    .returning(col(AuthStepUpCredential.expires_at))
                 )
                 expires_at = result.scalar_one_or_none()
                 if expires_at is None:

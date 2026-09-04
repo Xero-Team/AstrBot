@@ -1,7 +1,6 @@
 import asyncio
 import math
 import random
-from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -450,7 +449,7 @@ class RespondStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> None:
         result = event.get_result()
         if result is None:
             return
@@ -464,6 +463,11 @@ class RespondStage(Stage):
             return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
+            return
+        if (
+            not result.chain
+            and result.result_content_type != ResultContentType.STREAMING_RESULT
+        ):
             return
         sent_plain_texts = event.get_extra(
             "_send_message_to_user_current_session_plain_texts",

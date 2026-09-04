@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
@@ -224,12 +222,17 @@ async def test_webchat_step_up_http_chat_pipeline_context_matches_authorization(
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
+                "command_prefixes": ["/"],
+                "llm_access": {
+                    "prefixes": ["/"],
+                    "private": "open",
+                    "group": "prefix",
+                    "reply_to_bot": False,
+                },
                 "platform_settings": {
-                    "friend_message_needs_wake_prefix": False,
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": False,
-                    "group_wake_policy": {},
                 },
                 "plugin_set": ["*"],
             },

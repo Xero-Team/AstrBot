@@ -3,7 +3,7 @@
     <div class="provider-sources-head">
       <div class="provider-sources-head__copy">
         <h3 class="provider-sources-title">
-          {{ tm('providerSources.title') }}
+          {{ title || tm('providerSources.title') }}
         </h3>
       </div>
 
@@ -18,7 +18,7 @@
             variant="solo-filled"
             flat
             hide-details
-            :placeholder="tm('providerSources.selectHint')"
+            :placeholder="selectHint || tm('providerSources.selectHint')"
             @update:model-value="selectSourceByValue"
           >
             <template #selection="{ item }">
@@ -32,6 +32,11 @@
                     <v-img
                       v-if="resolveOption(item)?.source?.provider"
                       :src="resolveSourceIcon(resolveOption(item)?.source)"
+                      :class="{
+                        'provider-icon--monochrome': isMonochromeSourceIcon(
+                          resolveOption(item)?.source,
+                        ),
+                      }"
                       alt="provider logo"
                       cover
                     ></v-img>
@@ -57,6 +62,11 @@
                       <v-img
                         v-if="resolveOption(item)?.source?.provider"
                         :src="resolveSourceIcon(resolveOption(item)?.source)"
+                        :class="{
+                          'provider-icon--monochrome': isMonochromeSourceIcon(
+                            resolveOption(item)?.source,
+                          ),
+                        }"
                         alt="provider logo"
                         cover
                       ></v-img>
@@ -76,8 +86,8 @@
           variant="text"
           size="small"
           color="error"
-          :aria-label="tm('providerSources.delete')"
-          :title="tm('providerSources.delete')"
+          :aria-label="deleteLabel || tm('providerSources.delete')"
+          :title="deleteLabel || tm('providerSources.delete')"
           @click.stop="deleteSelectedSource"
         ></v-btn>
 
@@ -110,6 +120,9 @@
                 <v-img
                   v-if="sourceType.icon"
                   :src="sourceType.icon"
+                  :class="{
+                    'provider-icon--monochrome': sourceType.isMonochrome,
+                  }"
                   alt="provider icon"
                   cover
                 ></v-img>
@@ -120,6 +133,14 @@
           </v-list-item>
         </StyledMenu>
       </div>
+
+      <v-progress-linear
+        v-if="loading"
+        class="provider-sources-progress"
+        color="primary"
+        height="2"
+        indeterminate
+      />
     </div>
 
     <div
@@ -148,6 +169,9 @@
           <v-img
             v-if="source?.provider"
             :src="resolveSourceIcon(source)"
+            :class="{
+              'provider-icon--monochrome': isMonochromeSourceIcon(source),
+            }"
             alt="provider logo"
             cover
           ></v-img>
@@ -169,18 +193,18 @@
             icon="mdi-delete-outline"
             variant="text"
             size="small"
-            :aria-label="tm('providerSources.delete')"
-            :title="tm('providerSources.delete')"
+            :aria-label="deleteLabel || tm('providerSources.delete')"
+            :title="deleteLabel || tm('providerSources.delete')"
             @click.stop="emitDeleteSource(source)"
           ></v-btn>
         </div>
       </button>
     </div>
 
-    <div v-else class="provider-sources-empty">
+    <div v-else-if="!loading" class="provider-sources-empty">
       <v-icon size="44" color="on-surface-variant">mdi-api-off</v-icon>
       <p class="provider-sources-empty__text">
-        {{ tm('providerSources.empty') }}
+        {{ emptyText || tm('providerSources.empty') }}
       </p>
     </div>
   </div>
@@ -203,6 +227,26 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  title: {
+    type: String,
+    default: '',
+  },
+  emptyText: {
+    type: String,
+    default: '',
+  },
+  selectHint: {
+    type: String,
+    default: '',
+  },
+  deleteLabel: {
+    type: String,
+    default: '',
+  },
+  loading: {
+    type: Boolean,
+    default: false,
+  },
   tm: {
     type: Function,
     required: true,
@@ -210,6 +254,10 @@ const props = defineProps({
   resolveSourceIcon: {
     type: Function,
     required: true,
+  },
+  isMonochromeSourceIcon: {
+    type: Function,
+    default: () => false,
   },
   getSourceDisplayName: {
     type: Function,
@@ -294,14 +342,24 @@ const selectSourceByValue = (value) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .provider-sources-head {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   justify-content: space-between;
   gap: 12px;
   padding: 20px 20px 12px;
+  position: relative;
+}
+
+.provider-sources-progress {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
 }
 
 .provider-sources-head__copy {
@@ -354,6 +412,7 @@ const selectSourceByValue = (value) => {
 .provider-sources-list {
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding: 6px 12px 16px;
   display: flex;

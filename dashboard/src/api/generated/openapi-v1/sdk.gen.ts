@@ -29,8 +29,6 @@ import type {
   BulkToggleBuiltinCommandsResponses,
   CheckBackupData,
   CheckBackupResponses,
-  CheckUpdateData,
-  CheckUpdateResponses,
   CleanupStorageData,
   CleanupStorageResponses,
   CompleteBackupUploadData,
@@ -192,6 +190,8 @@ import type {
   GetConfigProfileSchemaData,
   GetConfigProfileSchemaResponses,
   GetConversationData,
+  GetConversationFilterOptionsData,
+  GetConversationFilterOptionsResponses,
   GetConversationResponses,
   GetDataFileContentData,
   GetDataFileContentResponses,
@@ -276,8 +276,6 @@ import type {
   GetTokenFileResponses,
   GetTraceSettingsData,
   GetTraceSettingsResponses,
-  GetUpdateProgressData,
-  GetUpdateProgressResponses,
   GetVersionData,
   GetVersionResponses,
   GrantAuthorizationRoleBindingData,
@@ -411,8 +409,6 @@ import type {
   ListProviderSourcesData,
   ListProviderSourcesResponses,
   ListProvidersResponses,
-  ListReleasesData,
-  ListReleasesResponses,
   ListSessionGroupsData,
   ListSessionGroupsResponses,
   ListSessionRulesData,
@@ -439,7 +435,6 @@ import type {
   MovePersonaItemData,
   MovePersonaItemResponses,
   OpenChatWebSocketData,
-  OpenLiveChatWebSocketData,
   OpenUnifiedChatWebSocketData,
   PromoteNeoSkillCandidateData,
   PromoteNeoSkillCandidateResponses,
@@ -568,8 +563,6 @@ import type {
   UpdateConfigProfileContentResponses,
   UpdateConversationData,
   UpdateConversationResponses,
-  UpdateCoreData,
-  UpdateCoreResponses,
   UpdateCronJobData,
   UpdateCronJobResponses,
   UpdateDataFileContentData,
@@ -2222,19 +2215,7 @@ export const openChatWebSocket = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Open the live voice chat WebSocket
- */
-export const openLiveChatWebSocket = <ThrowOnError extends boolean = false>(
-  options: Options<OpenLiveChatWebSocketData, ThrowOnError>,
-): RequestResult<unknown, unknown, ThrowOnError> =>
-  (options.client ?? client).get<unknown, unknown, ThrowOnError>({
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/live-chat/ws',
-    ...options,
-  });
-
-/**
- * Open the unified live/chat WebSocket
+ * Open the unified chat WebSocket
  */
 export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(
   options: Options<OpenUnifiedChatWebSocketData, ThrowOnError>,
@@ -5497,6 +5478,29 @@ export const listConversations = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List available conversation filters
+ */
+export const getConversationFilterOptions = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<GetConversationFilterOptionsData, ThrowOnError>,
+): RequestResult<
+  GetConversationFilterOptionsResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    GetConversationFilterOptionsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/conversations/filter-options',
+    ...options,
+  });
+
+/**
  * Delete multiple conversations
  */
 export const batchDeleteConversations = <ThrowOnError extends boolean = false>(
@@ -6084,68 +6088,6 @@ export const importBackup = <ThrowOnError extends boolean = false>(
       },
     },
   );
-
-/**
- * Check for updates
- */
-export const checkUpdate = <ThrowOnError extends boolean = false>(
-  options?: Options<CheckUpdateData, ThrowOnError>,
-): RequestResult<CheckUpdateResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<CheckUpdateResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/check',
-    ...options,
-  });
-
-/**
- * List releases
- */
-export const listReleases = <ThrowOnError extends boolean = false>(
-  options?: Options<ListReleasesData, ThrowOnError>,
-): RequestResult<ListReleasesResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<ListReleasesResponses, unknown, ThrowOnError>(
-    {
-      responseType: 'json',
-      security: [{ name: 'X-API-Key', type: 'apiKey' }],
-      url: '/api/v1/updates/releases',
-      ...options,
-    },
-  );
-
-/**
- * Update AstrBot core
- */
-export const updateCore = <ThrowOnError extends boolean = false>(
-  options?: Options<UpdateCoreData, ThrowOnError>,
-): RequestResult<UpdateCoreResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).post<UpdateCoreResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/core',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-/**
- * Get update progress
- */
-export const getUpdateProgress = <ThrowOnError extends boolean = false>(
-  options: Options<GetUpdateProgressData, ThrowOnError>,
-): RequestResult<GetUpdateProgressResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).get<
-    GetUpdateProgressResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/progress/{task_id}',
-    ...options,
-  });
 
 /**
  * Install a Python package

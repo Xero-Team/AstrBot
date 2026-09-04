@@ -14,7 +14,7 @@ from astrbot.core.agent.mcp_client import MCPTool, MCPToolNameAllocator
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_models import Conversation
-from astrbot.core.message.components import Face, File, Image, Json, Plain, Reply, Video
+from astrbot.core.message.components import Face, Image, Json, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -427,9 +427,6 @@ def sample_config():
     return module.MainAgentBuildConfig(
         tool_call_timeout=60,
         streaming_response=True,
-        file_extract_enabled=True,
-        file_extract_prov="moonshotai",
-        file_extract_msh_api_key="test-api-key",
     )
 
 
@@ -576,11 +573,9 @@ class TestMainAgentBuildConfig:
         config = module.MainAgentBuildConfig(tool_call_timeout=60)
         assert config.tool_call_timeout == 60
         assert config.tool_schema_mode == "full"
-        assert config.provider_wake_prefix == ""
         assert config.streaming_response is True
         assert config.sanitize_context_by_modalities is False
         assert config.kb_agentic_mode is False
-        assert config.file_extract_enabled is False
         assert config.llm_safety_mode is True
 
     def test_config_with_custom_values(self):
@@ -589,19 +584,15 @@ class TestMainAgentBuildConfig:
         config = module.MainAgentBuildConfig(
             tool_call_timeout=120,
             tool_schema_mode="skills-like",
-            provider_wake_prefix="/",
             streaming_response=False,
             kb_agentic_mode=True,
-            file_extract_enabled=True,
             computer_use_runtime="sandbox",
             add_cron_tools=False,
         )
         assert config.tool_call_timeout == 120
         assert config.tool_schema_mode == "skills-like"
-        assert config.provider_wake_prefix == "/"
         assert config.streaming_response is False
         assert config.kb_agentic_mode is True
-        assert config.file_extract_enabled is True
         assert config.computer_use_runtime == "sandbox"
         assert config.add_cron_tools is False
 
@@ -1115,6 +1106,30 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
         assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
 
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_adds_anysearch_tool(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "anysearch",
+            }
+        }
+        builtin_tool = MagicMock(spec=FunctionTool)
+        builtin_tool.name = "web_search_anysearch"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.return_value = builtin_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.AnySearchWebSearchTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_anysearch") is builtin_tool
+
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
         module = ama
         req = ProviderRequest(system_prompt="base")
@@ -1171,104 +1186,6 @@ class TestBuiltinToolInjection:
         tool_mgr.get_builtin_tool.assert_called_once_with(module.FutureTaskTool)
         assert req.func_tool is not None
         assert req.func_tool.get_tool("future_task") is future_task_tool
-
-
-class TestApplyFileExtract:
-    """Tests for _apply_file_extract function."""
-
-    @pytest.mark.asyncio
-    async def test_file_extract_basic(self, mock_event, sample_config):
-        """Test basic file extraction."""
-        module = ama
-        mock_file = MagicMock(spec=File)
-        mock_file.name = "test.pdf"
-        mock_file.get_file = AsyncMock(return_value="/path/to/test.pdf")
-        mock_event.message_obj.message = [mock_file]
-
-        req = ProviderRequest(prompt="Summarize")
-
-        with patch(
-            "astrbot.core.astr_main_agent.extract_file_moonshotai"
-        ) as mock_extract:
-            mock_extract.return_value = "File content"
-
-            await module._apply_file_extract(mock_event, req, sample_config)
-
-        assert len(req.contexts) == 1
-        assert "File Extract Results" in req.contexts[0]["content"]
-
-    @pytest.mark.asyncio
-    async def test_file_extract_no_files(self, mock_event, sample_config):
-        """Test file extraction when no files present."""
-        module = ama
-        mock_event.message_obj.message = [Plain(text="Hello")]
-        req = ProviderRequest(prompt="Hello")
-
-        await module._apply_file_extract(mock_event, req, sample_config)
-
-        assert len(req.contexts) == 0
-
-    @pytest.mark.asyncio
-    async def test_file_extract_in_reply(self, mock_event, sample_config):
-        """Test file extraction from reply chain."""
-        module = ama
-        mock_file = MagicMock(spec=File)
-        mock_file.name = "reply.pdf"
-        mock_file.get_file = AsyncMock(return_value="/path/to/reply.pdf")
-        mock_reply = MagicMock(spec=Reply)
-        mock_reply.chain = [mock_file]
-        mock_event.message_obj.message = [mock_reply]
-
-        req = ProviderRequest(prompt="Summarize")
-
-        with patch(
-            "astrbot.core.astr_main_agent.extract_file_moonshotai"
-        ) as mock_extract:
-            mock_extract.return_value = "Reply content"
-
-            await module._apply_file_extract(mock_event, req, sample_config)
-
-        assert len(req.contexts) == 1
-
-    @pytest.mark.asyncio
-    async def test_file_extract_no_prompt(self, mock_event, sample_config):
-        """Test file extraction when prompt is empty."""
-        module = ama
-        mock_file = MagicMock(spec=File)
-        mock_file.name = "test.pdf"
-        mock_file.get_file = AsyncMock(return_value="/path/to/test.pdf")
-        mock_event.message_obj.message = [mock_file]
-
-        req = ProviderRequest(prompt=None)
-
-        with patch(
-            "astrbot.core.astr_main_agent.extract_file_moonshotai"
-        ) as mock_extract:
-            mock_extract.return_value = "Content"
-
-            await module._apply_file_extract(mock_event, req, sample_config)
-
-        assert req.prompt == "总结一下文件里面讲了什么？"
-
-    @pytest.mark.asyncio
-    async def test_file_extract_no_api_key(self, mock_event):
-        """Test file extraction when no API key is configured."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            file_extract_enabled=True,
-            file_extract_msh_api_key="",
-        )
-        mock_file = MagicMock(spec=File)
-        mock_file.name = "test.pdf"
-        mock_file.get_file = AsyncMock(return_value="/path/to/test.pdf")
-        mock_event.message_obj.message = [mock_file]
-
-        req = ProviderRequest(prompt="Summarize")
-
-        await module._apply_file_extract(mock_event, req, config)
-
-        assert len(req.contexts) == 0
 
 
 class TestEnsurePersonaAndSkills:
@@ -2029,10 +1946,10 @@ class TestBuildMainAgent:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_with_wake_prefix(
+    async def test_build_main_agent_with_command_prefixed_message(
         self, mock_event, mock_context, mock_provider
     ):
-        """Test building main agent with wake prefix."""
+        """Building the main agent still succeeds for a command-prefixed message."""
         module = ama
         mock_event.message_str = "/command"
         mock_context.get_provider_by_id.return_value = None
@@ -2053,32 +1970,38 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
-                    tool_call_timeout=60, provider_wake_prefix="/"
-                ),
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_no_wake_prefix(
+    async def test_build_main_agent_without_command_prefix(
         self, mock_event, mock_context, mock_provider
     ):
-        """Test building main agent without matching wake prefix."""
+        """Routing owns LLM access; a missing extra prefix no longer blocks build."""
         module = ama
         mock_event.message_str = "hello"
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
 
-        result = await module.build_main_agent(
-            event=mock_event,
-            plugin_context=mock_context,
-            config=module.MainAgentBuildConfig(
-                tool_call_timeout=60, provider_wake_prefix="/"
-            ),
-        )
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
 
-        assert result is None
+        assert result is not None
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_images(
@@ -2362,9 +2285,8 @@ class TestBuildMainAgent:
                     llm_safety_mode=False,
                     computer_use_runtime="none",
                     add_cron_tools=False,
-                    provider_settings={
-                        "fallback_chat_models": ["image-provider"],
-                    },
+                    fallback_provider_ids=["image-provider"],
+                    provider_settings={},
                 ),
                 provider=text_provider,
                 req=req,
@@ -2419,9 +2341,8 @@ class TestBuildMainAgent:
                     llm_safety_mode=False,
                     computer_use_runtime="none",
                     add_cron_tools=False,
-                    provider_settings={
-                        "fallback_chat_models": ["missing-provider"],
-                    },
+                    fallback_provider_ids=["missing-provider"],
+                    provider_settings={},
                 ),
                 provider=text_provider,
                 req=req,

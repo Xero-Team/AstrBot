@@ -135,7 +135,9 @@ class FunctionTool[TContext](ToolSchema):
             f"description={self.description})"
         )
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs: Any
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
@@ -239,7 +241,8 @@ class ToolSet:
     ) -> list[dict]:
         """Convert tools to the Chat Completions function-tool format."""
         result = []
-        for tool in self.tools:
+        # Stable ordering preserves prompt-cache prefixes for compatible providers.
+        for tool in sorted(self.tools, key=lambda tool: tool.name):
             func_def = {"type": "function", "function": {"name": tool.name}}
             if tool.description:
                 func_def["function"]["description"] = tool.description

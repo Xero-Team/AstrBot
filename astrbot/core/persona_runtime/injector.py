@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC
 
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.message import TextPart
@@ -33,9 +33,3 @@ class PersonaRuntimeInjector:
         req.extra_user_content_parts.append(
             TextPart(text=self.build_context_text(state)).mark_as_temp()
         )
-
-
-def is_in_cooldown(state: PersonaSessionState, now: datetime | None = None) -> bool:
-    if not state.cooldown_until:
-        return False
-    return state.cooldown_until > (now or datetime.now(UTC))

@@ -18,6 +18,7 @@ export type PluginComponent =
 
 export interface InstalledPlugin extends PluginData {
   name: string;
+  author?: unknown;
   repo?: string;
   version?: string;
   marketplace_name?: string;
@@ -56,6 +57,7 @@ export interface PluginMarketItem {
   i18n?: Record<string, unknown>;
   astrbot_version?: string;
   category?: string;
+  market_plugin_id?: string;
   support_platforms?: string[];
   astrbot_support_checked?: boolean;
   astrbot_version_supported?: boolean;

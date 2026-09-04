@@ -2,7 +2,7 @@
 
 AstrBot 把 Dashboard 登录、IM 会话管理和高风险操作拆开。把群友加成「管理员」不会让对方登录 WebUI，也不会变成全局 operator。
 
-入口：侧栏 **更多 → 权限**，打开 `/authorization`。开发模型见 [项目架构](/dev/architecture#统一授权系统)。TOTP 和登录仍在 [WebUI](./webui#双因素认证)。
+入口：侧栏 **更多功能 → 授权管理**，打开 `/authorization`。开发模型见 [项目架构](/dev/architecture#统一授权系统)。TOTP 和登录仍在 [WebUI](./webui#双因素认证)。
 
 ## 三套身份不要混
 
@@ -20,7 +20,7 @@ AstrBot 把 Dashboard 登录、IM 会话管理和高风险操作拆开。把群�
 | ------------------- | --------------- | ------------------------------ |
 | `root`              | 全局控制面      | 账户管理、重启、pip 安装       |
 | `operator`          | 全局控制面      | 配置、Provider、插件、数据运维 |
-| `instance_operator` | 单个配置档      | 该配置档的管理动作             |
+| `instance_operator` | 单个配置文件    | 该配置文件的管理动作           |
 | `session_owner`     | 当前群/私聊会话 | 会话管理、会话内模型选择       |
 | `session_admin`     | 当前会话        | 有限管理，例如停任务、改会话名 |
 | `member`            | 当前会话        | 普通对话                       |
@@ -48,7 +48,7 @@ AstrBot 把 Dashboard 登录、IM 会话管理和高风险操作拆开。把群�
 
 群聊的 `/conversation reset` 等管理指令需要 `session_admin` 及以上。私聊对端已经是 `session_owner`，不必预先绑定 `session_admin`。
 
-配置档可以按平台、群或私聊分别绑定。改 `default` 不一定改变当前会话的授权范围，见 [配置文件](./config-profiles)。
+配置文件可以按平台、群或私聊分别绑定。改 `default` 不一定改变当前会话的授权范围，见 [配置文件](./config-profiles)。
 
 ## 二次验证（step-up）
 
@@ -68,5 +68,5 @@ ChatUI 里的高风险工具（本机 Shell、文件写入、浏览器等）是�
 
 1. 用 `/admin grant` 之后，以为对方可以登录 WebUI。
 2. 把 Dashboard 的 `operator` 当成群管理开关。
-3. 在 A 群授权，却在 B 群或另一份配置档上期望同样生效。
+3. 在 A 群授权，却在 B 群或另一份配置文件上期望同样生效。
 4. 把匿名 WebChat 或 API Key 当成 Dashboard `root`。

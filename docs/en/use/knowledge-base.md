@@ -69,3 +69,10 @@ Use Agentic when some turns need documents and some are small talk. Use default 
 3. A custom rule `kb_ids` points at a deleted base, so retrieval looks dead.
 4. Agentic is on, but the model cannot call tools or the Persona forbids the tool.
 5. A failed upload is still searchable — treat that as a defect, clean up, and re-upload.
+
+If this happens, do not upload the same file again immediately:
+
+1. Open the knowledge-base document list and delete the residual document;
+2. Check the AstrBot startup log and errors around the upload time;
+3. Use the **Retrieval** tab to confirm that the residual content is gone;
+4. Upload the file again. If deletion fails or the index is inconsistent, back up `data/knowledge_base/` and the runtime directory, stop AstrBot, and contact the maintainer. Do not edit FAISS files by hand.

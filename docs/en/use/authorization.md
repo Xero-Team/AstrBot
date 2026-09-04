@@ -2,7 +2,7 @@
 
 AstrBot splits Dashboard login, IM session management, and high-risk actions. Making a group member an "admin" does not let them sign in to WebUI and does not make them a global operator.
 
-Open **More → Authorization** (`/authorization`). The developer model is in [Architecture](/en/dev/architecture#unified-authorization). TOTP and login stay in [WebUI](./webui#two-factor-authentication).
+Open **More → Authorization** under the sidebar's **More** group (`/authorization`). The developer model is in [Architecture](/en/dev/architecture#unified-authorization). TOTP and login stay in [WebUI](./webui#two-factor-authentication).
 
 ## Three identities
 

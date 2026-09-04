@@ -133,13 +133,13 @@ IM 消息、插件和后台续跑不能复用该授权。
 
 WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账户（用户名通常为 `astrbot`）。控制面身份来自账户表和角色绑定，不能凭用户名推断 `root`。
 
-侧栏 **更多 → 权限** 打开 `/authorization`。Dashboard 账户、IM 会话 owner 和 `/admin grant` 不是同一套身份；群聊授权、二次验证（step-up）和角色表见 [授权管理](./authorization)。
+侧栏 **更多功能 → 授权管理** 打开 `/authorization`。Dashboard 账户、IM 会话 owner 和 `/admin grant` 不是同一套身份；群聊授权、二次验证（step-up）和角色表见 [授权管理](./authorization)。
 
 开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ## 可视化配置
 
-在管理面板中，你可以通过可视化配置来配置 AstrBot 的插件。点击左栏 `配置` 即可进入配置页面。配置档、会话绑定以及和自定义规则的优先级见 [配置文件](./config-profiles)。
+在管理面板中，你可以通过可视化配置来配置 AstrBot 的插件。点击左栏 `配置文件` 即可进入配置页面。配置文件、会话绑定以及和自定义规则的优先级见 [配置文件](./config-profiles)。
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-3.png)
 

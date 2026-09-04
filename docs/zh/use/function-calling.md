@@ -6,14 +6,14 @@ outline: deep
 
 函数调用让模型在同一轮对话里调用外部工具，例如网页搜索、待办、知识库检索、沙箱或插件提供的工具。
 
-入口：WebUI **插件 → 工具**（管理行为面板）。MCP 和 Skills 是旁边的标签，见 [MCP](./mcp) 和 [技能](./skills)。
+入口：WebUI **插件 → 管理行为 → 函数工具**。MCP 和 Skills 是旁边的标签，见 [MCP](./mcp) 和 [技能](./skills)。
 
 ## 和指令的区别
 
 |          | 工具                                 | 指令                                                                                      |
 | -------- | ------------------------------------ | ----------------------------------------------------------------------------------------- |
 | 谁触发   | 模型按 schema 选择                   | 用户打 `command_prefixes` 开头的命令                                                      |
-| 在哪管理 | **插件 → 工具**                      | **指令管理**                                                                              |
+| 在哪管理 | **插件 → 管理行为 → 函数工具**       | **指令管理**                                                                              |
 | 稳定 ID  | 工具名（插件工具、MCP 工具另有前缀） | `command_id`，格式 `插件名:原指令路径`（空格换成点），例如 `builtin_commands:plugin.list` |
 
 `command_id` 只用于指令的启用、重命名和权限覆盖，**不是**工具开关。不要在工具面板里找 `command_id`。指令说明见 [内置指令](./command) 和 [WebUI 指令管理](./webui#指令管理)。
@@ -32,7 +32,7 @@ outline: deep
 
 ## 哪些模型能用
 
-主流在 2025 年后发布的对话模型通常支持函数调用，例如 GPT-5.x、Gemini 3.x、Claude 4.x、DeepSeek v3.2（deepseek-chat）、Qwen 3.x。较老的 DeepSeek-R1、Gemini 2.0 thinking 类常常不支持。
+下面只是常见示例，不保证同系列的每个模型、端点或 Provider 配置都支持。主流在 2025 年后发布的对话模型通常支持函数调用，例如 GPT-5.x、Gemini 3.x、Claude 4.x、DeepSeek v3.2（deepseek-chat）、Qwen 3.x。较老的 DeepSeek-R1、Gemini 2.0 thinking 类常常不支持。最终以 Provider 能力测试和服务端文档为准。
 
 服务端报 `tool call is not supported` / `function calling is not supported` / `tool use is not supported` 时，AstrBot 多数情况下会自动去掉工具再试。也可以在面板里先关掉全部工具，或换支持工具的模型。Provider 上的「工具调用」开关必须和服务实际能力一致，见 [服务提供商配置](/providers/llm)。
 
@@ -54,7 +54,7 @@ outline: deep
 
 ## 知识库的 Agentic 检索
 
-配置档打开 `kb_agentic_mode` 后，知识库检索变成工具 `astr_kb_search`，由模型决定何时查询。关闭时（默认），检索结果会直接注入当前请求。见 [知识库](./knowledge-base#agentic-检索)。
+配置文件打开 `kb_agentic_mode` 后，知识库检索变成工具 `astr_kb_search`，由模型决定何时查询。关闭时（默认），检索结果会直接注入当前请求。见 [知识库](./knowledge-base#agentic-检索)。
 
 ## 常见误配
 

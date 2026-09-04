@@ -77,7 +77,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `enable_id_white_list`                      | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
 | `reply_prefix`                              | `""`                        | 所有回复的前缀。                                                                                            |
 | `reply_with_mention` / `reply_with_quote`   | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
-| `forward_threshold`                         | `1500`                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
+| `forward_threshold`                         | `1500`                      | OneBot `aiocqhttp` 适配器的长回复转发阈值；其他平台是否支持取决于适配器。                                   |
 | `segmented_reply`                           | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
 | `path_mapping`                              | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
 | `ignore_bot_self_message` / `ignore_at_all` | `false`                     | 忽略机器人自身消息或全体提及。                                                                              |

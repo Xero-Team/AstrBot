@@ -32,11 +32,11 @@ Each rule binds to one UMO and may include several overlays:
 
 ### Plugin rules (`session_plugin_config`)
 
-Enable or disable plugins for this UMO. When all three layers exist:
+Disable selected plugins for this UMO. Plugins not listed remain enabled. When all three layers exist:
 
 1. A global disable on the plugin page: checking the plugin here still will not load it.
 2. Profile `plugin_set`: limits plugins for that profile.
-3. This rule: narrows or allows per session.
+3. This rule: disables plugins for the session.
 
 See [Plugins](./plugin).
 

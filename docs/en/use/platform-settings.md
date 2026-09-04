@@ -46,7 +46,7 @@ Later fragments do not need to repeat the LLM prefix. A command discards the buf
 
 ## Segmented replies
 
-Off by default. Splits non-streaming results. Can be limited to LLM results. Interval is random or a log of character count. On platforms that support forwards, `forward_threshold` (default 1500 characters) sends long replies as forwards.
+Off by default. Splits non-streaming results. Can be limited to LLM results. Interval is random or a log of character count. `forward_threshold` (default 1500 characters) currently applies only to the OneBot `aiocqhttp` adapter and turns long replies into forward nodes; support on other platforms depends on the adapter.
 
 Streaming replies, and groups with sender concurrency, do not use this splitter.
 

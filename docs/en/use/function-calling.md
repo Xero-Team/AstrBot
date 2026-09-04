@@ -6,15 +6,15 @@ outline: deep
 
 Function calling lets the model invoke external tools in the same turn: web search, reminders, knowledge-base retrieval, sandbox tools, or plugin tools.
 
-Open **Plugins → Tools** (the behavior panel). MCP and Skills are adjacent tabs. See [MCP](./mcp) and [Skills](./skills).
+Open **Plugins → Manage behavior → Function tools**. MCP and Skills are adjacent tabs. See [MCP](./mcp) and [Skills](./skills).
 
 ## Tools versus commands
 
-|                    | Tool                                          | Command                                                                                                  |
-| ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Who triggers it    | The model picks from a schema                 | The user types a `command_prefixes` command                                                              |
-| Where to manage it | **Plugins → Tools**                           | **Command management**                                                                                   |
-| Stable ID          | Tool name (plugin and MCP tools add prefixes) | `command_id`, `{plugin}:{original path}` with spaces as dots, for example `builtin_commands:plugin.list` |
+|                    | Tool                                           | Command                                                                                                  |
+| ------------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Who triggers it    | The model picks from a schema                  | The user types a `command_prefixes` command                                                              |
+| Where to manage it | **Plugins → Manage behavior → Function tools** | **Command management**                                                                                   |
+| Stable ID          | Tool name (plugin and MCP tools add prefixes)  | `command_id`, `{plugin}:{original path}` with spaces as dots, for example `builtin_commands:plugin.list` |
 
 `command_id` is only for enabling, renaming, and permission overrides on **commands**. It is **not** a tool switch. Do not look for `command_id` on the tool panel. See [Built-in commands](./command) and [WebUI command management](./webui#command-management).
 
@@ -32,7 +32,7 @@ High-risk tools (local shell, file write, browser, Computer Use, writable MCP) a
 
 ## Which models work
 
-Mainstream chat models released after 2025 usually support function calling: GPT-5.x, Gemini 3.x, Claude 4.x, DeepSeek v3.2 (`deepseek-chat`), Qwen 3.x. Older DeepSeek-R1 and Gemini 2.0 thinking variants often do not.
+The following are common examples, not a guarantee for every model, endpoint, or Provider configuration. Mainstream chat models released after 2025 usually support function calling: GPT-5.x, Gemini 3.x, Claude 4.x, DeepSeek v3.2 (`deepseek-chat`), Qwen 3.x. Older DeepSeek-R1 and Gemini 2.0 thinking variants often do not. Confirm with the Provider capability test and the service documentation.
 
 If the server returns `tool call is not supported`, `function calling is not supported`, or `tool use is not supported`, AstrBot usually strips tools and retries. You can also disable every tool on the panel, or switch to a model that supports tools. The Provider "tool calling" switch must match the service. See [Provider configuration](/en/providers/llm).
 

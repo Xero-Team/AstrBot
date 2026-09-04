@@ -1,35 +1,42 @@
-# IPv6支持
+# IPv6 支持
 
-目前ipv6普及度很高，很多家庭宽带都支持ipv6,且具有公网ipv6地址，本教程将介绍如何在astrbot中充分利用ipv6。
+很多家庭宽带和云服务器都支持 IPv6。本页说明如何让 AstrBot WebUI 监听 IPv6，以及如何排查外部无法访问问题。
 
-# 准备
+## 准备
 
-如果你是服务器环境，可以直接跳过以下内容，因为无需过多配置即可通过指定host，从而通过公网ipv6访问astrbot服务
+如果是云服务器或托管服务器，先确认服务器已有公网 IPv6 地址，并确认安全组和主机防火墙放行 WebUI 端口（默认 `6185`）。
 
-如果你是家庭宽带环境，处于安全考虑，从外部无法直接访问，需按照以下步骤修改
-这里以中国电信天翼宽带为例
+如果是家庭宽带，光猫或路由器通常会默认阻止外部入站连接。下面以中国电信天翼宽带为例；不同设备的菜单名称可能不同。
 
-进入光猫后台面板
-你可以试试192.168.1.1
+进入光猫或路由器后台，常见地址是 `192.168.1.1`。
 
-如图所示：
-![image](https://files.astrbot.app/docs/source/images/ipv6/index.png)
-如需修改光猫或路由器的高级配置，请优先联系你的运营商、设备厂商或网络安装人员，使用合规方式获取管理权限。
+![光猫后台](https://files.astrbot.app/docs/source/images/ipv6/index.png)
 
-进入后菜单如下
-![image](https://files.astrbot.app/docs/source/images/ipv6/index.png)
+进入 **安全 → 防火墙**。
 
-依此点击：安全-防火墙
-![image](https://files.astrbot.app/docs/source/images/ipv6/firewall.png)
-将防火墙等级设置为低
-同时将启用IPV6 SESSEION关闭（此选项开启后将无法从外部访问）
+![防火墙设置](https://files.astrbot.app/docs/source/images/ipv6/firewall.png)
 
-# 启动服务
+不要为了访问 AstrBot 直接关闭整套防火墙或把防火墙长期设为低。只放行需要访问的端口和可信来源；如果设备提供 IPv6 入站控制或 IPv6 防火墙例外，优先使用更细粒度的规则。设备中的 IPv6 SESSION、IPv6 会话保护等选项含义因厂商而异，修改前先确认它确实阻止了目标端口的入站连接。
+
+公网访问 WebUI 时必须保留登录认证。不要直接把管理面板裸露在公网；优先通过 HTTPS 反向代理、访问控制或 VPN 提供外部访问。
+
+如需修改光猫或路由器的高级配置，请优先联系运营商、设备厂商或网络安装人员，使用合规方式获取管理权限。
+
+## 启动服务
 
 ```bash
 astrbot run
-# 不出意外，你可以在输出里面看到24开头，一长串的ipv6链接
-# http://[ipv6地址]:6185
+# 查看日志中的实际监听地址，例如：
+# http://[2001:db8::10]:6185
 ```
 
-AstrBot 默认监听地址为 `127.0.0.1`。如需通过 IPv6 或远程网络访问 WebUI，请在 `data/cmd_config.json` 中将 `dashboard.host` 手动改为 `::` 或相应的监听地址，修改后重启 AstrBot 生效。
+AstrBot 默认监听地址为 `127.0.0.1`，只接受本机访问。如需让 WebUI 监听 IPv6，在 `data/cmd_config.json` 中将 `dashboard.host` 改为 `::` 或指定的 IPv6 监听地址，保存后重启 AstrBot。
+
+使用浏览器访问日志中的地址。IPv6 地址必须放在方括号中，例如 `http://[2001:db8::10]:6185`。
+
+如果仍无法访问，依次检查：
+
+1. AstrBot 是否监听了 `::` 或目标 IPv6 地址；
+2. 云服务器安全组、主机防火墙、光猫和路由器是否放行 `6185`；
+3. 客户端网络是否具备 IPv6 连接；
+4. 是否通过 HTTPS 反向代理或 VPN 访问，而不是直接暴露 WebUI。

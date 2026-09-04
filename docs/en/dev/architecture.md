@@ -283,7 +283,7 @@ API keys use explicit capabilities only. Runtime authorization no longer expands
 
 Platform membership facts come only from inbound payloads: NapCat/aiocqhttp use group `sender.role`; Discord uses `guild.owner_id` and `administrator` already on the message; Telegram maps `status` only when present; Misskey maps a matching room owner. Lark, DingTalk, Kook, Slack, Mattermost, and Satori stay `member`/`unknown`. QQ Official, WeChat Official Account, WeCom, personal WeChat, Line, and WebChat never elevate from platform facts.
 
-Operator usage is in [WebUI](/en/use/webui#accounts-and-authorization). Plugin filter examples are in [Listen to Message Events](/en/dev/star/guides/listen-message-event#permissions-and-actions).
+Operator usage is in [Authorization](/en/use/authorization). Plugin filter examples are in [Listen to Message Events](/en/dev/star/guides/listen-message-event#permissions-and-actions).
 
 ## Dashboard and HTTP API
 

@@ -31,6 +31,18 @@ def test_not_found_message_does_not_point_upstream() -> None:
     assert "make run" in message
 
 
+def test_help_static_headers_omit_referrer() -> None:
+    service = StaticFileService()
+    help_headers = service.headers_for_static_path("help/use/webui.html")
+    assert help_headers["Referrer-Policy"] == "no-referrer"
+    assert help_headers["Cache-Control"] == "no-store"
+    assert service.headers_for_static_path("help")["Referrer-Policy"] == ("no-referrer")
+    assert service.headers_for_static_path("help/")["Referrer-Policy"] == (
+        "no-referrer"
+    )
+    assert "Referrer-Policy" not in service.headers_for_static_path("index.html")
+
+
 def test_index_routes_use_current_dashboard_paths() -> None:
     routes = StaticFileService().list_index_routes()
     assert "/dashboard" in routes

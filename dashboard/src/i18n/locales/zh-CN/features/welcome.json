@@ -39,5 +39,17 @@
     "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
     "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
     "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。"
+  },
+  "help": {
+    "title": "使用帮助",
+    "subtitle": "配完引导后，可以按专题查阅文档。",
+    "configProfiles": "配置文件",
+    "configProfilesDesc": "多配置档、会话绑定，以及和自定义规则的优先级。",
+    "groupWake": "群聊何时会理我",
+    "groupWakeDesc": "LLM 前缀、@、回复机器人和隔离会话。",
+    "authorization": "授权管理",
+    "authorizationDesc": "Dashboard 账户、IM 会话 owner 和二次验证。",
+    "webui": "WebUI",
+    "webuiDesc": "登录、ChatUI、统计、日志、追踪和数据文件。"
   }
 }

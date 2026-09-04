@@ -1,48 +1,78 @@
-# AstrBot Knowledge Base
+# Knowledge base
 
-> [!TIP]
-> This guide documents the current knowledge base system used by this fork. Legacy workflows are not part of the supported path here.
+A knowledge base chunks documents, stores vectors, and retrieves related passages during chat. This fork documents only the current workflow. Legacy paths are unsupported.
 
-![Knowledge Base Preview](https://files.astrbot.app/docs/en/use/image-3.png)
+Open **Knowledge Base**. Profile binding is **Config → AI → Knowledge Base**.
 
-## Configuring Embedding Model
+![Knowledge base preview](https://files.astrbot.app/docs/en/use/image-3.png)
 
-Open the service provider page, click "Add Service Provider", and select Embedding.
+## Prepare models
 
-Built-in embedding provider types currently include OpenAI-compatible services, Gemini, NVIDIA NIM, and Ollama.
+1. Open **Providers** and add an **Embedding** source. Built-in types include OpenAI-compatible, Gemini, NVIDIA NIM, and Ollama.
+2. Optionally add a **Rerank** source. Built-in types include vLLM-compatible, Xinference, Bailian, and NVIDIA.
+3. Save, then open **Knowledge Base**, create a base, and pick the embedding model (rerank is optional).
 
-Click on the provider card above to enter the configuration page and fill in the configuration.
+After you choose an embedding model, do not change that provider's **model name** or **vector dimension**. Existing FAISS indexes are not migrated. Recall will fail or error. If built-in NVIDIA defaults change, saved Provider rows and existing indexes are not migrated either.
 
-After completing the configuration, click Save.
+## Upload and chunking
 
-## Configuring Reranker Model (Optional)
+Upload after create. Select many files, or drop a whole folder (for example a Markdown tree). Nested directories are collected recursively. There is no 10-file batch cap. Each file may be up to 128 MB.
 
-A reranker model can improve the precision of final retrieval results to some extent.
+![Upload files](https://files.astrbot.app/docs/en/use/image-4.png)
 
-Similar to configuring the embedding model, open the service provider page, click "Add Service Provider", and select Reranker. Built-in reranker provider types currently include vLLM-compatible, Xinference, Bailian, and NVIDIA rerank services.
+Uploads can override chunk settings. Knowledge-base settings also store defaults:
 
-## Creating a Knowledge Base
+| Field           | Default | Role                                 |
+| --------------- | ------- | ------------------------------------ |
+| `chunk_size`    | `512`   | Approximate characters per chunk     |
+| `chunk_overlap` | `50`    | Overlap so sentences are not cut off |
 
-AstrBot supports multiple knowledge base management. During chat, you can **freely specify which knowledge base to use**.
+Markdown is split on headings. Changing chunk size does not rewrite documents already stored; re-upload them.
 
-Enter the knowledge base page and click "Create Knowledge Base", as shown below:
+An upload writes the document store, metadata, and local vectors together. Any step that fails runs compensating cleanup: after the API reports failure, that document must not stay queryable. Storage is SQLite in the runtime directory plus FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment.
 
-![image](https://files.astrbot.app/docs/source/images/knowledge-base/image.png)
+## Attach to a session
 
-Fill in the relevant information. In the embedding model dropdown menu, you will see the embedding model and reranker model you just created (reranker model is optional).
+Chat does not search every knowledge base you created. You must name them on the profile or a rule.
 
-> [!TIP]
-> Once you've selected an embedding model for a knowledge base, do not modify the **model** or **vector dimension information** of that provider, as this will **seriously affect** the retrieval accuracy of the knowledge base or even **cause errors**.
+### Profile
 
-## Uploading Files
+**Config → Knowledge Base**:
 
-After creating a knowledge base, you can upload documents to it. Select multiple files, or drop/choose a whole folder (for example a tree of Markdown files). Nested directories are collected recursively. There is no longer a 10-file batch limit, and each file can be up to 128 MB.
+| Field             | Default | Notes                                                       |
+| ----------------- | ------- | ----------------------------------------------------------- |
+| `kb_names`        | Empty   | Default knowledge-base names for this profile. Multi-select |
+| `kb_fusion_top_k` | `20`    | Rows kept after multi-base fusion                           |
+| `kb_final_top_k`  | `5`     | Rows injected or returned                                   |
+| `kb_agentic_mode` | Off     | Next section                                                |
 
-![Upload Files](https://files.astrbot.app/docs/en/use/image-4.png)
+Empty `kb_names` means this profile does not retrieve. Different profiles can bind different lists. See [Configuration profiles](./config-profiles).
 
-## Using the Knowledge Base
+### Custom rules
 
-In the configuration file, you can specify different knowledge bases for different configuration profiles.
+`kb_config.kb_ids` on a rule overrides the profile list. An empty list means **this session uses no knowledge base**. You can also set `top_k`. See [Custom rules](./custom-rules).
 
-> [!WARNING]
-> Knowledge-base storage is a SQLite document store in the runtime directory plus local FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. After you choose an embedding model, do not change the model or vector dimension; recall will break, and existing indexes are not migrated automatically. Failed uploads run compensating cleanup, so a reported API failure must not leave a partially queryable document. If the built-in NVIDIA embedding or rerank defaults change, saved provider configuration and existing indexes are also not migrated automatically.
+The **Retrieval** tab on the knowledge-base page can test recall without sending a group message.
+
+## Agentic retrieval
+
+Default (`kb_agentic_mode = false`): every LLM request retrieves against the user text and injects hits as temporary context.
+
+When Agentic is on: retrieval becomes the `astr_kb_search` tool and the model decides when to call it. The model must support function calling, and the tool panel must not disable that tool. See [Function calling](./function-calling).
+
+Use Agentic when some turns need documents and some are small talk. Use default injection when almost every turn on this profile should ground in the corpus.
+
+## Common misconfigurations
+
+1. The knowledge base exists, but profile `kb_names` is still empty.
+2. You changed the embedding model or dimension and kept the old index.
+3. A custom rule `kb_ids` points at a deleted base, so retrieval looks dead.
+4. Agentic is on, but the model cannot call tools or the Persona forbids the tool.
+5. A failed upload is still searchable — treat that as a defect, clean up, and re-upload.
+
+If this happens, do not upload the same file again immediately:
+
+1. Open the knowledge-base document list and delete the residual document;
+2. Check the AstrBot startup log and errors around the upload time;
+3. Use the **Retrieval** tab to confirm that the residual content is gone;
+4. Upload the file again. If deletion fails or the index is inconsistent, back up `data/knowledge_base/` and the runtime directory, stop AstrBot, and contact the maintainer. Do not edit FAISS files by hand.

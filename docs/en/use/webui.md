@@ -138,27 +138,13 @@ reuse this authorization.
 
 WebUI supports multiple Dashboard accounts. First startup creates a bootstrap `root` account (username is usually `astrbot`). Control-plane identity comes from the account table and role bindings; a username never implies `root`.
 
-**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An authenticated IM private-chat peer is the runtime owner of that DM session (source `private_session`), not a Dashboard binding. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
-
-Fixed roles:
-
-| Role                | Scope                | Typical use                                    |
-| ------------------- | -------------------- | ---------------------------------------------- |
-| `root`              | global control plane | accounts, restarts, pip installs               |
-| `operator`          | global control plane | config, providers, plugins, data operations    |
-| `instance_operator` | one config profile   | management actions for that profile            |
-| `session_owner`     | current group/DM     | session management and in-session model choice |
-| `session_admin`     | current session      | limited management such as stopping a task     |
-| `member`            | current session      | ordinary chat                                  |
-| `guest`             | unauthenticated      | anonymous WebChat                              |
-
-Plugin installs, credential writes, full conversation export, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
+**More → Authorization** opens `/authorization`. Dashboard accounts, IM session owners, and `/admin grant` are not the same identity. Group grants, step-up, and the role table are in [Authorization](./authorization).
 
 The developer model is in [Architecture](/en/dev/architecture#unified-authorization).
 
 ## Visual Configuration
 
-In the admin panel, you can configure AstrBot's plugins through visual configuration. Click `Configuration` in the left sidebar to enter the configuration page.
+In the admin panel, you can configure AstrBot's plugins through visual configuration. Click `Configuration` in the left sidebar to enter the configuration page. Profiles, session binding, and priority versus custom rules are in [Configuration profiles](./config-profiles).
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-3.png)
 
@@ -172,7 +158,7 @@ After editing, first click `Apply This Configuration`, which will apply the conf
 
 ## Plugins
 
-In the admin panel, you can view installed plugins and install new plugins through the `Plugins` section in the left sidebar.
+In the admin panel, you can view installed plugins and install new plugins through the `Plugins` section in the left sidebar. Marketplace source, `astrbot_version`, and Dashboard extensions are in [Plugins](./plugin).
 
 Click the Plugin Market tab to browse plugins from the default marketplace source. That source first requests the upstream `cloud.astrbot.app` market JSON, then falls back to `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
 

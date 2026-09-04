@@ -103,16 +103,16 @@ Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.
 
 ### The bot does not answer in a group
 
-To avoid flooding group chats, ordinary messages require the configured `llm_access.group` policy (the default is `prefix`, with `llm_access.prefixes` defaulting to `["/"]`). To allow replies to the bot as an additional trigger, enable `llm_access.reply_to_bot`. Also check:
+To avoid flooding group chats, ordinary messages require the configured `llm_access.group` policy (the default is `prefix`, with `llm_access.prefixes` defaulting to `["/"]`). To allow replies to the bot as an additional trigger, enable `llm_access.reply_to_bot`. Full policy, isolated sessions, and drops that still happen after a wake are in [When the bot replies in groups](/en/use/group-wake). Also check:
 
-- which profile is bound to the message session;
+- which profile is bound to the message session, see [Configuration profiles](/en/use/config-profiles);
 - whether the platform and Provider are enabled;
-- allowlist, administrator bypass, and rate limiting;
+- allowlist, administrator bypass, and rate limiting, see [Platform handling](/en/use/platform-settings);
 - `ignore_at_all`, self-message filtering, and platform permissions.
 
 ### An administrator command says permission denied
 
-Group chats still need a Dashboard [authorization page](/en/use/webui#accounts-and-authorization) binding or `/admin grant` for current-session `session_admin`. That is not a global operator. A private-chat peer already owns the current session and does not need a pre-bound `session_admin` to `/conversation reset`. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session. Use `/session info` to inspect the current user ID.
+Group chats still need a Dashboard [authorization page](/en/use/authorization) binding or `/admin grant` for current-session `session_admin`. That is not a global operator. A private-chat peer already owns the current session and does not need a pre-bound `session_admin` to `/conversation reset`. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session. Use `/session info` to inspect the current user ID.
 
 ### Older commands such as `/plugin ls` or `/reset` do nothing
 

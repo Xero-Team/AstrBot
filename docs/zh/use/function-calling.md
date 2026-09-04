@@ -4,52 +4,61 @@ outline: deep
 
 # 函数调用（Function-calling）
 
-## 简介
+函数调用让模型在同一轮对话里调用外部工具，例如网页搜索、待办、知识库检索、沙箱或插件提供的工具。
 
-函数调用旨在提供大模型**调用外部工具的能力**，以此实现 Agentic 的一些功能。
+入口：WebUI **插件 → 管理行为 → 函数工具**。MCP 和 Skills 是旁边的标签，见 [MCP](./mcp) 和 [技能](./skills)。
 
-比如，问大模型：帮我搜索一下关于“猫”的信息，大模型会调用用于搜索的外部工具，比如搜索引擎，然后返回搜索结果。
+## 和指令的区别
 
-目前，支持的模型包括但远不限于
+|          | 工具                                 | 指令                                                                                      |
+| -------- | ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| 谁触发   | 模型按 schema 选择                   | 用户打 `command_prefixes` 开头的命令                                                      |
+| 在哪管理 | **插件 → 管理行为 → 函数工具**       | **指令管理**                                                                              |
+| 稳定 ID  | 工具名（插件工具、MCP 工具另有前缀） | `command_id`，格式 `插件名:原指令路径`（空格换成点），例如 `builtin_commands:plugin.list` |
 
-- GPT-5.x 系列
-- Gemini 3.x 系列
-- Claude 4.x 系列
-- Deepseek v3.2(deepseek-chat)
-- Qwen 3.x 系列
+`command_id` 只用于指令的启用、重命名和权限覆盖，**不是**工具开关。不要在工具面板里找 `command_id`。指令说明见 [内置指令](./command) 和 [WebUI 指令管理](./webui#指令管理)。
 
-2025年后推出的主流模型通常已支持函数调用。
+## 打开或关闭工具
 
-不支持的模型比较常见的有 Deepseek-R1, Gemini 2.0 的 thinking 类等较老模型。
+在工具面板可以：
 
-在 AstrBot 中，可以通过函数调用暴露网页搜索、待办提醒以及 Agent / 沙盒相关工具链。很多插件，如:
+1. 打开或关闭工具总开关；
+2. 逐个允许或禁止内置工具、插件工具和 MCP 工具；
+3. 打开原生并行执行（默认关闭）。
 
-- astrbot_plugin_cloudmusic
-- astrbot_plugin_bilibili
-- ...
+最终能否调用还要过三道关：用户授权 ∩ Persona 允许的工具 ∩ 工具自身策略。Persona 里把工具设成空列表，等于这个角色不能用工具，见 [Persona](./persona)。子 Agent handoff 不能提升调用者的权限。
 
-等在提供传统的指令调用的基础上，也提供了函数调用的功能。
+高风险工具（本机 Shell、文件写入、浏览器、Computer Use、可写 MCP）还要满足 [授权管理](./authorization) 和 ChatUI step-up。IM 消息不会继承 Dashboard `root`。
 
-相关操作请在 WebUI 中管理工具的开启和关闭。
+## 哪些模型能用
+
+下面只是常见示例，不保证同系列的每个模型、端点或 Provider 配置都支持。主流在 2025 年后发布的对话模型通常支持函数调用，例如 GPT-5.x、Gemini 3.x、Claude 4.x、DeepSeek v3.2（deepseek-chat）、Qwen 3.x。较老的 DeepSeek-R1、Gemini 2.0 thinking 类常常不支持。最终以 Provider 能力测试和服务端文档为准。
+
+服务端报 `tool call is not supported` / `function calling is not supported` / `tool use is not supported` 时，AstrBot 多数情况下会自动去掉工具再试。也可以在面板里先关掉全部工具，或换支持工具的模型。Provider 上的「工具调用」开关必须和服务实际能力一致，见 [服务提供商配置](/providers/llm)。
+
+插件除了传统指令，也可以同时暴露工具。市场里的插件是否真的提供工具，以该插件自己的说明为准。
+
+常见调用示意：
+
+![函数调用示例](https://files.astrbot.app/docs/source/images/function-calling/image.png)
+
+![工具结果示例](https://files.astrbot.app/docs/source/images/function-calling/image-1.png)
 
 ## 原生并行工具调用
 
-AstrBot 可以并行执行同一轮模型响应中彼此独立的函数调用。该功能默认关闭，
-需要先在 WebUI 工具面板开启总开关，再逐个允许工具。具有副作用、直接向用户
-发送消息、Handoff、后台任务或明确要求串行的工具不能启用并行。
+同一轮模型响应里，彼此独立的调用可以并行执行。默认关闭。需要先打开总开关，再逐个允许工具。
 
-即使工具完成顺序不同，写回模型上下文的结果仍保持调用顺序。MCP 工具使用
-按服务器划分的并发限制（默认值为 1），因此启用工具并不会自动让有共享状态的
-MCP 服务器并发执行。
+下列工具不能开并行：有副作用、直接向用户发消息、Handoff、后台任务，或明确要求串行。
 
-某些模型可能不支持函数调用，会返回诸如 `tool call is not supported`, `function calling is not supported`, `tool use is not supported` 等错误。在大多数情况下，AstrBot 能够检测到这种错误并自动帮您去除函数调用工具。如果你发现某个模型不支持函数调用，也可在 WebUI 中关闭所有调用工具，然后再次尝试。或者更换为支持函数调用的模型。
+即使完成顺序不同，写回模型上下文的结果仍保持调用顺序。MCP 工具使用按服务器划分的并发限制（默认 1），允许某个工具并行，不会自动让有共享状态的 MCP 服务器并发执行。
 
-下面是一些常见的工具调用 Demo：
+## 知识库的 Agentic 检索
 
-![image](https://files.astrbot.app/docs/source/images/function-calling/image.png)
+配置文件打开 `kb_agentic_mode` 后，知识库检索变成工具 `astr_kb_search`，由模型决定何时查询。关闭时（默认），检索结果会直接注入当前请求。见 [知识库](./knowledge-base#agentic-检索)。
 
-![image](https://files.astrbot.app/docs/source/images/function-calling/image-1.png)
+## 常见误配
 
-## MCP
-
-请前往此文档 [AstrBot - MCP](/use/mcp) 查看。
+1. 在 **指令管理** 里找工具开关。
+2. 模型不支持 function calling，却开着一堆工具。
+3. Persona 把工具列表留空，面板上看起来是开的。
+4. 打开并行后，MCP 服务器仍串行，因为每服务器并发默认是 1。

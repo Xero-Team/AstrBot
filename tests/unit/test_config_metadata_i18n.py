@@ -153,8 +153,26 @@ def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
     assert converted["plugin_group"]["metadata"]["plugin"]["docs"] == (
         "use/plugin.html"
     )
+    assert converted["platform_group"]["docs"] == "use/group-wake.html"
+    assert converted["platform_group"]["metadata"]["general"]["docs"] == (
+        "use/group-wake.html"
+    )
+    assert converted["platform_group"]["metadata"]["whitelist"]["docs"] == (
+        "use/platform-settings.html"
+    )
+    assert converted["ext_group"]["metadata"]["segmented_reply"]["docs"] == (
+        "use/platform-settings.html"
+    )
     assert converted["ext_group"]["metadata"]["ltm"]["docs"] == (
         "use/group-chat-context.html"
+    )
+    assert (
+        ai_sections["ai"]["items"]["provider_stt_settings.enable"]["docs"]
+        == "use/speech.html"
+    )
+    assert (
+        ai_sections["ai"]["items"]["provider_tts_settings.enable"]["docs"]
+        == "use/speech.html"
     )
 
     def walk(node: Any) -> None:

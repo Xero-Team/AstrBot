@@ -2,59 +2,63 @@
 outline: deep
 ---
 
-# Function Calling
+# Function calling
 
-## Introduction
+Function calling lets the model invoke external tools in the same turn: web search, reminders, knowledge-base retrieval, sandbox tools, or plugin tools.
 
-Function calling aims to provide large language models with **the ability to invoke external tools**, enabling various Agentic functionalities.
+Open **Plugins → Manage behavior → Function tools**. MCP and Skills are adjacent tabs. See [MCP](./mcp) and [Skills](./skills).
 
-For example, when you ask the LLM: "Help me search for information about cats", the model will call external search tools, such as search engines, and return the search results.
+## Tools versus commands
 
-Here is the revised text, updated to reflect your new content while maintaining a formal documentation tone:
+|                    | Tool                                           | Command                                                                                                  |
+| ------------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Who triggers it    | The model picks from a schema                  | The user types a `command_prefixes` command                                                              |
+| Where to manage it | **Plugins → Manage behavior → Function tools** | **Command management**                                                                                   |
+| Stable ID          | Tool name (plugin and MCP tools add prefixes)  | `command_id`, `{plugin}:{original path}` with spaces as dots, for example `builtin_commands:plugin.list` |
 
-Currently, supported models include but are not limited to:
+`command_id` is only for enabling, renaming, and permission overrides on **commands**. It is **not** a tool switch. Do not look for `command_id` on the tool panel. See [Built-in commands](./command) and [WebUI command management](./webui#command-management).
 
-- GPT-5.x series
-- Gemini 3.x series
-- Claude 4.x series
-- DeepSeek v3.2 (deepseek-chat)
-- Qwen 3.x series
+## Enable or disable tools
 
-Mainstream models released after 2025 typically support function calling.
+On the tool panel you can:
 
-Commonly unsupported models include older models such as DeepSeek-R1 and Gemini 2.0 thinking-type models.
+1. Toggle the master tool switch;
+2. Allow or deny built-in, plugin, and MCP tools one by one;
+3. Enable native parallel execution (off by default).
 
-In AstrBot, tools such as web search, todo reminders, and Agent / sandbox-related toolchains can be exposed for function calling. Many plugins, such as:
+The final call still passes three gates: user authorization ∩ tools allowed by the Persona ∩ the tool's own policy. An empty tool list on a Persona means that role cannot use tools. See [Personas](./persona). A sub-agent handoff cannot raise the caller's authority.
 
-- astrbot_plugin_cloudmusic
-- astrbot_plugin_bilibili
-- ...
+High-risk tools (local shell, file write, browser, Computer Use, writable MCP) also need [Authorization](./authorization) and ChatUI step-up. IM messages do not inherit Dashboard `root`.
 
-In addition to providing traditional command invocation, also offer function calling capabilities.
+## Which models work
 
-Tool management (enable/disable) can be done in the WebUI.
+The following are common examples, not a guarantee for every model, endpoint, or Provider configuration. Mainstream chat models released after 2025 usually support function calling: GPT-5.x, Gemini 3.x, Claude 4.x, DeepSeek v3.2 (`deepseek-chat`), Qwen 3.x. Older DeepSeek-R1 and Gemini 2.0 thinking variants often do not. Confirm with the Provider capability test and the service documentation.
+
+If the server returns `tool call is not supported`, `function calling is not supported`, or `tool use is not supported`, AstrBot usually strips tools and retries. You can also disable every tool on the panel, or switch to a model that supports tools. The Provider "tool calling" switch must match the service. See [Provider configuration](/en/providers/llm).
+
+Plugins may expose tools in addition to commands. Whether a marketplace plugin actually ships tools is up to that plugin's own docs.
+
+Example calls:
+
+![Function-calling example](https://files.astrbot.app/docs/source/images/function-calling/image.png)
+
+![Tool result example](https://files.astrbot.app/docs/source/images/function-calling/image-1.png)
 
 ## Native parallel tool execution
 
-AstrBot can execute independent function calls from the same model turn in
-parallel. This feature is disabled by default. Enable the global switch in the
-WebUI tool panel, then explicitly allow individual tools. Tools with side
-effects, direct user delivery, handoffs, background tasks, or serial-only
-policies cannot be enabled.
+Independent calls from the same model turn can run in parallel. The feature is off by default. Turn on the master switch, then allow tools one by one.
 
-Results are written back to the model in call order even when execution
-finishes out of order. MCP tools use a per-server concurrency limit (default
-one), so enabling a tool does not automatically make a stateful MCP server
-concurrent.
+These tools cannot be parallel: side effects, direct user delivery, handoffs, background tasks, or an explicit serial policy.
 
-Some models may not support function calling and will return errors such as `tool call is not supported`, `function calling is not supported`, `tool use is not supported`, etc. In most cases, AstrBot can detect these errors and automatically remove function calling tools for you. If you find that a model doesn't support function calling, you can also disable all calling tools in the WebUI and try again, or switch to a model that supports function calling.
+Results are written back in call order even when execution finishes out of order. MCP tools use a per-server concurrency limit (default 1). Allowing a tool to run in parallel does not make a stateful MCP server concurrent.
 
-Below are some common tool calling demos:
+## Agentic knowledge-base retrieval
 
-![image](https://files.astrbot.app/docs/source/images/function-calling/image.png)
+When the profile sets `kb_agentic_mode`, retrieval becomes the `astr_kb_search` tool and the model decides when to query. When it is off (default), results are injected into the current request. See [Knowledge base](./knowledge-base#agentic-retrieval).
 
-![image](https://files.astrbot.app/docs/source/images/function-calling/image-1.png)
+## Common misconfigurations
 
-## MCP
-
-Please refer to this documentation: [AstrBot - MCP](/en/use/mcp).
+1. Looking for tool switches under **Command management**.
+2. Leaving many tools on for a model that cannot call functions.
+3. The Persona tool list is empty, while the panel looks enabled.
+4. Parallel is on, but the MCP server stays serial because per-server concurrency defaults to 1.

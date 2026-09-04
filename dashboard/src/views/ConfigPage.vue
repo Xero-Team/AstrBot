@@ -15,6 +15,10 @@
               @select="onConfigSelect"
               @manage="configManageDialog = true"
             />
+            <ConfigDocsLink
+              v-if="!isSystemConfig"
+              docs="use/config-profiles.html"
+            />
           </div>
           <div class="config-toolbar-actions">
             <div
@@ -358,6 +362,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { configProfileApi, systemConfigApi, type OpenConfig } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
+import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
@@ -1234,6 +1239,7 @@ function closeTestChat() {
   display: flex;
   align-items: center;
   min-width: 0;
+  gap: var(--astrbot-space-2);
 }
 
 .config-toolbar-actions {

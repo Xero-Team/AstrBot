@@ -26,6 +26,7 @@ export function head(base = '/'): HeadConfig[] {
     ],
     ['link', { rel: 'icon', href: `${prefix}/logo.png` }],
     ['meta', { name: 'description', content: 'AstrBot' }],
+    ['meta', { name: 'referrer', content: 'no-referrer' }],
     [
       'meta',
       { name: 'viewport', content: 'width=device-width, initial-scale=1.0' },

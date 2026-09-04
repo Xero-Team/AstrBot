@@ -283,7 +283,7 @@ API Key 只认显式 capability，运行时不再把 `*` 或 `NULL` scope 扩权
 
 平台成员事实只从入站载荷归一化：NapCat/aiocqhttp 使用群消息 `sender.role`；Discord 使用消息上的 `guild.owner_id` 与 `administrator`；Telegram 仅在已带 `status` 时映射；Misskey 仅在房间 owner 匹配时映射。Lark、DingTalk、Kook、Slack、Mattermost、Satori 保持 `member`/`unknown`。QQ 官方、微信公众号、企业微信、个微、Line 和 WebChat 不从平台事实提升。
 
-使用说明见 [WebUI](/use/webui#账户与权限)。插件过滤器示例见[接收消息事件](/dev/star/guides/listen-message-event#权限与动作)。
+使用说明见 [授权管理](/use/authorization)。插件过滤器示例见[接收消息事件](/dev/star/guides/listen-message-event#权限与动作)。
 
 ## Dashboard 与 HTTP API
 

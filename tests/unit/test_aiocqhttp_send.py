@@ -6,9 +6,8 @@ import pytest
 import astrbot.core.message.components as Comp
 import astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event as aiocqhttp_send
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
-    AiocqhttpMessageEvent,
-)
+
+AiocqhttpMessageEvent = aiocqhttp_send.AiocqhttpMessageEvent
 
 pytestmark = pytest.mark.platform
 

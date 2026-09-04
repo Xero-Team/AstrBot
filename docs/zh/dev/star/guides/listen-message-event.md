@@ -91,7 +91,7 @@ class AstrBotMessage:
 
 #### 群聊 JSON 卡片
 
-群聊 JSON 卡片会记入群聊上下文，并在主动回复或普通 LLM 请求没有文本 prompt 时作为 `[Shared Card]` 卡片摘要进入模型输入，而不会把原始 JSON 整段塞进 prompt。
+群聊 JSON 卡片会记入群聊上下文，并在普通 LLM 请求没有文本 prompt 时作为 `[Shared Card]` 卡片摘要进入模型输入，而不会把原始 JSON 整段塞进 prompt。
 
 ## 指令
 

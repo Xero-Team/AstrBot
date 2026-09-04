@@ -212,12 +212,6 @@ DEFAULT_CONFIG = {
         "image_caption_max_concurrency": 2,
         "image_caption_cache_ttl": 0,
         "image_caption_lazy": False,
-        "active_reply": {
-            "enable": False,
-            "method": "possibility_reply",
-            "possibility_reply": 0.1,
-            "whitelist": [],
-        },
     },
     "content_safety": {
         "also_use_in_response": False,
@@ -3107,25 +3101,6 @@ CONFIG_METADATA_2 = {
                     "image_caption_prompt": {
                         "type": "string",
                     },
-                    "active_reply": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                            },
-                            "whitelist": {
-                                "type": "list",
-                                "items": {"type": "string"},
-                            },
-                            "method": {
-                                "type": "string",
-                                "options": ["possibility_reply"],
-                            },
-                            "possibility_reply": {
-                                "type": "float",
-                            },
-                        },
-                    },
                 },
             },
         },
@@ -4628,36 +4603,6 @@ CONFIG_METADATA_3 = {
                         "hint": "开启后先记录占位，仅在真正唤醒 LLM 时转述。默认关闭。",
                         "condition": {
                             "provider_ltm_settings.image_caption": True,
-                        },
-                    },
-                    "provider_ltm_settings.active_reply.enable": {
-                        "description": "主动回复",
-                        "type": "bool",
-                    },
-                    "provider_ltm_settings.active_reply.method": {
-                        "description": "主动回复方法",
-                        "type": "string",
-                        "options": ["possibility_reply"],
-                        "condition": {
-                            "provider_ltm_settings.active_reply.enable": True,
-                        },
-                    },
-                    "provider_ltm_settings.active_reply.possibility_reply": {
-                        "description": "回复概率",
-                        "type": "float",
-                        "hint": "0.0-1.0 之间的数值",
-                        "slider": {"min": 0, "max": 1, "step": 0.05},
-                        "condition": {
-                            "provider_ltm_settings.active_reply.enable": True,
-                        },
-                    },
-                    "provider_ltm_settings.active_reply.whitelist": {
-                        "description": "主动回复白名单",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "为空时不启用白名单过滤。使用 /session info 获取 ID。",
-                        "condition": {
-                            "provider_ltm_settings.active_reply.enable": True,
                         },
                     },
                 },

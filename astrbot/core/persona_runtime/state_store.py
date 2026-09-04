@@ -22,7 +22,7 @@ class PersonaRuntimeStateStore:
             persona_id=persona_id,
             umo=umo,
             last_interaction_at=datetime.now(UTC),
-            extra_state={"proactive_enabled": False},
+            extra_state={},
         )
 
     async def apply_signal(self, signal: PersonaRuntimeSignal) -> PersonaSessionState:

@@ -11,7 +11,7 @@ async def test_persona_runtime_sqlite_interfaces(temp_db: SQLiteDatabase):
         agent_state="running",
         talk_frequency_adjust=1.25,
         consecutive_idle_count=0,
-        extra_state={"proactive_enabled": False},
+        extra_state={"last_mention_at": "2026-01-01T00:00:00+00:00"},
     )
     updated_state = await temp_db.upsert_persona_session_state(
         persona_id="persona-a",
@@ -19,12 +19,14 @@ async def test_persona_runtime_sqlite_interfaces(temp_db: SQLiteDatabase):
         agent_state="wait",
         talk_frequency_adjust=0.9,
         consecutive_idle_count=1,
-        extra_state={"proactive_enabled": True},
+        extra_state={"last_mention_at": "2026-01-02T00:00:00+00:00"},
     )
 
     assert state.id == updated_state.id
     assert updated_state.agent_state == "wait"
-    assert updated_state.extra_state == {"proactive_enabled": True}
+    assert updated_state.extra_state == {
+        "last_mention_at": "2026-01-02T00:00:00+00:00",
+    }
 
     expression = await temp_db.upsert_persona_expression_asset(
         persona_id="persona-a",

@@ -1266,22 +1266,6 @@
         "image_caption_lazy": {
           "description": "Lazy Group Chat Image Caption",
           "hint": "When enabled, store a placeholder first and caption only when the LLM is actually woken. Disabled by default."
-        },
-        "active_reply": {
-          "enable": {
-            "description": "Active Reply"
-          },
-          "method": {
-            "description": "Active Reply Method"
-          },
-          "possibility_reply": {
-            "description": "Reply Probability",
-            "hint": "Value between 0.0-1.0"
-          },
-          "whitelist": {
-            "description": "Active Reply Whitelist",
-            "hint": "Whitelist filtering is disabled when empty. Use /session info to get IDs."
-          }
         }
       }
     }

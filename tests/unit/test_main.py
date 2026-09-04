@@ -15,9 +15,14 @@ from astrbot.core.utils.io import (
     get_dashboard_version,
     should_use_bundled_dashboard_dist,
 )
+from astrbot.runtime_instance_lock import (
+    RuntimeInstanceLockHeld,
+    runtime_instance_lock_path,
+)
 from main import (
     DASHBOARD_RESET_PASSWORD_ENV,
     _apply_startup_env_flags,
+    run_process,
 )
 
 
@@ -68,6 +73,20 @@ def test_prepare_runtime_environment(monkeypatch):
     monkeypatch.setattr(sys, "version_info", version_info_wrong)
     with pytest.raises(SystemExit):
         prepare_runtime_environment()
+
+
+def test_run_process_exits_1_when_instance_lock_is_held(monkeypatch):
+    lock_path = runtime_instance_lock_path(Path("/tmp/data"))
+
+    async def fake_run_application(_options):
+        raise RuntimeInstanceLockHeld(lock_path)
+
+    monkeypatch.setattr("main.run_application", fake_run_application)
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_process()
+
+    assert excinfo.value.code == 1
 
 
 def test_apply_startup_env_flags_sets_reset_password_env(monkeypatch):

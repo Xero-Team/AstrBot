@@ -9,6 +9,7 @@ from astrbot.cli.commands import cmd_run
 
 def test_run_reset_password_sets_startup_env(monkeypatch, tmp_path):
     (tmp_path / ".astrbot").touch()
+    monkeypatch.delenv("ASTRBOT_ROOT", raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv(cmd_run.DASHBOARD_RESET_PASSWORD_ENV, raising=False)
     original_env = {
@@ -54,6 +55,7 @@ def test_run_reset_password_sets_startup_env(monkeypatch, tmp_path):
 def test_run_redacts_sensitive_runtime_traceback(monkeypatch, tmp_path):
     """CLI startup diagnostics must not echo a provider credential."""
     (tmp_path / ".astrbot").touch()
+    monkeypatch.delenv("ASTRBOT_ROOT", raising=False)
     monkeypatch.chdir(tmp_path)
 
     def fake_bootstrap() -> None:

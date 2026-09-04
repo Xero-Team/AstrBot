@@ -16,16 +16,19 @@ from astrbot.cli.commands import cmd_init, cmd_run
 from astrbot.runtime_instance_lock import (
     LOCK_FILENAME,
     RuntimeInstanceLockHeld,
+    directory_lock_supported,
     runtime_instance_lock,
     runtime_instance_lock_path,
 )
 
 _HOLD_LOCK_SCRIPT = """
-from filelock import FileLock
+from pathlib import Path
 import sys
 import time
 
-with FileLock(sys.argv[1], timeout=5, fallback_to_soft=False):
+from astrbot.runtime_instance_lock import runtime_instance_lock
+
+with runtime_instance_lock(Path(sys.argv[1]), timeout=5):
     print("held", flush=True)
     time.sleep(60)
 """
@@ -35,9 +38,8 @@ with FileLock(sys.argv[1], timeout=5, fallback_to_soft=False):
 def hold_runtime_instance_lock(data_dir: Path) -> Iterator[None]:
     """Hold the instance lock in a child process until the context exits."""
     data_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = runtime_instance_lock_path(data_dir)
     process = subprocess.Popen(
-        [sys.executable, "-c", _HOLD_LOCK_SCRIPT, str(lock_path)],
+        [sys.executable, "-c", _HOLD_LOCK_SCRIPT, str(data_dir)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -82,11 +84,31 @@ def test_leftover_lock_file_is_still_acquirable(tmp_path: Path) -> None:
 
 def test_timeout_after_acquire_is_not_rewritten(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
-    with pytest.raises(Timeout) as excinfo:
+    caught: Timeout | None = None
+    try:
         with runtime_instance_lock(data_dir, timeout=0.05):
             raise Timeout("other.lock")
-    assert excinfo.value.lock_file == "other.lock"
-    assert not isinstance(excinfo.value, RuntimeInstanceLockHeld)
+    except RuntimeInstanceLockHeld:
+        pytest.fail("held-section Timeout was rewritten as RuntimeInstanceLockHeld")
+    except Timeout as exc:
+        caught = exc
+    assert caught is not None
+    assert caught.lock_file == "other.lock"
+
+
+@pytest.mark.skipif(
+    not directory_lock_supported(),
+    reason="data-directory flock is POSIX-only",
+)
+def test_unlinked_lock_file_does_not_admit_second_instance(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    lock_path = runtime_instance_lock_path(data_dir)
+    with hold_runtime_instance_lock(data_dir):
+        lock_path.unlink()
+        with pytest.raises(RuntimeInstanceLockHeld) as excinfo:
+            with runtime_instance_lock(data_dir, timeout=0.05):
+                pass
+        assert excinfo.value.lock_path == lock_path
 
 
 def test_lock_path_is_under_the_data_directory(tmp_path: Path) -> None:
@@ -102,7 +124,14 @@ async def test_run_application_exits_before_services_when_lock_held(
 ) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    monkeypatch.setattr("astrbot.application.prepare_runtime_environment", lambda: None)
+    monkeypatch.setattr(
+        "astrbot.application.prepare_runtime_environment",
+        mock.Mock(
+            side_effect=AssertionError(
+                "runtime path setup must not run while the lock is held"
+            )
+        ),
+    )
     monkeypatch.setattr(
         "astrbot.application.get_astrbot_data_path", lambda: str(data_dir)
     )

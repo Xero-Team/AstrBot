@@ -10,16 +10,16 @@ uv run astrbot --help
 
 ## Top-Level Commands
 
-| Command                   | Purpose                                                        |
-| ------------------------- | -------------------------------------------------------------- |
-| `astrbot init`            | Initialize the current directory as a CLI runtime root.        |
-| `astrbot run`             | Start AstrBot in the foreground.                               |
-| `astrbot install-browser` | Install Playwright Chromium for local text-to-image rendering. |
-| `astrbot conf`            | Read or update common config values.                           |
-| `astrbot password`        | Change the WebUI login password interactively.                 |
-| `astrbot plug`            | Create, install, update, remove, or search plugins.            |
-| `astrbot help`            | Show CLI help.                                                 |
-| `astrbot --version`       | Show the CLI version.                                          |
+| Command                   | Purpose                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `astrbot init`            | Initialize the CLI runtime root; defaults to cwd, overridable with `ASTRBOT_ROOT`. |
+| `astrbot run`             | Start AstrBot in the foreground.                                                   |
+| `astrbot install-browser` | Install Playwright Chromium for local text-to-image rendering.                     |
+| `astrbot conf`            | Read or update common config values.                                               |
+| `astrbot password`        | Change the WebUI login password interactively.                                     |
+| `astrbot plug`            | Create, install, update, remove, or search plugins.                                |
+| `astrbot help`            | Show CLI help.                                                                     |
+| `astrbot --version`       | Show the CLI version.                                                              |
 
 ## Initialize and Start
 
@@ -32,7 +32,9 @@ uv run astrbot run
 
 `init` creates the `.astrbot` marker and `data/` subdirectories, then checks Dashboard assets. Use `astrbot init --yes` (or `-y`) only to skip its first-install directory confirmation; it does not bypass the lock, initial-password setup, or any other confirmation. The direct source entry point, `uv run main.py`, does not require this marker.
 
-`astrbot run`, `uv run main.py`, and the image `CMD` share `data/astrbot.lock`. One process may own a given `data/` directory; a second instance fails before opening the database. The lock is advisory: the operating system releases it when the process exits, and a leftover lock file does not hold the lock. `astrbot init` uses the same lock after the install-directory confirmation.
+The CLI resolves its runtime root from `ASTRBOT_ROOT` when set, otherwise the current working directory. That matches `main.py`. The CLI does not use the packaged Desktop home-directory default.
+
+`astrbot run`, `uv run main.py`, and the image `CMD` share `data/astrbot.lock`. One process may own a given `data/` directory; a second instance fails before opening the database. The lock is advisory: the operating system releases it when the process exits, and a leftover lock file does not hold the lock. On POSIX the helper also `flock`s `data/`, so unlinking a held `astrbot.lock` cannot admit a second process. The former `<root>/astrbot.lock` is unused. `astrbot init` uses the same lock after the install-directory confirmation.
 
 Common `run` options:
 

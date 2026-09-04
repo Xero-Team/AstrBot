@@ -1,12 +1,18 @@
 import copy
 import json
 
+import pytest
 from click.testing import CliRunner
 
 from astrbot.cli.commands.cmd_conf import conf
 from astrbot.cli.commands.cmd_password import password
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.auth_password import verify_dashboard_password
+
+
+@pytest.fixture(autouse=True)
+def _clear_astrbot_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ASTRBOT_ROOT", raising=False)
 
 
 def _write_config(root):

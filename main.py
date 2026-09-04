@@ -32,6 +32,19 @@ _apply_startup_env_flags(sys.argv[1:])
 from astrbot.application import ApplicationOptions, run_application  # noqa: E402
 from astrbot.runtime_instance_lock import RuntimeInstanceLockHeld  # noqa: E402
 
+
+def run_process(webui_dir: str | None = None) -> None:
+    """Run the shared application and map a held instance lock to exit code 1.
+
+    Args:
+        webui_dir: Optional Dashboard static directory for ``--webui-dir``.
+    """
+    try:
+        asyncio.run(run_application(ApplicationOptions(webui_dir=webui_dir)))
+    except RuntimeInstanceLockHeld:
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AstrBot")
     parser.add_argument(
@@ -50,7 +63,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    try:
-        asyncio.run(run_application(ApplicationOptions(webui_dir=args.webui_dir)))
-    except RuntimeInstanceLockHeld:
-        raise SystemExit(1) from None
+    run_process(args.webui_dir)

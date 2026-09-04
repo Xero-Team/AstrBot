@@ -10,16 +10,16 @@ uv run astrbot --help
 
 ## 顶层指令
 
-| 指令                      | 用途                                       |
-| ------------------------- | ------------------------------------------ |
-| `astrbot init`            | 将当前目录初始化为 CLI runtime root。      |
-| `astrbot run`             | 在前台启动 AstrBot。                       |
-| `astrbot install-browser` | 安装本地文转图所需的 Playwright Chromium。 |
-| `astrbot conf`            | 查看或修改常用配置项。                     |
-| `astrbot password`        | 交互式修改 WebUI 登录密码。                |
-| `astrbot plug`            | 创建、安装、更新、删除或搜索插件。         |
-| `astrbot help`            | 查看 CLI 帮助。                            |
-| `astrbot --version`       | 查看 CLI 版本。                            |
+| 指令                      | 用途                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| `astrbot init`            | 将 CLI runtime root 初始化；默认当前目录，`ASTRBOT_ROOT` 可覆盖。 |
+| `astrbot run`             | 在前台启动 AstrBot。                                              |
+| `astrbot install-browser` | 安装本地文转图所需的 Playwright Chromium。                        |
+| `astrbot conf`            | 查看或修改常用配置项。                                            |
+| `astrbot password`        | 交互式修改 WebUI 登录密码。                                       |
+| `astrbot plug`            | 创建、安装、更新、删除或搜索插件。                                |
+| `astrbot help`            | 查看 CLI 帮助。                                                   |
+| `astrbot --version`       | 查看 CLI 版本。                                                   |
 
 ## 初始化与启动
 
@@ -32,7 +32,9 @@ uv run astrbot run
 
 `init` 会创建 `.astrbot` 标记、`data/` 子目录并检查 Dashboard。`astrbot init --yes`（或 `-y`）仅跳过首次安装目录确认，不会跳过文件锁、初始密码设置或其他后续确认。直接使用 `uv run main.py` 的源码启动流程不要求这个标记。
 
-`astrbot run`、`uv run main.py` 和镜像 `CMD` 共用 `data/astrbot.lock`。一个 `data/` 只允许一个进程；第二个实例会在打开数据库前失败退出。这是咨询锁（advisory lock）：进程退出后由操作系统释放，磁盘上残留的锁文件本身不占锁。`astrbot init` 在确认安装目录之后使用同一把锁。
+CLI 解析 runtime root 时优先使用 `ASTRBOT_ROOT`，未设置时才用当前工作目录。这与 `main.py` 一致；CLI 不使用 Desktop 包的家目录默认根。
+
+`astrbot run`、`uv run main.py` 和镜像 `CMD` 共用 `data/astrbot.lock`。一个 `data/` 只允许一个进程；第二个实例会在打开数据库前失败退出。这是咨询锁（advisory lock）：进程退出后由操作系统释放，磁盘上残留的锁文件本身不占锁。POSIX 上还会 `flock` `data/` 目录，因此删掉正在持有的 `astrbot.lock` 不能让第二个进程进来。旧的 `<root>/astrbot.lock` 已不再使用。`astrbot init` 在确认安装目录之后使用同一把锁。
 
 `run` 常用选项：
 

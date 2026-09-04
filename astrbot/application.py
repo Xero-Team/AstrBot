@@ -57,11 +57,16 @@ _LOGO = r"""
 """
 
 
-def prepare_runtime_environment() -> None:
-    """Prepare runtime paths after bootstrap and before service construction."""
+def require_supported_python() -> None:
+    """Exit if this process is not running Python 3.14+."""
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 14):
         logger.error("请使用 Python3.14+ 运行本项目。")
         raise SystemExit(1)
+
+
+def prepare_runtime_environment() -> None:
+    """Prepare runtime paths after bootstrap and before service construction."""
+    require_supported_python()
 
     astrbot_root = get_astrbot_root()
     if astrbot_root not in sys.path:
@@ -163,10 +168,11 @@ async def resolve_dashboard_assets(webui_dir: str | None = None) -> str | None:
 
 async def run_application(options: ApplicationOptions) -> None:
     """Create and supervise one complete AstrBot runtime instance."""
-    prepare_runtime_environment()
+    require_supported_python()
     data_dir = Path(get_astrbot_data_path())
     try:
         with runtime_instance_lock(data_dir):
+            prepare_runtime_environment()
             webui_dir = await resolve_dashboard_assets(options.webui_dir)
             if webui_dir is None:
                 logger.warning(

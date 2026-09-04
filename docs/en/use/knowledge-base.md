@@ -29,7 +29,7 @@ Uploads can override chunk settings. Knowledge-base settings also store defaults
 
 Markdown is split on headings. Changing chunk size does not rewrite documents already stored; re-upload them.
 
-An upload writes the document store, metadata, and local vectors together. Any step that fails runs compensating cleanup: after the API reports failure, that document must not stay queryable. Storage is SQLite in the runtime directory plus FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. Runtime startup enforces that with `data/astrbot.lock`; SQLite WAL and `busy_timeout` are not an instance lock. The operating system releases this advisory lock when the process exits, and a leftover lock file does not mean an instance is still running. If Compose mounts the same `./data` into a second full instance, the later container is expected to fail.
+An upload writes the document store, metadata, and local vectors together. Any step that fails runs compensating cleanup: after the API reports failure, that document must not stay queryable. Storage is SQLite in the runtime directory plus FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. Runtime startup enforces that with `data/astrbot.lock`; on POSIX it also locks the `data/` directory, so deleting the lock file cannot bypass the singleton. SQLite WAL and `busy_timeout` are not an instance lock. The operating system releases this advisory lock when the process exits, and a leftover lock file does not mean an instance is still running. If Compose mounts the same `./data` into a second full instance, the later container is expected to fail.
 
 ## Attach to a session
 

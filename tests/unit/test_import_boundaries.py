@@ -234,6 +234,15 @@ def test_runtime_instance_lock_module_does_not_import_core() -> None:
     )
 
 
+def test_cli_root_helper_does_not_import_core() -> None:
+    """CLI root resolution must honor ASTRBOT_ROOT without importing core."""
+    modules = _imports(ROOT / "astrbot" / "cli" / "utils" / "basic.py")
+    assert not any(
+        module == "astrbot.core" or module.startswith("astrbot.core.")
+        for module in modules
+    )
+
+
 def test_runtime_entry_points_use_the_shared_application_runner() -> None:
     """Both process entry points must delegate runtime construction centrally."""
     main_path = ROOT / "main.py"

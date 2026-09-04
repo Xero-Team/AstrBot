@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 
@@ -13,5 +14,12 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 
 def get_astrbot_root() -> Path:
-    """Get the AstrBot root directory path"""
+    """Return the CLI runtime root.
+
+    ``ASTRBOT_ROOT`` relocates the root when set. Otherwise this is the
+    current working directory. The CLI does not use the packaged Desktop
+    home-directory default; that path belongs to the core helper.
+    """
+    if path := os.environ.get("ASTRBOT_ROOT"):
+        return Path(path).resolve()
     return Path.cwd()

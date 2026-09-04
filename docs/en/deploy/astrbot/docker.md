@@ -49,8 +49,11 @@ docker compose --profile computer up -d --build computer
 ```
 
 That starts the `computer` service (AstrBot plus docker.sock) instead of the
-default `astrbot` service. Do not run both at once or the published ports will
-conflict.
+default `astrbot` service. Do not run both at once: they mount the same
+`./data`, so the later container fails on `data/astrbot.lock`, and the
+published ports also conflict. On some volumes (for example NFS without
+`flock`) this advisory lock fail-closes instead of falling back to a soft
+lock.
 
 ## Start AstrBot
 

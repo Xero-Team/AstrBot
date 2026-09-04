@@ -47,7 +47,7 @@ docker compose --profile computer up -d --build computer
 ```
 
 该命令启动带 `docker.sock` 的 `computer` 服务，而不是默认的 `astrbot` 服务。请勿与默认
-`astrbot` 同时运行以免端口冲突。
+`astrbot` 同时运行：两者都挂载同一份 `./data`，后启动的容器会因 `data/astrbot.lock` 失败；发布端口也会冲突。某些卷（例如不支持 `flock` 的 NFS）上该咨询锁（advisory lock）会失败关闭，不会降成软锁。
 
 ## 启动 AstrBot
 

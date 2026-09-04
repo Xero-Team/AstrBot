@@ -30,6 +30,7 @@ def _apply_startup_env_flags(argv: list[str]) -> None:
 _apply_startup_env_flags(sys.argv[1:])
 
 from astrbot.application import ApplicationOptions, run_application  # noqa: E402
+from astrbot.runtime_instance_lock import RuntimeInstanceLockHeld  # noqa: E402
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AstrBot")
@@ -49,4 +50,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    asyncio.run(run_application(ApplicationOptions(webui_dir=args.webui_dir)))
+    try:
+        asyncio.run(run_application(ApplicationOptions(webui_dir=args.webui_dir)))
+    except RuntimeInstanceLockHeld:
+        raise SystemExit(1) from None

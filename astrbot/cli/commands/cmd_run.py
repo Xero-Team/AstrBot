@@ -4,6 +4,8 @@ import sys
 
 import click
 
+from astrbot.runtime_instance_lock import RuntimeInstanceLockHeld
+
 from ..utils.basic import check_astrbot_root, get_astrbot_root
 
 DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
@@ -60,6 +62,8 @@ def run(reload: bool, port: str | None, reset_password: bool) -> None:
         asyncio.run(_run_application())
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
+    except RuntimeInstanceLockHeld as exc:
+        raise click.ClickException(str(exc)) from None
     except click.ClickException:
         raise
     except Exception as exc:

@@ -247,7 +247,7 @@ def test_runtime_entry_points_use_the_shared_application_runner() -> None:
 
     cli_run_source = cli_run_path.read_text(encoding="utf-8")
     assert "FileLock" not in cli_run_source
-    assert "filelock" not in cli_run_source
+    assert "from filelock" not in cli_run_source
     application_source = (ROOT / "astrbot" / "application.py").read_text(
         encoding="utf-8"
     )

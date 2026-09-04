@@ -6,10 +6,21 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
 
 LOCK_FILENAME = "astrbot.lock"
 LOCK_TIMEOUT_SECONDS = 5.0
+
+
+class RuntimeInstanceLockHeld(Exception):
+    """Raised when another process already owns the runtime data directory."""
+
+    def __init__(self, lock_path: Path) -> None:
+        self.lock_path = Path(lock_path)
+        super().__init__(
+            f"Cannot acquire lock file at {self.lock_path}. "
+            "Please check if another instance is running"
+        )
 
 
 def runtime_instance_lock_path(data_dir: Path) -> Path:
@@ -33,7 +44,9 @@ def runtime_instance_lock(
     """Hold the exclusive instance lock for ``data_dir``.
 
     The caller supplies the data directory. This helper does not read
-    ``ASTRBOT_ROOT`` or the current working directory.
+    ``ASTRBOT_ROOT`` or the current working directory. Acquisition failure
+    is raised as ``RuntimeInstanceLockHeld``; later ``filelock.Timeout``
+    errors from the held section propagate unchanged.
 
     Args:
         data_dir: The runtime ``data/`` directory to own.
@@ -44,14 +57,24 @@ def runtime_instance_lock(
         Nothing. The lock is held for the duration of the context.
 
     Raises:
-        filelock.Timeout: If the lock cannot be acquired before ``timeout``.
+        RuntimeInstanceLockHeld: If the lock cannot be acquired before
+            ``timeout``.
     """
     if timeout is None:
         timeout = LOCK_TIMEOUT_SECONDS
     data_dir.mkdir(parents=True, exist_ok=True)
-    with FileLock(
-        runtime_instance_lock_path(data_dir),
+    lock_path = runtime_instance_lock_path(data_dir)
+    lock = FileLock(
+        lock_path,
         timeout=timeout,
         fallback_to_soft=False,
-    ):
+        preserve_lock_file=True,
+    )
+    try:
+        lock.acquire()
+    except Timeout as exc:
+        raise RuntimeInstanceLockHeld(lock_path) from exc
+    try:
         yield
+    finally:
+        lock.release()

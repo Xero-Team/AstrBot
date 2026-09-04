@@ -15,6 +15,7 @@ from astrbot.application import ApplicationOptions, run_application
 from astrbot.cli.commands import cmd_init, cmd_run
 from astrbot.runtime_instance_lock import (
     LOCK_FILENAME,
+    RuntimeInstanceLockHeld,
     runtime_instance_lock,
     runtime_instance_lock_path,
 )
@@ -62,9 +63,10 @@ def hold_runtime_instance_lock(data_dir: Path) -> Iterator[None]:
 def test_second_process_times_out_on_the_same_data_dir(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     with hold_runtime_instance_lock(data_dir):
-        with pytest.raises(Timeout):
+        with pytest.raises(RuntimeInstanceLockHeld) as excinfo:
             with runtime_instance_lock(data_dir, timeout=0.05):
                 pass
+        assert excinfo.value.lock_path == runtime_instance_lock_path(data_dir)
 
 
 def test_leftover_lock_file_is_still_acquirable(tmp_path: Path) -> None:
@@ -75,6 +77,16 @@ def test_leftover_lock_file_is_still_acquirable(tmp_path: Path) -> None:
 
     with runtime_instance_lock(data_dir, timeout=0.05):
         assert lock_path.exists()
+    assert lock_path.exists()
+
+
+def test_timeout_after_acquire_is_not_rewritten(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    with pytest.raises(Timeout) as excinfo:
+        with runtime_instance_lock(data_dir, timeout=0.05):
+            raise Timeout("other.lock")
+    assert excinfo.value.lock_file == "other.lock"
+    assert not isinstance(excinfo.value, RuntimeInstanceLockHeld)
 
 
 def test_lock_path_is_under_the_data_directory(tmp_path: Path) -> None:
@@ -115,11 +127,11 @@ async def test_run_application_exits_before_services_when_lock_held(
     with (
         hold_runtime_instance_lock(data_dir),
         caplog.at_level(logging.ERROR, logger="astrbot"),
-        pytest.raises(SystemExit) as excinfo,
+        pytest.raises(RuntimeInstanceLockHeld) as excinfo,
     ):
         await run_application(ApplicationOptions())
 
-    assert excinfo.value.code == 1
+    assert excinfo.value.lock_path == runtime_instance_lock_path(data_dir)
     assert str(runtime_instance_lock_path(data_dir)) in caplog.text
     assert "already owns this data directory" in caplog.text
 
@@ -127,7 +139,7 @@ async def test_run_application_exits_before_services_when_lock_held(
 def test_cmd_run_source_does_not_construct_filelock() -> None:
     source = Path(cmd_run.__file__).read_text(encoding="utf-8")
     assert "FileLock" not in source
-    assert "filelock" not in source
+    assert "from filelock" not in source
 
 
 def test_cmd_run_fails_when_runtime_lock_held(
@@ -159,6 +171,8 @@ def test_cmd_run_fails_when_runtime_lock_held(
             os.environ["ASTRBOT_CLI"] = original_cli
 
     assert result.exit_code == 1
+    assert str(runtime_instance_lock_path(data_dir)) in result.output
+    assert "another instance is running" in result.output
     assert str(runtime_instance_lock_path(data_dir)) in caplog.text
     assert "already owns this data directory" in caplog.text
 

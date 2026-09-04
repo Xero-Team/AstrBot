@@ -29,7 +29,7 @@ outline: deep
 
 - 根目录 `main.py` 先调用 `runtime_bootstrap.initialize_runtime_bootstrap()` 配置受信任 CA，再导入核心模块、应用启动环境参数并校验 Python 与运行目录。Dashboard 解析优先使用显式 `--webui-dir`，然后依次检查版本匹配的源码树 `dashboard/dist`、运行目录 `data/dist` 和包内置资源。它不访问网络，也不会使用版本失配或不完整的静态资源；没有兼容构建时只停用 WebUI。
 - `astrbot` CLI 先解析 CLI runtime root，要求存在 `.astrbot` 标记。`astrbot/cli/__main__.py` 与 `astrbot run` 都会调用 `runtime_bootstrap.initialize_runtime_bootstrap()` 安装受信任 CA。CLI 的 `init` 和 `run` 不下载、不更新 Dashboard，也没有 `main.py` 的 `--webui-dir`。因此修改启动安全、runtime root 或 Dashboard 静态资源解析时，仍必须分别检查 `main.py` 与 CLI 两条路径。
-- `main.py`、`astrbot run` 和镜像 `CMD` 都进入 `run_application()`。该函数在 `prepare_runtime_environment()` 之后、解析 Dashboard 资源并调用 `create_runtime_services()` 之前，对 `data/astrbot.lock` 获取一把咨询锁（advisory lock）。同一 `data/` 只允许一个进程；获取失败立即退出，不会打开数据库或加载适配器。进程退出后由操作系统释放锁，磁盘上残留的 `astrbot.lock` 文件本身不占锁。`astrbot init` 在用户确认安装目录之后使用同一把锁。Compose 把 `./data` 挂到多个完整实例时，第二个容器会启动失败，这是预期行为。
+- `main.py`、`astrbot run` 和镜像 `CMD` 都进入 `run_application()`。该函数在 `prepare_runtime_environment()` 之后、解析 Dashboard 资源并调用 `create_runtime_services()` 之前，对 `data/astrbot.lock` 获取一把咨询锁（advisory lock）。同一 `data/` 只允许一个进程；获取失败立即退出，不会打开数据库或加载适配器。获取失败与运行期其他 `Timeout` 分开，不会把后者误报成实例占用。进程退出后由操作系统释放锁，磁盘上残留的 `astrbot.lock` 文件本身不占锁。`astrbot init` 在用户确认安装目录之后使用同一把锁。Compose 把 `./data` 挂到多个完整实例时，第二个容器会启动失败，这是预期行为。
 - 两条路径随后都调用 `create_runtime_services()` 创建配置、数据库、共享偏好、HTML 渲染器、文件 token 服务和依赖安装器等实例，再由 `InitialLoader` 初始化 `AstrBotCoreLifecycle`，并行运行核心任务与 FastAPI Dashboard。
 - 初始化中途失败时会调用生命周期清理；停止逻辑必须能处理“只初始化了一部分”的状态并允许重复调用。导入 `astrbot.core` 本身不得创建运行时服务或访问用户数据。
 

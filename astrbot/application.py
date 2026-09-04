@@ -9,8 +9,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from filelock import Timeout
-
 from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.initial_loader import InitialLoader
@@ -36,8 +34,8 @@ from astrbot.core.utils.io import (
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 from astrbot.runtime_instance_lock import (
+    RuntimeInstanceLockHeld,
     runtime_instance_lock,
-    runtime_instance_lock_path,
 )
 
 
@@ -183,10 +181,10 @@ async def run_application(options: ApplicationOptions) -> None:
             logger.info(_LOGO)
             loader = InitialLoader(services, log_broker, webui_dir=webui_dir)
             await loader.start()
-    except Timeout:
+    except RuntimeInstanceLockHeld as exc:
         logger.error(
             "Cannot acquire runtime lock at %s. Another AstrBot instance "
             "already owns this data directory.",
-            runtime_instance_lock_path(data_dir),
+            exc.lock_path,
         )
-        raise SystemExit(1) from None
+        raise

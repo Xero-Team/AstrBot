@@ -3,9 +3,11 @@ import os
 from pathlib import Path
 
 import click
-from filelock import Timeout
 
-from astrbot.runtime_instance_lock import runtime_instance_lock
+from astrbot.runtime_instance_lock import (
+    RuntimeInstanceLockHeld,
+    runtime_instance_lock,
+)
 
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 
@@ -84,10 +86,8 @@ def init(yes: bool) -> None:
                 )
             )
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
-    except Timeout:
-        raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
-        )
+    except RuntimeInstanceLockHeld as exc:
+        raise click.ClickException(str(exc)) from None
 
     except Exception as e:
         raise click.ClickException(f"Initialization failed: {e!s}")

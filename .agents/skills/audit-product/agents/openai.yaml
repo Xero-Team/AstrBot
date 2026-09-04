@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Audit AstrBot as a product'
+  short_description: 'Long-run product quality and security audit with Chinese Markdown reports'
+  default_prompt: 'Use $audit-product to audit this checkout as a shipped product against ISO/IEC 25010, OWASP ASVS, OpenAPI, MCP, OWASP GenAI LLM Top 10 2026, and checkout invariants. Write a Chinese Markdown report with archify diagrams. Independently disprove security findings before scoring. Cite official standards from references/standards.md; do not paste them.'

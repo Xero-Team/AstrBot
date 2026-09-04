@@ -18,6 +18,7 @@ Shared locks live under `.agents/shared/`:
 | `sync-upstream`         | Absorb `AstrBotDevs/AstrBot` `master`                                 |
 | `create-astrbot-plugin` | Create or repair a plugin (Star) package                              |
 | `archify`               | Checkout-only diagram renderer; not shipped in sdist, wheel, or image |
+| `audit-product`         | Baseline or module product audit; Chinese Markdown report + diagrams  |
 
 Do not add a skill that only restates `AGENTS.md`. Split a skill when a
 second, independently loadable workflow appears.
@@ -46,3 +47,11 @@ maintainer tool: hatch sdist excludes `/.agents`, and `.dockerignore` drops
 `archify/REFERENCE.md` and the pin in `archify/VENDOR.json`. Agents load it
 from `.agents/skills/archify/SKILL.md`. Verify with `make check-archify`; that
 target is not part of `make check`.
+
+`audit-product` writes working state under `.tmp/product-audit/` (gitignored)
+and diagrams via `archify`. Reports stay out of `docs/` unless the user
+explicitly asks to promote a figure. Security findings follow `SECURITY.md`.
+Official-standard URLs live in `audit-product/references/standards.md`; cite
+them, do not paste the specs. Independent disprove, variant sweeps, and GHA
+bars live in `audit-product/references/verification.md`. Do not vendor
+third-party audit skill trees into `.agents/skills/`.

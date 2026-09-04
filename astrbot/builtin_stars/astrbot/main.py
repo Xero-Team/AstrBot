@@ -1,5 +1,4 @@
 import copy
-import traceback
 from collections.abc import Iterable
 from sys import maxsize
 
@@ -9,7 +8,6 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import ProviderRequest
-from astrbot.core.message.json_card import json_card_prompt_from_components
 
 from .group_chat_context import GroupChatContext
 
@@ -127,13 +125,10 @@ class Main(star.Star):
         group_context_settings = self.context.config.get(umo=event.unified_msg_origin)[
             "provider_ltm_settings"
         ]
-        return (
-            group_context_settings["group_icl_enable"]
-            or group_context_settings["active_reply"]["enable"]
-        )
+        return group_context_settings["group_icl_enable"]
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
-    async def on_message(self, event: AstrMessageEvent):
+    async def on_message(self, event: AstrMessageEvent) -> None:
         """群聊上下文感知"""
         message_components = _iter_message_components(event)
         has_context_content = False
@@ -149,68 +144,21 @@ class Main(star.Star):
             except Exception as e:
                 logger.error(f"group chat context: {e}")
 
-        if group_context_enabled and self.group_chat_context and has_context_content:
-            need_active = await self.group_chat_context.need_active_reply(event)
-
-            group_icl_enable = self.context.config.get(umo=event.unified_msg_origin)[
-                "provider_ltm_settings"
-            ]["group_icl_enable"]
-            if group_icl_enable:
-                # Skip recording if a command handler matched (e.g. /conversation reset,
-                # /help, /conversation create). Slash commands are bot instructions, not group
-                # chat context that should be injected into future LLM requests.
-                if not event.get_extra("handlers_parsed_params", {}):
-                    try:
-                        await self.group_chat_context.handle_message(event)
-                    except Exception as e:
-                        logger.error(e)
-
-            if need_active:
-                provider = self.context.models.using_chat(event.unified_msg_origin)
-                if not provider:
-                    logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
-                    return
-                try:
-                    session_curr_cid = await self.context.conversations.current_id(
-                        event.unified_msg_origin,
-                    )
-
-                    if not session_curr_cid:
-                        logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /conversation create 创建一个会话。",
-                        )
-                        return
-
-                    conv = await self.context.conversations.get(
-                        event.unified_msg_origin,
-                        session_curr_cid,
-                    )
-
-                    if not conv:
-                        logger.error("未找到对话，无法主动回复")
-                        return
-
-                    prompt = event.message_str
-                    if not prompt or not prompt.strip():
-                        prompt = json_card_prompt_from_components(message_components)
-                    image_urls = []
-                    for comp in message_components:
-                        if isinstance(comp, Image):
-                            try:
-                                image_urls.append(await comp.convert_to_file_path())
-                            except Exception:
-                                logger.exception("主动回复处理图片失败")
-
-                    event.set_extra("active_reply", True)
-                    yield event.request_llm(
-                        prompt=prompt,
-                        session_id=event.session_id,
-                        image_urls=image_urls,
-                        conversation=conv,
-                    )
-                except Exception as e:
-                    logger.error(traceback.format_exc())
-                    logger.error(f"主动回复失败: {e}")
+        if (
+            not group_context_enabled
+            or not self.group_chat_context
+            or not has_context_content
+        ):
+            return
+        # Skip recording if a command handler matched (e.g. /conversation reset,
+        # /help, /conversation create). Slash commands are bot instructions, not group
+        # chat context that should be injected into future LLM requests.
+        if event.get_extra("handlers_parsed_params", {}):
+            return
+        try:
+            await self.group_chat_context.handle_message(event)
+        except Exception as e:
+            logger.error(e)
 
     @filter.on_llm_request()
     async def decorate_llm_req(

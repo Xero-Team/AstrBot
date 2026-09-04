@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +12,7 @@ from astrbot.core.memory.tools import (
     SearchMemoryTool,
 )
 from astrbot.core.memory.writeback import MemoryFactExtractor, MemoryProfileRefresher
-from astrbot.core.persona_runtime import PersonaRuntimeManager, ProactiveScheduler
+from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.persona_runtime.models import PersonaRuntimeSignal
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     _run_runtime_memory_postprocess,
@@ -277,23 +277,6 @@ async def test_profile_refresher_updates_existing_profile_version(temp_db):
     assert first == second
     assert profile is not None
     assert profile.source_version == 2
-
-
-def test_proactive_scheduler_respects_disabled_and_cooldown():
-    scheduler = ProactiveScheduler()
-    state = SimpleNamespace(
-        extra_state={"proactive_enabled": False},
-        cooldown_until=None,
-        agent_state="running",
-        talk_frequency_adjust=1.2,
-    )
-
-    assert scheduler.evaluate(state, unread_count=3).reason == "proactive_disabled"
-
-    state.extra_state["proactive_enabled"] = True
-    state.cooldown_until = datetime.now(UTC) + timedelta(minutes=1)
-
-    assert scheduler.evaluate(state, unread_count=3).reason == "cooldown"
 
 
 @pytest.mark.asyncio

@@ -67,7 +67,7 @@ def is_group_sender_concurrent(event: object, config: object | None) -> bool:
     event_extra = (
         get_extra if callable(get_extra) else lambda _key, default=None: default
     )
-    if event_extra("active_reply") or event_extra("cron_job"):
+    if event_extra("cron_job"):
         return False
     platform_meta = getattr(event, "platform_meta", None)
     if getattr(platform_meta, "name", "") == "cron":

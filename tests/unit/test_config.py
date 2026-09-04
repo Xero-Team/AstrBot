@@ -77,6 +77,10 @@ def test_default_config_avoids_public_listener_addresses():
     assert "0.0.0.0" not in values
 
 
+def test_default_config_omits_group_active_reply():
+    assert "active_reply" not in DEFAULT_CONFIG["provider_ltm_settings"]
+
+
 def test_platform_templates_prioritize_current_adapters_without_public_defaults():
     """Platform templates keep their intended order and loopback listeners."""
     templates = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
@@ -577,6 +581,35 @@ class TestConfigValidation:
         )
 
         assert "unknown_key" not in config
+
+    def test_strips_legacy_active_reply_from_provider_ltm_settings(
+        self, temp_config_path
+    ):
+        default_config = {
+            "provider_ltm_settings": {
+                "group_icl_enable": False,
+            },
+        }
+        existing_config = {
+            "provider_ltm_settings": {
+                "group_icl_enable": True,
+                "active_reply": {
+                    "enable": True,
+                    "method": "possibility_reply",
+                    "possibility_reply": 1.0,
+                    "whitelist": [],
+                },
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=default_config
+        )
+
+        assert config["provider_ltm_settings"]["group_icl_enable"] is True
+        assert "active_reply" not in config["provider_ltm_settings"]
 
     def test_nested_config_validation(self, temp_config_path):
         """Test validation of nested config structures."""

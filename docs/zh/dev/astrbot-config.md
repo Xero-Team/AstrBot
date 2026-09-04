@@ -38,7 +38,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `provider_settings`                               | 当前配置档的 AI 开关、检索、流式输出、Computer Use 等共用行为。                              |
 | `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                        |
 | `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                       |
-| `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。               |
+| `provider_ltm_settings`                           | 旧名称下的群聊上下文和图片转述设置；不是 Alkaid 长期记忆的数据开关。群聊随机主动回复已移除。 |
 | `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                                           |
 | `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。              |
 | `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                      |
@@ -148,7 +148,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 - `provider_pool`：本配置档可用 Provider 范围，`["*"]` 表示全部。
 - `default_image_caption_provider_id` 和 `image_caption_prompt`：主 Agent 当前请求和引用图片的转述，不受群聊历史限流影响。
 - `provider_ltm_settings.image_caption_*`：只作用于群聊历史上下文转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
-- 群聊 JSON 卡片会进入群聊上下文，并在主动回复或普通 LLM 请求缺少文本 prompt 时作为 `[Shared Card]` 卡片摘要。
+- 群聊 JSON 卡片会进入群聊上下文，并在普通 LLM 请求缺少文本 prompt 时作为 `[Shared Card]` 卡片摘要。
 
 API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志或备份提交到 Git；日志和 Trace 也可能包含 Provider ID、请求错误或工具输出。
 

@@ -28,24 +28,24 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 ## Top-level structure
 
-| Key                                               | Purpose                                                                                                                                |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `3`. Do not downgrade it manually.                                                         |
-| `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                     |
-| `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                  |
-| `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                 |
-| `agent_runner`                                    | Agent Runner type and inline configuration for this profile.                                                                           |
-| `provider_settings`                               | Shared AI switch, retrieval, streaming, and Computer Use behavior for this profile.                                                    |
-| `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                        |
-| `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                         |
-| `provider_ltm_settings`                           | Group-context, image-caption, and proactive-reply settings under a historical name; it is not the Alkaid long-term-memory switch.      |
-| `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                   |
-| `dashboard`                                       | WebUI listening, authentication, rate limiting, and TLS; Dashboard account identity and authoritative TOTP state live in its database. |
-| `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                              |
-| `command_prefixes`                                | Command framing prefixes; default `["/"]`.                                                                                             |
-| `llm_access`                                      | Per-profile LLM access policy for direct and group messages; defaults to `private=open`, `group=prefix`, `prefixes=["/"]`.             |
-| `inbound_coalesce`                                | Optional bounded merging of consecutive private-message LLM fragments; disabled by default.                                            |
-| Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                            |
+| Key                                               | Purpose                                                                                                                                                           |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config_version`                                  | Current core configuration version, default `3`. Do not downgrade it manually.                                                                                    |
+| `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                                                |
+| `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                                             |
+| `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                                            |
+| `agent_runner`                                    | Agent Runner type and inline configuration for this profile.                                                                                                      |
+| `provider_settings`                               | Shared AI switch, retrieval, streaming, and Computer Use behavior for this profile.                                                                               |
+| `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                                                   |
+| `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                                                    |
+| `provider_ltm_settings`                           | Group-context and image-caption settings under a historical name; it is not the Alkaid long-term-memory switch. Random group proactive replies have been removed. |
+| `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                                              |
+| `dashboard`                                       | WebUI listening, authentication, rate limiting, and TLS; Dashboard account identity and authoritative TOTP state live in its database.                            |
+| `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                                                         |
+| `command_prefixes`                                | Command framing prefixes; default `["/"]`.                                                                                                                        |
+| `llm_access`                                      | Per-profile LLM access policy for direct and group messages; defaults to `private=open`, `group=prefix`, `prefixes=["/"]`.                                        |
+| `inbound_coalesce`                                | Optional bounded merging of consecutive private-message LLM fragments; disabled by default.                                                                       |
+| Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                                                       |
 
 Object layouts inside `provider_sources`, `provider`, and `platform` come from the currently registered type templates. Do not copy old objects from documentation. Create them in the WebUI and inspect the saved result if necessary. A model references its source through `provider_source_id`; use the WebUI when renaming or deleting a source so references are updated together.
 
@@ -146,7 +146,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 - `provider_pool` limits Providers available to this profile; `["*"]` means all.
 - `default_image_caption_provider_id` and `image_caption_prompt` caption images in the current main-agent request and quoted messages. They are not affected by group-history caption limits.
 - `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency. `image_caption_cache_ttl` defaults to `0` (off) and is scoped by UMO plus content id. `image_caption_lazy` defaults to off.
-- Group-chat JSON cards enter group context and are used as a `[Shared Card]` summary when a proactive reply or ordinary LLM request has no text prompt.
+- Group-chat JSON cards enter group context and are used as a `[Shared Card]` summary when an ordinary LLM request has no text prompt.
 
 API keys are sensitive configuration. Never commit a real `cmd_config.json`, screenshots, logs, or backups. Logs and Trace data can also contain Provider IDs, request errors, and tool output.
 

@@ -91,7 +91,7 @@ This enrichment covers the current message, quoted messages, forwarded messages,
 
 #### Group-chat JSON cards
 
-Group-chat JSON cards are recorded into group context, and when a proactive reply or ordinary LLM request has no text prompt they are sent as a `[Shared Card]` summary instead of the raw JSON blob.
+Group-chat JSON cards are recorded into group context, and when an ordinary LLM request has no text prompt they are sent as a `[Shared Card]` summary instead of the raw JSON blob.
 
 ## Commands
 

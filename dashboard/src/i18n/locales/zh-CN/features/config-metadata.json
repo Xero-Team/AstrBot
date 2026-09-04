@@ -1260,22 +1260,6 @@
         "image_caption_lazy": {
           "description": "延迟群聊图片转述",
           "hint": "开启后先记录占位，仅在真正唤醒 LLM 时转述。默认关闭。"
-        },
-        "active_reply": {
-          "enable": {
-            "description": "主动回复"
-          },
-          "method": {
-            "description": "主动回复方法"
-          },
-          "possibility_reply": {
-            "description": "回复概率",
-            "hint": "0.0-1.0 之间的数值"
-          },
-          "whitelist": {
-            "description": "主动回复白名单",
-            "hint": "为空时不启用白名单过滤。使用 /session info 获取 ID。"
-          }
         }
       }
     }

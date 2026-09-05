@@ -8,7 +8,7 @@ from typing import Any, cast
 import aiohttp
 
 from astrbot import logger
-from astrbot.core.message.components import Mention, Plain
+from astrbot.core.message.components import Mention, MentionAll, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -315,6 +315,8 @@ class MattermostPlatformAdapter(Platform):
         for component in components:
             if isinstance(component, Plain):
                 text_parts.append(component.text)
+            elif isinstance(component, MentionAll):
+                text_parts.append("@all")
             elif isinstance(component, Mention):
                 is_self_mention = str(component.target) == self_id
                 if not leading_self_mention_skipped and is_self_mention:

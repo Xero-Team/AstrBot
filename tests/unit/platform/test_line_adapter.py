@@ -6,7 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Mention, Plain, Record, Video
+from astrbot.api.message_components import (
+    File,
+    Image,
+    Mention,
+    MentionAll,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
@@ -57,13 +65,13 @@ def test_line_parse_text_with_mentions_splits_user_mentions_and_plain_text():
         Plain,
         Mention,
         Plain,
-        Plain,
+        MentionAll,
     ]
     assert components[0].text == "Hello "
     assert components[1].target == "user-1"
     assert components[1].name == "Alice"
     assert components[2].text == " and "
-    assert components[3].text == "@all"
+    assert isinstance(components[3], MentionAll)
 
 
 def test_line_parse_text_with_mentions_ignores_invalid_mention_entries():
@@ -728,6 +736,7 @@ def test_line_build_message_str_covers_known_components_and_unknown_fallback():
         [
             Plain("hello"),
             Mention(target="u1", name="Alice"),
+            MentionAll(),
             Image.fromURL("https://example.test/a.png"),
             Video.fromURL("https://example.test/v.mp4"),
             Record(file="voice.wav"),
@@ -736,7 +745,14 @@ def test_line_build_message_str_covers_known_components_and_unknown_fallback():
         ]
     )
 
-    assert message == "hello @Alice [image] [video] [audio] report.pdf [mystery]"
+    assert message == "hello @Alice @all [image] [video] [audio] report.pdf [mystery]"
+
+
+@pytest.mark.asyncio
+async def test_line_outbound_mention_all_is_plain_at_all():
+    payload = await LineMessageEvent._component_to_message_object(MentionAll())
+
+    assert payload == {"type": "text", "text": "@all"}
 
 
 def test_line_create_event_wraps_message_with_line_context():

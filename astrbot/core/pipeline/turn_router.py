@@ -284,8 +284,7 @@ def _first_mention_is_other(inp: TurnRouteInput) -> bool:
     first = inp.messages[0]
     if not isinstance(first, Mention):
         return False
-    target = str(first.target)
-    return target not in {str(inp.self_id), "all"}
+    return str(first.target) != str(inp.self_id)
 
 
 def _llm_gate(

@@ -1255,6 +1255,24 @@ async def test_telegram_send_with_client_prefixes_at_and_reuses_reply_and_thread
 
 
 @pytest.mark.asyncio
+async def test_telegram_send_with_client_prefixes_mention_all():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        MessageChain([Comp.MentionAll(), Comp.Plain("hello there")]),
+        "123",
+    )
+
+    client.send_message.assert_awaited_once_with(
+        text="@all hello there",
+        parse_mode="MarkdownV2",
+        chat_id="123",
+    )
+
+
+@pytest.mark.asyncio
 async def test_telegram_send_with_client_uses_animation_for_gif(monkeypatch):
     TelegramPlatformEvent = _load_telegram_platform_event()
     client = MockTelegramBuilder.create_bot()

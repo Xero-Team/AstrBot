@@ -357,7 +357,7 @@ class AiocqhttpAdapter(Platform):
                             continue
 
                         target = str(m["data"]["qq"])
-                        is_at_self = target in {abm.self_id, "all"}
+                        is_at_self = target == str(abm.self_id)
                         abm.message.append(Mention(target=target, name=""))
 
                         if is_at_self and not first_at_self_processed:

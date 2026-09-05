@@ -116,3 +116,27 @@ def test_component_types_maps_mention_keys_only():
     assert ComponentTypes["mention"] is Mention
     assert ComponentTypes["mention_all"] is MentionAll
     assert "at" not in ComponentTypes
+
+
+@pytest.mark.asyncio
+async def test_node_to_dict_maps_mentions_to_onebot_at():
+    node = Node(
+        uin="10001",
+        name="Mock Sender",
+        content=[Mention(target="10002"), MentionAll(), Plain(text="hi")],
+    )
+
+    payload = await node.to_dict()
+
+    assert payload == {
+        "type": "node",
+        "data": {
+            "user_id": "10001",
+            "nickname": "Mock Sender",
+            "content": [
+                {"type": "at", "data": {"qq": "10002"}},
+                {"type": "at", "data": {"qq": "all"}},
+                {"type": "text", "data": {"text": "hi"}},
+            ],
+        },
+    }

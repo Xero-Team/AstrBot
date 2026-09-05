@@ -79,6 +79,19 @@ async def picture(self, event: AstrMessageEvent):
     yield event.chain_result(chain)
 ```
 
+Builders `MessageEventResult.mention()` / `mention_all()` do the same:
+
+```python
+yield (
+    event.make_result()
+    .mention(event.get_sender_name(), event.get_sender_id())
+    .message("hello")
+)
+yield event.make_result().mention_all().message("everyone")
+```
+
+`MentionAll` is a sibling type. Do not write `Mention(target="all")`. Some platforms degrade everyone-mentions to text (`@all` on LINE, Telegram, Mattermost). QQ Official drops `MentionAll`.
+
 Some platforms split or degrade unsupported components. OneBot adapters may
 also trim leading and trailing whitespace from plain-text segments. If that
 whitespace is essential, place a zero-width space (`\u200b`) at the boundary.

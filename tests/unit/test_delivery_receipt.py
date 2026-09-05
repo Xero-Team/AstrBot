@@ -174,6 +174,39 @@ async def test_standard_record_failure_keeps_accepted_text_projection():
 
 
 @pytest.mark.asyncio
+async def test_respond_stage_skips_duplicate_text_when_chain_has_mention_all():
+    event = _Event(
+        MessageEventResult(chain=[MentionAll(), Plain("hello")]),
+        [_success()],
+    )
+    event.set_extra("_send_message_to_user_current_session_plain_texts", ["hello"])
+
+    await _stage().process(event)
+
+    event.send.assert_not_awaited()
+    assert event.get_extra("delivery_receipt").status == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_segmented_keeps_mention_all_on_first_plain_chunk():
+    event = _Event(
+        MessageEventResult(chain=[MentionAll(), Plain("hello")]),
+        [_success()],
+    )
+    stage = _stage()
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    stage._calc_comp_interval = AsyncMock(return_value=0)
+
+    await stage.process(event)
+
+    event.send.assert_awaited_once()
+    sent_chain = event.send.await_args.args[0]
+    assert [type(component) for component in sent_chain.chain] == [MentionAll, Plain]
+    assert sent_chain.chain[1].text == "hello"
+
+
+@pytest.mark.asyncio
 async def test_segmented_receipt_keeps_only_accepted_fragment():
     event = _Event(
         MessageEventResult(chain=[Plain("first"), Plain("second")]),

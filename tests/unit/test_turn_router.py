@@ -210,3 +210,16 @@ def test_group_at_other_blocks_prefix_and_command():
     assert result.should_run_command is False
     assert result.should_run_llm is False
     assert result.stop is True
+
+
+def test_mention_target_all_is_not_everyone_and_blocks_command():
+    result = route_turn(
+        _input(
+            "/help",
+            private=False,
+            messages=[Mention(target="all"), Plain("/help")],
+        )
+    )
+    assert result.should_run_command is False
+    assert result.should_run_llm is False
+    assert result.stop is True

@@ -124,6 +124,63 @@ def test_lark_build_message_str_keeps_non_self_and_quoted_mentions():
     )
 
 
+def test_lark_parse_text_treats_all_placeholder_as_mention_all():
+    adapter = _adapter()
+    components = adapter._parse_text_message_components(
+        {"text": "hello @_all world"},
+        {},
+    )
+
+    assert [type(component) for component in components] == [
+        Comp.Plain,
+        Comp.MentionAll,
+        Comp.Plain,
+    ]
+    assert adapter._build_message_str_from_components(components) == "hello @all world"
+
+
+@pytest.mark.asyncio
+async def test_lark_parse_post_at_all_is_mention_all():
+    adapter = _adapter()
+    components = await adapter._parse_post_or_image_message_components(
+        message_id="msg-all",
+        message_type="post",
+        content={
+            "content": [
+                [
+                    {"tag": "at", "user_id": "all"},
+                    {"tag": "text", "text": "hi"},
+                ]
+            ]
+        },
+        at_map={},
+        tracked_paths=[],
+    )
+
+    assert [type(component) for component in components] == [
+        Comp.MentionAll,
+        Comp.Plain,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_lark_convert_mention_all_uses_user_id_all():
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
+
+    result = await LarkMessageEvent._convert_to_lark(
+        MessageChain(chain=[Comp.MentionAll(), Comp.Plain("hi")]),
+        None,
+    )
+
+    assert result == [
+        [
+            {"tag": "at", "user_id": "all", "style": []},
+            {"tag": "md", "text": "hi"},
+        ]
+    ]
+
+
 @pytest.mark.asyncio
 async def test_lark_parse_message_components_post_parses_mentions_links_and_images():
     adapter = _adapter()

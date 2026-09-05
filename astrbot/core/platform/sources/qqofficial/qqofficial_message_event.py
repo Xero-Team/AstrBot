@@ -27,7 +27,15 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.message.components import File, Image, Mention, Plain, Record, Video
+from astrbot.core.message.components import (
+    File,
+    Image,
+    Mention,
+    MentionAll,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -970,6 +978,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = file_path
                 elif i.url:
                     file_source = i.url
+            elif isinstance(i, MentionAll):
+                logger.debug("qq_official 忽略 MentionAll")
             elif isinstance(i, Mention):
                 target_id = str(i.target)
                 if target_id and target_id != "all":

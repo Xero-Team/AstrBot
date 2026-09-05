@@ -6,6 +6,7 @@ from astrbot.core.message.components import (
     Forward,
     Image,
     Mention,
+    MentionAll,
     Node,
     Nodes,
     Plain,
@@ -390,6 +391,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 )
                 return text
 
+            if isinstance(component, MentionAll):
+                return '<at type="all"/>'
             if isinstance(component, Mention):
                 if component.target:
                     return f'<at id="{component.target}"/>'
@@ -483,6 +486,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 )
                 return text
 
+            if isinstance(component, MentionAll):
+                return '<at type="all"/>'
             if isinstance(component, Mention):
                 if component.target:
                     return f'<at id="{component.target}"/>'

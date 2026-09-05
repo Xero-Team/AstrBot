@@ -72,6 +72,19 @@ async def picture(self, event: AstrMessageEvent):
     yield event.chain_result(chain)
 ```
 
+也可以用 `MessageEventResult.mention()` / `mention_all()`：
+
+```python
+yield (
+    event.make_result()
+    .mention(event.get_sender_name(), event.get_sender_id())
+    .message("你好")
+)
+yield event.make_result().mention_all().message("全体注意")
+```
+
+`MentionAll` 是独立类型，不要写 `Mention(target="all")`。部分平台会把全体提及降级成文本，例如 LINE、Telegram、Mattermost 发出 `@all`；QQ 官方机器人会忽略 `MentionAll`。
+
 部分平台会拆分或降级不支持的组件。OneBot 适配器还可能清理纯文本首尾空白；确实
 需要保留时，可以在文本边界加入零宽空格 `\u200b`。OneBot v11 与 NapCat 把文件、
 语音、视频和合并转发拆成独立消息，连续拆分发送之间间隔 0.5 秒。

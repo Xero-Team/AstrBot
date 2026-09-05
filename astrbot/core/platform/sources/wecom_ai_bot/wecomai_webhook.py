@@ -10,7 +10,15 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import aiohttp
 
 from astrbot import logger
-from astrbot.core.message.components import File, Image, Mention, Plain, Record, Video
+from astrbot.core.message.components import (
+    File,
+    Image,
+    Mention,
+    MentionAll,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import convert_audio_format
 
@@ -148,7 +156,7 @@ class WecomAIBotWebhookClient:
 
     @staticmethod
     def is_stream_supported_component(component: Any) -> bool:
-        return isinstance(component, Plain | Image | Mention)
+        return isinstance(component, Plain | Image | Mention | MentionAll)
 
     async def send_message_chain(
         self,
@@ -168,6 +176,8 @@ class WecomAIBotWebhookClient:
                 continue
             if isinstance(component, Plain):
                 markdown_buffer.append(component.text)
+            elif isinstance(component, MentionAll):
+                markdown_buffer.append(" @all ")
             elif isinstance(component, Mention):
                 mention_name = component.name or str(component.target)
                 markdown_buffer.append(f" @{mention_name} ")

@@ -187,6 +187,8 @@ class LarkPlatformAdapter(Platform):
                 text = comp.text.strip()
                 if text:
                     parts.append(text)
+            elif isinstance(comp, Comp.MentionAll):
+                parts.append("@all")
             elif isinstance(comp, Comp.Mention):
                 name = str(comp.name or comp.target or "").strip()
                 if name:
@@ -244,10 +246,13 @@ class LarkPlatformAdapter(Platform):
         at_map: dict[str, Comp.Mention],
     ) -> list[Comp.BaseMessageComponent]:
         components: list[Comp.BaseMessageComponent] = []
-        parts = re.split(r"(@_user_\d+)", str(content.get("text", "")))
+        parts = re.split(r"(@_user_\d+|@_all(?:_\d+)?)", str(content.get("text", "")))
         for part in parts:
             segment = part.strip()
             if not segment:
+                continue
+            if re.fullmatch(r"@_all(?:_\d+)?", segment):
+                components.append(Comp.MentionAll())
                 continue
             components.append(at_map.get(segment, Comp.Plain(segment)))
         return components
@@ -271,7 +276,9 @@ class LarkPlatformAdapter(Platform):
             tag = comp.get("tag")
             if tag == "at":
                 user_key = str(comp.get("user_id", ""))
-                if mention := at_map.get(user_key):
+                if user_key == "all":
+                    components.append(Comp.MentionAll())
+                elif mention := at_map.get(user_key):
                     components.append(mention)
                 continue
             if tag == "text":

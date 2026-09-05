@@ -66,7 +66,8 @@ A `message chain` describes the structure of a message. It's an ordered list whe
 Common message segment types include:
 
 - `Plain`: Text message segment
-- `At`: Mention message segment
+- `Mention`: Mention a user; the target is `target`
+- `MentionAll`: Mention everyone. Do not use `Mention(target="all")`
 - `Image`: Image message segment
 - `Record`: Audio message segment
 - `Video`: Video message segment

@@ -11,6 +11,7 @@ from astrbot.core.message.components import (
     File,
     Image,
     Mention,
+    MentionAll,
     Plain,
     Record,
     Video,
@@ -47,6 +48,8 @@ class LineMessageEvent(AstrMessageEvent):
                 return None
             return {"type": "text", "text": text[:5000]}
 
+        if isinstance(segment, MentionAll):
+            return {"type": "text", "text": "@all"}
         if isinstance(segment, Mention):
             name = str(segment.name or segment.target or "").strip()
             if not name:

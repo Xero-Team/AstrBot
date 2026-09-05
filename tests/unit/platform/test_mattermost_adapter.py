@@ -147,6 +147,16 @@ def test_mattermost_build_message_str_only_skips_leading_self_mention():
     assert message_str == "hi @alice there"
 
 
+def test_mattermost_build_message_str_renders_mention_all():
+    message_str = MattermostPlatformAdapter._build_message_str(
+        [Comp.MentionAll(), Comp.Plain(" heads up")],
+        fallback="@all heads up",
+        self_id="bot-id",
+    )
+
+    assert message_str == "@all heads up"
+
+
 def test_mattermost_parse_timestamp_handles_milliseconds_and_fallback():
     assert (
         MattermostPlatformAdapter._parse_timestamp(1_700_000_000_123) == 1_700_000_000

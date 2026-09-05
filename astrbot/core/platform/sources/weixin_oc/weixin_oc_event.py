@@ -7,6 +7,7 @@ from astrbot.core.message.components import (
     File,
     Image,
     Mention,
+    MentionAll,
     Plain,
     Record,
     Video,
@@ -49,6 +50,8 @@ class WeixinOCMessageEvent(AstrMessageEvent):
             return "[视频]"
         if isinstance(segment, Record):
             return "[音频]"
+        if isinstance(segment, MentionAll):
+            return "@all"
         if isinstance(segment, Mention):
             return f"@{segment.name or segment.target}"
         return "[消息]"

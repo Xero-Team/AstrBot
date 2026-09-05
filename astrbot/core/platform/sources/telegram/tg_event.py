@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
     File,
     Image,
     Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -263,12 +264,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
         has_reply = False
         reply_message_id = None
         at_user_id = None
+        mention_all = False
         for i in message.chain:
             if isinstance(i, Reply):
                 has_reply = True
                 reply_message_id = i.id
-            if isinstance(i, Mention):
+            elif isinstance(i, Mention):
                 at_user_id = i.name
+            elif isinstance(i, MentionAll):
+                mention_all = True
 
         at_flag = False
         message_thread_id = None
@@ -292,6 +296,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
+                    at_flag = True
+                elif mention_all and not at_flag:
+                    i.text = f"@all {i.text}"
                     at_flag = True
                 await cls._send_text_chunks(client, i.text, payload)
             elif isinstance(i, Image):

@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
     File,
     Image,
     Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -680,8 +681,11 @@ class SatoriPlatformAdapter(Platform):
             attrs = child.attrib
 
             if tag_name == "at":
-                user_id = attrs.get("id") or attrs.get("name", "")
-                elements.append(Mention(target=user_id, name=user_id))
+                if attrs.get("type") == "all" or attrs.get("id") == "all":
+                    elements.append(MentionAll())
+                else:
+                    user_id = attrs.get("id") or attrs.get("name", "")
+                    elements.append(Mention(target=user_id, name=user_id))
 
             elif tag_name in ("img", "image"):
                 src = attrs.get("src", "")

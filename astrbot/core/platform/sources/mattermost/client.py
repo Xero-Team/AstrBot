@@ -11,6 +11,7 @@ from astrbot.core.message.components import (
     File,
     Image,
     Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -243,6 +244,8 @@ class MattermostClient:
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 text_parts.append(segment.text)
+            elif isinstance(segment, MentionAll):
+                text_parts.append("@all")
             elif isinstance(segment, Mention):
                 mention_name = str(segment.name or segment.target or "").strip()
                 if mention_name:

@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Mention, MentionAll, Plain
 from astrbot.core.platform.sources.satori.satori_adapter import SatoriPlatformAdapter
+from astrbot.core.platform.sources.satori.satori_event import SatoriPlatformEvent
 
 pytestmark = pytest.mark.platform
 
@@ -147,3 +148,36 @@ def test_satori_create_event_does_not_promote_member_roles():
     event = adapter.create_event(message)
     assert event.platform_member_role == "member"
     assert event.platform_role_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_satori_parse_at_all_is_mention_all():
+    adapter = SatoriPlatformAdapter(
+        {
+            "id": "satori-test",
+            "satori_endpoint": "ws://localhost:5140/satori/v1/events",
+        },
+        {},
+        asyncio.Queue(),
+    )
+
+    elements = await adapter.parse_satori_elements('<at type="all"/> hi <at id="all"/>')
+
+    assert [type(component) for component in elements] == [
+        MentionAll,
+        Plain,
+        MentionAll,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_satori_outbound_mention_all_uses_type_all():
+    payload = await SatoriPlatformEvent._convert_component_to_satori_static(
+        MentionAll()
+    )
+    user = await SatoriPlatformEvent._convert_component_to_satori_static(
+        Mention(target="u1")
+    )
+
+    assert payload == '<at type="all"/>'
+    assert user == '<at id="u1"/>'

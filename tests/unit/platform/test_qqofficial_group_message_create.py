@@ -14,6 +14,7 @@ from astrbot.api.message_components import (
     File,
     Image,
     Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -1105,6 +1106,7 @@ async def test_parse_to_qqofficial_extracts_at_video_and_first_file_source():
         MessageChain(
             chain=[
                 Mention(target="user-1"),
+                MentionAll(),
                 Plain(" hello"),
                 Video(file="https://example.com/video.mp4"),
                 File(name="doc.txt", url="https://example.com/doc.txt"),

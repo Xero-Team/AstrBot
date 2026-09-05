@@ -22,6 +22,11 @@ from ..stage import Stage
 
 
 class RespondStage(Stage):
+    _HEADER_COMPONENT_TYPES = {
+        ComponentType.Reply,
+        ComponentType.Mention,
+        ComponentType.MentionAll,
+    }
     # 组件类型到其非空判断函数的映射
     _component_validators = {
         Comp.Plain: lambda comp: bool(
@@ -389,7 +394,7 @@ class RespondStage(Stage):
         """Deliver a result component by component, retaining reply headers once."""
         header_comps = self._extract_comp(
             result.chain,
-            {ComponentType.Reply, ComponentType.Mention},
+            self._HEADER_COMPONENT_TYPES,
             modify_raw_chain=True,
         )
         if not result.chain:
@@ -414,12 +419,9 @@ class RespondStage(Stage):
         self, event: AstrMessageEvent, result
     ) -> DeliveryReceipt:
         """Deliver records separately, then the remaining ordinary message chain."""
-        if all(
-            comp.type in {ComponentType.Reply, ComponentType.Mention}
-            for comp in result.chain
-        ):
+        if all(comp.type in self._HEADER_COMPONENT_TYPES for comp in result.chain):
             logger.warning(
-                "消息链全为 Reply 和 Mention 消息段, 跳过发送阶段。chain: %s",
+                "消息链全为 Reply、Mention 和 MentionAll 消息段, 跳过发送阶段。chain: %s",
                 result.chain,
             )
             return DeliveryReceipt.skipped(platform_id=event.get_platform_id())
@@ -485,6 +487,7 @@ class RespondStage(Stage):
                     ComponentType.Plain,
                     ComponentType.Reply,
                     ComponentType.Mention,
+                    ComponentType.MentionAll,
                 }
                 for comp in result.chain
             )

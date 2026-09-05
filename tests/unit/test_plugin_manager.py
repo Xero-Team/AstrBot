@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
@@ -1476,6 +1477,32 @@ async def test_load_reports_unregistered_plugin_without_index_error(
     assert "继承自 Star 的插件主类" in error
     assert "list index out of range" not in error
     assert plugin_name in plugin_manager_pm.loader._failed_plugins
+
+
+@pytest.mark.asyncio
+async def test_failed_plugin_record_redacts_error_and_traceback(
+    plugin_manager_pm: PluginManager,
+):
+    plugin_path = Path(plugin_manager_pm.packages.store_path) / "broken"
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    secret_error = RuntimeError(
+        "password=top-secret https://internal.example.test/private/config"
+    )
+    try:
+        raise secret_error
+    except RuntimeError as exc:
+        record = plugin_manager_pm.loader._build_failed_plugin_record(
+            root_dir_name="broken",
+            plugin_dir_path=str(plugin_path),
+            reserved=False,
+            error=exc,
+            error_trace=traceback.format_exc(),
+        )
+
+    assert "top-secret" not in record["error"]
+    assert "internal.example.test" not in record["error"]
+    assert "top-secret" not in record["traceback"]
+    assert "internal.example.test" not in record["traceback"]
 
 
 @pytest.mark.asyncio

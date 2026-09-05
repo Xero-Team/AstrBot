@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import json
-import traceback
 import typing as T
 import uuid
 from collections.abc import AsyncGenerator as AsyncGeneratorABC
@@ -49,6 +48,7 @@ from astrbot.core.tools.computer_tools import (
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
@@ -875,8 +875,6 @@ async def call_local_llm_tool(
     """执行本地 LLM 工具的处理函数并处理其返回结果"""
     ready_to_call = None  # 一个协程或者异步生成器
 
-    trace_ = None
-
     event = context.context.event
 
     try:
@@ -887,7 +885,7 @@ async def call_local_llm_tool(
         else:
             raise ValueError(f"未知的方法名: {method_name}")
     except ValueError as e:
-        raise Exception(f"Tool execution ValueError: {e}") from e
+        raise Exception(f"Tool execution ValueError: {safe_error('', e)}") from e
     except TypeError as e:
         # 获取函数的签名（包括类型），除了第一个 event/context 参数。
         try:
@@ -921,8 +919,7 @@ async def call_local_llm_tool(
             f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}"
         ) from e
     except Exception as e:
-        trace_ = traceback.format_exc()
-        raise Exception(f"Tool execution error: {e}. Traceback: {trace_}") from e
+        raise Exception(f"Tool execution error: {safe_error('', e)}") from e
 
     if ready_to_call is None:
         return
@@ -946,11 +943,14 @@ async def call_local_llm_tool(
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield
         except Exception as e:
-            logger.error(f"Previous Error: {trace_}")
-            raise e
+            logger.error("Previous Error: %s", safe_error("", e), exc_info=True)
+            raise Exception(f"Tool execution error: {safe_error('', e)}") from e
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
-        ret = await ready_to_call
+        try:
+            ret = await ready_to_call
+        except Exception as e:
+            raise Exception(f"Tool execution error: {safe_error('', e)}") from e
         if isinstance(ret, MessageEventResult):
             event.set_result(ret)
             yield

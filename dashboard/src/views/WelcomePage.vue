@@ -188,9 +188,18 @@
       v-model:show="showAddPlatformDialog"
       :metadata="platformMetadata"
       :config-data="platformConfigData"
+      :request-step-up="requestStepUp"
+      @show-toast="handlePlatformToast"
       @refresh-config="loadPlatformConfigBase"
     />
     <ProviderConfigDialog v-model="showProviderDialog" />
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
     <v-dialog v-model="showComputerAccessHelpDialog" max-width="640" scrollable>
       <v-card class="computer-access-help-dialog">
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
@@ -222,10 +231,14 @@
 import { computed, ref, watch, onMounted } from 'vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
 import { docsHref } from '@/utils/docsHref';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import { stepUpHeaders } from '@/utils/stepUp';
 import { useToast } from '@/utils/toast';
 
 type StepState = 'pending' | 'completed' | 'skipped';
@@ -280,6 +293,14 @@ interface ProviderTemplatePayload {
 const { locale } = useI18n();
 const { tm } = useModuleI18n('features/welcome');
 const { success: showSuccess, error: showError } = useToast();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const helpLinks = [
   {
@@ -450,7 +471,19 @@ async function syncDefaultConfigProviderIfNeeded() {
 
   modelConfig.provider_id = targetProviderId;
 
-  const updateRes = await configProfileApi.update('default', configData);
+  const updateRes = await runConfigMutationWithStepUp(
+    (stepUp) =>
+      configProfileApi.update(
+        'default',
+        configData,
+        stepUp ? { headers: stepUpHeaders(stepUp) } : undefined,
+      ),
+    'default',
+    requestStepUp,
+  );
+  if (!updateRes) {
+    return;
+  }
   if (updateRes.data.status !== 'ok') {
     throw new Error(
       updateRes.data.message || tm('onboard.providerUpdateFailed'),
@@ -497,7 +530,20 @@ async function saveComputerAccessRuntime() {
     configData.provider_settings.computer_use_runtime =
       computerAccessRuntime.value;
 
-    const updateRes = await configProfileApi.update('default', configData);
+    const updateRes = await runConfigMutationWithStepUp(
+      (stepUp) =>
+        configProfileApi.update(
+          'default',
+          configData,
+          stepUp ? { headers: stepUpHeaders(stepUp) } : undefined,
+        ),
+      'default',
+      requestStepUp,
+    );
+    if (!updateRes) {
+      computerAccessRuntime.value = savedComputerAccessRuntime.value;
+      return;
+    }
     if (updateRes.data.status !== 'ok') {
       throw new Error(
         updateRes.data.message || tm('onboard.computerAccessUpdateFailed'),
@@ -548,6 +594,20 @@ onMounted(async () => {
     console.error(e);
   }
 });
+
+function handlePlatformToast({
+  message,
+  type,
+}: {
+  message: string;
+  type: 'success' | 'error';
+}) {
+  if (type === 'error') {
+    showError(message);
+    return;
+  }
+  showSuccess(message);
+}
 
 async function openPlatformDialog() {
   loadingPlatformDialog.value = true;

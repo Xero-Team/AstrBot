@@ -23,6 +23,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_site_packages_path,
     get_astrbot_temp_path,
 )
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
     get_dashboard_dist_version,
@@ -191,6 +192,6 @@ async def run_application(options: ApplicationOptions) -> None:
         logger.error(
             "Cannot acquire runtime lock at %s. Another AstrBot instance "
             "already owns this data directory.",
-            exc.lock_path,
+            redact_sensitive_text(str(exc.lock_path)),
         )
         raise

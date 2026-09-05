@@ -1,7 +1,5 @@
 """Narrow structural database contracts grouped by domain."""
 
-from __future__ import annotations
-
 import datetime
 import typing as T
 from contextlib import AbstractAsyncContextManager

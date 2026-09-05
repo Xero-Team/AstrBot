@@ -66,6 +66,23 @@ _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
 _STOP_HISTORY_USER_TEXT = "Stop output."
 _STOP_HISTORY_ASSISTANT_TEXT = "Output stopped."
 
+# High-risk ``tool.*`` actions the BTW work loop may auto-elevate for
+# operator/root subjects.  Mirrors ``HIGH_RISK_ACTIONS`` for tool actions and
+# the dashboard ``btw.work_loop.elevated_actions`` default.  Kept here so the
+# runtime stays consistent with the authorization gate without importing the
+# auth models into the pipeline.
+_BTW_WORK_ELEVATABLE_ACTIONS = frozenset(
+    {
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.file_write",
+        "tool.browser_control",
+        "tool.mcp_write",
+        "tool.computer_use",
+    }
+)
+_BTW_WORK_ELEVATED_ACTIONS_DEFAULT = tuple(sorted(_BTW_WORK_ELEVATABLE_ACTIONS))
+
 
 def _history_merge_fields(
     base_history: object,
@@ -104,9 +121,71 @@ class InternalAgentSubStage:
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
+
+        btw_config = conf.get("btw", {})
+        btw_config = btw_config if isinstance(btw_config, dict) else {}
+        conversation_loop_config = btw_config.get("conversation_loop", {})
+        conversation_loop_config = (
+            conversation_loop_config
+            if isinstance(conversation_loop_config, dict)
+            else {}
+        )
+        work_loop_config = btw_config.get("work_loop", {})
+        work_loop_config = (
+            work_loop_config if isinstance(work_loop_config, dict) else {}
+        )
+        self.conversation_provider_id = conversation_loop_config.get("provider_id", "")
+        if not isinstance(self.conversation_provider_id, str):
+            self.conversation_provider_id = ""
+        self.work_provider_id = work_loop_config.get("provider_id", "")
+        if not isinstance(self.work_provider_id, str):
+            self.work_provider_id = ""
+        self.work_computer_use_runtime = work_loop_config.get(
+            "computer_use_runtime", "inherit"
+        )
+        if self.work_computer_use_runtime not in {
+            "inherit",
+            "none",
+            "local",
+            "sandbox",
+        }:
+            self.work_computer_use_runtime = "inherit"
+        # High-risk tool actions the work loop may auto-elevate for operator
+        # operators/root.  Defaults to the full set; invalid entries are
+        # dropped and an empty/absent value keeps the prior behavior (all six).
+        raw_elevated_actions = work_loop_config.get(
+            "elevated_actions", _BTW_WORK_ELEVATED_ACTIONS_DEFAULT
+        )
+        elevated_actions = (
+            raw_elevated_actions
+            if isinstance(raw_elevated_actions, (list, tuple))
+            else _BTW_WORK_ELEVATED_ACTIONS_DEFAULT
+        )
+        self.work_elevated_actions = frozenset(
+            action
+            for action in elevated_actions
+            if isinstance(action, str) and action in _BTW_WORK_ELEVATABLE_ACTIONS
+        ) or frozenset(_BTW_WORK_ELEVATED_ACTIONS_DEFAULT)
+
         self.conv_manager = ctx.execution_context.conversation_manager
         self.main_agent_cfg, self.max_step = local_agent_runtime_from_profile(
             conf,
+            btw_plugin_routes=(
+                btw_config.get("plugin_routes", [])
+                if isinstance(btw_config, dict)
+                else []
+            ),
+            btw_mcp_routes=(
+                btw_config.get("mcp_routes", []) if isinstance(btw_config, dict) else []
+            ),
+            btw_skill_routes=(
+                btw_config.get("skill_routes", [])
+                if isinstance(btw_config, dict)
+                else []
+            ),
+            conversation_provider_id=self.conversation_provider_id,
+            work_provider_id=self.work_provider_id,
+            work_computer_use_runtime=self.work_computer_use_runtime,
             timezone=self.ctx.execution_context.get_config().get("timezone"),
         )
         self.tool_call_timeout = self.main_agent_cfg.tool_call_timeout
@@ -268,9 +347,55 @@ class InternalAgentSubStage:
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
+        loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        if loop_mode == "work":
+            # The work loop is an explicit, user-initiated elevation for
+            # high-risk tool execution (shell, computer, file, browser).
+            # Stamp the per-profile allowed action set onto the authorization
+            # context so the unified gate treats these ``tool.*`` actions as
+            # elevated, like a dashboard step-up, while the role check still
+            # restricts them to operators/root.  Carried on metadata because
+            # ``AuthorizationService`` has no access to profile config.
+            auth_context = getattr(event, "auth_context", None)
+            if auth_context is not None:
+                auth_context.metadata["btw_work_elevation"] = True
+                auth_context.metadata["btw_elevated_actions"] = tuple(
+                    self.work_elevated_actions
+                )
+        if loop_mode == "conversation":
+            computer_use_runtime = "none"
+            provider_id_override = getattr(
+                self.main_agent_cfg, "conversation_provider_id", ""
+            )
+        else:
+            computer_use_runtime = getattr(
+                self.main_agent_cfg, "work_computer_use_runtime", "inherit"
+            )
+            if computer_use_runtime == "inherit":
+                computer_use_runtime = getattr(
+                    self.main_agent_cfg, "computer_use_runtime", None
+                )
+            if computer_use_runtime not in {"none", "local", "sandbox"}:
+                computer_use_runtime = "none"
+            provider_id_override = getattr(self.main_agent_cfg, "work_provider_id", "")
+
+        configured_provider_settings = getattr(
+            self.main_agent_cfg, "provider_settings", {}
+        )
+        provider_settings = (
+            dict(configured_provider_settings)
+            if isinstance(configured_provider_settings, dict)
+            else {}
+        )
+        provider_settings["computer_use_runtime"] = computer_use_runtime
+
         build_cfg = replace(
             self.main_agent_cfg,
             streaming_response=streaming_response,
+            loop_mode=loop_mode,
+            provider_id_override=provider_id_override,
+            computer_use_runtime=computer_use_runtime,
+            provider_settings=provider_settings,
         )
         build_result = await build_main_agent(
             event=event,
@@ -301,6 +426,10 @@ class InternalAgentSubStage:
         follow_up_activated = False
         typing_requested = False
         try:
+            # BTW work-loop tasks may detach from the originating event so the
+            # parent task retains the follow-up runner; the streaming choice is
+            # still resolved via the unified session override helper below.
+            is_detached_work = bool(event.get_extra("btw_detached_work"))
             from astrbot.core.streaming_override import resolve_streaming_response
 
             streaming_response = await resolve_streaming_response(
@@ -355,7 +484,9 @@ class InternalAgentSubStage:
 
             logger.debug("ready to request llm provider")
             follow_up_capture = (
-                self.ctx.execution_context.follow_up_coordinator.try_capture(event)
+                None
+                if is_detached_work
+                else self.ctx.execution_context.follow_up_coordinator.try_capture(event)
             )
             if follow_up_capture:
                 (
@@ -392,6 +523,12 @@ class InternalAgentSubStage:
             concurrent, lock_key, turn_cm, streaming_response = (
                 self._prepare_group_sender_concurrency(event, streaming_response)
             )
+            # BTW work-loop tasks share one agent lock across related turns;
+            # honor the loop-provided key when present, else keep the group
+            # sender lock key resolved above.
+            btw_lock_key = event.get_extra("btw_agent_lock_key")
+            if isinstance(btw_lock_key, str) and btw_lock_key:
+                lock_key = btw_lock_key
 
             async with (
                 turn_cm,
@@ -468,8 +605,11 @@ class InternalAgentSubStage:
                             )
                         else:
                             runner_stop_callback = None
-                    self._register_follow_up_runner(event, agent_runner, concurrent)
-                    runner_registered = True
+                    # BTW detached work tasks are managed by their parent turn
+                    # and must not register their own follow-up runner.
+                    if not is_detached_work:
+                        self._register_follow_up_runner(event, agent_runner, concurrent)
+                        runner_registered = True
                     event.trace.record(
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,

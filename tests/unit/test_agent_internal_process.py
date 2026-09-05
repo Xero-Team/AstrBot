@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 import pytest
 
+from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.message.components import Json
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 
@@ -1194,3 +1193,59 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         == "Error occurred during AI execution."
     )
     event.stop_typing.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_internal_builder_applies_model_and_permission_per_btw_loop(
+    monkeypatch,
+):
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.ctx = _pipeline_context(_internal_plugin_context())
+    stage.main_agent_cfg = MainAgentBuildConfig(
+        tool_call_timeout=60,
+        computer_use_runtime="local",
+        provider_settings={"computer_use_runtime": "local"},
+        conversation_provider_id="conversation-model",
+        work_provider_id="work-model",
+        work_computer_use_runtime="sandbox",
+        btw_mcp_routes=[{"server_name": "workspace", "loop": "work"}],
+        btw_skill_routes=[{"skill_name": "workspace-edit", "loop": "work"}],
+    )
+    build_result = SimpleNamespace(
+        provider=SimpleNamespace(provider_config={"api_base": ""}),
+    )
+    build_main_agent = AsyncMock(return_value=build_result)
+    monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
+
+    conversation_event = FakeEvent()
+    assert (
+        await stage._build_checked_agent_runner(
+            conversation_event,
+            streaming_response=True,
+        )
+        is build_result
+    )
+    conversation_config = build_main_agent.await_args.kwargs["config"]
+    assert conversation_config.loop_mode == "conversation"
+    assert conversation_config.provider_id_override == "conversation-model"
+    assert conversation_config.computer_use_runtime == "none"
+    assert conversation_config.btw_mcp_routes == [
+        {"server_name": "workspace", "loop": "work"}
+    ]
+    assert conversation_config.btw_skill_routes == [
+        {"skill_name": "workspace-edit", "loop": "work"}
+    ]
+
+    work_event = FakeEvent(extras={"btw_loop": "work"})
+    assert (
+        await stage._build_checked_agent_runner(
+            work_event,
+            streaming_response=False,
+        )
+        is build_result
+    )
+    work_config = build_main_agent.await_args.kwargs["config"]
+    assert work_config.loop_mode == "work"
+    assert work_config.provider_id_override == "work-model"
+    assert work_config.computer_use_runtime == "sandbox"
+    assert work_config.provider_settings["computer_use_runtime"] == "sandbox"

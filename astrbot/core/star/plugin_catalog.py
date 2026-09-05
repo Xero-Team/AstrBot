@@ -1,7 +1,5 @@
 """Runtime-owned plugin declarations and command catalog snapshots."""
 
-from __future__ import annotations
-
 import copy
 import sys
 from collections.abc import Mapping

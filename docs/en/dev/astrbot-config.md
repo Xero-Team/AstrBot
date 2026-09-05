@@ -37,6 +37,7 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 | `agent_runner`                                    | Agent Runner type and inline configuration for this profile.                                                                                                                                                                                                    |
 | `provider_settings`                               | Shared AI switch, retrieval, streaming, and Computer Use behavior for this profile.                                                                                                                                                                             |
 | `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                                                                                                                                                 |
+| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                                                                                                                                                |
 | `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                                                                                                                                                  |
 | `provider_ltm_settings`                           | [Group chat context awareness](../use/group-chat-context) (in-memory group context, image captions, persisted group history). The JSON key is still historical; it is not the Alkaid long-term-memory switch. Random group proactive replies have been removed. |
 | `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                                                                                                                                            |
@@ -185,6 +186,29 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 `web_search`, `websearch_provider`, and provider-specific keys configure built-in web search; `web_search_link` controls link output. Enter keys through the WebUI.
 
 `image_compress_enabled` and `image_compress_options.max_size/quality` control image compression before model requests. `max_quoted_fallback_images` and `quoted_message_parser` limit quoted and forwarded-message expansion to prevent unbounded fetching. For `quoted_message_parser`, `0` is a valid boundary: depth limits keep the root level but stop child recursion, and `max_forward_fetch=0` disables recursive `get_forward_msg` calls. Negative or invalid values fall back to defaults; this setting does not globally disable a direct quoted-message `get_msg` fallback.
+
+## BTW dual-loop prototype
+
+`btw` provides one entry point for the current dual-loop prototype. Every message first enters the conversation loop. With rule-based classification enabled, requests about code, files, commands, search, research, or coding agents such as Claude Code, Codex, OpenCode, and HAPI, plus requests beginning with `/work`, are sent to the work loop. The work loop reuses the established Agent and tool execution path; core does not provide a dedicated Codex, CC, or other coding-agent executor. The source-built Docker image does preinstall the `claude` and `codex` CLIs, but they are callable only through work-loop shell tools or an external plugin.
+
+- `btw.enabled` is the master switch. When disabled, every request still uses the existing Agent path through the conversation loop.
+- `btw.classifier.enabled` enables the built-in deterministic rules. When disabled, requests are not automatically sent to the work loop.
+- `btw.conversation_loop.provider_id` selects the conversation-loop model. Empty uses the session default; a value takes precedence over a session model selection.
+- `btw.work_loop.enabled` enables the work loop; `max_concurrent` limits classified work tasks that can execute at the same time in this profile.
+- `btw.work_loop.provider_id` selects the work-loop model, which may differ from the conversation Provider. Empty uses the session default.
+- `btw.work_loop.computer_use_runtime` controls computer permission for the work loop. `inherit` uses the existing `provider_settings.computer_use_runtime`; `none`, `local`, and `sandbox` set it explicitly.
+- `btw.work_session.max_age_seconds` is the retention period for terminal work sessions. It defaults to `3600` seconds and is cleaned up lazily by the next session operation.
+- `btw.plugin_routes` lets you choose **Conversation only**, **Work only**, or **Conversation and Work** for every enabled non-system plugin on the **Config** page. No saved entry defaults to **Work only**; choosing both loops is stored as an explicit override.
+- `btw.mcp_routes` uses the same choice for every enabled MCP server. No saved entry also defaults to **Work only**, so execution-oriented servers such as `mcp__codex__codex` do not silently enter the conversation loop.
+- `btw.skill_routes` uses the same choice for every enabled Skill. Ordinary Skills default to both loops, while workspace Skills remain work-loop-only.
+
+The conversation loop forcibly disables local computer, sandbox, browser, and filesystem tools. Only the work loop can receive those capabilities. Plugin assignments filter plugin LLM tools, MCP assignments filter all tools provided by each MCP server, and Skill assignments filter which Skill prompts are injected. Existing subagent handoffs receive the same tool routes and cannot regain computer tools from the conversation loop. LLM tools registered by external Claude Code, Self Code, HAPI, Codex app-server, and OpenCode plugins therefore default to the work loop.
+
+Plugin Pipeline/Star handlers and explicit commands such as `/hapi`, `/codexdev`, `/vibe`, and `/oc` retain the plugin's existing priority and are outside LLM tool routing. Moving those commands into detached work sessions requires explicit plugin support or a future command-execution protocol; a work-only plugin tool assignment does not migrate the entire plugin.
+
+The work loop first replies that the task has started, then continues in a runtime-owned background task. Its results still use the existing content-safety, result-decoration, and platform-delivery paths. Background work uses a separate session lock, so it does not block later chat or status queries in the same session. Work sessions are runtime-only in-memory state: users can ask for the latest task with messages such as “progress”, “status”, or “怎么样了” while it runs or after it finishes. The state is not retained after a restart or runtime rebuild.
+
+These settings belong to a configuration profile. Check the BTW switches, concurrency, and plugin-tool assignments separately for every profile.
 
 ## SubAgents, speech, and knowledge base
 

@@ -1,7 +1,5 @@
 """Completed runtime state and the small control surface used by the Dashboard."""
 
-from __future__ import annotations
-
 import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol

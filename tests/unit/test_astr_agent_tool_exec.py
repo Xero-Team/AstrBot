@@ -5,30 +5,39 @@ from unittest.mock import AsyncMock
 
 import mcp
 import pytest
+from mcp.types import Tool
 
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.mcp_client import MCPTool, MCPToolNameAllocator
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.message.components import Image
+from astrbot.core.tools.computer_tools import FileReadTool
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
 )
 
 
 class _DummyEvent:
-    def __init__(self, message_components: list[object] | None = None) -> None:
+    def __init__(
+        self,
+        message_components: list[object] | None = None,
+        *,
+        extras: dict | None = None,
+    ) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
         self.role = "member"
+        self._extras = extras or {}
 
-    def get_extra(self, _key: str, default=None):
-        return default
+    def get_extra(self, key: str, default=None):
+        return self._extras.get(key, default)
 
-    def set_extra(self, _key: str, _value) -> None:
-        return None
+    def set_extra(self, key: str, value) -> None:
+        self._extras[key] = value
 
 
 class _DummyTool:
@@ -159,6 +168,99 @@ def test_build_handoff_toolset_keeps_declared_tools():
     assert toolset is not None
     assert toolset.get_tool("admin_only_mcp") is plugin_tool
     assert toolset.get_tool("transfer_to_child") is None
+
+
+def test_handoff_toolset_defaults_plugin_mcp_and_computer_tools_to_work():
+    mcp_tool = MCPTool(
+        Tool(
+            name="workspace_mcp",
+            description="workspace MCP",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        AsyncMock(),
+        "workspace-server",
+    )
+    safe_tool = FunctionTool(
+        name="safe",
+        description="safe",
+        parameters={"type": "object", "properties": {}},
+    )
+    plugin_tool = FunctionTool(
+        name="coding_agent",
+        description="coding agent",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.coding.main",
+    )
+    event = _DummyEvent(extras={"btw_loop": "conversation"})
+    plugin = SimpleNamespace(root_dir_name="coding", name="coding")
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    plugin if module_path == "plugins.coding.main" else None
+                )
+            )
+        )
+    )
+
+    filtered = FunctionToolExecutor._filter_handoff_toolset_for_btw(
+        ToolSet([mcp_tool, FileReadTool(), plugin_tool, safe_tool]),
+        ctx=context,
+        cfg={"btw": {}},
+        event=event,
+    )
+
+    assert filtered.names() == ["safe"]
+
+
+def test_handoff_toolset_honors_explicit_both_routes():
+    mcp_tool = MCPTool(
+        Tool(
+            name="workspace_mcp",
+            description="workspace MCP",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        AsyncMock(),
+        "workspace-server",
+    )
+    plugin_tool = FunctionTool(
+        name="coding_agent",
+        description="coding agent",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="plugins.coding.main",
+    )
+    event = _DummyEvent(extras={"btw_loop": "conversation"})
+    plugin = SimpleNamespace(root_dir_name="coding", name="coding")
+    context = SimpleNamespace(
+        catalogs=SimpleNamespace(
+            plugins=SimpleNamespace(
+                get_by_module=lambda module_path: (
+                    plugin if module_path == "plugins.coding.main" else None
+                )
+            )
+        )
+    )
+
+    filtered = FunctionToolExecutor._filter_handoff_toolset_for_btw(
+        ToolSet([mcp_tool, plugin_tool]),
+        ctx=context,
+        cfg={
+            "btw": {
+                "mcp_routes": [
+                    {"server_name": "workspace-server", "loop": "both"},
+                ],
+                "plugin_routes": [
+                    {"plugin_id": "coding", "loop": "both"},
+                ],
+            }
+        },
+        event=event,
+    )
+
+    assert filtered.names() == [
+        MCPToolNameAllocator().allocate("workspace-server", "workspace_mcp"),
+        "coding_agent",
+    ]
 
 
 @pytest.mark.asyncio

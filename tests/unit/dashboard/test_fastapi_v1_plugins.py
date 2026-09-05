@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from tests.unit.dashboard.fastapi_v1_support import *  # noqa: F403

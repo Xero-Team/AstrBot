@@ -1,7 +1,5 @@
 """Plugin discovery, import, declaration collection, and initialization."""
 
-from __future__ import annotations
-
 import functools
 import json
 import keyword

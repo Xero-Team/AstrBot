@@ -1,7 +1,5 @@
 """Minimal HTTP server for Dashboard plugin Page browser transport tests."""
 
-from __future__ import annotations
-
 import argparse
 import base64
 import ipaddress

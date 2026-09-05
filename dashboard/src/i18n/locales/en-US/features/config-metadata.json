@@ -1170,6 +1170,67 @@
         "description": "Available Plugins",
         "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
       }
+    },
+    "btw": {
+      "description": "BTW dual loops",
+      "btw": {
+        "enabled": {
+          "description": "Enable BTW dual loops",
+          "hint": "Route all messages through the conversation loop and send tool-intensive requests to the work loop."
+        },
+        "classifier": {
+          "enabled": {
+            "description": "Enable task classification",
+            "hint": "Use built-in rules to identify code, file, lookup, and research work."
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "Conversation-loop model",
+            "hint": "Leave empty to use the current session's default chat model. The conversation loop never receives local, sandbox, or filesystem tools."
+          }
+        },
+        "work_loop": {
+          "enabled": {
+            "description": "Enable work loop",
+            "hint": "When disabled, the conversation loop handles every request."
+          },
+          "provider_id": {
+            "description": "Work-loop model",
+            "hint": "Leave empty to use the current session's default chat model. When set, it takes priority over a session model selection."
+          },
+          "computer_use_runtime": {
+            "description": "Work-loop computer permission",
+            "hint": "inherit uses the existing computer-use setting; local and sandbox are exposed only to the work loop."
+          },
+          "elevated_actions": {
+            "description": "Work-loop high-risk tool elevation",
+            "hint": "The work loop reuses the conversation loop's permission subject and role. Select which high-risk tool actions the work loop auto-elevates for operator/root subjects when running from chat. Unlisted high-risk actions are denied as dashboard-only. The conversation loop hard-disables all of these and cannot be enabled here."
+          },
+          "max_concurrent": {
+            "description": "Maximum concurrent work loops",
+            "hint": "Number of work tasks that may execute concurrently in this configuration profile."
+          }
+        },
+        "work_session": {
+          "max_age_seconds": {
+            "description": "Work-session retention",
+            "hint": "How many seconds to retain completed, failed, or cancelled work for status queries."
+          }
+        },
+        "plugin_routes": {
+          "description": "Plugin tool loop assignments",
+          "hint": "Plugin LLM tools default to the work loop; explicitly assign an enabled plugin to the conversation loop or both when needed."
+        },
+        "mcp_routes": {
+          "description": "MCP server loop assignments",
+          "hint": "MCP tools default to the work loop; explicitly assign an enabled server to the conversation loop or both when needed."
+        },
+        "skill_routes": {
+          "description": "Skill loop assignments",
+          "hint": "Skills default to both loops; explicitly restrict an enabled Skill to one loop when needed."
+        }
+      }
     }
   },
   "ext_group": {

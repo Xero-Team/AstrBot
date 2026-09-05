@@ -1,7 +1,5 @@
 """Central outbound URL validation, pinned resolution, and safe downloads."""
 
-from __future__ import annotations
-
 import asyncio
 import gzip
 import io

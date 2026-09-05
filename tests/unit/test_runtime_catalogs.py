@@ -1,7 +1,5 @@
 """Regression coverage for runtime-owned dynamic capability catalogs."""
 
-from __future__ import annotations
-
 import sys
 from types import ModuleType
 

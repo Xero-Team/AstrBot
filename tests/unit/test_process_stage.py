@@ -149,7 +149,9 @@ def _stage(
         astrbot_config={"provider_settings": {"enable": provider_enabled}}
     )
     stage.star_request_sub_stage = FakeSubStage(star_responses or [])
-    stage.agent_sub_stage = FakeSubStage(agent_responses or [])
+    stage.conversation_loop = FakeSubStage(agent_responses or [])
+    # Keep the alias while these tests describe the previous request-path name.
+    stage.agent_sub_stage = stage.conversation_loop
     return stage
 
 

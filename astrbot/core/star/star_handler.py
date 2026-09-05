@@ -10,7 +10,7 @@ from .star import PluginRegistry
 T = TypeVar("T", bound="StarHandlerMetadata")
 
 
-class HandlerRegistry[T: "StarHandlerMetadata"]:
+class HandlerRegistry[T: StarHandlerMetadata]:
     """Runtime-owned catalog of materialized plugin handlers."""
 
     def __init__(self, plugins: PluginRegistry) -> None:

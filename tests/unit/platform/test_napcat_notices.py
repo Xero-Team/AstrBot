@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from tests.unit.platform.napcat_adapter_support import *  # noqa: F403

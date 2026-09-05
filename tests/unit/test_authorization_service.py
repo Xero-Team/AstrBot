@@ -1566,6 +1566,112 @@ async def test_high_risk_allow_fails_closed_when_audit_queue_is_full(authorizati
 
 
 @pytest.mark.asyncio
+async def test_btw_work_elevation_allows_high_risk_tools_for_im_operators(
+    authorization,
+):
+    """BTW work-loop engagement elevates high-risk tool actions for IM operators.
+
+    The work loop is an explicit, user-initiated elevation equivalent to a
+    dashboard step-up.  Without the marker, an IM operator is denied high-risk
+    tool actions as dashboard-only; with the marker plus a per-profile
+    ``btw_elevated_actions`` set, the role check still applies and operators
+    may execute the listed actions.  Only the actions in the set are lifted:
+    unlisted tool actions and non-tool high-risk actions stay dashboard-only.
+    """
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    shell_resource = Resource.named(
+        "tool", "astrbot_execute_shell", config_id="default"
+    )
+    file_resource = Resource.named(
+        "tool", "astrbot_file_write_tool", config_id="default"
+    )
+    # Like every real IM event (see waking_check/stage.py), the auth context
+    # is bound to its inbound session, so the upstream ``origin_session``
+    # required-context gate is satisfied before the step-up/BTW branch.
+    session_resource = Resource.session("default", "napcat:FriendMessage:napcat!bot!42")
+
+    def _btw_context(**metadata) -> AuthContext:
+        return AuthContext(
+            subject=subject,
+            source="im",
+            config_id="default",
+            authenticated=subject.authenticated,
+            origin_session_resource_id=session_resource.id,
+            metadata=metadata,
+        )
+
+    # Without the marker, an IM operator is denied high-risk tool actions.
+    denied = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        shell_resource,
+        _btw_context(),
+    )
+    assert not denied.allowed
+    assert denied.reason == "high_risk_dashboard_only"
+
+    # With the marker and the action listed, an operator may execute it.
+    elevated = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        shell_resource,
+        _btw_context(
+            btw_work_elevation=True,
+            btw_elevated_actions=("tool.local_exec",),
+        ),
+    )
+    assert elevated.allowed
+
+    # A tool action not in the per-profile set is not lifted, even with the
+    # work-loop marker present.
+    unlisted = await authorization.authorize(
+        subject,
+        "tool.file_write",
+        file_resource,
+        _btw_context(
+            btw_work_elevation=True,
+            btw_elevated_actions=("tool.local_exec",),
+        ),
+    )
+    assert not unlisted.allowed
+    assert unlisted.reason == "high_risk_dashboard_only"
+
+    # An empty elevation set denies every high-risk tool action.
+    empty_set = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        shell_resource,
+        _btw_context(btw_work_elevation=True, btw_elevated_actions=()),
+    )
+    assert not empty_set.allowed
+    assert empty_set.reason == "high_risk_dashboard_only"
+
+    # Non-tool high-risk actions are never lifted by the work-loop marker.
+    non_tool_denied = await authorization.authorize(
+        subject,
+        "provider.credentials.write",
+        Resource.instance("default"),
+        _btw_context(
+            btw_work_elevation=True,
+            btw_elevated_actions=("tool.local_exec",),
+        ),
+    )
+    assert not non_tool_denied.allowed
+    assert non_tool_denied.reason == "high_risk_dashboard_only"
+
+
+@pytest.mark.asyncio
 async def test_binding_mutations_write_audit_records(authorization):
     owner = Subject.im(platform_instance="napcat", bot_account_id="bot", sender_id="42")
     target = Subject.im(

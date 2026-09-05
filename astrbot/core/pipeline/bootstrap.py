@@ -1,7 +1,5 @@
 """The immutable built-in pipeline stage order."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 from .stage import Stage

@@ -1,7 +1,5 @@
 """In-app VitePress pages must keep the Dashboard /help/ base."""
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

@@ -126,6 +126,14 @@ docker compose logs -f astrbot
 
 发布 `6199` 并不会自动让 OneBot 入口监听外部接口。仅当 OneBot 客户端位于 AstrBot 容器之外时，才把该平台的 `ws_reverse_host` 改为 `0.0.0.0`；同时配置 `ws_reverse_token`，并限制端口的网络访问范围。
 
+## 镜像内的开发 CLI 与主机权限
+
+源码构建的 AstrBot 镜像预装 Claude Code 的 `claude` CLI 和 OpenAI Codex CLI，定位是容器内开发工具，不是 AstrBot 内置 Agent Runner。BTW 对话循环不会获得 Shell、文件或沙箱工具；插件 LLM 工具和 MCP 工具也默认只在工作循环可用。外部插件仍可直接启动这些 CLI，因此只安装可信插件，并检查其 BTW 循环分配和工作目录。
+
+不要把 Claude Code、Codex 或其他服务的长期凭据提交到仓库或烘焙进镜像层。若使用 `.docker-local/` 向 `/root` 提供本地配置，要确认该目录未被提交、构建产物不会被分发，并按最小权限管理凭据和可写工作区。
+
+`compose-with-napcat.yml` 默认把 `/var/run/docker.sock` 挂载到 AstrBot 容器，以支持需要 Docker 的本地能力。能够访问该 socket 的进程通常可以获得接近宿主机 root 的控制权；如果不使用这类能力，请删除该挂载。保留时应把 Dashboard、管理员账号和插件安装权限视为高权限管理面。
+
 ## 同时启动 AstrBot 和 NapCat
 
 当前文件还为 NapCat 设置了 `MODE=astrbot`。该模式会在 NapCat 每次启动时写入一个连接 `ws://astrbot:6199/ws` 的**反向** WebSocket 客户端。如果要使用 AstrBot 当前推荐的独立 `NapCat` 平台，请先将它改成：

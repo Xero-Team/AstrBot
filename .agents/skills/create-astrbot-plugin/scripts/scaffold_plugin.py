@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Create a minimal AstrBot plugin from the current source checkout."""
 
-from __future__ import annotations
-
 import argparse
 import keyword
 import re

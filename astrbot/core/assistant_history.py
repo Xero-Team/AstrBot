@@ -5,8 +5,6 @@ only the user-visible assistant history that is safe to persist after a
 platform has accepted the corresponding message submission.
 """
 
-from __future__ import annotations
-
 import asyncio
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping, Sequence

@@ -1,7 +1,5 @@
 """Frozen action, relation, and risk registry for authorization v1/v2."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from enum import StrEnum
 

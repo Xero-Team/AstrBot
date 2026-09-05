@@ -139,6 +139,14 @@ Its default mount and published ports are:
 
 Publishing `6199` does not change the OneBot listener address. Only set that platform's `ws_reverse_host` to `0.0.0.0` when its OneBot client runs outside the AstrBot container. Also configure `ws_reverse_token` and restrict network access to the port.
 
+## Development CLIs and Host Privileges
+
+The source-built AstrBot image preinstalls the Claude Code `claude` CLI and the OpenAI Codex CLI as development tools; neither is a built-in AstrBot Agent Runner. The BTW conversation loop does not receive shell, filesystem, or sandbox tools, while plugin LLM tools and MCP tools default to the work loop. External plugins can still launch these CLIs directly, so install only trusted plugins and review their BTW loop assignment and working directory.
+
+Do not commit long-lived Claude Code, Codex, or other service credentials to the repository or bake them into image layers. If you use `.docker-local/` to place local configuration under `/root`, verify that it remains uncommitted, that the resulting image is not distributed, and that credentials and writable workspaces follow least privilege.
+
+`compose-with-napcat.yml` mounts `/var/run/docker.sock` into the AstrBot container by default for local capabilities that need Docker. A process with access to that socket can usually gain near-root control of the host. Remove the mount when those capabilities are not needed; otherwise treat Dashboard access, administrator accounts, and plugin installation as a privileged management surface.
+
 ## Start AstrBot and NapCat Together
 
 The file currently also sets NapCat `MODE=astrbot`. On every NapCat startup, that mode writes a **reverse** WebSocket client targeting `ws://astrbot:6199/ws`. To use AstrBot's currently recommended dedicated `NapCat` platform, change it first to:

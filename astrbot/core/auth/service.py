@@ -1,7 +1,5 @@
 """Runtime-owned authorization, audit, and Dashboard step-up service."""
 
-from __future__ import annotations
-
 import asyncio
 import hashlib
 import secrets
@@ -1482,49 +1480,83 @@ class AuthorizationService:
             )
         step_up_id: str | None = None
         if _requires_step_up(action, resource, context):
-            if context.source not in {"dashboard", "webchat"}:
-                return Decision(
-                    False,
-                    subject,
-                    action,
-                    resource,
-                    role,
-                    "high_risk_dashboard_only",
-                    audit_id=audit_id,
-                    matched_relations=tuple(item.relation.value for item in matched),
-                    relation_sources=tuple(item.source for item in matched),
-                )
-            if context.source == "webchat" and (
-                subject.kind != "dashboard-account"
-                or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
-                or not context.authenticated
-                or context.origin_session_resource_id is None
-            ):
-                return Decision(
-                    False,
-                    subject,
-                    action,
-                    resource,
-                    role,
-                    "high_risk_dashboard_only",
-                    audit_id=audit_id,
-                    matched_relations=tuple(item.relation.value for item in matched),
-                    relation_sources=tuple(item.source for item in matched),
-                )
-            step_up_id = _webchat_step_up_cached(context, action)
-            if step_up_id is None:
+            if context.source == "dashboard":
                 step_up_id = await self._consume_step_up(
                     subject, action, resource, context
                 )
-            if step_up_id is None:
+                if step_up_id is None:
+                    return Decision(
+                        False,
+                        subject,
+                        action,
+                        resource,
+                        role,
+                        "step_up_required",
+                        requires_step_up=True,
+                        audit_id=audit_id,
+                    )
+            elif context.metadata.get(
+                "btw_work_elevation"
+            ) and action in context.metadata.get("btw_elevated_actions", ()):
+                # The BTW work loop is an explicit, user-initiated elevation
+                # for high-risk tool execution (shell, computer, file, browser)
+                # and is equivalent to a dashboard step-up.  The role check
+                # above already restricted these ``tool.*`` actions to
+                # operators/root, so the work loop may execute them without a
+                # fresh interactive dashboard step-up.  The per-profile
+                # ``btw_elevated_actions`` set selects which high-risk tool
+                # actions the work loop elevates; unlisted tool actions and
+                # non-tool high-risk actions (system/identity/extension
+                # management) fall through to the dashboard-only deny.
+                pass
+            elif context.source == "webchat":
+                if (
+                    subject.kind != "dashboard-account"
+                    or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                    or not context.authenticated
+                    or context.origin_session_resource_id is None
+                ):
+                    return Decision(
+                        False,
+                        subject,
+                        action,
+                        resource,
+                        role,
+                        "high_risk_dashboard_only",
+                        audit_id=audit_id,
+                        matched_relations=tuple(
+                            item.relation.value for item in matched
+                        ),
+                        relation_sources=tuple(item.source for item in matched),
+                    )
+                step_up_id = _webchat_step_up_cached(context, action)
+                if step_up_id is None:
+                    step_up_id = await self._consume_step_up(
+                        subject, action, resource, context
+                    )
+                if step_up_id is None:
+                    return Decision(
+                        False,
+                        subject,
+                        action,
+                        resource,
+                        role,
+                        "step_up_required",
+                        requires_step_up=True,
+                        audit_id=audit_id,
+                        matched_relations=tuple(
+                            item.relation.value for item in matched
+                        ),
+                        relation_sources=tuple(item.source for item in matched),
+                    )
+            else:
                 return Decision(
                     False,
                     subject,
                     action,
                     resource,
                     role,
-                    "step_up_required",
-                    requires_step_up=True,
+                    "high_risk_dashboard_only",
                     audit_id=audit_id,
                     matched_relations=tuple(item.relation.value for item in matched),
                     relation_sources=tuple(item.source for item in matched),

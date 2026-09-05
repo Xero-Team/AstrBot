@@ -1,7 +1,5 @@
 """Download, stage, validate, and update plugin packages."""
 
-from __future__ import annotations
-
 import asyncio
 import os
 import tempfile

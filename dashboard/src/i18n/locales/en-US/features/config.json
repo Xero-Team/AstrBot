@@ -186,6 +186,41 @@
     "fileCount": "Files: {count}",
     "done": "Done"
   },
+  "pluginLoopSelector": {
+    "hint": "Plugin LLM tools default to Work only. You can explicitly allow Conversation only or both loops; plugin commands are outside this tool route.",
+    "plugin": "Plugin",
+    "loop": "Available loop",
+    "conversation": "Conversation only",
+    "work": "Work only",
+    "both": "Conversation and Work",
+    "empty": "There are no enabled non-system plugins."
+  },
+  "capabilityLoopSelector": {
+    "mcpHint": "MCP tools default to Work only. Expose a server to the conversation loop only when it is appropriate for chat-time use.",
+    "skillHint": "Skills default to both loops. Workspace Skills remain available only to the work loop.",
+    "capability": "Capability",
+    "loop": "Available loop",
+    "conversation": "Conversation only",
+    "work": "Work only",
+    "both": "Conversation and Work",
+    "emptyMcp": "There are no enabled MCP servers.",
+    "emptySkill": "There are no enabled Skills."
+  },
+  "btwElevatedActionsSelector": {
+    "hint": "The work loop reuses the conversation loop's permission subject and role. Toggle which high-risk tool actions the work loop may auto-elevate for operator/root subjects. Unlisted actions are denied as dashboard-only; the role check still applies.",
+    "action": "High-risk tool action",
+    "workLoop": "Work loop",
+    "conversationLoop": "Conversation loop",
+    "conversationLocked": "The conversation loop hard-disables local, sandbox, browser, and filesystem tools. High-risk tools can only run in the work loop.",
+    "actions": {
+      "tool.local_exec": "Shell execution",
+      "tool.python_exec": "Python execution",
+      "tool.file_write": "File write / edit / upload / download",
+      "tool.browser_control": "Browser control",
+      "tool.mcp_write": "MCP write (mutating tool calls)",
+      "tool.computer_use": "Computer use (CUA)"
+    }
+  },
   "unsavedChangesWarning": {
     "dialogTitle": "Unsaved changes",
     "leavePage": "You have unsaved changes. Do you want to save before leaving?",

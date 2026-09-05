@@ -6,8 +6,6 @@ context stays internal; this module adapts its narrowly scoped operations into
 plugin-facing capabilities.
 """
 
-from __future__ import annotations
-
 import inspect
 import logging
 from collections.abc import Awaitable, Callable, Sequence

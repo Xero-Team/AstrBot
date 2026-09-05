@@ -63,6 +63,32 @@
         @update:model-value="emitUpdate"
       />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_plugin_loop_routes'">
+      <PluginLoopSelector
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'select_mcp_loop_routes'">
+      <CapabilityLoopSelector
+        kind="mcp"
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'select_skill_loop_routes'">
+      <CapabilityLoopSelector
+        kind="skill"
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'select_btw_elevated_actions'">
+      <BtwElevatedActionsSelector
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
     </template>
@@ -306,6 +332,9 @@ import ProviderSelector from './ProviderSelector.vue';
 import PersonaSelector from './PersonaSelector.vue';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import PluginSetSelector from './PluginSetSelector.vue';
+import PluginLoopSelector from './PluginLoopSelector.vue';
+import CapabilityLoopSelector from './CapabilityLoopSelector.vue';
+import BtwElevatedActionsSelector from './BtwElevatedActionsSelector.vue';
 import T2ITemplateEditor from './T2ITemplateEditor.vue';
 import DashboardTotpManager from './DashboardTotpManager.vue';
 import { computed, ref } from 'vue';

@@ -4,8 +4,6 @@ LLM locks may split by sender. Group outbound is serialized per UMO for the
 whole concurrent turn. History merging lives in AssistantHistoryCommitter.
 """
 
-from __future__ import annotations
-
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator

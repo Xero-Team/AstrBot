@@ -1,7 +1,5 @@
 """Lifecycle ownership for loaded plugin runtimes."""
 
-from __future__ import annotations
-
 import asyncio
 import copy
 import os

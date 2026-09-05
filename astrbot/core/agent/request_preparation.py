@@ -4,8 +4,6 @@ This is deliberately a pure-at-the-object-boundary step: callers receive a new
 ``ProviderRequest`` and their request object and lists remain unchanged.
 """
 
-from __future__ import annotations
-
 from copy import deepcopy
 from dataclasses import replace
 from typing import TYPE_CHECKING, Literal

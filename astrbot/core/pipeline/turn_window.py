@@ -1,7 +1,5 @@
 """Bounded inbound turn windows for optional DM coalescing."""
 
-from __future__ import annotations
-
 import asyncio
 import copy
 from collections import OrderedDict

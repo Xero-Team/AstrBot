@@ -10,6 +10,7 @@ import astrbot.core.pipeline.process_stage as process_stage_pkg
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.star.star_handler import EventType
 
 _original_process_stage_module = sys.modules.get(
     "astrbot.core.pipeline.process_stage.stage"
@@ -213,7 +214,9 @@ async def test_star_request_process_non_wake_error_stops_without_user_facing_res
     async def fake_call_handler(event_arg, handler_obj, **params):
         if False:
             yield None
-        raise RuntimeError("broken handler")
+        raise RuntimeError(
+            "broken handler password=top-secret https://internal.example.test/private"
+        )
 
     on_plugin_error = AsyncMock(return_value=False)
     monkeypatch.setattr(star_request, "call_handler", fake_call_handler)
@@ -223,6 +226,57 @@ async def test_star_request_process_non_wake_error_stops_without_user_facing_res
 
     assert yielded == []
     on_plugin_error.assert_awaited_once()
+    traceback_text = on_plugin_error.await_args.args[5]
+    assert "top-secret" not in traceback_text
+    assert "https://internal.example.test" not in traceback_text
     assert event.result_history == []
     assert event.clear_result_calls == 0
+    assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
+async def test_star_request_process_redacts_im_reply_and_hook_traceback(monkeypatch):
+    stage, catalogs = _stage_with_runtime()
+    handler = _handler_meta("boom")
+    event = FakeEvent(
+        {"activated_handlers": [handler], "handlers_parsed_params": {}},
+        at_or_wake=True,
+    )
+    raised = RuntimeError(
+        "boom password=top-secret https://internal.example.test/private"
+    )
+
+    _publish_plugin(catalogs, "plugin.module")
+
+    async def fake_call_handler(event_arg, handler_obj, **params):
+        if False:
+            yield None
+        raise raised
+
+    on_plugin_error = AsyncMock(return_value=False)
+    monkeypatch.setattr(star_request, "call_handler", fake_call_handler)
+    monkeypatch.setattr(star_request, "call_event_hook", on_plugin_error)
+
+    yielded = [item async for item in stage.process(event)]
+
+    assert yielded == [None]
+    on_plugin_error.assert_awaited_once()
+    hook_args = on_plugin_error.await_args.args
+    assert hook_args[1] is EventType.OnPluginErrorEvent
+    assert hook_args[2] == "demo-plugin"
+    assert hook_args[3] == "boom"
+    assert hook_args[4] is raised
+    traceback_text = hook_args[5]
+    assert "top-secret" not in traceback_text
+    assert "https://internal.example.test" not in traceback_text
+    assert "password=[REDACTED]" in traceback_text
+    assert "[REDACTED_URL]" in traceback_text
+    im_text = event.result_history[-1].get_plain_text()
+    assert im_text.startswith(
+        ":(\n\n在调用插件 demo-plugin 的处理函数 boom 时出现异常："
+    )
+    assert "top-secret" not in im_text
+    assert "https://internal.example.test" not in im_text
+    assert "password=[REDACTED]" in im_text
+    assert "[REDACTED_URL]" in im_text
     assert event.is_stopped() is True

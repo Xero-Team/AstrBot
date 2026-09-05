@@ -469,7 +469,7 @@ async def on_plugin_unloaded(self, metadata):
 
 #### 插件处理消息异常时
 
-插件的消息处理函数抛出异常时，会触发 `on_plugin_error` 钩子。它会传入当前事件、插件名、处理函数名、异常对象和格式化后的回溯文本。
+插件的消息处理函数抛出异常时，会触发 `on_plugin_error` 钩子。它会传入当前事件、插件名、处理函数名、原始异常对象，以及经过 `redact_sensitive_text` 的回溯文本。默认发到当前会话的插件错误提示使用 `safe_error`，不会带上原始凭据、URL 或绝对路径。示例中打印的 `traceback_text` 已脱敏，不是原始堆栈。
 
 ```python
 from astrbot.api.event import AstrMessageEvent, filter

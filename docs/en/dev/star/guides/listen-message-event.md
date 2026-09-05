@@ -471,7 +471,7 @@ async def on_plugin_unloaded(self, metadata):
 
 #### On Plugin Message-Handler Error
 
-The `on_plugin_error` hook runs when a plugin message handler raises an exception. It receives the current event, plugin name, handler name, exception object, and formatted traceback text.
+The `on_plugin_error` hook runs when a plugin message handler raises an exception. It receives the current event, plugin name, handler name, the original exception object, and traceback text that has already passed through `redact_sensitive_text`. The default plugin-error message sent to the current session uses `safe_error` and does not include raw credentials, URLs, or absolute paths. The `traceback_text` printed in the example is redacted, not a raw dump.
 
 ```python
 from astrbot.api.event import AstrMessageEvent, filter

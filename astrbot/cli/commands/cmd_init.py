@@ -3,7 +3,11 @@ import os
 from pathlib import Path
 
 import click
-from filelock import FileLock, Timeout
+
+from astrbot.runtime_instance_lock import (
+    RuntimeInstanceLockHeld,
+    runtime_instance_lock,
+)
 
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 
@@ -66,22 +70,24 @@ def init(yes: bool) -> None:
     click.echo("Initializing AstrBot...")
 
     astrbot_root = get_astrbot_root()
-    lock_file = astrbot_root / "astrbot.lock"
-    lock = FileLock(lock_file, timeout=5)
+    if not yes and not (astrbot_root / ".astrbot").exists():
+        click.confirm(
+            f"Install AstrBot to this directory? {astrbot_root}",
+            default=True,
+            abort=True,
+        )
 
     try:
-        with lock.acquire():
+        with runtime_instance_lock(astrbot_root / "data"):
             asyncio.run(
                 initialize_astrbot(
                     astrbot_root,
-                    confirm_install_directory=not yes,
+                    confirm_install_directory=False,
                 )
             )
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
-    except Timeout:
-        raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
-        )
+    except RuntimeInstanceLockHeld as exc:
+        raise click.ClickException(str(exc)) from None
 
     except Exception as e:
         raise click.ClickException(f"Initialization failed: {e!s}")

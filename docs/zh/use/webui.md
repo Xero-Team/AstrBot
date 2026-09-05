@@ -194,7 +194,7 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 受保护路径单独授权：
 
 - `plugins/` 默认只读，删除或写入需要 root 的 `filesystem.manage` step-up。
-- `dist/`、`site-packages/` 和正在使用的数据库及其 WAL/SHM 始终不可写。
+- `dist/`、`site-packages/`、`astrbot.lock` 和正在使用的数据库及其 WAL/SHM 始终不可写。
 - `cmd_config.json` 和 `config/` 的原文读取仅限 root；普通配置仍应走结构化配置页。
 - demo mode 只读。
 - API Key 不能访问该页面。

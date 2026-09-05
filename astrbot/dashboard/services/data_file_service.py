@@ -20,6 +20,7 @@ from typing import Any
 from starlette.datastructures import UploadFile
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.runtime_instance_lock import LOCK_FILENAME
 
 DATA_TEXT_MAX_BYTES = 1024 * 1024
 DATA_UPLOAD_MAX_BYTES = 32 * 1024 * 1024
@@ -100,6 +101,7 @@ _SENSITIVE_ROOT_FILES = {
 _SENSITIVE_DIRS = {"config", "backups", "webchat"}
 _TEMPORARY_DIRS = {"temp", "attachments", "logs"}
 _HARD_READONLY_DIRS = {"dist", "site-packages"}
+_HARD_READONLY_ROOT_FILES = {LOCK_FILENAME}
 
 
 def _decode_utf8(data: bytes) -> str | None:
@@ -283,6 +285,8 @@ class DataFileService:
             return "system", True, True
         if any(part in _HARD_READONLY_DIRS for part in lower_parts):
             return "system", True, True
+        if len(lower_parts) == 1 and lower_parts[0] in _HARD_READONLY_ROOT_FILES:
+            return "system", True, True
         if lower_parts and lower_parts[0] == "plugins":
             return "system", True, False
         if name in _DATABASE_NAMES or name.endswith(_DATABASE_SUFFIXES):
@@ -326,6 +330,7 @@ class DataFileService:
         name = parts[-1]
         return bool(
             any(part in (_HARD_READONLY_DIRS | {"plugins"}) for part in parts)
+            or (len(parts) == 1 and parts[0] in _HARD_READONLY_ROOT_FILES)
             or (parts and parts[0] in _SENSITIVE_DIRS)
             or name in _SENSITIVE_ROOT_FILES
             or name in _DATABASE_NAMES
@@ -343,6 +348,7 @@ class DataFileService:
         name = parts[-1]
         return bool(
             any(part in _HARD_READONLY_DIRS for part in parts)
+            or (len(parts) == 1 and parts[0] in _HARD_READONLY_ROOT_FILES)
             or name in _DATABASE_NAMES
             or name.endswith(_DATABASE_SUFFIXES)
             or (

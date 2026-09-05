@@ -8,6 +8,11 @@ import astrbot.cli.utils.plugin as plugin_utils
 from astrbot.cli.commands.cmd_plug import plug
 
 
+@pytest.fixture(autouse=True)
+def _clear_astrbot_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ASTRBOT_ROOT", raising=False)
+
+
 def _write_plugin(path: Path, name: str = "astrbot_plugin_local_demo") -> None:
     path.mkdir(parents=True)
     (path / "metadata.yaml").write_text(

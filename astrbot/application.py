@@ -33,6 +33,10 @@ from astrbot.core.utils.io import (
     should_use_bundled_dashboard_dist,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
+from astrbot.runtime_instance_lock import (
+    RuntimeInstanceLockHeld,
+    runtime_instance_lock,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,11 +57,16 @@ _LOGO = r"""
 """
 
 
-def prepare_runtime_environment() -> None:
-    """Prepare runtime paths after bootstrap and before service construction."""
+def require_supported_python() -> None:
+    """Exit if this process is not running Python 3.14+."""
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 14):
         logger.error("请使用 Python3.14+ 运行本项目。")
         raise SystemExit(1)
+
+
+def prepare_runtime_environment() -> None:
+    """Prepare runtime paths after bootstrap and before service construction."""
+    require_supported_python()
 
     astrbot_root = get_astrbot_root()
     if astrbot_root not in sys.path:
@@ -159,18 +168,29 @@ async def resolve_dashboard_assets(webui_dir: str | None = None) -> str | None:
 
 async def run_application(options: ApplicationOptions) -> None:
     """Create and supervise one complete AstrBot runtime instance."""
-    prepare_runtime_environment()
-    webui_dir = await resolve_dashboard_assets(options.webui_dir)
-    if webui_dir is None:
-        logger.warning(
-            "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请构建当前 checkout 的 dashboard/dist，运行 "
-            "scripts/sync_dashboard_dist.py，或手动指定 --webui-dir。",
-        )
+    require_supported_python()
+    data_dir = Path(get_astrbot_data_path())
+    try:
+        with runtime_instance_lock(data_dir):
+            prepare_runtime_environment()
+            webui_dir = await resolve_dashboard_assets(options.webui_dir)
+            if webui_dir is None:
+                logger.warning(
+                    "管理面板文件检查失败，WebUI 功能将不可用。"
+                    "请构建当前 checkout 的 dashboard/dist，运行 "
+                    "scripts/sync_dashboard_dist.py，或手动指定 --webui-dir。",
+                )
 
-    log_broker = LogBroker()
-    LogManager.set_queue_handler(logger, log_broker)
-    services = create_runtime_services()
-    logger.info(_LOGO)
-    loader = InitialLoader(services, log_broker, webui_dir=webui_dir)
-    await loader.start()
+            log_broker = LogBroker()
+            LogManager.set_queue_handler(logger, log_broker)
+            services = create_runtime_services()
+            logger.info(_LOGO)
+            loader = InitialLoader(services, log_broker, webui_dir=webui_dir)
+            await loader.start()
+    except RuntimeInstanceLockHeld as exc:
+        logger.error(
+            "Cannot acquire runtime lock at %s. Another AstrBot instance "
+            "already owns this data directory.",
+            exc.lock_path,
+        )
+        raise

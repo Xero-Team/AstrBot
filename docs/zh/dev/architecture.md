@@ -38,12 +38,22 @@ outline: deep
 `RuntimeServices` 持有一个 AstrBot 进程共享的基础能力：
 
 - `AstrBotConfig`
+- `RuntimeCatalogs`
 - `SQLiteDatabase`
 - `SharedPreferences`
 - 本地 Playwright `HtmlRenderer`
 - `FileTokenService`
 - `PipInstaller`
+- `WebChatQueueManager`
+- `WebChatRunCoordinator`
+- `FollowUpCoordinator`
+- `LLMMetadataCatalog`
+- `MetricsRuntime`
+- `ComputerRuntime`
+- `ToolImageCache`
+- `TotpRuntimeState`
 - demo mode 状态
+- `AuthorizationService`
 
 `AstrBotCoreLifecycle` 在这些基础服务之上按依赖顺序创建 Provider、Platform、Conversation、Persona、Memory、Knowledge Base、Cron、Plugin、SubAgent 和 Pipeline 等管理器。需要共享这些能力时，应通过现有所有者注入，不要恢复进程级全局单例。
 

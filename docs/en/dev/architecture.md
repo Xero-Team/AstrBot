@@ -38,12 +38,22 @@ The source and CLI entry points have different preparation paths, but both event
 `RuntimeServices` owns capabilities shared by one AstrBot process:
 
 - `AstrBotConfig`
+- `RuntimeCatalogs`
 - `SQLiteDatabase`
 - `SharedPreferences`
 - the local Playwright `HtmlRenderer`
 - `FileTokenService`
 - `PipInstaller`
+- `WebChatQueueManager`
+- `WebChatRunCoordinator`
+- `FollowUpCoordinator`
+- `LLMMetadataCatalog`
+- `MetricsRuntime`
+- `ComputerRuntime`
+- `ToolImageCache`
+- `TotpRuntimeState`
 - demo-mode state
+- `AuthorizationService`
 
 `AstrBotCoreLifecycle` builds Provider, Platform, Conversation, Persona, Memory, Knowledge Base, Cron, Plugin, SubAgent, and Pipeline managers on top of those services in dependency order. Pass shared capabilities through their existing owners; do not restore process-global service singletons.
 

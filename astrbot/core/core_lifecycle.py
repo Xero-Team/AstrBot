@@ -735,13 +735,11 @@ class AstrBotCoreLifecycle:
         flush. ``InitialLoader`` then runs ``stop()`` once and calls
         ``ProcessRebooter.reboot``.
         """
+        if not self._initialized:
+            raise RuntimeError("AstrBot core lifecycle is not initialized")
         dashboard_shutdown_event = self.dashboard_shutdown_event
-        if (
-            self.provider_manager is None
-            or self.platform_manager is None
-            or self.kb_manager is None
-            or dashboard_shutdown_event is None
-        ):
+        process_rebooter = self.process_rebooter
+        if dashboard_shutdown_event is None or process_rebooter is None:
             raise RuntimeError("AstrBot core lifecycle is not initialized")
 
         self.reboot_requested = True

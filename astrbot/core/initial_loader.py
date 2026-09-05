@@ -99,5 +99,9 @@ class InitialLoader:
             if lifecycle.reboot_requested:
                 process_rebooter = lifecycle.process_rebooter
                 if process_rebooter is None:
-                    raise RuntimeError("AstrBot core lifecycle is not initialized")
-                process_rebooter.reboot(delay=0)
+                    logger.error(
+                        "Restart was requested without a process rebooter; "
+                        "skipping process replace"
+                    )
+                else:
+                    process_rebooter.reboot(delay=0)

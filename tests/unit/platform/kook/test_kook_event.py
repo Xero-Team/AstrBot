@@ -91,6 +91,16 @@ from tests.unit.platform.kook.shared import (
             None,
         ),
         (
+            Mention(target="all"),
+            "test mention sentinel",
+            OrderMessage(
+                index=1,
+                text="@all",
+                type=KookMessageType.KMARKDOWN,
+            ),
+            None,
+        ),
+        (
             MentionAll(),
             "test atAll",
             OrderMessage(

@@ -181,3 +181,12 @@ async def test_satori_outbound_mention_all_uses_type_all():
 
     assert payload == '<at type="all"/>'
     assert user == '<at id="u1"/>'
+
+
+@pytest.mark.asyncio
+async def test_satori_outbound_mention_target_all_is_plain_text():
+    payload = await SatoriPlatformEvent._convert_component_to_satori_static(
+        Mention(target="all")
+    )
+
+    assert payload == "@all"

@@ -82,6 +82,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if isinstance(segment, MentionAll):
             return {"type": "at", "data": {"qq": "all"}}
         if isinstance(segment, Mention):
+            if segment.is_everyone_sentinel():
+                return {"type": "text", "data": {"text": "@all"}}
             return {"type": "at", "data": {"qq": str(segment.target)}}
         return await segment.to_dict()
 

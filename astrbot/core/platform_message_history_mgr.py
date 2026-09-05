@@ -162,11 +162,11 @@ def _serialize_component(component: BaseMessageComponent) -> dict | None:
         return {"type": component.type.lower(), "text": f"[{component.type}]"}
     if isinstance(component, Mention):
         return {
-            "type": "at",
+            "type": "mention",
             "name": _bounded(getattr(component, "name", None), 256) or "user",
         }
     if isinstance(component, MentionAll):
-        return {"type": "at_all"}
+        return {"type": "mention_all"}
     if isinstance(component, Reply):
         return {
             "type": "reply",

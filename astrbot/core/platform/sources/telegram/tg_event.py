@@ -270,7 +270,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 has_reply = True
                 reply_message_id = i.id
             elif isinstance(i, Mention):
-                at_user_id = i.name
+                at_user_id = i.name or str(i.target)
             elif isinstance(i, MentionAll):
                 mention_all = True
 

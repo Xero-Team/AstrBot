@@ -435,9 +435,9 @@ class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
                     typ = str(part.get("type", "unknown")).lower()
                     if typ == "plain":
                         texts.append(str(part.get("text", "")))
-                    elif typ == "at":
+                    elif typ in {"mention", "at"}:
                         texts.append(f"@{part.get('name', 'user')}")
-                    elif typ == "at_all":
+                    elif typ in {"mention_all", "at_all"}:
                         texts.append("@all")
                     elif typ == "reply":
                         texts.append(f"[Reply: {part.get('text', '')}]")

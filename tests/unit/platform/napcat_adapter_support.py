@@ -21,6 +21,8 @@ from astrbot.core.message.components import (
     Json,
     Location,
     Markdown,
+    Mention,
+    MentionAll,
     MFace,
     MiniApp,
     Music,

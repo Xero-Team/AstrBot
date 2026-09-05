@@ -394,6 +394,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if isinstance(component, MentionAll):
                 return '<at type="all"/>'
             if isinstance(component, Mention):
+                if component.is_everyone_sentinel():
+                    return "@all"
                 if component.target:
                     return f'<at id="{component.target}"/>'
                 if component.name:
@@ -489,6 +491,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if isinstance(component, MentionAll):
                 return '<at type="all"/>'
             if isinstance(component, Mention):
+                if component.is_everyone_sentinel():
+                    return "@all"
                 if component.target:
                     return f'<at id="{component.target}"/>'
                 if component.name:

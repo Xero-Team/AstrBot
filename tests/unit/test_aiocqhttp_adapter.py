@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.command import CommandCatalogStore
-from astrbot.core.message.components import Plain, Reply
+from astrbot.core.message.components import Mention, MentionAll, Plain, Reply
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
@@ -450,3 +450,18 @@ async def test_aiocqhttp_group_admin_role_stays_in_current_session(tmp_path):
     finally:
         await service.close()
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_outbound_mention_target_all_is_plain_text():
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+        AiocqhttpMessageEvent,
+    )
+
+    everyone = await AiocqhttpMessageEvent._from_segment_to_dict(MentionAll())
+    sentinel = await AiocqhttpMessageEvent._from_segment_to_dict(Mention(target="all"))
+    user = await AiocqhttpMessageEvent._from_segment_to_dict(Mention(target="10001"))
+
+    assert everyone == {"type": "at", "data": {"qq": "all"}}
+    assert sentinel == {"type": "text", "data": {"text": "@all"}}
+    assert user == {"type": "at", "data": {"qq": "10001"}}

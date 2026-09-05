@@ -1137,6 +1137,10 @@ class NapCatPlatformAdapter(Platform):
             fallback_parts.append("@all")
             return True
         if isinstance(component, Mention):
+            if component.is_everyone_sentinel():
+                segments.append(self.client.text("@all"))
+                fallback_parts.append("@all")
+                return True
             segments.append(self.client.at(component.target, name=component.name))
             fallback_parts.append(f"@{component.name or component.target}")
             return True

@@ -789,6 +789,27 @@ async def test_discord_parse_to_discord_keeps_long_content_and_reply_id():
     assert reference_message_id == "77"
 
 
+@pytest.mark.asyncio
+async def test_discord_parse_to_discord_emits_everyone_for_mention_all():
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+
+    content, files, view, embeds, reference_message_id = await event._parse_to_discord(
+        MessageChain(
+            chain=[
+                discord_platform_event.MentionAll(),
+                discord_platform_event.Mention(target="all"),
+                discord_platform_event.Plain(" hello"),
+            ]
+        )
+    )
+
+    assert content == "@everyone<@all> hello"
+    assert files == []
+    assert view is None
+    assert embeds == []
+    assert reference_message_id is None
+
+
 def _discord_adapter() -> DiscordPlatformAdapter:
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     adapter.config = {"id": "discord-test"}

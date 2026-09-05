@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.execution_context import CoreExecutionContext
-from astrbot.core.message.components import File, Image, Plain
+from astrbot.core.message.components import File, Image, Mention, MentionAll, Plain
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.pipeline.group_message_history.stage import GroupMessageHistoryStage
 from astrbot.core.platform.message_type import MessageType
@@ -105,6 +105,34 @@ async def test_group_history_sanitizes_media_and_retains_only_group_scope(temp_d
     ]
     assert "secret.example" not in str(rows[0].content)
     assert "/home/alice" not in str(rows[0].content)
+
+
+@pytest.mark.asyncio
+async def test_group_history_serializes_mentions_with_current_type_names(temp_db):
+    manager = PlatformMessageHistoryManager(temp_db)
+
+    await manager.insert_message_chain(
+        platform_id="onebot",
+        user_id="onebot:GroupMessage:group-1",
+        message_chain=MessageChain(
+            [Mention(target="10001", name="bob"), MentionAll(), Plain("hi")]
+        ),
+        role="user",
+        is_group=True,
+        sender_id="u1",
+        sender_name="Alice",
+    )
+
+    rows = await manager.get_group(
+        "onebot",
+        "onebot:GroupMessage:group-1",
+        limit=20,
+    )
+    assert rows[0].content["message"] == [
+        {"type": "mention", "name": "bob"},
+        {"type": "mention_all"},
+        {"type": "plain", "text": "hi"},
+    ]
 
 
 @pytest.mark.asyncio

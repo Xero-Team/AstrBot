@@ -364,7 +364,10 @@ class LarkMessageEvent(AstrMessageEvent):
             elif isinstance(comp, MentionAll):
                 _stage.append({"tag": "at", "user_id": "all", "style": []})
             elif isinstance(comp, Mention):
-                _stage.append({"tag": "at", "user_id": comp.target, "style": []})
+                if comp.is_everyone_sentinel():
+                    _stage.append({"tag": "md", "text": "@all"})
+                else:
+                    _stage.append({"tag": "at", "user_id": comp.target, "style": []})
             elif isinstance(comp, AstrBotImage):
                 if not comp.file:
                     logger.error("[Lark] 图片路径为空，无法上传")

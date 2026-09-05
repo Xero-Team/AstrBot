@@ -182,6 +182,24 @@ async def test_lark_convert_mention_all_uses_user_id_all():
 
 
 @pytest.mark.asyncio
+async def test_lark_convert_mention_target_all_is_plain_text():
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
+
+    result = await LarkMessageEvent._convert_to_lark(
+        MessageChain(chain=[Comp.Mention(target="all"), Comp.Plain("hi")]),
+        None,
+    )
+
+    assert result == [
+        [
+            {"tag": "md", "text": "@all"},
+            {"tag": "md", "text": "hi"},
+        ]
+    ]
+
+
+@pytest.mark.asyncio
 async def test_lark_parse_message_components_post_parses_mentions_links_and_images():
     adapter = _adapter()
 

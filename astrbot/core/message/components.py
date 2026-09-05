@@ -477,6 +477,14 @@ class Mention(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    def is_everyone_sentinel(self) -> bool:
+        """Return whether ``target`` is the reserved everyone marker.
+
+        Adapters must not map this value to a platform @everyone token.
+        Use MentionAll for everyone.
+        """
+        return str(self.target) == "all"
+
     async def to_dict(self) -> dict:
         return {
             "type": "mention",
@@ -791,7 +799,12 @@ class Node(BaseMessageComponent):
             elif isinstance(comp, MentionAll):
                 data_content.append({"type": "at", "data": {"qq": "all"}})
             elif isinstance(comp, Mention):
-                data_content.append({"type": "at", "data": {"qq": str(comp.target)}})
+                if comp.is_everyone_sentinel():
+                    data_content.append({"type": "text", "data": {"text": "@all"}})
+                else:
+                    data_content.append(
+                        {"type": "at", "data": {"qq": str(comp.target)}}
+                    )
             else:
                 d = await comp.to_dict()
                 data_content.append(d)

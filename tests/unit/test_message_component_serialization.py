@@ -105,6 +105,8 @@ def test_mention_rejects_qq_keyword():
 def test_mention_all_is_not_a_mention_subclass():
     assert not issubclass(MentionAll, Mention)
     assert not isinstance(MentionAll(), Mention)
+    assert Mention(target="all").is_everyone_sentinel() is True
+    assert Mention(target="10001").is_everyone_sentinel() is False
 
 
 def test_message_event_result_mention_builders():
@@ -140,3 +142,19 @@ async def test_node_to_dict_maps_mentions_to_onebot_at():
             ],
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_node_to_dict_does_not_map_mention_target_all_to_everyone():
+    node = Node(
+        uin="10001",
+        name="Mock Sender",
+        content=[Mention(target="all"), Plain(text="hi")],
+    )
+
+    payload = await node.to_dict()
+
+    assert payload["data"]["content"] == [
+        {"type": "text", "data": {"text": "@all"}},
+        {"type": "text", "data": {"text": "hi"}},
+    ]

@@ -135,6 +135,8 @@ class KookEvent(AstrMessageEvent):
             case Plain():
                 return handle_plain(index, message_component.text)
             case Mention():
+                if message_component.is_everyone_sentinel():
+                    return handle_plain(index, "@all")
                 return handle_plain(index, f"(met){message_component.target}(met)")
             case MentionAll():
                 return handle_plain(index, "(met)all(met)")

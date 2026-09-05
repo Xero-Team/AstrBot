@@ -63,7 +63,10 @@ from astrbot.api.event import AstrMessageEvent, filter
 @filter.command("picture")
 async def picture(self, event: AstrMessageEvent):
     chain = [
-        Comp.Mention(target=event.get_sender_id()),
+        Comp.Mention(
+            target=event.get_sender_id(),
+            name=event.get_sender_name(),
+        ),
         Comp.Plain("来看这张图片："),
         Comp.Image.fromURL("https://example.com/image.jpg"),
         Comp.Image.fromFileSystem("path/to/image.jpg"),
@@ -83,7 +86,7 @@ yield (
 yield event.make_result().mention_all().message("全体注意")
 ```
 
-`MentionAll` 是独立类型，不要写 `Mention(target="all")`。部分平台会把全体提及降级成文本，例如 LINE、Telegram、Mattermost 发出 `@all`；QQ 官方机器人会忽略 `MentionAll`。
+`MentionAll` 是独立类型，不要写 `Mention(target="all")`。部分平台会把全体提及降级成文本，例如 LINE、Telegram、Mattermost 发出 `@all`；QQ 官方机器人会忽略 `MentionAll`。出站时 `Mention(target="all")` 也不是全体：OneBot、NapCat、飞书、Satori、KOOK 会把它降级成普通文本 `@all`，不会发平台的全体标记。部分适配器只用 `name` 渲染 `@`，构造 `Mention` 时请同时写 `name` 和 `target`。
 
 部分平台会拆分或降级不支持的组件。OneBot 适配器还可能清理纯文本首尾空白；确实
 需要保留时，可以在文本边界加入零宽空格 `\u200b`。OneBot v11 与 NapCat 把文件、

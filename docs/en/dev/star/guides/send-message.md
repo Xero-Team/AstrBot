@@ -70,7 +70,10 @@ from astrbot.api.event import AstrMessageEvent, filter
 @filter.command("picture")
 async def picture(self, event: AstrMessageEvent):
     chain = [
-        Comp.Mention(target=event.get_sender_id()),
+        Comp.Mention(
+            target=event.get_sender_id(),
+            name=event.get_sender_name(),
+        ),
         Comp.Plain("Look at this image:"),
         Comp.Image.fromURL("https://example.com/image.jpg"),
         Comp.Image.fromFileSystem("path/to/image.jpg"),
@@ -90,7 +93,7 @@ yield (
 yield event.make_result().mention_all().message("everyone")
 ```
 
-`MentionAll` is a sibling type. Do not write `Mention(target="all")`. Some platforms degrade everyone-mentions to text (`@all` on LINE, Telegram, Mattermost). QQ Official drops `MentionAll`.
+`MentionAll` is a sibling type. Do not write `Mention(target="all")`. Some platforms degrade everyone-mentions to text (`@all` on LINE, Telegram, Mattermost). QQ Official drops `MentionAll`. Outbound `Mention(target="all")` is also not everyone: OneBot, NapCat, Lark, Satori, and KOOK degrade it to plain `@all` instead of the platform everyone token. Some adapters render `@` from `name`, so set both `name` and `target` when building a `Mention`.
 
 Some platforms split or degrade unsupported components. OneBot adapters may
 also trim leading and trailing whitespace from plain-text segments. If that

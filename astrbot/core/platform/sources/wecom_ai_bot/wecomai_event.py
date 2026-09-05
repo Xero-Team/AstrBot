@@ -94,7 +94,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 )
             elif isinstance(comp, Mention):
-                data = f"@{comp.name} "
+                data = f"@{comp.name or comp.target} "
                 await back_queue.put(
                     {
                         "type": "plain",
@@ -157,7 +157,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             if isinstance(comp, MentionAll):
                 plain_parts.append("@all ")
             elif isinstance(comp, Mention):
-                plain_parts.append(f"@{comp.name} ")
+                plain_parts.append(f"@{comp.name or comp.target} ")
             elif isinstance(comp, Plain):
                 plain_parts.append(comp.text)
         result = "".join(plain_parts)

@@ -85,6 +85,18 @@ async def test_wecom_ai_bot_convert_message_text_removes_bot_mention_and_marks_f
     assert result.message[1].text == "hello there"
 
 
+def test_wecom_ai_bot_extracts_mention_target_when_name_missing():
+    from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
+        WecomAIBotMessageEvent,
+    )
+
+    text = WecomAIBotMessageEvent._extract_plain_text_from_chain(
+        MessageChain(chain=[Mention(target="user-1"), Plain("hi")])
+    )
+
+    assert text == "@user-1 hi"
+
+
 @pytest.mark.asyncio
 async def test_wecom_ai_bot_convert_message_mixed_collects_text_and_images(monkeypatch):
     adapter = _adapter()

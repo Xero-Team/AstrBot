@@ -115,6 +115,8 @@ vi.mock('@/stores/customizer', () => ({
 
 vi.mock('@/components/platform/AddNewPlatform.vue', () => ({
   default: {
+    name: 'AddNewPlatform',
+    props: ['show', 'metadata', 'configData', 'requestStepUp'],
     template: '<div class="add-platform-stub"></div>',
   },
 }));
@@ -353,6 +355,14 @@ describe('view dialog layouts', () => {
     expect(
       document.body.querySelector('.computer-access-help-dialog__content'),
     ).not.toBeNull();
+
+    const addPlatform = wrapper.findComponent({ name: 'AddNewPlatform' });
+    expect(addPlatform.exists()).toBe(true);
+    expect(typeof addPlatform.props('requestStepUp')).toBe('function');
+    expect(
+      wrapper.findComponent({ name: 'DashboardStepUpDialog' }).exists(),
+    ).toBe(true);
+
     expect(hasCriticalRuntimeWarning(warnSpy.mock.calls)).toBe(false);
     expect(hasCriticalRuntimeWarning(errorSpy.mock.calls)).toBe(false);
 

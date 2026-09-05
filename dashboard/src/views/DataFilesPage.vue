@@ -7,14 +7,17 @@
           {{ tm('description') }}
         </p>
       </div>
-      <div class="d-flex ga-2 align-center">
+      <div class="inline-control-row">
         <v-text-field
           v-model="searchQuery"
+          class="control-search"
           :label="tm('search')"
           prepend-inner-icon="mdi-magnify"
           density="compact"
-          variant="outlined"
+          variant="solo-filled"
+          flat
           hide-details
+          single-line
           clearable
           @keyup.enter="runSearch"
         />

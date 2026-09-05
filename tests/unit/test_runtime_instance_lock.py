@@ -161,7 +161,8 @@ async def test_run_application_exits_before_services_when_lock_held(
         await run_application(ApplicationOptions())
 
     assert excinfo.value.lock_path == runtime_instance_lock_path(data_dir)
-    assert str(runtime_instance_lock_path(data_dir)) in caplog.text
+    assert str(runtime_instance_lock_path(data_dir)) not in caplog.text
+    assert "[REDACTED_PATH]" in caplog.text
     assert "already owns this data directory" in caplog.text
 
 
@@ -202,7 +203,8 @@ def test_cmd_run_fails_when_runtime_lock_held(
     assert result.exit_code == 1
     assert str(runtime_instance_lock_path(data_dir)) in result.output
     assert "another instance is running" in result.output
-    assert str(runtime_instance_lock_path(data_dir)) in caplog.text
+    assert str(runtime_instance_lock_path(data_dir)) not in caplog.text
+    assert "[REDACTED_PATH]" in caplog.text
     assert "already owns this data directory" in caplog.text
 
 

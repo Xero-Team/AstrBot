@@ -80,4 +80,6 @@ When diagnosing a problem, collect as much of the following as possible:
 - For Docker deployments, include the matching `docker logs` output.
 - Installed plugin list, and whether the issue still happens after disabling third-party plugins.
 
-Before sharing logs, redact API keys, tokens, cookies, private chat content, and other sensitive information.
+Stack traces in `astrbot.log` no longer include loguru local-variable dumps, and absolute paths in frames are replaced with `[REDACTED_PATH]`. The sink only redacts recognized patterns (secret fields, Bearer tokens, URLs, and absolute paths). Cookies, private chat content, and custom secrets are not guaranteed to be stripped.
+
+Before sharing logs, still review and redact API keys, tokens, cookies, private chat content, and other sensitive information.

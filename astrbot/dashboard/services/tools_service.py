@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import traceback
 from typing import Any
 
 from mcp.types import PromptReference, ResourceTemplateReference
@@ -49,7 +48,7 @@ class ToolsService:
                 return self.tool_mgr.save_mcp_config(rollback_config)
             return True
         except Exception:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to roll back MCP server %s", name)
             return False
 
     def get_mcp_servers(self) -> list[dict]:
@@ -100,7 +99,7 @@ class ToolsService:
 
             return servers
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to get MCP server list")
             raise ToolsServiceError(f"Failed to get MCP server list: {exc!s}") from exc
 
     def get_mcp_server_config(self, name: str) -> dict | None:
@@ -311,7 +310,7 @@ class ToolsService:
                 try:
                     await self.tool_mgr.test_mcp_server_connection(server_config)
                 except Exception as exc:
-                    logger.error(traceback.format_exc())
+                    logger.exception("MCP connection test failed")
                     logger.warning(
                         "MCP connection test failed: %s", safe_error("", exc)
                     )
@@ -330,7 +329,7 @@ class ToolsService:
         except ToolsServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to add MCP server")
             raise ToolsServiceError(f"Failed to add MCP server: {exc!s}") from exc
 
     async def update_mcp_server(self, old_name: str, server_data: Any) -> str:
@@ -382,7 +381,7 @@ class ToolsService:
         except ToolsServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to update MCP server")
             raise ToolsServiceError(f"Failed to update MCP server: {exc!s}") from exc
 
     async def delete_mcp_server(self, server_data: Any) -> str:
@@ -407,7 +406,7 @@ class ToolsService:
         except ToolsServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to delete MCP server")
             raise ToolsServiceError(f"Failed to delete MCP server: {exc!s}") from exc
 
     async def test_mcp_connection(self, server_data: Any) -> list:
@@ -422,7 +421,7 @@ class ToolsService:
         except ToolsServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to test MCP connection")
             raise ToolsServiceError(f"Failed to test MCP connection: {exc!s}") from exc
 
     async def get_tool_list(self) -> list[dict]:
@@ -447,7 +446,7 @@ class ToolsService:
                 )
             return tools_dict
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to get tool list")
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
 
     async def get_parallel_settings(self) -> dict[str, Any]:
@@ -562,7 +561,7 @@ class ToolsService:
         except ToolsServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to operate tool")
             raise ToolsServiceError(f"Failed to operate tool: {exc!s}") from exc
 
     async def sync_provider(self, data: Any) -> str:
@@ -579,7 +578,7 @@ class ToolsService:
         except ToolsServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to sync MCP provider")
             raise ToolsServiceError(f"Sync failed: {exc!s}") from exc
 
     @staticmethod
@@ -649,7 +648,7 @@ class ToolsService:
                 )
             raise ToolsServiceError(err_msg) from exc
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to enable MCP server %s", name)
             rollback_ok = self.rollback_mcp_server(name)
             err_msg = f"Failed to enable MCP server {name}: {exc!s}"
             if not rollback_ok:
@@ -687,7 +686,10 @@ class ToolsService:
                 f"Timed out while disabling MCP server {old_name} before enabling: {exc!s}"
             ) from exc
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception(
+                "Failed to disable MCP server %s before enabling",
+                old_name,
+            )
             raise ToolsServiceError(
                 f"Failed to disable MCP server {old_name} before enabling: {exc!s}"
             ) from exc
@@ -702,7 +704,7 @@ class ToolsService:
                 f"Timed out while enabling MCP server {name}."
             ) from exc
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to enable MCP server %s", name)
             raise ToolsServiceError(
                 f"Failed to enable MCP server {name}: {exc!s}"
             ) from exc
@@ -715,7 +717,7 @@ class ToolsService:
                 f"Timed out while disabling MCP server {name}."
             ) from exc
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to disable MCP server %s", name)
             raise ToolsServiceError(
                 f"Failed to disable MCP server {name}: {exc!s}"
             ) from exc

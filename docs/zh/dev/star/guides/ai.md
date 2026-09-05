@@ -176,4 +176,4 @@ yield event.plain_result(response.completion_text)
 - 不要把模型输出当作可信指令；涉及写文件、Shell、账号和外部操作时继续做权限检查。
 - 覆盖 Provider 不可用、空回复、工具参数错误、超时、取消、达到 step 上限和插件热重载。
 - 用 mock Provider / tool 做单元测试，Provider 实网测试应由环境变量显式启用。
-- 面向用户的错误应简短并脱敏，详细异常只写安全日志。
+- 面向用户的错误应简短，并使用 `safe_error` 脱敏。详细异常可以写日志；受控出口会自动脱敏已识别模式。

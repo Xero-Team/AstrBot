@@ -1,5 +1,4 @@
 import asyncio
-import traceback
 from datetime import UTC, datetime
 
 from astrbot import logger
@@ -49,7 +48,7 @@ class CronService:
         except CronServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to list cron jobs")
             raise CronServiceError(f"Failed to list jobs: {exc!s}") from exc
 
     async def create_job(self, payload: object) -> dict:
@@ -106,7 +105,7 @@ class CronService:
         except CronServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to create cron job")
             raise CronServiceError(f"Failed to create job: {exc!s}") from exc
 
     async def update_job(self, job_id: str, payload: object) -> dict:
@@ -145,7 +144,7 @@ class CronService:
         except CronServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to update cron job")
             raise CronServiceError(f"Failed to update job: {exc!s}") from exc
 
     async def delete_job(self, job_id: str) -> None:
@@ -155,7 +154,7 @@ class CronService:
         except CronServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to delete cron job")
             raise CronServiceError(f"Failed to delete job: {exc!s}") from exc
 
     async def run_job_now(self, job_id: str) -> None:
@@ -170,7 +169,7 @@ class CronService:
         except CronServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to run cron job")
             raise CronServiceError(f"Failed to run job: {exc!s}") from exc
 
     @staticmethod

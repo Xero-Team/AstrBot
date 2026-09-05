@@ -343,6 +343,7 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 - 不可信 XML 使用 `defusedxml` 解析。
 - Dashboard 动态 HTML 必须经过 DOMPurify；前端 lint 默认禁止未审计的 `v-html`。
 - 面向用户或日志输出的 Agent 异常需要经过敏感信息脱敏。
+- 受控日志出口（控制台、文件、仪表盘队列、Trace 载荷）在离开进程前会自动脱敏已识别模式，例如密钥字段、Bearer、URL 和绝对路径。loguru 的 `diagnose` 与 `backtrace` 已关闭，堆栈不再转储局部变量。Cookie、私聊内容和自定义 secret 不保证被剥离；分享前仍需人工检查。
 
 ## 修改位置速查
 

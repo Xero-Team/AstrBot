@@ -233,7 +233,7 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 - Provider / Platform 使用三态 `proxy_mode`：`inherit` 跟随全局配置，`direct` 明确直连并忽略环境变量代理，`custom` 只使用本项 `proxy_url`。空字符串不再同时表示继承和直连。
 - GitHub 镜像默认不提供。插件 `download_url` 和镜像前缀必须是公开 HTTPS origin，私网和非 HTTPS 会被拒绝。
 - `platform_settings.segmented_reply` 仍是默认关闭的体验分段。Telegram / Discord / 企业微信的平台硬限制分段由发送层负责，二者不要混用。
-- `log_level`、`log_file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log_level` 会同步到终端输出，不只写文件。
+- `log_level`、`log_file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log_level` 会同步到终端输出，不只写文件。文件日志走同一脱敏出口：已识别的密钥字段、Bearer、URL 和绝对路径会在写入前替换。Cookie、私聊和自定义 secret 不保证被剥离；分享前仍需人工检查。
 - `trace_enable`：Trace 采集总开关；`trace_log_*` 控制独立 Trace 文件。
 - `temp_dir_max_size`：`data/temp` 上限（MiB），默认 `1024`；后台定期清理旧文件。
 - `timezone`：IANA 时区名称，默认 `Asia/Shanghai`。

@@ -19,6 +19,7 @@ Shared locks live under `.agents/shared/`:
 | `create-astrbot-plugin` | Create or repair a plugin (Star) package                              |
 | `archify`               | Checkout-only diagram renderer; not shipped in sdist, wheel, or image |
 | `audit-product`         | Baseline or module product audit; Chinese Markdown report + diagrams  |
+| `plan-issue`            | Issue or pasted request → research, clarify, file-path plan           |
 
 Do not add a skill that only restates `AGENTS.md`. Split a skill when a
 second, independently loadable workflow appears.
@@ -55,3 +56,10 @@ Official-standard URLs live in `audit-product/references/standards.md`; cite
 them, do not paste the specs. Independent disprove, variant sweeps, and GHA
 bars live in `audit-product/references/verification.md`. Do not vendor
 third-party audit skill trees into `.agents/skills/`.
+
+`plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). It
+stops at `PLAN.md` until the user approves implementation. Cite
+`plan-issue/references/sources.md` for Superpowers, triage, Spec Kit,
+grilling, JTBD, and related planning skills; do not vendor those trees
+or their default `docs/superpowers/`, `tasks/`, `.specify/`, or
+`dev/plans/` directories.

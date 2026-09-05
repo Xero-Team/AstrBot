@@ -1214,10 +1214,9 @@ class TestAstrBotCoreLifecycleRestart:
     """Tests for AstrBotCoreLifecycle.restart method."""
 
     @pytest.mark.asyncio
-    async def test_restart_terminates_managers_and_starts_thread(
+    async def test_restart_requests_reboot_without_terminating_managers(
         self, mock_log_broker, mock_db
     ):
-        """Test that restart terminates managers and starts reboot thread."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         lifecycle.provider_manager = MagicMock()
@@ -1234,22 +1233,30 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.process_rebooter = MagicMock()
         mock_html_renderer = MagicMock()
         mock_html_renderer.terminate = AsyncMock()
+        mock_db.html_renderer = mock_html_renderer
 
-        with (
-            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        await lifecycle.restart()
+
+        lifecycle.provider_manager.terminate.assert_not_awaited()
+        lifecycle.platform_manager.terminate.assert_not_awaited()
+        lifecycle.kb_manager.terminate.assert_not_awaited()
+        mock_html_renderer.terminate.assert_not_awaited()
+        lifecycle.process_rebooter.reboot.assert_not_called()
+        assert lifecycle.dashboard_shutdown_event.is_set()
+        assert lifecycle.reboot_requested is True
+
+    @pytest.mark.asyncio
+    async def test_restart_rejects_uninitialized_lifecycle(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        with pytest.raises(
+            RuntimeError, match="AstrBot core lifecycle is not initialized"
         ):
-            mock_db.html_renderer = mock_html_renderer
             await lifecycle.restart()
 
-            # Verify managers were terminated
-            lifecycle.provider_manager.terminate.assert_awaited_once()
-            lifecycle.platform_manager.terminate.assert_awaited_once()
-            lifecycle.kb_manager.terminate.assert_awaited_once()
-            mock_html_renderer.terminate.assert_awaited_once()
-
-            # Verify thread was started
-            mock_thread.assert_called_once()
-            mock_thread.return_value.start.assert_called_once()
+        assert lifecycle.reboot_requested is False
 
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:

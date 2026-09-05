@@ -11,7 +11,6 @@
 
 import asyncio
 import os
-import threading
 import time
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
@@ -108,6 +107,8 @@ class AstrBotCoreLifecycle:
         self._initialized = False
         self._started = False
         self._stopped = False
+        self.reboot_requested = False
+        self.process_rebooter: ProcessRebooter | None = None
 
         # Proxy variables are process-wide, but the lifecycle is their owner in
         # this process.  Preserve the prior values so that stopping an embedded
@@ -728,29 +729,23 @@ class AstrBotCoreLifecycle:
             self._stopped = True
 
     async def restart(self) -> None:
-        """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
-        provider_manager = self.provider_manager
-        platform_manager = self.platform_manager
-        knowledge_base_manager = self.kb_manager
+        """Signal Dashboard shutdown and replace this process after stop().
+
+        The HTTP handler returns after this method so the restart response can
+        flush. ``InitialLoader`` then runs ``stop()`` once and calls
+        ``ProcessRebooter.reboot``.
+        """
         dashboard_shutdown_event = self.dashboard_shutdown_event
         if (
-            provider_manager is None
-            or platform_manager is None
-            or knowledge_base_manager is None
+            self.provider_manager is None
+            or self.platform_manager is None
+            or self.kb_manager is None
             or dashboard_shutdown_event is None
         ):
             raise RuntimeError("AstrBot core lifecycle is not initialized")
 
-        await provider_manager.terminate()
-        await platform_manager.terminate()
-        await knowledge_base_manager.terminate()
-        await self.services.html_renderer.terminate()
+        self.reboot_requested = True
         dashboard_shutdown_event.set()
-        threading.Thread(
-            target=self.process_rebooter.reboot,
-            name="restart",
-            daemon=True,
-        ).start()
 
     async def load_pipeline_scheduler(self) -> dict[str, PipelineScheduler]:
         """加载消息事件流水线调度器.

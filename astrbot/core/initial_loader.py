@@ -96,3 +96,8 @@ class InitialLoader:
         finally:
             await self._cancel_and_join(tasks)
             await self._stop_lifecycle(lifecycle)
+            if lifecycle.reboot_requested:
+                process_rebooter = lifecycle.process_rebooter
+                if process_rebooter is None:
+                    raise RuntimeError("AstrBot core lifecycle is not initialized")
+                process_rebooter.reboot(delay=0)

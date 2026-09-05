@@ -12,6 +12,8 @@ def _lifecycle(*, start) -> SimpleNamespace:
         initialize=AsyncMock(),
         start=start,
         stop=AsyncMock(),
+        reboot_requested=False,
+        process_rebooter=SimpleNamespace(reboot=MagicMock()),
         runtime=SimpleNamespace(dashboard_shutdown_event=asyncio.Event()),
     )
 
@@ -238,3 +240,45 @@ async def test_real_lifecycle_event_bus_failure_cancels_dashboard(monkeypatch):
 
     assert dashboard_cancelled.is_set()
     assert stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_reboots_after_stop_when_requested(monkeypatch):
+    call_order: list[str] = []
+    reboot = MagicMock()
+
+    def reboot_impl(delay: int = 3) -> None:
+        call_order.append(f"reboot:{delay}")
+
+    reboot.side_effect = reboot_impl
+
+    lifecycle = _lifecycle(start=AsyncMock())
+    lifecycle.reboot_requested = True
+    lifecycle.process_rebooter = SimpleNamespace(reboot=reboot)
+    original_stop = lifecycle.stop
+
+    async def tracking_stop() -> None:
+        call_order.append("stop")
+        await original_stop()
+
+    lifecycle.stop = tracking_stop
+    loader = _loader(monkeypatch, lifecycle, lambda: None)
+
+    await loader.start()
+
+    assert call_order == ["stop", "reboot:0"]
+    reboot.assert_called_once_with(delay=0)
+    original_stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_does_not_reboot_without_request(monkeypatch):
+    lifecycle = _lifecycle(start=AsyncMock())
+    reboot = MagicMock()
+    lifecycle.process_rebooter = SimpleNamespace(reboot=reboot)
+    loader = _loader(monkeypatch, lifecycle, lambda: None)
+
+    await loader.start()
+
+    reboot.assert_not_called()
+    lifecycle.stop.assert_awaited_once()

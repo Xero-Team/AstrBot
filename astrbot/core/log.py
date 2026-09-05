@@ -12,7 +12,7 @@ import uuid
 from asyncio import Queue
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger as _raw_loguru_logger
 
@@ -28,6 +28,9 @@ PLUGIN_LOGGER_PREFIX = "astrbot.plugin."
 PLUGIN_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 LOG_CATEGORIES = frozenset({"system", "user_chat", "platform_send", "security"})
 LOG_PRIVACY = frozenset({"public", "internal", "private"})
+_SANITIZED_ATTR = "astrbot_sanitized"
+_UNPRINTABLE_LOG_MESSAGE = "<unprintable log message>"
+_UNPRINTABLE_EXCEPTION = "<unprintable exception>"
 
 
 def _new_event_id() -> str:
@@ -37,6 +40,85 @@ def _new_event_id() -> str:
 
 if TYPE_CHECKING:
     from loguru import Record
+
+
+def _formatted_log_message(record: logging.LogRecord) -> str:
+    try:
+        return record.getMessage()
+    except Exception:
+        return _UNPRINTABLE_LOG_MESSAGE
+
+
+def _format_exception_text(exc_info: Any) -> str:
+    try:
+        return logging.Formatter().formatException(exc_info)
+    except Exception:
+        return _UNPRINTABLE_EXCEPTION
+
+
+def sanitize_log_record(record: logging.LogRecord) -> logging.LogRecord:
+    """Redact a logging record before it reaches any sink.
+
+    Args:
+        record: The original logging record. Mutated in place.
+
+    Returns:
+        The same record after redaction. A second call is a no-op.
+    """
+    if getattr(record, _SANITIZED_ATTR, False):
+        return record
+
+    formatted = _formatted_log_message(record)
+    record.msg = redact_sensitive_text(formatted)
+    record.args = ()
+    if record.exc_info:
+        record.exc_text = redact_sensitive_text(_format_exception_text(record.exc_info))
+    if record.stack_info:
+        record.stack_info = redact_sensitive_text(record.stack_info)
+    record.exc_info = None
+    setattr(record, _SANITIZED_ATTR, True)
+    return record
+
+
+def sanitize_log_payload(obj: Any) -> Any:
+    """Return a redacted deep copy of a structured log payload.
+
+    Args:
+        obj: Mapping, sequence, or nested structure to copy.
+
+    Returns:
+        A new object with string values redacted. Non-strings are unchanged.
+    """
+    if isinstance(obj, dict):
+        return {key: sanitize_log_payload(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_log_payload(value) for value in obj]
+    if isinstance(obj, tuple):
+        return tuple(sanitize_log_payload(value) for value in obj)
+    if isinstance(obj, str):
+        return redact_sensitive_text(obj)
+    return obj
+
+
+def _redacted_loguru_message(record: logging.LogRecord) -> str:
+    message = record.getMessage()
+    if record.exc_text:
+        if not message.endswith("\n"):
+            message += "\n"
+        message += record.exc_text
+    if record.stack_info:
+        if not message.endswith("\n"):
+            message += "\n"
+        message += record.stack_info
+    return message
+
+
+class _LogRecordSanitizeFilter(logging.Filter):
+    """Redact logging records at logger and handler boundaries."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        sanitize_log_record(record)
+        return True
 
 
 class _RecordEnricherFilter(logging.Filter):
@@ -189,6 +271,7 @@ class _LoguruInterceptHandler(logging.Handler):
     """将 logging 记录转发到 loguru。"""
 
     def emit(self, record: logging.LogRecord) -> None:
+        record = sanitize_log_record(record)
         try:
             level: str | int = _loguru.level(record.levelname).name
         except ValueError:
@@ -209,9 +292,10 @@ class _LoguruInterceptHandler(logging.Handler):
             "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),
         }
 
-        _loguru.bind(**payload).opt(exception=record.exc_info).log(
+        _loguru.bind(**payload).opt(exception=False).log(
             level,
-            record.getMessage(),
+            "{}",
+            _redacted_loguru_message(record),
         )
 
 
@@ -232,10 +316,11 @@ class LogBroker:
             self.subscribers.remove(q)
 
     def publish(self, log_entry: dict) -> None:
-        self.log_cache.append(log_entry)
+        sanitized = sanitize_log_payload(log_entry)
+        self.log_cache.append(sanitized)
         for q in self.subscribers:
             try:
-                q.put_nowait(log_entry)
+                q.put_nowait(sanitized)
             except asyncio.QueueFull:
                 pass
 
@@ -248,6 +333,7 @@ class LogQueueHandler(logging.Handler):
         self.log_broker = log_broker
 
     def emit(self, record: logging.LogRecord) -> None:
+        record = sanitize_log_record(record)
         timestamp = float(getattr(record, "timestamp", record.created))
         category = str(getattr(record, "category", "system") or "system")
         privacy = str(getattr(record, "privacy", "internal") or "internal")
@@ -275,6 +361,7 @@ class LogQueueHandler(logging.Handler):
 class LogManager:
     _LOGGER_HANDLER_FLAG = "_astrbot_loguru_handler"
     _ENRICH_FILTER_FLAG = "_astrbot_enrich_filter"
+    _SANITIZE_FILTER_FLAG = "_astrbot_sanitize_filter"
 
     _configured = False
     _console_sink_id: int | None = None
@@ -313,6 +400,8 @@ class LogManager:
             _SafeConsoleStream(sys.stdout),
             level="DEBUG",
             colorize=True,
+            diagnose=False,
+            backtrace=False,
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
                 "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
@@ -335,6 +424,7 @@ class LogManager:
             setattr(handler, cls._LOGGER_HANDLER_FLAG, True)
             root_logger.addHandler(handler)
         root_logger.setLevel(logging.DEBUG)
+        cls._ensure_logger_sanitize_filter(root_logger)
         for name, level in cls._NOISY_LOGGER_LEVELS.items():
             logging.getLogger(name).setLevel(level)
 
@@ -348,6 +438,17 @@ class LogManager:
             enrich_filter = _RecordEnricherFilter()
             setattr(enrich_filter, cls._ENRICH_FILTER_FLAG, True)
             logger.addFilter(enrich_filter)
+
+    @classmethod
+    def _ensure_logger_sanitize_filter(cls, logger: logging.Logger) -> None:
+        has_filter = any(
+            getattr(existing_filter, cls._SANITIZE_FILTER_FLAG, False)
+            for existing_filter in logger.filters
+        )
+        if not has_filter:
+            sanitize_filter = _LogRecordSanitizeFilter()
+            setattr(sanitize_filter, cls._SANITIZE_FILTER_FLAG, True)
+            logger.addFilter(sanitize_filter)
 
     @classmethod
     def _ensure_logger_intercept_handler(cls, logger: logging.Logger) -> None:
@@ -367,6 +468,7 @@ class LogManager:
 
         logger = logging.getLogger(log_name)
         cls._ensure_logger_enricher_filter(logger)
+        cls._ensure_logger_sanitize_filter(logger)
         cls._ensure_logger_intercept_handler(logger)
         logger.setLevel(logging.DEBUG)
         logger.propagate = False
@@ -468,6 +570,7 @@ class LogManager:
 
         for target in targets:
             cls._ensure_logger_enricher_filter(target)
+            cls._ensure_logger_sanitize_filter(target)
             if any(isinstance(handler, LogQueueHandler) for handler in target.handlers):
                 continue
             handler = LogQueueHandler(log_broker)
@@ -515,6 +618,8 @@ class LogManager:
                 rotation=rotation,
                 retention=retention,
                 enqueue=True,
+                diagnose=False,
+                backtrace=False,
                 filter=lambda record: record["extra"].get("is_trace", False),
             )
 
@@ -533,6 +638,8 @@ class LogManager:
             rotation=rotation,
             retention=retention,
             enqueue=True,
+            diagnose=False,
+            backtrace=False,
             filter=lambda record: not record["extra"].get("is_trace", False),
         )
 
@@ -560,6 +667,8 @@ class LogManager:
                         _SafeConsoleStream(sys.stdout),
                         level=configured_level,
                         colorize=True,
+                        diagnose=False,
+                        backtrace=False,
                         filter=lambda record: (
                             not record["extra"].get("is_trace", False)
                         ),
@@ -620,6 +729,7 @@ class LogManager:
 
         trace_logger = logging.getLogger("astrbot.trace")
         cls._ensure_logger_enricher_filter(trace_logger)
+        cls._ensure_logger_sanitize_filter(trace_logger)
         cls._ensure_logger_intercept_handler(trace_logger)
         trace_logger.setLevel(logging.INFO)
         trace_logger.propagate = False

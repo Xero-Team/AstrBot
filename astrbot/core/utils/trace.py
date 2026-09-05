@@ -5,7 +5,7 @@ import uuid
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.log import LogManager, LogQueueHandler
+from astrbot.core.log import LogManager, LogQueueHandler, sanitize_log_payload
 
 _cached_log_broker = None
 _trace_logger = None
@@ -74,12 +74,13 @@ class TraceSpan:
             "action": action,
             "fields": fields,
         }
+        sanitized = sanitize_log_payload(payload)
         log_broker = _get_log_broker()
         if log_broker:
-            log_broker.publish(payload)
+            log_broker.publish(sanitized)
         else:
-            logger.info(f"[trace] {payload}")
+            logger.info(f"[trace] {sanitized}")
 
         trace_logger = _get_trace_logger()
         if trace_logger and trace_logger.handlers:
-            trace_logger.info(json.dumps(payload, ensure_ascii=False))
+            trace_logger.info(json.dumps(sanitized, ensure_ascii=False))

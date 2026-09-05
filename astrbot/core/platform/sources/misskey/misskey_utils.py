@@ -90,13 +90,13 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
         if isinstance(component, Comp.Image):
             # 为图片组件返回占位符，但适配器仍会处理原组件
             return "[图片]"
-        if isinstance(component, Comp.At):
+        if isinstance(component, Comp.Mention):
             has_at = True
             # 优先使用name字段（用户名），如果没有则使用qq字段
             # 这样可以避免在Misskey中生成 @<user_id> 这样的无效提及
             if hasattr(component, "name") and component.name:
                 return f"@{component.name}"
-            return f"@{component.qq}"
+            return f"@{component.target}"
         if hasattr(component, "text"):
             text = getattr(component, "text", "")
             if "@" in text:
@@ -386,7 +386,7 @@ def process_at_mention(
 
     if bot_username and raw_text.startswith(f"@{bot_username}"):
         at_mention = f"@{bot_username}"
-        message.message.append(Comp.At(qq=bot_self_id))
+        message.message.append(Comp.Mention(target=bot_self_id))
         remaining_text = raw_text[len(at_mention) :].strip()
         if remaining_text:
             message.message.append(Comp.Plain(remaining_text))

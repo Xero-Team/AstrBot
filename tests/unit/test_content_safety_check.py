@@ -10,7 +10,6 @@ from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckS
 @pytest.mark.asyncio
 async def test_content_safety_checks_inbound_reply_text_once() -> None:
     event = SimpleNamespace(
-        is_at_or_wake_command=False,
         get_message_str=lambda: "current message",
         get_messages=lambda: [Reply(id="1", message_str="quoted message")],
         stop_event=Mock(),
@@ -29,7 +28,6 @@ async def test_content_safety_checks_inbound_reply_text_once() -> None:
 @pytest.mark.asyncio
 async def test_content_safety_does_not_include_quotes_for_result_checks() -> None:
     event = SimpleNamespace(
-        is_at_or_wake_command=False,
         get_message_str=lambda: "current message",
         get_messages=lambda: [Reply(id="1", chain=[Plain("quoted message")])],
         stop_event=Mock(),

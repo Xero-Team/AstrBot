@@ -206,7 +206,7 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
         for component in result.message
     )
     assert any(
-        isinstance(component, Comp.At) and component.qq == "alice"
+        isinstance(component, Comp.Mention) and component.target == "alice"
         for component in result.message
     )
 
@@ -433,7 +433,7 @@ async def test_telegram_group_command_strips_only_current_bot_mention():
     assert result is not None
     assert result.message_str == "/ask hi"
     assert any(
-        isinstance(component, Comp.At) and component.qq == "test_bot"
+        isinstance(component, Comp.Mention) and component.target == "test_bot"
         for component in result.message
     )
     assert any(
@@ -466,7 +466,7 @@ async def test_telegram_group_command_keeps_other_bot_mentions():
     assert result is not None
     assert result.message_str == "ping @other_bot"
     assert any(
-        isinstance(component, Comp.At) and component.qq == "other_bot"
+        isinstance(component, Comp.Mention) and component.target == "other_bot"
         for component in result.message
     )
     assert any(
@@ -1233,7 +1233,7 @@ async def test_telegram_send_with_client_prefixes_at_and_reuses_reply_and_thread
         MessageChain(
             [
                 Comp.Reply(id="42", chain=[]),
-                Comp.At(qq="alice", name="alice"),
+                Comp.Mention(target="alice", name="alice"),
                 Comp.Plain("hello there"),
             ]
         ),

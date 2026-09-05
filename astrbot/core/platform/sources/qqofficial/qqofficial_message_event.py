@@ -27,7 +27,7 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.message.components import At, File, Image, Plain, Record, Video
+from astrbot.core.message.components import File, Image, Mention, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -970,10 +970,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = file_path
                 elif i.url:
                     file_source = i.url
-            elif isinstance(i, At):
-                qq_id = getattr(i, "qq", "")
-                if qq_id and qq_id != "all":
-                    plain_text += f"<@{qq_id}>"
+            elif isinstance(i, Mention):
+                target_id = str(i.target)
+                if target_id and target_id != "all":
+                    plain_text += f"<@{target_id}>"
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (

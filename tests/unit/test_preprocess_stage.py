@@ -15,7 +15,6 @@ class FakeEvent:
     def __init__(self, message):
         self.message_obj = SimpleNamespace(message=message, message_str="")
         self.message_str = ""
-        self.is_at_or_wake_command = False
         self._extras: dict[str, object] = {}
         self.unified_msg_origin = "test:session"
         self.temporary_local_files: list[str] = []

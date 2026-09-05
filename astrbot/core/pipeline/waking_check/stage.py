@@ -114,7 +114,7 @@ class WakingCheckStage(Stage):
 
     1. 机器人被 @ 了
     2. 机器人的消息被提到了
-    3. 以配置的 LLM 前缀开头，并且消息没有以 At 消息段开头
+    3. 以配置的 LLM 前缀开头，并且消息没有以 Mention 消息段开头
     4. 插件（Star）的 handler filter 通过
     5. 私聊消息的唤醒由当前平台和会话策略决定，不读取旧管理员配置
     """
@@ -225,7 +225,6 @@ class WakingCheckStage(Stage):
             or route.should_run_llm
             or route.route_kind in {"passthrough", "turn_flush"}
         )
-        event.is_at_or_wake_command = route.should_run_command or route.should_run_llm
         if route.resolution is not None and route.resolution.kind in {
             CommandResolutionKind.INCOMPLETE_GROUP,
             CommandResolutionKind.UNKNOWN_SUBCOMMAND,
@@ -509,7 +508,6 @@ class WakingCheckStage(Stage):
             or route.should_run_llm
             or route.route_kind in {"passthrough", "turn_flush"}
         )
-        event.is_at_or_wake_command = route.should_run_command or route.should_run_llm
         reasons = set()
         for value in route.wake_reasons:
             try:

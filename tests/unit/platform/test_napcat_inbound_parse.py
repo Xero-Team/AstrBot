@@ -521,7 +521,7 @@ async def test_napcat_forward_ws_client_parses_group_string_cq_segments():
     queued = queue.get_nowait()
     assert queued.get_message_str() == "hello"
     assert [type(component).__name__ for component in queued.get_messages()] == [
-        "At",
+        "Mention",
         "Plain",
         "Reply",
     ]
@@ -573,11 +573,11 @@ async def test_napcat_forward_ws_client_keeps_group_string_at_targets_without_lo
     assert queued.get_message_str() == "@999999  hi  @888888  @all  @inline-name"
     messages = queued.get_messages()
     assert [type(component).__name__ for component in messages] == [
-        "At",
+        "Mention",
         "Plain",
-        "At",
-        "AtAll",
-        "At",
+        "Mention",
+        "MentionAll",
+        "Mention",
     ]
     assert messages[0].name == ""
     assert messages[2].name == ""
@@ -624,7 +624,7 @@ async def test_napcat_forward_ws_client_keeps_group_string_at_targets_from_raw_m
     queued = queue.get_nowait()
     assert queued.get_message_str() == "@999999  hello"
     messages = queued.get_messages()
-    assert [type(component).__name__ for component in messages] == ["At", "Plain"]
+    assert [type(component).__name__ for component in messages] == ["Mention", "Plain"]
     assert messages[0].name == ""
     adapter.client.get_group_member_info.assert_not_awaited()
     adapter.client.get_stranger_info.assert_not_awaited()

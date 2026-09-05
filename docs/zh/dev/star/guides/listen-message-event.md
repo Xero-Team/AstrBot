@@ -33,7 +33,7 @@ class AstrBotMessage:
     group: Group | None  # 群组元数据；私聊为 None
     group_id: str = ""  # 群组 id，由 group.group_id 派生；私聊为空字符串
     sender: MessageMember  # 发送者
-    message: List[BaseMessageComponent]  # 消息链。比如 [Plain("Hello"), At(qq=123456)]
+    message: List[BaseMessageComponent]  # 消息链。比如 [Plain("Hello"), Mention(target=123456)]
     message_str: (
         str  # 最直观的纯文本消息字符串，将消息链中的 Plain 消息（文本消息）连接起来
     )

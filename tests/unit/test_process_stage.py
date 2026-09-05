@@ -107,14 +107,13 @@ class FakeEvent:
     ) -> None:
         self._extras = extras or {}
         self._has_send_oper = has_send_oper
-        self.is_at_or_wake_command = at_or_wake
+        if at_or_wake and "should_run_llm" not in self._extras:
+            self._extras["should_run_llm"] = True
         self.call_llm = call_llm
         self._result = result
         self._stopped = stopped
 
     def get_extra(self, key: str, default=None):
-        if key == "should_run_llm" and key not in self._extras:
-            return self.is_at_or_wake_command
         return self._extras.get(key, default)
 
     def set_extra(self, key: str, value) -> None:

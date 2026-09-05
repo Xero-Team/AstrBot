@@ -13,9 +13,9 @@ from websockets.asyncio.client import ClientConnection, connect
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     File,
     Image,
+    Mention,
     Plain,
     Record,
     Reply,
@@ -681,7 +681,7 @@ class SatoriPlatformAdapter(Platform):
 
             if tag_name == "at":
                 user_id = attrs.get("id") or attrs.get("name", "")
-                elements.append(At(qq=user_id, name=user_id))
+                elements.append(Mention(target=user_id, name=user_id))
 
             elif tag_name in ("img", "image"):
                 src = attrs.get("src", "")

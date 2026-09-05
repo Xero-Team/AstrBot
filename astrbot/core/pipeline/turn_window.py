@@ -274,7 +274,6 @@ class TurnWindowManager:
         flush.set_extra(MANAGER_FLUSH_TOKEN, MANAGER_FLUSH_SENTINEL)
         flush.set_extra("wake_reasons", {"turn_continuation"})
         flush.is_wake = True
-        flush.is_at_or_wake_command = True
         return flush
 
     def _cancel_window_task(self, window: TurnWindow) -> None:

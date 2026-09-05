@@ -70,7 +70,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 @filter.command("picture")
 async def picture(self, event: AstrMessageEvent):
     chain = [
-        Comp.At(qq=event.get_sender_id()),
+        Comp.Mention(target=event.get_sender_id()),
         Comp.Plain("Look at this image:"),
         Comp.Image.fromURL("https://example.com/image.jpg"),
         Comp.Image.fromFileSystem("path/to/image.jpg"),

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.message.components import At, AtAll, Plain, Record, Reply
+from astrbot.core.message.components import Mention, MentionAll, Plain, Record, Reply
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -100,7 +100,7 @@ def _success() -> PlatformSendResult:
 async def test_standard_receipt_uses_platform_acceptance_and_excludes_headers():
     event = _Event(
         MessageEventResult(
-            chain=[At(qq="1"), AtAll(), Reply(id="2"), Plain("hello")],
+            chain=[Mention(target="1"), MentionAll(), Reply(id="2"), Plain("hello")],
         ),
         [_success()],
     )

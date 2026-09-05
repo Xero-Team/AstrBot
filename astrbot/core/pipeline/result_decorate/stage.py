@@ -6,7 +6,15 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
-from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
+from astrbot.core.message.components import (
+    Image,
+    Json,
+    Mention,
+    Node,
+    Plain,
+    Record,
+    Reply,
+)
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -402,7 +410,7 @@ class ResultDecorateStage(Stage):
             and event.get_message_type() != MessageType.FRIEND_MESSAGE
         ):
             result.chain.insert(
-                0, At(qq=event.get_sender_id(), name=event.get_sender_name())
+                0, Mention(target=event.get_sender_id(), name=event.get_sender_name())
             )
             if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
                 result.chain[1].text = "\n" + result.chain[1].text

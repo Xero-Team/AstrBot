@@ -4,11 +4,11 @@ import re
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     BaseMessageComponent,
     File,
     Image,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Video,
@@ -232,7 +232,7 @@ class KookPlatformAdapter(Platform):
         # 需要通过 `/user/view` 接口获取当前bot账号的某个频道下所属角色的id
         # 为了解决 https://github.com/AstrBotDevs/AstrBot/issues/7539
         # 在确定机器人需要响应某个`(rol)xxx(rol)`时,需要将角色id替换装当前的bot id
-        # 包装成`At`机器人自己,而`At`的name就保留角色名称
+        # 包装成`Mention`机器人自己,而`Mention`的name就保留角色名称
         # 如果没有查询到角色id或者bot不属于某类角色, 则不处理此`(rol)xxx(rol)`
         # 暂时想不到能在不修改原有消息内容的情况下处理这个角色mention的方案
 
@@ -256,7 +256,7 @@ class KookPlatformAdapter(Platform):
             tag_name = match.group(1)
             mention_target = match.group(2).strip()
             if tag_name == KookMentionTagName.MENTION and mention_target == "all":
-                components.append(AtAll())
+                components.append(MentionAll())
             elif tag_name == KookMentionTagName.ROLE:
                 role_mention_counter += 1
                 role_id = 0
@@ -270,8 +270,8 @@ class KookPlatformAdapter(Platform):
                             or bot_username == role_mention_name
                         ):
                             components.append(
-                                At(
-                                    qq=bot_id,
+                                Mention(
+                                    target=bot_id,
                                     name=role_mention_name,  # 保留角色名称
                                 )
                             )
@@ -292,16 +292,16 @@ class KookPlatformAdapter(Platform):
                     continue
 
                 components.append(
-                    At(
-                        qq=bot_id,
+                    Mention(
+                        target=bot_id,
                         name=role_mention_name,  # 保留角色名称
                     )
                 )
 
             elif mention_target:
                 components.append(
-                    At(
-                        qq=int(mention_target)
+                    Mention(
+                        target=int(mention_target)
                         if mention_target.isdigit()
                         else mention_target,
                         name=mention_name_map.get(mention_target, ""),
@@ -321,8 +321,8 @@ class KookPlatformAdapter(Platform):
                     if not comp.text.strip():
                         continue
                     break
-                if isinstance(comp, At):
-                    if str(comp.qq) == str(self.client.bot_id):
+                if isinstance(comp, Mention):
+                    if str(comp.target) == str(self.client.bot_id):
                         message_str = AT_MENTION_PREFIX_REGEX.sub(
                             "",
                             message_str,

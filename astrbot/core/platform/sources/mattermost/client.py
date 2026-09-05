@@ -7,7 +7,15 @@ from typing import Any
 import aiohttp
 
 from astrbot import logger
-from astrbot.core.message.components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.core.message.components import (
+    File,
+    Image,
+    Mention,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import detect_image_mime_type_async
@@ -235,8 +243,8 @@ class MattermostClient:
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 text_parts.append(segment.text)
-            elif isinstance(segment, At):
-                mention_name = str(segment.name or segment.qq or "").strip()
+            elif isinstance(segment, Mention):
+                mention_name = str(segment.name or segment.target or "").strip()
                 if mention_name:
                     text_parts.append(f"@{mention_name}")
             elif isinstance(segment, Reply):

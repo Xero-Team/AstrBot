@@ -13,9 +13,9 @@ from telegram.ext import ExtBot
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     File,
     Image,
+    Mention,
     Plain,
     Record,
     Reply,
@@ -267,7 +267,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if isinstance(i, Reply):
                 has_reply = True
                 reply_message_id = i.id
-            if isinstance(i, At):
+            if isinstance(i, Mention):
                 at_user_id = i.name
 
         at_flag = False

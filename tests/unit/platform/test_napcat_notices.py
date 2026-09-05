@@ -59,7 +59,8 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
     await stage.process(queued)
 
     assert queued.is_private_chat() is True
-    assert queued.is_at_or_wake_command is False
+    assert queued.get_extra("should_run_command") is False
+    assert queued.get_extra("should_run_llm") is False
     assert queued.is_wake is True
     assert queued.get_extra("route_kind") == "passthrough"
 
@@ -309,7 +310,7 @@ async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
     await stage.process(queued)
 
     assert queued.is_wake is True
-    assert queued.is_at_or_wake_command is True
+    assert queued.get_extra("should_run_llm") is True
     assert reply.sender_id == "123456"
     adapter.client.get_message.assert_awaited_once_with("9001")
 

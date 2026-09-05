@@ -11,13 +11,13 @@ from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import (
-    At,
-    AtAll,
     Face,
     File,
     Forward,
     Image,
     Json,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -457,14 +457,12 @@ class GroupChatContext:
                     parts.append(" [Image]")
             elif isinstance(comp, Json):
                 parts.append(f" {format_json_card_prompt(comp)}")
-            elif isinstance(comp, At):
-                is_at_self = str(comp.qq) in (
-                    event.get_self_id(),
-                    "all",
-                )
-                if is_at_self:
+            elif isinstance(comp, Mention):
+                if str(comp.target) == str(event.get_self_id()):
                     parts.insert(1, "⚠️[DIRECTED AT YOU] ")
                 parts.append(f" [At: {comp.name}]")
+            elif isinstance(comp, MentionAll):
+                parts.append(" [At: All]")
             elif isinstance(comp, Reply):
                 if comp.chain:
                     chain_desc = _describe_chain(comp.chain)
@@ -494,8 +492,8 @@ def _describe_chain(chain: list) -> str:
             desc.append(c.text)
         elif isinstance(c, Image):
             desc.append("[Image]")
-        elif isinstance(c, At):
-            name = getattr(c, "name", "") or getattr(c, "qq", "")
+        elif isinstance(c, Mention):
+            name = getattr(c, "name", "") or getattr(c, "target", "")
             desc.append(f"[At: {name}]")
         elif isinstance(c, Record):
             desc.append("[Voice]")
@@ -505,7 +503,7 @@ def _describe_chain(chain: list) -> str:
             desc.append(f"[File: {getattr(c, 'name', '') or ''}]")
         elif isinstance(c, Forward):
             desc.append("[Forward]")
-        elif isinstance(c, AtAll):
+        elif isinstance(c, MentionAll):
             desc.append("[At: All]")
         elif isinstance(c, Face):
             desc.append(format_qq_face(getattr(c, "id", None)))

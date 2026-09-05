@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.message.components import At, Image, Plain
+from astrbot.core.message.components import Image, Mention, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -562,10 +562,10 @@ class WecomAIBotAdapter(Platform):
         # 消息内容
         abm.message = []
 
-        # 处理 At
+        # 处理 Mention
         if self.bot_name and f"@{self.bot_name}" in abm.message_str:
             abm.message_str = abm.message_str.replace(f"@{self.bot_name}", "").strip()
-            abm.message.append(At(qq=self.bot_name, name=self.bot_name))
+            abm.message.append(Mention(target=self.bot_name, name=self.bot_name))
         if abm.message_str:
             abm.message.append(Plain(abm.message_str))
         if image_base64:

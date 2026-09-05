@@ -3,11 +3,11 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     BaseMessageComponent,
     Image,
     Json,
+    Mention,
+    MentionAll,
     Plain,
 )
 
@@ -15,7 +15,7 @@ from astrbot.core.message.components import (
 @dataclass
 class MessageChain:
     """MessageChain 描述了一整条消息中带有的所有组件。
-    现代消息平台的一条富文本消息中可能由多个组件构成，如文本、图片、At 等，并且保留了顺序。
+    现代消息平台的一条富文本消息中可能由多个组件构成，如文本、图片、Mention 等，并且保留了顺序。
 
     Attributes:
         `chain` (list): 用于顺序存储各个组件。
@@ -55,26 +55,26 @@ class MessageChain:
         self.chain.append(Plain(message))
         return self
 
-    def at(self, name: str, qq: str | int):
-        """添加一条 At 消息到消息链 `chain` 中。
+    def mention(self, name: str, target: str | int):
+        """添加一条 Mention 消息到消息链 `chain` 中。
 
         Example:
-            MessageEventResult().at("张三", "12345678910")
+            MessageEventResult().mention("张三", "12345678910")
             # 输出 @张三
 
         """
-        self.chain.append(At(name=name, qq=qq))
+        self.chain.append(Mention(name=name, target=target))
         return self
 
-    def at_all(self):
-        """添加一条 AtAll 消息到消息链 `chain` 中。
+    def mention_all(self):
+        """添加一条 MentionAll 消息到消息链 `chain` 中。
 
         Example:
-            MessageEventResult().at_all()
+            MessageEventResult().mention_all()
             # 输出 @所有人
 
         """
-        self.chain.append(AtAll())
+        self.chain.append(MentionAll())
         return self
 
     def url_image(self, url: str):
@@ -210,7 +210,7 @@ class ResultContentType(enum.Enum):
 @dataclass
 class MessageEventResult(MessageChain):
     """MessageEventResult 描述了一整条消息中带有的所有组件以及事件处理的结果。
-    现代消息平台的一条富文本消息中可能由多个组件构成，如文本、图片、At 等，并且保留了顺序。
+    现代消息平台的一条富文本消息中可能由多个组件构成，如文本、图片、Mention 等，并且保留了顺序。
 
     Attributes:
         `chain` (list): 用于顺序存储各个组件。

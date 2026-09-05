@@ -284,7 +284,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     mention_user_id = msg.get("mention_user_id")
                     if not mention_user_id:
                         return f"error: messages[{idx}].mention_user_id is required for mention_user component."
-                    components.append(Comp.At(qq=mention_user_id))
+                    components.append(Comp.Mention(target=mention_user_id))
                 else:
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."

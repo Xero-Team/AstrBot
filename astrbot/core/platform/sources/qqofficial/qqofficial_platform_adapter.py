@@ -15,10 +15,10 @@ from botpy.gateway import BotWebSocket
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     BaseMessageComponent,
     File,
     Image,
+    Mention,
     Plain,
     Record,
     Reply,
@@ -842,7 +842,7 @@ class QQOfficialPlatformAdapter(Platform):
                     mention_name = (
                         getattr(bot_mentions[0], "username", "") if bot_mentions else ""
                     )
-                    msg.append(At(qq=abm.self_id, name=mention_name))
+                    msg.append(Mention(target=abm.self_id, name=mention_name))
             else:
                 abm.sender = MessageMember(
                     message.author.user_openid,
@@ -852,7 +852,7 @@ class QQOfficialPlatformAdapter(Platform):
                     (message.content or "").strip()
                 )
                 abm.self_id = "unknown_selfid"
-                msg.append(At(qq="qq_official"))
+                msg.append(Mention(target="qq_official"))
             msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
                 msg, message.attachments
@@ -884,7 +884,7 @@ class QQOfficialPlatformAdapter(Platform):
                 str(message.author.id),
                 str(message.author.username),
             )
-            msg.append(At(qq="qq_official"))
+            msg.append(Mention(target="qq_official"))
             msg.append(Plain(plain_content))
 
             if isinstance(message, botpy.message.Message):

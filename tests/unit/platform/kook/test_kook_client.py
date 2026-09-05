@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, call
 import pytest
 
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     BaseMessageComponent,
+    Mention,
+    MentionAll,
     Plain,
     Record,
 )
@@ -135,10 +135,10 @@ class JsonFieldPaths:
             ["d", "extra", "kmarkdown", "raw_content"],
             [
                 # 这里默认机器人一定属于某个角色id
-                At(qq=TEST_BOT_ID, name="some_role"),
+                Mention(target=TEST_BOT_ID, name="some_role"),
                 Plain(text="/help"),
-                At(qq=3351526782, name="some_username"),
-                AtAll(qq="all", name=""),
+                Mention(target=3351526782, name="some_username"),
+                MentionAll(name=""),
             ],
         ),
         (

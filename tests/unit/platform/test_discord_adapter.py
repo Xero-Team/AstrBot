@@ -348,7 +348,6 @@ async def test_discord_handle_msg_ignores_non_message_raw_payload(monkeypatch):
         return SimpleNamespace(
             interaction_followup_webhook=None,
             is_wake=False,
-            is_at_or_wake_command=False,
         )
 
     adapter.create_event = fake_create_event
@@ -776,7 +775,7 @@ async def test_discord_parse_to_discord_keeps_long_content_and_reply_id():
         MessageChain(
             chain=[
                 discord_platform_event.Reply(id="77", chain=[]),
-                discord_platform_event.At(qq="123"),
+                discord_platform_event.Mention(target="123"),
                 discord_platform_event.Plain(long_text),
             ]
         )

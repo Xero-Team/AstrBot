@@ -6,12 +6,12 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     BaseMessageComponent,
     File,
     Image,
     Json,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -134,9 +134,9 @@ class KookEvent(AstrMessageEvent):
                 return handle_audio(index, message_component)
             case Plain():
                 return handle_plain(index, message_component.text)
-            case At():
-                return handle_plain(index, f"(met){message_component.qq}(met)")
-            case AtAll():
+            case Mention():
+                return handle_plain(index, f"(met){message_component.target}(met)")
+            case MentionAll():
                 return handle_plain(index, "(met)all(met)")
             case Reply():
                 return handle_plain(index, "", reply_id=message_component.id)

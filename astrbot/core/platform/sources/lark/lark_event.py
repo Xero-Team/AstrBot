@@ -27,7 +27,7 @@ from lark_oapi.api.im.v1 import (
 )
 
 from astrbot import logger
-from astrbot.core.message.components import At, File, Json, Plain, Record, Video
+from astrbot.core.message.components import File, Json, Mention, Plain, Record, Video
 from astrbot.core.message.components import Image as AstrBotImage
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
@@ -353,8 +353,8 @@ class LarkMessageEvent(AstrMessageEvent):
         for comp in message.chain:
             if isinstance(comp, Plain):
                 _stage.append({"tag": "md", "text": comp.text})
-            elif isinstance(comp, At):
-                _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
+            elif isinstance(comp, Mention):
+                _stage.append({"tag": "at", "user_id": comp.target, "style": []})
             elif isinstance(comp, AstrBotImage):
                 if not comp.file:
                     logger.error("[Lark] 图片路径为空，无法上传")

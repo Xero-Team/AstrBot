@@ -32,7 +32,8 @@ class RespondStage(Stage):
         Comp.Anonymous: lambda _: True,
         Comp.Record: lambda comp: bool(comp.file),  # 语音
         Comp.Video: lambda comp: bool(comp.file),  # 视频
-        Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
+        Comp.Mention: lambda comp: bool(comp.target) or bool(comp.name),  # @
+        Comp.MentionAll: lambda _: True,
         Comp.Image: lambda comp: bool(comp.file),  # 图片
         Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
         Comp.Poke: lambda comp: comp.id not in (None, "", 0, "0"),  # 戳一戳
@@ -206,7 +207,7 @@ class RespondStage(Stage):
         """Return submitted user-visible text without transport wrappers."""
         text_parts: list[str] = []
         for component in chain.chain:
-            if isinstance(component, (Comp.At, Comp.AtAll, Comp.Reply)):
+            if isinstance(component, (Comp.Mention, Comp.MentionAll, Comp.Reply)):
                 continue
             if isinstance(component, (Comp.Plain, Comp.Unknown)) and component.text:
                 text_parts.append(component.text)
@@ -388,7 +389,7 @@ class RespondStage(Stage):
         """Deliver a result component by component, retaining reply headers once."""
         header_comps = self._extract_comp(
             result.chain,
-            {ComponentType.Reply, ComponentType.At},
+            {ComponentType.Reply, ComponentType.Mention},
             modify_raw_chain=True,
         )
         if not result.chain:
@@ -414,11 +415,11 @@ class RespondStage(Stage):
     ) -> DeliveryReceipt:
         """Deliver records separately, then the remaining ordinary message chain."""
         if all(
-            comp.type in {ComponentType.Reply, ComponentType.At}
+            comp.type in {ComponentType.Reply, ComponentType.Mention}
             for comp in result.chain
         ):
             logger.warning(
-                "消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: %s",
+                "消息链全为 Reply 和 Mention 消息段, 跳过发送阶段。chain: %s",
                 result.chain,
             )
             return DeliveryReceipt.skipped(platform_id=event.get_platform_id())
@@ -483,7 +484,7 @@ class RespondStage(Stage):
                 in {
                     ComponentType.Plain,
                     ComponentType.Reply,
-                    ComponentType.At,
+                    ComponentType.Mention,
                 }
                 for comp in result.chain
             )

@@ -60,8 +60,8 @@ async def test_mattermost_convert_message_strips_leading_self_mention():
 
     assert result is not None
     assert result.message_str == "/help now"
-    assert isinstance(result.message[0], Comp.At)
-    assert result.message[0].qq == "bot-id"
+    assert isinstance(result.message[0], Comp.Mention)
+    assert result.message[0].target == "bot-id"
     assert any(
         isinstance(component, Comp.Plain) and component.text.strip() == "/help now"
         for component in result.message
@@ -135,9 +135,9 @@ def test_mattermost_parse_text_components_without_bot_username_falls_back_to_pla
 def test_mattermost_build_message_str_only_skips_leading_self_mention():
     message_str = MattermostPlatformAdapter._build_message_str(
         [
-            Comp.At(qq="bot-id", name="bot"),
+            Comp.Mention(target="bot-id", name="bot"),
             Comp.Plain(" hi "),
-            Comp.At(qq="user-2", name="alice"),
+            Comp.Mention(target="user-2", name="alice"),
             Comp.Plain(" there"),
         ],
         fallback="@bot hi @alice there",

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import File, Image, Mention, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
@@ -53,9 +53,14 @@ def test_line_parse_text_with_mentions_splits_user_mentions_and_plain_text():
         },
     )
 
-    assert [type(component) for component in components] == [Plain, At, Plain, Plain]
+    assert [type(component) for component in components] == [
+        Plain,
+        Mention,
+        Plain,
+        Plain,
+    ]
     assert components[0].text == "Hello "
-    assert components[1].qq == "user-1"
+    assert components[1].target == "user-1"
     assert components[1].name == "Alice"
     assert components[2].text == " and "
     assert components[3].text == "@all"
@@ -722,7 +727,7 @@ def test_line_build_message_str_covers_known_components_and_unknown_fallback():
     message = LinePlatformAdapter._build_message_str(
         [
             Plain("hello"),
-            At(qq="u1", name="Alice"),
+            Mention(target="u1", name="Alice"),
             Image.fromURL("https://example.test/a.png"),
             Video.fromURL("https://example.test/v.mp4"),
             Record(file="voice.wav"),

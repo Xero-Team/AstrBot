@@ -174,7 +174,7 @@ class SlackAdapter(Platform):
             if "<@" in message_text:
                 mentions = re.findall(r"<@([^>]+)>", message_text)
                 for mention in mentions:
-                    abm.message.append(At(qq=mention, name=""))
+                    abm.message.append(Mention(target=mention, name=""))
 
                 # 清理消息文本中的@标记
                 if clean_text := re.sub(r"<@[^>]+>", "", message_text).strip():
@@ -301,7 +301,9 @@ class SlackAdapter(Platform):
                                         )
                                     text_parts = []
                                     # 添加@提及组件
-                                    message_components.append(At(qq=user_id, name=""))
+                                    message_components.append(
+                                        Mention(target=user_id, name="")
+                                    )
                             elif element_type == "channel":
                                 # #频道提及
                                 channel_id = section_element.get("channel_id", "")

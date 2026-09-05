@@ -105,7 +105,9 @@ async def test_aiocqhttp_group_at_conversion_skips_member_lookup(
     abm = await adapter._convert_handle_message_event(event)
 
     assert abm.message_str.strip() == "/sid @999999"
-    assert [component.qq for component in abm.message if hasattr(component, "qq")] == [
+    assert [
+        component.target for component in abm.message if hasattr(component, "target")
+    ] == [
         "123456",
         "999999",
     ]
@@ -328,7 +330,7 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
     await stage.process(event)
 
     assert event.is_wake is True
-    assert event.is_at_or_wake_command is True
+    assert event.get_extra("should_run_llm") is True
     assert event.get_messages()[0].sender_id == "123456"
     adapter.bot.call_action.assert_awaited_once_with("get_msg", message_id="9001")
 

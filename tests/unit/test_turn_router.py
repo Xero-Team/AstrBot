@@ -6,7 +6,7 @@ from astrbot.core.command import (
     CommandGroupRegistration,
     CommandResolutionKind,
 )
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.components import Mention, Plain
 from astrbot.core.pipeline.turn_router import (
     LlmAccess,
     TurnRouteInput,
@@ -204,7 +204,7 @@ def test_group_at_other_blocks_prefix_and_command():
         _input(
             "/help",
             private=False,
-            messages=[At(qq="other"), Plain("/help")],
+            messages=[Mention(target="other"), Plain("/help")],
         )
     )
     assert result.should_run_command is False

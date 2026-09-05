@@ -8,11 +8,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     Face,
     Forward,
     Image,
+    Mention,
+    MentionAll,
     Plain,
     Reply,
 )
@@ -81,7 +81,7 @@ class TestAstrMessageEventInit:
         assert astr_message_event.message_str == "Hello world"
         assert astr_message_event.platform_member_role == "member"
         assert astr_message_event.is_wake is False
-        assert astr_message_event.is_at_or_wake_command is False
+        assert not hasattr(astr_message_event, "is_at_or_wake_command")
         assert astr_message_event._extras == {}
         assert astr_message_event._result is None
         assert astr_message_event.call_llm is False
@@ -295,8 +295,8 @@ class TestGetMessageOutline:
         assert "[图片]" in outline
 
     def test_outline_with_at(self, platform_meta, astrbot_message):
-        """Test outline with At component."""
-        astrbot_message.message = [At(qq="12345"), Plain(text=" hello")]
+        """Test outline with Mention component."""
+        astrbot_message.message = [Mention(target="12345"), Plain(text=" hello")]
         event = ConcreteAstrMessageEvent(
             message_str=" hello",
             message_obj=astrbot_message,
@@ -307,8 +307,8 @@ class TestGetMessageOutline:
         assert "[At:12345]" in outline
 
     def test_outline_with_at_all(self, platform_meta, astrbot_message):
-        """Test outline with AtAll component."""
-        astrbot_message.message = [AtAll()]
+        """Test outline with MentionAll component."""
+        astrbot_message.message = [MentionAll()]
         event = ConcreteAstrMessageEvent(
             message_str="",
             message_obj=astrbot_message,
@@ -316,8 +316,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        # AtAll format is "[At:all]" in the actual implementation
-        assert "[At:" in outline and "all" in outline.lower()
+        assert "[At:全体成员]" in outline
 
     def test_outline_with_face(self, platform_meta, astrbot_message):
         """Test outline with Face component."""
@@ -734,7 +733,7 @@ class TestSendStreaming:
         self, astr_message_event
     ):
         """Buffered fallbacks send one squashed chain and record once."""
-        mention = At(qq="user-1")
+        mention = Mention(target="user-1")
 
         async def generator():
             yield MessageChain([Plain("hello "), mention])

@@ -338,7 +338,8 @@ class InternalAgentSubStage:
                 comp.type
                 not in {
                     ComponentType.Plain,
-                    ComponentType.At,
+                    ComponentType.Mention,
+                    ComponentType.MentionAll,
                 }
                 for comp in event.message_obj.message
             )

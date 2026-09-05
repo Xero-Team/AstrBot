@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.core.message.components import At, Plain, Record, Reply
+from astrbot.core.message.components import Mention, Plain, Record, Reply
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -240,5 +240,5 @@ async def test_result_decorate_adds_mention_then_quote():
     await _consume(stage, _make_event(result))
 
     assert isinstance(result.chain[0], Reply)
-    assert isinstance(result.chain[1], At)
+    assert isinstance(result.chain[1], Mention)
     assert result.chain[2].text == "\nhello"

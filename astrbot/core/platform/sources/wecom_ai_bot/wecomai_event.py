@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 from astrbot import logger
-from astrbot.core.message.components import At, Image, Plain
+from astrbot.core.message.components import Image, Mention, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
@@ -83,7 +83,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         data = ""
         for comp in message_chain.chain:
-            if isinstance(comp, At):
+            if isinstance(comp, Mention):
                 data = f"@{comp.name} "
                 await back_queue.put(
                     {
@@ -144,7 +144,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             return ""
         plain_parts: list[str] = []
         for comp in message_chain.chain:
-            if isinstance(comp, At):
+            if isinstance(comp, Mention):
                 plain_parts.append(f"@{comp.name} ")
             elif isinstance(comp, Plain):
                 plain_parts.append(comp.text)
@@ -361,7 +361,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     last_stream_update_time = now
 
             for comp in chain.chain:
-                if isinstance(comp, (At, Plain)):
+                if isinstance(comp, (Mention, Plain)):
                     continue
                 await WecomAIBotMessageEvent._send(
                     MessageChain([comp]),

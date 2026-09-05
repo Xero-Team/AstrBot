@@ -46,8 +46,8 @@ class Main(star.Star):
                 return
 
             is_empty_mention = (
-                isinstance(messages[0], Comp.At)
-                and str(messages[0].qq) == str(event.get_self_id())
+                isinstance(messages[0], Comp.Mention)
+                and str(messages[0].target) == str(event.get_self_id())
                 and p_settings.get("empty_mention_waiting", True)
             )
             is_command_prefix_only = (
@@ -99,7 +99,7 @@ class Main(star.Star):
                     return
                 event.message_obj.message.insert(
                     0,
-                    Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
+                    Comp.Mention(target=event.get_self_id(), name=event.get_self_id()),
                 )
                 new_event = copy.copy(event)
                 self.context.messages.submit(new_event)

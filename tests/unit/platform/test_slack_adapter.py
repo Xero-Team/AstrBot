@@ -189,7 +189,7 @@ async def test_slack_convert_message_uses_blocks_and_attachment_parsing():
     adapter._parse_blocks = MagicMock(
         return_value=[
             Comp.Plain("Hello "),
-            Comp.At(qq="U2", name="Alice"),
+            Comp.Mention(target="U2", name="Alice"),
             Comp.Plain("world"),
         ]
     )
@@ -221,7 +221,7 @@ async def test_slack_convert_message_uses_blocks_and_attachment_parsing():
     assert result.sender.nickname == "U1"
     assert result.message_str == "Hello world"
     assert isinstance(result.message[0], Comp.Plain)
-    assert isinstance(result.message[1], Comp.At)
+    assert isinstance(result.message[1], Comp.Mention)
     assert isinstance(result.message[2], Comp.Plain)
     assert isinstance(result.message[3], Comp.Image)
     assert isinstance(result.message[4], Comp.File)
@@ -486,8 +486,8 @@ async def test_slack_convert_message_parses_mentions_and_mention_lookup_failures
     assert result.group_id == "C2"
     assert result.message_str == "<@U2> hi there"
     assert len(result.message) == 2
-    assert isinstance(result.message[0], Comp.At)
-    assert result.message[0].qq == "U2"
+    assert isinstance(result.message[0], Comp.Mention)
+    assert result.message[0].target == "U2"
     assert result.message[0].name == ""
     assert isinstance(result.message[1], Comp.Plain)
     assert result.message[1].text == "hi there"
@@ -541,8 +541,8 @@ def test_slack_parse_blocks_handles_rich_text_lists_and_markdown_sections():
     assert len(components) == 5
     assert isinstance(components[0], Comp.Plain)
     assert components[0].text == "Hello "
-    assert isinstance(components[1], Comp.At)
-    assert components[1].qq == "U2"
+    assert isinstance(components[1], Comp.Mention)
+    assert components[1].target == "U2"
     assert isinstance(components[2], Comp.Plain)
     assert components[2].text == "#C1[doc](https://example.com):wave:"
     assert isinstance(components[3], Comp.Plain)
@@ -675,8 +675,8 @@ async def test_slack_convert_message_keeps_whitespace_only_text_out_of_component
 
     assert result.message_str == "<@U2>   "
     assert len(result.message) == 1
-    assert isinstance(result.message[0], Comp.At)
-    assert result.message[0].qq == "U2"
+    assert isinstance(result.message[0], Comp.Mention)
+    assert result.message[0].target == "U2"
 
 
 @pytest.mark.asyncio

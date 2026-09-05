@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from astrbot import logger
-from astrbot.core.message.components import At, File, Image, Plain, Record, Video
+from astrbot.core.message.components import File, Image, Mention, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -351,7 +351,7 @@ class LinePlatformAdapter(Platform):
             mention_type = str(item.get("type", ""))
             if mention_type == "user":
                 target_id = str(item.get("userId", "")).strip()
-                ret.append(At(qq=target_id, name=label.lstrip("@")))
+                ret.append(Mention(target=target_id, name=label.lstrip("@")))
             else:
                 ret.append(Plain(text=label))
             cursor = max(cursor, start + length)
@@ -552,8 +552,8 @@ class LinePlatformAdapter(Platform):
         for comp in components:
             if isinstance(comp, Plain):
                 parts.append(comp.text)
-            elif isinstance(comp, At):
-                parts.append(f"@{comp.name or comp.qq}")
+            elif isinstance(comp, Mention):
+                parts.append(f"@{comp.name or comp.target}")
             elif isinstance(comp, Image):
                 parts.append("[image]")
             elif isinstance(comp, Video):

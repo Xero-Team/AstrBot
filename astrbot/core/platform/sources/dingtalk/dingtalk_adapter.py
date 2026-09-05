@@ -14,7 +14,7 @@ from dingtalk_stream import AckMessage
 from dingtalk_stream.frames import Headers
 
 from astrbot import logger
-from astrbot.core.message.components import At, File, Image, Plain, Record, Video
+from astrbot.core.message.components import File, Image, Mention, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -195,7 +195,7 @@ class DingtalkPlatformAdapter(Platform):
             if message.at_users:
                 for index, user in enumerate(message.at_users):
                     if user_id := self._id_to_sid(user.dingtalk_id):
-                        abm.message.append(At(qq=user_id))
+                        abm.message.append(Mention(target=user_id))
                         if (
                             index == 0
                             and user_id != "unknown"
@@ -799,14 +799,14 @@ class DingtalkPlatformAdapter(Platform):
         normalized_sender_id = self._id_to_sid(sender_id)
         # 现在用的发消息接口不支持 at
         # for segment in message_chain.chain:
-        #     if isinstance(segment, At):
+        #     if isinstance(segment, Mention):
         #         if (
-        #             str(segment.qq) in {sender_id, normalized_sender_id}
+        #             str(segment.target) in {sender_id, normalized_sender_id}
         #             and sender_staff_id
         #         ):
         #             at_list.append(f"@{sender_staff_id}")
         #         else:
-        #             at_list.append(f"@{segment.qq}")
+        #             at_list.append(f"@{segment.target}")
         # at_str = " ".join(at_list)
 
         if incoming_message.conversation_type == "2":

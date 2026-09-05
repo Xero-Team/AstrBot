@@ -10,7 +10,7 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor, call_local_llm_tool
 from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.message.components import Image
 from astrbot.core.tools.function_tool_manager import (
@@ -58,6 +58,28 @@ class _DoneRunner:
 
     def get_final_llm_resp(self):
         return SimpleNamespace(role="assistant", completion_text="done")
+
+
+@pytest.mark.asyncio
+async def test_call_local_llm_tool_does_not_embed_raw_traceback() -> None:
+    def handler(_event: object) -> None:
+        raise RuntimeError(
+            "password=top-secret https://internal.example.test/private/config"
+        )
+
+    with pytest.raises(Exception, match="Tool execution error") as caught:
+        async for _ in call_local_llm_tool(
+            _build_run_context(),
+            handler,
+            "decorator_handler",
+        ):
+            pass
+
+    text = str(caught.value)
+    assert "Traceback" not in text
+    assert "top-secret" not in text
+    assert "internal.example.test" not in text
+    assert isinstance(caught.value.__cause__, RuntimeError)
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.execution_context import CoreExecutionContext
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.requirements_utils import plan_missing_requirements_install
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -489,8 +490,8 @@ class PluginRuntimeLoader:
     ) -> dict[str, Any]:
         record: dict[str, Any] = {
             "name": root_dir_name,
-            "error": str(error),
-            "traceback": error_trace,
+            "error": safe_error("", error),
+            "traceback": redact_sensitive_text(error_trace),
             "reserved": reserved,
         }
         try:

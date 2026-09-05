@@ -37,6 +37,11 @@ describe('DataFilesPage contract', () => {
     expect(page).toContain('overflow-y: auto');
   });
 
+  it('uses the shared toolbar search layout so the field cannot collapse', () => {
+    expect(page).toContain('class="inline-control-row"');
+    expect(page).toContain('class="control-search"');
+  });
+
   it('covers Phase 2 API operations without persistent file content state', () => {
     for (const operation of ['create', 'move', 'remove', 'upload', 'search']) {
       expect(api).toContain(`${operation}(`);

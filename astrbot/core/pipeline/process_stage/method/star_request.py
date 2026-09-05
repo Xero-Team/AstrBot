@@ -8,6 +8,7 @@ from astrbot import logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 
 from ...context import PipelineContext, call_event_hook, call_handler
 from ...stage import Stage
@@ -51,9 +52,12 @@ class StarRequestSubStage(Stage):
                     break
                 event.clear_result()  # 清除上一个 handler 的结果
             except Exception as e:
-                traceback_text = traceback.format_exc()
+                traceback_text = redact_sensitive_text(traceback.format_exc())
+                error_text = safe_error("", e)
                 logger.error(traceback_text)
-                logger.error(f"Star {handler.handler_full_name} handle error: {e}")
+                logger.error(
+                    f"Star {handler.handler_full_name} handle error: {error_text}"
+                )
 
                 await call_event_hook(
                     event,
@@ -70,7 +74,7 @@ class StarRequestSubStage(Stage):
                     event.get_extra("should_run_command")
                     or event.get_extra("should_run_llm")
                 ):
-                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
+                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{error_text}"
                     event.set_result(MessageEventResult().message(ret))
                     yield
                     event.clear_result()

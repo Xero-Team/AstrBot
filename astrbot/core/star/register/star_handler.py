@@ -357,6 +357,9 @@ def register_on_plugin_error(**kwargs):
         event, plugin_name, handler_name, error, traceback_text
 
     说明:
+        `error` 仍是原始异常对象。`traceback_text` 已经过
+        `redact_sensitive_text`。默认即时通讯回显使用 `safe_error`，
+        不含原始凭据、URL 或绝对路径。
         在 hook 中调用 `event.stop_event()` 可屏蔽默认报错回显，
         并由插件自行决定是否转发到其他会话。
     """

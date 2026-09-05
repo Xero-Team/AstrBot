@@ -49,7 +49,6 @@ class FakeEvent:
         if at_or_wake:
             self._extras["should_run_command"] = True
         self._stopped = False
-        self.is_at_or_wake_command = at_or_wake
         self.result_history: list[MessageEventResult] = []
         self.clear_result_calls = 0
 

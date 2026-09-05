@@ -2,10 +2,11 @@ from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     File,
     Forward,
     Image,
+    Mention,
+    MentionAll,
     Node,
     Nodes,
     Plain,
@@ -390,9 +391,13 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 )
                 return text
 
-            if isinstance(component, At):
-                if component.qq:
-                    return f'<at id="{component.qq}"/>'
+            if isinstance(component, MentionAll):
+                return '<at type="all"/>'
+            if isinstance(component, Mention):
+                if component.is_everyone_sentinel():
+                    return "@all"
+                if component.target:
+                    return f'<at id="{component.target}"/>'
                 if component.name:
                     return f'<at name="{component.name}"/>'
 
@@ -483,9 +488,13 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 )
                 return text
 
-            if isinstance(component, At):
-                if component.qq:
-                    return f'<at id="{component.qq}"/>'
+            if isinstance(component, MentionAll):
+                return '<at type="all"/>'
+            if isinstance(component, Mention):
+                if component.is_everyone_sentinel():
+                    return "@all"
+                if component.target:
+                    return f'<at id="{component.target}"/>'
                 if component.name:
                     return f'<at name="{component.name}"/>'
 

@@ -283,6 +283,21 @@ async def test_napcat_outbound_builder_supports_forward_segments():
 
 
 @pytest.mark.asyncio
+async def test_napcat_outbound_mention_target_all_is_plain_text():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain([Mention(target="all"), MentionAll(), Mention(target="10001")])
+    )
+
+    assert [segment.to_dict() for segment in payload] == [
+        {"type": "text", "data": {"text": "@all"}},
+        {"type": "at", "data": {"qq": "all"}},
+        {"type": "at", "data": {"qq": "10001"}},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_napcat_send_by_session_supports_forward_nodes(monkeypatch):
     _zero_split_send_interval(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()

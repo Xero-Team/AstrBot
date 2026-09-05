@@ -35,7 +35,7 @@ class AstrBotMessage:
     sender: MessageMember  # Sender
     message: List[
         BaseMessageComponent
-    ]  # Message chain. For example: [Plain("Hello"), At(qq=123456)]
+    ]  # Message chain. For example: [Plain("Hello"), Mention(target=123456)]
     message_str: str  # The most straightforward plain text message string, concatenating Plain messages (text messages) from the message chain
     raw_message: object
     timestamp: int  # Message timestamp
@@ -66,7 +66,8 @@ A `message chain` describes the structure of a message. It's an ordered list whe
 Common message segment types include:
 
 - `Plain`: Text message segment
-- `At`: Mention message segment
+- `Mention`: Mention a user; the target is `target`
+- `MentionAll`: Mention everyone. Do not use `Mention(target="all")`
 - `Image`: Image message segment
 - `Record`: Audio message segment
 - `Video`: Video message segment

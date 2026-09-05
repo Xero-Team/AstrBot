@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import File, Image, Mention, Plain, Record, Video
 from astrbot.api.platform import MessageType
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -267,10 +267,10 @@ async def test_dingtalk_convert_msg_rich_text_group_parses_mentions_and_images()
     assert result.session_id == "group-1"
     assert result.message_id == "msg-1"
     assert result.message_str == "hello"
-    assert isinstance(result.message[0], At)
-    assert result.message[0].qq == "user-2"
-    assert isinstance(result.message[1], At)
-    assert result.message[1].qq == "unknown"
+    assert isinstance(result.message[0], Mention)
+    assert result.message[0].target == "user-2"
+    assert isinstance(result.message[1], Mention)
+    assert result.message[1].target == "unknown"
     assert isinstance(result.message[2], Plain)
     assert result.message[2].text == " hello "
     assert isinstance(result.message[3], Image)
@@ -306,8 +306,8 @@ async def test_dingtalk_rich_text_strips_a_duplicate_leading_self_mention():
 
     assert result.message_str == "/server"
     assert len(result.message) == 2
-    assert isinstance(result.message[0], At)
-    assert result.message[0].qq == "bot"
+    assert isinstance(result.message[0], Mention)
+    assert result.message[0].target == "bot"
     assert isinstance(result.message[1], Plain)
     assert result.message[1].text == "/server"
 
@@ -1164,7 +1164,7 @@ async def test_dingtalk_event_send_streaming_merges_mixed_components_before_send
     event.send = AsyncMock()
 
     async def _generator():
-        yield MessageChain(chain=[Plain("hello "), At(qq="user-1")])
+        yield MessageChain(chain=[Plain("hello "), Mention(target="user-1")])
         yield MessageChain().message("world")
 
     await event.send_streaming(_generator())
@@ -1173,8 +1173,8 @@ async def test_dingtalk_event_send_streaming_merges_mixed_components_before_send
     buffered_chain = event.send.await_args.args[0]
     assert isinstance(buffered_chain.chain[0], Plain)
     assert buffered_chain.chain[0].text == "hello world"
-    assert isinstance(buffered_chain.chain[1], At)
-    assert buffered_chain.chain[1].qq == "user-1"
+    assert isinstance(buffered_chain.chain[1], Mention)
+    assert buffered_chain.chain[1].target == "user-1"
 
 
 def test_dingtalk_create_event_does_not_promote_roles():

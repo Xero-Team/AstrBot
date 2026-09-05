@@ -6,7 +6,7 @@ from astrbot.core.command import (
     CommandGroupRegistration,
     CommandResolutionKind,
 )
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.components import Mention, MentionAll, Plain
 from astrbot.core.pipeline.turn_router import (
     LlmAccess,
     TurnRouteInput,
@@ -204,9 +204,35 @@ def test_group_at_other_blocks_prefix_and_command():
         _input(
             "/help",
             private=False,
-            messages=[At(qq="other"), Plain("/help")],
+            messages=[Mention(target="other"), Plain("/help")],
         )
     )
     assert result.should_run_command is False
     assert result.should_run_llm is False
     assert result.stop is True
+
+
+def test_mention_target_all_is_not_everyone_and_blocks_command():
+    result = route_turn(
+        _input(
+            "/help",
+            private=False,
+            messages=[Mention(target="all"), Plain("/help")],
+        )
+    )
+    assert result.should_run_command is False
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_mention_all_first_does_not_block_command():
+    result = route_turn(
+        _input(
+            "/help",
+            private=False,
+            messages=[MentionAll(), Plain("/help")],
+        )
+    )
+    assert result.should_run_command is True
+    assert result.should_run_llm is False
+    assert result.stop is False

@@ -474,7 +474,7 @@ class TelegramPlatformAdapter(Platform):
                     name = telegram_message.caption[
                         entity.offset + 1 : entity.offset + entity.length
                     ]
-                    message.message.append(Comp.At(qq=name, name=name))
+                    message.message.append(Comp.Mention(target=name, name=name))
 
     async def _populate_telegram_message_content(
         self,
@@ -494,7 +494,7 @@ class TelegramPlatformAdapter(Platform):
                 if entity.type != "mention":
                     continue
                 name = raw_text[entity.offset + 1 : entity.offset + entity.length]
-                message.message.append(Comp.At(qq=name, name=name))
+                message.message.append(Comp.Mention(target=name, name=name))
                 if name.lower() == context.bot.username.lower():
                     plain_text = (
                         plain_text[: entity.offset]

@@ -51,7 +51,8 @@ class ComponentType(StrEnum):
     Face = "Face"  # Emoji segment for Tencent QQ platform
     MFace = "MFace"  # NapCat market-face emoji segment
     Anonymous = "Anonymous"  # NapCat/OneBot anonymous segment
-    At = "At"  # mention a user in IM apps
+    Mention = "Mention"  # mention a user in IM apps
+    MentionAll = "MentionAll"  # mention all members in IM apps
     Node = "Node"  # a node in a forwarded message
     Nodes = "Nodes"  # a forwarded message consisting of multiple nodes
     Poke = "Poke"  # a poke message for Tencent QQ platform
@@ -468,26 +469,38 @@ class Video(DeferredMediaSourceComponent):
         }
 
 
-class At(BaseMessageComponent):
-    type: ComponentType = ComponentType.At
-    qq: int | str  # 此处str为all时代表所有人
+class Mention(BaseMessageComponent):
+    type: ComponentType = ComponentType.Mention
+    target: int | str
+    name: str | None = ""
+
+    def __init__(self, **_) -> None:
+        super().__init__(**_)
+
+    def is_everyone_sentinel(self) -> bool:
+        """Return whether ``target`` is the reserved everyone marker.
+
+        Adapters must not map this value to a platform @everyone token.
+        Use MentionAll for everyone.
+        """
+        return str(self.target) == "all"
+
+    async def to_dict(self) -> dict:
+        return {
+            "type": "mention",
+            "data": {"target": str(self.target)},
+        }
+
+
+class MentionAll(BaseMessageComponent):
+    type: ComponentType = ComponentType.MentionAll
     name: str | None = ""
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
     async def to_dict(self) -> dict:
-        return {
-            "type": "at",
-            "data": {"qq": str(self.qq)},
-        }
-
-
-class AtAll(At):
-    qq: int | str = "all"
-
-    def __init__(self, **_) -> None:
-        super().__init__(**_)
+        return {"type": "mention_all", "data": {}}
 
 
 class RPS(BaseMessageComponent):
@@ -783,6 +796,15 @@ class Node(BaseMessageComponent):
                         "data": {"file": f"base64://{bs64}"},
                     },
                 )
+            elif isinstance(comp, MentionAll):
+                data_content.append({"type": "at", "data": {"qq": "all"}})
+            elif isinstance(comp, Mention):
+                if comp.is_everyone_sentinel():
+                    data_content.append({"type": "text", "data": {"text": "@all"}})
+                else:
+                    data_content.append(
+                        {"type": "at", "data": {"qq": str(comp.target)}}
+                    )
             else:
                 d = await comp.to_dict()
                 data_content.append(d)
@@ -1075,7 +1097,8 @@ ComponentTypes = {
     "face": Face,
     "mface": MFace,
     "anonymous": Anonymous,
-    "at": At,
+    "mention": Mention,
+    "mention_all": MentionAll,
     "rps": RPS,
     "dice": Dice,
     "shake": Shake,

@@ -1,13 +1,16 @@
 import inspect
 
 import pytest
+from pydantic import ValidationError
 
 from astrbot.core.message.components import (
     Anonymous,
-    At,
     BaseMessageComponent,
+    ComponentTypes,
     FlashTransfer,
     Forward,
+    Mention,
+    MentionAll,
     Node,
     Nodes,
     OnlineFile,
@@ -15,6 +18,7 @@ from astrbot.core.message.components import (
     Poke,
     Reply,
 )
+from astrbot.core.message.message_event_result import MessageEventResult
 
 
 @pytest.mark.asyncio
@@ -25,7 +29,7 @@ async def test_message_components_use_only_async_serialization_api():
     components = [
         Plain(text="mock text"),
         Anonymous(ignore=1),
-        At(qq="10001"),
+        Mention(target="10001"),
         OnlineFile(
             msg_id="mock-message",
             element_id="mock-element",
@@ -44,7 +48,7 @@ async def test_message_components_use_only_async_serialization_api():
     assert [payload["type"] for payload in payloads] == [
         "text",
         "anonymous",
-        "at",
+        "mention",
         "onlinefile",
         "reply",
         "poke",
@@ -79,3 +83,78 @@ async def test_nested_nodes_use_async_component_serialization():
             }
         ]
     }
+
+
+@pytest.mark.asyncio
+async def test_mention_to_dict_is_platform_neutral():
+    payload = await Mention(target="10001").to_dict()
+    assert payload == {"type": "mention", "data": {"target": "10001"}}
+
+
+@pytest.mark.asyncio
+async def test_mention_all_to_dict_is_platform_neutral():
+    payload = await MentionAll().to_dict()
+    assert payload == {"type": "mention_all", "data": {}}
+
+
+def test_mention_rejects_qq_keyword():
+    with pytest.raises(ValidationError):
+        Mention(qq="10001")
+
+
+def test_mention_all_is_not_a_mention_subclass():
+    assert not issubclass(MentionAll, Mention)
+    assert not isinstance(MentionAll(), Mention)
+    assert Mention(target="all").is_everyone_sentinel() is True
+    assert Mention(target="10001").is_everyone_sentinel() is False
+
+
+def test_message_event_result_mention_builders():
+    result = MessageEventResult().mention("n", "1").mention_all()
+    assert [type(item) for item in result.chain] == [Mention, MentionAll]
+
+
+def test_component_types_maps_mention_keys_only():
+    assert ComponentTypes["mention"] is Mention
+    assert ComponentTypes["mention_all"] is MentionAll
+    assert "at" not in ComponentTypes
+
+
+@pytest.mark.asyncio
+async def test_node_to_dict_maps_mentions_to_onebot_at():
+    node = Node(
+        uin="10001",
+        name="Mock Sender",
+        content=[Mention(target="10002"), MentionAll(), Plain(text="hi")],
+    )
+
+    payload = await node.to_dict()
+
+    assert payload == {
+        "type": "node",
+        "data": {
+            "user_id": "10001",
+            "nickname": "Mock Sender",
+            "content": [
+                {"type": "at", "data": {"qq": "10002"}},
+                {"type": "at", "data": {"qq": "all"}},
+                {"type": "text", "data": {"text": "hi"}},
+            ],
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_node_to_dict_does_not_map_mention_target_all_to_everyone():
+    node = Node(
+        uin="10001",
+        name="Mock Sender",
+        content=[Mention(target="all"), Plain(text="hi")],
+    )
+
+    payload = await node.to_dict()
+
+    assert payload["data"]["content"] == [
+        {"type": "text", "data": {"text": "@all"}},
+        {"type": "text", "data": {"text": "hi"}},
+    ]

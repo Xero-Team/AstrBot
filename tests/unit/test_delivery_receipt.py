@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.message.components import At, AtAll, Plain, Record, Reply
+from astrbot.core.message.components import Mention, MentionAll, Plain, Record, Reply
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -100,7 +100,7 @@ def _success() -> PlatformSendResult:
 async def test_standard_receipt_uses_platform_acceptance_and_excludes_headers():
     event = _Event(
         MessageEventResult(
-            chain=[At(qq="1"), AtAll(), Reply(id="2"), Plain("hello")],
+            chain=[Mention(target="1"), MentionAll(), Reply(id="2"), Plain("hello")],
         ),
         [_success()],
     )
@@ -171,6 +171,39 @@ async def test_standard_record_failure_keeps_accepted_text_projection():
     receipt = event.get_extra("delivery_receipt")
     assert receipt.status == "partial"
     assert receipt.history_text == "text"
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_skips_duplicate_text_when_chain_has_mention_all():
+    event = _Event(
+        MessageEventResult(chain=[MentionAll(), Plain("hello")]),
+        [_success()],
+    )
+    event.set_extra("_send_message_to_user_current_session_plain_texts", ["hello"])
+
+    await _stage().process(event)
+
+    event.send.assert_not_awaited()
+    assert event.get_extra("delivery_receipt").status == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_segmented_keeps_mention_all_on_first_plain_chunk():
+    event = _Event(
+        MessageEventResult(chain=[MentionAll(), Plain("hello")]),
+        [_success()],
+    )
+    stage = _stage()
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    stage._calc_comp_interval = AsyncMock(return_value=0)
+
+    await stage.process(event)
+
+    event.send.assert_awaited_once()
+    sent_chain = event.send.await_args.args[0]
+    assert [type(component) for component in sent_chain.chain] == [MentionAll, Plain]
+    assert sent_chain.chain[1].text == "hello"
 
 
 @pytest.mark.asyncio

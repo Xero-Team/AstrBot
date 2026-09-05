@@ -10,7 +10,16 @@ import pytest
 from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    File,
+    Image,
+    Mention,
+    MentionAll,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -122,7 +131,7 @@ async def test_parse_group_message_create_plain_message_has_no_at_component():
     assert abm.sender.user_id == "member-1"
     assert abm.group_id == "group-1"
     assert abm.message_str == "plain group message"
-    assert not any(isinstance(component, At) for component in abm.message)
+    assert not any(isinstance(component, Mention) for component in abm.message)
     assert [
         component.text for component in abm.message if isinstance(component, Plain)
     ] == ["plain group message"]
@@ -185,8 +194,8 @@ async def test_parse_group_message_create_bot_mention_cleans_plain_text():
         MessageType.GROUP_MESSAGE,
     )
 
-    assert isinstance(abm.message[0], At)
-    assert abm.message[0].qq == "bot-123"
+    assert isinstance(abm.message[0], Mention)
+    assert abm.message[0].target == "bot-123"
     assert abm.self_id == "bot-123"
     assert isinstance(abm.message[1], Plain)
     assert abm.message[1].text == "hello there"
@@ -209,8 +218,8 @@ async def test_legacy_group_at_path_forces_bot_mention_when_mentions_missing():
         force_group_mention=True,
     )
 
-    assert isinstance(abm.message[0], At)
-    assert abm.message[0].qq == "qq_official"
+    assert isinstance(abm.message[0], Mention)
+    assert abm.message[0].target == "qq_official"
     assert abm.self_id == "qq_official"
     assert isinstance(abm.message[1], Plain)
     assert abm.message[1].text == "legacy text"
@@ -1096,7 +1105,8 @@ async def test_parse_to_qqofficial_extracts_at_video_and_first_file_source():
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
         MessageChain(
             chain=[
-                At(qq="user-1"),
+                Mention(target="user-1"),
+                MentionAll(),
                 Plain(" hello"),
                 Video(file="https://example.com/video.mp4"),
                 File(name="doc.txt", url="https://example.com/doc.txt"),

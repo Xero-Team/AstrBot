@@ -7,10 +7,11 @@ from aiocqhttp.exceptions import ActionFailed
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     BaseMessageComponent,
     File,
     Image,
+    Mention,
+    MentionAll,
     Node,
     Nodes,
     Plain,
@@ -78,6 +79,12 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if isinstance(segment, Video):
             d = await segment.to_dict()
             return d
+        if isinstance(segment, MentionAll):
+            return {"type": "at", "data": {"qq": "all"}}
+        if isinstance(segment, Mention):
+            if segment.is_everyone_sentinel():
+                return {"type": "text", "data": {"text": "@all"}}
+            return {"type": "at", "data": {"qq": str(segment.target)}}
         return await segment.to_dict()
 
     @staticmethod
@@ -85,8 +92,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         """解析成 OneBot json 格式"""
         ret = []
         for segment in message_chain.chain:
-            if isinstance(segment, At):
-                # At 组件后插入一个空格，避免与后续文本粘连
+            if isinstance(segment, (Mention, MentionAll)):
+                # Mention 组件后插入一个空格，避免与后续文本粘连
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
                 ret.append({"type": "text", "data": {"text": " "}})

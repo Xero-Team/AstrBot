@@ -48,7 +48,7 @@ Both prefix lists default to `/`. A non-empty LLM prefix occupies that profile's
 Two extra conditions:
 
 - **Allow LLM when replying to the bot** (`reply_to_bot`): an additional OR. Even `group=off` can wake on a reply to the bot.
-- **@ everyone**: if the group policy is not `off` and `ignore_at_all` is off, @ everyone admits the LLM. `ignore_at_all` lives under **Platform → Other**.
+- **@ everyone**: if the group policy is not `off` and `ignore_at_all` is off, inbound `MentionAll` admits the LLM. `Mention(target="all")` is not everyone. `ignore_at_all` lives under **Platform → Other**.
 
 A message that starts by @-ing **someone else** does not wake on prefix. That keeps talk directed at other people from hitting the bot.
 
@@ -92,7 +92,7 @@ A policy admit can still vanish behind an allowlist, a custom rule that disabled
 1. Talking plainly in a group while `group` is still the default `prefix`.
 2. Changing `command_prefixes` and expecting the LLM prefix to follow.
 3. Editing `default` while the group is bound to another profile. Check the UMO with `/session info`.
-4. Setting `mention` on a platform that does not parse @ into an At segment.
+4. Setting `mention` on a platform that does not parse @ into a `Mention` segment. @ everyone must be `MentionAll`; `Mention(target="all")` is not everyone.
 5. Assuming a reply equals a mention; `reply_to_bot` is a separate switch.
 6. Allowlist enabled with a non-empty list that omits this group.
 7. A custom rule or `/llm disable` turned LLM off for the session.

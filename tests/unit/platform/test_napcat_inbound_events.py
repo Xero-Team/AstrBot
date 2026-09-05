@@ -73,7 +73,7 @@ async def test_napcat_group_message_event_is_queued_with_expected_components():
     assert queued.get_message_type() == MessageType.GROUP_MESSAGE
     assert queued.session.session_id == "654321"
     assert [type(component).__name__ for component in queued.get_messages()] == [
-        "At",
+        "Mention",
         "Plain",
         "Image",
         "Reply",

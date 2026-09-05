@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 
 from astrbot.core.message.components import (
     RPS,
-    At,
-    AtAll,
     BaseMessageComponent,
     Contact,
     Dice,
@@ -19,6 +17,8 @@ from astrbot.core.message.components import (
     Json,
     Location,
     Markdown,
+    Mention,
+    MentionAll,
     MFace,
     MiniApp,
     Music,
@@ -79,9 +79,9 @@ def _render_simple_component(
 ) -> str:
     if isinstance(component, Plain):
         return component.text if include_plain else ""
-    if isinstance(component, At):
-        return f"@{component.name or component.qq}" if include_plain else ""
-    if isinstance(component, AtAll):
+    if isinstance(component, Mention):
+        return f"@{component.name or component.target}" if include_plain else ""
+    if isinstance(component, MentionAll):
         return "@all" if include_plain else ""
     if isinstance(component, Reply):
         return component.message_str or "[Quoted Message]" if include_plain else ""

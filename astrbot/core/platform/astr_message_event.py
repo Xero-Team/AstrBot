@@ -17,8 +17,6 @@ from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import (
     RPS,
     Anonymous,
-    At,
-    AtAll,
     BaseMessageComponent,
     Contact,
     Face,
@@ -29,6 +27,8 @@ from astrbot.core.message.components import (
     Json,
     Location,
     Markdown,
+    Mention,
+    MentionAll,
     MFace,
     MiniApp,
     Node,
@@ -119,8 +119,6 @@ class AstrMessageEvent(abc.ABC):
         self.auth_context: AuthContext | None = None
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
-        self.is_at_or_wake_command = False
-        """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
@@ -271,9 +269,9 @@ class AstrMessageEvent(abc.ABC):
                 parts.append(format_qq_face(i.id))
             elif isinstance(i, MFace):
                 parts.append(f"[商城表情:{i.summary}]")
-            elif isinstance(i, At):
-                parts.append(f"[At:{i.qq}]")
-            elif isinstance(i, AtAll):
+            elif isinstance(i, Mention):
+                parts.append(f"[At:{i.target}]")
+            elif isinstance(i, MentionAll):
                 parts.append("[At:全体成员]")
             elif isinstance(i, Record):
                 parts.append("[语音]")
@@ -533,7 +531,7 @@ class AstrMessageEvent(abc.ABC):
         """Return local semantic text for a submitted streaming fragment."""
         text_parts: list[str] = []
         for component in chain.chain:
-            if isinstance(component, (At, AtAll, Reply)):
+            if isinstance(component, (Mention, MentionAll, Reply)):
                 continue
             if isinstance(component, Plain) and component.text:
                 text_parts.append(component.text)

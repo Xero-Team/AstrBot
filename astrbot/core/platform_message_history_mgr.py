@@ -1,11 +1,11 @@
 from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.db.protocols import MessageHistoryStore
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     BaseMessageComponent,
     File,
     Image,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -160,13 +160,13 @@ def _serialize_component(component: BaseMessageComponent) -> dict | None:
         return {"type": "plain", "text": text} if text else None
     if isinstance(component, (Image, Record, Video, File)):
         return {"type": component.type.lower(), "text": f"[{component.type}]"}
-    if isinstance(component, At):
+    if isinstance(component, Mention):
         return {
-            "type": "at",
+            "type": "mention",
             "name": _bounded(getattr(component, "name", None), 256) or "user",
         }
-    if isinstance(component, AtAll):
-        return {"type": "at_all"}
+    if isinstance(component, MentionAll):
+        return {"type": "mention_all"}
     if isinstance(component, Reply):
         return {
             "type": "reply",

@@ -5,11 +5,11 @@ import pytest
 
 from astrbot.api.platform import PlatformMetadata, Unknown
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     BaseMessageComponent,
     Image,
     Json,
+    Mention,
+    MentionAll,
     Plain,
     Reply,
     Video,
@@ -81,7 +81,7 @@ from tests.unit.platform.kook.shared import (
             None,
         ),
         (
-            At(qq="test at"),
+            Mention(target="test at"),
             "test at",
             OrderMessage(
                 index=1,
@@ -91,7 +91,17 @@ from tests.unit.platform.kook.shared import (
             None,
         ),
         (
-            AtAll(qq="all"),
+            Mention(target="all"),
+            "test mention sentinel",
+            OrderMessage(
+                index=1,
+                text="@all",
+                type=KookMessageType.KMARKDOWN,
+            ),
+            None,
+        ),
+        (
+            MentionAll(),
             "test atAll",
             OrderMessage(
                 index=1,

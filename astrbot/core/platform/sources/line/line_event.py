@@ -7,10 +7,11 @@ from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     BaseMessageComponent,
     File,
     Image,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Video,
@@ -47,8 +48,10 @@ class LineMessageEvent(AstrMessageEvent):
                 return None
             return {"type": "text", "text": text[:5000]}
 
-        if isinstance(segment, At):
-            name = str(segment.name or segment.qq or "").strip()
+        if isinstance(segment, MentionAll):
+            return {"type": "text", "text": "@all"}
+        if isinstance(segment, Mention):
+            name = str(segment.name or segment.target or "").strip()
             if not name:
                 return None
             return {"type": "text", "text": f"@{name}"[:5000]}

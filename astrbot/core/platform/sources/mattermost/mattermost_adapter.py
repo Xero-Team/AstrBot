@@ -8,7 +8,7 @@ from typing import Any, cast
 import aiohttp
 
 from astrbot import logger
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.components import Mention, MentionAll, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -284,7 +284,7 @@ class MattermostPlatformAdapter(Platform):
         for match in mention_pattern.finditer(message_text):
             if match.start() > last_end:
                 components.append(Plain(message_text[last_end : match.start()]))
-            components.append(At(qq=self.bot_self_id, name=self.bot_username))
+            components.append(Mention(target=self.bot_self_id, name=self.bot_username))
             last_end = match.end()
 
         if last_end < len(message_text):
@@ -315,13 +315,15 @@ class MattermostPlatformAdapter(Platform):
         for component in components:
             if isinstance(component, Plain):
                 text_parts.append(component.text)
-            elif isinstance(component, At):
-                is_self_mention = str(component.qq) == self_id
+            elif isinstance(component, MentionAll):
+                text_parts.append("@all")
+            elif isinstance(component, Mention):
+                is_self_mention = str(component.target) == self_id
                 if not leading_self_mention_skipped and is_self_mention:
                     leading_self_mention_skipped = True
                     if not text_parts or not "".join(text_parts).strip():
                         continue
-                mention_name = str(component.name or component.qq or "").strip()
+                mention_name = str(component.name or component.target or "").strip()
                 if mention_name:
                     text_parts.append(f"@{mention_name}")
         message_str = "".join(text_parts).strip()

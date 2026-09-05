@@ -353,12 +353,12 @@ class AiocqhttpAdapter(Platform):
                 for m in m_group:
                     try:
                         if m["data"]["qq"] == "all":
-                            abm.message.append(At(qq="all", name="全体成员"))
+                            abm.message.append(MentionAll(name="全体成员"))
                             continue
 
                         target = str(m["data"]["qq"])
-                        is_at_self = target in {abm.self_id, "all"}
-                        abm.message.append(At(qq=target, name=""))
+                        is_at_self = target == str(abm.self_id)
+                        abm.message.append(Mention(target=target, name=""))
 
                         if is_at_self and not first_at_self_processed:
                             # 第一个@是机器人，不添加到message_str

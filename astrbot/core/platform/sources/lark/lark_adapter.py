@@ -170,8 +170,8 @@ class LarkPlatformAdapter(Platform):
         normalized_bot_name = str(bot_name or "").strip()
         parts: list[str] = []
         for index, comp in enumerate(components):
-            if index == 0 and isinstance(comp, Comp.At):
-                mention_id = str(comp.qq or "").strip()
+            if index == 0 and isinstance(comp, Comp.Mention):
+                mention_id = str(comp.target or "").strip()
                 mention_name = str(comp.name or "").strip()
                 is_self_mention = bool(
                     normalized_self_id
@@ -187,8 +187,10 @@ class LarkPlatformAdapter(Platform):
                 text = comp.text.strip()
                 if text:
                     parts.append(text)
-            elif isinstance(comp, Comp.At):
-                name = str(comp.name or comp.qq or "").strip()
+            elif isinstance(comp, Comp.MentionAll):
+                parts.append("@all")
+            elif isinstance(comp, Comp.Mention):
+                name = str(comp.name or comp.target or "").strip()
                 if name:
                     parts.append(f"@{name}")
             elif isinstance(comp, Comp.Image):
@@ -215,8 +217,8 @@ class LarkPlatformAdapter(Platform):
         return result
 
     @staticmethod
-    def _build_at_map(mentions: list[Any] | None) -> dict[str, Comp.At]:
-        at_map: dict[str, Comp.At] = {}
+    def _build_at_map(mentions: list[Any] | None) -> dict[str, Comp.Mention]:
+        at_map: dict[str, Comp.Mention] = {}
         if not mentions:
             return at_map
 
@@ -234,20 +236,23 @@ class LarkPlatformAdapter(Platform):
                     open_id = str(mention_id)
 
             mention_name = str(getattr(mention, "name", "") or "")
-            at_map[key] = Comp.At(qq=open_id, name=mention_name)
+            at_map[key] = Comp.Mention(target=open_id, name=mention_name)
 
         return at_map
 
     @staticmethod
     def _parse_text_message_components(
         content: dict[str, Any],
-        at_map: dict[str, Comp.At],
+        at_map: dict[str, Comp.Mention],
     ) -> list[Comp.BaseMessageComponent]:
         components: list[Comp.BaseMessageComponent] = []
-        parts = re.split(r"(@_user_\d+)", str(content.get("text", "")))
+        parts = re.split(r"(@_user_\d+|@_all(?:_\d+)?)", str(content.get("text", "")))
         for part in parts:
             segment = part.strip()
             if not segment:
+                continue
+            if re.fullmatch(r"@_all(?:_\d+)?", segment):
+                components.append(Comp.MentionAll())
                 continue
             components.append(at_map.get(segment, Comp.Plain(segment)))
         return components
@@ -258,7 +263,7 @@ class LarkPlatformAdapter(Platform):
         message_id: str | None,
         message_type: str,
         content: dict[str, Any],
-        at_map: dict[str, Comp.At],
+        at_map: dict[str, Comp.Mention],
         tracked_paths: list[str],
     ) -> list[Comp.BaseMessageComponent]:
         components: list[Comp.BaseMessageComponent] = []
@@ -271,7 +276,9 @@ class LarkPlatformAdapter(Platform):
             tag = comp.get("tag")
             if tag == "at":
                 user_key = str(comp.get("user_id", ""))
-                if mention := at_map.get(user_key):
+                if user_key == "all":
+                    components.append(Comp.MentionAll())
+                elif mention := at_map.get(user_key):
                     components.append(mention)
                 continue
             if tag == "text":
@@ -451,7 +458,7 @@ class LarkPlatformAdapter(Platform):
         message_id: str | None,
         message_type: str,
         content: dict[str, Any],
-        at_map: dict[str, Comp.At],
+        at_map: dict[str, Comp.Mention],
         temporary_file_paths: list[str] | None = None,
     ) -> list[Comp.BaseMessageComponent]:
         tracked_paths = temporary_file_paths if temporary_file_paths is not None else []
@@ -722,7 +729,7 @@ class LarkPlatformAdapter(Platform):
                     continue
                 # 飞书 open_id 可能是 None，这里做个防护
                 open_id = m.id.open_id if m.id.open_id else ""
-                at_list[m.key] = Comp.At(qq=open_id, name=m.name)
+                at_list[m.key] = Comp.Mention(target=open_id, name=m.name)
 
                 if (self.bot_open_id and open_id == self.bot_open_id) or (
                     m.name == self.bot_name

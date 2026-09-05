@@ -364,7 +364,7 @@ def create_mock_message_component(
     component_map = {
         "plain": Comp.Plain,
         "image": Comp.Image,
-        "at": Comp.At,
+        "mention": Comp.Mention,
         "reply": Comp.Reply,
         "file": Comp.File,
     }

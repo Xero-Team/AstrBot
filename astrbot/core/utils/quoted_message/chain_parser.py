@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from astrbot.core.message.components import (
-    At,
-    AtAll,
     Face,
     File,
     Forward,
     Image,
+    Mention,
+    MentionAll,
     Node,
     Nodes,
     Plain,
@@ -127,12 +127,12 @@ def _extract_text_from_component_chain(
         if isinstance(seg, Plain):
             if seg.text:
                 parts.append(seg.text)
-        elif isinstance(seg, At):
+        elif isinstance(seg, Mention):
             if seg.name:
                 parts.append(f"@{seg.name}")
-            elif seg.qq:
-                parts.append(f"@{seg.qq}")
-        elif isinstance(seg, AtAll):
+            elif seg.target:
+                parts.append(f"@{seg.target}")
+        elif isinstance(seg, MentionAll):
             parts.append("@all")
         elif isinstance(seg, Image):
             parts.append("[Image]")

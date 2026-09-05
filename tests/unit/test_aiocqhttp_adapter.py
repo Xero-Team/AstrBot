@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.command import CommandCatalogStore
-from astrbot.core.message.components import Plain, Reply
+from astrbot.core.message.components import Mention, MentionAll, Plain, Reply
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
@@ -105,7 +105,9 @@ async def test_aiocqhttp_group_at_conversion_skips_member_lookup(
     abm = await adapter._convert_handle_message_event(event)
 
     assert abm.message_str.strip() == "/sid @999999"
-    assert [component.qq for component in abm.message if hasattr(component, "qq")] == [
+    assert [
+        component.target for component in abm.message if hasattr(component, "target")
+    ] == [
         "123456",
         "999999",
     ]
@@ -328,7 +330,7 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
     await stage.process(event)
 
     assert event.is_wake is True
-    assert event.is_at_or_wake_command is True
+    assert event.get_extra("should_run_llm") is True
     assert event.get_messages()[0].sender_id == "123456"
     adapter.bot.call_action.assert_awaited_once_with("get_msg", message_id="9001")
 
@@ -448,3 +450,18 @@ async def test_aiocqhttp_group_admin_role_stays_in_current_session(tmp_path):
     finally:
         await service.close()
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_outbound_mention_target_all_is_plain_text():
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+        AiocqhttpMessageEvent,
+    )
+
+    everyone = await AiocqhttpMessageEvent._from_segment_to_dict(MentionAll())
+    sentinel = await AiocqhttpMessageEvent._from_segment_to_dict(Mention(target="all"))
+    user = await AiocqhttpMessageEvent._from_segment_to_dict(Mention(target="10001"))
+
+    assert everyone == {"type": "at", "data": {"qq": "all"}}
+    assert sentinel == {"type": "text", "data": {"text": "@all"}}
+    assert user == {"type": "at", "data": {"qq": "10001"}}

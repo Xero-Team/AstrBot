@@ -206,7 +206,7 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
         for component in result.message
     )
     assert any(
-        isinstance(component, Comp.At) and component.qq == "alice"
+        isinstance(component, Comp.Mention) and component.target == "alice"
         for component in result.message
     )
 
@@ -433,7 +433,7 @@ async def test_telegram_group_command_strips_only_current_bot_mention():
     assert result is not None
     assert result.message_str == "/ask hi"
     assert any(
-        isinstance(component, Comp.At) and component.qq == "test_bot"
+        isinstance(component, Comp.Mention) and component.target == "test_bot"
         for component in result.message
     )
     assert any(
@@ -466,7 +466,7 @@ async def test_telegram_group_command_keeps_other_bot_mentions():
     assert result is not None
     assert result.message_str == "ping @other_bot"
     assert any(
-        isinstance(component, Comp.At) and component.qq == "other_bot"
+        isinstance(component, Comp.Mention) and component.target == "other_bot"
         for component in result.message
     )
     assert any(
@@ -1233,7 +1233,7 @@ async def test_telegram_send_with_client_prefixes_at_and_reuses_reply_and_thread
         MessageChain(
             [
                 Comp.Reply(id="42", chain=[]),
-                Comp.At(qq="alice", name="alice"),
+                Comp.Mention(target="alice", name="alice"),
                 Comp.Plain("hello there"),
             ]
         ),
@@ -1251,6 +1251,42 @@ async def test_telegram_send_with_client_prefixes_at_and_reuses_reply_and_thread
         chat_id="123",
         reply_to_message_id="42",
         message_thread_id="99",
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_with_client_prefixes_mention_target_when_name_missing():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        MessageChain([Comp.Mention(target="alice"), Comp.Plain("hello there")]),
+        "123",
+    )
+
+    client.send_message.assert_awaited_once_with(
+        text="@alice hello there",
+        parse_mode="MarkdownV2",
+        chat_id="123",
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_with_client_prefixes_mention_all():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        MessageChain([Comp.MentionAll(), Comp.Plain("hello there")]),
+        "123",
+    )
+
+    client.send_message.assert_awaited_once_with(
+        text="@all hello there",
+        parse_mode="MarkdownV2",
+        chat_id="123",
     )
 
 

@@ -12,8 +12,6 @@ from astrbot import logger
 from astrbot.core.message.components import (
     RPS,
     Anonymous,
-    At,
-    AtAll,
     BaseMessageComponent,
     Contact,
     Dice,
@@ -25,6 +23,8 @@ from astrbot.core.message.components import (
     Json,
     Location,
     Markdown,
+    Mention,
+    MentionAll,
     MFace,
     MiniApp,
     Music,
@@ -1132,13 +1132,17 @@ class NapCatPlatformAdapter(Platform):
                 segments.append(self.client.text(component.text))
                 fallback_parts.append(component.text)
             return True
-        if isinstance(component, AtAll):
+        if isinstance(component, MentionAll):
             segments.append(self.client.at_all())
             fallback_parts.append("@all")
             return True
-        if isinstance(component, At):
-            segments.append(self.client.at(component.qq, name=component.name))
-            fallback_parts.append(f"@{component.name or component.qq}")
+        if isinstance(component, Mention):
+            if component.is_everyone_sentinel():
+                segments.append(self.client.text("@all"))
+                fallback_parts.append("@all")
+                return True
+            segments.append(self.client.at(component.target, name=component.name))
+            fallback_parts.append(f"@{component.name or component.target}")
             return True
         if isinstance(component, Reply):
             segments.append(self.client.reply(component.id))
@@ -2124,10 +2128,14 @@ class NapCatPlatformAdapter(Platform):
         if isinstance(payload, AtSegment):
             target = payload.data.qq
             if target == "all":
-                return [AtAll(name="全体成员")], [" @all "], first_at_self_processed
+                return (
+                    [MentionAll(name="全体成员")],
+                    [" @all "],
+                    first_at_self_processed,
+                )
 
             resolved_name = payload.data.name
-            component = At(qq=target, name=resolved_name or "")
+            component = Mention(target=target, name=resolved_name or "")
             if self_id and str(target) == self_id and not first_at_self_processed:
                 return [component], [], True
             return (

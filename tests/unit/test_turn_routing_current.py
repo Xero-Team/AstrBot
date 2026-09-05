@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.command import build_command_catalog
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.components import Mention, Plain
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import StarMetadata
@@ -65,7 +65,10 @@ async def test_private_llm_access_prefix_matrix(settings, text, expected_wake):
 
     assert (await stage._detect_wake(event)).should_wake is expected_wake
     assert event.is_wake is expected_wake
-    assert event.is_at_or_wake_command is expected_wake
+    assert (
+        bool(event.get_extra("should_run_command") or event.get_extra("should_run_llm"))
+        is expected_wake
+    )
 
 
 @pytest.mark.asyncio
@@ -126,7 +129,7 @@ async def test_chat_status_is_command_and_unknown_subcommand_does_not_reach_llm(
     assert status.stopped is False
     assert status.sent == []
     assert status.get_extra("activated_handlers") == [child_md]
-    assert status.is_at_or_wake_command is True
+    assert status.get_extra("should_run_command") is True
 
     unknown = FakeEvent(
         [Plain("/chat 今天天气")],
@@ -220,7 +223,7 @@ async def test_napcat_input_status_is_not_queued():
 async def test_group_prefix_does_not_wake_when_first_component_ats_someone_else():
     stage = await make_stage()
     event = FakeEvent(
-        [At(qq="other"), Plain("/hello")],
+        [Mention(target="other"), Plain("/hello")],
         message_text="/hello",
     )
 
@@ -228,7 +231,8 @@ async def test_group_prefix_does_not_wake_when_first_component_ats_someone_else(
 
     assert decision.should_wake is False
     assert event.is_wake is False
-    assert event.is_at_or_wake_command is False
+    assert event.get_extra("should_run_command") is False
+    assert event.get_extra("should_run_llm") is False
     assert event.message_str == "/hello"
 
 
@@ -258,7 +262,8 @@ async def test_non_command_filter_still_handles_notice_and_request(monkeypatch):
     assert notice.stopped is False
     assert notice.get_extra("activated_handlers") == [handler]
     assert notice.is_wake is True
-    assert notice.is_at_or_wake_command is False
+    assert notice.get_extra("should_run_command") is False
+    assert notice.get_extra("should_run_llm") is False
 
     request = FakeEvent(
         [Plain("friend add")],
@@ -268,4 +273,5 @@ async def test_non_command_filter_still_handles_notice_and_request(monkeypatch):
     assert request.stopped is False
     assert request.get_extra("activated_handlers") == [handler]
     assert request.is_wake is True
-    assert request.is_at_or_wake_command is False
+    assert request.get_extra("should_run_command") is False
+    assert request.get_extra("should_run_llm") is False

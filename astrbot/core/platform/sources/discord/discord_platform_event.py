@@ -9,11 +9,12 @@ from discord.types.interactions import ComponentInteractionData
 
 from astrbot import logger
 from astrbot.core.message.components import (
-    At,
     BaseMessageComponent,
     ComponentType,
     File,
     Image,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -328,8 +329,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 content_parts.append(i.text)
             elif isinstance(i, Reply):
                 reference_message_id = i.id
-            elif isinstance(i, At):
-                content_parts.append(f"<@{i.qq}>")
+            elif isinstance(i, MentionAll):
+                content_parts.append("@everyone")
+            elif isinstance(i, Mention):
+                content_parts.append(f"<@{i.target}>")
             elif isinstance(i, Image):
                 logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:

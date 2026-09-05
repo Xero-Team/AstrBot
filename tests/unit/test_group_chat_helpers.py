@@ -2,12 +2,12 @@ from collections import deque
 from pathlib import Path
 
 from astrbot.api.message_components import (
-    At,
-    AtAll,
     Face,
     File,
     Forward,
     Image,
+    Mention,
+    MentionAll,
     Plain,
     Record,
     Reply,
@@ -20,12 +20,12 @@ def test_describe_chain_covers_component_types():
     chain = [
         Plain(text="hello"),
         Image(file="https://example.com/a.png"),
-        At(qq="1", name="bob"),
+        Mention(target="1", name="bob"),
         Record(file="a.wav"),
         Video(file="a.mp4"),
         File(name="a.txt"),
         Forward(id="fwd"),
-        AtAll(),
+        MentionAll(),
         Face(id=1),
         Reply(id="1"),
         object(),

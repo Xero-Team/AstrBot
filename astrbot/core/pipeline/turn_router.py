@@ -9,7 +9,7 @@ from astrbot.core.command import (
     CommandResolution,
     CommandResolutionKind,
 )
-from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.components import Mention, MentionAll, Reply
 
 RouteKind = Literal["ordinary", "passthrough", "turn_flush"]
 PrivateAccess = Literal["open", "prefix", "off"]
@@ -196,9 +196,9 @@ def route_turn(inp: TurnRouteInput) -> TurnRouteResult:
             stop=False,
         )
 
-    blocked_by_other_at = _first_at_is_other(inp)
+    blocked_by_other_mention = _first_mention_is_other(inp)
     command_text, command_prefix = _strip_command_prefix(inp.message_str, inp)
-    if command_prefix is not None and not blocked_by_other_at:
+    if command_prefix is not None and not blocked_by_other_mention:
         resolution = inp.catalog.resolve(command_text)
         if resolution.kind is CommandResolutionKind.MATCHED:
             return TurnRouteResult(
@@ -232,7 +232,7 @@ def route_turn(inp: TurnRouteInput) -> TurnRouteResult:
             )
 
     if inp.adapter_preconfigured:
-        llm_text, reasons = _llm_payload(inp, blocked_by_other_at)
+        llm_text, reasons = _llm_payload(inp, blocked_by_other_mention)
         return TurnRouteResult(
             False,
             True,
@@ -242,9 +242,9 @@ def route_turn(inp: TurnRouteInput) -> TurnRouteResult:
             False,
         )
 
-    llm_ok, reasons = _llm_gate(inp, blocked_by_other_at)
+    llm_ok, reasons = _llm_gate(inp, blocked_by_other_mention)
     if llm_ok:
-        llm_text, extra_reasons = _llm_payload(inp, blocked_by_other_at)
+        llm_text, extra_reasons = _llm_payload(inp, blocked_by_other_mention)
         return TurnRouteResult(
             False,
             True,
@@ -278,17 +278,18 @@ def _strip_command_prefix(
     return text[len(prefix) :].strip(" \t"), prefix
 
 
-def _first_at_is_other(inp: TurnRouteInput) -> bool:
+def _first_mention_is_other(inp: TurnRouteInput) -> bool:
     if inp.is_private or not inp.messages:
         return False
     first = inp.messages[0]
-    if not isinstance(first, At):
+    if not isinstance(first, Mention):
         return False
-    qq = str(first.qq)
-    return qq not in {str(inp.self_id), "all"}
+    return str(first.target) != str(inp.self_id)
 
 
-def _llm_gate(inp: TurnRouteInput, blocked_by_other_at: bool) -> tuple[bool, set[str]]:
+def _llm_gate(
+    inp: TurnRouteInput, blocked_by_other_mention: bool
+) -> tuple[bool, set[str]]:
     if inp.has_open_window:
         return True, {"turn_continuation"}
     mentioned_bot, mentioned_all, reply_to_bot = _mention_flags(inp)
@@ -298,7 +299,7 @@ def _llm_gate(inp: TurnRouteInput, blocked_by_other_at: bool) -> tuple[bool, set
             return True, {"llm_open"}
         if mode == "off":
             return False, set()
-        if blocked_by_other_at:
+        if blocked_by_other_mention:
             return False, set()
         if longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes):
             return True, {"llm_prefix"}
@@ -308,7 +309,7 @@ def _llm_gate(inp: TurnRouteInput, blocked_by_other_at: bool) -> tuple[bool, set
     base = False
     mode = inp.llm_access.group
     prefix_hit = False
-    if not blocked_by_other_at:
+    if not blocked_by_other_mention:
         prefix_hit = (
             longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes)
             is not None
@@ -344,10 +345,10 @@ def _llm_gate(inp: TurnRouteInput, blocked_by_other_at: bool) -> tuple[bool, set
 
 
 def _llm_payload(
-    inp: TurnRouteInput, blocked_by_other_at: bool
+    inp: TurnRouteInput, blocked_by_other_mention: bool
 ) -> tuple[str, set[str]]:
     text = inp.message_str.strip(" \t")
-    if blocked_by_other_at:
+    if blocked_by_other_mention:
         return text, set()
     prefix = longest_prefix_match(text, inp.llm_access.prefixes)
     if prefix is None:
@@ -360,9 +361,9 @@ def _mention_flags(inp: TurnRouteInput) -> tuple[bool, bool, bool]:
     mentioned_all = False
     reply_to_bot = False
     for message in inp.messages:
-        if isinstance(message, At) and str(message.qq) == str(inp.self_id):
+        if isinstance(message, Mention) and str(message.target) == str(inp.self_id):
             mentioned_bot = True
-        if isinstance(message, AtAll) and not inp.ignore_at_all:
+        if isinstance(message, MentionAll) and not inp.ignore_at_all:
             mentioned_all = True
         if isinstance(message, Reply) and str(
             getattr(message, "sender_id", "") or ""

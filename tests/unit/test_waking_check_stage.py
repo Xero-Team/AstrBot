@@ -10,7 +10,7 @@ from astrbot.core.command import (
     CommandLexer,
     build_command_catalog,
 )
-from astrbot.core.message.components import At, AtAll, Plain, Reply
+from astrbot.core.message.components import Mention, MentionAll, Plain, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
@@ -66,7 +66,6 @@ class FakeEvent:
         self.session_id = group_id
         self.role = "member"
         self.is_wake = False
-        self.is_at_or_wake_command = False
         self.plugins_name = None
         self._messages = messages
         self._private = private
@@ -366,12 +365,17 @@ def make_command_handler(name: str, handler, *extra_filters):
         ({}, FakeEvent([Plain("/hello")], message_text="/hello"), True),
         (
             {"llm_access": {"group": "mention"}},
-            FakeEvent([At(qq="bot"), Plain("hello")]),
+            FakeEvent([Mention(target="bot"), Plain("hello")]),
             True,
         ),
-        ({}, FakeEvent([At(qq="other"), Plain("hello")]), False),
-        ({}, FakeEvent([AtAll(), Plain("hello")]), True),
-        ({"ignore_at_all": True}, FakeEvent([AtAll(), Plain("hello")]), False),
+        ({}, FakeEvent([Mention(target="other"), Plain("hello")]), False),
+        ({}, FakeEvent([MentionAll(), Plain("hello")]), True),
+        ({"ignore_at_all": True}, FakeEvent([MentionAll(), Plain("hello")]), False),
+        (
+            {"llm_access": {"group": "mention"}},
+            FakeEvent([Mention(target="all"), Plain("hello")]),
+            False,
+        ),
     ],
 )
 async def test_detect_wake_behavior_matrix(settings, event, expected):
@@ -397,7 +401,7 @@ async def test_detect_wake_resolves_unknown_reply_sender(monkeypatch):
 async def test_unwoken_mention_does_not_mutate_at_component(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
-    mention = At(qq="bot")
+    mention = Mention(target="bot")
     event = FakeEvent([mention, Plain("hello")])
 
     await stage.process(event)
@@ -410,7 +414,7 @@ async def test_unwoken_mention_does_not_mutate_at_component(monkeypatch):
 async def test_adapter_preconfigured_wake_bypasses_group_llm_access(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
-    event = FakeEvent([At(qq="bot")])
+    event = FakeEvent([Mention(target="bot")])
     event.set_extra("adapter_preconfigured", True)
 
     await stage.process(event)

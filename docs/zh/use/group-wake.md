@@ -48,7 +48,7 @@
 另外两个独立条件：
 
 - **回复机器人时允许 LLM**（`reply_to_bot`）：作为额外的 OR 条件。群策略即使是 `off`，回复机器人仍可唤醒。
-- **@ 全体**：只要群策略不是 `off`，并且没有开启 `ignore_at_all`，@ 全体会放行 LLM。`ignore_at_all` 在 **平台配置 → 其他配置**。
+- **@ 全体**：只要群策略不是 `off`，并且没有开启 `ignore_at_all`，入站 `MentionAll` 会放行 LLM。`Mention(target="all")` 不算全体。`ignore_at_all` 在 **平台配置 → 其他配置**。
 
 消息以 @ **别人** 开头时，不会按前缀唤醒，避免把发给其他人的话当成对机器人说。
 
@@ -92,7 +92,7 @@
 1. 群里直接说话，但 `group` 仍是默认的 `prefix`。
 2. 改了 `command_prefixes`，以为 LLM 前缀会一起变。
 3. 改了 `default`，群其实绑定在另一份配置文件上。用 `/session info` 核对 UMO，再看配置文件页当前文件。
-4. 打开了 `mention`，但平台并没有把 @ 解析成 At 消息段。
+4. 打开了 `mention`，但平台并没有把 @ 解析成 `Mention` 消息段；@ 全体必须是 `MentionAll`，`Mention(target="all")` 不算。
 5. 以为回复机器人等于 @；需要显式打开 `reply_to_bot`。
 6. 白名单已启用且列表非空，当前群 ID 不在其中。
 7. 自定义规则或 `/llm disable` 关掉了该会话的 LLM。

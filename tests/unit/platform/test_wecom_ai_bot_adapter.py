@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import Image, Mention, Plain
 from astrbot.api.platform import MessageType
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_adapter import (
@@ -79,10 +79,22 @@ async def test_wecom_ai_bot_convert_message_text_removes_bot_mention_and_marks_f
     assert result.session_id == "wecom_ai_bot_wecomai_user-1"
     assert result.sender.user_id == "user-1"
     assert result.message_str == "hello there"
-    assert [type(component) for component in result.message] == [At, Plain]
-    assert result.message[0].qq == "AstrBot"
+    assert [type(component) for component in result.message] == [Mention, Plain]
+    assert result.message[0].target == "AstrBot"
     assert result.message[0].name == "AstrBot"
     assert result.message[1].text == "hello there"
+
+
+def test_wecom_ai_bot_extracts_mention_target_when_name_missing():
+    from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
+        WecomAIBotMessageEvent,
+    )
+
+    text = WecomAIBotMessageEvent._extract_plain_text_from_chain(
+        MessageChain(chain=[Mention(target="user-1"), Plain("hi")])
+    )
+
+    assert text == "@user-1 hi"
 
 
 @pytest.mark.asyncio

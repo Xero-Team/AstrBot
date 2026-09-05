@@ -6,10 +6,29 @@ artifacts, then wait. Do not write `PLAN.md` in this phase.
 
 Invariants in `AGENTS.md` stay locked even when reflection recommends a
 larger change: Python 3.14+, no legacy shims, no public security Issue,
-no fork publish/docs URL claims.
+no fork publish/docs URL claims. `AGENTS.md` is the constitution and
+ADR stand-in. Do not create `CONTEXT.md` or `docs/adr/`.
 
 Facts about this tree stay the agent's job. Do not quiz or grill a
 lookup. Decisions (scope, architecture, acceptance) are the user's.
+
+## Depth
+
+Set this in `RESEARCH.md` after the coverage ledger. Probe still runs.
+
+| Depth     | When                                         | After probe                                              |
+| --------- | -------------------------------------------- | -------------------------------------------------------- |
+| `small`   | ≤3 files, one sentence of change             | Skip 2–3 approach variants. One or two tasks.            |
+| `medium`  | Clear feature, under ~10 tasks               | Variants only if architecture forks.                     |
+| `large`   | Multi-owner or independently testable slices | Variants required. Capability map if slices diverge.     |
+| `complex` | Ambiguity, new domain, or fog past one plan  | Implicit-requirement sweep. Map fog before a giant plan. |
+
+Safety valve: if an implicit task list would exceed five steps, write
+formal tasks even if depth was `small`.
+
+A **capability map** is vertical slices plus blocking edges, each sized
+to one executor session. Do not pre-slice fog you cannot yet phrase as
+a sharp question. Out of scope is not fog.
 
 ## 2. Brief
 
@@ -158,9 +177,37 @@ Surgical remains the default recommendation unless a larger change
 removes a real invariant violation, a duplicated owner, or a design that
 cannot meet the inferred goal without more shims.
 
+Score each candidate with the **deletion test**: if deleting the module
+makes complexity vanish, it is a pass-through; if complexity reappears
+across N callers, it earns its keep. Deepening pays off on **hot spots**
+(`git log` files that keep changing), not cold code. **One adapter is a
+hypothetical seam; two adapters make a real one.** Do not add a seam
+only so a test can mock it.
+
+Label the better path:
+
+- **Surgical refactor:** behavior-preserving. Prefactor first, then the
+  feature, in separate tasks. Do not mix them.
+- **Redesign:** observable behavior changes. Say so. Prefer existing
+  seams; fewer seams is better (ideally one).
+
+Present candidates as cards, not essays:
+
+- **Files** involved
+- **Problem** (friction, shallowness, leaked seam)
+- **Solution** in plain English; no new interface yet
+- **Benefits** in locality, leverage, and how tests improve
+- **Strength** `strong` / `worth exploring` / `speculative`
+
+If a candidate contradicts `AGENTS.md` or a changelog fork deviation,
+only surface it when the friction is real enough to reopen. Mark that
+conflict on the card. Do not list every theoretical refactor those
+locks forbid.
+
 Still forbidden as "better": restoring legacy APIs, Python 3.10–3.13
 branches, weakening TLS/MCP/auth/`v-html` locks, or treating upstream
-artifacts as fork artifacts.
+artifacts as fork artifacts. Do not propose interfaces until the user
+picks a card.
 
 Write `REFLECT.md` and present it in chat:
 
@@ -196,6 +243,10 @@ refactors. Why it is better; what it costs; what it must not restore.
 
 `surgical` | `better` | `stop`
 Reason. If quiz verdict is `fail`, say how that moved the inferred goal.
+
+## Depth
+
+`small` | `medium` | `large` | `complex`
 ```
 
 Stop. The user picks a direction (or amends the goal). That choice is
@@ -210,10 +261,31 @@ only questions that change scope, architecture, or acceptance.
 
 Internally score remaining unknowns Clear / Partial / Missing across:
 functional scope, contracts, failure paths, invariants, integrations,
-and done-when. Ask at most **five** questions, highest
+terminology, and done-when. Ask at most **five** questions, highest
 **Impact × Uncertainty** first. Skip anything a grep or `RESEARCH.md`
 already answered. If nothing material remains, write `QUESTIONS.md`
 with `none` and go to plan.
+
+Clarify is a completeness check, not a new spec file. A question whose
+answer would not change architecture, data shape, tests, or acceptance
+is deferred, not asked.
+
+For `large` / `complex` depth, run a closing **implicit-requirement**
+sweep. Each row is a requirement or `N/A because …`. Do not invent
+scope to fill the table.
+
+| Dimension              | Cover                                     |
+| ---------------------- | ----------------------------------------- |
+| Input bounds           | Limits, formats, sanitization             |
+| Failure / partial fail | Timeouts, rollbacks, compensating cleanup |
+| Auth / rate limits     | Who may call what                         |
+| Concurrency            | Races, ordering                           |
+| State transitions      | Valid moves, guards                       |
+| External failure       | Adapter/provider/MCP down                 |
+| Observability          | What a test or log must show              |
+
+`medium` covers only dimensions obviously present. `small` skips the
+sweep.
 
 ### Question kinds
 
@@ -263,3 +335,23 @@ map before writing one giant plan.
 Stop grilling when remaining unknowns would not change architecture or
 acceptance, the user says proceed, or five questions are asked. Flag
 deferred high-impact items in the plan's Open questions.
+
+Write a coverage summary at the end of `QUESTIONS.md`:
+
+```markdown
+## Coverage
+
+| Category      | Status                                    |
+| ------------- | ----------------------------------------- |
+| Functional    | Resolved / Deferred / Clear / Outstanding |
+| Contracts     | …                                         |
+| Failure paths | …                                         |
+| Invariants    | …                                         |
+| Integrations  | …                                         |
+| Terminology   | …                                         |
+| Done-when     | …                                         |
+```
+
+Outstanding or Deferred high-impact rows must appear in the plan's Open
+questions. Do not start `PLAN.md` while a blocking contradiction is
+unresolved.

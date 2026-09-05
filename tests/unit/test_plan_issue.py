@@ -37,7 +37,7 @@ Change only the waking-check stage and its unit tests.
 
 ## Current behavior
 
-`WakingCheckStage` in `astrbot/core/pipeline/waking_check.py:1` decides
+`WakingCheckStage` in `astrbot/core/pipeline/waking_check/stage.py:1` decides
 wake without recording reasons.
 
 ## Desired behavior
@@ -54,7 +54,7 @@ Dashboard copy. Provider changes.
 ### Task 1: Record wake reasons
 
 **Files:**
-- Modify: `astrbot/core/pipeline/waking_check.py` (`WakingCheckStage`)
+- Modify: `astrbot/core/pipeline/waking_check/stage.py` (`WakingCheckStage`)
 - Test: `tests/unit/test_waking_check.py`
 
 **Acceptance:**
@@ -166,6 +166,7 @@ VALID_RESEARCH = """# Research: Wake reasons
 
 **Issue:** https://github.com/Xero-Team/AstrBot/issues/1
 **SHA:** abcdef0123456789
+**Depth:** medium
 **Verdict:** continue
 
 ## Request
@@ -176,7 +177,7 @@ Record selected wake reasons on the event.
 
 | # | Question | Area | Evidence | Status |
 | - | -------- | ---- | -------- | ------ |
-| 1 | How does waking-check decide today? | pipeline | `astrbot/core/pipeline/waking_check.py:1` | answered |
+| 1 | How does waking-check decide today? | pipeline | `astrbot/core/pipeline/waking_check/stage.py:1` | answered |
 
 ## Current behavior
 
@@ -241,6 +242,37 @@ VALID_QUIZ = """# Quiz
 """
 
 
+VALID_BRIEF = """# Brief
+
+**Problem:** operators cannot see why a group message woke the bot
+**Owner:** pipeline `astrbot/core/pipeline/waking_check/stage.py`
+**Not the problem:** restoring `group_wake_policy`
+"""
+
+VALID_REFLECT = """# Reflect
+
+## Inferred goal
+
+Record why a group message woke the bot.
+
+## Why-chain
+
+Why 1 operators cannot audit wakeups.
+
+## Surgical path
+
+Extend `WakingCheckStage` and its unit tests.
+
+## Better path
+
+Do not split a second wake owner.
+
+## Recommendation
+
+surgical
+"""
+
+
 def test_validate_research_accepts_complete_document():
     module = _load()
     assert module.validate_research(VALID_RESEARCH) == []
@@ -252,6 +284,53 @@ def test_validate_research_requires_headings():
     assert "RESEARCH.md missing heading: Coverage ledger" in errors
     assert "RESEARCH.md missing heading: Hypotheses" in errors
     assert "RESEARCH.md missing heading: Impact surface" in errors
+    assert any("Depth" in item for item in errors)
+
+
+def test_validate_brief_requires_problem():
+    module = _load()
+    assert module.validate_brief(VALID_BRIEF) == []
+    assert "BRIEF.md missing **Problem:**" in module.validate_brief("# Brief\n")
+
+
+def test_validate_reflect_requires_path_headings():
+    module = _load()
+    assert module.validate_reflect(VALID_REFLECT) == []
+    errors = module.validate_reflect("# Reflect\n\n## Inferred goal\n\nhello\n")
+    assert "REFLECT.md missing heading: Surgical path" in errors
+    assert "REFLECT.md missing heading: Better path" in errors
+
+
+def test_validate_task_graph_detects_cycle_and_unknown():
+    module = _load()
+    cyclic = VALID_PLAN.replace(
+        "### Task 1: Record wake reasons\n",
+        "### Task 1: Record wake reasons\n\n**Blocked by:** Task 1\n",
+    )
+    assert any("itself" in item for item in module.validate_task_graph(cyclic))
+    unknown = VALID_PLAN.replace(
+        "### Task 1: Record wake reasons\n",
+        "### Task 1: Record wake reasons\n\n**Blocked by:** Task 9\n",
+    )
+    assert any("unknown Task 9" in item for item in module.validate_task_graph(unknown))
+
+
+def test_validate_modify_paths_and_sha_match(tmp_path: Path):
+    module = _load()
+    missing = tmp_path / "checkout"
+    missing.mkdir()
+    errors = module.validate_modify_paths(VALID_PLAN, missing)
+    assert any(item.startswith("Modify path missing:") for item in errors)
+    present = tmp_path / "real"
+    target = present / "astrbot" / "core" / "pipeline" / "waking_check"
+    target.mkdir(parents=True)
+    (target / "stage.py").write_text("class WakingCheckStage:\n    pass\n")
+    assert module.validate_modify_paths(VALID_PLAN, present) == []
+    assert module.validate_sha_match(VALID_PLAN, "abcdef0123456789") == []
+    assert any(
+        "does not match" in item
+        for item in module.validate_sha_match(VALID_PLAN, "deadbeef")
+    )
 
 
 def test_validate_quiz_accepts_complete_document():
@@ -283,8 +362,8 @@ def test_validate_requires_align_files_unless_plan_only(
         module.cmd_validate(Namespace(run_dir=str(run_dir), plan_only=False))
     assert module.cmd_validate(Namespace(run_dir=str(run_dir), plan_only=True)) == 0
     (run_dir / "RESEARCH.md").write_text(VALID_RESEARCH, encoding="utf-8")
-    for name in ("BRIEF.md", "REFLECT.md"):
-        (run_dir / name).write_text(f"# {name}\n", encoding="utf-8")
+    (run_dir / "BRIEF.md").write_text(VALID_BRIEF, encoding="utf-8")
+    (run_dir / "REFLECT.md").write_text(VALID_REFLECT, encoding="utf-8")
     (run_dir / "QUIZ.md").write_text(VALID_QUIZ, encoding="utf-8")
     assert module.cmd_validate(Namespace(run_dir=str(run_dir), plan_only=False)) == 0
 

@@ -67,9 +67,14 @@ for a written plan.
   contracts; add a code sketch only when a new signature is easy to get
   wrong.
 - Claim a command was verified unless this session ran it.
-- Skip brief, quiz, or reflect because the user filed the Issue.
+- Skip brief, quiz, or reflect because the user filed the Issue or the
+  change looks small.
 - Ask the user a fact this tree already answers.
 - Treat an empty grep as proof the behavior is absent.
+- Create `CONTEXT.md`, `docs/adr/`, `.specify/`, or an HTML architecture
+  report in this checkout. Cite `AGENTS.md` instead.
+- Propose a new seam or interface before the user picks a path.
+- Mix a behavior-preserving refactor with a feature change in one task.
 
 ## Handoff
 
@@ -95,12 +100,17 @@ Load only the file the current step needs:
 - **Probe mode:** brief the problem, quiz the user, reflect on a better
   whole-tree path. Required after research. See `references/probe.md`.
 - **Clarify mode:** grill only after probe. Record answers in
-  `QUESTIONS.md`.
+  `QUESTIONS.md`. Completeness check, not a new spec file.
 - **Plan mode (default end state):** write `PLAN.md`, then validate.
 - **Check mode:** re-validate an existing workspace.
 - **Implement mode:** enter only after the user explicitly approved the
   plan in this conversation. That is a different task; keep the plan
   stable and follow it.
+
+After research, classify **depth** (`small` / `medium` / `large` /
+`complex`) in `RESEARCH.md`. Probe still runs. Small skips approach
+variants. Large or complex work that still has fog writes a capability
+map before one giant plan. See `references/probe.md`.
 
 ## Preflight
 
@@ -146,6 +156,10 @@ Stop and report, do not write a build plan, when the change is already
 implemented, previously rejected, a security vulnerability, or owned by
 another skill.
 
+For a `bug`, name one **red-capable** command that would catch the
+reporter's symptom before hypothesising a mechanism. If this session
+ran it, paste redacted output. If not, say so.
+
 ### 2–4. Brief, quiz, reflect
 
 Follow `references/probe.md` in order. Do not skip to grilling.
@@ -173,15 +187,22 @@ choice, if any: surgical vs better vs stop. Record each Q/A in
 `QUESTIONS.md`.
 
 List remaining non-blocking assumptions in the plan instead of stalling.
-If the request bundles several independently testable capabilities,
-stop and propose a capability map before writing one giant plan.
+If the request bundles several independently testable capabilities, or
+the way to the destination is still fog, stop and propose a capability
+map (vertical slices + blocking edges) before writing one giant plan.
+Close grilling with a coverage summary: Resolved / Deferred / Clear /
+Outstanding.
 
 ### 6. Choose an approach
 
 Work inside the path the user picked after reflection (`surgical` or
-`better`). For feature-depth work, present 2–3 variants of that path
-with trade-offs and one recommendation. Do not silently fall back to a
-local patch if they chose the better-path refactor.
+`better`). Present remaining candidates as Files / Problem / Solution /
+Benefits. Apply the deletion test and the one-adapter rule
+(`references/probe.md`). Prefer existing seams; fewer seams is better.
+Do not propose a new interface until they pick. For `medium`/`large`/
+`complex` work, present 2–3 variants of that path with trade-offs and
+one recommendation. Small work may skip variants. Do not silently fall
+back to a local patch if they chose the better-path refactor.
 
 ### 7. Write the plan
 
@@ -207,10 +228,11 @@ python .agents/skills/plan-issue/scripts/issue_plan.py validate
 python .agents/skills/plan-issue/scripts/issue_plan.py status
 ```
 
-A finished planning run has `RESEARCH.md`, `BRIEF.md`, `QUIZ.md`,
-`REFLECT.md`, `PLAN.md`, a passing validator, and either an Issue URL
-under `github.com/Xero-Team/AstrBot` or an explicit local-slug note that
-a development Issue is still required before a feature PR.
+A finished planning run has `RESEARCH.md` (with depth), `BRIEF.md`,
+`QUIZ.md`, `REFLECT.md`, `QUESTIONS.md` coverage summary, `PLAN.md`, a
+passing validator with empty BLOCKING, and either an Issue URL under
+`github.com/Xero-Team/AstrBot` or an explicit local-slug note that a
+development Issue is still required before a feature PR.
 
 ## Anti-rationalization
 
@@ -229,3 +251,7 @@ a development Issue is still required before a feature PR.
 | "One grep found nothing, so it is new"    | Empty lane is not absence. Report queries, a synonym, and a second surface. |
 | "Ask the user how the code works"         | Facts are yours. Decisions are theirs.                                      |
 | "The ticket is the job"                   | State the JTBD without the proposed patch. Then plan for that job.          |
+| "Better means rewrite the tree"           | Deletion test + YAGNI hot spots. Cold code stays.                           |
+| "Add a seam so tests can mock it"         | One adapter is hypothetical; two adapters make a real seam.                 |
+| "I can see the bug in the stack trace"    | Name a red-capable command first. Then hypothesise.                         |
+| "Small change, skip probe"                | Probe still runs. Small only skips approach variants.                       |

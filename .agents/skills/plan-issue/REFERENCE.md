@@ -40,11 +40,11 @@ Created by `scripts/issue_plan.py init` at `.tmp/issue-plan/<run-id>/`:
 .tmp/issue-plan/<run-id>/
   manifest.json    # SHA, branch, issue, slug, start time
   ISSUE.md         # fetched or pasted request
-  RESEARCH.md      # coverage ledger, current path, hypotheses
+  RESEARCH.md      # coverage ledger, depth, current path, hypotheses
   BRIEF.md         # problem framing
   QUIZ.md          # five questions, scores, verdict
   REFLECT.md       # JTBD, why-chain, surgical vs better path
-  QUESTIONS.md     # grill log with recommended answers
+  QUESTIONS.md     # grill log, coverage summary
   PLAN.md          # executor plan
 ```
 

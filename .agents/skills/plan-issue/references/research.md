@@ -12,6 +12,8 @@ do not ask the user what a grep can answer.
    re-asked.
 3. Classify: `bug`, `enhancement`, `task`, or mixed. Mixed work that
    bundles independent capabilities needs a capability map first.
+4. Classify **depth** (`small` / `medium` / `large` / `complex`) from
+   `references/probe.md`. Record it in `RESEARCH.md`.
 
 ## Coverage ledger
 
@@ -90,9 +92,15 @@ Read the owner, the nearest tests, and the matching `docs/zh/` +
 the plan (fix docs with the change), not a license to invent a third
 behavior.
 
-For a bug: reproduce from the reporter's steps, or trace the code path
-and say the live repro was not run. Distinguish **symptom** (what
-fails) from **mechanism** (how the current path produces it).
+For a bug: distinguish **symptom** (what fails) from **mechanism**
+(how the current path produces it). Name one **red-capable** command
+that would catch the reporter's exact symptom (test, curl, CLI, or a
+named harness) **before** ranking hypotheses. If this session ran it,
+paste the invocation and redacted output. If not, say so. Do not
+proceed to a mechanism guess with no named loop.
+
+Redact secrets in any pasted command or artifact: write `<REDACTED>`.
+Quote only the lines that carry the signal.
 
 ## Hypotheses
 
@@ -112,6 +120,15 @@ Name the likely callers, configs, generated artifacts, tests, and
 bilingual docs a change here would touch. That list becomes plan
 tasks or explicit out-of-scope.
 
+Weight **hot spots**: files that keep appearing in recent `git log`
+for this owner. Deepening or refactoring cold code is speculative
+unless the user picked `better` for a real invariant or duplicated
+owner.
+
+If the user or Issue uses a term that conflicts with `AGENTS.md` or
+the matching `docs/zh/` + `docs/en/` pages, record the conflict. Do
+not ask the user what the code calls it.
+
 ## Stop conditions
 
 Write `RESEARCH.md` and halt planning when:
@@ -128,6 +145,7 @@ Write `RESEARCH.md` and halt planning when:
 
 **Issue:** <url or local-slug>
 **SHA:** <full>
+**Depth:** small | medium | large | complex
 **Verdict:** continue | already-implemented | rejected | route:<skill> | security
 
 ## Request

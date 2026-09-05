@@ -68,6 +68,32 @@ VERDICT_RE = re.compile(
     r"^\*{0,2}Verdict:\*{0,2}\s*(pass|fail|override)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+DEPTH_RE = re.compile(
+    r"^\*{0,2}Depth:\*{0,2}\s*(small|medium|large|complex)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+PROBLEM_RE = re.compile(
+    r"^\*{0,2}Problem:\*{0,2}\s+\S",
+    re.IGNORECASE | re.MULTILINE,
+)
+SHA_LINE_RE = re.compile(
+    r"^\*{0,2}SHA:\*{0,2}\s*([0-9a-f]{7,40})\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+MODIFY_RE = re.compile(r"Modify:\s*`([^`]+)`")
+BLOCKED_BY_RE = re.compile(
+    r"^\*{0,2}Blocked by:\*{0,2}\s*(.+)$",
+    re.IGNORECASE,
+)
+TASK_ID_RE = re.compile(r"^Task\s+(\d+)\b", re.IGNORECASE)
+TASK_REF_RE = re.compile(r"Task\s+(\d+)\b", re.IGNORECASE)
+REFLECT_HEADINGS = (
+    "Inferred goal",
+    "Why-chain",
+    "Surgical path",
+    "Better path",
+    "Recommendation",
+)
 STATUS_FILES = (
     "ISSUE.md",
     "RESEARCH.md",
@@ -201,7 +227,118 @@ def validate_research(markdown: str) -> list[str]:
     for heading in RESEARCH_HEADINGS:
         if heading not in titles:
             errors.append(f"RESEARCH.md missing heading: {heading}")
+    if DEPTH_RE.search(markdown) is None:
+        errors.append("RESEARCH.md missing **Depth:** small|medium|large|complex")
     return errors
+
+
+def validate_brief(markdown: str) -> list[str]:
+    """Return mechanical errors for a BRIEF.md body."""
+    if not markdown.strip():
+        return ["BRIEF.md is empty"]
+    if PROBLEM_RE.search(markdown) is None:
+        return ["BRIEF.md missing **Problem:**"]
+    return []
+
+
+def validate_reflect(markdown: str) -> list[str]:
+    """Return mechanical errors for a REFLECT.md body."""
+    errors: list[str] = []
+    text = markdown.strip()
+    if not text:
+        return ["REFLECT.md is empty"]
+    titles = heading_titles(split_sections(markdown), 2)
+    for heading in REFLECT_HEADINGS:
+        if heading not in titles:
+            errors.append(f"REFLECT.md missing heading: {heading}")
+    return errors
+
+
+def _task_number(title: str) -> int | None:
+    match = TASK_ID_RE.match(title)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def validate_task_graph(markdown: str) -> list[str]:
+    """Return errors for cyclic or unknown Blocked-by edges."""
+    sections = split_sections(markdown)
+    tasks: dict[int, str] = {}
+    edges: list[tuple[int, int]] = []
+    errors: list[str] = []
+    for level, title, body in sections:
+        if level != 3 or TASK_HEADING_RE.match(f"### {title}") is None:
+            continue
+        number = _task_number(title)
+        if number is None:
+            continue
+        tasks[number] = title
+        for line in body.splitlines():
+            match = BLOCKED_BY_RE.match(line.strip())
+            if match is None:
+                continue
+            target_text = match.group(1).strip()
+            if re.fullmatch(r"none|n/a|linear", target_text, re.IGNORECASE):
+                continue
+            refs = [int(item) for item in TASK_REF_RE.findall(target_text)]
+            if not refs:
+                errors.append(f"{title}: Blocked by has no Task N")
+                continue
+            for target in refs:
+                edges.append((number, target))
+    known = set(tasks)
+    for source, target in edges:
+        if target not in known:
+            errors.append(f"{tasks[source]}: Blocked by unknown Task {target}")
+        if source == target:
+            errors.append(f"{tasks[source]}: Blocked by itself")
+    remaining = set(known)
+    inbound: dict[int, int] = dict.fromkeys(known, 0)
+    outgoing: dict[int, list[int]] = {node: [] for node in known}
+    for source, target in edges:
+        if target not in known:
+            continue
+        inbound[source] = inbound.get(source, 0) + 1
+        outgoing[target].append(source)
+    ready = [node for node, count in inbound.items() if count == 0]
+    while ready:
+        node = ready.pop()
+        remaining.discard(node)
+        for child in outgoing[node]:
+            inbound[child] -= 1
+            if inbound[child] == 0:
+                ready.append(child)
+    if remaining:
+        cycle = ", ".join(f"Task {item}" for item in sorted(remaining))
+        errors.append(f"Blocked by cycle: {cycle}")
+    return errors
+
+
+def validate_modify_paths(markdown: str, root: Path) -> list[str]:
+    """Return errors for Modify: paths that are missing from the checkout."""
+    errors: list[str] = []
+    for rel in MODIFY_RE.findall(markdown):
+        if any(char in rel for char in "*?[]"):
+            continue
+        path = root / rel
+        if not path.is_file():
+            errors.append(f"Modify path missing: {rel}")
+    return errors
+
+
+def validate_sha_match(markdown: str, expected: str | None) -> list[str]:
+    """Return errors when PLAN.md SHA disagrees with the workspace manifest."""
+    if not expected:
+        return []
+    match = SHA_LINE_RE.search(markdown)
+    if match is None:
+        return []
+    found = match.group(1).lower()
+    want = expected.lower()
+    if want.startswith(found) or found.startswith(want):
+        return []
+    return [f"PLAN.md SHA {found} does not match workspace {want}"]
 
 
 def validate_quiz(markdown: str) -> list[str]:
@@ -363,7 +500,15 @@ def cmd_validate(args: argparse.Namespace) -> int:
     plan_path = run_dir / "PLAN.md"
     if not plan_path.is_file():
         raise PlanError(f"missing {plan_path}")
-    errors = validate_plan(plan_path.read_text(encoding="utf-8"))
+    plan_text = plan_path.read_text(encoding="utf-8")
+    errors = validate_plan(plan_text)
+    errors.extend(validate_task_graph(plan_text))
+    if (root / "AGENTS.md").is_file() and (root / "pyproject.toml").is_file():
+        errors.extend(validate_modify_paths(plan_text, root))
+    manifest = load_manifest(run_dir)
+    sha = manifest.get("sha")
+    if isinstance(sha, str):
+        errors.extend(validate_sha_match(plan_text, sha))
     if not args.plan_only:
         for name in ALIGN_FILES:
             if not (run_dir / name).is_file():
@@ -371,9 +516,15 @@ def cmd_validate(args: argparse.Namespace) -> int:
         research_path = run_dir / "RESEARCH.md"
         if research_path.is_file():
             errors.extend(validate_research(research_path.read_text(encoding="utf-8")))
+        brief_path = run_dir / "BRIEF.md"
+        if brief_path.is_file():
+            errors.extend(validate_brief(brief_path.read_text(encoding="utf-8")))
         quiz_path = run_dir / "QUIZ.md"
         if quiz_path.is_file():
             errors.extend(validate_quiz(quiz_path.read_text(encoding="utf-8")))
+        reflect_path = run_dir / "REFLECT.md"
+        if reflect_path.is_file():
+            errors.extend(validate_reflect(reflect_path.read_text(encoding="utf-8")))
     if errors:
         raise PlanError("\n".join(errors))
     print(f"ok\t{plan_path}")

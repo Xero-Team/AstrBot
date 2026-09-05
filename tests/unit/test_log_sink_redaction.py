@@ -9,11 +9,14 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from loguru import logger as raw_loguru
+
 from astrbot.core.log import (
     LogBroker,
     LogManager,
     LogQueueHandler,
     _loguru,
+    _LoguruInterceptHandler,
     sanitize_log_payload,
     sanitize_log_record,
 )
@@ -107,6 +110,28 @@ def test_sanitize_log_record_overwrites_raw_exc_text() -> None:
     preserved = record.exc_text
     sanitize_log_record(record)
     assert record.exc_text == preserved
+
+
+def test_sanitize_log_record_redacts_exc_text_without_exc_info() -> None:
+    record = _record_from_exc("failed")
+    record.exc_text = f"LEAKED {SENSITIVE_MESSAGE}"
+    sanitize_log_record(record)
+    assert record.exc_info is None
+    assert record.exc_text is not None
+    _assert_redacted(record.exc_text)
+    assert "api_key=[REDACTED]" in record.exc_text
+
+
+def test_exc_text_without_exc_info_is_redacted_on_console() -> None:
+    handler = _LoguruInterceptHandler()
+    record = _record_from_exc("failed")
+    record.exc_text = f"LEAKED {SENSITIVE_MESSAGE}"
+    with _capture_loguru() as buf:
+        handler.emit(record)
+    text = buf.getvalue()
+    assert "failed" in text
+    _assert_redacted(text)
+    assert "api_key=[REDACTED]" in text
 
 
 def test_sanitize_log_record_redacts_stack_info() -> None:
@@ -233,6 +258,37 @@ def test_astrbot_logger_error_redacts_console_output() -> None:
     assert "not_a_field" in text
     assert "Traceback (most recent call last)" in text
     assert "Stack (most recent call last)" in text
+
+
+def test_native_loguru_logger_redacts_file_sink(tmp_path) -> None:
+    LogManager.GetLogger("astrbot")
+    previous_file = LogManager._file_sink_id
+    log_path = tmp_path / "native-loguru.log"
+    try:
+        LogManager._file_sink_id = LogManager._add_file_sink(
+            file_path=str(log_path),
+            level=logging.DEBUG,
+            max_mb=None,
+            backup_count=0,
+            trace=False,
+        )
+        raw_loguru.bind(
+            plugin_tag="[Core]",
+            short_levelname="ERRO",
+            astrbot_version_tag="",
+            source_file="test.log_sink",
+            source_line=1,
+            is_trace=False,
+        ).opt(exception=False).error(SENSITIVE_MESSAGE)
+        LogManager._remove_sink(LogManager._file_sink_id)
+        LogManager._file_sink_id = None
+        text = log_path.read_text(encoding="utf-8")
+    finally:
+        if LogManager._file_sink_id not in {None, previous_file}:
+            LogManager._remove_sink(LogManager._file_sink_id)
+        LogManager._file_sink_id = previous_file
+    _assert_redacted(text)
+    assert "api_key=[REDACTED]" in text
 
 
 def test_file_sink_redacts_after_enqueue_flush(tmp_path) -> None:

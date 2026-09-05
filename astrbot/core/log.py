@@ -73,6 +73,8 @@ def sanitize_log_record(record: logging.LogRecord) -> logging.LogRecord:
     record.args = ()
     if record.exc_info:
         record.exc_text = redact_sensitive_text(_format_exception_text(record.exc_info))
+    elif record.exc_text:
+        record.exc_text = redact_sensitive_text(record.exc_text)
     if record.stack_info:
         record.stack_info = redact_sensitive_text(record.stack_info)
     record.exc_info = None
@@ -197,6 +199,26 @@ def _build_source_file(pathname: str | None) -> str:
     )
 
 
+def _sanitize_loguru_record(record: Record) -> None:
+    message = record["message"]
+    if isinstance(message, str):
+        record["message"] = redact_sensitive_text(message)
+    extra = record["extra"]
+    summary = extra.get("summary")
+    if isinstance(summary, str):
+        extra["summary"] = redact_sensitive_text(summary)
+
+
+def _non_trace_sink_filter(record: Record) -> bool:
+    _sanitize_loguru_record(record)
+    return not record["extra"].get("is_trace", False)
+
+
+def _trace_sink_filter(record: Record) -> bool:
+    _sanitize_loguru_record(record)
+    return bool(record["extra"].get("is_trace", False))
+
+
 def _patch_record(record: Record) -> None:
     extra = record["extra"]
     extra.setdefault("plugin_tag", "[Core]")
@@ -213,6 +235,7 @@ def _patch_record(record: Record) -> None:
     extra.setdefault("platform", None)
     extra.setdefault("conversation_id", None)
     extra.setdefault("sender_id", None)
+    _sanitize_loguru_record(record)
     extra.setdefault("summary", redact_sensitive_text(str(record["message"])[:512]))
 
 
@@ -402,7 +425,7 @@ class LogManager:
             colorize=True,
             diagnose=False,
             backtrace=False,
-            filter=lambda record: not record["extra"].get("is_trace", False),
+            filter=_non_trace_sink_filter,
             format=(
                 "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
                 "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
@@ -620,7 +643,7 @@ class LogManager:
                 enqueue=True,
                 diagnose=False,
                 backtrace=False,
-                filter=lambda record: record["extra"].get("is_trace", False),
+                filter=_trace_sink_filter,
             )
 
         logging_level_name = logging.getLevelName(level)
@@ -640,7 +663,7 @@ class LogManager:
             enqueue=True,
             diagnose=False,
             backtrace=False,
-            filter=lambda record: not record["extra"].get("is_trace", False),
+            filter=_non_trace_sink_filter,
         )
 
     @classmethod
@@ -669,9 +692,7 @@ class LogManager:
                         colorize=True,
                         diagnose=False,
                         backtrace=False,
-                        filter=lambda record: (
-                            not record["extra"].get("is_trace", False)
-                        ),
+                        filter=_non_trace_sink_filter,
                         format=(
                             "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
                             "<level>[{extra[short_levelname]}]</level>"

@@ -343,6 +343,7 @@ Runtime-root helpers in `astrbot.core.utils.astrbot_path` currently return strin
 - Parse untrusted XML with `defusedxml`.
 - Sanitize dynamic Dashboard HTML with DOMPurify; frontend lint rejects unaudited `v-html` usage.
 - Redact sensitive values before exposing Agent exceptions to users or logs.
+- Controlled log sinks (console, file, Dashboard queue, and Trace payloads) redact recognized patterns such as secret fields, Bearer tokens, URLs, and absolute paths before they leave the process. loguru `diagnose` and `backtrace` are off, so traces no longer dump local variables. Cookies, private chat content, and custom secrets are not guaranteed to be stripped; review logs before sharing.
 
 ## Where to Make Changes
 

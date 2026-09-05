@@ -80,4 +80,6 @@ data/logs/event_loop_watchdog.log
 - 如果使用 Docker，请附带对应时间段的 `docker logs`。
 - 已安装插件列表，以及问题是否在禁用第三方插件后仍然出现。
 
-提交日志前请先检查并遮盖 API Key、Token、Cookie、私聊内容等敏感信息。
+`astrbot.log` 中的堆栈不再包含 loguru 局部变量转储，栈帧里的绝对路径会被替换为 `[REDACTED_PATH]`。出口只脱敏已识别模式（密钥字段、Bearer、URL、绝对路径）。Cookie、私聊内容和自定义 secret 不保证被剥离。
+
+提交日志前仍需人工检查并遮盖 API Key、Token、Cookie、私聊内容等敏感信息。

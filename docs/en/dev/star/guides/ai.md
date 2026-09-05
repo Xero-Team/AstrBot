@@ -178,4 +178,4 @@ These return current Provider abstractions. A plugin can call abstract capabilit
 - Do not treat model output as a trusted instruction. Continue authorization checks for file writes, shell, accounts, and external actions.
 - Cover unavailable Providers, empty output, invalid tool arguments, timeout, cancellation, step exhaustion, and plugin hot reload.
 - Use mock Providers and tools in unit tests. Enable live Provider tests only through explicit environment variables.
-- Keep user-facing errors concise and redacted; put detailed exceptions only in protected logs.
+- Keep user-facing errors concise and pass them through `safe_error`. Detailed exceptions may be written to logs; controlled sinks redact recognized patterns automatically.

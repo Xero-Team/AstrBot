@@ -12,6 +12,8 @@ def _lifecycle(*, start) -> SimpleNamespace:
         initialize=AsyncMock(),
         start=start,
         stop=AsyncMock(),
+        reboot_requested=False,
+        process_rebooter=SimpleNamespace(reboot=MagicMock()),
         runtime=SimpleNamespace(dashboard_shutdown_event=asyncio.Event()),
     )
 
@@ -238,3 +240,133 @@ async def test_real_lifecycle_event_bus_failure_cancels_dashboard(monkeypatch):
 
     assert dashboard_cancelled.is_set()
     assert stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_reboots_after_stop_when_requested(monkeypatch):
+    call_order: list[str] = []
+    reboot = MagicMock()
+
+    def reboot_impl(delay: int = 3) -> None:
+        call_order.append(f"reboot:{delay}")
+
+    reboot.side_effect = reboot_impl
+
+    lifecycle = _lifecycle(start=AsyncMock())
+    lifecycle.reboot_requested = True
+    lifecycle.process_rebooter = SimpleNamespace(reboot=reboot)
+    original_stop = lifecycle.stop
+
+    async def tracking_stop() -> None:
+        call_order.append("stop")
+        await original_stop()
+
+    lifecycle.stop = tracking_stop
+    loader = _loader(monkeypatch, lifecycle, lambda: None)
+
+    await loader.start()
+
+    assert call_order == ["stop", "reboot:0"]
+    reboot.assert_called_once_with(delay=0)
+    original_stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_does_not_reboot_without_request(monkeypatch):
+    lifecycle = _lifecycle(start=AsyncMock())
+    reboot = MagicMock()
+    lifecycle.process_rebooter = SimpleNamespace(reboot=reboot)
+    loader = _loader(monkeypatch, lifecycle, lambda: None)
+
+    await loader.start()
+
+    reboot.assert_not_called()
+    lifecycle.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_restart_flushes_dashboard_then_stops_then_reboots(monkeypatch):
+    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
+    call_order: list[str] = []
+    reboot = MagicMock()
+    dashboard_started = asyncio.Event()
+    shutdown_event = asyncio.Event()
+
+    def reboot_impl(delay: int = 3) -> None:
+        call_order.append(f"reboot:{delay}")
+
+    reboot.side_effect = reboot_impl
+
+    config = MagicMock()
+    config.get = MagicMock(return_value="")
+    lifecycle = AstrBotCoreLifecycle(
+        MagicMock(),
+        SimpleNamespace(config=config, db=MagicMock()),
+    )
+
+    async def initialize() -> None:
+        lifecycle._initialized = True
+        lifecycle.dashboard_shutdown_event = shutdown_event
+        lifecycle.process_rebooter = SimpleNamespace(reboot=reboot)
+        lifecycle._runtime = SimpleNamespace(dashboard_shutdown_event=shutdown_event)
+
+    async def core_start() -> None:
+        await asyncio.Event().wait()
+
+    original_stop = lifecycle.stop
+
+    async def tracking_stop() -> None:
+        call_order.append("stop")
+        await original_stop()
+
+    async def dashboard_run() -> None:
+        dashboard_started.set()
+        await shutdown_event.wait()
+        call_order.append("response_flushed")
+
+    lifecycle.initialize = initialize
+    lifecycle.start = core_start
+    lifecycle.stop = tracking_stop
+    loader = _loader(monkeypatch, lifecycle, dashboard_run)
+    start_task = asyncio.create_task(loader.start())
+    await dashboard_started.wait()
+    await lifecycle.restart()
+    await start_task
+
+    assert call_order == ["response_flushed", "stop", "reboot:0"]
+    reboot.assert_called_once_with(delay=0)
+
+
+@pytest.mark.asyncio
+async def test_missing_rebooter_does_not_hide_runtime_failure(monkeypatch):
+    lifecycle = _lifecycle(start=AsyncMock(side_effect=RuntimeError("core failed")))
+    lifecycle.reboot_requested = True
+    lifecycle.process_rebooter = None
+    loader = _loader(monkeypatch, lifecycle, lambda: None)
+
+    with pytest.raises(RuntimeError, match="core failed"):
+        await loader.start()
+
+    lifecycle.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_missing_rebooter_skips_process_replace(monkeypatch):
+    errors: list[str] = []
+    monkeypatch.setattr(
+        initial_loader.logger,
+        "error",
+        lambda message, *args: errors.append(message % args if args else message),
+    )
+    lifecycle = _lifecycle(start=AsyncMock())
+    lifecycle.reboot_requested = True
+    lifecycle.process_rebooter = None
+    loader = _loader(monkeypatch, lifecycle, lambda: None)
+
+    await loader.start()
+
+    lifecycle.stop.assert_awaited_once()
+    assert errors == [
+        "Restart was requested without a process rebooter; skipping process replace"
+    ]

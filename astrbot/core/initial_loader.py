@@ -96,3 +96,12 @@ class InitialLoader:
         finally:
             await self._cancel_and_join(tasks)
             await self._stop_lifecycle(lifecycle)
+            if lifecycle.reboot_requested:
+                process_rebooter = lifecycle.process_rebooter
+                if process_rebooter is None:
+                    logger.error(
+                        "Restart was requested without a process rebooter; "
+                        "skipping process replace"
+                    )
+                else:
+                    process_rebooter.reboot(delay=0)

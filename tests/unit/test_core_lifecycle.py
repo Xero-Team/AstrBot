@@ -1214,11 +1214,11 @@ class TestAstrBotCoreLifecycleRestart:
     """Tests for AstrBotCoreLifecycle.restart method."""
 
     @pytest.mark.asyncio
-    async def test_restart_terminates_managers_and_starts_thread(
+    async def test_restart_requests_reboot_without_terminating_managers(
         self, mock_log_broker, mock_db
     ):
-        """Test that restart terminates managers and starts reboot thread."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle._initialized = True
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock()
@@ -1234,22 +1234,52 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.process_rebooter = MagicMock()
         mock_html_renderer = MagicMock()
         mock_html_renderer.terminate = AsyncMock()
+        mock_db.html_renderer = mock_html_renderer
 
-        with (
-            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        await lifecycle.restart()
+
+        lifecycle.provider_manager.terminate.assert_not_awaited()
+        lifecycle.platform_manager.terminate.assert_not_awaited()
+        lifecycle.kb_manager.terminate.assert_not_awaited()
+        mock_html_renderer.terminate.assert_not_awaited()
+        lifecycle.process_rebooter.reboot.assert_not_called()
+        assert lifecycle.dashboard_shutdown_event.is_set()
+        assert lifecycle.reboot_requested is True
+
+    @pytest.mark.asyncio
+    async def test_restart_rejects_uninitialized_lifecycle(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.process_rebooter = MagicMock()
+
+        with pytest.raises(
+            RuntimeError, match="AstrBot core lifecycle is not initialized"
         ):
-            mock_db.html_renderer = mock_html_renderer
             await lifecycle.restart()
 
-            # Verify managers were terminated
-            lifecycle.provider_manager.terminate.assert_awaited_once()
-            lifecycle.platform_manager.terminate.assert_awaited_once()
-            lifecycle.kb_manager.terminate.assert_awaited_once()
-            mock_html_renderer.terminate.assert_awaited_once()
+        assert lifecycle.reboot_requested is False
+        assert not lifecycle.dashboard_shutdown_event.is_set()
 
-            # Verify thread was started
-            mock_thread.assert_called_once()
-            mock_thread.return_value.start.assert_called_once()
+    @pytest.mark.asyncio
+    async def test_restart_rejects_initialized_lifecycle_without_rebooter(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle._initialized = True
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+
+        with pytest.raises(
+            RuntimeError, match="AstrBot core lifecycle is not initialized"
+        ):
+            await lifecycle.restart()
+
+        assert lifecycle.reboot_requested is False
+        assert not lifecycle.dashboard_shutdown_event.is_set()
 
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:

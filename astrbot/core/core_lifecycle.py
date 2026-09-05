@@ -13,7 +13,6 @@ import asyncio
 import os
 import threading
 import time
-import traceback
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -693,7 +692,10 @@ class AstrBotCoreLifecycle:
             except KeyboardInterrupt, SystemExit:
                 raise
             except Exception:
-                logger.error(traceback.format_exc())
+                logger.exception(
+                    "hook(on_astrbot_loaded) failed: %s",
+                    handler.handler_name,
+                )
 
         await await_first_terminal_task(self.curr_tasks)
         raise RuntimeError("AstrBot event bus exited unexpectedly")

@@ -3,7 +3,6 @@ import asyncio
 import re
 import threading
 import time
-import traceback
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import cmp_to_key
@@ -307,7 +306,7 @@ class StatService:
             )
             return stat_dict
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to collect runtime stats")
             raise StatServiceError(str(exc)) from exc
 
     @staticmethod
@@ -543,7 +542,7 @@ class StatService:
                 "today_by_provider": today_by_provider_data,
             }
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to collect provider token stats")
             raise StatServiceError(f"Error: {exc!s}") from exc
 
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
@@ -582,7 +581,7 @@ class StatService:
         except StatServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to test GitHub mirror connection")
             raise StatServiceError("镜像测试失败") from exc
 
     def get_changelog(self, version: str | None) -> dict:
@@ -614,7 +613,7 @@ class StatService:
         except StatServiceError:
             raise
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to read changelog")
             raise StatServiceError(f"Error: {exc!s}") from exc
 
     def list_changelog_versions(self) -> dict:
@@ -639,7 +638,7 @@ class StatService:
 
             return {"versions": versions}
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to list changelog versions")
             raise StatServiceError(f"Error: {exc!s}") from exc
 
     def get_first_notice(self, locale: Literal["zh-CN", "en-US"] | None) -> dict:
@@ -663,5 +662,5 @@ class StatService:
 
             return {"content": None}
         except Exception as exc:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to read first notice")
             raise StatServiceError(f"Error: {exc!s}") from exc

@@ -657,7 +657,11 @@ class AstrBotCoreLifecycle:
             )
 
     async def start(self) -> None:
-        """Start the core event bus and fail if that critical task ends."""
+        """Start the core event bus and fail if that critical task ends.
+
+        Callers that invoke this method directly must await ``stop()`` when
+        this method exits or is cancelled after startup begins.
+        """
         if self._stopped:
             raise RuntimeError("AstrBot core lifecycle has already been stopped")
         if not self._initialized:

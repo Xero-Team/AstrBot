@@ -927,19 +927,23 @@ class TestAstrBotCoreLifecycleStart:
             await asyncio.Event().wait()
 
         lifecycle.event_bus.dispatch = hang_dispatch
-        with patch(
-            "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
-            return_value=[("event_loop_lag_monitor", fail_aux())],
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                return_value=[("event_loop_lag_monitor", fail_aux())],
+            ),
+            patch("astrbot.core.utils.task_utils.logger") as mock_logger,
         ):
             start_task = asyncio.create_task(lifecycle.start())
             try:
                 await asyncio.wait_for(ready.wait(), timeout=1)
                 await asyncio.sleep(0)
                 assert not start_task.done()
+                mock_logger.error.assert_called_once()
             finally:
                 await lifecycle.stop()
                 with pytest.raises(asyncio.CancelledError):
-                    await start_task
+                    await asyncio.gather(start_task)
 
     @pytest.mark.asyncio
     async def test_auxiliary_never_ending_does_not_pin_event_bus_path(

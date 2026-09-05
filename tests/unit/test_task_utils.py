@@ -17,10 +17,10 @@ async def test_await_first_terminal_task_prefers_exception_over_cancel():
     hang_future: asyncio.Future[None] = loop.create_future()
 
     async def wait_fail() -> None:
-        await fail_future
+        return await fail_future
 
     async def wait_hang() -> None:
-        await hang_future
+        return await hang_future
 
     fail_task = asyncio.create_task(wait_fail(), name="fail")
     hang_task = asyncio.create_task(wait_hang(), name="hang")

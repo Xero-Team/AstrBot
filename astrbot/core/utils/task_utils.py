@@ -71,24 +71,22 @@ async def await_first_terminal_task(
     if not tasks:
         return None
 
-    pending: set[asyncio.Task] = set(tasks)
-    while pending:
-        done, pending = await asyncio.wait(
-            pending,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in tasks:
-            if task not in done or task.cancelled():
-                continue
-            exception = task.exception()
-            if exception is not None:
-                raise exception
-        if any(task.cancelled() for task in done):
-            raise asyncio.CancelledError
-        for task in tasks:
-            if task in done:
-                return task
-    return None
+    done, _pending = await asyncio.wait(
+        tasks,
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in tasks:
+        if task not in done or task.cancelled():
+            continue
+        exception = task.exception()
+        if exception is not None:
+            raise exception
+    if any(task.cancelled() for task in done):
+        raise asyncio.CancelledError
+    for task in tasks:
+        if task in done:
+            return task
+    raise RuntimeError("No terminal task completed")
 
 
 async def cancel_tracked_tasks(task_set: set[asyncio.Task]) -> None:

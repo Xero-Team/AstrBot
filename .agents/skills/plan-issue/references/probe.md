@@ -2,7 +2,8 @@
 
 Load this after `RESEARCH.md` and before grilling. Do not skip because
 the user opened the Issue or "already knows the codebase". Write the
-artifacts, then wait. Do not write `PLAN.md` in this phase.
+artifacts, then wait. Do not write `PLAN.md` in this phase unless probe
+was explicitly skipped.
 
 Invariants in `AGENTS.md` stay locked even when reflection recommends a
 larger change: Python 3.14+, no legacy shims, no public security Issue,
@@ -12,9 +13,36 @@ ADR stand-in. Do not create `CONTEXT.md` or `docs/adr/`.
 Facts about this tree stay the agent's job. Do not quiz or grill a
 lookup. Decisions (scope, architecture, acceptance) are the user's.
 
+## Skip
+
+Probe is **required** until the user waives it in this conversation.
+Valid waivers name skipping the Q&A: `skip probe`, `skip quiz`,
+`skip the questions`, `just write the plan`, `跳过问答`, `跳过提问`,
+`直接出方案`, or a clear synonym of those. Filing a ticket, calling
+the change small, or claiming tree knowledge is not a waiver.
+
+On skip:
+
+1. Run `python .agents/skills/plan-issue/scripts/issue_plan.py skip-probe`
+   (or pass `--skip-probe` on `init` if the waiver already happened).
+2. Write `BRIEF.md` from research. Do not wait for framing acceptance.
+3. Write `QUIZ.md` with `**Total:** 0/10` and `**Verdict:** skipped`.
+   Do not invent five questions. If some answers already exist, keep
+   them and mark the rest skipped.
+4. Write `REFLECT.md` with both paths. Default the recommendation to
+   `surgical` unless the request already picked `better` or `stop`.
+   Do not wait for a pick.
+5. Write `QUESTIONS.md` with `**Probe:** skipped` and the waiver
+   phrase. Score coverage from research (Clear when already answered).
+   Put leftover unknowns in the plan's Open questions. Do not grill.
+6. Continue to `PLAN.md`.
+
+The hard approval gate after the plan still applies.
+
 ## Depth
 
-Set this in `RESEARCH.md` after the coverage ledger. Probe still runs.
+Set this in `RESEARCH.md` after the coverage ledger. Probe still runs
+unless the user explicitly skipped it.
 
 | Depth     | When                                         | After probe                                              |
 | --------- | -------------------------------------------- | -------------------------------------------------------- |
@@ -112,11 +140,12 @@ answers (ticket-literal is itself a signal). These feed reflection.
 
 **Total** is `/10`. **Expected understanding** is **7/10**.
 
-| Verdict    | Total | Effect                                          |
-| ---------- | ----- | ----------------------------------------------- |
-| `pass`     | >= 7  | Issue text may stay the working spec            |
-| `fail`     | <= 6  | Do not treat the Issue body as the spec         |
-| `override` | any   | User said proceed anyway after seeing the score |
+| Verdict    | Total       | Effect                                                     |
+| ---------- | ----------- | ---------------------------------------------------------- |
+| `pass`     | >= 7        | Issue text may stay the working spec                       |
+| `fail`     | <= 6        | Do not treat the Issue body as the spec                    |
+| `override` | any         | User said proceed anyway after seeing the score            |
+| `skipped`  | 0 / partial | User waived probe. Issue body is not proven understanding. |
 
 On `fail`, say which slots scored 0/1 and what the tree actually does.
 Offer retry (new five) or `override`. Still run reflection: answers and
@@ -139,6 +168,16 @@ Write `QUIZ.md`:
 **Score:** 0
 **Intent signal:** wants-legacy-compat
 **Note:** picked restore of `group_wake_policy`
+```
+
+Skipped stub:
+
+```markdown
+# Quiz
+
+**Total:** 0/10
+**Verdict:** skipped
+**Reason:** user explicitly skipped probe
 ```
 
 ## 4. Reflect
@@ -254,8 +293,9 @@ an input to grilling, not a license to implement.
 
 ## 5. Grill
 
-Only after brief, quiz, and reflect. Ask one question at a time, and
-only questions that change scope, architecture, or acceptance.
+Only after brief, quiz, and reflect. Skip grilling when probe is
+skipped. Otherwise ask one question at a time, and only questions that
+change scope, architecture, or acceptance.
 
 ### Coverage scan
 

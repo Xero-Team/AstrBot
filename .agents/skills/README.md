@@ -58,8 +58,11 @@ bars live in `audit-product/references/verification.md`. Do not vendor
 third-party audit skill trees into `.agents/skills/`.
 
 `plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). It
-stops at `PLAN.md` until the user approves implementation. Cite
-`plan-issue/references/sources.md` for Superpowers, triage, Spec Kit,
-grilling, JTBD, and related planning skills; do not vendor those trees
-or their default `docs/superpowers/`, `tasks/`, `.specify/`, or
-`dev/plans/` directories.
+stops at `PLAN.md` until the user approves implementation. Brief, quiz,
+reflect, and grill are required unless the user explicitly skips that
+Q&A. Cite `plan-issue/references/sources.md` for Superpowers, triage,
+Spec Kit, grilling, JTBD, and related planning skills; do not vendor
+those trees or their default `docs/superpowers/`, `tasks/`, `.specify/`,
+or `dev/plans/` directories. The plan checker in
+`plan-issue/references/verification.md` is the agent judgment pass;
+`scripts/issue_plan.py validate` owns mechanical bars.

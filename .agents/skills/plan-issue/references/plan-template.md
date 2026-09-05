@@ -13,8 +13,9 @@ strings verbatim. Copy this skeleton; delete unused optional sections.
 **Architecture:** 2–3 sentences
 **Recommended approach:** name, why it wins, what was rejected
 **Depth:** `small` / `medium` / `large` / `complex`
-**Probe:** quiz `pass` / `fail` / `override`; user picked `surgical` or
-`better`; job statement from `REFLECT.md`
+**Probe:** quiz `pass` / `fail` / `override` / `skipped`; user picked
+`surgical` or `better`, or skipped probe defaulted to `surgical`; job
+statement from `REFLECT.md`
 
 ## Constraints
 

@@ -4,6 +4,25 @@ Load this before writing `RESEARCH.md`. Search by domain concept, not
 only the Issue's wording. Facts about this tree are the agent's job;
 do not ask the user what a grep can answer.
 
+## Language
+
+Write `RESEARCH.md` in Simplified Chinese. This file is the user-facing
+research report. `PLAN.md` stays English for the executor.
+
+Keep verbatim: paths, symbols, commands, APIs, error strings, SHAs,
+URLs, and the English H2 headings listed in the shape below. On first
+use of a domain term, write `中文（English）`. Later mentions may use
+either form. Do not machine-translate the Issue body; quote it, then
+explain.
+
+When research completes, present that Chinese report in chat (full file
+or a dense section-by-section digest). Do not switch the file to
+English.
+
+Do not write a one-sentence section. Each heading below is a section
+with the bullets in the shape. A skim that only names a package is not
+done.
+
 ## Read the request
 
 1. Title, body, labels, comments, linked PRs. For a PR treated as a
@@ -38,6 +57,9 @@ and why that gap matters. Empty search is "this lane cannot see it",
 not "it is absent". Report the queries and at least one synonym or
 second surface before claiming absence.
 
+After the table, add one short paragraph per row: what you read, what
+it does, and the cite. Do not leave the table as the only answer.
+
 ## Parallel lanes
 
 For a non-trivial request, fan out disjoint lanes rather than one
@@ -54,7 +76,9 @@ Do not spawn two agents onto the same vague question.
 
 The parent re-reads every load-bearing `path:line`. Subagent
 summaries are leads. Merge by hunting conflict first; do not average
-disagreement away.
+disagreement away. Fold lane results into Coverage ledger, Current
+behavior, and Search log. Do not replace those sections with a lane
+dump.
 
 ## Redundancy
 
@@ -74,7 +98,7 @@ rebuild plan.
 
 ## Prior rejection
 
-Check, in order, and quote the hit or write `nothing found`:
+Check, in order, and quote the hit or write `未找到`:
 
 1. `AGENTS.md` do-not-restore and security invariants
 2. Latest `changelogs/` _Fork Adaptations_ / _Fork Deviations_
@@ -83,7 +107,7 @@ Check, in order, and quote the hit or write `nothing found`:
    this fork skipped
 
 Do not create `.out-of-scope/`. A rejected enhancement stays in GitHub
-plus changelog notes.
+plus changelog notes. List all four sources even when three are empty.
 
 ## Trace current behavior
 
@@ -91,6 +115,10 @@ Read the owner, the nearest tests, and the matching `docs/zh/` +
 `docs/en/` pages. Cite `path:line`. Docs vs code drift is a finding for
 the plan (fix docs with the change), not a license to invent a third
 behavior.
+
+Write the happy path and the relevant failure path as 触发 → 函数/阶段
+→ 可观察结果. Quote only the lines that carry the signal. Name the
+symbol, not just the file.
 
 For a bug: distinguish **symptom** (what fails) from **mechanism**
 (how the current path produces it). Name one **red-capable** command
@@ -100,7 +128,6 @@ paste the invocation and redacted output. If not, say so. Do not
 proceed to a mechanism guess with no named loop.
 
 Redact secrets in any pasted command or artifact: write `<REDACTED>`.
-Quote only the lines that carry the signal.
 
 ## Hypotheses
 
@@ -112,13 +139,13 @@ certainty. Distinguish direct evidence from inference.
 
 Track `claim → evidence → confidence → next check`. A snippet is a
 lead until a second surface (test, caller, config, or git history)
-agrees.
+agrees. Confidence is `high` / `medium` / `low`.
 
 ## Impact surface
 
 Name the likely callers, configs, generated artifacts, tests, and
 bilingual docs a change here would touch. That list becomes plan
-tasks or explicit out-of-scope.
+tasks or explicit out-of-scope. Write paths, not layer names.
 
 Weight **hot spots**: files that keep appearing in recent `git log`
 for this owner. Deepening or refactoring cold code is speculative
@@ -140,42 +167,116 @@ Write `RESEARCH.md` and halt planning when:
 
 ## RESEARCH.md shape
 
-```markdown
-# Research: <title>
+Copy this skeleton. Fill every bullet. Delete a bullet only when it
+cannot apply, and say why. H2 titles stay English for the validator.
 
-**Issue:** <url or local-slug>
-**SHA:** <full>
+```markdown
+# 研究：<中文标题>
+
+**Issue:** <url 或 local-slug>
+**SHA:** <完整对象名>
+**Kind:** bug | enhancement | task | mixed
 **Depth:** small | medium | large | complex
 **Verdict:** continue | already-implemented | rejected | route:<skill> | security
 
 ## Request
 
+- **原话：** 标题 + 请求里真正要的那一句（引用，不改写）
+- **分类：** Kind 的依据（标签、模板、还是正文推断）
+- **已关闭问题：** Human note / Agent note / 评论里已经答过的点；没有则写「无」
+- **不在范围内的相邻请求：** 一到两条，避免后面扩 scope
+
 ## Coverage ledger
 
-| #   | Question               | Area  | Evidence    | Status   |
-| --- | ---------------------- | ----- | ----------- | -------- |
-| 1   | How does X work today? | owner | `path:line` | answered |
+| #   | 问题（当前状态，不要写成补丁） | 区域  | 检索     | 证据        | 状态              |
+| --- | ------------------------------ | ----- | -------- | ----------- | ----------------- |
+| 1   | 今天 X 在这条路径上做什么？    | owner | 查询词 A | `path:line` | answered / open:… |
+
+每行下面跟一段中文：读了哪个符号、行为是什么、测试在哪（或「无测试」）。
+`open:` 必须写缺了什么证据、为什么会影响方案。
+
+## Search log
+
+| 查询（含同义词） | 工具        | 命中             | 结论                    |
+| ---------------- | ----------- | ---------------- | ----------------------- |
+| `wake_reasons`   | Grep        | `path:line` 或 0 | 现有符号 / 本车道看不见 |
+| `group_wake`     | Grep / Glob | …                | 第二表面                |
+
+至少一行目标词，一行同义词或第二表面。0 命中写成「本车道看不见」，不要写成「不存在」。
+记录并行车道的目录和它们交回的 `path:line`。
 
 ## Current behavior
 
+**触发：** 谁、在什么会话/请求下、带什么配置
+**路径：** `path:line`（`symbol`）→ `path:line`（`symbol`）→ 出口
+**结果：** 今天可观察到什么
+**失败路径：** 同样粒度；没有则写「本请求不涉及」
+**文档 vs 代码：** `docs/zh/...` 与 `docs/en/...` 是否一致；漂移是发现项
+
+引用 1–5 行关键代码或等价地描述该函数在 `path:line` 的行为。禁止只写包名。
+
+**缺陷（仅 `bug`）：**
+
+- **症状：** 报告者看见什么
+- **机制：** 当前路径如何产生它（先有 red 命令再写）
+- **Red 命令：** 一条能抓住该症状的命令
+- **本会话是否已跑：** 是（贴去密后的输出）/ 否（原因）
+
 ## Redundancy
+
+- **查询：** 列出实际用过的词
+- **看过的路径：** 文件或目录，不要写「搜过代码」
+- **结论：** 已实现（指出符号并 **Verdict:** already-implemented）或未实现
 
 ## Prior rejection
 
+| 来源                        | 结果                      |
+| --------------------------- | ------------------------- |
+| `AGENTS.md` 不恢复 / 安全锁 | 引用或「未找到」          |
+| 最新 changelog 分叉记录     | 引用或「未找到」          |
+| 已关闭 wontfix / duplicate  | 编号 + 一句或「未找到」   |
+| `upstream-decisions.jsonl`  | 命中或「不适用 / 未找到」 |
+
 ## Owners and tests
+
+- **运行时所有者：** 模块 id + 主路径 + 主符号（不是 importer）
+- **测试：** 最近的测试文件与类/函数；没有则写「无测试」和应放的目录
+- **敏感区：** 是否碰到 Dashboard 认证、MCP URL、文件令牌、适配器 XML、知识库上传、配置脱敏、`v-html`；没有则写「无」
 
 ## Docs
 
+- **中文页：** `docs/zh/...` 或「无对应用户文档」
+- **英文页：** `docs/en/...` 或「无」
+- **OpenAPI：** 是否涉及 `openspec/openapi-v1.yaml`；不涉及则写「无」
+- **漂移：** 文档与代码不一致的具体句子；没有则写「无」
+
 ## Impact surface
+
+| 类别            | 路径 / 符号             | 计划里如何处理   |
+| --------------- | ----------------------- | ---------------- |
+| 调用方          | `path` (`symbol`)       | 任务 / 明确不做  |
+| 配置            | 字段名                  | …                |
+| 生成物          | OpenAPI / 客户端 / 模型 | …                |
+| 测试            | `tests/...`             | …                |
+| 双语文档        | `docs/zh/` + `docs/en/` | …                |
+| 热点（git log） | 近期常改的文件          | 加深或保持手术式 |
 
 ## Hypotheses
 
-| Claim                    | Verdict  | Evidence                        |
-| ------------------------ | -------- | ------------------------------- |
-| already implemented as Y | REJECTED | searched A, B; read `path:line` |
+| 主张 | 结论                              | 证据                      | 置信度              | 下一步              |
+| ---- | --------------------------------- | ------------------------- | ------------------- | ------------------- |
+| …    | CONFIRMED / REJECTED / UNRESOLVED | `path:line` / 检索 / 测试 | high / medium / low | 已做完 / 还要查什么 |
+
+直接证据与推断分开写。禁止用「应该是」填满置信度。
 
 ## Open questions
+
+只留研究阶段仍缺证据的问题。决策类问题留给 grill，不要写进这里充数。
+没有则写「无」。
 ```
 
 After a `continue` verdict, load `references/probe.md`. Do not grill or
-write `PLAN.md` until brief, quiz, and reflect are done.
+write `PLAN.md` until brief, quiz, and reflect are done, unless the
+user explicitly skipped probe. On skip, write `BRIEF.md` and
+`REFLECT.md` without waiting, write `QUIZ.md` with verdict `skipped`,
+then write `PLAN.md`.

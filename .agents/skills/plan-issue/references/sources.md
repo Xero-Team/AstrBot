@@ -24,7 +24,9 @@ are already in `AGENTS.md` KISS / inline-first rules. Do not add a
 separate guidelines skill.
 
 GSD `codebase-mapper` / `plan-checker` become `references/research.md`
-and `references/verification.md` for this checkout. Marketplace pages
+and `references/verification.md` for this checkout. The checker file
+stays because `issue_plan.py` only does mechanical bars; judgment
+(coverage, invariants, verify realism) is an agent pass. Marketplace pages
 for Code Archaeology / Investigation Methodology / KnowzCode explore
 were not vendored; their usable rules (git history as an angle; do not
 blind-read a large tree; parent verifies subagent cites) are in

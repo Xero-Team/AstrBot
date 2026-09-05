@@ -38,18 +38,21 @@ Created by `scripts/issue_plan.py init` at `.tmp/issue-plan/<run-id>/`:
 
 ```text
 .tmp/issue-plan/<run-id>/
-  manifest.json    # SHA, branch, issue, slug, start time
+  manifest.json    # SHA, branch, issue, slug, probe, start time
   ISSUE.md         # fetched or pasted request
-  RESEARCH.md      # coverage ledger, depth, current path, hypotheses
+  RESEARCH.md      # Chinese report: ledger, search log, path:line, hypotheses
   BRIEF.md         # problem framing
-  QUIZ.md          # five questions, scores, verdict
+  QUIZ.md          # five questions, scores, verdict — or skipped stub
   REFLECT.md       # JTBD, why-chain, surgical vs better path
-  QUESTIONS.md     # grill log, coverage summary
+  QUESTIONS.md     # grill log, coverage summary, or skip record
   PLAN.md          # executor plan
 ```
 
 `<run-id>` is `issue-<number>` or `local-<slug>`. `.tmp/` is gitignored.
 Do not relocate the run into `docs/` or `data/`.
+
+`probe` is `required` (default) or `skipped`. Set `skipped` only after
+an explicit Q&A waiver (`init --skip-probe` or `skip-probe`).
 
 If `status` shows an in-progress run at the same SHA and same issue or
 slug, resume it. If the SHA drifted, start a new run and say so. Do not

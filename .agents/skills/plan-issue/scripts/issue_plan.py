@@ -14,6 +14,9 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 FORK_REPO = "Xero-Team/AstrBot"
+PROBE_REQUIRED = "required"
+PROBE_SKIPPED = "skipped"
+PROBE_VALUES = (PROBE_REQUIRED, PROBE_SKIPPED)
 UPSTREAM_HOST = "github.com/AstrBotDevs/AstrBot"
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 ISSUE_ID_RE = re.compile(r"^issue-\d+$")
@@ -31,6 +34,7 @@ REQUIRED_HEADINGS = (
 RESEARCH_HEADINGS = (
     "Request",
     "Coverage ledger",
+    "Search log",
     "Current behavior",
     "Redundancy",
     "Prior rejection",
@@ -65,13 +69,23 @@ TOTAL_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 VERDICT_RE = re.compile(
-    r"^\*{0,2}Verdict:\*{0,2}\s*(pass|fail|override)\s*$",
+    r"^\*{0,2}Verdict:\*{0,2}\s*(pass|fail|override|skipped)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 DEPTH_RE = re.compile(
     r"^\*{0,2}Depth:\*{0,2}\s*(small|medium|large|complex)\b",
     re.IGNORECASE | re.MULTILINE,
 )
+KIND_RE = re.compile(
+    r"^\*{0,2}Kind:\*{0,2}\s*(bug|enhancement|task|mixed)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+RESEARCH_VERDICT_RE = re.compile(
+    r"^\*{0,2}Verdict:\*{0,2}\s*(continue|already-implemented|rejected|"
+    r"route:\S+|security)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+PATH_CITE_RE = re.compile(r"`[^`\n]+?:\d+`")
 PROBLEM_RE = re.compile(
     r"^\*{0,2}Problem:\*{0,2}\s+\S",
     re.IGNORECASE | re.MULTILINE,
@@ -229,6 +243,19 @@ def validate_research(markdown: str) -> list[str]:
             errors.append(f"RESEARCH.md missing heading: {heading}")
     if DEPTH_RE.search(markdown) is None:
         errors.append("RESEARCH.md missing **Depth:** small|medium|large|complex")
+    if KIND_RE.search(markdown) is None:
+        errors.append("RESEARCH.md missing **Kind:** bug|enhancement|task|mixed")
+    verdict_match = RESEARCH_VERDICT_RE.search(markdown)
+    if verdict_match is None:
+        errors.append(
+            "RESEARCH.md missing **Verdict:** continue|already-implemented|"
+            "rejected|route:<skill>|security"
+        )
+    else:
+        verdict = verdict_match.group(1).lower()
+        needs_cite = not (verdict == "security" or verdict.startswith("route:"))
+        if needs_cite and PATH_CITE_RE.search(markdown) is None:
+            errors.append("RESEARCH.md missing `path:line` evidence")
     return errors
 
 
@@ -341,9 +368,24 @@ def validate_sha_match(markdown: str, expected: str | None) -> list[str]:
     return [f"PLAN.md SHA {found} does not match workspace {want}"]
 
 
-def validate_quiz(markdown: str) -> list[str]:
+def quiz_verdict(markdown: str) -> str | None:
+    match = VERDICT_RE.search(markdown)
+    if match is None:
+        return None
+    return match.group(1).lower()
+
+
+def validate_quiz(markdown: str, *, probe: str = PROBE_REQUIRED) -> list[str]:
     """Return mechanical errors for a QUIZ.md body."""
     errors: list[str] = []
+    verdict = quiz_verdict(markdown)
+    if verdict is None:
+        errors.append("QUIZ.md missing **Verdict:** pass|fail|override|skipped")
+        return errors
+    if verdict == PROBE_SKIPPED:
+        if probe != PROBE_SKIPPED:
+            errors.append("QUIZ.md verdict skipped but workspace probe is required")
+        return errors
     questions = [
         line for line in markdown.splitlines() if QUESTION_HEADING_RE.match(line)
     ]
@@ -356,8 +398,6 @@ def validate_quiz(markdown: str) -> list[str]:
         errors.append("QUIZ.md missing **Total:** n/10")
     elif int(total.group(1)) > 10:
         errors.append("QUIZ.md total exceeds 10")
-    if VERDICT_RE.search(markdown) is None:
-        errors.append("QUIZ.md missing **Verdict:** pass|fail|override")
     return errors
 
 
@@ -424,6 +464,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         "branch": run_git(root, "rev-parse", "--abbrev-ref", "HEAD"),
         "created_at_utc": now_utc(),
         "status": "research",
+        "probe": (
+            PROBE_SKIPPED if getattr(args, "skip_probe", False) else PROBE_REQUIRED
+        ),
     }
     write_json(run_dir / "manifest.json", manifest)
     latest_pointer(default_runs_root(root)).write_text(run_id + "\n", encoding="utf-8")
@@ -509,6 +552,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
     sha = manifest.get("sha")
     if isinstance(sha, str):
         errors.extend(validate_sha_match(plan_text, sha))
+    probe = str(manifest.get("probe", PROBE_REQUIRED))
+    if probe not in PROBE_VALUES:
+        errors.append(f"invalid probe: {probe}")
+        probe = PROBE_REQUIRED
     if not args.plan_only:
         for name in ALIGN_FILES:
             if not (run_dir / name).is_file():
@@ -521,7 +568,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
             errors.extend(validate_brief(brief_path.read_text(encoding="utf-8")))
         quiz_path = run_dir / "QUIZ.md"
         if quiz_path.is_file():
-            errors.extend(validate_quiz(quiz_path.read_text(encoding="utf-8")))
+            errors.extend(
+                validate_quiz(
+                    quiz_path.read_text(encoding="utf-8"),
+                    probe=probe,
+                )
+            )
         reflect_path = run_dir / "REFLECT.md"
         if reflect_path.is_file():
             errors.extend(validate_reflect(reflect_path.read_text(encoding="utf-8")))
@@ -538,8 +590,20 @@ def cmd_status(args: argparse.Namespace) -> int:
     files = [name for name in STATUS_FILES if (run_dir / name).is_file()]
     print(
         f"{manifest['run_id']}\t{manifest.get('sha', '')}\t"
-        f"{manifest.get('status', '')}\t{','.join(files) or 'none'}\t{run_dir}"
+        f"{manifest.get('status', '')}\t"
+        f"{manifest.get('probe', PROBE_REQUIRED)}\t"
+        f"{','.join(files) or 'none'}\t{run_dir}"
     )
+    return 0
+
+
+def cmd_skip_probe(args: argparse.Namespace) -> int:
+    root = repo_root()
+    run_dir = resolve_run_dir(root, args.run_dir)
+    manifest = load_manifest(run_dir)
+    manifest["probe"] = PROBE_SKIPPED
+    write_json(run_dir / "manifest.json", manifest)
+    print(f"probe\tskipped\t{run_dir}")
     return 0
 
 
@@ -552,6 +616,11 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--issue", type=int)
     init.add_argument("--slug")
     init.add_argument("--force", action="store_true")
+    init.add_argument(
+        "--skip-probe",
+        action="store_true",
+        help="record an explicit user waiver of brief/quiz/reflect/grill",
+    )
     init.set_defaults(func=cmd_init)
 
     fetch = sub.add_parser("fetch", help="write ISSUE.md from GitHub")
@@ -566,6 +635,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = sub.add_parser("status", help="print workspace status")
     status.set_defaults(func=cmd_status)
+
+    skip_probe = sub.add_parser(
+        "skip-probe",
+        help="record an explicit user waiver of brief/quiz/reflect/grill",
+    )
+    skip_probe.set_defaults(func=cmd_skip_probe)
     return parser
 
 

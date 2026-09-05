@@ -150,68 +150,107 @@ def test_init_writes_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         ),
     )
     monkeypatch.setattr(module, "now_utc", lambda: "2026-09-05T00:00:00Z")
-    args = Namespace(issue=9, slug=None, force=False)
+    args = Namespace(issue=9, slug=None, force=False, skip_probe=False)
     assert module.cmd_init(args) == 0
     run_dir = tmp_path / ".tmp" / "issue-plan" / "issue-9"
     manifest = (run_dir / "manifest.json").read_text(encoding="utf-8")
     assert '"run_id": "issue-9"' in manifest
     assert '"sha": "abc123"' in manifest
+    assert '"probe": "required"' in manifest
     pointer = (tmp_path / ".tmp" / "issue-plan" / "LATEST").read_text(encoding="utf-8")
     assert pointer.strip() == "issue-9"
     with pytest.raises(module.PlanError, match="already exists"):
         module.cmd_init(args)
+    args.force = True
+    args.skip_probe = True
+    assert module.cmd_init(args) == 0
+    manifest = (run_dir / "manifest.json").read_text(encoding="utf-8")
+    assert '"probe": "skipped"' in manifest
 
 
-VALID_RESEARCH = """# Research: Wake reasons
+VALID_RESEARCH = """# 研究：记录唤醒原因
 
 **Issue:** https://github.com/Xero-Team/AstrBot/issues/1
 **SHA:** abcdef0123456789
+**Kind:** enhancement
 **Depth:** medium
 **Verdict:** continue
 
 ## Request
 
-Record selected wake reasons on the event.
+- **原话：** 在事件上记录所选唤醒原因
+- **分类：** 标签为 enhancement
+- **已关闭问题：** 无
+- **不在范围内的相邻请求：** 恢复 `group_wake_policy`
 
 ## Coverage ledger
 
-| # | Question | Area | Evidence | Status |
-| - | -------- | ---- | -------- | ------ |
-| 1 | How does waking-check decide today? | pipeline | `astrbot/core/pipeline/waking_check/stage.py:1` | answered |
+| # | 问题 | 区域 | 检索 | 证据 | 状态 |
+| - | ---- | ---- | ---- | ---- | ---- |
+| 1 | 今天 waking-check 如何决定唤醒？ | pipeline | `WakingCheckStage` | `astrbot/core/pipeline/waking_check/stage.py:1` | answered |
+
+`WakingCheckStage.process` 根据配置决定是否唤醒，不写入原因。测试见 `tests/unit/test_waking_check.py`。
+
+## Search log
+
+| 查询 | 工具 | 命中 | 结论 |
+| ---- | ---- | ---- | ---- |
+| `wake_reasons` | Grep | 0 | 本车道看不见 |
+| `group_wake_policy` | Grep | `AGENTS.md:1` | 已禁止恢复 |
 
 ## Current behavior
 
-`WakingCheckStage` wakes without recording reasons.
+**触发：** 群聊提及机器人
+**路径：** `astrbot/core/pipeline/waking_check/stage.py:1`（`WakingCheckStage`）
+**结果：** 唤醒或不唤醒，事件上无原因字段
+**失败路径：** 本请求不涉及
+**文档 vs 代码：** 无漂移
 
 ## Redundancy
 
-Searched `wake_reasons` and `group_wake_policy`. Nothing records reasons.
+- **查询：** `wake_reasons`、`group_wake_policy`
+- **看过的路径：** `astrbot/core/pipeline/waking_check/`
+- **结论：** 未实现
 
 ## Prior rejection
 
-`AGENTS.md` forbids restoring `platform_settings.group_wake_policy`.
+| 来源 | 结果 |
+| ---- | ---- |
+| `AGENTS.md` | 禁止恢复 `platform_settings.group_wake_policy` |
+| changelog | 未找到 |
+| wontfix | 未找到 |
+| `upstream-decisions.jsonl` | 不适用 |
 
 ## Owners and tests
 
-`tests/unit/test_waking_check.py`
+- **运行时所有者：** pipeline `astrbot/core/pipeline/waking_check/stage.py`（`WakingCheckStage`）
+- **测试：** `tests/unit/test_waking_check.py`
+- **敏感区：** 无
 
 ## Docs
 
-`docs/zh/` and `docs/en/` pipeline pages.
+- **中文页：** `docs/zh/use/configuration.md`
+- **英文页：** `docs/en/use/configuration.md`
+- **OpenAPI：** 无
+- **漂移：** 无
 
 ## Impact surface
 
-Waking-check stage, event type, unit tests, bilingual pipeline docs.
+| 类别 | 路径 / 符号 | 计划里如何处理 |
+| ---- | ----------- | -------------- |
+| 调用方 | `WakingCheckStage` | 任务 |
+| 测试 | `tests/unit/test_waking_check.py` | 任务 |
+| 双语文档 | pipeline 配置页 | 任务 |
 
 ## Hypotheses
 
-| Claim | Verdict | Evidence |
-| ----- | ------- | -------- |
-| already implemented | REJECTED | no `wake_reasons` symbol |
+| 主张 | 结论 | 证据 | 置信度 | 下一步 |
+| ---- | ---- | ---- | ------ | ------ |
+| 已实现 | REJECTED | 无 `wake_reasons` 符号 | high | 已做完 |
 
 ## Open questions
 
-None.
+无
 """
 
 
@@ -239,6 +278,14 @@ VALID_QUIZ = """# Quiz
 ### Question 5: Wrong fix
 
 **Score:** 1
+"""
+
+
+VALID_SKIPPED_QUIZ = """# Quiz
+
+**Total:** 0/10
+**Verdict:** skipped
+**Reason:** user explicitly skipped probe
 """
 
 
@@ -282,9 +329,39 @@ def test_validate_research_requires_headings():
     module = _load()
     errors = module.validate_research("# Research\n\n## Request\n\nhello\n")
     assert "RESEARCH.md missing heading: Coverage ledger" in errors
+    assert "RESEARCH.md missing heading: Search log" in errors
     assert "RESEARCH.md missing heading: Hypotheses" in errors
     assert "RESEARCH.md missing heading: Impact surface" in errors
     assert any("Depth" in item for item in errors)
+    assert any("Kind" in item for item in errors)
+    assert any("Verdict" in item for item in errors)
+
+
+def test_validate_research_requires_path_cite_unless_routed():
+    module = _load()
+    missing_cite = VALID_RESEARCH.replace(
+        "`astrbot/core/pipeline/waking_check/stage.py:1`",
+        "`stage.py`",
+    ).replace("`AGENTS.md:1`", "`AGENTS.md`")
+    assert any("path:line" in item for item in module.validate_research(missing_cite))
+    routed = (
+        "# 研究：插件\n\n"
+        "**Kind:** task\n"
+        "**Depth:** small\n"
+        "**Verdict:** route:create-astrbot-plugin\n\n"
+        "## Request\n\n插件包\n\n"
+        "## Coverage ledger\n\n无\n\n"
+        "## Search log\n\n无\n\n"
+        "## Current behavior\n\n无\n\n"
+        "## Redundancy\n\n无\n\n"
+        "## Prior rejection\n\n无\n\n"
+        "## Owners and tests\n\n无\n\n"
+        "## Docs\n\n无\n\n"
+        "## Impact surface\n\n无\n\n"
+        "## Hypotheses\n\n无\n\n"
+        "## Open questions\n\n无\n"
+    )
+    assert module.validate_research(routed) == []
 
 
 def test_validate_brief_requires_problem():
@@ -341,9 +418,17 @@ def test_validate_quiz_accepts_complete_document():
 def test_validate_quiz_requires_five_questions_total_and_verdict():
     module = _load()
     errors = module.validate_quiz("# Quiz\n\n**Total:** 11/10\n")
+    assert any("Verdict" in item for item in errors)
+    errors = module.validate_quiz("# Quiz\n\n**Total:** 11/10\n**Verdict:** pass\n")
     assert any("five ### Question" in item for item in errors)
     assert "QUIZ.md total exceeds 10" in errors
-    assert any("Verdict" in item for item in errors)
+
+
+def test_validate_quiz_accepts_skipped_only_when_probe_skipped():
+    module = _load()
+    assert module.validate_quiz(VALID_SKIPPED_QUIZ, probe="skipped") == []
+    errors = module.validate_quiz(VALID_SKIPPED_QUIZ, probe="required")
+    assert any("workspace probe is required" in item for item in errors)
 
 
 def test_validate_requires_align_files_unless_plan_only(
@@ -366,6 +451,48 @@ def test_validate_requires_align_files_unless_plan_only(
     (run_dir / "REFLECT.md").write_text(VALID_REFLECT, encoding="utf-8")
     (run_dir / "QUIZ.md").write_text(VALID_QUIZ, encoding="utf-8")
     assert module.cmd_validate(Namespace(run_dir=str(run_dir), plan_only=False)) == 0
+
+
+def test_skip_probe_allows_skipped_quiz_on_full_validate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    module = _load()
+    run_dir = tmp_path / ".tmp" / "issue-plan" / "issue-9"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        '{"schema_version": 1, "run_id": "issue-9", "probe": "skipped"}\n',
+        encoding="utf-8",
+    )
+    (run_dir / "PLAN.md").write_text(VALID_PLAN, encoding="utf-8")
+    (run_dir / "RESEARCH.md").write_text(VALID_RESEARCH, encoding="utf-8")
+    (run_dir / "BRIEF.md").write_text(VALID_BRIEF, encoding="utf-8")
+    (run_dir / "REFLECT.md").write_text(VALID_REFLECT, encoding="utf-8")
+    (run_dir / "QUIZ.md").write_text(VALID_SKIPPED_QUIZ, encoding="utf-8")
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+    assert module.cmd_validate(Namespace(run_dir=str(run_dir), plan_only=False)) == 0
+
+
+def test_skip_probe_command_updates_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    module = _load()
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        module,
+        "run_git",
+        lambda _root, *arguments: (
+            "abc123" if arguments[:2] == ("rev-parse", "HEAD") else "plan-issue"
+        ),
+    )
+    monkeypatch.setattr(module, "now_utc", lambda: "2026-09-05T00:00:00Z")
+    assert (
+        module.cmd_init(Namespace(issue=9, slug=None, force=False, skip_probe=False))
+        == 0
+    )
+    run_dir = tmp_path / ".tmp" / "issue-plan" / "issue-9"
+    assert module.cmd_skip_probe(Namespace(run_dir=str(run_dir))) == 0
+    manifest = (run_dir / "manifest.json").read_text(encoding="utf-8")
+    assert '"probe": "skipped"' in manifest
 
 
 def test_fetch_refuses_upstream_url():

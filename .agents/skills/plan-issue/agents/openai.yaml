@@ -1,7 +1,7 @@
 interface:
   display_name: 'Plan an Issue'
   short_description: 'Turn a GitHub Issue into a code-backed implementation plan'
-  default_prompt: 'Use $plan-issue to research this checkout, clarify the request, and write a file-path-and-verify plan under .tmp/issue-plan/. Do not implement until the plan is approved. Cite AGENTS.md; do not paste it. Do not vendor third-party planning skill trees.'
+  default_prompt: 'Use $plan-issue to research this checkout, clarify the request unless the user explicitly skipped probe, and write a file-path-and-verify plan under .tmp/issue-plan/. Do not implement until the plan is approved. Cite AGENTS.md; do not paste it. Do not vendor third-party planning skill trees.'
 
 policy:
   allow_implicit_invocation: true

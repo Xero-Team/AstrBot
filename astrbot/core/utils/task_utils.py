@@ -45,6 +45,50 @@ def create_tracked_task(
     return task
 
 
+async def await_first_terminal_task(
+    tasks: list[asyncio.Task],
+) -> asyncio.Task | None:
+    """Wait until the first task completes, preferring a real exception.
+
+    ``asyncio.FIRST_EXCEPTION`` does not wake when a child task is
+    cancelled. Cancellation must still be observed. Completed tasks are
+    inspected in the original list order so a concrete failure wins over
+    a simultaneous sibling cancellation. Remaining tasks are left running;
+    the caller cancels them in ``finally``.
+
+    Args:
+        tasks: Tasks to observe. An empty list returns ``None``.
+
+    Returns:
+        The first task that finished normally, or ``None`` if ``tasks`` is
+        empty.
+
+    Raises:
+        BaseException: The first completed task's exception.
+        asyncio.CancelledError: If a task was cancelled and no sibling in
+            the same completion batch raised a real exception.
+    """
+    if not tasks:
+        return None
+
+    done, _pending = await asyncio.wait(
+        tasks,
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in tasks:
+        if task not in done or task.cancelled():
+            continue
+        exception = task.exception()
+        if exception is not None:
+            raise exception
+    if any(task.cancelled() for task in done):
+        raise asyncio.CancelledError
+    for task in tasks:
+        if task in done:
+            return task
+    raise RuntimeError("No terminal task completed")
+
+
 async def cancel_tracked_tasks(task_set: set[asyncio.Task]) -> None:
     """Cancel and await all tracked tasks."""
     tasks = list(task_set)

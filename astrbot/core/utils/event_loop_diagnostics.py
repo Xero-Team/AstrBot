@@ -1,5 +1,6 @@
 import asyncio
 import faulthandler
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
@@ -172,23 +173,23 @@ async def faulthandler_event_loop_watchdog(
         faulthandler.cancel_dump_traceback_later()
 
 
-def create_event_loop_diagnostic_tasks() -> list[asyncio.Task]:
-    """Create enabled event loop diagnostic tasks for the current loop.
+def create_event_loop_diagnostic_jobs() -> list[tuple[str, Awaitable[None]]]:
+    """Return enabled event loop diagnostic jobs without creating tasks.
 
     Returns:
-        A list of created asyncio tasks.
+        A list of ``(name, coroutine)`` pairs for the caller to track.
     """
     settings = load_event_loop_diagnostic_settings()
-    tasks: list[asyncio.Task] = []
+    jobs: list[tuple[str, Awaitable[None]]] = []
 
     if settings.lag_monitor_enabled:
-        tasks.append(
-            asyncio.create_task(
+        jobs.append(
+            (
+                "event_loop_lag_monitor",
                 monitor_event_loop_lag(
                     interval=settings.lag_monitor_interval,
                     warn_after=settings.lag_monitor_threshold,
                 ),
-                name="event_loop_lag_monitor",
             )
         )
 
@@ -202,16 +203,16 @@ def create_event_loop_diagnostic_tasks() -> list[asyncio.Task]:
             settings.watchdog_log_path,
             settings.watchdog_log_max_bytes,
         )
-        tasks.append(
-            asyncio.create_task(
+        jobs.append(
+            (
+                "event_loop_faulthandler_watchdog",
                 faulthandler_event_loop_watchdog(
                     dump_after=settings.watchdog_timeout,
                     interval=settings.watchdog_interval,
                     dump_path=settings.watchdog_log_path,
                     max_bytes=settings.watchdog_log_max_bytes,
                 ),
-                name="event_loop_faulthandler_watchdog",
             )
         )
 
-    return tasks
+    return jobs

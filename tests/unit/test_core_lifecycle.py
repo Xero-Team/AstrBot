@@ -223,61 +223,6 @@ class TestAstrBotCoreLifecycleStop:
         mock_db.db.initialize.assert_not_awaited()
 
 
-class TestAstrBotCoreLifecycleTaskWrapper:
-    """Tests for AstrBotCoreLifecycle._task_wrapper method."""
-
-    @pytest.mark.asyncio
-    async def test_task_wrapper_normal_completion(self, mock_log_broker, mock_db):
-        """Test task wrapper with normal completion."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        async def normal_task():
-            pass
-
-        task = asyncio.create_task(normal_task(), name="test_task")
-
-        # Should not raise
-        await lifecycle._task_wrapper(task)
-
-    @pytest.mark.asyncio
-    async def test_task_wrapper_with_exception(self, mock_log_broker, mock_db):
-        """Test task wrapper with exception."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        async def failing_task():
-            raise ValueError("Test error")
-
-        task = asyncio.create_task(failing_task(), name="test_task")
-
-        with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
-            await lifecycle._task_wrapper(task)
-
-            # Verify error was logged
-            mock_logger.error.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_task_wrapper_with_cancelled_error(self, mock_log_broker, mock_db):
-        """Test task wrapper with CancelledError."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        async def cancelled_task():
-            raise asyncio.CancelledError()
-
-        task = asyncio.create_task(cancelled_task(), name="test_task")
-
-        # Cancellation must propagate so the lifecycle supervisor can finish
-        # the matching cleanup path.
-        with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
-            with pytest.raises(asyncio.CancelledError):
-                await lifecycle._task_wrapper(task)
-
-            # CancelledError should be handled silently
-            assert not any(
-                "error" in str(call).lower()
-                for call in mock_logger.error.call_args_list
-            )
-
-
 class TestAstrBotCoreLifecycleErrorHandling:
     """Tests for AstrBotCoreLifecycle error handling."""
 
@@ -856,23 +801,17 @@ class TestAstrBotCoreLifecycleStart:
         with pytest.raises(RuntimeError, match="already been stopped"):
             await lifecycle.start()
 
-    @pytest.mark.asyncio
-    async def test_start_loads_event_bus_and_runs(self, mock_log_broker, mock_db):
-        """Test that start loads event bus and runs tasks."""
+    def _prepare_started_lifecycle(self, mock_log_broker, mock_db):
+        """Build an initialized lifecycle ready for ``start()``."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        # Set up minimal state
         lifecycle.event_bus = MagicMock()
         lifecycle.event_bus.dispatch = AsyncMock()
-
+        lifecycle.event_bus.shutdown = AsyncMock()
         lifecycle.cron_manager = None
-
         lifecycle.temp_dir_cleaner = None
-
         lifecycle.execution_context = MagicMock()
         lifecycle.execution_context._register_tasks = []
         lifecycle._initialized = True
-
         lifecycle.plugin_manager = SimpleNamespace(
             catalog=SimpleNamespace(
                 plugins=SimpleNamespace(all=MagicMock(return_value=[])),
@@ -884,81 +823,30 @@ class TestAstrBotCoreLifecycleStart:
                 stop=AsyncMock(),
             ),
         )
-
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock()
-
         lifecycle.platform_manager = MagicMock()
         lifecycle.platform_manager.terminate = AsyncMock()
-
         lifecycle.kb_manager = MagicMock()
         lifecycle.kb_manager.terminate = AsyncMock()
-
         lifecycle.dashboard_shutdown_event = asyncio.Event()
-
         lifecycle.curr_tasks = []
+        return lifecycle
 
-        with patch("astrbot.core.core_lifecycle.logger"):
-            # Create a task that completes quickly for testing
-            async def quick_task():
-                return
-
-            # Run start but cancel after a brief moment to avoid hanging
-            start_task = asyncio.create_task(lifecycle.start())
-
-            # Give it a moment to start
-            await asyncio.sleep(0.01)
-
-            # Cancel the start task
-            start_task.cancel()
-
-            try:
-                await start_task
-            except asyncio.CancelledError:
-                pass
+    @pytest.mark.asyncio
+    async def test_start_loads_event_bus_and_runs(self, mock_log_broker, mock_db):
+        """A dispatch that returns immediately fails start as a fatal exit."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+        try:
+            with pytest.raises(RuntimeError, match="event bus exited unexpectedly"):
+                await lifecycle.start()
+        finally:
+            await lifecycle.stop()
 
     @pytest.mark.asyncio
     async def test_start_calls_on_astrbot_loaded_hook(self, mock_log_broker, mock_db):
-        """Test that start calls the OnAstrBotLoadedEvent handlers."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        # Set up minimal state
-        lifecycle.event_bus = MagicMock()
-        lifecycle.event_bus.dispatch = AsyncMock()
-
-        lifecycle.cron_manager = None
-        lifecycle.temp_dir_cleaner = None
-
-        lifecycle.execution_context = MagicMock()
-        lifecycle.execution_context._register_tasks = []
-        lifecycle._initialized = True
-
-        lifecycle.plugin_manager = SimpleNamespace(
-            catalog=SimpleNamespace(
-                plugins=SimpleNamespace(all=MagicMock(return_value=[])),
-            ),
-            extensions=SimpleNamespace(deactivate=AsyncMock()),
-            lifecycle=SimpleNamespace(
-                reload=AsyncMock(),
-                terminate_plugin=AsyncMock(),
-                stop=AsyncMock(),
-            ),
-        )
-
-        lifecycle.provider_manager = MagicMock()
-        lifecycle.provider_manager.terminate = AsyncMock()
-
-        lifecycle.platform_manager = MagicMock()
-        lifecycle.platform_manager.terminate = AsyncMock()
-
-        lifecycle.kb_manager = MagicMock()
-        lifecycle.kb_manager.terminate = AsyncMock()
-
-        lifecycle.dashboard_shutdown_event = asyncio.Event()
-
-        lifecycle.curr_tasks = []
-
-        # Create a mock handler
+        """Hooks run before start fails on a returning event bus."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
         mock_handler = MagicMock()
         mock_handler.handler = AsyncMock()
         mock_handler.handler_module_path = "test_module"
@@ -966,27 +854,261 @@ class TestAstrBotCoreLifecycleStart:
         mock_db.catalogs.plugins.publish(
             StarMetadata(name="Test Handler", module_path="test_module")
         )
-
-        with (
-            patch.object(
+        try:
+            with patch.object(
                 mock_db.catalogs.handlers,
                 "get_handlers_by_event_type",
                 return_value=[mock_handler],
+            ):
+                with pytest.raises(RuntimeError, match="event bus exited unexpectedly"):
+                    await lifecycle.start()
+                mock_handler.handler.assert_awaited_once()
+        finally:
+            await lifecycle.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_raises_event_bus_error_despite_never_ending_diagnostics(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """Diagnostic loops must not pin start() after the event bus dies."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+        bus_error = RuntimeError("event bus failed")
+
+        async def fail_dispatch() -> None:
+            raise bus_error
+
+        async def never_end() -> None:
+            await asyncio.Event().wait()
+
+        lifecycle.event_bus.dispatch = fail_dispatch
+        try:
+            with patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                return_value=[("event_loop_lag_monitor", never_end())],
+            ):
+                with pytest.raises(RuntimeError, match="event bus failed") as caught:
+                    await lifecycle.start()
+                assert caught.value is bus_error
+        finally:
+            await lifecycle.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_raises_when_event_bus_returns(self, mock_log_broker, mock_db):
+        """A normal event-bus return is fatal."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+
+        async def return_dispatch() -> None:
+            return
+
+        lifecycle.event_bus.dispatch = return_dispatch
+        try:
+            with pytest.raises(RuntimeError, match="event bus exited unexpectedly"):
+                await lifecycle.start()
+        finally:
+            await lifecycle.stop()
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_failure_does_not_end_start(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """Auxiliary errors stay logged and start follows the event bus."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+        ready = asyncio.Event()
+
+        async def fail_aux() -> None:
+            raise RuntimeError("diagnostic failed")
+
+        async def hang_dispatch() -> None:
+            ready.set()
+            await asyncio.Event().wait()
+
+        lifecycle.event_bus.dispatch = hang_dispatch
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                return_value=[("event_loop_lag_monitor", fail_aux())],
             ),
-            patch("astrbot.core.core_lifecycle.logger"),
+            patch("astrbot.core.utils.task_utils.logger") as mock_logger,
         ):
-            # Run start but cancel after a brief moment
             start_task = asyncio.create_task(lifecycle.start())
-            await asyncio.sleep(0.01)
-            start_task.cancel()
-
             try:
-                await start_task
-            except asyncio.CancelledError:
-                pass
+                await asyncio.wait_for(ready.wait(), timeout=1)
+                await asyncio.sleep(0)
+                assert not start_task.done()
+                mock_logger.error.assert_called_once()
+            finally:
+                await lifecycle.stop()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.gather(start_task)
 
-            # Verify handler was called
-            mock_handler.handler.assert_awaited_once()
+    @pytest.mark.asyncio
+    async def test_auxiliary_never_ending_does_not_pin_event_bus_path(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """Never-ending diagnostics must not keep start() alive after the bus."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+
+        async def return_dispatch() -> None:
+            return
+
+        async def never_end() -> None:
+            await asyncio.Event().wait()
+
+        lifecycle.event_bus.dispatch = return_dispatch
+        try:
+            with patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                return_value=[("event_loop_lag_monitor", never_end())],
+            ):
+                with pytest.raises(RuntimeError, match="event bus exited unexpectedly"):
+                    await lifecycle.start()
+        finally:
+            await lifecycle.stop()
+
+    @pytest.mark.asyncio
+    async def test_cron_sync_failure_still_shuts_down_scheduler(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """Cron cleanup is registered before start, so a DB sync failure is closed."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+        cron_manager = MagicMock()
+        cron_manager.scheduler = MagicMock()
+        cron_manager.shutdown = AsyncMock()
+
+        async def start_then_fail(_ctx) -> None:
+            cron_manager.scheduler.start()
+            raise RuntimeError("db sync failed")
+
+        cron_manager.start = start_then_fail
+        lifecycle.cron_manager = cron_manager
+        try:
+            with patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                return_value=[],
+            ):
+                with pytest.raises(RuntimeError, match="db sync failed"):
+                    await lifecycle.start()
+        finally:
+            await lifecycle.stop()
+        cron_manager.scheduler.start.assert_called_once()
+        cron_manager.shutdown.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_load_failure_after_event_bus_spawn_is_reclaimed_by_stop(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """Tasks created during _load are cancelled even if _load then fails."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+
+        async def hang() -> None:
+            await asyncio.Event().wait()
+
+        lifecycle.event_bus.dispatch = hang
+        lifecycle.temp_dir_cleaner = MagicMock()
+        lifecycle.temp_dir_cleaner.run = hang
+        lifecycle.temp_dir_cleaner.stop = AsyncMock()
+
+        class BoomRegisterTasks:
+            def __iter__(self):
+                raise RuntimeError("register list failed")
+
+        lifecycle.execution_context._register_tasks = BoomRegisterTasks()
+        try:
+            with patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                return_value=[("event_loop_lag_monitor", hang())],
+            ):
+                with pytest.raises(RuntimeError, match="register list failed"):
+                    await lifecycle.start()
+            spawned_critical = list(lifecycle.curr_tasks)
+            spawned_aux = list(lifecycle._background_tasks)
+            assert spawned_critical
+            assert spawned_aux
+        finally:
+            await lifecycle.stop()
+        assert all(task.cancelled() or task.done() for task in spawned_critical)
+        assert all(task.cancelled() or task.done() for task in spawned_aux)
+        lifecycle.temp_dir_cleaner.stop.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_critical_and_auxiliary_tasks(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """stop() cancels both the event bus and tracked auxiliary tasks."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+
+        async def hang() -> None:
+            await asyncio.Event().wait()
+
+        lifecycle.event_bus.dispatch = hang
+        with patch(
+            "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+            return_value=[("event_loop_lag_monitor", hang())],
+        ):
+            start_task = asyncio.create_task(lifecycle.start())
+            try:
+                deadline = asyncio.get_running_loop().time() + 1
+                while not (lifecycle.curr_tasks and lifecycle._background_tasks):
+                    if asyncio.get_running_loop().time() > deadline:
+                        break
+                    await asyncio.sleep(0)
+                critical = list(lifecycle.curr_tasks)
+                auxiliary = list(lifecycle._background_tasks)
+                assert critical
+                assert auxiliary
+                await lifecycle.stop()
+                assert all(task.cancelled() or task.done() for task in critical)
+                assert all(task.cancelled() or task.done() for task in auxiliary)
+            finally:
+                if not start_task.done():
+                    start_task.cancel()
+                await asyncio.gather(start_task, return_exceptions=True)
+                await lifecycle.stop()
+
+    @pytest.mark.asyncio
+    async def test_register_task_failure_does_not_block_event_bus_exit(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        """Deprecated register_task failures are logged and do not pin start()."""
+        lifecycle = self._prepare_started_lifecycle(mock_log_broker, mock_db)
+
+        async def fail_register() -> None:
+            raise RuntimeError("plugin task failed")
+
+        async def fail_dispatch() -> None:
+            await asyncio.sleep(0)
+            raise RuntimeError("event bus failed")
+
+        lifecycle.execution_context._register_tasks = [fail_register()]
+        lifecycle.event_bus.dispatch = fail_dispatch
+        try:
+            with (
+                patch(
+                    "astrbot.core.core_lifecycle.create_event_loop_diagnostic_jobs",
+                    return_value=[],
+                ),
+                patch("astrbot.core.utils.task_utils.logger") as mock_logger,
+            ):
+                with pytest.raises(RuntimeError, match="event bus failed"):
+                    await lifecycle.start()
+                await asyncio.sleep(0)
+                assert mock_logger.error.called
+        finally:
+            await lifecycle.stop()
 
 
 class TestAstrBotCoreLifecycleStopAdditional:

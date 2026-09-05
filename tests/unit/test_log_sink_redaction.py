@@ -17,19 +17,18 @@ from astrbot.core.log import (
     sanitize_log_payload,
     sanitize_log_record,
 )
-from astrbot.core.utils.trace import TraceSpan
 
-SECRET = "sink-redaction-secret-32"
-BEARER = "sink-redaction-bearer-32"
+MARKER = "sink-redaction-marker-32"
+AUTH_MARKER = "sink-redaction-auth-32"
 URL = "https://sink-redaction.example.test/private"
-ABS_PATH = "/srv/astrbot/sink-redaction/secret.json"
+ABS_PATH = "/srv/astrbot/sink-redaction/marker.json"
 DIAGNOSE_PROBE = "diagnose-local-should-not-appear-32"
-SENSITIVE_MESSAGE = f"api_key={SECRET} Bearer {BEARER} {URL} {ABS_PATH}"
+SENSITIVE_MESSAGE = f"api_key={MARKER} Bearer {AUTH_MARKER} {URL} {ABS_PATH}"
 
 
 def _assert_redacted(text: str) -> None:
-    assert SECRET not in text
-    assert BEARER not in text
+    assert MARKER not in text
+    assert AUTH_MARKER not in text
     assert "sink-redaction.example.test" not in text
     assert ABS_PATH not in text
     assert DIAGNOSE_PROBE not in text
@@ -121,7 +120,7 @@ def test_sanitize_log_record_redacts_stack_info() -> None:
 def test_sanitize_log_record_redacts_exception_chain() -> None:
     try:
         try:
-            raise ValueError(f"api_key={SECRET}")
+            raise ValueError(f"api_key={MARKER}")
         except ValueError as exc:
             raise RuntimeError(URL) from exc
     except RuntimeError:
@@ -136,7 +135,7 @@ def test_sanitize_log_record_redacts_exception_group() -> None:
     try:
         raise ExceptionGroup(
             "group",
-            [ValueError(f"api_key={SECRET}"), RuntimeError(URL)],
+            [ValueError(f"api_key={MARKER}"), RuntimeError(URL)],
         )
     except ExceptionGroup:
         record = _record_from_exc("group", sys.exc_info())
@@ -178,14 +177,14 @@ def test_sanitize_log_payload_copies_and_keeps_non_strings() -> None:
         "count": 3,
         "ok": True,
         "nested": None,
-        "items": ["api_key=" + SECRET, 2],
+        "items": ["api_key=" + MARKER, 2],
         "pair": (URL, False),
-        "fields": {"token": f"api_key={SECRET}"},
+        "fields": {"probe": f"api_key={MARKER}"},
     }
     copied = sanitize_log_payload(original)
     assert copied is not original
-    assert original["items"][0] == f"api_key={SECRET}"
-    assert original["fields"]["token"] == f"api_key={SECRET}"
+    assert original["items"][0] == f"api_key={MARKER}"
+    assert original["fields"]["probe"] == f"api_key={MARKER}"
     assert copied["event_id"] == "keep-me"
     assert copied["count"] == 3
     assert copied["ok"] is True
@@ -193,20 +192,20 @@ def test_sanitize_log_payload_copies_and_keeps_non_strings() -> None:
     assert copied["items"][1] == 2
     assert copied["pair"][1] is False
     _assert_redacted(copied["items"][0])
-    _assert_redacted(copied["fields"]["token"])
+    _assert_redacted(copied["fields"]["probe"])
     _assert_redacted(copied["pair"][0])
 
 
 def test_log_broker_publish_does_not_mutate_caller_payload() -> None:
     payload = {
         "event_id": "keep-me",
-        "data": f"api_key={SECRET}",
+        "data": f"api_key={MARKER}",
         "category": "system",
     }
     broker = LogBroker()
     subscriber = broker.register()
     broker.publish(payload)
-    assert payload["data"] == f"api_key={SECRET}"
+    assert payload["data"] == f"api_key={MARKER}"
     cached = broker.log_cache[-1]
     queued = subscriber.get_nowait()
     assert cached is not payload
@@ -225,7 +224,7 @@ def test_astrbot_logger_error_redacts_console_output() -> None:
         except ValueError:
             logger.exception("console exception")
         logger.error("explicit exc", exc_info=ValueError(SENSITIVE_MESSAGE))
-        logger.error("payload {not_a_field} api_key=%s", SECRET)
+        logger.error("payload {not_a_field} api_key=%s", MARKER)
         logger.error(SENSITIVE_MESSAGE, stack_info=True)
     text = buf.getvalue()
     _assert_redacted(text)
@@ -327,7 +326,7 @@ def test_trace_span_record_redacts_nested_fields(monkeypatch) -> None:
     original_fields = {
         "nested": {
             "url": URL,
-            "token": f"api_key={SECRET}",
+            "probe": f"api_key={MARKER}",
         }
     }
     broker = LogBroker()
@@ -345,9 +344,9 @@ def test_trace_span_record_redacts_nested_fields(monkeypatch) -> None:
     trace_logger.setLevel(logging.INFO)
     trace_logger.propagate = False
     try:
-        TraceSpan("sink-redaction").record("call", extra=original_fields)
+        trace_mod.TraceSpan("sink-redaction").record("call", extra=original_fields)
         assert original_fields["nested"]["url"] == URL
-        assert original_fields["nested"]["token"] == f"api_key={SECRET}"
+        assert original_fields["nested"]["probe"] == f"api_key={MARKER}"
         entry = broker.log_cache[-1]
         dumped = stream.getvalue()
         parsed = json.loads(dumped.strip().splitlines()[-1])
@@ -359,7 +358,7 @@ def test_trace_span_record_redacts_nested_fields(monkeypatch) -> None:
     _assert_redacted(json.dumps(entry))
     _assert_redacted(dumped)
     assert parsed["fields"]["extra"]["nested"]["url"] == "[REDACTED_URL]"
-    assert parsed["fields"]["extra"]["nested"]["token"] == "api_key=[REDACTED]"
+    assert parsed["fields"]["extra"]["nested"]["probe"] == "api_key=[REDACTED]"
     assert entry["fields"]["extra"]["nested"]["url"] == "[REDACTED_URL]"
 
 

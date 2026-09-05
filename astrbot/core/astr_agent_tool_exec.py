@@ -885,7 +885,7 @@ async def call_local_llm_tool(
         else:
             raise ValueError(f"未知的方法名: {method_name}")
     except ValueError as e:
-        raise Exception(f"Tool execution ValueError: {e}") from e
+        raise Exception(f"Tool execution ValueError: {safe_error('', e)}") from e
     except TypeError as e:
         # 获取函数的签名（包括类型），除了第一个 event/context 参数。
         try:
@@ -944,10 +944,13 @@ async def call_local_llm_tool(
                 yield
         except Exception as e:
             logger.error("Previous Error: %s", safe_error("", e), exc_info=True)
-            raise e
+            raise Exception(f"Tool execution error: {safe_error('', e)}") from e
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
-        ret = await ready_to_call
+        try:
+            ret = await ready_to_call
+        except Exception as e:
+            raise Exception(f"Tool execution error: {safe_error('', e)}") from e
         if isinstance(ret, MessageEventResult):
             event.set_result(ret)
             yield

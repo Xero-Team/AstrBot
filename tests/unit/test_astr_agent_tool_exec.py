@@ -60,14 +60,53 @@ class _DoneRunner:
         return SimpleNamespace(role="assistant", completion_text="done")
 
 
-@pytest.mark.asyncio
-async def test_call_local_llm_tool_does_not_embed_raw_traceback() -> None:
-    def handler(_event: object) -> None:
-        raise RuntimeError(
-            "password=top-secret https://internal.example.test/private/config"
-        )
+_SECRET_TOOL_ERROR = "password=top-secret https://internal.example.test/private/config"
 
-    with pytest.raises(Exception, match="Tool execution error") as caught:
+
+def _sync_runtime_error(_event: object) -> None:
+    raise RuntimeError(_SECRET_TOOL_ERROR)
+
+
+def _sync_value_error(_event: object) -> None:
+    raise ValueError(_SECRET_TOOL_ERROR)
+
+
+async def _async_runtime_error(_event: object) -> None:
+    raise RuntimeError(_SECRET_TOOL_ERROR)
+
+
+async def _async_value_error(_event: object) -> None:
+    raise ValueError(_SECRET_TOOL_ERROR)
+
+
+async def _async_gen_runtime_error(_event: object):
+    raise RuntimeError(_SECRET_TOOL_ERROR)
+    yield
+
+
+async def _async_gen_value_error(_event: object):
+    raise ValueError(_SECRET_TOOL_ERROR)
+    yield
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("handler", "cause_type", "prefix"),
+    [
+        (_sync_runtime_error, RuntimeError, "Tool execution error"),
+        (_sync_value_error, ValueError, "Tool execution ValueError"),
+        (_async_runtime_error, RuntimeError, "Tool execution error"),
+        (_async_value_error, ValueError, "Tool execution error"),
+        (_async_gen_runtime_error, RuntimeError, "Tool execution error"),
+        (_async_gen_value_error, ValueError, "Tool execution error"),
+    ],
+)
+async def test_call_local_llm_tool_redacts_error_text(
+    handler,
+    cause_type: type[BaseException],
+    prefix: str,
+) -> None:
+    with pytest.raises(Exception, match=prefix) as caught:
         async for _ in call_local_llm_tool(
             _build_run_context(),
             handler,
@@ -79,7 +118,9 @@ async def test_call_local_llm_tool_does_not_embed_raw_traceback() -> None:
     assert "Traceback" not in text
     assert "top-secret" not in text
     assert "internal.example.test" not in text
-    assert isinstance(caught.value.__cause__, RuntimeError)
+    assert "[REDACTED]" in text
+    assert "[REDACTED_URL]" in text
+    assert isinstance(caught.value.__cause__, cause_type)
 
 
 @pytest.mark.asyncio

@@ -87,7 +87,7 @@ class AstrBotConfig(dict):
             if conf.get("agent_runner") != normalized_runner:
                 conf["agent_runner"] = normalized_runner
                 has_new = True
-        has_new |= self.check_config_integrity(default_config, conf)
+        has_new |= self.check_config_integrity(default_config, conf, schema=schema)
         if self._should_reset_dashboard_password(conf):
             self._reset_generated_dashboard_password(conf)
             has_new = True
@@ -211,8 +211,26 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
-        """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
+    def check_config_integrity(
+        self,
+        refer_conf: dict,
+        conf: dict,
+        path="",
+        schema: dict | None = None,
+    ):
+        """Check the integrity of a user config against its reference defaults.
+
+        Args:
+            refer_conf: Reference configuration holding default values.
+            conf: User configuration, checked and normalized in place.
+            path: Dot-separated path of the current level, used for logging.
+            schema: Schema nodes parallel to ``refer_conf`` at this level. Entries
+                declared as ``"type": "dict"`` are free-form mappings, so their
+                user-added keys are preserved instead of being treated as stale.
+
+        Returns:
+            True if any items were added or the key order was fixed.
+        """
         has_new = False
 
         # 创建一个新的有序字典以保持参考配置的顺序
@@ -223,6 +241,7 @@ class AstrBotConfig(dict):
             conf=conf,
             new_conf=new_conf,
             path=path,
+            schema=schema,
         )
         has_new |= self._remove_unknown_config_keys(
             refer_conf=refer_conf,
@@ -244,10 +263,12 @@ class AstrBotConfig(dict):
         conf: dict,
         new_conf: dict,
         path: str,
+        schema: dict | None = None,
     ) -> bool:
         has_new = False
         for key, value in refer_conf.items():
             current_path = path + "." + key if path else key
+            child_schema = schema.get(key) if isinstance(schema, dict) else None
             if key not in conf:
                 logger.info("Config key missing; added default.")
                 new_conf[key] = copy.deepcopy(value)
@@ -268,7 +289,20 @@ class AstrBotConfig(dict):
                 # Runner config is normalized according to runner_type when saved.
                 new_conf[key] = conf[key]
                 continue
-            child_has_new = self.check_config_integrity(value, conf[key], current_path)
+            if isinstance(child_schema, dict) and child_schema.get("type") == "dict":
+                # Free-form mapping declared as "type": "dict": user-added
+                # keys are data instead of stale entries, keep them as-is.
+                new_conf[key] = conf[key]
+                continue
+            child_items = (
+                child_schema.get("items") if isinstance(child_schema, dict) else None
+            )
+            child_has_new = self.check_config_integrity(
+                value,
+                conf[key],
+                current_path,
+                schema=child_items if isinstance(child_items, dict) else None,
+            )
             new_conf[key] = conf[key]
             has_new |= child_has_new
         return has_new
@@ -279,12 +313,14 @@ class AstrBotConfig(dict):
         conf: dict,
         *,
         path: str = "",
+        schema: dict | None = None,
     ) -> None:
         """Remove keys from ``conf`` that are absent from ``refer_conf``.
 
         Recurses into matching dict values. Leaves ``agent_runner.config``
-        intact, matching load-time integrity. An empty ``refer_conf`` is a
-        no-op so fixtures with ``default_config={}`` are not wiped.
+        and schema ``"type": "dict"`` mappings intact, matching load-time
+        integrity. An empty ``refer_conf`` is a no-op so fixtures with
+        ``default_config={}`` are not wiped.
         """
         if not refer_conf:
             return
@@ -295,11 +331,20 @@ class AstrBotConfig(dict):
                 continue
             if current_path == "agent_runner.config":
                 continue
+            child_schema = schema.get(key) if isinstance(schema, dict) else None
+            if isinstance(child_schema, dict) and child_schema.get("type") == "dict":
+                continue
             if isinstance(refer_conf[key], dict) and isinstance(conf[key], dict):
+                child_items = (
+                    child_schema.get("items")
+                    if isinstance(child_schema, dict)
+                    else None
+                )
                 AstrBotConfig._strip_unknown_config_keys(
                     refer_conf[key],
                     conf[key],
                     path=current_path,
+                    schema=child_items if isinstance(child_items, dict) else None,
                 )
 
     def _remove_unknown_config_keys(
@@ -367,7 +412,11 @@ class AstrBotConfig(dict):
         with self._save_state_lock:
             if replace_config:
                 incoming = copy.deepcopy(dict(replace_config))
-                self._strip_unknown_config_keys(self.default_config, incoming)
+                self._strip_unknown_config_keys(
+                    self.default_config,
+                    incoming,
+                    schema=self.schema,
+                )
                 self.update(incoming)
             snapshot = copy.deepcopy(dict(self))
             revision = self._save_revision + 1

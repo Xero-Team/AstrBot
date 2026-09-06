@@ -5,13 +5,18 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 6b848090525a0eebe622a9d46b032a6c5148c4a3
-  synced_at_utc: 2026-09-06T09:22:58Z
+  commit: bd4b198a5f2c9feaf992e773e07421e15169bea4
+  synced_at_utc: 2026-09-06T13:39:42Z
   sync_method: adapt
-  source_pr: '9899'
+  source_pr: '9908'
   note: >-
-    Reviewed 9852285bdafcbfd0078ae5a4c5f326a068a0dab7..6b848090525a0eebe622a9d46b032a6c5148c4a3
-    (1 commit). Adapted #9899 onto the current Gemini provider: construct
-    ThinkingConfig(thinking_level=...) per request, map Gemini 3.7 MINIMAL to
-    MEDIUM, and keep tests under tests/unit/provider/test_gemini_source.py.
-    Implementation commit f388a5327a54ad12d72c1098a73966f16f9c5acf.
+    Reviewed 6b848090525a0eebe622a9d46b032a6c5148c4a3..bd4b198a5f2c9feaf992e773e07421e15169bea4
+    (3 commits). Adapted #9958 onto the split config integrity helpers so
+    schema "type": "dict" mappings survive load and Dashboard plugin save
+    (d41631024d8fcbf6d7e812126c84416bd6ffe5c3). Adapted #9957 to append the
+    skills-like requery instruction as a user message and keep tests under
+    tests/unit/test_tool_loop_agent_runner.py
+    (1b00c9364306f2f9057ef89b523ab5d095cda1cd). Adapted #9908 by setting
+    items-per-page-options on the existing multiline DocumentsTab
+    v-data-table-server (00347f9ec5c7166362ab174340999b8140e8cfa1).
+    No skips.

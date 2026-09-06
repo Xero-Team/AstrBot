@@ -184,7 +184,7 @@ async def run_application(options: ApplicationOptions) -> None:
 
             log_broker = LogBroker()
             LogManager.set_queue_handler(logger, log_broker)
-            services = create_runtime_services()
+            services = await create_runtime_services()
             logger.info(_LOGO)
             loader = InitialLoader(services, log_broker, webui_dir=webui_dir)
             await loader.start()

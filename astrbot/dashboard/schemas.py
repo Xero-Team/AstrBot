@@ -81,21 +81,39 @@ def _reject_legacy_mcp_request_fields(
     return value
 
 
-_DEPRECATED_PERMISSION_CONFIG_FIELDS = frozenset(
-    {"admins_id", "tool_permissions", "disable_builtin_commands"}
+_REMOVED_CONFIG_FIELDS = frozenset(
+    {
+        "admins_id",
+        "tool_permissions",
+        "disable_builtin_commands",
+        "group_wake_policy",
+    }
 )
 
 
-def _reject_deprecated_permission_config_fields(value: Any) -> Any:
-    """Reject removed permission fields at the Dashboard config boundary."""
-    if not isinstance(value, dict):
-        return value
-    fields = sorted(_DEPRECATED_PERMISSION_CONFIG_FIELDS.intersection(value))
+def _collect_removed_config_fields(value: Any) -> list[str]:
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            found.update(_REMOVED_CONFIG_FIELDS.intersection(node))
+            for child in node.values():
+                walk(child)
+            return
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(value)
+    return sorted(found)
+
+
+def _reject_removed_config_fields(value: Any) -> Any:
+    """Reject removed config fields at the Dashboard config boundary."""
+    fields = _collect_removed_config_fields(value)
     if fields:
         joined = ", ".join(fields)
-        raise ValueError(
-            f"Deprecated permission config fields are not supported: {joined}"
-        )
+        raise ValueError(f"Removed config fields are not supported: {joined}")
     return value
 
 
@@ -105,17 +123,17 @@ class ConfigProfileCreateRequest(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_deprecated_permission_fields(cls, value: Any) -> Any:
+    def reject_removed_config_fields(cls, value: Any) -> Any:
         if isinstance(value, dict):
-            _reject_deprecated_permission_config_fields(value.get("config"))
+            _reject_removed_config_fields(value.get("config"))
         return value
 
 
 class ConfigContentRequest(OpenModel):
     @model_validator(mode="before")
     @classmethod
-    def reject_deprecated_permission_fields(cls, value: Any) -> Any:
-        return _reject_deprecated_permission_config_fields(value)
+    def reject_removed_config_fields(cls, value: Any) -> Any:
+        return _reject_removed_config_fields(value)
 
 
 class RenameRequest(BaseModel):

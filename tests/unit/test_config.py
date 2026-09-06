@@ -748,13 +748,18 @@ class TestConfigHotReload:
             assert json.load(f)["save_order"] == "newer"
 
     def test_save_config_with_replace(self, temp_config_path, minimal_default_config):
-        """Test saving config with replacement."""
+        """Unknown replace keys are stripped; known keys merge."""
         config = AstrBotConfig(
             config_path=temp_config_path, default_config=minimal_default_config
         )
 
         replacement_config = {
-            "replaced": True,
+            "config_version": 3,
+            "platform_settings": {
+                **config["platform_settings"],
+                "unique_session": True,
+                "group_wake_policy": "mention",
+            },
             "extra_field": "value",
         }
         config.save_config(replace_config=replacement_config)
@@ -762,11 +767,23 @@ class TestConfigHotReload:
         with open(temp_config_path, encoding="utf-8-sig") as f:
             loaded_config = json.load(f)
 
-        # The replacement config is merged with existing config
-        assert loaded_config["replaced"] is True
-        assert loaded_config["extra_field"] == "value"
-        # Original fields are preserved because update merges
-        assert "platform_settings" in loaded_config
+        assert loaded_config["config_version"] == 3
+        assert loaded_config["platform_settings"]["unique_session"] is True
+        assert loaded_config["platform_settings"]["rate_limit"]["strategy"] == "stall"
+        assert "group_wake_policy" not in loaded_config["platform_settings"]
+        assert "extra_field" not in loaded_config
+        assert "provider_settings" in loaded_config
+        assert "extra_field" not in config
+        assert "group_wake_policy" not in config["platform_settings"]
+
+    def test_save_config_empty_default_does_not_wipe_incoming(self, temp_config_path):
+        config = AstrBotConfig(config_path=temp_config_path, default_config={})
+        config.save_config(replace_config={"custom_key": "kept"})
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            loaded_config = json.load(f)
+
+        assert loaded_config["custom_key"] == "kept"
 
     def test_save_config_preserves_existing_file_when_write_fails(
         self, temp_config_path, minimal_default_config, monkeypatch

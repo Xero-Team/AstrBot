@@ -8,7 +8,7 @@ last_synced:
   commit: 6b848090525a0eebe622a9d46b032a6c5148c4a3
   synced_at_utc: 2026-09-06T09:22:58Z
   sync_method: adapt
-  source_pr: "9899"
+  source_pr: '9899'
   note: >-
     Reviewed 9852285bdafcbfd0078ae5a4c5f326a068a0dab7..6b848090525a0eebe622a9d46b032a6c5148c4a3
     (1 commit). Adapted #9899 onto the current Gemini provider: construct

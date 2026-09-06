@@ -44,6 +44,8 @@ class Main(star.Star):
             command_prefixes = cfg.get("command_prefixes", [])
             if len(messages) != 1:
                 return
+            if not p_settings.get("empty_mention_waiting", True):
+                return
 
             is_command_prefix_only = (
                 isinstance(messages[0], Comp.Plain)
@@ -92,6 +94,7 @@ class Main(star.Star):
                 if not event.message_str or not event.message_str.strip():
                     return
                 new_event = copy.copy(event)
+                new_event.set_extra("explicit_surface", True)
                 self.context.messages.submit(new_event)
                 event.stop_event()
                 controller.stop()

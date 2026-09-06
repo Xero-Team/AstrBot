@@ -997,7 +997,7 @@
           "description": "Forward Message Word Count Threshold"
         },
         "empty_mention_waiting": {
-          "description": "Trigger Waiting on Mention-only Messages"
+          "description": "Wait after a prefix-only message"
         }
       },
       "command_prefixes": {
@@ -1119,7 +1119,7 @@
           "description": "Ignore Bot's Own Messages"
         },
         "ignore_at_all": {
-          "description": "Ignore @All Events"
+          "description": "Ignore @everyone events (does not change the built-in LLM gate)"
         },
         "no_permission_reply": {
           "description": "Reply When User Has Insufficient Permissions"

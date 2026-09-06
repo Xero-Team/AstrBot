@@ -108,7 +108,7 @@ uv run python scripts/sync_dashboard_dist.py
 - 当前配置档是否绑定到该消息会话，见 [配置文件](/use/config-profiles)；
 - 平台和 Provider 是否启用；
 - 白名单、管理员绕过和限流，见 [平台处理](/use/platform-settings)；
-- `ignore_at_all`、机器人自身消息过滤及平台权限。
+- 机器人自身消息过滤及平台权限。
 
 ### 管理员指令提示无权限
 

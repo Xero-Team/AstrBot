@@ -1087,7 +1087,7 @@ CONFIG_METADATA_2 = {
                     },
                     "empty_mention_waiting": {
                         "type": "bool",
-                        "hint": "启用后，当消息内容只有 @ 机器人时，会触发等待，在 60 秒内的该用户的任意一条消息均会唤醒机器人。这在某些平台不支持 @ 和语音/图片等消息同时发送时特别有用。",
+                        "hint": "启用后，当消息内容只有指令前缀（例如单独一个 /）时，会等待该用户 60 秒内的下一条消息，并把它当作显式对准内置 AI。空 @ 不会触发等待。",
                     },
                     "empty_mention_waiting_need_reply": {
                         "type": "bool",
@@ -1099,7 +1099,8 @@ CONFIG_METADATA_2 = {
                     },
                     "ignore_at_all": {
                         "type": "bool",
-                        "hint": "启用后，机器人会忽略 @ 全体成员 的消息事件。",
+                        "invisible": True,
+                        "hint": "保留字段。MentionAll 只是消息链标记，不会单独放行或拦截内置 LLM。",
                     },
                     "segmented_reply": {
                         "type": "object",
@@ -4265,7 +4266,7 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                     },
                     "platform_settings.empty_mention_waiting": {
-                        "description": "只 @ 机器人是否触发等待",
+                        "description": "只打指令前缀是否触发等待",
                         "type": "bool",
                     },
                 },
@@ -4395,6 +4396,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.ignore_at_all": {
                         "description": "是否忽略 @ 全体成员事件",
                         "type": "bool",
+                        "invisible": True,
                     },
                     "platform_settings.no_permission_reply": {
                         "description": "用户权限不足时是否回复",

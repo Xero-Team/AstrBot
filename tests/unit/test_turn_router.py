@@ -311,3 +311,38 @@ def test_explicit_surface_webchat_help_is_command():
     result = route_turn(_input("/help", explicit_surface=True))
     assert result.should_run_command is True
     assert result.should_run_llm is False
+
+
+def test_explicit_surface_does_not_admit_when_group_off():
+    result = route_turn(
+        _input(
+            "hello",
+            private=False,
+            llm=LlmAccess(group="off"),
+            explicit_surface=True,
+        )
+    )
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_explicit_surface_does_not_admit_when_private_off():
+    result = route_turn(
+        _input("hello", llm=LlmAccess(private="off"), explicit_surface=True)
+    )
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_explicit_surface_off_still_continues_open_window():
+    result = route_turn(
+        _input(
+            "hello",
+            private=False,
+            llm=LlmAccess(group="off"),
+            explicit_surface=True,
+            has_open_window=True,
+        )
+    )
+    assert result.should_run_llm is True
+    assert "turn_continuation" in result.wake_reasons

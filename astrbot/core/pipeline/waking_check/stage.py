@@ -58,12 +58,8 @@ UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] 
 
 
 class WakeReason(Enum):
-    PREFIX = "prefix"
     COMMAND = "command"
-    MENTION_BOT = "mention_bot"
-    MENTION_ALL = "mention_all"
     REPLY_TO_BOT = "reply_to_bot"
-    PRIVATE_DEFAULT = "private_default"
     EXPLICIT_SURFACE = "explicit_surface"
     PLUGIN_HANDLER = "plugin_handler"
     LLM_PREFIX = "llm_prefix"

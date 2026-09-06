@@ -62,13 +62,14 @@ A message that starts by @-ing **someone else** does not wake on prefix. That ke
 
 ## Explicit surfaces
 
-These inbound paths stamp `explicit_surface`. After a command miss, the built-in LLM is admitted:
+These inbound paths stamp `explicit_surface`. After a command miss, the built-in LLM is admitted. `private=off` / `group=off` still block a new turn; the stamp does not bypass that kill switch:
 
 - Discord slash commands / interaction follow-up
 - Dashboard WebChat sends
 - WeCom AI Bot inbound
 - Cron jobs
 - `PlatformManager.create_event(..., is_wake=True)`
+- The follow-up after a prefix-only wait
 
 Discord user mentions and bot-owned role mentions **do not** receive this stamp; they still follow the `llm_access` gate above. WebChat does not inject `/` into `message_str`: `hello` goes to the LLM; a user-typed `/help` still matches commands first.
 
@@ -78,7 +79,7 @@ If the session already has an open LLM turn window (inbound coalesce waiting for
 
 ## Prefix-only messages
 
-A message that is only a command prefix (for example a lone `/`) may still wait up to 60 seconds for that user's next message. An empty `@` does not start the built-in AI and does not reinsert a `Mention` for resubmit.
+`empty_mention_waiting` is on by default. A message that is only a command prefix (for example a lone `/`) waits up to 60 seconds for that user's next message and resubmits it with `explicit_surface`, so the follow-up does not need another prefix. Turning the switch off skips the wait. An empty `@` does not start the built-in AI and does not reinsert a `Mention` for resubmit. `off` still blocks a new LLM turn.
 
 ## Isolated sessions
 

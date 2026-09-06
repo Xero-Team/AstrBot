@@ -231,15 +231,17 @@ def route_turn(inp: TurnRouteInput) -> TurnRouteResult:
             )
 
     if inp.explicit_surface:
-        llm_text, reasons = _llm_payload(inp, blocked_by_other_mention)
-        return TurnRouteResult(
-            False,
-            True,
-            "ordinary",
-            frozenset({"explicit_surface", *reasons}),
-            llm_text,
-            False,
-        )
+        mode = inp.llm_access.private if inp.is_private else inp.llm_access.group
+        if mode != "off":
+            llm_text, reasons = _llm_payload(inp, blocked_by_other_mention)
+            return TurnRouteResult(
+                False,
+                True,
+                "ordinary",
+                frozenset({"explicit_surface", *reasons}),
+                llm_text,
+                False,
+            )
 
     llm_ok, reasons = _llm_gate(inp, blocked_by_other_mention)
     if llm_ok:
@@ -297,8 +299,6 @@ def _llm_gate(
             return True, {"llm_open"}
         if mode == "off":
             return False, set()
-        if blocked_by_other_mention:
-            return False, set()
         if longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes):
             return True, {"llm_prefix"}
         return False, set()
@@ -334,7 +334,7 @@ def _llm_payload(
     prefix = longest_prefix_match(text, inp.llm_access.prefixes)
     if prefix is None:
         return text, set()
-    return text[len(prefix) :].strip(" \t"), {"llm_prefix"} if prefix else set()
+    return text[len(prefix) :].strip(" \t"), {"llm_prefix"}
 
 
 def _reply_to_bot(inp: TurnRouteInput) -> bool:

@@ -62,13 +62,14 @@
 
 ## 显式表面
 
-下列入站会打上 `explicit_surface`，指令未命中时放行内置 LLM：
+下列入站会打上 `explicit_surface`，指令未命中时放行内置 LLM。`private=off` / `group=off` 仍是总开关，显式表面不会绕过：
 
 - Discord 斜杠指令 / interaction follow-up
 - Dashboard WebChat 聊天框发送
 - 企业微信智能机器人全量入站
 - 定时任务（cron）
 - `PlatformManager.create_event(..., is_wake=True)`
+- 只打指令前缀后等待到的下一条消息
 
 Discord 的用户提及或机器人角色提及**不会**打这个标记，仍然走上面的 `llm_access` 门禁。WebChat 不会把 `/` 写进 `message_str`：`hello` 进 LLM；用户自己打的 `/help` 仍先走指令。
 
@@ -78,7 +79,7 @@ Discord 的用户提及或机器人角色提及**不会**打这个标记，仍�
 
 ## 只打了指令前缀、没有正文
 
-消息内容只有指令前缀（例如单独一个 `/`）时，仍可等待该用户 60 秒内的下一条消息。空 `@` 不会启动内置 AI，也不会插入 `Mention` 再投递。
+`empty_mention_waiting` 默认开启。消息内容只有指令前缀（例如单独一个 `/`）时，会等待该用户 60 秒内的下一条消息，并把后续内容打上 `explicit_surface` 再投递，因此不必再打前缀。关掉该开关后，单独的 `/` 不会进入等待。空 `@` 不会启动内置 AI，也不会插入 `Mention` 再投递。`off` 仍然阻止新的 LLM 回合。
 
 ## 隔离会话
 

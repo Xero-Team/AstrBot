@@ -288,6 +288,29 @@ async def test_empty_mention_does_not_request_llm_or_resubmit():
 
 
 @pytest.mark.asyncio
+async def test_empty_mention_waiting_false_skips_prefix_only_wait():
+    main = _make_empty_mention_main()
+    main.context.config.get.return_value = {
+        "platform_settings": {
+            "empty_mention_waiting": False,
+            "empty_mention_waiting_need_reply": True,
+        },
+        "command_prefixes": ["/"],
+    }
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:group"
+    event.get_messages.return_value = [Plain("/")]
+    event.request_llm = MagicMock()
+
+    results = [item async for item in main.handle_empty_mention(event)]
+
+    assert results == []
+    event.request_llm.assert_not_called()
+    main.context.messages.wait_for.assert_not_awaited()
+    main.context.messages.submit.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_command_prefix_only_still_waits_without_synthesizing_mention():
     main = _make_empty_mention_main()
     waiter_holder: dict[str, object] = {}
@@ -318,6 +341,7 @@ async def test_command_prefix_only_still_waits_without_synthesizing_mention():
     controller = MagicMock()
     await waiter(controller, follow_up)
     assert all(not isinstance(item, Mention) for item in follow_up.message_obj.message)
+    follow_up.set_extra.assert_called_once_with("explicit_surface", True)
     main.context.messages.submit.assert_called_once()
     follow_up.stop_event.assert_called_once()
     controller.stop.assert_called_once()

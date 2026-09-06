@@ -397,10 +397,14 @@ def make_command_handler(name: str, handler, *extra_filters):
         ),
         ({}, FakeEvent([Mention(target="other"), Plain("hello")]), False),
         ({}, FakeEvent([MentionAll(), Plain("hello")]), False),
-        ({"ignore_at_all": True}, FakeEvent([MentionAll(), Plain("hello")]), False),
         (
             {"llm_access": {"group": "mention"}},
             FakeEvent([Mention(target="all"), Plain("hello")]),
+            False,
+        ),
+        (
+            {"llm_access": {"group": "off"}},
+            FakeEvent([Plain("hello")], extras={"explicit_surface": True}),
             False,
         ),
     ],

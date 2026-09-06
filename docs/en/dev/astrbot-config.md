@@ -67,18 +67,18 @@ Routing checks commands before LLM access. A matched command wins; a bare comman
 
 ## `platform_settings`
 
-| Key                                         | Default                                | Meaning                                                                                                                                                |
-| ------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `unique_session`                            | `false`                                | Split separate sessions for members inside a group.                                                                                                    |
-| `group_sender_concurrency`                  | `false`                                | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on. |
-| `rate_limit`                                | `60` seconds / `30` messages / `stall` | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                      |
-| `enable_id_white_list`                      | `true`                                 | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                              |
-| `reply_prefix`                              | `""`                                   | Prefix added to replies.                                                                                                                               |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                | Mention the sender or quote the source message when supported by the adapter.                                                                          |
-| `forward_threshold`                         | `1500`                                 | Long-reply forwarding threshold for the OneBot `aiocqhttp` adapter; support on other platforms depends on the adapter.                                 |
-| `segmented_reply`                           | See current defaults                   | Non-streaming segmentation, timing, and cleanup rules.                                                                                                 |
-| `path_mapping`                              | `[]`                                   | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.            |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                | Ignore the bot's own messages or mass mentions.                                                                                                        |
+| Key                                       | Default                                | Meaning                                                                                                                                                |
+| ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unique_session`                          | `false`                                | Split separate sessions for members inside a group.                                                                                                    |
+| `group_sender_concurrency`                | `false`                                | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on. |
+| `rate_limit`                              | `60` seconds / `30` messages / `stall` | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                      |
+| `enable_id_white_list`                    | `true`                                 | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                              |
+| `reply_prefix`                            | `""`                                   | Prefix added to replies.                                                                                                                               |
+| `reply_with_mention` / `reply_with_quote` | `false`                                | Mention the sender or quote the source message when supported by the adapter.                                                                          |
+| `forward_threshold`                       | `1500`                                 | Long-reply forwarding threshold for the OneBot `aiocqhttp` adapter; support on other platforms depends on the adapter.                                 |
+| `segmented_reply`                         | See current defaults                   | Non-streaming segmentation, timing, and cleanup rules.                                                                                                 |
+| `path_mapping`                            | `[]`                                   | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.            |
+| `ignore_bot_self_message`                 | `false`                                | Ignore the bot's own messages. `ignore_at_all` is still persisted, but it is not an LLM gate.                                                          |
 
 Example path mapping:
 

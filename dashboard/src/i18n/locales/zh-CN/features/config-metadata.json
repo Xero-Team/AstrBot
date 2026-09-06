@@ -991,7 +991,7 @@
           "description": "转发消息的字数阈值"
         },
         "empty_mention_waiting": {
-          "description": "只 @ 机器人是否触发等待"
+          "description": "只打指令前缀是否触发等待"
         }
       },
       "command_prefixes": {
@@ -1113,7 +1113,7 @@
           "description": "是否忽略机器人自身的消息"
         },
         "ignore_at_all": {
-          "description": "是否忽略 @ 全体成员事件"
+          "description": "是否忽略 @ 全体成员事件（不影响内置 LLM 门禁）"
         },
         "no_permission_reply": {
           "description": "用户权限不足时是否回复"

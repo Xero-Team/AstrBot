@@ -53,7 +53,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system -r requirements.txt
+          uv pip install --system --no-config -r requirements.txt
         timeout-minutes: 15
 
       - name: Run smoke tests

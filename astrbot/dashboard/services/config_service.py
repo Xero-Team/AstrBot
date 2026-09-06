@@ -518,6 +518,8 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             **schema["misc_config_group"]["metadata"],
         }
         validate(data, meta_all)
+        if isinstance(data, dict):
+            AstrBotConfig._strip_unknown_config_keys(DEFAULT_CONFIG, data)
     else:
         validate(data, schema)
 

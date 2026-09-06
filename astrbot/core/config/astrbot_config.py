@@ -273,6 +273,35 @@ class AstrBotConfig(dict):
             has_new |= child_has_new
         return has_new
 
+    @staticmethod
+    def _strip_unknown_config_keys(
+        refer_conf: dict,
+        conf: dict,
+        *,
+        path: str = "",
+    ) -> None:
+        """Remove keys from ``conf`` that are absent from ``refer_conf``.
+
+        Recurses into matching dict values. Leaves ``agent_runner.config``
+        intact, matching load-time integrity. An empty ``refer_conf`` is a
+        no-op so fixtures with ``default_config={}`` are not wiped.
+        """
+        if not refer_conf:
+            return
+        for key in list(conf.keys()):
+            current_path = f"{path}.{key}" if path else key
+            if key not in refer_conf:
+                del conf[key]
+                continue
+            if current_path == "agent_runner.config":
+                continue
+            if isinstance(refer_conf[key], dict) and isinstance(conf[key], dict):
+                AstrBotConfig._strip_unknown_config_keys(
+                    refer_conf[key],
+                    conf[key],
+                    path=current_path,
+                )
+
     def _remove_unknown_config_keys(
         self,
         *,
@@ -337,7 +366,9 @@ class AstrBotConfig(dict):
         """Create an isolated snapshot and allocate its save revision."""
         with self._save_state_lock:
             if replace_config:
-                self.update(replace_config)
+                incoming = copy.deepcopy(dict(replace_config))
+                self._strip_unknown_config_keys(self.default_config, incoming)
+                self.update(incoming)
             snapshot = copy.deepcopy(dict(self))
             revision = self._save_revision + 1
             object.__setattr__(self, "_save_revision", revision)

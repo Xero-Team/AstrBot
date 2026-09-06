@@ -917,6 +917,15 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
         headers={"X-API-Key": config_key},
     )
     assert rejected_create.status_code == 422
+    rejected_nested_create = await test_client.post(
+        "/api/v1/config-profiles",
+        json={
+            "name": "deprecated-wake-profile",
+            "config": {"platform_settings": {"group_wake_policy": "mention"}},
+        },
+        headers={"X-API-Key": config_key},
+    )
+    assert rejected_nested_create.status_code == 422
 
     created = await test_client.post(
         "/api/v1/config-profiles",
@@ -938,6 +947,8 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
     profile_config["admins_id"] = ["changed-profile-admin"]
     profile_config["tool_permissions"] = {"shell": "admin"}
     profile_config["disable_builtin_commands"] = True
+    profile_config["group_wake_policy"] = "mention"
+    profile_config.setdefault("platform_settings", {})["group_wake_policy"] = "mention"
     profile_update = await test_client.put(
         f"/api/v1/config-profiles/{profile_id}",
         json=profile_config,
@@ -953,7 +964,9 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
         "admins_id",
         "tool_permissions",
         "disable_builtin_commands",
+        "group_wake_policy",
     }.intersection(stored_profile_config)
+    assert "group_wake_policy" not in stored_profile_config.get("platform_settings", {})
 
     system = await test_client.get(
         "/api/v1/system-config",
@@ -963,6 +976,8 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
     system_config["admins_id"] = ["changed-system-admin"]
     system_config["tool_permissions"] = {"python": "admin"}
     system_config["disable_builtin_commands"] = True
+    system_config["group_wake_policy"] = "mention"
+    system_config.setdefault("platform_settings", {})["group_wake_policy"] = "mention"
     system_update = await test_client.put(
         "/api/v1/system-config",
         json=system_config,
@@ -978,7 +993,9 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
         "admins_id",
         "tool_permissions",
         "disable_builtin_commands",
+        "group_wake_policy",
     }.intersection(stored_system_config)
+    assert "group_wake_policy" not in stored_system_config.get("platform_settings", {})
 
 
 @pytest.mark.asyncio

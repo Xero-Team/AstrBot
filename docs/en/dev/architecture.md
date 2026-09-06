@@ -216,7 +216,7 @@ Commands, Dashboard, WebChat, API keys, tools, and plugins all enter one runtime
 authorize(subject, action, resource, context) -> Decision
 ```
 
-The implementation lives in `astrbot/core/auth/`. `AuthorizationService` allows by the frozen action registry, relationship bindings, and at most one parent-resource hop. Unknown actions, missing subject/resource/context, policy failures, and a full high-risk audit queue fail closed. `event.role` is not an authorization field, and `event.is_admin()` is always `False`. Runtime code does not read `admins_id`, `tool_permissions`, `disable_builtin_commands`, or `group_wake_policy`; Dashboard config writes reject those fields. This fork does not migrate legacy permissions.
+The implementation lives in `astrbot/core/auth/`. `AuthorizationService` allows by the frozen action registry, relationship bindings, and at most one parent-resource hop. Unknown actions, missing subject/resource/context, policy failures, and a full high-risk audit queue fail closed. `event.role` is not an authorization field, and `event.is_admin()` is always `False`. Runtime code does not read `admins_id`, `tool_permissions`, or `disable_builtin_commands`; Dashboard config writes reject those fields. This fork does not migrate legacy permissions.
 
 Cross-platform IM elevation has no runtime channel.
 

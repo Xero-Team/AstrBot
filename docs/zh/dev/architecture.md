@@ -216,7 +216,7 @@ Tool Loop 每完成一次模型调用都会发出 `agent_stats`，包括工具�
 authorize(subject, action, resource, context) -> Decision
 ```
 
-实现位于 `astrbot/core/auth/`。`AuthorizationService` 按固定动作注册表、关系绑定和有限父资源解析放行；未知动作、缺失主体/资源/上下文、策略异常和高风险审计队列满载都 fail closed。`event.role` 不再作为授权依据，`event.is_admin()` 恒为 `False`。运行时不读取 `admins_id`、`tool_permissions`、`disable_builtin_commands`、`group_wake_policy`；Dashboard 配置写入会拒绝这些字段。本 fork 不执行旧权限迁移。
+实现位于 `astrbot/core/auth/`。`AuthorizationService` 按固定动作注册表、关系绑定和有限父资源解析放行；未知动作、缺失主体/资源/上下文、策略异常和高风险审计队列满载都 fail closed。`event.role` 不再作为授权依据，`event.is_admin()` 恒为 `False`。运行时不读取 `admins_id`、`tool_permissions`、`disable_builtin_commands`；Dashboard 配置写入会拒绝这些字段。本 fork 不执行旧权限迁移。
 
 跨平台 IM elevation 没有运行时通道。
 

@@ -16,6 +16,7 @@ from .commands import (
     ProviderCommands,
     SessionCommands,
     VariableCommands,
+    WorkCommands,
 )
 
 
@@ -34,6 +35,7 @@ class Main(star.Star):
         self.provider_c = ProviderCommands(self.context)
         self.session_c = SessionCommands(self.context)
         self.variable_c = VariableCommands(self.context)
+        self.work_c = WorkCommands(self.context)
 
     @filter.command("help")
     async def help(
@@ -53,6 +55,26 @@ class Main(star.Star):
     async def bot_status(self, event: AstrMessageEvent) -> None:
         """Show version and session, LLM, and TTS switches"""
         await self.bot_c.status(event)
+
+    @filter.command_group("work")
+    def work(self) -> None:
+        """Inspect BTW work-loop tasks for this session"""
+
+    @filter.permission("session.read")
+    @work.command("status")
+    async def work_status(self, event: AstrMessageEvent) -> None:
+        """Show the newest BTW work task and its status"""
+        await self.work_c.status(event)
+
+    @filter.permission("session.read")
+    @work.command("run")
+    async def work_run(
+        self,
+        event: AstrMessageEvent,
+        task: Annotated[str, GreedyStr] = "",
+    ) -> None:
+        """Run a task through the BTW work loop"""
+        await self.work_c.run(event, task)
 
     @filter.permission("session.manage")
     @bot.command("enable")

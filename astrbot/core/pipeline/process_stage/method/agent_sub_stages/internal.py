@@ -25,6 +25,7 @@ from astrbot.core.assistant_history import (
 )
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
+    MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
     local_agent_runtime_from_profile,
@@ -104,9 +105,56 @@ class InternalAgentSubStage:
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
+
+        btw_config = conf.get("btw", {})
+        btw_config = btw_config if isinstance(btw_config, dict) else {}
+        self.btw_enabled = bool(btw_config.get("enabled", False))
+        conversation_loop_config = btw_config.get("conversation_loop", {})
+        conversation_loop_config = (
+            conversation_loop_config
+            if isinstance(conversation_loop_config, dict)
+            else {}
+        )
+        work_loop_config = btw_config.get("work_loop", {})
+        work_loop_config = (
+            work_loop_config if isinstance(work_loop_config, dict) else {}
+        )
+        self.conversation_provider_id = conversation_loop_config.get("provider_id", "")
+        if not isinstance(self.conversation_provider_id, str):
+            self.conversation_provider_id = ""
+        self.work_provider_id = work_loop_config.get("provider_id", "")
+        if not isinstance(self.work_provider_id, str):
+            self.work_provider_id = ""
+        self.work_computer_use_runtime = work_loop_config.get(
+            "computer_use_runtime", "inherit"
+        )
+        if self.work_computer_use_runtime not in {
+            "inherit",
+            "none",
+            "local",
+            "sandbox",
+        }:
+            self.work_computer_use_runtime = "inherit"
+
         self.conv_manager = ctx.execution_context.conversation_manager
         self.main_agent_cfg, self.max_step = local_agent_runtime_from_profile(
             conf,
+            btw_plugin_routes=(
+                btw_config.get("plugin_routes", [])
+                if isinstance(btw_config, dict)
+                else []
+            ),
+            btw_mcp_routes=(
+                btw_config.get("mcp_routes", []) if isinstance(btw_config, dict) else []
+            ),
+            btw_skill_routes=(
+                btw_config.get("skill_routes", [])
+                if isinstance(btw_config, dict)
+                else []
+            ),
+            conversation_provider_id=self.conversation_provider_id,
+            work_provider_id=self.work_provider_id,
+            work_computer_use_runtime=self.work_computer_use_runtime,
             timezone=self.ctx.execution_context.get_config().get("timezone"),
         )
         self.tool_call_timeout = self.main_agent_cfg.tool_call_timeout
@@ -267,11 +315,65 @@ class InternalAgentSubStage:
         event: AstrMessageEvent,
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
-        """Build a runner and reject configured provider endpoints unsafe for use."""
+        """Build a runner and reject configured provider endpoints unsafe for use.
+
+        With BTW disabled the runner is built from the profile as-is: no
+        loop-mode override, no conversation hard-isolation — the path matches
+        upstream master exactly.
+        """
+        if not getattr(self, "btw_enabled", False):
+            build_cfg = replace(
+                self.main_agent_cfg,
+                streaming_response=streaming_response,
+                btw_enabled=False,
+            )
+            return await self._run_checked_build(event, build_cfg)
+
+        loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        if loop_mode == "conversation":
+            computer_use_runtime = "none"
+            provider_id_override = getattr(
+                self.main_agent_cfg, "conversation_provider_id", ""
+            )
+        else:
+            computer_use_runtime = getattr(
+                self.main_agent_cfg, "work_computer_use_runtime", "inherit"
+            )
+            if computer_use_runtime == "inherit":
+                computer_use_runtime = getattr(
+                    self.main_agent_cfg, "computer_use_runtime", None
+                )
+            if computer_use_runtime not in {"none", "local", "sandbox"}:
+                computer_use_runtime = "none"
+            provider_id_override = getattr(self.main_agent_cfg, "work_provider_id", "")
+
+        configured_provider_settings = getattr(
+            self.main_agent_cfg, "provider_settings", {}
+        )
+        provider_settings = (
+            dict(configured_provider_settings)
+            if isinstance(configured_provider_settings, dict)
+            else {}
+        )
+        provider_settings["computer_use_runtime"] = computer_use_runtime
+
         build_cfg = replace(
             self.main_agent_cfg,
             streaming_response=streaming_response,
+            loop_mode=loop_mode,
+            provider_id_override=provider_id_override,
+            computer_use_runtime=computer_use_runtime,
+            provider_settings=provider_settings,
+            btw_enabled=True,
         )
+        return await self._run_checked_build(event, build_cfg)
+
+    async def _run_checked_build(
+        self,
+        event: AstrMessageEvent,
+        build_cfg: MainAgentBuildConfig,
+    ) -> MainAgentBuildResult | None:
+        """Run the shared build + blocked-host check for one build config."""
         build_result = await build_main_agent(
             event=event,
             plugin_context=self.ctx.execution_context,
@@ -301,6 +403,10 @@ class InternalAgentSubStage:
         follow_up_activated = False
         typing_requested = False
         try:
+            # BTW work-loop tasks may detach from the originating event so the
+            # parent task retains the follow-up runner; the streaming choice is
+            # still resolved via the unified session override helper below.
+            is_detached_work = bool(event.get_extra("btw_detached_work"))
             from astrbot.core.streaming_override import resolve_streaming_response
 
             streaming_response = await resolve_streaming_response(
@@ -356,7 +462,9 @@ class InternalAgentSubStage:
 
             logger.debug("ready to request llm provider")
             follow_up_capture = (
-                self.ctx.execution_context.follow_up_coordinator.try_capture(event)
+                None
+                if is_detached_work
+                else self.ctx.execution_context.follow_up_coordinator.try_capture(event)
             )
             if follow_up_capture:
                 (
@@ -393,6 +501,12 @@ class InternalAgentSubStage:
             concurrent, lock_key, turn_cm, streaming_response = (
                 self._prepare_group_sender_concurrency(event, streaming_response)
             )
+            # BTW work-loop tasks share one agent lock across related turns;
+            # honor the loop-provided key when present, else keep the group
+            # sender lock key resolved above.
+            btw_lock_key = event.get_extra("btw_agent_lock_key")
+            if isinstance(btw_lock_key, str) and btw_lock_key:
+                lock_key = btw_lock_key
 
             async with (
                 turn_cm,
@@ -469,8 +583,11 @@ class InternalAgentSubStage:
                             )
                         else:
                             runner_stop_callback = None
-                    self._register_follow_up_runner(event, agent_runner, concurrent)
-                    runner_registered = True
+                    # BTW detached work tasks are managed by their parent turn
+                    # and must not register their own follow-up runner.
+                    if not is_detached_work:
+                        self._register_follow_up_runner(event, agent_runner, concurrent)
+                        runner_registered = True
                     event.trace.record(
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,

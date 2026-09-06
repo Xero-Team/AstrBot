@@ -37,6 +37,7 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 | `agent_runner`                                    | Agent Runner type and inline configuration for this profile.                                                                                                                                                                                                    |
 | `provider_settings`                               | Shared AI switch, retrieval, streaming, and Computer Use behavior for this profile.                                                                                                                                                                             |
 | `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                                                                                                                                                 |
+| `btw`                                             | Conversation-loop entry point, rule-based task classification, work loop, and plugin/MCP/Skill loop assignments.                                                                                                                                                |
 | `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                                                                                                                                                  |
 | `provider_ltm_settings`                           | [Group chat context awareness](../use/group-chat-context) (in-memory group context, image captions, persisted group history). The JSON key is still historical; it is not the Alkaid long-term-memory switch. Random group proactive replies have been removed. |
 | `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                                                                                                                                            |
@@ -51,7 +52,7 @@ Object layouts inside `provider_sources`, `provider`, and `platform` come from t
 
 ## Inbound routing
 
-User-facing steps are in [When the bot replies in groups](../use/group-wake). `command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
+`command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
 
 | Key                                  | Values                    | Meaning                                                                                                                            |
 | ------------------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -186,6 +187,30 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 
 `image_compress_enabled` and `image_compress_options.max_size/quality` control image compression before model requests. `max_quoted_fallback_images` and `quoted_message_parser` limit quoted and forwarded-message expansion to prevent unbounded fetching. For `quoted_message_parser`, `0` is a valid boundary: depth limits keep the root level but stop child recursion, and `max_forward_fetch=0` disables recursive `get_forward_msg` calls. Negative or invalid values fall back to defaults; this setting does not globally disable a direct quoted-message `get_msg` fallback.
 
+## BTW dual-loop prototype
+
+`btw` provides one entry point for the current dual-loop prototype. Every message first enters the conversation loop. With rule-based classification enabled, requests about code, files, commands, search, research, or coding agents such as Claude Code, Codex, OpenCode, and HAPI, plus requests beginning with `/work`, are sent to the work loop. The work loop reuses the established Agent and tool execution path; core does not provide a dedicated Codex, CC, or other coding-agent executor. The source-built Docker image does preinstall the `claude` and `codex` CLIs, but they are callable only through work-loop shell tools or an external plugin.
+
+- `btw.enabled` is the master switch. When disabled, every request still uses the existing Agent path through the conversation loop.
+- `btw.classifier.enabled` enables the built-in deterministic rules. When disabled, requests are not automatically sent to the work loop.
+- `btw.conversation_loop.provider_id` selects the conversation-loop model. Empty uses the session default; a value takes precedence over a session model selection.
+- `btw.work_loop.enabled` enables the work loop; `max_concurrent` limits classified work tasks that can execute at the same time in this profile.
+- `btw.work_loop.provider_id` selects the work-loop model, which may differ from the conversation Provider. Empty uses the session default.
+- `btw.work_loop.computer_use_runtime` controls computer permission for the work loop. `inherit` uses the existing `provider_settings.computer_use_runtime`; `none`, `local`, and `sandbox` set it explicitly.
+- The work loop receives no IM elevation: high-risk `tool.*` actions stay Dashboard-only from IM even when the work loop runs. Privilege isolation is configured per profile through `computer_use_runtime`; the conversation loop hard-disables these tools, and the work loop's runtime choice (`none`, `local`, `sandbox`) is the only control plane.
+- `btw.work_session.max_age_seconds` is the retention period for terminal work sessions. It defaults to `3600` seconds and is cleaned up lazily by the next session operation.
+- `btw.plugin_routes` lets you choose **Conversation only**, **Work only**, or **Conversation and Work** for every enabled non-system plugin on the **Config** page. No saved entry defaults to **Work only**; choosing both loops is stored as an explicit override.
+- `btw.mcp_routes` uses the same choice for every enabled MCP server. No saved entry also defaults to **Work only**, so execution-oriented servers such as `mcp__codex__codex` do not silently enter the conversation loop.
+- `btw.skill_routes` uses the same choice for every enabled Skill. Ordinary Skills default to both loops, while workspace Skills remain work-loop-only.
+
+The conversation loop forcibly disables local computer, sandbox, browser, and filesystem tools. Only the work loop can receive those capabilities. Plugin assignments filter plugin LLM tools, MCP assignments filter all tools provided by each MCP server, and Skill assignments filter which Skill prompts are injected. Existing subagent handoffs receive the same tool routes and cannot regain computer tools from the conversation loop. LLM tools registered by external Claude Code, Self Code, HAPI, Codex app-server, and OpenCode plugins therefore default to the work loop.
+
+Plugin Pipeline/Star handlers and explicit commands such as `/hapi`, `/codexdev`, `/vibe`, and `/oc` retain the plugin's existing priority and are outside LLM tool routing. Moving those commands into detached work sessions requires explicit plugin support or a future command-execution protocol; a work-only plugin tool assignment does not migrate the entire plugin.
+
+The work loop first replies that the task has started, then continues in a runtime-owned background task. Its results replay the result-decoration stage onward, which includes the reply content-safety check, TTS/T2I decoration, and platform delivery; inbound stages (waking, rate limit, inbound content safety) are not re-run. Background work uses a separate session lock, so it does not block later chat in the same session. Work sessions are runtime-only in-memory state; query them with the `/work status` command. The state is not retained after a restart or runtime rebuild.
+
+These settings belong to a configuration profile. Check the BTW switches, concurrency, and plugin-tool assignments separately for every profile.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.
@@ -231,7 +256,7 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 - Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
 - No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
 - `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
-- `log_level` and `log_file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log_level` applies to terminal output, not only the file sink. File logs use the same redacting sink: recognized secret fields, Bearer tokens, URLs, and absolute paths are replaced before write. Cookies, private chat, and custom secrets are not guaranteed; review logs before sharing.
+- `log_level` and `log_file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log_level` applies to terminal output, not only the file sink.
 - `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.
 - `timezone` is an IANA timezone and defaults to `Asia/Shanghai`.

@@ -1120,3 +1120,31 @@ async def test_provider_model_commands_list_and_switch_by_index():
     await command.set_model(switch_event, "2")
     assert provider.model == "model-b"
     assert "Switched model." in _plain_text(switch_event.result)
+
+
+@pytest.mark.asyncio
+async def test_work_status_reports_none_and_latest(monkeypatch):
+    from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
+    from astrbot.core.agent.btw import (
+        WorkSessionManager,
+        WorkSessionStatus,
+        runtime_registry,
+    )
+
+    context = SimpleNamespace(i18n=FakeI18n())
+    command = WorkCommands(context)
+
+    monkeypatch.setattr(runtime_registry, "_managers", {})
+    event = DummyEvent(message_str="work status")
+    await command.status(event)
+    assert _plain_text(event.result) == "No BTW work task has run in this session."
+
+    sessions = WorkSessionManager()
+    session = await sessions.create("napcat:FriendMessage:42", "refactor the module")
+    await sessions.update_status(session.id, WorkSessionStatus.RUNNING)
+    monkeypatch.setattr(runtime_registry, "_managers", {"": sessions})
+    latest_event = DummyEvent(message_str="work status")
+    await command.status(latest_event)
+    text = _plain_text(latest_event.result)
+    assert "Running" in text and "refactor the module" in text
+    assert latest_event.result.is_stopped()

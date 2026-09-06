@@ -1164,6 +1164,63 @@
         "description": "可用插件",
         "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用,则此处的选择不会生效。"
       }
+    },
+    "btw": {
+      "description": "BTW 双循环",
+      "btw": {
+        "enabled": {
+          "description": "启用 BTW 双循环",
+          "hint": "实验性原型，默认关闭。开启后由对话循环统一接收消息，并将显式工作请求转入工作循环；高风险工具动作仍然按上游规则拒绝，IM 不提权。"
+        },
+        "classifier": {
+          "enabled": {
+            "description": "启用任务分类",
+            "hint": "可选的启发式规则，默认关闭。开启后按内置规则把疑似工作请求转入工作循环；/work 指令不依赖此开关。"
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "对话循环模型",
+            "hint": "留空时使用当前会话的默认对话模型。对话循环不会获得本地、沙盒或文件工具。"
+          }
+        },
+        "work_loop": {
+          "enabled": {
+            "description": "启用工作循环",
+            "hint": "关闭后，所有请求都由对话循环处理。"
+          },
+          "provider_id": {
+            "description": "工作循环模型",
+            "hint": "留空时使用当前会话的默认对话模型。配置后会优先于会话模型选择。"
+          },
+          "computer_use_runtime": {
+            "description": "工作循环电脑权限",
+            "hint": "inherit 使用现有电脑使用配置；local 和 sandbox 只会暴露给工作循环。"
+          },
+          "max_concurrent": {
+            "description": "工作循环最大并发数",
+            "hint": "同一配置文件中可同时执行的工作任务数量。"
+          }
+        },
+        "work_session": {
+          "max_age_seconds": {
+            "description": "工作会话保留时长",
+            "hint": "已完成、失败或取消的工作任务保留多少秒以供状态查询。"
+          }
+        },
+        "plugin_routes": {
+          "description": "插件工具循环分配",
+          "hint": "插件 LLM 工具默认仅在工作循环可用；可为每个已启用插件显式改为对话循环或两者。"
+        },
+        "mcp_routes": {
+          "description": "MCP 服务器循环分配",
+          "hint": "MCP 工具默认仅在工作循环可用；可为每个已启用服务器显式改为对话循环或两者。"
+        },
+        "skill_routes": {
+          "description": "Skills 循环分配",
+          "hint": "Skill 默认注入两个循环；可为每个已启用 Skill 显式限制到单一循环。"
+        }
+      }
     }
   },
   "ext_group": {
@@ -2059,5 +2116,8 @@
     "documentation": "内置文档",
     "helpPrefix": "不了解配置？请见",
     "helpSuffix": "。"
+  },
+  "btw": {
+    "name": "BTW 双循环"
   }
 }

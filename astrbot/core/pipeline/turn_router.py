@@ -288,6 +288,18 @@ def _first_mention_is_other(inp: TurnRouteInput) -> bool:
     return str(first.target) != str(inp.self_id)
 
 
+def _llm_prefix_has_payload(
+    inp: TurnRouteInput, blocked_by_other_mention: bool
+) -> bool:
+    if blocked_by_other_mention:
+        return False
+    text = inp.message_str.strip(" \t")
+    prefix = longest_prefix_match(text, inp.llm_access.prefixes)
+    if prefix is None:
+        return False
+    return bool(text[len(prefix) :].strip(" \t"))
+
+
 def _llm_gate(
     inp: TurnRouteInput, blocked_by_other_mention: bool
 ) -> tuple[bool, set[str]]:
@@ -299,19 +311,14 @@ def _llm_gate(
             return True, {"llm_open"}
         if mode == "off":
             return False, set()
-        if longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes):
+        if _llm_prefix_has_payload(inp, False):
             return True, {"llm_prefix"}
         return False, set()
 
     reasons: set[str] = set()
     base = False
     mode = inp.llm_access.group
-    prefix_hit = False
-    if not blocked_by_other_mention:
-        prefix_hit = (
-            longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes)
-            is not None
-        )
+    prefix_hit = _llm_prefix_has_payload(inp, blocked_by_other_mention)
     if mode == "open":
         base = True
         reasons.add("llm_open")

@@ -1087,7 +1087,7 @@ CONFIG_METADATA_2 = {
                     },
                     "empty_mention_waiting": {
                         "type": "bool",
-                        "hint": "启用后，当消息内容只有指令前缀（例如单独一个 /）时，会等待该用户 60 秒内的下一条消息，并把它当作显式对准内置 AI。空 @ 不会触发等待。",
+                        "hint": "启用后，当消息内容只有指令前缀（例如单独一个 /）时，会等待该用户 60 秒内的下一条消息，并把它当作显式对准内置 AI。单独的前缀不会当成空提示词发给模型。空 @ 不会触发等待。llm_access 为 off 时不等待、不请求模型。",
                     },
                     "empty_mention_waiting_need_reply": {
                         "type": "bool",

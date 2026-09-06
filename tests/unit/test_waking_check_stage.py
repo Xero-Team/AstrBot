@@ -456,6 +456,33 @@ async def test_explicit_surface_wakes_group_mention_only(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_explicit_surface_admits_plain_hello_under_default_prefix(monkeypatch):
+    stage = await make_stage()
+    install_handlers(stage, monkeypatch, [])
+    event = FakeEvent([Plain("hello")], message_text="hello")
+    event.set_extra("explicit_surface", True)
+
+    await stage.process(event)
+
+    assert event.stopped is False
+    assert event.get_extra("should_run_llm") is True
+    assert event.get_extra("should_run_command") is False
+    assert "explicit_surface" in event.get_extra("wake_reasons")
+
+
+@pytest.mark.asyncio
+async def test_bare_command_prefix_does_not_run_llm(monkeypatch):
+    stage = await make_stage()
+    install_handlers(stage, monkeypatch, [])
+    event = FakeEvent([Plain("/")], message_text="/")
+
+    await stage.process(event)
+
+    assert event.get_extra("should_run_llm") is False
+    assert event.stopped is True
+
+
+@pytest.mark.asyncio
 async def test_default_private_hello_does_not_run_llm(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])

@@ -54,6 +54,16 @@ class Main(star.Star):
             if not is_command_prefix_only:
                 return
 
+            llm_access = cfg.get("llm_access") or {}
+            mode = llm_access.get(
+                "private" if event.is_private_chat() else "group",
+                "prefix",
+            )
+            if mode not in {"open", "prefix", "off"}:
+                mode = "prefix"
+            if mode == "off":
+                return
+
             if p_settings.get("empty_mention_waiting_need_reply", True):
                 try:
                     curr_cid = await self.context.conversations.current_id(

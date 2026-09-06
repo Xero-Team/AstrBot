@@ -254,6 +254,25 @@ def test_private_unmatched_prefix_runs_llm():
     assert "llm_prefix" in result.wake_reasons
 
 
+def test_bare_command_prefix_does_not_run_llm():
+    result = route_turn(_input("/"))
+    assert result.should_run_llm is False
+    assert result.should_run_command is False
+    assert result.stop is True
+
+
+def test_bare_group_command_prefix_does_not_run_llm():
+    result = route_turn(_input("/", private=False))
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_bare_llm_prefix_without_payload_does_not_run_llm():
+    result = route_turn(_input("#", llm=LlmAccess(prefixes=("#",))))
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
 def test_group_mention_all_does_not_admit_plain():
     result = route_turn(
         _input(

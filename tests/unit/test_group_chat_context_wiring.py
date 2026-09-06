@@ -300,6 +300,57 @@ async def test_empty_mention_waiting_false_skips_prefix_only_wait():
     event = MagicMock()
     event.unified_msg_origin = "aiocqhttp:GroupMessage:group"
     event.get_messages.return_value = [Plain("/")]
+    event.is_private_chat.return_value = False
+    event.request_llm = MagicMock()
+
+    results = [item async for item in main.handle_empty_mention(event)]
+
+    assert results == []
+    event.request_llm.assert_not_called()
+    main.context.messages.wait_for.assert_not_awaited()
+    main.context.messages.submit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_prefix_only_wait_skips_when_group_llm_off():
+    main = _make_empty_mention_main()
+    main.context.config.get.return_value = {
+        "platform_settings": {
+            "empty_mention_waiting": True,
+            "empty_mention_waiting_need_reply": True,
+        },
+        "command_prefixes": ["/"],
+        "llm_access": {"group": "off", "private": "prefix"},
+    }
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:group"
+    event.get_messages.return_value = [Plain("/")]
+    event.is_private_chat.return_value = False
+    event.request_llm = MagicMock()
+
+    results = [item async for item in main.handle_empty_mention(event)]
+
+    assert results == []
+    event.request_llm.assert_not_called()
+    main.context.messages.wait_for.assert_not_awaited()
+    main.context.messages.submit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_prefix_only_wait_skips_when_private_llm_off():
+    main = _make_empty_mention_main()
+    main.context.config.get.return_value = {
+        "platform_settings": {
+            "empty_mention_waiting": True,
+            "empty_mention_waiting_need_reply": True,
+        },
+        "command_prefixes": ["/"],
+        "llm_access": {"group": "prefix", "private": "off"},
+    }
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:FriendMessage:user"
+    event.get_messages.return_value = [Plain("/")]
+    event.is_private_chat.return_value = True
     event.request_llm = MagicMock()
 
     results = [item async for item in main.handle_empty_mention(event)]
@@ -324,6 +375,7 @@ async def test_command_prefix_only_still_waits_without_synthesizing_mention():
     event = MagicMock()
     event.unified_msg_origin = "aiocqhttp:GroupMessage:group"
     event.get_messages.return_value = [Plain("/")]
+    event.is_private_chat.return_value = False
     event.get_self_id.return_value = "bot"
     event.get_platform_id.return_value = "aiocqhttp"
     event.request_llm = MagicMock(return_value="llm")

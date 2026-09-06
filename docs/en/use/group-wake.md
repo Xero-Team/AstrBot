@@ -79,7 +79,7 @@ If the session already has an open LLM turn window (inbound coalesce waiting for
 
 ## Prefix-only messages
 
-`empty_mention_waiting` is on by default. A message that is only a command prefix (for example a lone `/`) waits up to 60 seconds for that user's next message and resubmits it with `explicit_surface`, so the follow-up does not need another prefix. Turning the switch off skips the wait. An empty `@` does not start the built-in AI and does not reinsert a `Mention` for resubmit. `off` still blocks a new LLM turn.
+`empty_mention_waiting` is on by default. A message that is only a command prefix (for example a lone `/`) is not sent to the built-in LLM as an empty prompt. It waits up to 60 seconds for that user's next message and resubmits it with `explicit_surface`, so the follow-up does not need another prefix. Turning the switch off skips the wait and does not call the model. An empty `@` does not start the built-in AI and does not reinsert a `Mention` for resubmit. `private=off` / `group=off` skips the wait and the courtesy prompt.
 
 ## Isolated sessions
 

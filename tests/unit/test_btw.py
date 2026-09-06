@@ -11,6 +11,7 @@ from astrbot.core.agent.btw import (
     WorkLoop,
     WorkSessionManager,
     WorkSessionStatus,
+    is_work_loop_enabled,
 )
 
 
@@ -147,8 +148,32 @@ async def test_task_classifier_respects_disabled_work_loop():
     )
 
 
+def test_is_work_loop_enabled_requires_both_switches():
+    assert is_work_loop_enabled(None) is False
+    assert is_work_loop_enabled("btw") is False
+    assert is_work_loop_enabled({}) is False
+    assert is_work_loop_enabled({"btw": {"enabled": True}}) is False
+    assert is_work_loop_enabled({"btw": {"enabled": True, "work_loop": True}}) is False
+    assert (
+        is_work_loop_enabled(
+            {"btw": {"enabled": True, "work_loop": {"enabled": False}}}
+        )
+        is False
+    )
+    assert (
+        is_work_loop_enabled(
+            {"btw": {"enabled": False, "work_loop": {"enabled": True}}}
+        )
+        is False
+    )
+    assert (
+        is_work_loop_enabled({"btw": {"enabled": True, "work_loop": {"enabled": True}}})
+        is True
+    )
+
+
 @pytest.mark.asyncio
-async def test_task_classifier_accepts_manual_work_command_when_auto_classification_is_disabled():
+async def test_task_classifier_does_not_treat_work_command_text_as_work():
     classifier = TaskClassifier(
         {
             "btw": {
@@ -161,7 +186,11 @@ async def test_task_classifier_accepts_manual_work_command_when_auto_classificat
 
     assert (
         await classifier.classify(SimpleNamespace(message_str="/work 重构项目"))
-        is TaskType.WORK
+        is TaskType.CONVERSATION
+    )
+    assert (
+        await classifier.classify(SimpleNamespace(message_str="work 重构项目"))
+        is TaskType.CONVERSATION
     )
 
 

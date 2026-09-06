@@ -56,25 +56,15 @@ class Main(star.Star):
         """Show version and session, LLM, and TTS switches"""
         await self.bot_c.status(event)
 
-    @filter.command_group("work")
-    def work(self) -> None:
-        """Inspect BTW work-loop tasks for this session"""
-
     @filter.permission("session.read")
-    @work.command("status")
-    async def work_status(self, event: AstrMessageEvent) -> None:
-        """Show the newest BTW work task and its status"""
-        await self.work_c.status(event)
-
-    @filter.permission("session.read")
-    @work.command("run")
-    async def work_run(
+    @filter.command("work")
+    async def work(
         self,
         event: AstrMessageEvent,
-        task: Annotated[str, GreedyStr] = "",
+        task: GreedyStr = GreedyStr(""),
     ) -> None:
-        """Run a task through the BTW work loop"""
-        await self.work_c.run(event, task)
+        """Submit a BTW work-loop task, or show the latest status"""
+        await self.work_c.handle(event, task)
 
     @filter.permission("session.manage")
     @bot.command("enable")

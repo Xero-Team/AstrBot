@@ -1,9 +1,9 @@
 """Per-profile registry exposing BTW work-session state to commands.
 
-The built-in ``work`` command group queries the newest work session for an
+The built-in ``/work`` command queries the newest work session for an
 origin without owning the pipeline.  The pipeline's ``ConversationLoop``
 registers its work-session manager under the owning profile's ``config_id``
-at initialization; the command group resolves the event's config and reads
+at initialization; the command resolves the event's config and reads
 through this registry.
 """
 

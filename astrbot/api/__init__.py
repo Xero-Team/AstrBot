@@ -21,6 +21,10 @@ _EXPORTS = {
         "astrbot.core.agent.btw.runtime_registry",
         "manager_for",
     ),
+    "btw_work_loop_enabled": (
+        "astrbot.core.agent.btw.task_classifier",
+        "is_work_loop_enabled",
+    ),
     "AuthContext": ("astrbot.core.auth", "AuthContext"),
     "Decision": ("astrbot.core.auth", "Decision"),
     "Resource": ("astrbot.core.auth", "Resource"),

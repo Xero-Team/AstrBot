@@ -16,6 +16,7 @@ from astrbot.core.agent.btw import (
     WorkLoop,
     WorkSessionManager,
     WorkSessionStatus,
+    is_work_loop_enabled,
     runtime_registry,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -107,7 +108,7 @@ class ConversationLoop:
         )
 
     def expose_to_commands(self, config_id: str) -> None:
-        """Publish work-session state for the built-in ``work`` command group."""
+        """Publish work-session state for the built-in ``/work`` command."""
         runtime_registry.register(config_id, self.work_sessions)
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
@@ -116,8 +117,9 @@ class ConversationLoop:
         When BTW is disabled the loop is a transparent pass-through: no
         classification, no loop tagging — the event reaches the Agent request
         executor exactly as it would on the upstream path.  Work-session
-        status is queried through the ``/work status`` command, not by
-        inspecting message text.
+        status is queried through the ``/work`` command, not by
+        inspecting message text. ``/work <task>`` sets ``btw_force_work``
+        so free-text tasks still enter the work loop.
 
         Args:
             event: The message event to process.
@@ -132,7 +134,12 @@ class ConversationLoop:
 
         if self.classifier is None:
             raise RuntimeError("ConversationLoop must be initialized before use")
-        task_type = await self.classifier.classify(event)
+        if event.get_extra("btw_force_work") and is_work_loop_enabled(
+            self.classifier.config
+        ):
+            task_type = TaskType.WORK
+        else:
+            task_type = await self.classifier.classify(event)
         if task_type is TaskType.WORK:
             if self.work_loop is None:
                 raise RuntimeError("ConversationLoop must be initialized before use")

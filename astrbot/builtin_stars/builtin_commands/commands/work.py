@@ -1,10 +1,7 @@
-"""BTW work-loop commands (/work status, /work <task>)."""
+"""BTW work-loop command (/work, /work status)."""
 
-from typing import Annotated
-
-from astrbot.api import btw_work_latest_status
+from astrbot.api import btw_work_latest_status, btw_work_loop_enabled
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.event.filter import GreedyStr
 
 from .reply import reply_i18n
 
@@ -14,6 +11,20 @@ class WorkCommands:
 
     def __init__(self, context) -> None:
         self.context = context
+
+    async def handle(self, event: AstrMessageEvent, task: str = "") -> None:
+        """Show status, or hand a free-text task to the work loop.
+
+        ``/work`` and a remainder of ``status`` (case-insensitive) query
+        the newest session task. Any other remainder is a work-loop
+        request: the handler rewrites ``event.message_str`` and lets
+        ProcessStage continue into ConversationLoop.
+        """
+        stripped = (task or "").strip()
+        if stripped == "" or stripped.lower() == "status":
+            await self.status(event)
+            return
+        await self.submit(event, stripped)
 
     async def status(self, event: AstrMessageEvent) -> None:
         """Show the newest work-session status for this origin."""
@@ -29,23 +40,14 @@ class WorkCommands:
         body = await self.context.i18n.t(event, f"work.status.{status}", task=request)
         await reply_i18n(self.context, event, "work.status.body", body=body)
 
-    async def run(
-        self,
-        event: AstrMessageEvent,
-        task: Annotated[str, GreedyStr],
-    ) -> None:
-        """Dispatch the task text through the BTW work loop.
-
-        The command handler tags the in-flight event so the process stage's
-        Agent request runs with the work-loop policy; the message text is
-        rewritten to the task body so downstream assembly sees only the task.
-        """
-        task = (task or "").strip()
-        if not task:
-            await reply_i18n(self.context, event, "work.run.usage")
+    async def submit(self, event: AstrMessageEvent, task: str) -> None:
+        """Mark the event as a BTW work request and continue to the Agent."""
+        cfg = self.context.config.get(umo=event.unified_msg_origin)
+        if not btw_work_loop_enabled(cfg):
+            await reply_i18n(self.context, event, "work.disabled")
             return
         event.message_str = task
         event.set_extra("should_run_command", False)
         event.set_extra("should_run_llm", True)
+        event.set_extra("btw_force_work", True)
         event.set_extra("btw_loop", "work")
-        # Do not stop the event: the pipeline continues into the Agent stage.

@@ -216,6 +216,24 @@ async def test_process_stage_plain_plugin_response_does_not_trigger_agent():
 
 
 @pytest.mark.asyncio
+async def test_process_stage_command_handler_can_continue_to_agent_when_llm_requested():
+    stage = _stage(star_responses=[None], agent_responses=["agent-step"])
+    event = FakeEvent(
+        extras={
+            "activated_handlers": [SimpleNamespace(name="work")],
+            "should_run_llm": True,
+            "btw_force_work": True,
+        }
+    )
+
+    yielded = [item async for item in stage.process(event)]
+
+    assert yielded == [None, None]
+    assert stage.star_request_sub_stage.calls == [(event,)]
+    assert stage.agent_sub_stage.calls == [(event,)]
+
+
+@pytest.mark.asyncio
 async def test_process_stage_wake_path_runs_agent_without_plugin_handlers():
     stage = _stage(agent_responses=["agent-step"])
     event = FakeEvent(

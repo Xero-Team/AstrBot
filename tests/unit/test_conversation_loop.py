@@ -72,6 +72,62 @@ async def test_conversation_loop_forwards_simple_chat_to_agent_request():
 
 
 @pytest.mark.asyncio
+async def test_conversation_loop_honors_forced_work_without_classifier_keywords():
+    loop = ConversationLoop(FakeAgentRequest())
+    await loop.initialize(_ctx())
+    event = FakeEvent("帮我写一段python代码获取当前系统磁盘占用情况")
+    event.set_extra("btw_force_work", True)
+
+    output = [item async for item in loop.process(event)]
+
+    assert output == ["first", "second"]
+    assert event.get_extra("btw_loop") == "work"
+
+
+@pytest.mark.asyncio
+async def test_conversation_loop_ignores_forced_work_when_btw_disabled():
+    loop = ConversationLoop(FakeAgentRequest())
+    await loop.initialize(
+        SimpleNamespace(
+            astrbot_config={
+                "btw": {"enabled": False, "work_loop": {"enabled": True}},
+            }
+        )
+    )
+    event = FakeEvent("帮我写一段python代码获取当前系统磁盘占用情况")
+    event.set_extra("btw_force_work", True)
+
+    output = [item async for item in loop.process(event)]
+
+    assert output == ["first", "second"]
+    assert loop.agent_request.process_calls == [event]
+    assert event.get_extra("btw_loop") is None
+
+
+@pytest.mark.asyncio
+async def test_conversation_loop_ignores_forced_work_when_work_loop_disabled():
+    loop = ConversationLoop(FakeAgentRequest())
+    await loop.initialize(
+        SimpleNamespace(
+            astrbot_config={
+                "btw": {
+                    "enabled": True,
+                    "classifier": {"enabled": True},
+                    "work_loop": {"enabled": False, "max_concurrent": 2},
+                }
+            }
+        )
+    )
+    event = FakeEvent("帮我写一段python代码获取当前系统磁盘占用情况")
+    event.set_extra("btw_force_work", True)
+
+    output = [item async for item in loop.process(event)]
+
+    assert output == ["first", "second"]
+    assert event.get_extra("btw_loop") == "conversation"
+
+
+@pytest.mark.asyncio
 async def test_conversation_loop_runs_classified_work_and_completes_session():
     loop = ConversationLoop(FakeAgentRequest())
     await loop.initialize(_ctx())

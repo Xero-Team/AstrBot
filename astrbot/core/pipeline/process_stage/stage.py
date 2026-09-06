@@ -95,5 +95,11 @@ class ProcessStage(Stage):
             if (
                 event.get_result() and not event.is_stopped()
             ) or not event.get_result():
-                async for _ in self._agent_request.process(event):
+                async for _ in self._dispatch_agent(event):
                     yield
+
+    def _dispatch_agent(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
+        """Run BTW classification when enabled, otherwise the Agent sub-stage."""
+        if self.conversation_loop is not None:
+            return self.conversation_loop.process(event)
+        return self._agent_request.process(event)

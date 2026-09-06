@@ -1,6 +1,6 @@
 """BTW conversation and work-loop primitives."""
 
-from .task_classifier import TaskClassifier
+from .task_classifier import TaskClassifier, is_work_loop_enabled
 from .types import TaskType, WorkSession, WorkSessionStatus
 from .work_loop import WorkLoop
 from .work_sessions import WorkSessionManager
@@ -12,4 +12,5 @@ __all__ = [
     "WorkSession",
     "WorkSessionManager",
     "WorkSessionStatus",
+    "is_work_loop_enabled",
 ]

@@ -58,6 +58,25 @@ def _keyword_matches(keyword: str, message: str) -> bool:
     return keyword in message
 
 
+def is_work_loop_enabled(config: object) -> bool:
+    """Return whether BTW and the work loop are both enabled.
+
+    Args:
+        config: A configuration mapping, or any other object.
+
+    Returns:
+        True only when both ``btw.enabled`` and ``btw.work_loop.enabled``
+        are true.
+    """
+    if not isinstance(config, Mapping):
+        return False
+    btw = config.get("btw", {})
+    if not isinstance(btw, Mapping) or not btw.get("enabled", False):
+        return False
+    work_loop = btw.get("work_loop", {})
+    return isinstance(work_loop, Mapping) and bool(work_loop.get("enabled", False))
+
+
 class TaskClassifier:
     """Classify a request without an additional model call.
 
@@ -66,6 +85,8 @@ class TaskClassifier:
     the conversation-loop entry point.  Classification is opt-in on every
     layer: when ``btw.enabled``, ``btw.classifier.enabled``, or
     ``btw.work_loop.enabled`` is false, the classifier never assigns work.
+    Manual ``/work <task>`` submission is a built-in command, not a
+    classifier rule.
     """
 
     def __init__(self, config: Mapping[str, object]) -> None:
@@ -80,19 +101,12 @@ class TaskClassifier:
         Returns:
             The selected task type.
         """
-        btw = self.config.get("btw", {})
-        if not isinstance(btw, Mapping) or not btw.get("enabled", False):
-            return TaskType.CONVERSATION
-
-        work_loop = btw.get("work_loop", {})
-        if not isinstance(work_loop, Mapping) or not work_loop.get("enabled", False):
+        if not is_work_loop_enabled(self.config):
             return TaskType.CONVERSATION
 
         message = (event.message_str or "").strip().lower()
-        if message.startswith("/work"):
-            return TaskType.WORK
-
-        classifier = btw.get("classifier", {})
+        btw = self.config.get("btw", {})
+        classifier = btw.get("classifier", {}) if isinstance(btw, Mapping) else {}
         if not isinstance(classifier, Mapping) or not classifier.get("enabled", False):
             return TaskType.CONVERSATION
         keywords = classifier.get("work_keywords", DEFAULT_WORK_KEYWORDS)

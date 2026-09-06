@@ -82,6 +82,8 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 ### 运行任务
 
 - `/task stop`：停止当前会话中正在运行的 Agent 或第三方 Agent Runner 任务，不删除历史。
+- `/work <任务>`：把后面的自由文本提交给 BTW 工作循环。不依赖 `/chat` 前缀，也不依赖任务分类器。需要 `session.read`，且配置档已启用 `btw.enabled` 与 `btw.work_loop.enabled`。指令身份是 `builtin_commands:work`。
+- `/work` 或 `/work status`：查询本会话最近一次工作任务状态。`status` 只在剩余文本整段匹配时视为查询（大小写不敏感）；`/work status 重构` 会作为任务提交。需要 `session.read`。状态只存在于运行时内存，重启后清空。
 
 ### Provider 与模型
 

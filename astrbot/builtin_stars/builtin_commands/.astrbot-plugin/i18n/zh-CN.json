@@ -148,13 +148,13 @@
     "provider.models.empty_current": "（空）",
     "provider.models.hint": "使用 /model set <名称或序号> 切换模型。模型名也可以解析到其他已配置 Provider。",
     "provider.models.invalid_index": "模型序号无效。",
+    "work.disabled": "BTW 工作循环未启用。",
     "work.status.none": "本会话还没有 BTW 工作任务。",
     "work.status.body": "{body}",
     "work.status.pending": "排队中：{task}",
     "work.status.running": "执行中：{task}",
     "work.status.completed": "已完成：{task}",
     "work.status.failed": "已失败：{task}",
-    "work.status.cancelled": "已取消：{task}",
-    "work.run.usage": "用法：/work <任务描述>"
+    "work.status.cancelled": "已取消：{task}"
   }
 }

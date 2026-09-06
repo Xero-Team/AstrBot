@@ -1157,6 +1157,43 @@ async def test_gemini_prepare_query_config_ignores_native_tools_for_gemini_2_lit
 
 
 @pytest.mark.asyncio
+async def test_gemini_thinking_level_is_serialized_on_every_request():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": {"level": "HIGH"}}
+    provider.provider_settings = {"streaming_response": False}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-3.7-flash"
+
+    first_config = await provider._prepare_query_config({"model": "gemini-3.7-flash"})
+    second_config = await provider._prepare_query_config({"model": "gemini-3.7-flash"})
+
+    assert first_config.thinking_config is not None
+    assert second_config.thinking_config is not None
+    assert first_config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": google_types.ThinkingLevel.HIGH,
+    }
+    assert second_config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": google_types.ThinkingLevel.HIGH,
+    }
+
+
+@pytest.mark.asyncio
+async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": {"level": "MINIMAL"}}
+    provider.provider_settings = {"streaming_response": False}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-3.7-flash"
+
+    config = await provider._prepare_query_config({"model": "gemini-3.7-flash"})
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": google_types.ThinkingLevel.MEDIUM,
+    }
+
+
+@pytest.mark.asyncio
 async def test_gemini_prepare_query_config_normalizes_invalid_thinking_level(caplog):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = {
@@ -1169,7 +1206,12 @@ async def test_gemini_prepare_query_config_normalizes_invalid_thinking_level(cap
     config = await provider._prepare_query_config({"model": "gemini-3.1-pro"})
 
     assert config.thinking_config is not None
-    assert "Invalid thinking level: INVALID, using HIGH" in caplog.text
+    assert config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": google_types.ThinkingLevel.HIGH,
+    }
+    assert (
+        "Invalid thinking level INVALID for gemini-3.1-pro, using HIGH" in caplog.text
+    )
 
 
 def test_gemini_process_content_parts_rejects_empty_candidate_content():

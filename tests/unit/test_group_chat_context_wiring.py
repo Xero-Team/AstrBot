@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Face, Json, Plain, Reply
+from astrbot.api.message_components import Face, Json, Mention, Plain, Reply
 from astrbot.api.provider import Provider
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
@@ -249,3 +249,75 @@ async def test_format_message_truncates_long_json_card_fields():
     formatted = await context._format_message(event, {})
 
     assert f"Description: {'a' * 200}..." in formatted
+
+
+def _make_empty_mention_main():
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.config.get.return_value = {
+        "platform_settings": {
+            "empty_mention_waiting": True,
+            "empty_mention_waiting_need_reply": True,
+        },
+        "command_prefixes": ["/"],
+    }
+    main.context.conversations.current_id = AsyncMock(return_value="cid-1")
+    main.context.conversations.get = AsyncMock(return_value=None)
+    main.context.messages.wait_for = AsyncMock()
+    main.context.messages.submit = MagicMock()
+    main.group_chat_context = None
+    return main
+
+
+@pytest.mark.asyncio
+async def test_empty_mention_does_not_request_llm_or_resubmit():
+    main = _make_empty_mention_main()
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:group"
+    event.get_messages.return_value = [Mention(target="bot")]
+    event.get_self_id.return_value = "bot"
+    event.request_llm = MagicMock()
+    event.message_obj.message = [Mention(target="bot")]
+
+    results = [item async for item in main.handle_empty_mention(event)]
+
+    assert results == []
+    event.request_llm.assert_not_called()
+    main.context.messages.wait_for.assert_not_awaited()
+    main.context.messages.submit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_command_prefix_only_still_waits_without_synthesizing_mention():
+    main = _make_empty_mention_main()
+    waiter_holder: dict[str, object] = {}
+
+    async def capture_wait(event, waiter, timeout_seconds=60):
+        _ = event
+        _ = timeout_seconds
+        waiter_holder["waiter"] = waiter
+
+    main.context.messages.wait_for = capture_wait
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:group"
+    event.get_messages.return_value = [Plain("/")]
+    event.get_self_id.return_value = "bot"
+    event.get_platform_id.return_value = "aiocqhttp"
+    event.request_llm = MagicMock(return_value="llm")
+    event.plain_result = MagicMock()
+
+    results = [item async for item in main.handle_empty_mention(event)]
+
+    assert results == ["llm"]
+    event.request_llm.assert_called_once()
+    waiter = waiter_holder["waiter"]
+    follow_up = MagicMock()
+    follow_up.message_str = "hello"
+    follow_up.message_obj.message = [Plain("hello")]
+    follow_up.get_self_id.return_value = "bot"
+    controller = MagicMock()
+    await waiter(controller, follow_up)
+    assert all(not isinstance(item, Mention) for item in follow_up.message_obj.message)
+    main.context.messages.submit.assert_called_once()
+    follow_up.stop_event.assert_called_once()
+    controller.stop.assert_called_once()

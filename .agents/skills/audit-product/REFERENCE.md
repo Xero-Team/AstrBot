@@ -180,7 +180,7 @@ Violations are findings, not style nits:
 
 - No legacy shims; no Python 3.10–3.13 branches
 - Import boundaries in `tests/unit/test_import_boundaries.py`
-- Group wake is explicit (`llm_access.group`, `llm_access.reply_to_bot`)
+- Group wake is explicit (`llm_access.group`, `llm_access.reply_to_bot`, continuation); mention is not a wake policy
 - Command identity is `command_id`; no fossil short-name lookup
 - Dashboard bind defaults to `127.0.0.1`; MCP private-network default deny
 - User-facing agent failures stay generic; redact secrets

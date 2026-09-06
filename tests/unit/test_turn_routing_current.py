@@ -54,8 +54,8 @@ def _chat_group_handlers() -> tuple[StarHandlerMetadata, StarHandlerMetadata]:
 @pytest.mark.parametrize(
     ("settings", "text", "expected_wake"),
     [
-        ({}, "今天天气", True),
-        ({"llm_access": {"private": "prefix"}}, "今天天气", False),
+        ({}, "今天天气", False),
+        ({"llm_access": {"private": "open"}}, "今天天气", True),
         ({"llm_access": {"private": "prefix"}}, "/今天天气", True),
     ],
 )
@@ -87,7 +87,7 @@ async def test_private_extra_token_chat_leaves_slash_and_bare_forms():
 
     assert (await stage._detect_wake(slash)).should_wake is True
     assert slash.message_str == "chat 今天天气"
-    assert (await stage._detect_wake(bare)).should_wake is True
+    assert (await stage._detect_wake(bare)).should_wake is False
     assert bare.message_str == "chat 今天天气"
 
 

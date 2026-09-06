@@ -812,8 +812,22 @@ def test_platform_manager_create_event_falls_back_to_platform_name() -> None:
     platform.create_event.assert_called_once()
     platform.commit_event.assert_called_once()
     platform.commit_event.call_args.args[0].set_extra.assert_called_once_with(
-        "adapter_preconfigured",
+        "explicit_surface",
         False,
+    )
+
+
+def test_platform_manager_create_event_stamps_explicit_surface_when_wake() -> None:
+    manager = _make_manager()
+    platform = MagicMock()
+    platform.create_event.return_value = MagicMock()
+    manager._find_inst_by_id = MagicMock(return_value=platform)
+
+    manager.create_event("telegram", MagicMock(), is_wake=True)
+
+    platform.commit_event.call_args.args[0].set_extra.assert_called_once_with(
+        "explicit_surface",
+        True,
     )
 
 

@@ -268,6 +268,7 @@ class WebChatAdapter(Platform):
             webchat_queue_manager=self._webchat_queue_manager,
             attachments_dir=self.attachments_dir,
         )
+        message_event.set_extra("explicit_surface", True)
 
         raw_message = getattr(message, "raw_message", None)
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:

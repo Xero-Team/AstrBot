@@ -75,7 +75,8 @@ Suggested maps (inspect code; do not copy example facts):
 | `lifecycle`    | Session, conversation, or agent-run states                |
 
 Group wake is explicit (`llm_access.group`, `llm_access.reply_to_bot`,
-continuation). Do not draw `platform_settings.group_wake_policy`.
+continuation). Mentions are message-chain markers, not a wake policy.
+Do not draw `platform_settings.group_wake_policy`.
 
 ## Verify
 

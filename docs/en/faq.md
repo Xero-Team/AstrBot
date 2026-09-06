@@ -103,7 +103,7 @@ Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.
 
 ### The bot does not answer in a group
 
-To avoid flooding group chats, ordinary messages require the configured `llm_access.group` policy (the default is `prefix`, with `llm_access.prefixes` defaulting to `["/"]`). To allow replies to the bot as an additional trigger, enable `llm_access.reply_to_bot`. Full policy, isolated sessions, and drops that still happen after a wake are in [When the bot replies in groups](/en/use/group-wake). Also check:
+To avoid flooding group chats, ordinary messages require the configured `llm_access.group` policy (the default is `prefix`, with `llm_access.prefixes` defaulting to `["/"]`). Direct messages default to `prefix` as well. `@` does not extra-admit the built-in AI. To allow replies to the bot as an additional trigger, enable `llm_access.reply_to_bot`. Full policy, isolated sessions, and drops that still happen after a wake are in [When the bot replies in groups](/en/use/group-wake). Also check:
 
 - which profile is bound to the message session, see [Configuration profiles](/en/use/config-profiles);
 - whether the platform and Provider are enabled;

@@ -269,7 +269,7 @@ DEFAULT_CONFIG = {
     "command_prefixes": ["/"],
     "llm_access": {
         "prefixes": ["/"],
-        "private": "open",
+        "private": "prefix",
         "group": "prefix",
         "reply_to_bot": False,
     },
@@ -3124,8 +3124,6 @@ CONFIG_METADATA_2 = {
                         "options": [
                             "open",
                             "prefix",
-                            "mention",
-                            "prefix_or_mention",
                             "off",
                         ],
                     },
@@ -4227,8 +4225,6 @@ CONFIG_METADATA_3 = {
                         "options": [
                             "open",
                             "prefix",
-                            "mention",
-                            "prefix_or_mention",
                             "off",
                         ],
                     },

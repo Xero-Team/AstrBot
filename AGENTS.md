@@ -243,10 +243,10 @@ The scheduler supports async stages and async-generator onion middleware.
 Preserve stage ordering, stop-propagation, and cancellation semantics.
 
 Group wake behavior is explicit. `llm_access.group`, `llm_access.reply_to_bot`,
-and continuation state control whether mentioning or replying to the bot wakes
-a group message, and `WakingCheckStage` records the selected `wake_reasons` on
-the event. Do not restore `platform_settings.group_wake_policy` or implicit
-mention/reply wakeups. Built-in command availability is stored
+and continuation state control group LLM admission. Mentions are message-chain
+markers, not a wake policy. `WakingCheckStage` records the selected
+`wake_reasons` on the event. Do not restore `platform_settings.group_wake_policy`
+or implicit mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
 field is not migrated or read by runtime code and must not become a pipeline
 switch again. Command identity is `command_id`

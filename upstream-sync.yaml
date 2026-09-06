@@ -5,16 +5,13 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 9852285bdafcbfd0078ae5a4c5f326a068a0dab7
-  synced_at_utc: 2026-09-04T02:56:28Z
+  commit: 6b848090525a0eebe622a9d46b032a6c5148c4a3
+  synced_at_utc: 2026-09-06T09:22:58Z
   sync_method: adapt
-  source_pr: '9925'
+  source_pr: '9899'
   note: >-
-    Reviewed 077d54baaf15cc0561f84bd9ceb943c2bb62e58d..9852285bdafcbfd0078ae5a4c5f326a068a0dab7
-    (1 commit). Adapted #9925 onto the TypeScript Dashboard using the
-    2026-06-27 plugin_id coordinate (author/name), not upstream's
-    market_plugin_id || repo || name fallback. Unique identity lives in
-    dashboard/src/utils/marketPluginKey.ts; navigation keeps ExtensionDetails
-    + #market; ingest skips $meta and source-emitted market_plugin_id; install
-    requests send market_plugin_id. Name-only market deep links no longer
-    resolve. Implementation commit dd93de80f6add6f586f8cadbb4b0e74f08c5dd79.
+    Reviewed 9852285bdafcbfd0078ae5a4c5f326a068a0dab7..6b848090525a0eebe622a9d46b032a6c5148c4a3
+    (1 commit). Adapted #9899 onto the current Gemini provider: construct
+    ThinkingConfig(thinking_level=...) per request, map Gemini 3.7 MINIMAL to
+    MEDIUM, and keep tests under tests/unit/provider/test_gemini_source.py.
+    Implementation commit f388a5327a54ad12d72c1098a73966f16f9c5acf.

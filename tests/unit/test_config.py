@@ -169,6 +169,31 @@ class TestAstrBotConfigLoad:
         assert config.nested["enabled"] is False
         assert config.nested["count"] == 0
 
+    def test_schema_save_replace_keeps_schema_keys(self, temp_config_path):
+        """Plugin schema defaults must be the save-time reference, not DEFAULT_CONFIG."""
+        schema = {
+            "enabled": {"type": "bool", "default": True},
+            "nested": {
+                "type": "object",
+                "items": {
+                    "value": {"type": "string", "default": "a"},
+                },
+            },
+        }
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        config.save_config(
+            replace_config={"enabled": False, "nested": {"value": "b"}},
+        )
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            loaded_config = json.load(f)
+
+        assert loaded_config["enabled"] is False
+        assert loaded_config["nested"]["value"] == "b"
+        assert config.enabled is False
+        assert config.nested["value"] == "b"
+
     def test_dot_notation_access(self, temp_config_path, minimal_default_config):
         """Test accessing config values using dot notation."""
         config = AstrBotConfig(

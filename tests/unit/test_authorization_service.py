@@ -1,7 +1,7 @@
 """Security-contract coverage for the unified authorization service."""
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -18,7 +18,7 @@ from astrbot.core.auth.models import (
     Subject,
     utc_now,
 )
-from astrbot.core.auth.service import AuthorizationService
+from astrbot.core.auth.service import _STEP_UP_TTL_SECONDS, AuthorizationService
 from astrbot.core.db.po import (
     AuthAuditLog,
     AuthRoleBinding,
@@ -30,6 +30,7 @@ from astrbot.core.star.plugin_context import AuthorizationCapability
 from astrbot.core.utils.totp import TotpRuntimeState
 from astrbot.dashboard.api.auth import object_resource
 from astrbot.dashboard.api.authorization import _resource
+from astrbot.dashboard.schemas import AuthorizationStepUpRequest, WebChatStepUpRequest
 from astrbot.dashboard.services.auth_service import AuthService
 
 
@@ -177,6 +178,68 @@ async def test_step_up_consumption_is_atomic(authorization):
         )
     )
     assert sum(decision.allowed for decision in decisions) == 1
+
+
+@pytest.mark.asyncio
+async def test_issue_step_up_uses_fixed_ttl_and_rejects_caller_override(authorization):
+    subject = Subject.dashboard_session("session-1")
+    resource = Resource.named("provider", "model-a", config_id="default")
+    issued_context = AuthContext(
+        subject=subject,
+        source="dashboard",
+        config_id="default",
+        authenticated=True,
+        metadata={"dashboard_session_id": "session-1"},
+    )
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    with pytest.raises(TypeError):
+        await authorization.issue_step_up(
+            subject=subject,
+            dashboard_session_id="session-1",
+            action="provider.credentials.write",
+            resource=resource,
+            context=issued_context,
+            verified_method="password",
+            ttl_seconds=301,
+        )
+
+    issued_at = utc_now()
+    credential_id, _token = await authorization.issue_step_up(
+        subject=subject,
+        dashboard_session_id="session-1",
+        action="provider.credentials.write",
+        resource=resource,
+        context=issued_context,
+        verified_method="password",
+    )
+    async with authorization._db.get_db() as session:
+        credential = (
+            await session.execute(
+                select(AuthStepUpCredential).where(
+                    AuthStepUpCredential.credential_id == credential_id
+                )
+            )
+        ).scalar_one()
+    expires_at = (
+        credential.expires_at.replace(tzinfo=UTC)
+        if credential.expires_at.tzinfo is None
+        else credential.expires_at.astimezone(UTC)
+    )
+    remaining = (expires_at - issued_at).total_seconds()
+    assert _STEP_UP_TTL_SECONDS == 300
+    assert remaining == pytest.approx(_STEP_UP_TTL_SECONDS, abs=1)
+    assert "ttl" not in AuthorizationStepUpRequest.model_fields
+    assert "ttl_seconds" not in AuthorizationStepUpRequest.model_fields
+    assert "ttl" not in WebChatStepUpRequest.model_fields
+    assert "ttl_seconds" not in WebChatStepUpRequest.model_fields
 
 
 @pytest.mark.asyncio

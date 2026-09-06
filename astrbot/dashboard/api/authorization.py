@@ -9,6 +9,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.core.auth.models import (
+    STEP_UP_TTL_SECONDS,
     WEBCHAT_INSTANCE_TOOL_ACTIONS,
     AuthContext,
     AuthorizationValueError,
@@ -19,7 +20,6 @@ from astrbot.core.auth.models import (
     parse_canonical_session_resource,
     utc_now,
 )
-from astrbot.core.auth.service import _STEP_UP_TTL_SECONDS
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
     AuthorizationBindingBatchRevokeRequest,
@@ -522,7 +522,7 @@ async def issue_webchat_step_up(
             verified_method=method,
         )
         tokens[action] = token
-    return ok({"tokens": tokens, "expires_in": _STEP_UP_TTL_SECONDS})
+    return ok({"tokens": tokens, "expires_in": STEP_UP_TTL_SECONDS})
 
 
 @router.get("/audit")

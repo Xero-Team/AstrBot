@@ -153,6 +153,9 @@ WEBCHAT_INSTANCE_TOOL_ACTIONS = frozenset(
     }
 )
 
+# Dashboard and WebChat step-up credentials live at most five minutes.
+STEP_UP_TTL_SECONDS = 300
+
 
 class AuthorizationValueError(ValueError):
     """Raised for invalid authorization value objects before policy evaluation."""

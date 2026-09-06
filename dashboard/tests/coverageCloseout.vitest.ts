@@ -73,6 +73,7 @@ vi.mock('@/api/v1', () => ({
   UPGRADE_RECOVERY_TOKEN_KEY: 'astrbot-upgrade-recovery-token',
 }));
 vi.mock('@/api/v1/authorization', () => ({
+  STEP_UP_TTL_SECONDS: 300,
   authorizationApi: api.authorizationApi,
 }));
 vi.mock('@/api/http', async () => {
@@ -84,6 +85,7 @@ vi.mock('@/api/http', async () => {
   };
 });
 
+import { STEP_UP_TTL_SECONDS } from '@/api/v1/authorization';
 import { fetchWithAuth } from '@/api/http';
 import { useConversations } from '@/composables/useConversations';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
@@ -440,7 +442,7 @@ describe('coverage closeout', () => {
     await stepUp.submitStepUp({ password: 'p' });
     await expect(webChat).resolves.toEqual({ 'webchat.tool_run': 'tok' });
     expect(stepUp.webChatExpiresAt.value).toBeGreaterThan(Date.now());
-    await vi.advanceTimersByTimeAsync(300_000);
+    await vi.advanceTimersByTimeAsync(STEP_UP_TTL_SECONDS * 1000);
     expect(stepUp.webChatExpiresAt.value).toBeNull();
     vi.useRealTimers();
 

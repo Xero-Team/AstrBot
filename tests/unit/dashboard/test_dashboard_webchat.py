@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.core.auth.models import STEP_UP_TTL_SECONDS
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
 
 
@@ -37,6 +38,7 @@ async def test_webchat_step_up_issues_session_bound_tool_bundle(
     assert response.status_code == 200
     payload = await response.get_json()
     tokens = payload["data"]["tokens"]
+    assert payload["data"]["expires_in"] == STEP_UP_TTL_SECONDS
     assert set(tokens) == {
         "tool.local_exec",
         "tool.python_exec",

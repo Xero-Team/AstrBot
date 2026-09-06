@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue';
-import { authorizationApi } from '@/api/v1/authorization';
+import { STEP_UP_TTL_SECONDS, authorizationApi } from '@/api/v1/authorization';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
 export interface DashboardStepUpTarget {
@@ -100,7 +100,9 @@ export function useDashboardStepUp() {
         }
         const expiresIn = Number(response.data?.data?.expires_in);
         const ttlSeconds =
-          Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 300;
+          Number.isFinite(expiresIn) && expiresIn > 0
+            ? expiresIn
+            : STEP_UP_TTL_SECONDS;
         clearWebChatExpiry();
         const expiresAt = Date.now() + ttlSeconds * 1000;
         webChatExpiresAt.value = expiresAt;

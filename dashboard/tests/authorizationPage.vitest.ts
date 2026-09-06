@@ -20,6 +20,7 @@ const toast = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/v1/authorization', () => ({
+  STEP_UP_TTL_SECONDS: 300,
   authorizationApi: api,
 }));
 

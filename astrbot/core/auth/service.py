@@ -19,6 +19,7 @@ from astrbot.core.auth.models import (
     GLOBAL_SCOPE_ID,
     HIGH_RISK_ACTIONS,
     ROLE_ORDER,
+    STEP_UP_TTL_SECONDS,
     WEBCHAT_INSTANCE_TOOL_ACTIONS,
     AuthContext,
     AuthorizationValueError,
@@ -47,7 +48,6 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 _AUDIT_QUEUE_SIZE = 2048
-_STEP_UP_TTL_SECONDS = 300
 _SENSITIVE_KEYS = frozenset(
     {
         "access_token",
@@ -1806,7 +1806,7 @@ class AuthorizationService:
             context_digest=context.digest_for(action, resource),
             token_hash=hashlib.sha256(secret.encode()).hexdigest(),
             verified_method=verified_method,
-            expires_at=utc_now() + timedelta(seconds=_STEP_UP_TTL_SECONDS),
+            expires_at=utc_now() + timedelta(seconds=STEP_UP_TTL_SECONDS),
         )
         async with self._db.get_db() as session:
             async with session.begin():

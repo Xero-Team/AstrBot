@@ -1,6 +1,7 @@
 """Security-contract coverage for the unified authorization service."""
 
 import asyncio
+import inspect
 from datetime import UTC, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,6 +11,7 @@ import pytest_asyncio
 from sqlmodel import select
 
 from astrbot.core.auth.models import (
+    STEP_UP_TTL_SECONDS,
     WEBCHAT_INSTANCE_TOOL_ACTIONS,
     AuthContext,
     Decision,
@@ -18,7 +20,7 @@ from astrbot.core.auth.models import (
     Subject,
     utc_now,
 )
-from astrbot.core.auth.service import _STEP_UP_TTL_SECONDS, AuthorizationService
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.db.po import (
     AuthAuditLog,
     AuthRoleBinding,
@@ -200,16 +202,10 @@ async def test_issue_step_up_uses_fixed_ttl_and_rejects_caller_override(authoriz
         config_id="default",
         enforce_actor=False,
     )
-    with pytest.raises(TypeError):
-        await authorization.issue_step_up(
-            subject=subject,
-            dashboard_session_id="session-1",
-            action="provider.credentials.write",
-            resource=resource,
-            context=issued_context,
-            verified_method="password",
-            ttl_seconds=301,
-        )
+    assert (
+        "ttl_seconds" not in inspect.signature(authorization.issue_step_up).parameters
+    )
+    assert "ttl" not in inspect.signature(authorization.issue_step_up).parameters
 
     issued_at = utc_now()
     credential_id, _token = await authorization.issue_step_up(
@@ -234,8 +230,8 @@ async def test_issue_step_up_uses_fixed_ttl_and_rejects_caller_override(authoriz
         else credential.expires_at.astimezone(UTC)
     )
     remaining = (expires_at - issued_at).total_seconds()
-    assert _STEP_UP_TTL_SECONDS == 300
-    assert remaining == pytest.approx(_STEP_UP_TTL_SECONDS, abs=1)
+    assert STEP_UP_TTL_SECONDS == 300
+    assert remaining == pytest.approx(STEP_UP_TTL_SECONDS, abs=1)
     assert "ttl" not in AuthorizationStepUpRequest.model_fields
     assert "ttl_seconds" not in AuthorizationStepUpRequest.model_fields
     assert "ttl" not in WebChatStepUpRequest.model_fields

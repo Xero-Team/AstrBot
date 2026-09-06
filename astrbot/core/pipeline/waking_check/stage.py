@@ -58,13 +58,9 @@ UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] 
 
 
 class WakeReason(Enum):
-    PREFIX = "prefix"
     COMMAND = "command"
-    MENTION_BOT = "mention_bot"
-    MENTION_ALL = "mention_all"
     REPLY_TO_BOT = "reply_to_bot"
-    PRIVATE_DEFAULT = "private_default"
-    ADAPTER_PRECONFIGURED = "adapter_preconfigured"
+    EXPLICIT_SURFACE = "explicit_surface"
     PLUGIN_HANDLER = "plugin_handler"
     LLM_PREFIX = "llm_prefix"
     LLM_OPEN = "llm_open"
@@ -110,13 +106,12 @@ def _auth_message_type(event: AstrMessageEvent) -> str | None:
 
 
 class WakingCheckStage(Stage):
-    """检查是否需要唤醒。唤醒机器人有如下几点条件：
+    """Decide command, LLM, passthrough, or drop for one inbound event.
 
-    1. 机器人被 @ 了
-    2. 机器人的消息被提到了
-    3. 以配置的 LLM 前缀开头，并且消息没有以 Mention 消息段开头
-    4. 插件（Star）的 handler filter 通过
-    5. 私聊消息的唤醒由当前平台和会话策略决定，不读取旧管理员配置
+    Built-in LLM admission comes from command match, LLM prefix, continuation,
+    explicit ``reply_to_bot``, or extras ``explicit_surface``. Mentions stay on
+    the message chain and are not an LLM gate. Plugin handlers can still
+    activate after the LLM is dropped.
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -136,10 +131,6 @@ class WakingCheckStage(Stage):
         )
         self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
             "ignore_bot_self_message",
-            False,
-        )
-        self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_at_all",
             False,
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
@@ -211,8 +202,7 @@ class WakingCheckStage(Stage):
                 has_open_window=has_open_window
                 or bool(event.get_extra("turn_continuation")),
                 is_manager_flush=manager_flush,
-                adapter_preconfigured=bool(event.get_extra("adapter_preconfigured")),
-                ignore_at_all=self.ignore_at_all,
+                explicit_surface=bool(event.get_extra("explicit_surface")),
             )
         )
         event.message_str = route.message_str
@@ -494,8 +484,7 @@ class WakingCheckStage(Stage):
                 in {"notice", "request"},
                 has_open_window=has_open_window,
                 is_manager_flush=manager_flush,
-                adapter_preconfigured=bool(event.get_extra("adapter_preconfigured")),
-                ignore_at_all=self.ignore_at_all,
+                explicit_surface=bool(event.get_extra("explicit_surface")),
             )
         )
         event.message_str = route.message_str

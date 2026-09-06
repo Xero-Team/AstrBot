@@ -36,7 +36,7 @@ class Main(star.Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):
-        """处理只有一个 @ 或仅有唤醒前缀的消息，并等待用户下一条内容。"""
+        """Wait for the next message when the user sent only a command prefix."""
         try:
             messages = event.get_messages()
             cfg = self.context.config.get(umo=event.unified_msg_origin)
@@ -44,18 +44,24 @@ class Main(star.Star):
             command_prefixes = cfg.get("command_prefixes", [])
             if len(messages) != 1:
                 return
+            if not p_settings.get("empty_mention_waiting", True):
+                return
 
-            is_empty_mention = (
-                isinstance(messages[0], Comp.Mention)
-                and str(messages[0].target) == str(event.get_self_id())
-                and p_settings.get("empty_mention_waiting", True)
-            )
             is_command_prefix_only = (
                 isinstance(messages[0], Comp.Plain)
                 and messages[0].text.strip() in command_prefixes
             )
+            if not is_command_prefix_only:
+                return
 
-            if not (is_empty_mention or is_command_prefix_only):
+            llm_access = cfg.get("llm_access") or {}
+            mode = llm_access.get(
+                "private" if event.is_private_chat() else "group",
+                "prefix",
+            )
+            if mode not in {"open", "prefix", "off"}:
+                mode = "prefix"
+            if mode == "off":
                 return
 
             if p_settings.get("empty_mention_waiting_need_reply", True):
@@ -78,7 +84,7 @@ class Main(star.Star):
 
                     yield event.request_llm(
                         prompt=(
-                            "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
+                            "注意，你正在社交媒体上中与用户进行聊天，用户只发送了指令前缀，尚未输入内容，他可能会在接下来一条发送他想发送的内容。"
                             "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
                             "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
                         ),
@@ -91,17 +97,14 @@ class Main(star.Star):
                     logger.error(f"LLM response failed: {e!s}")
                     yield event.plain_result("想要问什么呢？😄")
 
-            async def empty_mention_waiter(
+            async def prefix_only_waiter(
                 controller,
                 event: AstrMessageEvent,
             ) -> None:
                 if not event.message_str or not event.message_str.strip():
                     return
-                event.message_obj.message.insert(
-                    0,
-                    Comp.Mention(target=event.get_self_id(), name=event.get_self_id()),
-                )
                 new_event = copy.copy(event)
+                new_event.set_extra("explicit_surface", True)
                 self.context.messages.submit(new_event)
                 event.stop_event()
                 controller.stop()
@@ -109,7 +112,7 @@ class Main(star.Star):
             try:
                 await self.context.messages.wait_for(
                     event,
-                    empty_mention_waiter,
+                    prefix_only_waiter,
                     timeout_seconds=60,
                 )
             except TimeoutError:

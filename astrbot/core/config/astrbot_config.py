@@ -56,7 +56,6 @@ class AstrBotConfig(dict):
 
         # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
         object.__setattr__(self, "config_path", config_path)
-        object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
         object.__setattr__(self, "_save_state_lock", threading.Lock())
         object.__setattr__(self, "_save_commit_lock", threading.Lock())
@@ -64,6 +63,7 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "_save_committed_revision", 0)
 
         default_config = self._resolve_default_config(default_config, schema)
+        object.__setattr__(self, "default_config", default_config)
         self._ensure_config_file(default_config)
         conf = self._load_config_dict(config_path)
         dashboard_conf = conf.get("dashboard")

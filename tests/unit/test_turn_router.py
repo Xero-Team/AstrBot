@@ -6,10 +6,11 @@ from astrbot.core.command import (
     CommandGroupRegistration,
     CommandResolutionKind,
 )
-from astrbot.core.message.components import Mention, MentionAll, Plain
+from astrbot.core.message.components import Mention, MentionAll, Plain, Reply
 from astrbot.core.pipeline.turn_router import (
     LlmAccess,
     TurnRouteInput,
+    llm_access_from_config,
     longest_prefix_match,
     public_root_token,
     route_turn,
@@ -138,8 +139,8 @@ def test_llm_status_is_command_and_chat_is_not():
     assert chat.should_run_llm is True
 
 
-def test_group_mention_still_matches_help():
-    llm = LlmAccess(group="mention")
+def test_group_prefix_still_matches_help():
+    llm = LlmAccess(group="prefix")
     result = route_turn(_input("/help", private=False, llm=llm))
     assert result.should_run_command is True
     assert result.should_run_llm is False
@@ -236,3 +237,131 @@ def test_mention_all_first_does_not_block_command():
     assert result.should_run_command is True
     assert result.should_run_llm is False
     assert result.stop is False
+
+
+def test_default_private_hello_does_not_run_llm():
+    result = route_turn(_input("hello"))
+    assert result.should_run_llm is False
+    assert result.should_run_command is False
+    assert result.stop is True
+
+
+def test_private_unmatched_prefix_runs_llm():
+    result = route_turn(_input("/hello"))
+    assert result.should_run_llm is True
+    assert result.should_run_command is False
+    assert result.message_str == "hello"
+    assert "llm_prefix" in result.wake_reasons
+
+
+def test_bare_command_prefix_does_not_run_llm():
+    result = route_turn(_input("/"))
+    assert result.should_run_llm is False
+    assert result.should_run_command is False
+    assert result.stop is True
+
+
+def test_bare_group_command_prefix_does_not_run_llm():
+    result = route_turn(_input("/", private=False))
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_bare_llm_prefix_without_payload_does_not_run_llm():
+    result = route_turn(_input("#", llm=LlmAccess(prefixes=("#",))))
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_group_mention_all_does_not_admit_plain():
+    result = route_turn(
+        _input(
+            "hello",
+            private=False,
+            messages=[MentionAll(), Plain("hello")],
+        )
+    )
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_legacy_group_mention_config_falls_back_to_prefix():
+    policy = llm_access_from_config({"llm_access": {"group": "mention"}})
+    assert policy.group == "prefix"
+    also_legacy = llm_access_from_config({"llm_access": {"group": "prefix_or_mention"}})
+    assert also_legacy.group == "prefix"
+
+
+def test_explicit_surface_admits_group_plain():
+    result = route_turn(_input("hello", private=False, explicit_surface=True))
+    assert result.should_run_llm is True
+    assert "explicit_surface" in result.wake_reasons
+
+
+def test_open_window_admits_when_group_off():
+    result = route_turn(
+        _input("hello", private=False, llm=LlmAccess(group="off"), has_open_window=True)
+    )
+    assert result.should_run_llm is True
+    assert "turn_continuation" in result.wake_reasons
+
+
+def test_reply_to_bot_admits_group_even_when_off():
+    result = route_turn(
+        _input(
+            "hello",
+            private=False,
+            llm=LlmAccess(group="off", reply_to_bot=True),
+            messages=[Reply(id="1", sender_id="bot"), Plain("hello")],
+        )
+    )
+    assert result.should_run_llm is True
+    assert "reply_to_bot" in result.wake_reasons
+
+
+def test_explicit_surface_webchat_hello_runs_llm():
+    result = route_turn(_input("hello", explicit_surface=True))
+    assert result.should_run_llm is True
+    assert result.should_run_command is False
+    assert result.message_str == "hello"
+
+
+def test_explicit_surface_webchat_help_is_command():
+    result = route_turn(_input("/help", explicit_surface=True))
+    assert result.should_run_command is True
+    assert result.should_run_llm is False
+
+
+def test_explicit_surface_does_not_admit_when_group_off():
+    result = route_turn(
+        _input(
+            "hello",
+            private=False,
+            llm=LlmAccess(group="off"),
+            explicit_surface=True,
+        )
+    )
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_explicit_surface_does_not_admit_when_private_off():
+    result = route_turn(
+        _input("hello", llm=LlmAccess(private="off"), explicit_surface=True)
+    )
+    assert result.should_run_llm is False
+    assert result.stop is True
+
+
+def test_explicit_surface_off_still_continues_open_window():
+    result = route_turn(
+        _input(
+            "hello",
+            private=False,
+            llm=LlmAccess(group="off"),
+            explicit_surface=True,
+            has_open_window=True,
+        )
+    )
+    assert result.should_run_llm is True
+    assert "turn_continuation" in result.wake_reasons

@@ -48,7 +48,7 @@ class CronMessageEvent(AstrMessageEvent):
         # Ensure we use the original session for sending messages
         self.session = session
         self.context_obj = context
-        self.set_extra("adapter_preconfigured", True)
+        self.set_extra("explicit_surface", True)
 
         if extras:
             self._extras.update(extras)

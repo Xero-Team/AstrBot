@@ -9,11 +9,11 @@ from astrbot.core.command import (
     CommandResolution,
     CommandResolutionKind,
 )
-from astrbot.core.message.components import Mention, MentionAll, Reply
+from astrbot.core.message.components import Mention, Reply
 
 RouteKind = Literal["ordinary", "passthrough", "turn_flush"]
 PrivateAccess = Literal["open", "prefix", "off"]
-GroupAccess = Literal["open", "prefix", "mention", "prefix_or_mention", "off"]
+GroupAccess = Literal["open", "prefix", "off"]
 
 INBOUND_FLUSH_KEYS = ("turn_flush", "turn_continuation")
 MANAGER_FLUSH_TOKEN = "_turn_flush_token"
@@ -37,7 +37,7 @@ class LlmAccess:
     """LLM access policy for one configuration profile."""
 
     prefixes: tuple[str, ...] = ("/",)
-    private: PrivateAccess = "open"
+    private: PrivateAccess = "prefix"
     group: GroupAccess = "prefix"
     reply_to_bot: bool = False
 
@@ -56,8 +56,7 @@ class TurnRouteInput:
     is_notice_or_request: bool = False
     has_open_window: bool = False
     is_manager_flush: bool = False
-    adapter_preconfigured: bool = False
-    ignore_at_all: bool = False
+    explicit_surface: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,11 +125,11 @@ def llm_access_from_config(config: dict) -> LlmAccess:
     prefixes = tuple(
         str(item) for item in raw.get("prefixes", ["/"]) if str(item).strip()
     )
-    private = raw.get("private", "open")
+    private = raw.get("private", "prefix")
     group = raw.get("group", "prefix")
     if private not in {"open", "prefix", "off"}:
-        private = "open"
-    if group not in {"open", "prefix", "mention", "prefix_or_mention", "off"}:
+        private = "prefix"
+    if group not in {"open", "prefix", "off"}:
         group = "prefix"
     return LlmAccess(
         prefixes=prefixes or ("/",),
@@ -231,16 +230,18 @@ def route_turn(inp: TurnRouteInput) -> TurnRouteResult:
                 resolution,
             )
 
-    if inp.adapter_preconfigured:
-        llm_text, reasons = _llm_payload(inp, blocked_by_other_mention)
-        return TurnRouteResult(
-            False,
-            True,
-            "ordinary",
-            frozenset({"adapter_preconfigured", *reasons}),
-            llm_text,
-            False,
-        )
+    if inp.explicit_surface:
+        mode = inp.llm_access.private if inp.is_private else inp.llm_access.group
+        if mode != "off":
+            llm_text, reasons = _llm_payload(inp, blocked_by_other_mention)
+            return TurnRouteResult(
+                False,
+                True,
+                "ordinary",
+                frozenset({"explicit_surface", *reasons}),
+                llm_text,
+                False,
+            )
 
     llm_ok, reasons = _llm_gate(inp, blocked_by_other_mention)
     if llm_ok:
@@ -287,33 +288,37 @@ def _first_mention_is_other(inp: TurnRouteInput) -> bool:
     return str(first.target) != str(inp.self_id)
 
 
+def _llm_prefix_has_payload(
+    inp: TurnRouteInput, blocked_by_other_mention: bool
+) -> bool:
+    if blocked_by_other_mention:
+        return False
+    text = inp.message_str.strip(" \t")
+    prefix = longest_prefix_match(text, inp.llm_access.prefixes)
+    if prefix is None:
+        return False
+    return bool(text[len(prefix) :].strip(" \t"))
+
+
 def _llm_gate(
     inp: TurnRouteInput, blocked_by_other_mention: bool
 ) -> tuple[bool, set[str]]:
     if inp.has_open_window:
         return True, {"turn_continuation"}
-    mentioned_bot, mentioned_all, reply_to_bot = _mention_flags(inp)
     if inp.is_private:
         mode = inp.llm_access.private
         if mode == "open":
             return True, {"llm_open"}
         if mode == "off":
             return False, set()
-        if blocked_by_other_mention:
-            return False, set()
-        if longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes):
+        if _llm_prefix_has_payload(inp, False):
             return True, {"llm_prefix"}
         return False, set()
 
     reasons: set[str] = set()
     base = False
     mode = inp.llm_access.group
-    prefix_hit = False
-    if not blocked_by_other_mention:
-        prefix_hit = (
-            longest_prefix_match(inp.message_str.strip(" \t"), inp.llm_access.prefixes)
-            is not None
-        )
+    prefix_hit = _llm_prefix_has_payload(inp, blocked_by_other_mention)
     if mode == "open":
         base = True
         reasons.add("llm_open")
@@ -321,26 +326,9 @@ def _llm_gate(
         base = prefix_hit
         if prefix_hit:
             reasons.add("llm_prefix")
-    elif mode == "mention":
-        base = mentioned_bot or mentioned_all
-        if mentioned_bot:
-            reasons.add("mention_bot")
-        if mentioned_all:
-            reasons.add("mention_all")
-    elif mode == "prefix_or_mention":
-        base = prefix_hit or mentioned_bot or mentioned_all
-        if prefix_hit:
-            reasons.add("llm_prefix")
-        if mentioned_bot:
-            reasons.add("mention_bot")
-        if mentioned_all:
-            reasons.add("mention_all")
-    if inp.llm_access.reply_to_bot and reply_to_bot:
+    if inp.llm_access.reply_to_bot and _reply_to_bot(inp):
         base = True
         reasons.add("reply_to_bot")
-    if mode != "off" and mentioned_all:
-        base = True
-        reasons.add("mention_all")
     return base, reasons
 
 
@@ -353,20 +341,13 @@ def _llm_payload(
     prefix = longest_prefix_match(text, inp.llm_access.prefixes)
     if prefix is None:
         return text, set()
-    return text[len(prefix) :].strip(" \t"), {"llm_prefix"} if prefix else set()
+    return text[len(prefix) :].strip(" \t"), {"llm_prefix"}
 
 
-def _mention_flags(inp: TurnRouteInput) -> tuple[bool, bool, bool]:
-    mentioned_bot = False
-    mentioned_all = False
-    reply_to_bot = False
+def _reply_to_bot(inp: TurnRouteInput) -> bool:
     for message in inp.messages:
-        if isinstance(message, Mention) and str(message.target) == str(inp.self_id):
-            mentioned_bot = True
-        if isinstance(message, MentionAll) and not inp.ignore_at_all:
-            mentioned_all = True
         if isinstance(message, Reply) and str(
             getattr(message, "sender_id", "") or ""
         ) == str(inp.self_id):
-            reply_to_bot = True
-    return mentioned_bot, mentioned_all, reply_to_bot
+            return True
+    return False

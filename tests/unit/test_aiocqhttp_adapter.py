@@ -311,8 +311,8 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
                 "command_prefixes": ["/"],
                 "llm_access": {
                     "prefixes": ["/"],
-                    "private": "open",
-                    "group": "mention",
+                    "private": "prefix",
+                    "group": "prefix",
                     "reply_to_bot": True,
                 },
                 "plugin_set": ["*"],

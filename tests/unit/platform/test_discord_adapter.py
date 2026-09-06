@@ -250,7 +250,9 @@ async def test_discord_convert_message_strips_nickname_mention_prefix():
 
 
 @pytest.mark.asyncio
-async def test_discord_handle_msg_sets_wake_when_bot_role_is_mentioned(monkeypatch):
+async def test_discord_handle_msg_does_not_stamp_when_bot_role_is_mentioned(
+    monkeypatch,
+):
     class FakeDiscordMessage:
         pass
 
@@ -297,10 +299,47 @@ async def test_discord_handle_msg_sets_wake_when_bot_role_is_mentioned(monkeypat
     await adapter.handle_msg(message)
 
     assert len(committed_events) == 1
-    committed_events[0].set_extra.assert_called_once_with(
-        "adapter_preconfigured",
-        True,
+    committed_events[0].set_extra.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_discord_handle_msg_does_not_stamp_when_user_is_mentioned(monkeypatch):
+    class FakeDiscordMessage:
+        pass
+
+    monkeypatch.setattr(discord_platform_adapter.discord, "Message", FakeDiscordMessage)
+
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    user = SimpleNamespace(id=1)
+    adapter.client = SimpleNamespace(user=user)
+    committed_events = []
+    adapter.commit_event = committed_events.append
+
+    raw_message = FakeDiscordMessage()
+    raw_message.mentions = [user]
+    raw_message.role_mentions = []
+    raw_message.guild = None
+
+    message = SimpleNamespace(
+        raw_message=raw_message,
+        message_str="hello",
+        session_id="555",
+        message=[],
     )
+
+    def fake_create_event(_message, _followup_webhook=None):
+        return SimpleNamespace(
+            interaction_followup_webhook=None,
+            _extras={},
+            set_extra=MagicMock(),
+        )
+
+    adapter.create_event = fake_create_event
+
+    await adapter.handle_msg(message)
+
+    assert len(committed_events) == 1
+    committed_events[0].set_extra.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -384,7 +423,7 @@ async def test_discord_handle_msg_slash_command_wakes_without_mention_checks():
 
     assert len(committed_events) == 1
     committed_events[0].set_extra.assert_called_once_with(
-        "adapter_preconfigured",
+        "explicit_surface",
         True,
     )
 

@@ -43,7 +43,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。                                                                                    |
 | `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                                                                                            |
 | `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                                                                                           |
-| `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=open`、`group=prefix`、`prefixes=["/"]`。                                                                       |
+| `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=prefix`、`group=prefix`、`prefixes=["/"]`。                                                                     |
 | `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                                                                                        |
 | 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                                                                                      |
 
@@ -53,15 +53,15 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 用户向步骤见 [群聊何时会理我](../use/group-wake)。`command_prefixes` 和 `llm_access` 都读取事件实际选中的配置档。`command_prefixes` 只负责指令头，不会与 LLM 前缀自动拼接。`llm_access.prefixes` 的每一项都是用户实际输入的完整字符串，按词边界和最长匹配处理。非空 LLM 前缀会在同一配置档占用其第一个指令根；如果与已启用指令冲突，Dashboard 会拒绝保存。
 
-| 键                                   | 可选值                                                      | 说明                                                                     |
-| ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `llm_access.private`                 | `open` / `prefix` / `off`                                   | 私聊始终允许、必须带 LLM 前缀，或不打开新的 LLM 回合；已有续片仍可继续。 |
-| `llm_access.group`                   | `open` / `prefix` / `mention` / `prefix_or_mention` / `off` | 群聊 LLM 的基础门禁；不会从指令前缀推断提及或回复条件。                  |
-| `llm_access.reply_to_bot`            | `true` / `false`                                            | 将“回复机器人”作为群聊 LLM 访问的额外 OR 条件。                          |
-| `inbound_coalesce.enable`            | `true` / `false`                                            | 启用有界回合窗口，默认关闭；当前实现只合并私聊消息。                     |
-| `inbound_coalesce.wait_seconds`      | 数字                                                        | 缓冲回合的静默等待时间。                                                 |
-| `inbound_coalesce.max_total_seconds` | 数字                                                        | 缓冲回合的最长生命周期，不因新片段而延长。                               |
-| `inbound_coalesce.max_typing_wait`   | 数字                                                        | 输入停止通知丢失时，自动恢复暂停回合的保护时间。                         |
+| 键                                   | 可选值                    | 说明                                                                                             |
+| ------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `llm_access.private`                 | `open` / `prefix` / `off` | 默认 `prefix`。私聊始终允许、必须带 LLM 前缀，或不打开新的 LLM 回合；已有续片仍可继续。          |
+| `llm_access.group`                   | `open` / `prefix` / `off` | 群聊 LLM 的基础门禁。提及不是门禁；旧值 `mention` / `prefix_or_mention` 运行时按 `prefix` 处理。 |
+| `llm_access.reply_to_bot`            | `true` / `false`          | 将“回复机器人”作为群聊 LLM 访问的额外 OR 条件。                                                  |
+| `inbound_coalesce.enable`            | `true` / `false`          | 启用有界回合窗口，默认关闭；当前实现只合并私聊消息。                                             |
+| `inbound_coalesce.wait_seconds`      | 数字                      | 缓冲回合的静默等待时间。                                                                         |
+| `inbound_coalesce.max_total_seconds` | 数字                      | 缓冲回合的最长生命周期，不因新片段而延长。                                                       |
+| `inbound_coalesce.max_typing_wait`   | 数字                      | 输入停止通知丢失时，自动恢复暂停回合的保护时间。                                                 |
 
 路由顺序是先匹配指令，再判断 LLM 访问。命中指令时只执行指令；裸指令组输出帮助；未知子指令输出 Orbit 诊断且不会回落到 LLM。否则事件通过 LLM 门禁或被丢弃。通知和请求属于透传事件。启用合并后，私聊窗口中的后续片段不再要求重复 LLM 前缀；收到指令会丢弃缓冲回合。NapCat 的 `input_status` 只暂停或恢复回合窗口，不会进入消息 Pipeline。
 
@@ -69,18 +69,18 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 常用字段如下：
 
-| 键                                          | 默认值                      | 说明                                                                                                        |
-| ------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
-| `group_sender_concurrency`                  | `false`                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
-| `rate_limit`                                | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
-| `enable_id_white_list`                      | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
-| `reply_prefix`                              | `""`                        | 所有回复的前缀。                                                                                            |
-| `reply_with_mention` / `reply_with_quote`   | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
-| `forward_threshold`                         | `1500`                      | OneBot `aiocqhttp` 适配器的长回复转发阈值；其他平台是否支持取决于适配器。                                   |
-| `segmented_reply`                           | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
-| `path_mapping`                              | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                     | 忽略机器人自身消息或全体提及。                                                                              |
+| 键                                        | 默认值                      | 说明                                                                                                        |
+| ----------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `unique_session`                          | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
+| `group_sender_concurrency`                | `false`                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
+| `rate_limit`                              | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
+| `enable_id_white_list`                    | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
+| `reply_prefix`                            | `""`                        | 所有回复的前缀。                                                                                            |
+| `reply_with_mention` / `reply_with_quote` | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
+| `forward_threshold`                       | `1500`                      | OneBot `aiocqhttp` 适配器的长回复转发阈值；其他平台是否支持取决于适配器。                                   |
+| `segmented_reply`                         | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
+| `path_mapping`                            | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
+| `ignore_bot_self_message`                 | `false`                     | 忽略机器人自身消息。`ignore_at_all` 仍会写入磁盘，但不参与内置 LLM 门禁。                                   |
 
 `path_mapping` 示例：
 

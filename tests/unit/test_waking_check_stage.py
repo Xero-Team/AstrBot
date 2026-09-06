@@ -18,6 +18,10 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.event_message_type import (
+    EventMessageType,
+    EventMessageTypeFilter,
+)
 from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
@@ -120,6 +124,29 @@ class FakeEvent:
         self.sent.append(payload)
 
 
+def test_default_llm_access_private_is_prefix():
+    from astrbot.core.config.default import (
+        CONFIG_METADATA_2,
+        CONFIG_METADATA_3,
+        DEFAULT_CONFIG,
+    )
+
+    assert DEFAULT_CONFIG["llm_access"]["private"] == "prefix"
+    expected = ["open", "prefix", "off"]
+    assert (
+        CONFIG_METADATA_2["misc_config_group"]["metadata"]["llm_access"]["items"][
+            "group"
+        ]["options"]
+        == expected
+    )
+    assert (
+        CONFIG_METADATA_3["platform_group"]["metadata"]["general"]["items"][
+            "llm_access.group"
+        ]["options"]
+        == expected
+    )
+
+
 async def make_stage(**settings):
     platform_settings = {
         "no_permission_reply": True,
@@ -129,7 +156,7 @@ async def make_stage(**settings):
     }
     llm_access = {
         "prefixes": ["/"],
-        "private": "open",
+        "private": "prefix",
         "group": "prefix",
         "reply_to_bot": False,
     }
@@ -344,11 +371,11 @@ def make_command_handler(name: str, handler, *extra_filters):
 @pytest.mark.parametrize(
     ("settings", "event", "expected"),
     [
-        ({}, FakeEvent([Plain("hello")], private=True), True),
+        ({}, FakeEvent([Plain("hello")], private=True), False),
         (
-            {"llm_access": {"private": "prefix"}},
+            {"llm_access": {"private": "open"}},
             FakeEvent([Plain("hello")], private=True),
-            False,
+            True,
         ),
         (
             {"llm_access": {"private": "prefix"}},
@@ -366,14 +393,18 @@ def make_command_handler(name: str, handler, *extra_filters):
         (
             {"llm_access": {"group": "mention"}},
             FakeEvent([Mention(target="bot"), Plain("hello")]),
-            True,
+            False,
         ),
         ({}, FakeEvent([Mention(target="other"), Plain("hello")]), False),
-        ({}, FakeEvent([MentionAll(), Plain("hello")]), True),
-        ({"ignore_at_all": True}, FakeEvent([MentionAll(), Plain("hello")]), False),
+        ({}, FakeEvent([MentionAll(), Plain("hello")]), False),
         (
             {"llm_access": {"group": "mention"}},
             FakeEvent([Mention(target="all"), Plain("hello")]),
+            False,
+        ),
+        (
+            {"llm_access": {"group": "off"}},
+            FakeEvent([Plain("hello")], extras={"explicit_surface": True}),
             False,
         ),
     ],
@@ -411,16 +442,77 @@ async def test_unwoken_mention_does_not_mutate_at_component(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_adapter_preconfigured_wake_bypasses_group_llm_access(monkeypatch):
+async def test_explicit_surface_wakes_group_mention_only(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
     event = FakeEvent([Mention(target="bot")])
-    event.set_extra("adapter_preconfigured", True)
+    event.set_extra("explicit_surface", True)
 
     await stage.process(event)
 
     assert event.stopped is False
-    assert "adapter_preconfigured" in event.get_extra("wake_reasons")
+    assert event.get_extra("should_run_llm") is True
+    assert "explicit_surface" in event.get_extra("wake_reasons")
+
+
+@pytest.mark.asyncio
+async def test_explicit_surface_admits_plain_hello_under_default_prefix(monkeypatch):
+    stage = await make_stage()
+    install_handlers(stage, monkeypatch, [])
+    event = FakeEvent([Plain("hello")], message_text="hello")
+    event.set_extra("explicit_surface", True)
+
+    await stage.process(event)
+
+    assert event.stopped is False
+    assert event.get_extra("should_run_llm") is True
+    assert event.get_extra("should_run_command") is False
+    assert "explicit_surface" in event.get_extra("wake_reasons")
+
+
+@pytest.mark.asyncio
+async def test_bare_command_prefix_does_not_run_llm(monkeypatch):
+    stage = await make_stage()
+    install_handlers(stage, monkeypatch, [])
+    event = FakeEvent([Plain("/")], message_text="/")
+
+    await stage.process(event)
+
+    assert event.get_extra("should_run_llm") is False
+    assert event.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_default_private_hello_does_not_run_llm(monkeypatch):
+    stage = await make_stage()
+    install_handlers(stage, monkeypatch, [])
+    event = FakeEvent([Plain("hello")], private=True)
+
+    decision = await stage._detect_wake(event)
+
+    assert decision.should_wake is False
+    assert event.get_extra("should_run_llm") is False
+
+
+@pytest.mark.asyncio
+async def test_event_message_type_all_still_activates_when_llm_dropped(monkeypatch):
+    stage = await make_stage()
+    handler = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_all",
+        "on_all",
+        "test.plugin",
+        lambda *_args: None,
+        [EventMessageTypeFilter(EventMessageType.ALL)],
+    )
+    install_handlers(stage, monkeypatch, [handler])
+    event = FakeEvent([Plain("hello")], private=True)
+
+    await stage.process(event)
+
+    assert event.get_extra("should_run_llm") is False
+    assert event.get_extra("activated_handlers") == [handler]
+    assert event.stopped is False
 
 
 @pytest.mark.asyncio

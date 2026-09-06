@@ -349,55 +349,19 @@ class DiscordPlatformAdapter(Platform):
             )
             return
 
-        # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
 
-        # 1. 优先处理斜杠指令
         if is_slash_command:
-            message_event.set_extra("adapter_preconfigured", True)
+            message_event.set_extra("explicit_surface", True)
             self.commit_event(message_event)
             return
 
-        # 2. 处理普通消息（提及检测）
-        # 确保 raw_message 是 discord.Message 类型，以便静态检查通过
         raw_message = message.raw_message
         if not isinstance(raw_message, discord.Message):
             logger.warning(
                 f"[Discord] Non-Message type received and ignored: {type(raw_message)}"
             )
             return
-
-        # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
-        is_mention = False
-
-        # User Mention
-        # 此时 Pylance 知道 raw_message 是 discord.Message，具有 mentions 属性
-        if self.client.user in raw_message.mentions:
-            is_mention = True
-
-        # Role Mention（Bot 拥有的角色被提及）
-        if not is_mention and raw_message.role_mentions:
-            bot_member = None
-            if raw_message.guild:
-                try:
-                    bot_member = raw_message.guild.get_member(
-                        self.client.user.id,
-                    )
-                except Exception:
-                    bot_member = None
-            if bot_member and hasattr(bot_member, "roles"):
-                bot_roles = set(bot_member.roles)
-                mentioned_roles = set(raw_message.role_mentions)
-                if (
-                    bot_roles
-                    and mentioned_roles
-                    and bot_roles.intersection(mentioned_roles)
-                ):
-                    is_mention = True
-
-        # 如果是被@的消息，设置为唤醒状态
-        if is_mention:
-            message_event.set_extra("adapter_preconfigured", True)
 
         self.commit_event(message_event)
 

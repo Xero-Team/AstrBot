@@ -8,12 +8,15 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.cron.manager import (
     CronJobManager,
     CronJobSchedulingError,
     _normalize_crontab_day_of_week,
 )
 from astrbot.core.db.po import CronJob
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 
 
 @pytest.fixture
@@ -828,3 +831,13 @@ class TestGetNextRunTime:
         next_run = cron_manager._get_next_run_time("non-existent")
 
         assert next_run is None
+
+
+def test_cron_message_event_stamps_explicit_surface():
+    event = CronMessageEvent(
+        context=MagicMock(),
+        session=MessageSession("cron", MessageType.FRIEND_MESSAGE, "user-1"),
+        message="hello",
+    )
+
+    assert event.get_extra("explicit_surface") is True

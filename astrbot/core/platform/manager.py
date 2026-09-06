@@ -646,7 +646,7 @@ class PlatformManager:
             raise ValueError(f"Platform not found: {platform}")
 
         event = inst.create_event(cast(AstrBotMessage, event_message))
-        event.set_extra("adapter_preconfigured", bool(is_wake))
+        event.set_extra("explicit_surface", bool(is_wake))
         inst.commit_event(event)
 
     def get_all_stats(self) -> dict:

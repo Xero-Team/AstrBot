@@ -182,3 +182,5 @@ def test_webchat_create_event_does_not_promote_declared_username(tmp_path):
     event = adapter.create_event(message)
     assert event.platform_member_role == "member"
     assert event.platform_role_source == "none"
+    assert event.get_extra("explicit_surface") is True
+    assert event.message_str == "hello"

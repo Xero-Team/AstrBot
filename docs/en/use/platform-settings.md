@@ -58,8 +58,7 @@ Streaming replies, and groups with sender concurrency, do not use this splitter.
 
 - **Reply prefix / mention sender / quote original**: adapter-dependent.
 - **Ignore the bot's own messages**: some platforms re-deliver the bot's messages from other clients.
-- **Ignore @ everyone**: when on, @ everyone is no longer an LLM wake reason.
 - **Reply on missing permission**: whether to tell the user a command was denied.
-- **Wait after a mention-only message**: see [When the bot replies in groups](./group-wake#mention-only-messages).
+- **Wait after a prefix-only message**: gated by `empty_mention_waiting`. See [When the bot replies in groups](./group-wake#prefix-only-messages).
 
 Pre-ack emoji for Lark / Telegram / Discord sit under Other, per platform.

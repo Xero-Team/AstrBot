@@ -113,6 +113,7 @@ from astrbot.core.tools.web_search_tools import (
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
     get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.config_number import coerce_int_config
@@ -1630,6 +1631,58 @@ def _select_request_provider(
     return selected, [fallback for fallback in fallbacks if fallback is not selected]
 
 
+def _track_temp_image_path(event: AstrMessageEvent, media_path: str) -> None:
+    """Track a converted image when it lives under AstrBot temp.
+
+    Args:
+        event: Message event that owns temporary files.
+        media_path: Local path to track when it is under the temp root.
+    """
+    try:
+        path = Path(media_path).resolve()
+        temp_dir = Path(get_astrbot_temp_path()).resolve()
+        path.relative_to(temp_dir)
+    except OSError, ValueError:
+        return
+    event.track_temporary_local_file(str(path))
+
+
+async def _materialize_image_ref_for_provider(
+    event: AstrMessageEvent,
+    image_ref: str,
+    config: MainAgentBuildConfig,
+) -> str | None:
+    """Download or resolve a string image ref to a local provider path.
+
+    Args:
+        event: Message event that owns temporary files.
+        image_ref: HTTP, file, data, or local image reference.
+        config: Main-agent build config used for compression settings.
+
+    Returns:
+        A local path suitable for ``req.image_urls``, or ``None`` when the
+        reference cannot be materialized.
+    """
+    try:
+        path = await Image(file=image_ref).convert_to_file_path()
+        _track_temp_image_path(event, path)
+        image_path = await _compress_image_for_provider(
+            path,
+            config.provider_settings,
+        )
+        if _is_generated_compressed_image_path(path, image_path):
+            event.track_temporary_local_file(image_path)
+        return image_path
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to materialize image ref for provider: %s",
+            type(exc).__name__,
+        )
+        return None
+
+
 async def _append_direct_attachments(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -1683,9 +1736,18 @@ async def _append_message_component_context(
     for image_ref in rendered.image_refs:
         if image_ref in req.image_urls:
             continue
-        req.image_urls.append(image_ref)
+        materialized = await _materialize_image_ref_for_provider(
+            event,
+            image_ref,
+            config,
+        )
+        if materialized is None or materialized in req.image_urls:
+            continue
+        req.image_urls.append(materialized)
         req.extra_user_content_parts.append(
-            TextPart(text=f"[Image Attachment in forwarded message: path {image_ref}]")
+            TextPart(
+                text=f"[Image Attachment in forwarded message: path {materialized}]"
+            )
         )
 
     for component in rendered.nested_media:
@@ -1785,10 +1847,11 @@ async def _append_quoted_fallback_images(
     event: AstrMessageEvent,
     req: ProviderRequest,
     reply: Reply,
-    settings: QuotedMessageParserSettings,
+    config: MainAgentBuildConfig,
     limit: int,
 ) -> int:
     """Append deduplicated fallback images for a reply-only payload."""
+    settings = _get_quoted_message_parser_settings(config.provider_settings)
     try:
         images = normalize_and_dedupe_strings(
             await extract_quoted_message_images(event, reply, settings=settings)
@@ -1814,9 +1877,16 @@ async def _append_quoted_fallback_images(
         for image_ref in images:
             if image_ref in req.image_urls:
                 continue
-            req.image_urls.append(image_ref)
+            materialized = await _materialize_image_ref_for_provider(
+                event,
+                image_ref,
+                config,
+            )
+            if materialized is None or materialized in req.image_urls:
+                continue
+            req.image_urls.append(materialized)
             added += 1
-            _append_quoted_image_attachment(req, image_ref)
+            _append_quoted_image_attachment(req, materialized)
         return added
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -1847,9 +1917,6 @@ async def prepare_event_attachments(
         for component in event.message_obj.message
         if isinstance(component, Reply)
     ]
-    quoted_message_settings = _get_quoted_message_parser_settings(
-        config.provider_settings
-    )
     fallback_quoted_image_count = 0
     for reply in replies:
         has_embedded_image = await _append_quoted_reply_components(
@@ -1860,7 +1927,7 @@ async def prepare_event_attachments(
                 event,
                 req,
                 reply,
-                quoted_message_settings,
+                config,
                 config.max_quoted_fallback_images - fallback_quoted_image_count,
             )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)

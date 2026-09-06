@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import base64
 import datetime
 import json
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
+from astrbot.core.agent.request_preparation import prepare_provider_request
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import Face, Image, Json, Plain, Reply, Video
@@ -144,6 +146,88 @@ async def test_prepare_event_attachments_adds_qq_face_context(mock_event, mock_c
     expected = "<Message Components>\n[QQ Face: 可怜 (id: 111)]\n</Message Components>"
     assert req.message_component_context == expected
     assert [part.text for part in req.extra_user_content_parts] == [expected]
+
+
+_MIN_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/"
+    "ScL9mQAAAABJRU5ErkJggg=="
+)
+
+
+@pytest.mark.asyncio
+async def test_prepare_event_attachments_materializes_quoted_fallback_http(
+    mock_event, mock_context, tmp_path, monkeypatch
+):
+    local_path = tmp_path / "quoted.png"
+    local_path.write_bytes(_MIN_PNG)
+    http_url = "https://multimedia.nt.qq.com.cn/download?fileid=example"
+    mock_event.message_obj.message = [
+        Plain(text="what is this"),
+        Reply(id="200", chain=None, message_str=""),
+    ]
+    req = ProviderRequest(prompt="what is this")
+    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+    monkeypatch.setattr(ama, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def _fake_convert(self):
+        del self
+        return str(local_path)
+
+    with (
+        patch(
+            "astrbot.core.astr_main_agent.extract_quoted_message_images",
+            AsyncMock(return_value=[http_url]),
+        ),
+        patch.object(Image, "convert_to_file_path", _fake_convert),
+        patch(
+            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            AsyncMock(side_effect=lambda path, _settings: path),
+        ),
+    ):
+        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+
+    assert req.image_urls == [str(local_path)]
+    extra = "\n".join(part.text for part in req.extra_user_content_parts)
+    assert str(local_path) in extra
+    assert http_url not in extra
+    mock_event.track_temporary_local_file.assert_called_with(str(local_path))
+
+    prepared = await prepare_provider_request(req)
+    assert len(prepared.image_urls) == 1
+    assert prepared.image_urls[0].startswith("data:image/")
+    assert not any(
+        "image omitted" in part.text for part in prepared.extra_user_content_parts
+    )
+
+
+@pytest.mark.asyncio
+async def test_prepare_event_attachments_skips_quoted_fallback_http_on_convert_failure(
+    mock_event, mock_context
+):
+    http_url = "https://multimedia.nt.qq.com.cn/download?fileid=example"
+    mock_event.message_obj.message = [
+        Plain(text="what is this"),
+        Reply(id="200", chain=None, message_str=""),
+    ]
+    req = ProviderRequest(prompt="what is this")
+    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+
+    async def _fail_convert(self):
+        del self
+        raise OSError("download failed")
+
+    with (
+        patch(
+            "astrbot.core.astr_main_agent.extract_quoted_message_images",
+            AsyncMock(return_value=[http_url]),
+        ),
+        patch.object(Image, "convert_to_file_path", _fail_convert),
+    ):
+        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+
+    assert req.image_urls == []
+    extra = "\n".join(part.text for part in req.extra_user_content_parts)
+    assert http_url not in extra
 
 
 @pytest.mark.asyncio

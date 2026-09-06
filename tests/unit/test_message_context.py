@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -8,6 +9,7 @@ from astrbot.core.message.components import (
     Face,
     File,
     Forward,
+    Image,
     Json,
     Node,
     Plain,
@@ -70,6 +72,7 @@ def _make_event(components, client: _NapCatContextClient):
         message_obj=SimpleNamespace(message=components),
         adapter=SimpleNamespace(client=client),
         get_group_id=lambda: "",
+        track_temporary_local_file=lambda *_args, **_kwargs: None,
     )
 
 
@@ -398,10 +401,25 @@ async def test_append_message_component_context_makes_forward_only_request_valid
     event = _make_event([Forward(id="mock-forward")], client)
     req = ProviderRequest(prompt="")
     config = ama.MainAgentBuildConfig(tool_call_timeout=60)
+    local_path = "/tmp/mock-agent-forward.jpg"
 
-    await ama._append_message_component_context(event, req, config)
+    with (
+        patch.object(
+            Image,
+            "convert_to_file_path",
+            AsyncMock(return_value=local_path),
+        ),
+        patch(
+            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            AsyncMock(side_effect=lambda path, _settings: path),
+        ),
+    ):
+        await ama._append_message_component_context(event, req, config)
 
     assert any(
         "Mock Sender: hello" in part.text for part in req.extra_user_content_parts
     )
-    assert req.image_urls == [image_url]
+    assert req.image_urls == [local_path]
+    assert image_url not in req.image_urls
+    assert any(local_path in part.text for part in req.extra_user_content_parts)
+    assert not any(image_url in part.text for part in req.extra_user_content_parts)

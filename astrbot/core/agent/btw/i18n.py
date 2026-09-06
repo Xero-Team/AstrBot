@@ -6,7 +6,6 @@ does, then looks the string up in these bundles. Missing locales fall back
 to ``zh-CN``.
 """
 
-
 LOCALES: dict[str, dict[str, str]] = {
     "zh-CN": {
         "btw.work.started": "🔧 工作任务已开始处理。",

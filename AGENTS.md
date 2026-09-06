@@ -194,7 +194,10 @@ endings. Targets such as `format-py`, `format-web`, and `format-md` are scoped
 only by file type, not by the files changed for the current task. In a dirty
 worktree, run Ruff or Prettier directly on the intended paths when unrelated
 same-type edits must be preserved. Ruff uses line length 88, target `py314`,
-and mccabe complexity 15. Pre-commit runs Ruff and `pyupgrade --py314-plus`.
+and mccabe complexity 15. Pre-commit runs Ruff and
+`pyupgrade --py313-plus` (not `--py314-plus`, which strips
+`from __future__ import annotations` that the runtime still needs for
+eagerly-evaluated protocol stub annotations).
 
 ## Architecture
 

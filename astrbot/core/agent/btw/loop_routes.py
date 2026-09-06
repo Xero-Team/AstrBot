@@ -5,7 +5,6 @@ single narrow implementation here prevents duplicated drift between the main
 agent assembly and the handoff tool executor.
 """
 
-
 _LOOP_VALUES = {"conversation", "work"}
 _ALLOWED_ROUTES = _LOOP_VALUES | {"both"}
 

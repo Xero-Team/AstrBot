@@ -1,6 +1,5 @@
 """Types shared by the BTW conversation and work loops."""
 
-
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum

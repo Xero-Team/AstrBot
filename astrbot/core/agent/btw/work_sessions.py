@@ -1,6 +1,5 @@
 """In-memory runtime ownership for BTW work sessions."""
 
-
 import asyncio
 from datetime import UTC, datetime, timedelta
 

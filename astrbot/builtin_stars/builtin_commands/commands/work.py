@@ -1,6 +1,5 @@
 """BTW work-loop commands (/work status, /work <task>)."""
 
-
 from typing import Annotated
 
 from astrbot.api import btw_work_latest_status

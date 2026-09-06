@@ -7,7 +7,6 @@ at initialization; the command group resolves the event's config and reads
 through this registry.
 """
 
-
 import asyncio
 
 from astrbot.core.agent.btw.types import WorkSessionStatus

@@ -78,6 +78,7 @@ vi.mock('@/api/v1', () => ({
   UPGRADE_RECOVERY_TOKEN_KEY: 'astrbot-upgrade-recovery-token',
 }));
 vi.mock('@/api/v1/authorization', () => ({
+  STEP_UP_TTL_SECONDS: 300,
   authorizationApi: api.authorizationApi,
 }));
 vi.mock('@/api/http', async () => {

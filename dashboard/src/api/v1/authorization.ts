@@ -42,6 +42,8 @@ export type WebChatStepUpRequest = {
   code?: string;
 };
 
+export const STEP_UP_TTL_SECONDS = 300;
+
 export type AuthorizationBatchRevokeRequest = {
   binding_ids: string[];
   password?: string;

@@ -63,7 +63,7 @@ The main SQLite database uses SQLModel tables as the schema source of truth. Acc
 
 The main database file is `data/data_v4.db` under the runtime root. SQLModel tables are the only schema source of truth: tables, columns, ordinary unique constraints, and ordinary indexes live on the models. Access ports are the domain store protocols in `astrbot/core/db/protocols.py`. `SQLiteDatabase` composes those protocols with mixins; callers still import that class. This fork does not add Alembic, sqlc, or a main-database `.sql` schema.
 
-`create_runtime_services()` constructs `SQLiteDatabase(DB_PATH)`. The lifecycle explicitly calls `db.initialize()`; `get_db()` keeps lazy initialization as a fallback. Explicit initialization, the first `get_db()`, and concurrent initialization share one lock, so schema work runs once.
+`create_runtime_services()` constructs `SQLiteDatabase(DB_PATH)`. If the factory fails after constructing the database and before returning `RuntimeServices`, it `await`s `db.close()` to dispose the async engine, then re-raises the original exception. The lifecycle explicitly calls `db.initialize()`; `get_db()` keeps lazy initialization as a fallback. Explicit initialization, the first `get_db()`, and concurrent initialization share one lock, so schema work runs once.
 
 ### Layout
 

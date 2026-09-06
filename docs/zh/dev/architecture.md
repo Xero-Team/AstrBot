@@ -63,7 +63,7 @@ outline: deep
 
 主库文件是 runtime root 下的 `data/data_v4.db`。SQLModel 表是 schema 的唯一真源：表、列、普通唯一约束和普通索引都写在模型上。访问口是 `astrbot/core/db/protocols.py` 中的域存储协议；`SQLiteDatabase` 用 mixin 组合这些协议，调用方仍导入该类。本 fork 不引入 Alembic、sqlc 或主库 `.sql` schema。
 
-`create_runtime_services()` 构造 `SQLiteDatabase(DB_PATH)`。生命周期会显式调用 `db.initialize()`；`get_db()` 保留懒初始化兜底。显式初始化、第一次 `get_db()` 和并发初始化共用同一把锁，schema 工作只执行一次。
+`create_runtime_services()` 构造 `SQLiteDatabase(DB_PATH)`。若工厂在构造数据库之后、交出 `RuntimeServices` 之前失败，会先 `await db.close()` 释放异步引擎，再抛出原异常。生命周期会显式调用 `db.initialize()`；`get_db()` 保留懒初始化兜底。显式初始化、第一次 `get_db()` 和并发初始化共用同一把锁，schema 工作只执行一次。
 
 ### 布局
 

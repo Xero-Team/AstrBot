@@ -1771,15 +1771,12 @@ class AuthorizationService:
         resource: Resource,
         context: AuthContext,
         verified_method: str,
-        ttl_seconds: int = _STEP_UP_TTL_SECONDS,
     ) -> tuple[str, str]:
         """Issue a short-lived, one-time credential after reauthentication."""
 
         context = self._resource_scoped_dashboard_context(context, resource)
-        if (
-            context.source not in {"dashboard", "webchat"}
-            or not _requires_step_up(action, resource, context)
-            or not 0 < ttl_seconds <= 900
+        if context.source not in {"dashboard", "webchat"} or not _requires_step_up(
+            action, resource, context
         ):
             raise AuthorizationValueError("Invalid step-up request")
         if context.source == "webchat":
@@ -1809,7 +1806,7 @@ class AuthorizationService:
             context_digest=context.digest_for(action, resource),
             token_hash=hashlib.sha256(secret.encode()).hexdigest(),
             verified_method=verified_method,
-            expires_at=utc_now() + timedelta(seconds=ttl_seconds),
+            expires_at=utc_now() + timedelta(seconds=_STEP_UP_TTL_SECONDS),
         )
         async with self._db.get_db() as session:
             async with session.begin():

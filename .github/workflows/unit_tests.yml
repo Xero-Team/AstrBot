@@ -20,9 +20,25 @@ concurrency:
 
 jobs:
   unit-tests:
-    name: Run blocking pytest suite
-    runs-on: ubuntu-latest
+    name: Run blocking pytest suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    # Windows stays continue-on-error so a Windows-only flake does not
+    # block the required Ubuntu/macOS lanes. The Windows blocking suite
+    # is currently green; promote it to a hard gate after it stays green
+    # on master.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+
+    defaults:
+      run:
+        # Windows runners default to pwsh; use bash so the same steps and
+        # test script work on all three platforms.
+        shell: bash
 
     steps:
       - name: Checkout

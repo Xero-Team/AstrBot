@@ -88,7 +88,10 @@ def _decode_bytes_with_fallback(
             return decoded
 
     if os.name == "nt":
-        for encoding in ("mbcs", "cp936", "gbk", "gb18030", preferred):
+        # Native commands use the Windows system code page. Python children
+        # are forced to UTF-8 by the callers above, so prefer the system code
+        # page here instead of guessing GBK for every non-UTF-8 byte sequence.
+        for encoding in (preferred, "mbcs", "cp936", "gbk", "gb18030"):
             if decoded := _try_decode(encoding):
                 return decoded
     elif decoded := _try_decode(preferred):
@@ -98,7 +101,25 @@ def _decode_bytes_with_fallback(
 
 
 def _decode_shell_output(output: bytes | str | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    # Normalize CRLF so tool text output is identical across platforms.
+    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8").replace(
+        "\r\n", "\n"
+    )
+
+
+def _signal_asyncio_process(
+    process: asyncio.subprocess.Process, *, terminate: bool
+) -> None:
+    """Signal an asyncio subprocess, ignoring processes that already exited."""
+    if process.returncode is not None:
+        return
+    try:
+        if terminate:
+            process.terminate()
+        else:
+            process.kill()
+    except ProcessLookupError:
+        return
 
 
 @dataclass
@@ -127,6 +148,10 @@ class LocalShellComponent(ShellComponent):
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
+            if sys.platform == "win32":
+                # Python children otherwise emit text in the ANSI code page
+                # (e.g. cp1252) and crash printing non-ASCII output.
+                run_env.setdefault("PYTHONIOENCODING", "utf-8")
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
             popen_command: str | list[str] = command
             popen_shell = shell
@@ -265,12 +290,19 @@ class LocalShellComponent(ShellComponent):
         output_path = output_dir / f"{session_id}.log"
         output_path.touch()
 
+        run_env = {
+            **os.environ,
+            **{str(k): str(v) for k, v in (env or {}).items()},
+        }
+        if sys.platform == "win32":
+            # Keep managed-session child output UTF-8 (see LocalShellComponent.exec).
+            run_env.setdefault("PYTHONIOENCODING", "utf-8")
         process_kwargs: dict[str, Any] = {
             "stdin": asyncio.subprocess.PIPE,
             "stdout": asyncio.subprocess.PIPE,
             "stderr": asyncio.subprocess.STDOUT,
             "cwd": str(working_dir),
-            "env": {**os.environ, **{str(k): str(v) for k, v in (env or {}).items()}},
+            "env": run_env,
         }
         if sys.platform == "win32":
             process_kwargs["creationflags"] = getattr(
@@ -641,9 +673,9 @@ class LocalShellComponent(ShellComponent):
                     timeout=5,
                 )
                 if result.returncode != 0:
-                    process.terminate()
+                    _signal_asyncio_process(process, terminate=True)
             except Exception:
-                process.terminate()
+                _signal_asyncio_process(process, terminate=True)
         else:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -653,13 +685,18 @@ class LocalShellComponent(ShellComponent):
             await asyncio.wait_for(process.wait(), 5)
         except TimeoutError:
             if sys.platform == "win32":
-                process.kill()
+                _signal_asyncio_process(process, terminate=False)
             else:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-            await process.wait()
+            try:
+                await process.wait()
+            except ProcessLookupError:
+                return
+        except ProcessLookupError:
+            return
 
 
 @dataclass
@@ -694,11 +731,16 @@ class LocalPythonComponent(PythonComponent):
         def _run() -> dict[str, Any]:
             try:
                 working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+                child_env = os.environ.copy()
+                if sys.platform == "win32":
+                    # Keep python tool output UTF-8 (see LocalShellComponent.exec).
+                    child_env.setdefault("PYTHONIOENCODING", "utf-8")
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout_seconds,
                     capture_output=True,
                     cwd=working_dir,
+                    env=child_env,
                 )
                 stdout = "" if silent else _decode_shell_output(result.stdout)
                 stderr = (

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shlex
 import signal
 import subprocess
@@ -10,8 +11,17 @@ from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalShellComponent
 
 
+def _powershell_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _python_command(code: str) -> str:
-    return f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
+    """Build a shell-safe Python command for the current operating system."""
+    if os.name == "nt":
+        # PowerShell re-parses the whole command text: invoke the executable
+        # through the call operator (&) so quoted paths with spaces survive.
+        return f"& {_powershell_quote(sys.executable)} -u -c {_powershell_quote(code)}"
+    return shlex.join([sys.executable, "-u", "-c", code])
 
 
 class _FakePopen:
@@ -69,10 +79,30 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
+def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
         return _FakePopen(stdout="微博热搜".encode("gbk"))
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        local_booter.locale,
+        "getpreferredencoding",
+        lambda _do_setlocale=False: "cp936",
+    )
+
+    result = asyncio.run(LocalShellComponent().exec("dummy"))
+
+    assert result["stdout"] == "微博热搜"
+    assert result["stderr"] == ""
+    assert result["exit_code"] == 0
+
+
+def test_local_shell_component_preserves_western_windows_output(monkeypatch):
+    def fake_run(*args, **kwargs):
+        _ = args, kwargs
+        return _FakePopen(stdout="caféA".encode("cp1252"))
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
@@ -84,7 +114,7 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
-    assert result["stdout"] == "微博热搜"
+    assert result["stdout"] == "caféA"
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
 
@@ -145,6 +175,31 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
 
     assert proc.killed
     assert proc.wait_timeout == 5
+
+
+def test_terminate_process_ignores_windows_process_lookup(monkeypatch):
+    class DeadProcess:
+        pid = 12345
+        returncode = None
+
+        def terminate(self):
+            raise ProcessLookupError
+
+        def kill(self):
+            raise ProcessLookupError
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
+    )
+
+    asyncio.run(LocalShellComponent()._terminate_process(DeadProcess()))
 
 
 def test_local_shell_component_kills_posix_process_group_on_timeout(monkeypatch):

@@ -5,18 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: bd4b198a5f2c9feaf992e773e07421e15169bea4
-  synced_at_utc: 2026-09-06T13:39:42Z
+  commit: a412146401426c0cdff8bbefb8627a03da519da8
+  synced_at_utc: 2026-09-07T17:04:55Z
   sync_method: adapt
-  source_pr: '9908'
+  source_pr: '9975'
   note: >-
-    Reviewed 6b848090525a0eebe622a9d46b032a6c5148c4a3..bd4b198a5f2c9feaf992e773e07421e15169bea4
-    (3 commits). Adapted #9958 onto the split config integrity helpers so
-    schema "type": "dict" mappings survive load and Dashboard plugin save
-    (d41631024d8fcbf6d7e812126c84416bd6ffe5c3). Adapted #9957 to append the
-    skills-like requery instruction as a user message and keep tests under
-    tests/unit/test_tool_loop_agent_runner.py
-    (1b00c9364306f2f9057ef89b523ab5d095cda1cd). Adapted #9908 by setting
-    items-per-page-options on the existing multiline DocumentsTab
-    v-data-table-server (00347f9ec5c7166362ab174340999b8140e8cfa1).
-    No skips.
+    Reviewed 1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b..a412146401426c0cdff8bbefb8627a03da519da8
+    (4 commits). Adapted 2, skipped 2, no cherry-picks. Skipped #9955 Japanese
+    i18n (zh-CN/en-US only; no ru-RU or docs.astrbot.app). Adapted #9973 onto
+    MetricsRuntime._post_metrics
+    (909c5748bbde7afad624a222e2d25628c0f4e03f). Skipped #9974 docker/setup-qemu-action
+    because this fork has no docker-image.yml. Adapted #9975 to 4.28.0,
+    renamed changelogs/v4.28.0-beta.1.md, dropped [WIP]
+    (1b3f6839bfcffab09c8c9e46810949f8a5ff3342). Cursor matches upstream/master.

@@ -488,6 +488,7 @@ async def test_skill_file_browser_and_editor_security(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
     tmp_path,
+    require_symlink,
 ):
     async def _fake_sync_skills_to_active_sandboxes():
         return

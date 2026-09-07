@@ -117,6 +117,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
+        # Same default as QQOfficialPlatformAdapter: a missing key enables
+        # Markdown. Previous send_by_session used content; rejection falls back.
+        self.use_markdown_default = platform_config.get("use_markdown", True)
 
         intents = botpy.Intents(
             public_messages=True,

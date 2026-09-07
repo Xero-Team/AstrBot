@@ -500,6 +500,7 @@ class TestMainAgentBuildConfig:
         assert config.sanitize_context_by_modalities is False
         assert config.kb_agentic_mode is False
         assert config.llm_safety_mode is True
+        assert config.computer_use_runtime == "none"
 
     def test_config_with_custom_values(self):
         """Test MainAgentBuildConfig with custom values."""
@@ -1344,14 +1345,21 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="no-skills")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(
+            req, {"computer_use_runtime": "local"}, mock_context, mock_event
+        )
 
         assert "Workspace scoped skill." not in req.system_prompt
         assert "## Skills" not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_skills_skips_workspace_skills_in_sandbox_runtime(
+    @pytest.mark.parametrize(
+        "runtime_settings",
+        [{}, {"computer_use_runtime": "none"}, {"computer_use_runtime": "sandbox"}],
+    )
+    async def test_ensure_skills_skips_workspace_skills_outside_local_runtime(
         self,
+        runtime_settings,
         monkeypatch,
         tmp_path,
         mock_event,
@@ -1398,7 +1406,7 @@ class TestEnsurePersonaAndSkills:
 
         await module._ensure_persona_and_skills(
             req,
-            {"computer_use_runtime": "sandbox"},
+            runtime_settings,
             mock_context,
             mock_event,
         )
@@ -1523,6 +1531,66 @@ class TestEnsurePersonaAndSkills:
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
+
+    @pytest.mark.asyncio
+    async def test_omitted_runtime_does_not_expose_local_computer_tools(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        mock_event.platform_meta.support_proactive_message = False
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            add_cron_tools=False,
+        )
+        req = ProviderRequest(prompt="hello")
+        req.conversation = MagicMock(persona_id=None, history="[]")
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=config,
+                provider=mock_provider,
+                req=req,
+                apply_reset=False,
+            )
+        assert result is not None
+        try:
+            tool_names = (
+                result.provider_request.func_tool.names()
+                if result.provider_request.func_tool is not None
+                else []
+            )
+            assert "astrbot_execute_python" not in tool_names
+            assert "astrbot_execute_ipython" not in tool_names
+            assert "astrbot_execute_shell" not in tool_names
+        finally:
+            if result.reset_coro:
+                result.reset_coro.close()
+
+    def test_local_agent_runtime_from_profile_defaults_missing_runtime_to_none(self):
+        config, _ = ama.local_agent_runtime_from_profile({})
+        assert config.computer_use_runtime == "none"
+        assert config.llm_safety_mode is True
+
+    def test_local_agent_runtime_from_profile_keeps_explicit_local_and_safety_mode(
+        self,
+    ):
+        config, _ = ama.local_agent_runtime_from_profile(
+            {
+                "provider_settings": {"computer_use_runtime": "local"},
+                "agent_runner": {"config": {"persona": {"safety_mode": False}}},
+            }
+        )
+        assert config.computer_use_runtime == "local"
+        assert config.llm_safety_mode is False
 
     @pytest.mark.asyncio
     async def test_subagent_dedupe_uses_default_persona_tools(

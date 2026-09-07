@@ -55,6 +55,9 @@ def _safe_media_ref(ref: object) -> str | None:
         scheme = urlsplit(value).scheme.lower()
     except ValueError:
         return None
+    if len(scheme) == 1 and scheme.isalpha():
+        # Windows drive paths such as C:\Users\a.png parse as scheme "c".
+        return value
     if scheme in {"http", "https"}:
         # MediaResolver intentionally supports HTTP for trusted internal callers,
         # but request preparation receives plugin/user-controlled references.

@@ -216,7 +216,7 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
-    computer_use_runtime: str = "local"
+    computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
@@ -318,7 +318,7 @@ def local_agent_runtime_from_profile(
         "safety_mode_strategy": persona_config.get(
             "safety_mode_strategy", "system_prompt"
         ),
-        "computer_use_runtime": settings.get("computer_use_runtime", "local"),
+        "computer_use_runtime": settings.get("computer_use_runtime", "none"),
         "sandbox_cfg": _mapping(settings.get("sandbox")),
         "add_cron_tools": proactive_cfg.get("add_cron_tools", True),
         "provider_settings": settings,
@@ -604,7 +604,7 @@ def _append_skills_prompt(
     event: AstrMessageEvent,
     plugin_context: CoreExecutionContext,
 ) -> None:
-    runtime = cfg.get("computer_use_runtime", "local")
+    runtime = cfg.get("computer_use_runtime", "none")
     skill_manager = plugin_context.skill_manager or SkillManager(
         builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
     )

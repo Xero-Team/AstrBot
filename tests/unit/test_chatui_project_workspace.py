@@ -30,7 +30,9 @@ async def test_project_workspace_is_creator_and_uuid_derived_and_safe(
 
 
 @pytest.mark.asyncio
-async def test_project_workspace_rejects_symlink_and_hardlink(temp_db, tmp_path):
+async def test_project_workspace_rejects_symlink_and_hardlink(
+    temp_db, tmp_path, require_symlink
+):
     service = ChatUIProjectService(temp_db)
     service.workspace_resolver = ProjectWorkspaceResolver(tmp_path)
     project = await temp_db.create_chatui_project(creator="alice", title="Project")

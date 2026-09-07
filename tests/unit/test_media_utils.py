@@ -1159,3 +1159,17 @@ async def test_prepare_images_for_provider_drops_mp4_named_gif(tmp_path, monkeyp
     paths = await media_utils.prepare_images_for_provider(str(fake_gif))
 
     assert paths == []
+
+
+def test_compose_image_frames_caps_long_gif(tmp_path):
+    image_path = tmp_path / "long.gif"
+    frames = [_solid((index % 200, 20, 80)) for index in range(80)]
+    _save_gif(image_path, frames, 50)
+
+    composed = media_utils._compose_image_frames(str(image_path))
+    try:
+        assert len(composed) == media_utils.PROVIDER_JPEG_MAX_COMPOSE_FRAMES
+        assert media_utils.PROVIDER_JPEG_MAX_COMPOSE_FRAMES == 64
+    finally:
+        for frame in composed:
+            frame.image.close()

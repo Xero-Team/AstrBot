@@ -37,6 +37,7 @@ IMAGE_COMPRESS_DEFAULT_QUALITY = 85
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
 PROVIDER_JPEG_MAX_ANIMATED_FRAMES = 8
+PROVIDER_JPEG_MAX_COMPOSE_FRAMES = 64
 PROVIDER_JPEG_STATIC_HAMMING = 12
 PROVIDER_JPEG_DEDUP_HAMMING = 16
 PROVIDER_JPEG_MU_REF = 16 / 64
@@ -1732,7 +1733,10 @@ def _compose_image_frames(image_path: str) -> list[ComposedFrame]:
     frames: list[ComposedFrame] = []
     with PILImage.open(image_path) as source:
         canvas = PILImage.new("RGBA", source.size, (0, 0, 0, 0))
-        n_frames = getattr(source, "n_frames", 1) or 1
+        n_frames = min(
+            getattr(source, "n_frames", 1) or 1,
+            PROVIDER_JPEG_MAX_COMPOSE_FRAMES,
+        )
         try:
             for index in range(n_frames):
                 source.seek(index)
@@ -1843,8 +1847,8 @@ async def prepare_images_for_provider(
     """Convert a local image into 0..8 JPEG files for a chat provider.
 
     Alpha is flattened onto white. Output is never enlarged. Animated GIF/WebP
-    sources are dhash-sampled. Bytes that are not a decodable image yield an
-    empty list.
+    sources are dhash-sampled from at most 64 composed frames. Bytes that are
+    not a decodable image yield an empty list.
 
     Args:
         url_or_path: Local filesystem path to the source image.

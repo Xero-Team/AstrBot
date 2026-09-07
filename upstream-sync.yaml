@@ -5,25 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b
-  synced_at_utc: 2026-09-07T14:53:13Z
+  commit: a412146401426c0cdff8bbefb8627a03da519da8
+  synced_at_utc: 2026-09-07T17:04:55Z
   sync_method: adapt
-  source_pr: '9941'
+  source_pr: '9975'
   note: >-
-    Reviewed bd4b198a5f2c9feaf992e773e07421e15169bea4..1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b
-    (5 commits). Adapted 5, skipped 0, no version bump. #9954 fork-shaped 3-OS
-    blocking pytest matrix with Windows continue-on-error, kept _split_path_mapping,
-    tests under tests/unit/ (cfbccec1bb22fdfa34e11e2811c0142cf75ca23b). #9914
-    QQ Official proactive Markdown with unique-session suffix strip, webhook
-    single super().send_by_session, en-US/zh-CN i18n only
-    (46f8cae9db6dc9c10e50ce439cac052ee3179e2c). #9971 missing computer_use_runtime
-    is none; keep local_agent_runtime_from_profile and persona safety_mode
-    (27adaab319d3b777b8167719f67a669084a01047). #9910 WebChat history filters via
-    self.config and ConversationWorkspacePage.vue
-    (bf43e23570590c837518899b4be1a64ee022e524). #9941 dedicated watchdog thread
-    keeping create_event_loop_diagnostic_jobs and dump_after, with token/URL
-    redaction (b1ea0f0bafceb49c220d0dc143ee90c1011f5af4). Focused tests plus
-    blocking pytest. Fork-local follow-ups after this cursor: Windows media
-    paths/shell shutdown, watchdog dump-retry test, residual-risk docs.
-    After this interval, upstream/master advanced to
-    ec848fc2c3c49a45ddee01d62c20ec0fc8b0291c (#9955 Japanese i18n), not absorbed.
+    Reviewed 1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b..a412146401426c0cdff8bbefb8627a03da519da8
+    (4 commits). Adapted 2, skipped 2, no cherry-picks. Skipped #9955 Japanese
+    i18n (zh-CN/en-US only; no ru-RU or docs.astrbot.app). Adapted #9973 onto
+    MetricsRuntime._post_metrics
+    (909c5748bbde7afad624a222e2d25628c0f4e03f). Skipped #9974 docker/setup-qemu-action
+    because this fork has no docker-image.yml. Adapted #9975 to 4.28.0,
+    renamed changelogs/v4.28.0-beta.1.md, dropped [WIP]
+    (1b3f6839bfcffab09c8c9e46810949f8a5ff3342). Cursor matches upstream/master.

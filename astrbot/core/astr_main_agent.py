@@ -1760,7 +1760,25 @@ async def _append_message_component_context(
             TextPart(text=req.message_component_context)
         )
 
-    for image_ref in rendered.image_refs:
+    image_refs = list(rendered.image_refs)
+    limit = max(config.max_quoted_fallback_images, 0)
+    if limit <= 0 and image_refs:
+        logger.warning(
+            "Skip forwarded image refs due to limit=%d for umo=%s",
+            config.max_quoted_fallback_images,
+            getattr(event, "unified_msg_origin", None),
+        )
+        image_refs = []
+    elif len(image_refs) > limit:
+        logger.warning(
+            "Truncate forwarded image refs for umo=%s from %d to %d",
+            getattr(event, "unified_msg_origin", None),
+            len(image_refs),
+            limit,
+        )
+        image_refs = image_refs[:limit]
+
+    for image_ref in image_refs:
         if image_ref in req.image_urls:
             continue
         jpeg_paths = await _materialize_image_ref_for_provider(

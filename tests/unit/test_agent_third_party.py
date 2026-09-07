@@ -1073,7 +1073,15 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
 @pytest.mark.asyncio
 async def test_third_party_process_builds_media_only_request_and_uses_non_streaming_path(
     monkeypatch,
+    tmp_path,
 ):
+    from PIL import Image as PILImage
+
+    import astrbot.core.utils.media_utils as media_utils
+
+    image_path = tmp_path / "image.png"
+    PILImage.new("RGB", (8, 8), (12, 34, 56)).save(image_path)
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
@@ -1085,7 +1093,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     image = MagicMock(spec=Image)
-    image.convert_to_file_path = AsyncMock(return_value="/tmp/image.png")
+    image.convert_to_file_path = AsyncMock(return_value=str(image_path))
     record = MagicMock(spec=Record)
     record.convert_to_file_path = AsyncMock(return_value="/tmp/audio.wav")
     event = FakeInternalProcessEvent(
@@ -1143,7 +1151,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     assert len(captured_calls) == 1
     req = runner.reset.await_args.kwargs["request"]
     assert req.prompt == ""
-    assert req.image_urls == ["/tmp/image.png"]
+    assert req.image_urls == [str(image_path)]
     assert req.audio_urls == ["/tmp/audio.wav"]
     set_persona_error.assert_called_once_with(event, None)
     assert runner.close.await_count == 1

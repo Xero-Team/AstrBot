@@ -26,6 +26,7 @@ class FakeEvent:
         self.unified_msg_origin = "webchat:FriendMessage:test-session"
         self._extras = extras or {}
         self.result_history: list[MessageEventResult] = []
+        self.temporary_local_files: list[str] = []
 
     def get_extra(self, key: str):
         return self._extras.get(key)
@@ -35,6 +36,10 @@ class FakeEvent:
 
     def set_result(self, result: MessageEventResult) -> None:
         self.result_history.append(result)
+
+    def track_temporary_local_file(self, path: str) -> None:
+        if path not in self.temporary_local_files:
+            self.temporary_local_files.append(path)
 
 
 class FakeInternalProcessEvent(FakeEvent):

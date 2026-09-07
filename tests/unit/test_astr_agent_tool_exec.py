@@ -207,7 +207,8 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
     assert second_tasks == set()
 
 
-def test_build_handoff_toolset_keeps_declared_tools():
+@pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
+def test_build_handoff_toolset_keeps_declared_tools(runtime):
     mgr = FunctionToolManager()
     plugin_tool = FunctionTool(
         name="admin_only_mcp",
@@ -218,10 +219,9 @@ def test_build_handoff_toolset_keeps_declared_tools():
     mgr.func_list = [plugin_tool, handoff]
 
     event = _DummyEvent()
+    provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_runtime": "none"}
-        },
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: mgr,
     )
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
@@ -231,6 +231,15 @@ def test_build_handoff_toolset_keeps_declared_tools():
     assert toolset is not None
     assert toolset.get_tool("admin_only_mcp") is plugin_tool
     assert toolset.get_tool("transfer_to_child") is None
+    assert (toolset.get_tool("astrbot_execute_python") is not None) == (
+        runtime == "local"
+    )
+    assert (toolset.get_tool("astrbot_execute_ipython") is not None) == (
+        runtime == "sandbox"
+    )
+    assert (toolset.get_tool("astrbot_execute_shell") is not None) == (
+        runtime in {"local", "sandbox"}
+    )
 
 
 def test_handoff_toolset_defaults_plugin_mcp_and_computer_tools_to_work():
@@ -757,6 +766,8 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     config = captured["config"]
     assert config.tool_call_timeout == 456
     assert config.streaming_response == provider_settings["streaming_response"]
+    assert config.computer_use_runtime == "none"
+    assert config.llm_safety_mode is True
     assert config.fallback_provider_ids == ["fallback-provider"]
     assert config.request_max_retries == 3
     assert config.provider_settings == provider_settings
@@ -768,6 +779,72 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert cron_context is not event.auth_context
     assert cron_context.request_id != event.auth_context.request_id
     assert cron_context.metadata == {"dashboard_session_id": "sid-1"}
+
+
+@pytest.mark.asyncio
+async def test_background_wakeup_honors_explicit_runtime_and_safety_mode(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(agent_runner=_DoneRunner())
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        AsyncMock(),
+    )
+
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="send",
+        parameters={"type": "object", "properties": {}},
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"},
+            "agent_runner": {"config": {"persona": {"safety_mode": False}}},
+        },
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+        preferences=None,
+    )
+    event = _DummyEvent([])
+    event.subject = None
+    event.resource = None
+    event.auth_context = None
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=context),
+        tool_call_timeout=60,
+    )
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="long_tool",
+        result_text="ok",
+        tool_args={},
+        note="task finished",
+        summary_name="BackgroundTask",
+    )
+
+    config = captured["config"]
+    assert config.computer_use_runtime == "local"
+    assert config.llm_safety_mode is False
 
 
 @pytest.mark.asyncio

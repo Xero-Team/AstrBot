@@ -1,6 +1,6 @@
 import platform
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -27,6 +27,47 @@ def test_local_python_tool_description_contains_os():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runtime_settings",
+    [
+        {},
+        {"computer_use_runtime": "none"},
+        {"computer_use_runtime": "sandbox"},
+        {"computer_use_runtime": "invalid"},
+        {"computer_use_runtime": None},
+    ],
+)
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_local_python_tool_rejects_nonlocal_runtime(runtime_settings, role):
+    """Reject retained local tools before accessing the host, regardless of role."""
+    get_local_booter = MagicMock()
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:FriendMessage:user123",
+        role=role,
+        get_platform_name=lambda: "onebot",
+    )
+    runtime = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                **runtime_settings,
+                "computer_use_require_admin": False,
+            }
+        },
+        computer_runtime=SimpleNamespace(get_local_booter=get_local_booter),
+    )
+    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=runtime),
+        tool_call_timeout=60,
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')")
+
+    get_local_booter.assert_not_called()
+    assert result == "Error executing code: only local runtime is supported."
+
+
+@pytest.mark.asyncio
 async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     """Local Python execution should use the same workspace as local shell."""
     tool = LocalPythonTool()
@@ -44,7 +85,9 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         get_platform_name=lambda: "onebot",
     )
     runtime = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": {}},
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"}
+        },
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
                 python=SimpleNamespace(exec=python_exec)
@@ -86,7 +129,9 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         get_platform_name=lambda: "onebot",
     )
     runtime = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": {}},
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"}
+        },
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
                 python=SimpleNamespace(exec=python_exec)

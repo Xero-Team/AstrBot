@@ -109,8 +109,8 @@ class PreProcessStage(Stage):
                     logger.warning("无效的路径映射配置，已跳过: %s", mapping)
                     continue
                 from_, to_ = split_result
-                from_ = from_.removesuffix("/")
-                to_ = to_.removesuffix("/")
+                from_ = from_.removesuffix("/").removesuffix("\\")
+                to_ = to_.removesuffix("/").removesuffix("\\")
                 url = (
                     file_uri_to_path(component.url)
                     if is_file_uri(component.url)

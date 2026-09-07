@@ -21,6 +21,7 @@ from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
+    image_compress_args_from_settings,
     prepare_provider_request,
 )
 from astrbot.core.agent.tool import ToolSet
@@ -116,14 +117,11 @@ from astrbot.core.tools.web_search_tools import (
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
     get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.config_number import coerce_int_config
-from astrbot.core.utils.media_utils import (
-    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-    IMAGE_COMPRESS_DEFAULT_QUALITY,
-    compress_image,
-)
+from astrbot.core.utils.media_utils import prepare_images_for_provider
 from astrbot.core.utils.message_context import MessageContextRenderer
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
@@ -221,7 +219,7 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
-    computer_use_runtime: str = "local"
+    computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
@@ -332,7 +330,7 @@ def local_agent_runtime_from_profile(
         "safety_mode_strategy": persona_config.get(
             "safety_mode_strategy", "system_prompt"
         ),
-        "computer_use_runtime": settings.get("computer_use_runtime", "local"),
+        "computer_use_runtime": settings.get("computer_use_runtime", "none"),
         "sandbox_cfg": _mapping(settings.get("sandbox")),
         "add_cron_tools": proactive_cfg.get("add_cron_tools", True),
         "provider_settings": settings,
@@ -642,7 +640,7 @@ def _append_skills_prompt(
     skill_routes: object = (),
     btw_enabled: bool = False,
 ) -> None:
-    runtime = cfg.get("computer_use_runtime", "local")
+    runtime = cfg.get("computer_use_runtime", "none")
     skill_manager = plugin_context.skill_manager or SkillManager(
         builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
     )
@@ -912,10 +910,9 @@ async def _ensure_img_caption(
     try:
         compressed_urls = []
         for url in req.image_urls:
-            compressed_url = await _compress_image_for_provider(url, cfg)
-            compressed_urls.append(compressed_url)
-            if _is_generated_compressed_image_path(url, compressed_url):
-                event.track_temporary_local_file(compressed_url)
+            jpeg_paths = await _compress_image_for_provider(url, cfg)
+            _track_provider_jpeg_paths(event, url, jpeg_paths)
+            compressed_urls.extend(jpeg_paths)
         caption = await _request_img_caption(
             event,
             image_caption_provider,
@@ -1009,44 +1006,45 @@ def _get_quoted_message_parser_settings(
     return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
 
 
-def _get_image_compress_args(
-    provider_settings: dict[str, object] | None,
-) -> tuple[bool, int, int]:
-    if not isinstance(provider_settings, dict):
-        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
-
-    enabled = provider_settings.get("image_compress_enabled", True)
-    if not isinstance(enabled, bool):
-        enabled = True
-
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
-
-    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
-    if not isinstance(max_size, int):
-        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
-    max_size = max(max_size, 1)
-
-    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
-    if not isinstance(quality, int):
-        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
-    quality = min(max(quality, 1), 100)
-
-    return enabled, max_size, quality
-
-
 async def _compress_image_for_provider(
     url_or_path: str,
     provider_settings: dict[str, object] | None,
-) -> str:
+) -> list[str]:
+    """Convert one source image into provider JPEG paths.
+
+    Args:
+        url_or_path: Local image path to convert.
+        provider_settings: Provider settings used for resize and JPEG quality.
+            Format conversion always runs; resize follows ``image_compress_enabled``.
+
+    Returns:
+        Temporary JPEG paths. Empty when the source cannot be decoded as an image.
+    """
     try:
-        enabled, max_size, quality = _get_image_compress_args(provider_settings)
-        if not enabled:
-            return url_or_path
-        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+        enabled, max_size, quality = image_compress_args_from_settings(
+            provider_settings
+        )
+        return await prepare_images_for_provider(
+            url_or_path,
+            max_size=max_size,
+            quality=quality,
+            resize=enabled,
+        )
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.error("Image compression failed: %s", exc)
-        return url_or_path
+        return []
+
+
+def _track_provider_jpeg_paths(
+    event: AstrMessageEvent,
+    original_path: str,
+    jpeg_paths: list[str],
+) -> None:
+    for jpeg_path in jpeg_paths:
+        if _is_generated_compressed_image_path(original_path, jpeg_path):
+            event.track_temporary_local_file(jpeg_path)
 
 
 def _is_generated_compressed_image_path(
@@ -1100,7 +1098,7 @@ async def _process_quote_message(
 
     if image_seg:
         path: str | None = None
-        compress_path: str | None = None
+        jpeg_paths: list[str] = []
         if skip_quote_image_caption:
             logger.debug(
                 "Skipping quote image captioning because image captioning already handled this request."
@@ -1123,17 +1121,15 @@ async def _process_quote_message(
 
                 if prov and _can_text_chat(prov):
                     path = await image_seg.convert_to_file_path()
-                    compress_path = await _compress_image_for_provider(
+                    jpeg_paths = await _compress_image_for_provider(
                         path,
                         config.provider_settings if config else None,
                     )
-                    if path and _is_generated_compressed_image_path(
-                        path, compress_path
-                    ):
-                        event.track_temporary_local_file(compress_path)
+                    if path:
+                        _track_provider_jpeg_paths(event, path, jpeg_paths)
                     llm_resp = await cast(ChatModel, prov).text_chat(
                         prompt="Please describe the image content.",
-                        image_urls=[compress_path],
+                        image_urls=jpeg_paths,
                     )
                     if llm_resp.completion_text:
                         content_parts.append(
@@ -1144,13 +1140,11 @@ async def _process_quote_message(
             except Exception as exc:
                 logger.error("处理引用图片失败: %s", exc)
             finally:
-                if (
-                    compress_path
-                    and compress_path != path
-                    and os.path.exists(compress_path)
-                ):
+                for jpeg_path in jpeg_paths:
+                    if jpeg_path == path or not os.path.exists(jpeg_path):
+                        continue
                     try:
-                        os.remove(compress_path)
+                        os.remove(jpeg_path)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "Fail to remove temporary compressed image: %s", exc
@@ -1803,23 +1797,67 @@ def _select_request_provider(
     return selected, [fallback for fallback in fallbacks if fallback is not selected]
 
 
+def _track_temp_image_path(event: AstrMessageEvent, media_path: str) -> None:
+    """Track a converted image when it lives under AstrBot temp.
+
+    Args:
+        event: Message event that owns temporary files.
+        media_path: Local path to track when it is under the temp root.
+    """
+    try:
+        path = Path(media_path).resolve()
+        temp_dir = Path(get_astrbot_temp_path()).resolve()
+        path.relative_to(temp_dir)
+    except OSError, ValueError:
+        return
+    event.track_temporary_local_file(str(path))
+
+
+async def _materialize_image_ref_for_provider(
+    event: AstrMessageEvent,
+    image_ref: str,
+    config: MainAgentBuildConfig,
+) -> list[str]:
+    """Download or resolve a string image ref to a local filesystem path.
+
+    Args:
+        event: Message event that owns temporary files.
+        image_ref: HTTP, file, data, or local image reference.
+        config: Unused; kept so callers stay on the current attachment API.
+
+    Returns:
+        A one-element list with the local path, or empty when the
+        reference cannot be materialized. JPEG conversion happens later
+        in ``prepare_provider_request``.
+    """
+    del config
+    try:
+        path = await Image(file=image_ref).convert_to_file_path()
+        _track_temp_image_path(event, path)
+        return [path]
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to materialize image ref for provider: %s",
+            type(exc).__name__,
+        )
+        return []
+
+
 async def _append_direct_attachments(
     event: AstrMessageEvent,
     req: ProviderRequest,
     config: MainAgentBuildConfig,
 ) -> None:
+    del config
     for component in event.message_obj.message:
         if isinstance(component, Image):
             path = await component.convert_to_file_path()
-            image_path = await _compress_image_for_provider(
-                path,
-                config.provider_settings,
-            )
-            if _is_generated_compressed_image_path(path, image_path):
-                event.track_temporary_local_file(image_path)
-            req.image_urls.append(image_path)
+            _track_temp_image_path(event, path)
+            req.image_urls.append(path)
             req.extra_user_content_parts.append(
-                TextPart(text=f"[Image Attachment: path {image_path}]")
+                TextPart(text=f"[Image Attachment: path {path}]")
             )
         elif isinstance(component, Record):
             audio_path = await component.convert_to_file_path()
@@ -1853,31 +1891,51 @@ async def _append_message_component_context(
             TextPart(text=req.message_component_context)
         )
 
-    for image_ref in rendered.image_refs:
+    image_refs = list(rendered.image_refs)
+    limit = max(config.max_quoted_fallback_images, 0)
+    if limit <= 0 and image_refs:
+        logger.warning(
+            "Skip forwarded image refs due to limit=%d for umo=%s",
+            config.max_quoted_fallback_images,
+            getattr(event, "unified_msg_origin", None),
+        )
+        image_refs = []
+    elif len(image_refs) > limit:
+        logger.warning(
+            "Truncate forwarded image refs for umo=%s from %d to %d",
+            getattr(event, "unified_msg_origin", None),
+            len(image_refs),
+            limit,
+        )
+        image_refs = image_refs[:limit]
+
+    for image_ref in image_refs:
         if image_ref in req.image_urls:
             continue
-        req.image_urls.append(image_ref)
+        local_paths = await _materialize_image_ref_for_provider(
+            event,
+            image_ref,
+            config,
+        )
+        local_paths = [path for path in local_paths if path not in req.image_urls]
+        if not local_paths:
+            continue
+        req.image_urls.extend(local_paths)
         req.extra_user_content_parts.append(
-            TextPart(text=f"[Image Attachment in forwarded message: path {image_ref}]")
+            TextPart(
+                text=f"[Image Attachment in forwarded message: path {local_paths[0]}]"
+            )
         )
 
     for component in rendered.nested_media:
         try:
             if isinstance(component, Image):
                 path = await component.convert_to_file_path()
-                image_path = await _compress_image_for_provider(
-                    path,
-                    config.provider_settings,
-                )
-                if _is_generated_compressed_image_path(path, image_path):
-                    event.track_temporary_local_file(image_path)
-                req.image_urls.append(image_path)
+                _track_temp_image_path(event, path)
+                req.image_urls.append(path)
                 req.extra_user_content_parts.append(
                     TextPart(
-                        text=(
-                            "[Image Attachment in forwarded message: "
-                            f"path {image_path}]"
-                        )
+                        text=f"[Image Attachment in forwarded message: path {path}]"
                     )
                 )
             elif isinstance(component, Record):
@@ -1921,19 +1979,15 @@ async def _append_quoted_reply_components(
     config: MainAgentBuildConfig,
 ) -> bool:
     """Append explicit media in a reply and report whether it contained an image."""
+    del config
     has_embedded_image = False
     for component in reply.chain or []:
         if isinstance(component, Image):
             has_embedded_image = True
             path = await component.convert_to_file_path()
-            image_path = await _compress_image_for_provider(
-                path,
-                config.provider_settings,
-            )
-            if _is_generated_compressed_image_path(path, image_path):
-                event.track_temporary_local_file(image_path)
-            req.image_urls.append(image_path)
-            _append_quoted_image_attachment(req, image_path)
+            _track_temp_image_path(event, path)
+            req.image_urls.append(path)
+            _append_quoted_image_attachment(req, path)
         elif isinstance(component, Record):
             audio_path = await component.convert_to_file_path()
             req.audio_urls.append(audio_path)
@@ -1958,10 +2012,11 @@ async def _append_quoted_fallback_images(
     event: AstrMessageEvent,
     req: ProviderRequest,
     reply: Reply,
-    settings: QuotedMessageParserSettings,
+    config: MainAgentBuildConfig,
     limit: int,
 ) -> int:
     """Append deduplicated fallback images for a reply-only payload."""
+    settings = _get_quoted_message_parser_settings(config.provider_settings)
     try:
         images = normalize_and_dedupe_strings(
             await extract_quoted_message_images(event, reply, settings=settings)
@@ -1987,9 +2042,17 @@ async def _append_quoted_fallback_images(
         for image_ref in images:
             if image_ref in req.image_urls:
                 continue
-            req.image_urls.append(image_ref)
+            local_paths = await _materialize_image_ref_for_provider(
+                event,
+                image_ref,
+                config,
+            )
+            local_paths = [path for path in local_paths if path not in req.image_urls]
+            if not local_paths:
+                continue
+            req.image_urls.extend(local_paths)
             added += 1
-            _append_quoted_image_attachment(req, image_ref)
+            _append_quoted_image_attachment(req, local_paths[0])
         return added
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -2020,9 +2083,6 @@ async def prepare_event_attachments(
         for component in event.message_obj.message
         if isinstance(component, Reply)
     ]
-    quoted_message_settings = _get_quoted_message_parser_settings(
-        config.provider_settings
-    )
     fallback_quoted_image_count = 0
     for reply in replies:
         has_embedded_image = await _append_quoted_reply_components(
@@ -2033,7 +2093,7 @@ async def prepare_event_attachments(
                 event,
                 req,
                 reply,
-                quoted_message_settings,
+                config,
                 config.max_quoted_fallback_images - fallback_quoted_image_count,
             )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
@@ -2221,7 +2281,16 @@ async def build_main_agent(
 
     # Main-Agent assembly may add request-scoped text. Prepare the selected
     # provider request immediately before runner reset.
-    req = await prepare_provider_request(req, provider=provider)
+    compress_enabled, image_max_size, image_quality = image_compress_args_from_settings(
+        config.provider_settings
+    )
+    req = await prepare_provider_request(
+        req,
+        provider=provider,
+        image_compress_enabled=compress_enabled,
+        image_max_size=image_max_size,
+        image_quality=image_quality,
+    )
     event.set_extra("provider_request", req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:

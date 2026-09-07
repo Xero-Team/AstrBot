@@ -8,11 +8,13 @@ import asyncio
 import base64
 import binascii
 import io
+import math
 import mimetypes
 import os
+import statistics
 import subprocess
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +22,7 @@ from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
 from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -29,10 +32,20 @@ from astrbot.core.utils.tencent_record_helper import (
     wav_to_tencent_silk,
 )
 
-IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
-IMAGE_COMPRESS_DEFAULT_QUALITY = 95
+IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1024
+IMAGE_COMPRESS_DEFAULT_QUALITY = 85
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+PROVIDER_JPEG_MAX_ANIMATED_FRAMES = 8
+PROVIDER_JPEG_MAX_COMPOSE_FRAMES = 64
+PROVIDER_JPEG_STATIC_HAMMING = 12
+PROVIDER_JPEG_DEDUP_HAMMING = 16
+PROVIDER_JPEG_MU_REF = 16 / 64
+PROVIDER_JPEG_T_REF_SECONDS = 8.0
+PROVIDER_JPEG_BLANK_VARIANCE = 12
+PROVIDER_JPEG_DEFAULT_DELAY_MS = 100
+PROVIDER_JPEG_HAMMING_CAP = 32
+PROVIDER_JPEG_BLINK_OCCUPANCY = 0.8
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -177,6 +190,48 @@ class ResolvedMediaFile:
         _cleanup_paths(self.cleanup_paths)
 
 
+@dataclass(slots=True)
+class ComposedFrame:
+    """One fully composited RGB frame used for provider JPEG sampling.
+
+    Attributes:
+        image: Flattened RGB pixels, never a raw GIF patch.
+        duration_ms: Frame delay in milliseconds. Missing or zero delays are
+            stored as ``PROVIDER_JPEG_DEFAULT_DELAY_MS``.
+        global_hash: 64-bit difference hash of the full frame.
+        tile_hashes: Difference hashes of the four 2x2 quadrants.
+    """
+
+    image: PILImage.Image
+    duration_ms: int
+    global_hash: int
+    tile_hashes: tuple[int, int, int, int]
+    color_hash: int
+    tile_colors: tuple[int, int, int, int]
+
+    @classmethod
+    def from_image(cls, image: PILImage.Image, duration_ms: int) -> ComposedFrame:
+        """Build a composed frame, flattening alpha and hashing the result.
+
+        Args:
+            image: Source frame pixels.
+            duration_ms: Frame delay in milliseconds.
+
+        Returns:
+            A composed RGB frame with global and tile dhashes.
+        """
+        rgb = image if image.mode == "RGB" else _flatten_alpha_on_white(image)
+        delay = duration_ms if duration_ms > 0 else PROVIDER_JPEG_DEFAULT_DELAY_MS
+        return cls(
+            rgb,
+            delay,
+            _dhash64(rgb),
+            _tile_dhashes(rgb),
+            _mean_rgb_pack(rgb),
+            _tile_color_packs(rgb),
+        )
+
+
 def is_file_uri(value: object) -> bool:
     """Return whether a value is a ``file:`` URI.
 
@@ -227,7 +282,14 @@ def file_uri_to_path(file_uri: MediaRefStr) -> str:
         # treats a leading // as a non-local authority and raises URLError.
         path = "/" + path.lstrip("/")
     path = url2pathname(path)
-    if len(path) >= 4 and path[0] == "/" and path[2] == ":" and path[1].isalpha():
+    # url2pathname keeps "/" on POSIX but converts it to "\" on Windows, so
+    # accept both prefixes before the drive colon.
+    if (
+        len(path) >= 4
+        and path[0] in ("/", "\\")
+        and path[2] == ":"
+        and path[1].isalpha()
+    ):
         path = path[1:]
     return str(Path(path))
 
@@ -1406,6 +1468,418 @@ async def extract_video_cover(
         return output_path
     except FileNotFoundError:
         raise Exception("ffmpeg not found")
+
+
+def _dhash64(image: PILImage.Image) -> int:
+    """Return a 64-bit difference hash of ``image``."""
+    gray = image.convert("L").resize((9, 8), PILImage.Resampling.LANCZOS)
+    try:
+        pixels = gray.tobytes()
+        value = 0
+        for row in range(8):
+            offset = row * 9
+            for column in range(8):
+                left = pixels[offset + column]
+                right = pixels[offset + column + 1]
+                value = (value << 1) | int(left > right)
+        return value
+    finally:
+        if gray is not image:
+            gray.close()
+
+
+def _mean_rgb_pack(image: PILImage.Image) -> int:
+    sample = image.convert("RGB").resize((1, 1), PILImage.Resampling.BOX)
+    try:
+        pixel = sample.getpixel((0, 0))
+        if not isinstance(pixel, tuple) or len(pixel) < 3:
+            return 0
+        red, green, blue = int(pixel[0]), int(pixel[1]), int(pixel[2])
+        return (red << 16) | (green << 8) | blue
+    finally:
+        if sample is not image:
+            sample.close()
+
+
+def _color_distance(left: int, right: int) -> int:
+    delta = (
+        abs(((left >> 16) & 255) - ((right >> 16) & 255))
+        + abs(((left >> 8) & 255) - ((right >> 8) & 255))
+        + abs((left & 255) - (right & 255))
+    )
+    return min(delta * PROVIDER_JPEG_HAMMING_CAP // 765, PROVIDER_JPEG_HAMMING_CAP)
+
+
+def _max_channel_delta(left: int, right: int) -> int:
+    red = abs(((left >> 16) & 255) - ((right >> 16) & 255))
+    green = abs(((left >> 8) & 255) - ((right >> 8) & 255))
+    blue = abs((left & 255) - (right & 255))
+    return min(max(red, green, blue), PROVIDER_JPEG_HAMMING_CAP)
+
+
+def _quadrant_boxes(image: PILImage.Image) -> tuple[tuple[int, int, int, int], ...]:
+    width, height = image.size
+    mid_w = max(width // 2, 1)
+    mid_h = max(height // 2, 1)
+    return (
+        (0, 0, mid_w, mid_h),
+        (width - mid_w, 0, width, mid_h),
+        (0, height - mid_h, mid_w, height),
+        (width - mid_w, height - mid_h, width, height),
+    )
+
+
+def _tile_color_packs(image: PILImage.Image) -> tuple[int, int, int, int]:
+    packs: list[int] = []
+    for box in _quadrant_boxes(image):
+        tile = image.crop(box)
+        try:
+            packs.append(_mean_rgb_pack(tile))
+        finally:
+            tile.close()
+    return packs[0], packs[1], packs[2], packs[3]
+
+
+def _tile_dhashes(image: PILImage.Image) -> tuple[int, int, int, int]:
+    hashes: list[int] = []
+    for box in _quadrant_boxes(image):
+        tile = image.crop(box)
+        try:
+            hashes.append(_dhash64(tile))
+        finally:
+            tile.close()
+    return hashes[0], hashes[1], hashes[2], hashes[3]
+
+
+def _flatten_alpha_on_white(image: PILImage.Image) -> PILImage.Image:
+    if image.mode == "RGB":
+        return image.copy()
+    rgba = image.convert("RGBA")
+    try:
+        background = PILImage.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.getchannel("A"))
+        return background
+    finally:
+        if rgba is not image:
+            rgba.close()
+
+
+def _is_blank_frame(image: PILImage.Image) -> bool:
+    gray = image.convert("L")
+    try:
+        histogram = gray.histogram()
+        total = sum(histogram)
+        if total == 0:
+            return True
+        mean = sum(index * count for index, count in enumerate(histogram)) / total
+        variance = (
+            sum(count * (index - mean) ** 2 for index, count in enumerate(histogram))
+            / total
+        )
+        if variance >= PROVIDER_JPEG_BLANK_VARIANCE:
+            return False
+        return mean < PROVIDER_JPEG_BLANK_VARIANCE or mean > (
+            255 - PROVIDER_JPEG_BLANK_VARIANCE
+        )
+    finally:
+        if gray is not image:
+            gray.close()
+
+
+def _frame_hamming(left: ComposedFrame, right: ComposedFrame) -> tuple[int, int]:
+    global_h = (left.global_hash ^ right.global_hash).bit_count()
+    tile_h = max(
+        (left_tile ^ right_tile).bit_count()
+        for left_tile, right_tile in zip(
+            left.tile_hashes, right.tile_hashes, strict=True
+        )
+    )
+    color_h = _color_distance(left.color_hash, right.color_hash)
+    tile_color_h = max(
+        _max_channel_delta(left_color, right_color)
+        for left_color, right_color in zip(
+            left.tile_colors, right.tile_colors, strict=True
+        )
+    )
+    return global_h, max(tile_h, color_h, tile_color_h)
+
+
+def _is_near_static(frame: ComposedFrame, first: ComposedFrame) -> bool:
+    global_h, tile_h = _frame_hamming(frame, first)
+    return (
+        global_h < PROVIDER_JPEG_STATIC_HAMMING
+        and tile_h < PROVIDER_JPEG_STATIC_HAMMING
+    )
+
+
+def _adjacent_changes(frames: Sequence[ComposedFrame]) -> list[int]:
+    return [
+        min(
+            max(*_frame_hamming(frames[index], frames[index - 1])),
+            PROVIDER_JPEG_HAMMING_CAP,
+        )
+        for index in range(1, len(frames))
+    ]
+
+
+def _non_blank_frames(frames: Sequence[ComposedFrame]) -> list[ComposedFrame]:
+    return [frame for frame in frames if not _is_blank_frame(frame.image)]
+
+
+def animated_frame_budget(frames: Sequence[ComposedFrame]) -> float:
+    """Return a sampling budget ``f`` in ``[0, 1]``.
+
+    ``0`` means the source is static, blink-static, or blank-padded. Higher
+    values mean more adjacent change and/or longer duration.
+
+    Args:
+        frames: Composed RGB frames with delays and dhashes.
+
+    Returns:
+        Sampling budget in ``[0, 1]``.
+    """
+    remaining = _non_blank_frames(frames)
+    if len(remaining) <= 1:
+        return 0.0
+    first = remaining[0]
+    if all(_is_near_static(frame, first) for frame in remaining):
+        return 0.0
+    total_ms = 0
+    same_ms = 0
+    for frame in remaining:
+        duration = (
+            frame.duration_ms
+            if frame.duration_ms > 0
+            else PROVIDER_JPEG_DEFAULT_DELAY_MS
+        )
+        total_ms += duration
+        if _is_near_static(frame, first):
+            same_ms += duration
+    if total_ms > 0 and same_ms / total_ms >= PROVIDER_JPEG_BLINK_OCCUPANCY:
+        return 0.0
+    changes = _adjacent_changes(remaining)
+    if not changes:
+        return 0.0
+    mu = statistics.fmean(changes) / 64.0
+    t_seconds = total_ms / 1000.0
+    ratio = (mu / PROVIDER_JPEG_MU_REF) ** 2 * (t_seconds / PROVIDER_JPEG_T_REF_SECONDS)
+    return min(max(1.0 - math.exp(-ratio), 0.0), 1.0)
+
+
+def _first_index_reaching(cumulative: Sequence[int], target: float) -> int:
+    for index, value in enumerate(cumulative):
+        if value >= target:
+            return index
+    return max(len(cumulative) - 1, 0)
+
+
+def _cumulative_quantile_indices(changes: Sequence[int], count: int) -> list[int]:
+    if count <= 1:
+        return [0]
+    cumulative = [0]
+    for change in changes:
+        cumulative.append(cumulative[-1] + change)
+    total = cumulative[-1]
+    if total <= 0:
+        return [0]
+    return [
+        _first_index_reaching(cumulative, t * total / (count - 1)) for t in range(count)
+    ]
+
+
+def _pick_animated_frame_indices(frames: Sequence[ComposedFrame], k: int) -> list[int]:
+    n_frames = len(frames)
+    if n_frames == 0:
+        return []
+    if n_frames == 1 or k <= 1:
+        return [0]
+    k = min(k, n_frames, PROVIDER_JPEG_MAX_ANIMATED_FRAMES)
+    changes = _adjacent_changes(frames)
+    mean = statistics.fmean(changes) if changes else 0.0
+    std = statistics.pstdev(changes) if len(changes) >= 2 else 0.0
+    cuts: list[int] = []
+    if std > 0:
+        threshold = mean + std
+        cuts = [index + 1 for index, change in enumerate(changes) if change > threshold]
+    if 1 <= len(cuts) < k:
+        selected = [0]
+        for cut in cuts:
+            if cut not in selected:
+                selected.append(cut)
+        if len(selected) < k:
+            for index in _cumulative_quantile_indices(changes, k):
+                if index not in selected:
+                    selected.append(index)
+                if len(selected) >= k:
+                    break
+        return sorted(selected)
+    return _cumulative_quantile_indices(changes, k)
+
+
+def _dedupe_frame_indices(
+    frames: Sequence[ComposedFrame],
+    indices: Sequence[int],
+) -> list[int]:
+    ordered = sorted({index for index in indices if 0 <= index < len(frames)})
+    if not ordered:
+        return []
+    kept = [ordered[0]]
+    for index in ordered[1:]:
+        global_h, region_h = _frame_hamming(frames[index], frames[kept[-1]])
+        if max(global_h, region_h) < PROVIDER_JPEG_DEDUP_HAMMING:
+            continue
+        kept.append(index)
+    if len(kept) > 1:
+        global_h, region_h = _frame_hamming(frames[kept[-1]], frames[kept[0]])
+        if max(global_h, region_h) < PROVIDER_JPEG_DEDUP_HAMMING:
+            kept.pop()
+    return kept
+
+
+def _compose_image_frames(image_path: str) -> list[ComposedFrame]:
+    frames: list[ComposedFrame] = []
+    with PILImage.open(image_path) as source:
+        canvas = PILImage.new("RGBA", source.size, (0, 0, 0, 0))
+        n_frames = min(
+            getattr(source, "n_frames", 1) or 1,
+            PROVIDER_JPEG_MAX_COMPOSE_FRAMES,
+        )
+        try:
+            for index in range(n_frames):
+                source.seek(index)
+                duration = source.info.get("duration") or PROVIDER_JPEG_DEFAULT_DELAY_MS
+                if duration <= 0:
+                    duration = PROVIDER_JPEG_DEFAULT_DELAY_MS
+                disposal = getattr(source, "disposal_method", None)
+                if disposal is None:
+                    disposal = source.info.get("disposal", 0) or 0
+                frame_rgba = source.convert("RGBA")
+                try:
+                    if frame_rgba.size != canvas.size:
+                        padded = PILImage.new("RGBA", canvas.size, (0, 0, 0, 0))
+                        padded.paste(frame_rgba, (0, 0))
+                        frame_rgba.close()
+                        frame_rgba = padded
+                    composed = canvas.copy()
+                    composed.paste(frame_rgba, (0, 0), frame_rgba)
+                finally:
+                    frame_rgba.close()
+                rgb = _flatten_alpha_on_white(composed)
+                frames.append(ComposedFrame.from_image(rgb, int(duration)))
+                if disposal == 2:
+                    composed.close()
+                    canvas.close()
+                    canvas = PILImage.new("RGBA", source.size, (0, 0, 0, 0))
+                else:
+                    canvas.close()
+                    canvas = composed
+        finally:
+            canvas.close()
+    return frames
+
+
+def _save_provider_jpeg(
+    image: PILImage.Image,
+    *,
+    max_size: int | None,
+    quality: int,
+) -> str:
+    working = image if image.mode == "RGB" else _flatten_alpha_on_white(image)
+    converted = working if working is not image else None
+    resized = None
+    try:
+        if max_size is not None and max(working.size) > max_size:
+            resized = working.copy()
+            resized.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+            working = resized
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        output_path = temp_dir / f"provider_jpeg_{uuid.uuid4().hex}.jpg"
+        working.save(
+            output_path,
+            "JPEG",
+            quality=quality,
+            optimize=IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
+        )
+        return str(output_path)
+    finally:
+        if resized is not None:
+            resized.close()
+        if converted is not None:
+            converted.close()
+
+
+def _prepare_images_for_provider_sync(
+    url_or_path: str,
+    max_size: int,
+    quality: int,
+    resize: bool,
+) -> list[str]:
+    source = Path(url_or_path)
+    if not source.is_file():
+        return []
+    try:
+        frames = _compose_image_frames(str(source))
+    except OSError, ValueError, UnidentifiedImageError, SyntaxError:
+        return []
+    if not frames:
+        return []
+    try:
+        remaining = _non_blank_frames(frames)
+        work = remaining or frames[:1]
+        budget = animated_frame_budget(frames)
+        k = min(
+            max(1 + round(7 * budget), 1),
+            PROVIDER_JPEG_MAX_ANIMATED_FRAMES,
+        )
+        indices = _dedupe_frame_indices(work, _pick_animated_frame_indices(work, k))
+        quality = min(max(int(quality), 1), 100)
+        resize_to = max(int(max_size), 1) if resize else None
+        return [
+            _save_provider_jpeg(work[index].image, max_size=resize_to, quality=quality)
+            for index in indices
+        ]
+    finally:
+        for frame in frames:
+            frame.image.close()
+
+
+async def prepare_images_for_provider(
+    url_or_path: str,
+    *,
+    max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    resize: bool = True,
+) -> list[str]:
+    """Convert a local image into 0..8 JPEG files for a chat provider.
+
+    Alpha is flattened onto white. Output is never enlarged. Animated GIF/WebP
+    sources are dhash-sampled from at most 64 composed frames. Bytes that are
+    not a decodable image yield an empty list.
+
+    Args:
+        url_or_path: Local filesystem path to the source image.
+        max_size: Longest edge in pixels when ``resize`` is true.
+        quality: JPEG quality from 1 to 100.
+        resize: When true, thumbnail down if the long edge exceeds ``max_size``.
+
+    Returns:
+        Temporary JPEG paths in increasing source-frame order. Empty when the
+        source cannot be decoded as an image.
+    """
+    try:
+        return await asyncio.to_thread(
+            _prepare_images_for_provider_sync,
+            url_or_path,
+            max_size,
+            quality,
+            resize,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to prepare provider JPEG: %s", exc)
+        return []
 
 
 def _compress_image_sync(

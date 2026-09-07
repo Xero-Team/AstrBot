@@ -16,7 +16,7 @@
 | Video        | Yes     | Yes  |       |
 | File         | Yes     | Yes  |       |
 
-Proactive message push: Supported.
+Proactive message push: Supported. Messages are sent as Markdown by default. Disable `use_markdown` on the adapter, or let a plugin call `use_markdown()` to override.
 
 ## Create a QQ Bot in AstrBot with One-click QR Setup (Recommended)
 
@@ -110,6 +110,7 @@ If QR setup is unavailable, choose `Manual setup` and fill in:
 - `appid`: from QQ Official Bot platform.
 - `secret`: from QQ Official Bot platform.
 - Unified Webhook Mode (`unified_webhook_mode`): keep enabled.
+- Use Markdown for proactive messages (`use_markdown`): enabled by default. Disable it to send proactive messages as plain `content`. Archives without this key default to Markdown; that changes this fork's previous `content` payload, and bots that reject native Markdown fall back to `content`.
 
 Click `Save`.
 

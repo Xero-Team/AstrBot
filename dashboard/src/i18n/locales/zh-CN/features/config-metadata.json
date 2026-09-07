@@ -507,18 +507,18 @@
         },
         "image_compress_enabled": {
           "description": "启用图片压缩",
-          "hint": "启用后，发送给多模态模型前会先压缩本地大图片。"
+          "hint": "送给模型的图片会转为 JPEG。关闭时仍会转 JPEG，但不会按最长边缩小。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。"
         },
         "image_compress_options": {
           "description": "图片压缩配置",
-          "hint": "用于控制图片压缩的尺寸、质量和触发阈值。",
+          "hint": "控制送给模型的 JPEG 最长边和质量。图片始终转为 JPEG，从不放大；动画最多抽 8 帧。",
           "max_size": {
             "description": "最大边长",
-            "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。"
+            "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。"
           },
           "quality": {
             "description": "JPEG 质量",
-            "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。"
+            "hint": "JPEG 输出质量，范围为 1-100。送给模型的图片始终是 JPEG。"
           }
         },
         "reachability_check": {
@@ -829,6 +829,10 @@
       "unified_webhook_mode": {
         "description": "统一 Webhook 模式",
         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/v1/webhooks/platforms/{webhook_uuid}。"
+      },
+      "use_markdown": {
+        "description": "主动消息使用 Markdown",
+        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",

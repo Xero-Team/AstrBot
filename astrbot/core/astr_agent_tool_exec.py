@@ -441,7 +441,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         btw = btw if isinstance(btw, dict) else {}
         btw_enabled = bool(btw.get("enabled", False))
         provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        runtime = str(provider_settings.get("computer_use_runtime", "none"))
         get_extra = getattr(event, "get_extra", None)
         loop_mode = get_extra("btw_loop") if callable(get_extra) else None
         if btw_enabled and loop_mode == "conversation":

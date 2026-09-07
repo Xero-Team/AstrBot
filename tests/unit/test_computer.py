@@ -5,8 +5,8 @@ filesystem operations, Python execution, shell execution, and security restricti
 """
 
 import shlex
-import subprocess
 import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,9 +41,17 @@ class TestLocalBooterInit:
         assert booter.shell is booter._shell
 
 
+def _powershell_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _shell_command(args: list[str]) -> str:
     if sys.platform == "win32":
-        return subprocess.list2cmdline(args)
+        executable, *rest = args
+        quoted_rest = " ".join(_powershell_quote(arg) for arg in rest)
+        # PowerShell needs the call operator (&) for quoted, space-containing
+        # executables; POSIX shells take the plain quoted form.
+        return f"& {_powershell_quote(executable)} {quoted_rest}".rstrip()
     return shlex.join(args)
 
 
@@ -402,6 +410,25 @@ class TestComputerBooterBase:
 class TestComputerClient:
     """Tests for computer_client module functions."""
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("runtime", [None, "none", "local"])
+    async def test_get_booter_requires_explicit_runtime(self, runtime):
+        """An omitted runtime must not start or reuse a computer environment."""
+        computer_runtime = ComputerRuntime()
+        provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
+        mock_context = MagicMock()
+        mock_config = MagicMock()
+        mock_config.get = lambda key, default=None: {
+            "provider_settings": provider_settings
+        }.get(key, default)
+        mock_context.get_config = MagicMock(return_value=mock_config)
+        if runtime == "local":
+            result = await computer_runtime.get_booter(mock_context, "session")
+            assert result is computer_runtime.get_local_booter()
+        else:
+            with pytest.raises(RuntimeError, match="disabled by configuration"):
+                await computer_runtime.get_booter(mock_context, "session")
+
     def test_get_local_booter(self):
         """A runtime reuses its own local booter without sharing globally."""
         runtime = ComputerRuntime()
@@ -575,91 +602,74 @@ class TestComputerClient:
             assert runtime.get_session_booter(session_id) is mock_new_booter
 
 
+def _isolate_sync_skill_paths(monkeypatch, tmp_path: Path) -> Path:
+    """Keep SkillManager and skill-bundle writes inside this test's temp root."""
+    data_root = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    temp_root = tmp_path / "temp"
+    data_root.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    return skills_root
+
+
 class TestSyncSkillsToSandbox:
     """Tests for _sync_skills_to_sandbox function."""
 
     @pytest.mark.asyncio
-    async def test_sync_skills_no_skills_dir(self):
+    async def test_sync_skills_no_skills_dir(self, monkeypatch, tmp_path):
         """Test sync does nothing when skills directory doesn't exist."""
         from astrbot.core.computer import computer_client
 
+        _isolate_sync_skill_paths(monkeypatch, tmp_path)
         mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock()
+        mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0, "stdout": ""})
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        with patch(
-            "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-            return_value="/nonexistent/path",
-        ):
-            await computer_client._sync_skills_to_sandbox(mock_booter)
-            mock_booter.upload_file.assert_not_called()
+        await computer_client._sync_skills_to_sandbox(mock_booter)
+        mock_booter.upload_file.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_skills_empty_dir(self):
+    async def test_sync_skills_empty_dir(self, monkeypatch, tmp_path):
         """Test sync does nothing when skills directory is empty."""
         from astrbot.core.computer import computer_client
 
+        skills_root = _isolate_sync_skill_paths(monkeypatch, tmp_path)
+        skills_root.mkdir(parents=True, exist_ok=True)
         mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock()
+        mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0, "stdout": ""})
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/empty",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([]),
-            ),
-        ):
-            await computer_client._sync_skills_to_sandbox(mock_booter)
-            mock_booter.upload_file.assert_not_called()
+        await computer_client._sync_skills_to_sandbox(mock_booter)
+        mock_booter.upload_file.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_skills_success(self):
+    async def test_sync_skills_success(self, monkeypatch, tmp_path):
         """Test successful skills sync."""
         from astrbot.core.computer import computer_client
 
+        skills_root = _isolate_sync_skill_paths(monkeypatch, tmp_path)
+        skill_dir = skills_root / "demo-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\ndescription: demo\n---\n# demo\n",
+            encoding="utf-8",
+        )
         mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0})
+        mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0, "stdout": ""})
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        mock_skill_file = MagicMock()
-        mock_skill_file.name = "skill.py"
-        mock_skill_file.__str__ = lambda: "/tmp/skills/skill.py"
+        await computer_client._sync_skills_to_sandbox(mock_booter)
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/skills",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([mock_skill_file]),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_temp_path",
-                return_value="/tmp",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.shutil.make_archive",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.exists",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.remove",
-            ),
-        ):
-            # Should not raise
-            await computer_client._sync_skills_to_sandbox(mock_booter)
+        mock_booter.upload_file.assert_awaited()

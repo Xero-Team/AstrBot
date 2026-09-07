@@ -12,6 +12,20 @@ def _write_skill(root: Path, name: str, description: str) -> None:
     )
 
 
+def test_load_config_creates_missing_data_directory(monkeypatch, tmp_path: Path):
+    data_dir = tmp_path / "missing" / "data"
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+
+    manager = SkillManager(skills_root=str(tmp_path / "skills"))
+    loaded = manager._load_config()
+
+    assert loaded == {"skills": {}}
+    assert (data_dir / "skills.json").is_file()
+
+
 def test_list_skills_discovers_plugin_skills(monkeypatch, tmp_path: Path):
     data_dir = tmp_path / "data"
     skills_root = tmp_path / "skills"

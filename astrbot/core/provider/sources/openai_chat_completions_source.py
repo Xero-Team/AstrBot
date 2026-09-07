@@ -16,6 +16,7 @@ from openai.types.completion_usage import CompletionUsage
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
+from astrbot.core.agent.history_sanitizer import IMAGE_HISTORY_PLACEHOLDER
 from astrbot.core.agent.llm_types import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.agent.message import (
     AudioURLPart,
@@ -32,6 +33,7 @@ from astrbot.core.exceptions import (
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -379,6 +381,8 @@ class ProviderOpenAIChatCompletions(Provider):
             url, image_detail = self._extract_image_part_info(part)
             if not url:
                 return part
+            if url == IMAGE_HISTORY_PLACEHOLDER:
+                return {"type": "text", "text": url}
 
             try:
                 resolved_part = await self._resolve_image_part(
@@ -386,13 +390,15 @@ class ProviderOpenAIChatCompletions(Provider):
                 )
             except Exception as exc:
                 logger.warning(
-                    "图片 %s 预处理失败，将保留原始内容。错误: %s",
-                    url,
-                    exc,
+                    "图片 %s 预处理失败，将忽略。错误: %s",
+                    describe_media_ref(url),
+                    safe_error("", exc),
                 )
-                return part
+                return {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
 
-            return resolved_part or part
+            if resolved_part is None:
+                return {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
+            return resolved_part
 
         if part.get("type") == "audio_url":
             audio_ref = self._extract_audio_part_info(part)

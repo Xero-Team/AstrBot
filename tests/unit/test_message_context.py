@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -8,6 +9,7 @@ from astrbot.core.message.components import (
     Face,
     File,
     Forward,
+    Image,
     Json,
     Node,
     Plain,
@@ -70,6 +72,7 @@ def _make_event(components, client: _NapCatContextClient):
         message_obj=SimpleNamespace(message=components),
         adapter=SimpleNamespace(client=client),
         get_group_id=lambda: "",
+        track_temporary_local_file=lambda *_args, **_kwargs: None,
     )
 
 
@@ -398,10 +401,100 @@ async def test_append_message_component_context_makes_forward_only_request_valid
     event = _make_event([Forward(id="mock-forward")], client)
     req = ProviderRequest(prompt="")
     config = ama.MainAgentBuildConfig(tool_call_timeout=60)
+    local_path = "/tmp/mock-agent-forward.jpg"
 
-    await ama._append_message_component_context(event, req, config)
+    with (
+        patch.object(
+            Image,
+            "convert_to_file_path",
+            AsyncMock(return_value=local_path),
+        ),
+        patch(
+            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
+        ),
+    ):
+        await ama._append_message_component_context(event, req, config)
 
     assert any(
         "Mock Sender: hello" in part.text for part in req.extra_user_content_parts
     )
-    assert req.image_urls == [image_url]
+    assert req.image_urls == [local_path]
+    assert image_url not in req.image_urls
+    assert any(local_path in part.text for part in req.extra_user_content_parts)
+    assert not any(image_url in part.text for part in req.extra_user_content_parts)
+
+
+def _forward_payload_with_image_urls(image_urls: list[str]) -> dict[str, dict]:
+    return {
+        "mock-forward": {
+            "data": {
+                "messages": [
+                    {
+                        "type": "node",
+                        "data": {
+                            "nickname": "Mock Sender",
+                            "message": [
+                                {"type": "text", "data": {"text": "hello"}},
+                                *[
+                                    {"type": "image", "data": {"url": image_url}}
+                                    for image_url in image_urls
+                                ],
+                            ],
+                        },
+                    }
+                ]
+            }
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_append_message_component_context_caps_forwarded_image_refs():
+    image_urls = [
+        f"https://img.example.com/mock-agent-forward-{index}.jpg" for index in range(21)
+    ]
+    client = _NapCatContextClient(_forward_payload_with_image_urls(image_urls))
+    event = _make_event([Forward(id="mock-forward")], client)
+    req = ProviderRequest(prompt="")
+    config = ama.MainAgentBuildConfig(tool_call_timeout=60)
+    convert_calls: list[str] = []
+
+    async def _fake_convert(self):
+        path = f"/tmp/mock-agent-forward-{len(convert_calls)}.jpg"
+        convert_calls.append(self.file)
+        return path
+
+    with (
+        patch.object(Image, "convert_to_file_path", _fake_convert),
+        patch(
+            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
+        ),
+    ):
+        await ama._append_message_component_context(event, req, config)
+
+    assert convert_calls == image_urls[:20]
+    assert req.image_urls == [
+        f"/tmp/mock-agent-forward-{index}.jpg" for index in range(20)
+    ]
+
+    zero_req = ProviderRequest(prompt="")
+    zero_config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        max_quoted_fallback_images=0,
+    )
+    convert_calls.clear()
+    zero_event = _make_event([Forward(id="mock-forward")], client)
+
+    with (
+        patch.object(Image, "convert_to_file_path", _fake_convert),
+        patch(
+            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
+        ),
+    ):
+        await ama._append_message_component_context(zero_event, zero_req, zero_config)
+
+    assert convert_calls == []
+    assert zero_req.image_urls == []

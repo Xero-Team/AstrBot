@@ -285,7 +285,7 @@ class SkillsService:
     def get_skills(self) -> dict:
         """Return the Skill inventory with runtime plugin activation state."""
         provider_settings = self.config.get("provider_settings", {})
-        runtime = provider_settings.get("computer_use_runtime", "local")
+        runtime = provider_settings.get("computer_use_runtime", "none")
         skill_mgr = self.skill_manager
         skills = skill_mgr.list_skills(
             active_only=False,

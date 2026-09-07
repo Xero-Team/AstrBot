@@ -82,6 +82,8 @@ async def test_sandbox_file_download_handles_windows_remote_filename(
     )
 
     async def _download_file(_remote_path, local_path):
+        # The local temp path keeps the original remote basename; separators
+        # are platform-native, so only the basename is asserted here.
         assert local_path.endswith("report.txt")
         assert os.path.basename(local_path).count("report.txt") == 1
 

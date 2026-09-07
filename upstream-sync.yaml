@@ -5,13 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 6b848090525a0eebe622a9d46b032a6c5148c4a3
-  synced_at_utc: 2026-09-06T09:22:58Z
+  commit: a412146401426c0cdff8bbefb8627a03da519da8
+  synced_at_utc: 2026-09-07T17:04:55Z
   sync_method: adapt
-  source_pr: '9899'
+  source_pr: '9975'
   note: >-
-    Reviewed 9852285bdafcbfd0078ae5a4c5f326a068a0dab7..6b848090525a0eebe622a9d46b032a6c5148c4a3
-    (1 commit). Adapted #9899 onto the current Gemini provider: construct
-    ThinkingConfig(thinking_level=...) per request, map Gemini 3.7 MINIMAL to
-    MEDIUM, and keep tests under tests/unit/provider/test_gemini_source.py.
-    Implementation commit f388a5327a54ad12d72c1098a73966f16f9c5acf.
+    Reviewed 1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b..a412146401426c0cdff8bbefb8627a03da519da8
+    (4 commits). Adapted 2, skipped 2, no cherry-picks. Skipped #9955 Japanese
+    i18n (zh-CN/en-US only; no ru-RU or docs.astrbot.app). Adapted #9973 onto
+    MetricsRuntime._post_metrics
+    (909c5748bbde7afad624a222e2d25628c0f4e03f). Skipped #9974 docker/setup-qemu-action
+    because this fork has no docker-image.yml. Adapted #9975 to 4.28.0,
+    renamed changelogs/v4.28.0-beta.1.md, dropped [WIP]
+    (1b3f6839bfcffab09c8c9e46810949f8a5ff3342). Cursor matches upstream/master.

@@ -2,7 +2,7 @@ import asyncio
 import shutil
 import uuid
 from collections.abc import Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import aiofiles
@@ -57,10 +57,10 @@ class KnowledgeBaseService:
         """
         raw = str(filename or "document").replace("\\", "/")
         parts: list[str] = []
-        for part in Path(raw).parts:
-            if part in {"", ".", "..", "/", "\\"}:
+        for part in PurePosixPath(raw).parts:
+            if part in {"", ".", "..", "/"}:
                 continue
-            if len(part) == 2 and part[1] == ":":
+            if len(part) == 2 and part[1] == ":" and part[0].isalpha():
                 continue
             parts.append(part)
         if not parts:

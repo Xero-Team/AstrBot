@@ -729,10 +729,62 @@ class TestRunActiveAgentJob:
         assert config.fallback_provider_ids == ["fallback-provider"]
         assert config.request_max_retries == 4
         assert config.provider_settings == provider_settings
+        assert config.computer_use_runtime == "none"
+        assert config.llm_safety_mode is True
         request = captured["req"]
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_honors_explicit_runtime_and_safety_mode(
+        self, cron_manager
+    ):
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_settings": {"computer_use_runtime": "local"},
+            "agent_runner": {"config": {"persona": {"safety_mode": False}}},
+        }
+        cron_manager.ctx = ctx
+        captured = {}
+
+        class FakeRunner:
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return None
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["config"] = config
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=MagicMock(history="[]")),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        assert captured["config"].computer_use_runtime == "local"
+        assert captured["config"].llm_safety_mode is False
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

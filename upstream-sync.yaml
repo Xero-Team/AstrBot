@@ -5,18 +5,25 @@ upstream:
   branch: master
 
 last_synced:
-  commit: bd4b198a5f2c9feaf992e773e07421e15169bea4
-  synced_at_utc: 2026-09-06T13:39:42Z
+  commit: 1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b
+  synced_at_utc: 2026-09-07T14:53:13Z
   sync_method: adapt
-  source_pr: '9908'
+  source_pr: '9941'
   note: >-
-    Reviewed 6b848090525a0eebe622a9d46b032a6c5148c4a3..bd4b198a5f2c9feaf992e773e07421e15169bea4
-    (3 commits). Adapted #9958 onto the split config integrity helpers so
-    schema "type": "dict" mappings survive load and Dashboard plugin save
-    (d41631024d8fcbf6d7e812126c84416bd6ffe5c3). Adapted #9957 to append the
-    skills-like requery instruction as a user message and keep tests under
-    tests/unit/test_tool_loop_agent_runner.py
-    (1b00c9364306f2f9057ef89b523ab5d095cda1cd). Adapted #9908 by setting
-    items-per-page-options on the existing multiline DocumentsTab
-    v-data-table-server (00347f9ec5c7166362ab174340999b8140e8cfa1).
-    No skips.
+    Reviewed bd4b198a5f2c9feaf992e773e07421e15169bea4..1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b
+    (5 commits). Adapted 5, skipped 0, no version bump. #9954 fork-shaped 3-OS
+    blocking pytest matrix with Windows continue-on-error, kept _split_path_mapping,
+    tests under tests/unit/ (cfbccec1bb22fdfa34e11e2811c0142cf75ca23b). #9914
+    QQ Official proactive Markdown with unique-session suffix strip, webhook
+    single super().send_by_session, en-US/zh-CN i18n only
+    (46f8cae9db6dc9c10e50ce439cac052ee3179e2c). #9971 missing computer_use_runtime
+    is none; keep local_agent_runtime_from_profile and persona safety_mode
+    (27adaab319d3b777b8167719f67a669084a01047). #9910 WebChat history filters via
+    self.config and ConversationWorkspacePage.vue
+    (bf43e23570590c837518899b4be1a64ee022e524). #9941 dedicated watchdog thread
+    keeping create_event_loop_diagnostic_jobs and dump_after, with token/URL
+    redaction (b1ea0f0bafceb49c220d0dc143ee90c1011f5af4). Focused tests plus
+    blocking pytest. Fork-local follow-ups after this cursor: Windows media
+    paths/shell shutdown, watchdog dump-retry test, residual-risk docs.
+    After this interval, upstream/master advanced to
+    ec848fc2c3c49a45ddee01d62c20ec0fc8b0291c (#9955 Japanese i18n), not absorbed.

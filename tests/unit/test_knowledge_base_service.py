@@ -28,6 +28,7 @@ def _make_service(*, kb_manager=None) -> KnowledgeBaseService:
         ("../etc/passwd", "etc/passwd"),
         ("/etc/passwd", "etc/passwd"),
         ("C:\\docs\\guide.md", "docs/guide.md"),
+        ("C:/docs/guide.md", "docs/guide.md"),
         ("..", "document"),
         ("", "document"),
         (None, "document"),

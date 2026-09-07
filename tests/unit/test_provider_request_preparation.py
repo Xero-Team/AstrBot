@@ -9,6 +9,7 @@ import pytest
 
 from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest
 from astrbot.core.agent.request_preparation import (
+    _safe_media_ref,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -33,6 +34,13 @@ class _SDKProvider(Provider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.request_kwargs = kwargs
         return LLMResponse(role="assistant", completion_text="prepared")
+
+
+def test_safe_media_ref_accepts_windows_drive_paths():
+    assert _safe_media_ref(r"C:\Users\a.png") == r"C:\Users\a.png"
+    assert _safe_media_ref("D:/tmp/a.gif") == "D:/tmp/a.gif"
+    assert _safe_media_ref("ftp://example.invalid/a.png") is None
+    assert _safe_media_ref("http://127.0.0.1/a.png") is None
 
 
 @pytest.mark.asyncio

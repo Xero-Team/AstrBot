@@ -107,6 +107,21 @@ def _decode_shell_output(output: bytes | str | None) -> str:
     )
 
 
+def _signal_asyncio_process(
+    process: asyncio.subprocess.Process, *, terminate: bool
+) -> None:
+    """Signal an asyncio subprocess, ignoring processes that already exited."""
+    if process.returncode is not None:
+        return
+    try:
+        if terminate:
+            process.terminate()
+        else:
+            process.kill()
+    except ProcessLookupError:
+        return
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     _sessions: dict[str, _LocalShellSession] = field(default_factory=dict, init=False)
@@ -658,9 +673,9 @@ class LocalShellComponent(ShellComponent):
                     timeout=5,
                 )
                 if result.returncode != 0:
-                    process.terminate()
+                    _signal_asyncio_process(process, terminate=True)
             except Exception:
-                process.terminate()
+                _signal_asyncio_process(process, terminate=True)
         else:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -670,13 +685,18 @@ class LocalShellComponent(ShellComponent):
             await asyncio.wait_for(process.wait(), 5)
         except TimeoutError:
             if sys.platform == "win32":
-                process.kill()
+                _signal_asyncio_process(process, terminate=False)
             else:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-            await process.wait()
+            try:
+                await process.wait()
+            except ProcessLookupError:
+                return
+        except ProcessLookupError:
+            return
 
 
 @dataclass

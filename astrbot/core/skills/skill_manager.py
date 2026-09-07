@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from datetime import UTC, datetime
@@ -63,15 +64,17 @@ class SkillManager(SkillManagerInventoryMixin, SkillManagerArchiveMixin):
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):
-            self._save_config(DEFAULT_SKILLS_CONFIG.copy())
-            return DEFAULT_SKILLS_CONFIG.copy()
+            config = copy.deepcopy(DEFAULT_SKILLS_CONFIG)
+            self._save_config(config)
+            return config
         with open(self.config_path, encoding="utf-8") as file:
             data = json.load(file)
         if not isinstance(data, dict) or "skills" not in data:
-            return DEFAULT_SKILLS_CONFIG.copy()
+            return copy.deepcopy(DEFAULT_SKILLS_CONFIG)
         return data
 
     def _save_config(self, config: dict) -> None:
+        Path(self.config_path).parent.mkdir(parents=True, exist_ok=True)
         with open(self.config_path, "w", encoding="utf-8") as file:
             json.dump(config, file, ensure_ascii=False, indent=4)
 

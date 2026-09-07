@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest
-from astrbot.core.agent.request_preparation import prepare_provider_request
+from astrbot.core.agent.request_preparation import (
+    image_compress_args_from_settings,
+    prepare_provider_request,
+)
 from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.provider.provider import Provider
 
@@ -88,6 +91,7 @@ async def test_sdk_llm_generate_uses_shared_preparation_without_global_hook():
     context.provider_manager = SimpleNamespace(
         get_provider_by_id=AsyncMock(return_value=provider),
     )
+    context.get_config = MagicMock(return_value={})
     data_image = (
         "data:image/png;base64,"
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/"
@@ -231,3 +235,92 @@ async def test_prepare_provider_request_gif_becomes_jpeg_when_compress_off(
     assert prepared.image_urls
     assert all(url.startswith("data:image/jpeg;base64,") for url in prepared.image_urls)
     assert not any("data:image/gif" in url for url in prepared.image_urls)
+
+
+def test_image_compress_args_from_settings_defaults_and_clamps():
+    assert image_compress_args_from_settings(None) == (True, 1024, 85)
+    enabled, max_size, quality = image_compress_args_from_settings(
+        {
+            "image_compress_enabled": False,
+            "image_compress_options": {"max_size": 0, "quality": 200},
+        }
+    )
+    assert enabled is False
+    assert max_size == 1
+    assert quality == 100
+
+
+@pytest.mark.asyncio
+async def test_prepare_provider_request_resizes_when_compress_enabled(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    import astrbot.core.utils.media_utils as media_utils
+
+    monkeypatch.setattr(
+        media_utils, "get_astrbot_temp_path", lambda: str(tmp_path / "t")
+    )
+    image_path = tmp_path / "wide.png"
+    PILImage.new("RGB", (2048, 32), (10, 20, 30)).save(image_path)
+    request = ProviderRequest(prompt="look", image_urls=[str(image_path)])
+
+    prepared = await prepare_provider_request(
+        request,
+        image_compress_enabled=True,
+        image_max_size=1024,
+    )
+
+    jpeg_bytes = base64.b64decode(prepared.image_urls[0].split(",", 1)[1])
+    with PILImage.open(BytesIO(jpeg_bytes)) as jpeg:
+        assert jpeg.format == "JPEG"
+        assert max(jpeg.size) <= 1024
+
+
+@pytest.mark.asyncio
+async def test_prepare_provider_request_keeps_long_edge_when_compress_off(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    import astrbot.core.utils.media_utils as media_utils
+
+    monkeypatch.setattr(
+        media_utils, "get_astrbot_temp_path", lambda: str(tmp_path / "t")
+    )
+    image_path = tmp_path / "wide.png"
+    PILImage.new("RGB", (2048, 32), (10, 20, 30)).save(image_path)
+    request = ProviderRequest(prompt="look", image_urls=[str(image_path)])
+
+    prepared = await prepare_provider_request(
+        request,
+        image_compress_enabled=False,
+        image_max_size=1024,
+    )
+
+    jpeg_bytes = base64.b64decode(prepared.image_urls[0].split(",", 1)[1])
+    with PILImage.open(BytesIO(jpeg_bytes)) as jpeg:
+        assert jpeg.format == "JPEG"
+        assert jpeg.size == (2048, 32)
+
+
+@pytest.mark.asyncio
+async def test_prepare_provider_request_reencodes_existing_jpeg(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    import astrbot.core.utils.media_utils as media_utils
+
+    monkeypatch.setattr(
+        media_utils, "get_astrbot_temp_path", lambda: str(tmp_path / "t")
+    )
+    image_path = tmp_path / "already.jpg"
+    PILImage.new("RGB", (16, 16), (4, 5, 6)).save(image_path, format="JPEG", quality=95)
+    original = image_path.read_bytes()
+    request = ProviderRequest(prompt="look", image_urls=[str(image_path)])
+
+    prepared = await prepare_provider_request(request)
+
+    jpeg_bytes = base64.b64decode(prepared.image_urls[0].split(",", 1)[1])
+    assert jpeg_bytes != original
+    with PILImage.open(BytesIO(jpeg_bytes)) as jpeg:
+        assert jpeg.format == "JPEG"

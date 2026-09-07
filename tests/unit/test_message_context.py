@@ -411,7 +411,7 @@ async def test_append_message_component_context_makes_forward_only_request_valid
         ),
         patch(
             "astrbot.core.astr_main_agent._compress_image_for_provider",
-            AsyncMock(side_effect=lambda path, _settings: [path]),
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
         await ama._append_message_component_context(event, req, config)
@@ -469,7 +469,7 @@ async def test_append_message_component_context_caps_forwarded_image_refs():
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
             "astrbot.core.astr_main_agent._compress_image_for_provider",
-            AsyncMock(side_effect=lambda path, _settings: [path]),
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
         await ama._append_message_component_context(event, req, config)
@@ -491,7 +491,7 @@ async def test_append_message_component_context_caps_forwarded_image_refs():
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
             "astrbot.core.astr_main_agent._compress_image_for_provider",
-            AsyncMock(side_effect=lambda path, _settings: [path]),
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
         await ama._append_message_component_context(zero_event, zero_req, zero_config)

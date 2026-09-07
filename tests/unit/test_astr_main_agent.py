@@ -181,7 +181,7 @@ async def test_prepare_event_attachments_materializes_quoted_fallback_http(
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
             "astrbot.core.astr_main_agent._compress_image_for_provider",
-            AsyncMock(side_effect=lambda path, _settings: [path]),
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
         await ama.prepare_event_attachments(mock_event, req, config, mock_context)
@@ -198,6 +198,53 @@ async def test_prepare_event_attachments_materializes_quoted_fallback_http(
     assert not any(
         "image omitted" in part.text for part in prepared.extra_user_content_parts
     )
+
+
+@pytest.mark.asyncio
+async def test_prepare_event_attachments_defers_jpeg_to_choke_point(
+    mock_event, mock_context, tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    import astrbot.core.utils.media_utils as media_utils
+
+    image_path = tmp_path / "direct.png"
+    PILImage.new("RGB", (8, 8), (1, 2, 3)).save(image_path)
+    mock_event.message_obj.message = [Image(file=str(image_path))]
+    req = ProviderRequest(prompt="look")
+    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+    monkeypatch.setattr(
+        media_utils, "get_astrbot_temp_path", lambda: str(tmp_path / "t")
+    )
+    real_prepare = media_utils.prepare_images_for_provider
+    calls: list[str] = []
+
+    async def _count_prepare(url_or_path, **kwargs):
+        calls.append(url_or_path)
+        return await real_prepare(url_or_path, **kwargs)
+
+    with (
+        patch.object(
+            Image,
+            "convert_to_file_path",
+            AsyncMock(return_value=str(image_path)),
+        ),
+        patch(
+            "astrbot.core.agent.request_preparation.prepare_images_for_provider",
+            _count_prepare,
+        ),
+        patch(
+            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            AsyncMock(side_effect=AssertionError("chat path must not compress")),
+        ),
+    ):
+        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+        assert req.image_urls == [str(image_path)]
+        assert calls == []
+        prepared = await prepare_provider_request(req)
+
+    assert len(calls) == 1
+    assert prepared.image_urls[0].startswith("data:image/jpeg;base64,")
 
 
 @pytest.mark.asyncio

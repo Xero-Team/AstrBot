@@ -118,10 +118,21 @@ async def test_event_loop_watchdog_survives_dump_failure(tmp_path, monkeypatch):
             dump_path=log_path,
         )
     )
-    await asyncio.sleep(0)
-    time.sleep(0.06)  # noqa: ASYNC251 - Intentionally block the event loop.
-    assert dumped.is_set()
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    try:
+        for _ in range(200):
+            if any(
+                thread.name == "event_loop_watchdog" for thread in threading.enumerate()
+            ):
+                break
+            await asyncio.sleep(0)
+        else:
+            pytest.fail("event loop watchdog thread did not start")
 
-    assert attempts >= 2
+        # Keep the event loop stalled until the worker retries after the
+        # first dump failure. A short time.sleep() can expire on macOS
+        # before the second attempt.
+        assert dumped.wait(timeout=1.0)
+        assert attempts >= 2
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

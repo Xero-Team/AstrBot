@@ -1,4 +1,5 @@
 import base64
+import logging
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -2339,5 +2340,43 @@ async def test_transform_content_part_keeps_jpeg_detail(monkeypatch):
         assert transformed["type"] == "image_url"
         assert transformed["image_url"]["url"] == "data:image/jpeg;base64,abcd"
         assert transformed["image_url"]["detail"] == "high"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transform_content_part_failure_log_redacts_url(caplog, monkeypatch):
+    provider = _make_provider()
+    try:
+        token = "secret-token"
+        query_url = "https://multimedia.nt.qq.com.cn/download?fileid=abc&token=" + token
+        data_payload = "A" * 80
+        data_url = "data:image/gif;base64," + data_payload
+
+        async def boom(image_url: str, *, image_detail: str | None = None):
+            raise OSError(f"failed {image_url}")
+
+        monkeypatch.setattr(provider, "_resolve_image_part", boom)
+
+        with caplog.at_level(logging.WARNING, logger="astrbot"):
+            http_result = await provider._transform_content_part(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": query_url},
+                }
+            )
+            data_result = await provider._transform_content_part(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                }
+            )
+
+        assert http_result == {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
+        assert data_result == {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
+        assert token not in caplog.text
+        assert query_url not in caplog.text
+        assert data_payload not in caplog.text
+        assert data_url not in caplog.text
     finally:
         await provider.terminate()

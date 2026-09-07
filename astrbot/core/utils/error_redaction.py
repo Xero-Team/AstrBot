@@ -22,6 +22,9 @@ _AUTH_HEADER_PATTERN = re.compile(
 _BEARER_PATTERN = re.compile(r"(?i)(?P<prefix>\bbearer\s+)(?P<token>[A-Za-z0-9._\-]+)")
 _SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
 _URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+")
+_DATA_URI_PATTERN = re.compile(
+    r"(?i)\bdata:[a-z0-9.+-]+/[a-z0-9.+-]+(?:;[^,\s'\"<>]+)*,[^\s'\"<>]+"
+)
 _WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|\\\\)[^\s'\"<>]+"
 )
@@ -69,6 +72,7 @@ def _redact_tokens(text: str) -> str:
 
 def _redact_locations(text: str) -> str:
     text = _URL_PATTERN.sub("[REDACTED_URL]", text)
+    text = _DATA_URI_PATTERN.sub("[REDACTED_URL]", text)
     text = _WINDOWS_ABSOLUTE_PATH_PATTERN.sub("[REDACTED_PATH]", text)
     return _UNIX_ABSOLUTE_PATH_PATTERN.sub("[REDACTED_PATH]", text)
 

@@ -33,6 +33,7 @@ from astrbot.core.exceptions import (
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -390,8 +391,8 @@ class ProviderOpenAIChatCompletions(Provider):
             except Exception as exc:
                 logger.warning(
                     "图片 %s 预处理失败，将忽略。错误: %s",
-                    url,
-                    exc,
+                    describe_media_ref(url),
+                    safe_error("", exc),
                 )
                 return {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
 

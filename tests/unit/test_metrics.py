@@ -1,8 +1,10 @@
+import platform
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.config import VERSION
 from astrbot.core.utils.metrics import MetricsRuntime
 
 
@@ -149,3 +151,60 @@ def test_metrics_runtime_stores_installation_id_under_its_runtime_root(
     installation_id = metrics.get_installation_id()
 
     assert installation_id_path.read_text(encoding="utf-8") == installation_id
+
+
+@pytest.mark.asyncio
+async def test_metrics_payload_includes_python_version(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Telemetry uploads include the running Python version next to os/v."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    monkeypatch.delenv("ASTRBOT_DISABLE_METRICS", raising=False)
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            del args
+            return None
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            del args
+            return None
+
+        def post(self, _url, json=None, timeout=None, proxy=None):
+            del timeout, proxy
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.proxy_route.create_aiohttp_session",
+        lambda: FakeSession(),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.proxy_route.current_aiohttp_proxy",
+        lambda: None,
+    )
+    metrics = MetricsRuntime(
+        {"disable_metrics": False},
+        None,
+        installation_id_path=tmp_path / ".installation_id",
+    )
+
+    await metrics._post_metrics({"msg_event_tick": 1})
+
+    payload = captured["json"]
+    assert isinstance(payload, dict)
+    metrics_data = payload["metrics_data"]
+    assert isinstance(metrics_data, dict)
+    assert metrics_data["v"] == VERSION
+    assert metrics_data["python_version"] == platform.python_version()

@@ -16,7 +16,7 @@
 | 视频     | 是           | 是           |      |
 | 文件     | 是           | 是           |      |
 
-主动消息推送：支持。
+主动消息推送：支持。默认以 Markdown 模式发送；可在适配器配置中关闭 `use_markdown`，或由插件调用 `use_markdown()` 覆盖。
 
 ## 在 AstrBot 中扫码一键创建 QQ 机器人（推荐）
 
@@ -112,6 +112,7 @@ Webhook 模式还需要在 QQ 开放平台的回调配置中勾选群事件 `GRO
 - appid: QQ 官方机器人中获取的 appid。
 - secret: QQ 官方机器人中获取的 secret。
 - 统一 Webhook 模式 (unified_webhook_mode): 保持开启。
+- 主动消息使用 Markdown(use_markdown): 默认开启。关闭后，主动消息以纯文本 content 模式发送。旧配置缺该键时视为 Markdown；这会改变本 fork 先前的 content 载荷，被拒绝时回退 content。
 
 点击 `保存`。
 

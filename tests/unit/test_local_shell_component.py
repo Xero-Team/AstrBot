@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shlex
 import signal
 import subprocess
@@ -11,7 +12,12 @@ from astrbot.core.computer.booters.local import LocalShellComponent
 
 
 def _python_command(code: str) -> str:
-    return f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
+    """Build a shell-safe Python command for the current operating system."""
+    if os.name == "nt":
+        # PowerShell re-parses the whole command text: invoke the executable
+        # through the call operator (&) so quoted paths with spaces survive.
+        return f"& '{sys.executable}' -u -c \"{code}\""
+    return shlex.join([sys.executable, "-u", "-c", code])
 
 
 class _FakePopen:
@@ -69,10 +75,30 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
+def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
         return _FakePopen(stdout="微博热搜".encode("gbk"))
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        local_booter.locale,
+        "getpreferredencoding",
+        lambda _do_setlocale=False: "cp936",
+    )
+
+    result = asyncio.run(LocalShellComponent().exec("dummy"))
+
+    assert result["stdout"] == "微博热搜"
+    assert result["stderr"] == ""
+    assert result["exit_code"] == 0
+
+
+def test_local_shell_component_preserves_western_windows_output(monkeypatch):
+    def fake_run(*args, **kwargs):
+        _ = args, kwargs
+        return _FakePopen(stdout="caféA".encode("cp1252"))
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
@@ -84,7 +110,7 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
-    assert result["stdout"] == "微博热搜"
+    assert result["stdout"] == "caféA"
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
 

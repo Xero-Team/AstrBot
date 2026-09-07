@@ -43,7 +43,11 @@ class TestLocalBooterInit:
 
 def _shell_command(args: list[str]) -> str:
     if sys.platform == "win32":
-        return subprocess.list2cmdline(args)
+        executable, *rest = args
+        quoted_rest = subprocess.list2cmdline(rest)
+        # PowerShell needs the call operator (&) for quoted, space-containing
+        # executables; POSIX shells take the plain quoted form.
+        return f"& '{executable}' {quoted_rest}"
     return shlex.join(args)
 
 

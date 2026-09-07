@@ -7,7 +7,10 @@ import pytest
 
 from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
-from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
+from astrbot.core.pipeline.preprocess_stage.stage import (
+    PreProcessStage,
+    _split_path_mapping,
+)
 from astrbot.core.utils import media_utils
 
 
@@ -144,6 +147,30 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
+    tmp_path,
+):
+    from PIL import Image as PILImage
+
+    target_root = tmp_path / "target"
+    target_root.mkdir()
+    target_image = target_root / "photo.jpg"
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
+
+    source_prefix = r"C:\remote\media"
+    event = FakeEvent([Image(file="", url=f"{source_prefix}/photo.jpg")])
+    stage = _stage(
+        platform_settings={"path_mapping": [f"{source_prefix}:{target_root}"]}
+    )
+
+    await stage.process(event)
+
+    image = event.get_messages()[0]
+    assert isinstance(image, Image)
+    assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
 async def test_pre_ack_emoji_only_reacts_for_awakened_supported_platform(monkeypatch):
     event = FakeEvent([Plain("hello")])
     event.set_extra("should_run_llm", True)
@@ -180,6 +207,13 @@ async def test_pre_ack_emoji_failure_does_not_interrupt_preprocessing(
     await stage.process(event)
 
     assert "预回应表情发送失败" in caplog.text
+
+
+def test_split_path_mapping_windows_source_to_posix_target():
+    assert _split_path_mapping(r"C:\remote\media:/tmp/target") == (
+        r"C:\remote\media",
+        "/tmp/target",
+    )
 
 
 def test_path_mapping_handles_windows_posix_invalid_entries_and_first_prefix_only(

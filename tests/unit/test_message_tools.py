@@ -592,6 +592,8 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
         return {"content": "_&exists_"}
 
     async def _download_file(_remote_path, local_path):
+        # The local temp path keeps the original remote basename; separators
+        # are platform-native, so only the basename is asserted here.
         assert local_path.endswith("report.txt")
         assert os.path.basename(local_path).count("report.txt") == 1
         with open(local_path, "w", encoding="utf-8") as file:

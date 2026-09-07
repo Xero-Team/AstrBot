@@ -411,7 +411,7 @@ async def test_append_message_component_context_makes_forward_only_request_valid
         ),
         patch(
             "astrbot.core.astr_main_agent._compress_image_for_provider",
-            AsyncMock(side_effect=lambda path, _settings: path),
+            AsyncMock(side_effect=lambda path, _settings: [path]),
         ),
     ):
         await ama._append_message_component_context(event, req, config)

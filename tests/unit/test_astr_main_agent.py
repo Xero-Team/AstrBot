@@ -149,8 +149,8 @@ async def test_prepare_event_attachments_adds_qq_face_context(mock_event, mock_c
 
 
 _MIN_PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/"
-    "ScL9mQAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQD"
+    "J/pLvAAAAAElFTkSuQmCC"
 )
 
 
@@ -181,7 +181,7 @@ async def test_prepare_event_attachments_materializes_quoted_fallback_http(
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
             "astrbot.core.astr_main_agent._compress_image_for_provider",
-            AsyncMock(side_effect=lambda path, _settings: path),
+            AsyncMock(side_effect=lambda path, _settings: [path]),
         ),
     ):
         await ama.prepare_event_attachments(mock_event, req, config, mock_context)
@@ -1868,11 +1868,18 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_skips_caption_when_main_provider_supports_images(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, tmp_path, monkeypatch
     ):
         """Test image-capable chat providers receive quoted images directly."""
+        from PIL import Image as PILImage
+
+        import astrbot.core.utils.media_utils as media_utils
+
         module = ama
-        mock_image = Image(file="file:///tmp/quoted.jpg")
+        quoted_path = tmp_path / "quoted.jpg"
+        PILImage.new("RGB", (8, 8), (20, 40, 60)).save(quoted_path)
+        monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+        mock_image = Image(file=quoted_path.as_uri())
         mock_reply = Reply(
             id="reply-1",
             chain=[Plain(text="quoted text"), mock_image],
@@ -1894,7 +1901,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
+                AsyncMock(return_value=str(quoted_path)),
             ),
         ):
             mock_runner = MagicMock()
@@ -1914,8 +1921,12 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request.image_urls == []
-        assert any(
+        assert result.provider_request.image_urls
+        assert all(
+            url.startswith("data:image/jpeg;base64,")
+            for url in result.provider_request.image_urls
+        )
+        assert not any(
             "image omitted" in part.text
             for part in result.provider_request.extra_user_content_parts
         )
@@ -1968,7 +1979,7 @@ class TestBuildMainAgent:
             ),
             patch(
                 "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
+                AsyncMock(side_effect=lambda path, _settings: [path]),
             ),
         ):
             mock_runner = MagicMock()
@@ -2039,7 +2050,7 @@ class TestBuildMainAgent:
             ),
             patch(
                 "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
+                AsyncMock(side_effect=lambda path, _settings: [path]),
             ),
         ):
             mock_runner = MagicMock()

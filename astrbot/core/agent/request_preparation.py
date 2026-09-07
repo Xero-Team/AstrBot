@@ -6,8 +6,10 @@ This is deliberately a pure-at-the-object-boundary step: callers receive a new
 
 from __future__ import annotations
 
+import base64
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlsplit
 
@@ -16,7 +18,7 @@ from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
 from astrbot.core.agent.llm_types import ProviderContentBlock, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import MediaResolver, prepare_images_for_provider
 
 if TYPE_CHECKING:
     from astrbot.core.agent.chat_model import ChatModel
@@ -74,6 +76,7 @@ async def _prepare_media(
     media_type: Literal["image", "audio", "video", "file"],
     provider: ChatModel | None,
     max_bytes: int,
+    extra_parts: list | None = None,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:
     """Resolve allowed media to data URLs and report whether anything was dropped."""
     prepared_refs: list[str] = []
@@ -81,6 +84,13 @@ async def _prepare_media(
     dropped = False
     if not _provider_supports(provider, media_type):
         return prepared_refs, blocks, bool(refs)
+
+    if media_type == "image":
+        return await _prepare_image_refs(
+            refs,
+            max_bytes=max_bytes,
+            extra_parts=extra_parts,
+        )
 
     for ref in refs:
         safe_ref = _safe_media_ref(ref)
@@ -124,6 +134,82 @@ async def _prepare_media(
     return prepared_refs, blocks, dropped
 
 
+async def _prepare_image_refs(
+    refs: list[str],
+    *,
+    max_bytes: int,
+    extra_parts: list | None = None,
+) -> tuple[list[str], list[ProviderContentBlock], bool]:
+    prepared_refs: list[str] = []
+    blocks: list[ProviderContentBlock] = []
+    dropped = False
+    for ref in refs:
+        safe_ref = _safe_media_ref(ref)
+        if safe_ref is None:
+            dropped = True
+            continue
+        jpeg_paths: list[str] = []
+        encoded_this_ref = 0
+        try:
+            async with MediaResolver(
+                safe_ref, media_type="image"
+            ).as_path() as resolved:
+                jpeg_paths = await prepare_images_for_provider(
+                    str(resolved.path),
+                    resize=False,
+                )
+                if not jpeg_paths:
+                    dropped = True
+                    continue
+                generated = [
+                    path
+                    for path in jpeg_paths
+                    if Path(path).resolve() != resolved.path.resolve()
+                ]
+                try:
+                    for jpeg_path in jpeg_paths:
+                        jpeg_bytes = Path(jpeg_path).read_bytes()
+                        if len(jpeg_bytes) > max_bytes:
+                            logger.warning(
+                                "Drop invalid or oversized image provider media."
+                            )
+                            dropped = True
+                            continue
+                        data_url = "data:image/jpeg;base64," + base64.b64encode(
+                            jpeg_bytes
+                        ).decode("ascii")
+                        prepared_refs.append(data_url)
+                        blocks.append(
+                            ProviderContentBlock(
+                                type="image",
+                                value=data_url,
+                                mime_type="image/jpeg",
+                            )
+                        )
+                        encoded_this_ref += 1
+                finally:
+                    for path in generated:
+                        try:
+                            Path(path).unlink(missing_ok=True)
+                        except OSError:
+                            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Drop invalid image provider media: %s",
+                safe_error("", exc),
+            )
+            dropped = True
+            continue
+        if encoded_this_ref == 0:
+            dropped = True
+            continue
+        if encoded_this_ref > 1 and extra_parts is not None:
+            extra_parts.append(
+                TextPart(text=f"[Animated image: {encoded_this_ref} sampled frames]")
+            )
+    return prepared_refs, blocks, dropped
+
+
 async def prepare_provider_request(
     request: ProviderRequest,
     *,
@@ -154,6 +240,7 @@ async def prepare_provider_request(
         media_type="image",
         provider=provider,
         max_bytes=max_media_bytes,
+        extra_parts=extra_parts,
     )
     audio_refs, audio_blocks, audio_dropped = await _prepare_media(
         prepared_request.audio_urls,

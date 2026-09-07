@@ -18,6 +18,7 @@ from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
+    image_compress_args_from_settings,
     prepare_provider_request,
 )
 from astrbot.core.agent.tool import ToolSet
@@ -117,11 +118,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.config_number import coerce_int_config
-from astrbot.core.utils.media_utils import (
-    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-    IMAGE_COMPRESS_DEFAULT_QUALITY,
-    prepare_images_for_provider,
-)
+from astrbot.core.utils.media_utils import prepare_images_for_provider
 from astrbot.core.utils.message_context import MessageContextRenderer
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
@@ -958,32 +955,6 @@ def _get_quoted_message_parser_settings(
     return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
 
 
-def _get_image_compress_args(
-    provider_settings: dict[str, object] | None,
-) -> tuple[bool, int, int]:
-    if not isinstance(provider_settings, dict):
-        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
-
-    enabled = provider_settings.get("image_compress_enabled", True)
-    if not isinstance(enabled, bool):
-        enabled = True
-
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
-
-    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
-    if not isinstance(max_size, int):
-        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
-    max_size = max(max_size, 1)
-
-    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
-    if not isinstance(quality, int):
-        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
-    quality = min(max(quality, 1), 100)
-
-    return enabled, max_size, quality
-
-
 async def _compress_image_for_provider(
     url_or_path: str,
     provider_settings: dict[str, object] | None,
@@ -999,7 +970,9 @@ async def _compress_image_for_provider(
         Temporary JPEG paths. Empty when the source cannot be decoded as an image.
     """
     try:
-        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        enabled, max_size, quality = image_compress_args_from_settings(
+            provider_settings
+        )
         return await prepare_images_for_provider(
             url_or_path,
             max_size=max_size,
@@ -1021,13 +994,6 @@ def _track_provider_jpeg_paths(
     for jpeg_path in jpeg_paths:
         if _is_generated_compressed_image_path(original_path, jpeg_path):
             event.track_temporary_local_file(jpeg_path)
-
-
-def _note_animated_provider_images(req: ProviderRequest, jpeg_paths: list[str]) -> None:
-    if len(jpeg_paths) > 1:
-        req.extra_user_content_parts.append(
-            TextPart(text=f"[Animated image: {len(jpeg_paths)} sampled frames]")
-        )
 
 
 def _is_generated_compressed_image_path(
@@ -1679,26 +1645,23 @@ async def _materialize_image_ref_for_provider(
     image_ref: str,
     config: MainAgentBuildConfig,
 ) -> list[str]:
-    """Download or resolve a string image ref to local provider JPEG paths.
+    """Download or resolve a string image ref to a local filesystem path.
 
     Args:
         event: Message event that owns temporary files.
         image_ref: HTTP, file, data, or local image reference.
-        config: Main-agent build config used for compression settings.
+        config: Unused; kept so callers stay on the current attachment API.
 
     Returns:
-        Local JPEG paths suitable for ``req.image_urls``. Empty when the
-        reference cannot be materialized.
+        A one-element list with the local path, or empty when the
+        reference cannot be materialized. JPEG conversion happens later
+        in ``prepare_provider_request``.
     """
+    del config
     try:
         path = await Image(file=image_ref).convert_to_file_path()
         _track_temp_image_path(event, path)
-        jpeg_paths = await _compress_image_for_provider(
-            path,
-            config.provider_settings,
-        )
-        _track_provider_jpeg_paths(event, path, jpeg_paths)
-        return jpeg_paths
+        return [path]
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -1714,20 +1677,15 @@ async def _append_direct_attachments(
     req: ProviderRequest,
     config: MainAgentBuildConfig,
 ) -> None:
+    del config
     for component in event.message_obj.message:
         if isinstance(component, Image):
             path = await component.convert_to_file_path()
-            jpeg_paths = await _compress_image_for_provider(
-                path,
-                config.provider_settings,
+            _track_temp_image_path(event, path)
+            req.image_urls.append(path)
+            req.extra_user_content_parts.append(
+                TextPart(text=f"[Image Attachment: path {path}]")
             )
-            _track_provider_jpeg_paths(event, path, jpeg_paths)
-            req.image_urls.extend(jpeg_paths)
-            if jpeg_paths:
-                req.extra_user_content_parts.append(
-                    TextPart(text=f"[Image Attachment: path {jpeg_paths[0]}]")
-                )
-                _note_animated_provider_images(req, jpeg_paths)
         elif isinstance(component, Record):
             audio_path = await component.convert_to_file_path()
             req.audio_urls.append(audio_path)
@@ -1781,42 +1739,32 @@ async def _append_message_component_context(
     for image_ref in image_refs:
         if image_ref in req.image_urls:
             continue
-        jpeg_paths = await _materialize_image_ref_for_provider(
+        local_paths = await _materialize_image_ref_for_provider(
             event,
             image_ref,
             config,
         )
-        jpeg_paths = [path for path in jpeg_paths if path not in req.image_urls]
-        if not jpeg_paths:
+        local_paths = [path for path in local_paths if path not in req.image_urls]
+        if not local_paths:
             continue
-        req.image_urls.extend(jpeg_paths)
+        req.image_urls.extend(local_paths)
         req.extra_user_content_parts.append(
             TextPart(
-                text=f"[Image Attachment in forwarded message: path {jpeg_paths[0]}]"
+                text=f"[Image Attachment in forwarded message: path {local_paths[0]}]"
             )
         )
-        _note_animated_provider_images(req, jpeg_paths)
 
     for component in rendered.nested_media:
         try:
             if isinstance(component, Image):
                 path = await component.convert_to_file_path()
-                jpeg_paths = await _compress_image_for_provider(
-                    path,
-                    config.provider_settings,
-                )
-                _track_provider_jpeg_paths(event, path, jpeg_paths)
-                req.image_urls.extend(jpeg_paths)
-                if jpeg_paths:
-                    req.extra_user_content_parts.append(
-                        TextPart(
-                            text=(
-                                "[Image Attachment in forwarded message: "
-                                f"path {jpeg_paths[0]}]"
-                            )
-                        )
+                _track_temp_image_path(event, path)
+                req.image_urls.append(path)
+                req.extra_user_content_parts.append(
+                    TextPart(
+                        text=f"[Image Attachment in forwarded message: path {path}]"
                     )
-                    _note_animated_provider_images(req, jpeg_paths)
+                )
             elif isinstance(component, Record):
                 audio_path = await component.convert_to_file_path()
                 req.audio_urls.append(audio_path)
@@ -1858,20 +1806,15 @@ async def _append_quoted_reply_components(
     config: MainAgentBuildConfig,
 ) -> bool:
     """Append explicit media in a reply and report whether it contained an image."""
+    del config
     has_embedded_image = False
     for component in reply.chain or []:
         if isinstance(component, Image):
             has_embedded_image = True
             path = await component.convert_to_file_path()
-            jpeg_paths = await _compress_image_for_provider(
-                path,
-                config.provider_settings,
-            )
-            _track_provider_jpeg_paths(event, path, jpeg_paths)
-            req.image_urls.extend(jpeg_paths)
-            if jpeg_paths:
-                _append_quoted_image_attachment(req, jpeg_paths[0])
-                _note_animated_provider_images(req, jpeg_paths)
+            _track_temp_image_path(event, path)
+            req.image_urls.append(path)
+            _append_quoted_image_attachment(req, path)
         elif isinstance(component, Record):
             audio_path = await component.convert_to_file_path()
             req.audio_urls.append(audio_path)
@@ -1926,18 +1869,17 @@ async def _append_quoted_fallback_images(
         for image_ref in images:
             if image_ref in req.image_urls:
                 continue
-            jpeg_paths = await _materialize_image_ref_for_provider(
+            local_paths = await _materialize_image_ref_for_provider(
                 event,
                 image_ref,
                 config,
             )
-            jpeg_paths = [path for path in jpeg_paths if path not in req.image_urls]
-            if not jpeg_paths:
+            local_paths = [path for path in local_paths if path not in req.image_urls]
+            if not local_paths:
                 continue
-            req.image_urls.extend(jpeg_paths)
+            req.image_urls.extend(local_paths)
             added += 1
-            _append_quoted_image_attachment(req, jpeg_paths[0])
-            _note_animated_provider_images(req, jpeg_paths)
+            _append_quoted_image_attachment(req, local_paths[0])
         return added
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -2157,7 +2099,16 @@ async def build_main_agent(
 
     # Main-Agent assembly may add request-scoped text. Prepare the selected
     # provider request immediately before runner reset.
-    req = await prepare_provider_request(req, provider=provider)
+    compress_enabled, image_max_size, image_quality = image_compress_args_from_settings(
+        config.provider_settings
+    )
+    req = await prepare_provider_request(
+        req,
+        provider=provider,
+        image_compress_enabled=compress_enabled,
+        image_max_size=image_max_size,
+        image_quality=image_quality,
+    )
     event.set_extra("provider_request", req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:

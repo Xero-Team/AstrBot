@@ -305,8 +305,16 @@ class CoreExecutionContext:
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
-        from astrbot.core.agent.request_preparation import prepare_provider_request
+        from astrbot.core.agent.request_preparation import (
+            image_compress_args_from_settings,
+            prepare_provider_request,
+        )
 
+        compress_enabled, image_max_size, image_quality = (
+            image_compress_args_from_settings(
+                (self.get_config() or {}).get("provider_settings")
+            )
+        )
         request = await prepare_provider_request(
             ProviderRequest(
                 prompt=prompt,
@@ -320,6 +328,9 @@ class CoreExecutionContext:
                 system_prompt=system_prompt or "",
             ),
             provider=prov,
+            image_compress_enabled=compress_enabled,
+            image_max_size=image_max_size,
+            image_quality=image_quality,
         )
         llm_resp = await prov.text_chat(
             prompt=request.prompt,
@@ -377,7 +388,10 @@ class CoreExecutionContext:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
-        from astrbot.core.agent.request_preparation import prepare_provider_request
+        from astrbot.core.agent.request_preparation import (
+            image_compress_args_from_settings,
+            prepare_provider_request,
+        )
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
             AstrAgentContext,
@@ -421,7 +435,16 @@ class CoreExecutionContext:
             ),
             self,
         )
-        request = await prepare_provider_request(request, provider=prov)
+        compress_enabled, image_max_size, image_quality = (
+            image_compress_args_from_settings(provider_settings)
+        )
+        request = await prepare_provider_request(
+            request,
+            provider=prov,
+            image_compress_enabled=compress_enabled,
+            image_max_size=image_max_size,
+            image_quality=image_quality,
+        )
         if agent_context is None:
             agent_context = AstrAgentContext(
                 context=self,

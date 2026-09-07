@@ -67,6 +67,8 @@ data/logs/event_loop_watchdog.log
 
 When reading this file, focus on the top frames. Useful clues often include plugin functions, platform adapters, MCP tools, synchronous network requests, `time.sleep()`, `subprocess.run()`, or CPU-heavy loops.
 
+Watchdog dumps redact recognized tokens, secret fields, and URLs, but keep file paths so the stall location stays readable. They do not dump local variable values. Cookies, private chat content, and custom secrets in source lines are not guaranteed to be stripped. Review the file before sharing.
+
 ## What to Collect
 
 When diagnosing a problem, collect as much of the following as possible:

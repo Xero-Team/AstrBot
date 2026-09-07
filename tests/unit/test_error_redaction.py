@@ -24,6 +24,20 @@ def test_redact_sensitive_text_removes_credentials_urls_and_absolute_paths():
         assert sensitive_value not in redacted
 
 
+def test_redact_sensitive_text_can_keep_absolute_paths():
+    text = (
+        "Bearer bearer-secret "
+        "https://internal.example.test/private/config "
+        "/srv/astrbot/data/config.json"
+    )
+
+    redacted = redact_sensitive_text(text, redact_paths=False)
+
+    assert "bearer-secret" not in redacted
+    assert "internal.example.test" not in redacted
+    assert "/srv/astrbot/data/config.json" in redacted
+
+
 def test_redact_sensitive_text_redacts_data_uris():
     payload = "A" * 64
     redacted = redact_sensitive_text(f"failed data:image/gif;base64,{payload}")

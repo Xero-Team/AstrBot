@@ -33,6 +33,24 @@ def test_redact_sensitive_text_redacts_data_uris():
     assert "[REDACTED_URL]" in redacted
 
 
+def test_redact_sensitive_text_redacts_parameterized_data_uris():
+    payload = "B" * 32
+    redacted = redact_sensitive_text(
+        f"failed data:image/png;charset=utf-8;base64,{payload}"
+    )
+
+    assert payload not in redacted
+    assert "[REDACTED_URL]" in redacted
+
+
+def test_redact_sensitive_text_data_uri_pattern_is_linear():
+    probe = "data:image/gif" + (";!" * 4000)
+    redacted = redact_sensitive_text(f"failed {probe}")
+
+    assert probe not in redacted
+    assert "[REDACTED_URL]" in redacted
+
+
 def test_redact_sensitive_text_does_not_corrupt_ascii_art():
     logo_fragment = r" /  /_\  \       \   \       |  |     |  |"
 

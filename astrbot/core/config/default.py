@@ -165,8 +165,8 @@ DEFAULT_CONFIG = {
         },
         "image_compress_enabled": True,
         "image_compress_options": {
-            "max_size": 1280,
-            "quality": 95,
+            "max_size": 1024,
+            "quality": 85,
         },
     },
     "agent_runner": {
@@ -4097,12 +4097,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                        "hint": "送给模型的图片会转为 JPEG。关闭时仍会转 JPEG，但不会按最长边缩小。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。",
                     },
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },
@@ -4111,7 +4111,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_options.quality": {
                         "description": "压缩质量",
                         "type": "int",
-                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "hint": "JPEG 输出质量，范围为 1-100。送给模型的图片始终是 JPEG。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },

@@ -1,4 +1,5 @@
 import base64
+import logging
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_chat_completions_source as openai_chat_completions_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.history_sanitizer import IMAGE_HISTORY_PLACEHOLDER
 from astrbot.core.agent.llm_types import LLMResponse, ToolCallsResult
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
@@ -1284,7 +1286,7 @@ async def test_audio_preprocess_failure_does_not_log_media_ref(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
+async def test_prepare_chat_payload_replaces_unresolved_context_image_with_text(
     monkeypatch,
 ):
     provider = _make_provider()
@@ -1327,12 +1329,7 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
 
         assert payloads["messages"][0]["content"] == [
             {"type": "text", "text": "look"},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": "https://example.com/expired.png",
-                },
-            },
+            {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER},
         ]
     finally:
         await provider.terminate()
@@ -2274,5 +2271,112 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hi"}
         assert messages[1] == {"role": "user", "content": "again"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transform_content_part_converts_history_placeholder_to_text():
+    provider = _make_provider()
+    try:
+        part = {
+            "type": "image_url",
+            "image_url": {"url": IMAGE_HISTORY_PLACEHOLDER, "detail": "low"},
+        }
+
+        transformed = await provider._transform_content_part(part)
+
+        assert transformed == {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transform_content_part_drops_unresolved_local_path(tmp_path):
+    provider = _make_provider()
+    try:
+        missing = str(tmp_path / "missing-local.png")
+        part = {
+            "type": "image_url",
+            "image_url": {"url": missing, "detail": "high"},
+        }
+
+        transformed = await provider._transform_content_part(part)
+
+        assert transformed["type"] == "text"
+        assert transformed["text"] == IMAGE_HISTORY_PLACEHOLDER
+        assert "image_url" not in transformed
+        assert missing not in str(transformed)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transform_content_part_keeps_jpeg_detail(monkeypatch):
+    provider = _make_provider()
+    try:
+
+        async def fake_resolve(image_url: str, *, image_detail: str | None = None):
+            assert image_url == "data:image/jpeg;base64,abcd"
+            return {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url,
+                    "detail": image_detail,
+                },
+            }
+
+        monkeypatch.setattr(provider, "_resolve_image_part", fake_resolve)
+        part = {
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/jpeg;base64,abcd",
+                "detail": "high",
+            },
+        }
+
+        transformed = await provider._transform_content_part(part)
+
+        assert transformed["type"] == "image_url"
+        assert transformed["image_url"]["url"] == "data:image/jpeg;base64,abcd"
+        assert transformed["image_url"]["detail"] == "high"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transform_content_part_failure_log_redacts_url(caplog, monkeypatch):
+    provider = _make_provider()
+    try:
+        token = "secret-token"
+        query_url = "https://multimedia.nt.qq.com.cn/download?fileid=abc&token=" + token
+        data_payload = "A" * 80
+        data_url = "data:image/gif;base64," + data_payload
+
+        async def boom(image_url: str, *, image_detail: str | None = None):
+            raise OSError(f"failed {image_url}")
+
+        monkeypatch.setattr(provider, "_resolve_image_part", boom)
+
+        with caplog.at_level(logging.WARNING, logger="astrbot"):
+            http_result = await provider._transform_content_part(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": query_url},
+                }
+            )
+            data_result = await provider._transform_content_part(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                }
+            )
+
+        assert http_result == {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
+        assert data_result == {"type": "text", "text": IMAGE_HISTORY_PLACEHOLDER}
+        assert token not in caplog.text
+        assert query_url not in caplog.text
+        assert data_payload not in caplog.text
+        assert data_url not in caplog.text
     finally:
         await provider.terminate()

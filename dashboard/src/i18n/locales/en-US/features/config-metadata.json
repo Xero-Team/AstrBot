@@ -513,18 +513,18 @@
         },
         "image_compress_enabled": {
           "description": "Enable image compression",
-          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+          "hint": "Provider-bound images are converted to JPEG. When disabled, images are still converted to JPEG but are not downscaled. Animated GIF/WebP sources are dhash-sampled, up to 8 frames."
         },
         "image_compress_options": {
           "description": "Image compression settings",
-          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "hint": "Control the JPEG long-edge limit and quality for model requests. Images are always converted to JPEG and never upscaled; animated sources are sampled to at most 8 frames.",
           "max_size": {
             "description": "Maximum edge length",
-            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are downscaled only; they are never enlarged."
           },
           "quality": {
             "description": "JPEG quality",
-            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+            "hint": "JPEG output quality from 1 to 100. Provider-bound images are always JPEG."
           }
         },
         "reachability_check": {

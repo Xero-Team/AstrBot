@@ -882,3 +882,294 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+def _save_gif(path: Path, frames: list, durations: int | list[int]) -> None:
+    first, *rest = frames
+    first.save(
+        path,
+        format="GIF",
+        save_all=True,
+        append_images=rest,
+        duration=durations,
+        loop=0,
+        disposal=2,
+    )
+
+
+def _solid(color: tuple[int, int, int], size: tuple[int, int] = (32, 32)):
+    from PIL import Image as PILImage
+
+    return PILImage.new("RGB", size, color)
+
+
+def _hashed_frame(
+    global_hash: int,
+    *,
+    duration_ms: int = 100,
+    tile_hashes: tuple[int, int, int, int] | None = None,
+):
+    from PIL import Image as PILImage
+
+    image = PILImage.new("RGB", (16, 16), (80, 80, 80))
+    tiles = tile_hashes or (global_hash, global_hash, global_hash, global_hash)
+    return media_utils.ComposedFrame(
+        image=image,
+        duration_ms=duration_ms,
+        global_hash=global_hash,
+        tile_hashes=tiles,
+        color_hash=0x808080,
+        tile_colors=(0x808080, 0x808080, 0x808080, 0x808080),
+    )
+
+
+def test_image_compress_defaults_are_1024_by_85():
+    from astrbot.core.config.default import DEFAULT_CONFIG
+
+    assert media_utils.IMAGE_COMPRESS_DEFAULT_MAX_SIZE == 1024
+    assert media_utils.IMAGE_COMPRESS_DEFAULT_QUALITY == 85
+    options = DEFAULT_CONFIG["provider_settings"]["image_compress_options"]
+    assert options["max_size"] == 1024
+    assert options["quality"] == 85
+
+
+def test_animated_frame_budget_same_color_is_zero():
+    frames = [
+        media_utils.ComposedFrame.from_image(_solid((200, 10, 10)), 100)
+        for _ in range(8)
+    ]
+    assert media_utils.animated_frame_budget(frames) == 0.0
+
+
+def test_animated_frame_budget_blink_is_zero():
+    red = media_utils.ComposedFrame.from_image(_solid((220, 0, 0)), 100)
+    blue = media_utils.ComposedFrame.from_image(_solid((0, 0, 220)), 100)
+    frames = [red] * 20 + [blue]
+    assert media_utils.animated_frame_budget(frames) == 0.0
+
+
+def test_animated_frame_budget_blank_pad_is_zero():
+    scene = media_utils.ComposedFrame.from_image(_solid((10, 180, 10)), 100)
+    blank = media_utils.ComposedFrame.from_image(_solid((255, 255, 255)), 100)
+    frames = [scene] + [blank] * 10
+    assert media_utils.animated_frame_budget(frames) == 0.0
+
+
+def test_animated_frame_budget_mild_dither_keeps_one_frame():
+    frames = []
+    value = 0
+    for index in range(20):
+        frames.append(_hashed_frame(value, duration_ms=100))
+        mask = 0
+        start = (index * 6) % 64
+        for bit in range(6):
+            mask |= 1 << ((start + bit) % 64)
+        value ^= mask
+    budget = media_utils.animated_frame_budget(frames)
+    k = min(max(1 + round(7 * budget), 1), 8)
+    assert k == 1
+
+
+def test_animated_frame_budget_corner_motion_is_not_static():
+    from PIL import Image as PILImage
+
+    base = PILImage.new("RGB", (64, 64), (30, 30, 30))
+    moved = base.copy()
+    moved.paste(PILImage.new("RGB", (16, 16), (240, 10, 10)), (48, 48))
+    frames = [
+        media_utils.ComposedFrame.from_image(base, 100),
+        media_utils.ComposedFrame.from_image(moved, 100),
+        media_utils.ComposedFrame.from_image(base, 100),
+        media_utils.ComposedFrame.from_image(moved, 100),
+    ]
+    assert media_utils.animated_frame_budget(frames) > 0.0
+
+
+def test_pick_static_hold_cut_lands_on_cut():
+    red = media_utils.ComposedFrame.from_image(_solid((220, 0, 0)), 100)
+    blue = media_utils.ComposedFrame.from_image(_solid((0, 0, 220)), 100)
+    frames = [red] * 20 + [blue] * 20
+    indices = media_utils._pick_animated_frame_indices(frames, 3)
+    assert 0 in indices
+    assert 20 in indices
+    assert 10 not in indices
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_keeps_one_by_one_png(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "one.png"
+    PILImage.new("RGB", (1, 1), (255, 0, 0)).save(image_path)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert len(paths) == 1
+    with PILImage.open(paths[0]) as jpeg:
+        assert jpeg.format == "JPEG"
+        assert jpeg.size == (1, 1)
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_same_color_gif_is_one_jpeg(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "same.gif"
+    frames = [_solid((180, 20, 20)) for _ in range(8)]
+    _save_gif(image_path, frames, 100)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert len(paths) == 1
+    with PILImage.open(paths[0]) as jpeg:
+        assert jpeg.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_blink_gif_is_one_jpeg(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "blink.gif"
+    frames = [_solid((180, 20, 20)) for _ in range(20)] + [_solid((20, 20, 180))]
+    _save_gif(image_path, frames, 100)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert len(paths) == 1
+    with PILImage.open(paths[0]) as jpeg:
+        assert jpeg.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_blank_pad_is_one_jpeg(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "blank.gif"
+    frames = [_solid((20, 160, 20))] + [_solid((255, 255, 255)) for _ in range(10)]
+    _save_gif(image_path, frames, 100)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert len(paths) == 1
+    with PILImage.open(paths[0]) as jpeg:
+        assert jpeg.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_three_scenes_keeps_ordered_frames(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "scenes.gif"
+    frames = [
+        _solid((220, 0, 0)),
+        _solid((0, 220, 0)),
+        _solid((0, 0, 220)),
+    ]
+    _save_gif(image_path, frames, 1000)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert 2 <= len(paths) <= 8
+    for path in paths:
+        with PILImage.open(path) as jpeg:
+            assert jpeg.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_full_budget_caps_at_eight(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "full.gif"
+    colors = [
+        (255, 0, 0),
+        (0, 255, 0),
+        (0, 0, 255),
+        (255, 255, 0),
+        (255, 0, 255),
+        (0, 255, 255),
+        (255, 128, 0),
+        (128, 0, 255),
+        (0, 128, 255),
+        (128, 255, 0),
+        (255, 0, 128),
+        (0, 255, 128),
+        (64, 64, 255),
+        (255, 64, 64),
+        (64, 255, 64),
+        (0, 0, 0),
+    ]
+    frames = [_solid(color) for color in colors]
+    _save_gif(image_path, frames, 500)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert 1 <= len(paths) <= 8
+    with PILImage.open(paths[0]) as first:
+        assert first.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_does_not_upscale_when_compress_off(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "tiny.gif"
+    _save_gif(image_path, [_solid((10, 10, 200), (8, 8)) for _ in range(2)], 100)
+
+    paths = await media_utils.prepare_images_for_provider(
+        str(image_path),
+        max_size=1024,
+        resize=False,
+    )
+
+    assert paths
+    with PILImage.open(paths[0]) as jpeg:
+        assert jpeg.format == "JPEG"
+        assert jpeg.size == (8, 8)
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_drops_mp4_named_gif(tmp_path, monkeypatch):
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    fake_gif = tmp_path / "video.gif"
+    fake_gif.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
+
+    paths = await media_utils.prepare_images_for_provider(str(fake_gif))
+
+    assert paths == []
+
+
+def test_compose_image_frames_caps_long_gif(tmp_path):
+    image_path = tmp_path / "long.gif"
+    frames = [_solid((index % 200, 20, 80)) for index in range(80)]
+    _save_gif(image_path, frames, 50)
+
+    composed = media_utils._compose_image_frames(str(image_path))
+    try:
+        assert len(composed) == media_utils.PROVIDER_JPEG_MAX_COMPOSE_FRAMES
+        assert media_utils.PROVIDER_JPEG_MAX_COMPOSE_FRAMES == 64
+    finally:
+        for frame in composed:
+            frame.image.close()

@@ -633,7 +633,7 @@ class ComputerRuntime(_ComputerRuntimeState):
             config = context.get_config(umo=session_id)
 
             runtime = config.get("provider_settings", {}).get(
-                "computer_use_runtime", "local"
+                "computer_use_runtime", "none"
             )
             if runtime == "local":
                 return self.get_local_booter()

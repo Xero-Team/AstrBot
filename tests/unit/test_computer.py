@@ -406,6 +406,25 @@ class TestComputerBooterBase:
 class TestComputerClient:
     """Tests for computer_client module functions."""
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("runtime", [None, "none", "local"])
+    async def test_get_booter_requires_explicit_runtime(self, runtime):
+        """An omitted runtime must not start or reuse a computer environment."""
+        computer_runtime = ComputerRuntime()
+        provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
+        mock_context = MagicMock()
+        mock_config = MagicMock()
+        mock_config.get = lambda key, default=None: {
+            "provider_settings": provider_settings
+        }.get(key, default)
+        mock_context.get_config = MagicMock(return_value=mock_config)
+        if runtime == "local":
+            result = await computer_runtime.get_booter(mock_context, "session")
+            assert result is computer_runtime.get_local_booter()
+        else:
+            with pytest.raises(RuntimeError, match="disabled by configuration"):
+                await computer_runtime.get_booter(mock_context, "session")
+
     def test_get_local_booter(self):
         """A runtime reuses its own local booter without sharing globally."""
         runtime = ComputerRuntime()

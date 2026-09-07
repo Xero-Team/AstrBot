@@ -427,7 +427,6 @@ class CronJobManager:
 
         config, max_agent_step = local_agent_runtime_from_profile(
             cfg,
-            llm_safety_mode=False,
             streaming_response=False,
         )
         req = ProviderRequest()

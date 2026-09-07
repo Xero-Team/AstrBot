@@ -2083,7 +2083,7 @@ async function loadNeoAvailability() {
     const providerSettings = asRecord(config?.provider_settings);
     const sandbox = asRecord(providerSettings?.sandbox);
     const currentRuntime =
-      getString(providerSettings?.computer_use_runtime) || 'local';
+      getString(providerSettings?.computer_use_runtime) || 'none';
     const booter = getString(sandbox?.booter);
     neoEnabled.value =
       currentRuntime === 'sandbox' && booter === 'shipyard_neo';

@@ -1151,8 +1151,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     assert len(captured_calls) == 1
     req = runner.reset.await_args.kwargs["request"]
     assert req.prompt == ""
-    assert req.image_urls
-    assert all(path.endswith(".jpg") for path in req.image_urls)
+    assert req.image_urls == [str(image_path)]
     assert req.audio_urls == ["/tmp/audio.wav"]
     set_persona_error.assert_called_once_with(event, None)
     assert runner.close.await_count == 1

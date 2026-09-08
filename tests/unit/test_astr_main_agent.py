@@ -1493,7 +1493,7 @@ class TestEnsurePersonaAndSkills:
         assert "test_tool" in req.func_tool.names()
 
     @pytest.mark.asyncio
-    async def test_persona_empty_tools_keeps_late_builtin_tools(
+    async def test_persona_empty_tools_strips_late_builtin_tools(
         self, mock_event, mock_context, mock_provider
     ):
         module = ama

@@ -134,7 +134,7 @@ The implementation must pin the difference between `None`, an empty list, and a 
 
 ### Request-scoped Skill snapshot
 
-`read_skill` must use a Skill snapshot frozen when the request is built; it must not rescan the global Skill directories by name. The snapshot should contain at least the Skill name, source, resolved Skill root, runtime-copy location, and an identity such as a content digest. During one tool loop, disabling, replacing, syncing, or retargeting a symlink must not make the prompt and the object read by `read_skill` disagree.
+`read_skill` must use a Skill snapshot frozen when the request is built; it must not rescan the global Skill directories by name. The snapshot should contain at least the Skill name, source, resolved Skill root, runtime-copy location, an identity such as a content digest, and frozen copies of regular files under a host-readable Skill directory. During one tool loop, disabling, replacing, syncing, or retargeting a symlink must not make the prompt and the object read by `read_skill` disagree. Host freeze reads cap each file at 64 KiB and the tree at 256 KiB / 32 files; overflow stays out of the snapshot. `SKILL.md` and referenced files are served from that snapshot, not reopened from disk. Sandbox copies still use the remote path locked at request time.
 
 After same-name source precedence is resolved, only the selected source remains addressable. `read_skill(name=...)` must not guess between sources. Sandbox cache paths must also be checked against the current session sandbox root; a cached path string is not trusted by itself.
 
@@ -163,7 +163,7 @@ Open only the registered Skill's `SKILL.md` and files under that directory. Do n
 
 In sandbox runtime, read the resolvable sandbox copy. In local runtime, read the local or workspace copy. Tool results should return a path relative to the Skill directory, or a fixed placeholder, never a host absolute path.
 
-Path validation must not be only a non-atomic `resolve()` followed by `read_text()`: a symlink replacement can create a TOCTOU escape. Where supported, open through directory handles, `O_NOFOLLOW`, or an equivalent no-follow mechanism; otherwise verify again after opening that the real file still lies under the snapshot root.
+Path validation must not be only a non-atomic `resolve()` followed by `read_text()`: a symlink replacement can create a TOCTOU escape. Freeze and read must not follow symlinks. Unix opens through directory handles with `O_NOFOLLOW`; Windows walks path parts without following links. If an opened fd can be resolved to a real path, that path is authoritative. If it cannot, Unix fails closed instead of accepting the intended path.
 
 ### Output and limits
 
@@ -254,7 +254,7 @@ These behaviors are covered by `tests/unit/test_skill_tool_assembly.py` and main
 4. `tools:` from enabled Skills enter the candidate set and appear after Persona intersection. Undeclared platform-baseline and session plugin/MCP tools remain when Persona `tools is None`. An empty Persona list removes them and keeps only `read_skill`.
 5. Two Skills that declare the same tool hang it once.
 6. A social surface (not a WebChat step-up subject) catalog contains no tool whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`.
-7. A Skill frontmatter listing `astrbot_execute_shell` does not let an IM subject pass `tool.local_exec`.
+7. A Skill frontmatter listing `astrbot_execute_shell` does not let an IM subject pass `tool.local_exec`. `tool.file_read` is not hard-stripped; after Persona and visibility filters, workspace file-read may appear on IM for local/sandbox runtimes, but a Skill declaration alone must not hang it.
 8. `skills_like` still only changes schema shape, not the catalog set above.
 9. Replacing or disabling a Skill after request creation does not change that request's `read_skill` snapshot.
 10. The `persona.tools` matrix covers `None`, `[]`, and non-empty lists; an empty list keeps `read_skill` and removes other tools as specified.
@@ -264,6 +264,7 @@ These behaviors are covered by `tests/unit/test_skill_tool_assembly.py` and main
 14. After `read_skill` opens a file, the real path is still under the snapshot root (`O_NOFOLLOW` or equivalent).
 15. Sandbox + `shipyard_neo` lifecycle tools are on-demand computer tools and are absent when `runtime=none`.
 16. A Skill that only sets `allowed-tools` and omits `tools:` adds no tools and grants no privilege.
+17. Existing request tools are re-ingested through the same assembly rules; a Persona empty list or social-surface strip cannot be bypassed by preloaded high-risk tools.
 
 ## Docs and config sync
 

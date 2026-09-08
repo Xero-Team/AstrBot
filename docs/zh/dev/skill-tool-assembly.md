@@ -134,7 +134,7 @@ Neo 生命周期工具（`astrbot_create_skill_payload` 等）属于 sandbox + `
 
 ### 请求级 Skill 快照
 
-`read_skill` 必须使用请求创建时冻结的 Skill 快照，而不能按名称重新扫描全局目录。快照至少包含 Skill 名称、来源、已解析的 Skill 根目录、运行时副本位置和身份信息（例如内容摘要）。在一次工具循环内，即使 Skill 被禁用、替换、同步或符号链接改向，提示词中的 Skill 与实际读取对象也必须保持一致。
+`read_skill` 必须使用请求创建时冻结的 Skill 快照，而不能按名称重新扫描全局目录。快照至少包含 Skill 名称、来源、已解析的 Skill 根目录、运行时副本位置、身份信息（例如内容摘要），以及宿主可读 Skill 目录内普通文件的冻结副本。在一次工具循环内，即使 Skill 被禁用、替换、同步或符号链接改向，提示词中的 Skill 与实际读取对象也必须保持一致。宿主冻结读取单文件上限 64 KiB，整棵目录合计上限 256 KiB / 32 个文件；超出部分不进入快照。`SKILL.md` 和引用文件都读快照副本，不再打开现场文件。sandbox 副本仍按请求时锁定的远程路径读取。
 
 同名 Skill 覆盖完成后只能保留最终选中的来源；不能让 `read_skill(name=...)` 在多个来源之间重新猜测。Sandbox 缓存路径也必须经过当前会话沙盒根校验，不能把缓存中的字符串路径直接当作可信路径。
 
@@ -163,7 +163,7 @@ Neo 生命周期工具（`astrbot_create_skill_payload` 等）属于 sandbox + `
 
 sandbox 运行时读 sandbox 内可解析副本；local 读本地或工作区副本。路径对模型只回相对 Skill 目录的路径，或固定占位，不把宿主机绝对路径写进工具结果。
 
-路径校验不能停留在“先 `resolve()` 再 `read_text()`”的非原子检查；实现应避免符号链接替换造成 TOCTOU。若平台允许，使用目录句柄、`O_NOFOLLOW` 或等价的“不跟随链接”打开方式；否则至少在打开后再次确认真实路径仍位于快照根目录内。
+路径校验不能停留在“先 `resolve()` 再 `read_text()`”的非原子检查；实现应避免符号链接替换造成 TOCTOU。冻结和读取都必须不跟随符号链接。Unix 使用目录句柄加 `O_NOFOLLOW`；Windows 走不跟随链接的逐级打开。打开后若能拿到 fd 实路径，必须用它复核；拿不到实路径时 Unix 失败关闭，不得用意图路径放行。
 
 ### 输出与限额
 
@@ -254,7 +254,7 @@ Skill 正文和描述属于可不完全信任的数据。`read_skill` 返回时�
 4. 已启用 Skill 的 `tools:` 进入候选并与人格白名单求交后出现在目录中。未声明的平台基线、会话插件/MCP 在人格 `tools is None` 时仍在；人格空列表时它们被移除，只留 `read_skill`。
 5. 两个 Skill 声明同一工具只挂一次。
 6. 社交表面（非 WebChat step-up 主体）目录不含 `required_actions` 与 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 有交集的工具。
-7. Skill 前言写了 `astrbot_execute_shell` 也不使 IM 主体通过 `tool.local_exec`。
+7. Skill 前言写了 `astrbot_execute_shell` 也不使 IM 主体通过 `tool.local_exec`。`tool.file_read` 不在硬裁集；`runtime=local/sandbox` 且通过人格与可见性后，工作区读文件可以进 IM 目录，但不能仅因 Skill 声明就挂出。
 8. `skills_like` 仍只影响 schema 形状，不改变上述目录集合。
 9. 请求创建后替换或禁用 Skill，不改变该请求快照中的 `read_skill` 结果。
 10. `persona.tools` 的 `None`、`[]`、非空列表分别覆盖；空列表保留 `read_skill`，其他工具按规则移除。
@@ -264,6 +264,7 @@ Skill 正文和描述属于可不完全信任的数据。`read_skill` 返回时�
 14. `read_skill` 打开后再次确认真实路径仍在快照根内（`O_NOFOLLOW` 或等价）。
 15. sandbox + `shipyard_neo` 的生命周期工具走按需电脑层，`runtime=none` 时不出现。
 16. 前言只写 `allowed-tools`、未写 `tools:` 的 Skill 不额外加工具、不升权。
+17. 请求上已有工具必须回灌同一套装配规则；人格空列表或社交硬裁后不能靠预先塞入的高风险工具留在目录里。
 
 ## 文档与配置同步
 

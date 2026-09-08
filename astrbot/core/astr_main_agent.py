@@ -62,9 +62,8 @@ from astrbot.core.star.star import PluginRegistry
 from astrbot.core.tool_catalog import (
     ToolCatalogInputs,
     assemble_tool_catalog,
+    merge_existing_tools,
     resolve_catalog_surface,
-    tool_is_surface_stripped,
-    tool_required_actions,
 )
 from astrbot.core.tools.computer_tools import (
     normalize_umo_for_workspace,
@@ -1237,46 +1236,33 @@ def _assemble_request_tool_catalog(
         authenticated=authenticated,
         subject_kind=subject_kind,
     )
-    catalog = assemble_tool_catalog(
-        ToolCatalogInputs(
-            snapshot=snapshot,
-            persona_tools=persona_tools,
-            surface=surface,
-            computer_use_runtime=config.computer_use_runtime,
-            plugin_names=event.plugins_name,
-            registered_tools=registered_tools,
-            session_tool_names=session_tool_names,
-            memory_enabled=memory_manager is not None,
-            web_search_enabled=bool(provider_settings.get("web_search", False)),
-            web_search_provider=str(
-                provider_settings.get("websearch_provider", "tavily")
-            ),
-            group_history_enabled=bool(
-                event.get_message_type() == MessageType.GROUP_MESSAGE
-                and ltm_settings.get("group_message_history_enable", False)
-            ),
-            proactive_messaging=bool(event.platform_meta.support_proactive_message),
-            kb_agentic_mode=config.kb_agentic_mode,
-            add_cron_tools=config.add_cron_tools,
-            sandbox_booter=str(config.sandbox_cfg.get("booter", "shipyard_neo")),
-            sandbox_capabilities=sandbox_capabilities,
-            webchat_step_up_actions=step_up_actions,
-            plugins=plugin_context.catalogs.plugins,
-        )
+    catalog_inputs = ToolCatalogInputs(
+        snapshot=snapshot,
+        persona_tools=persona_tools,
+        surface=surface,
+        computer_use_runtime=config.computer_use_runtime,
+        plugin_names=event.plugins_name,
+        registered_tools=registered_tools,
+        session_tool_names=session_tool_names,
+        memory_enabled=memory_manager is not None,
+        web_search_enabled=bool(provider_settings.get("web_search", False)),
+        web_search_provider=str(provider_settings.get("websearch_provider", "tavily")),
+        group_history_enabled=bool(
+            event.get_message_type() == MessageType.GROUP_MESSAGE
+            and ltm_settings.get("group_message_history_enable", False)
+        ),
+        proactive_messaging=bool(event.platform_meta.support_proactive_message),
+        kb_agentic_mode=config.kb_agentic_mode,
+        add_cron_tools=config.add_cron_tools,
+        sandbox_booter=str(config.sandbox_cfg.get("booter", "shipyard_neo")),
+        sandbox_capabilities=sandbox_capabilities,
+        webchat_step_up_actions=step_up_actions,
+        plugins=plugin_context.catalogs.plugins,
     )
     existing = req.func_tool
     if existing is not None:
-        for tool in existing.tools:
-            if catalog.get_tool(tool.name) is not None:
-                continue
-            if tool_is_surface_stripped(
-                tool_required_actions(tool),
-                surface=surface,
-                webchat_step_up_actions=step_up_actions,
-            ):
-                continue
-            catalog.add_tool(tool)
-    req.func_tool = catalog
+        catalog_inputs = merge_existing_tools(catalog_inputs, existing.tools)
+    req.func_tool = assemble_tool_catalog(catalog_inputs)
     _add_subagent_tools(req, plugin_context, tool_manager)
 
 

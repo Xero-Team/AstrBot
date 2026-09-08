@@ -2,11 +2,6 @@ from dataclasses import dataclass
 
 import yaml
 
-from astrbot.core.skills._skill_inventory import (
-    _extract_frontmatter_block,
-    _load_frontmatter_payload,
-)
-
 MAX_SKILL_TOOL_NAME_LENGTH = 128
 MAX_SKILL_TOOL_COUNT = 64
 
@@ -21,11 +16,11 @@ class SkillFrontmatter:
 
 def parse_skill_frontmatter(text: str) -> SkillFrontmatter:
     """Parse SKILL.md YAML frontmatter once into structured metadata."""
-    frontmatter = _extract_frontmatter_block(text)
+    frontmatter = extract_frontmatter_block(text)
     if frontmatter is None:
         return SkillFrontmatter(name="", description="", tools=(), warnings=())
     try:
-        payload = _load_frontmatter_payload(frontmatter)
+        payload = load_frontmatter_payload(frontmatter)
     except yaml.YAMLError:
         return SkillFrontmatter(
             name="",
@@ -46,6 +41,29 @@ def parse_skill_frontmatter(text: str) -> SkillFrontmatter:
         tools=_extract_frontmatter_tools(payload),
         warnings=_extract_frontmatter_warnings(payload),
     )
+
+
+def extract_frontmatter_block(text: str) -> str | None:
+    if not text.startswith("---"):
+        return None
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    end_index = _find_frontmatter_end_index(lines)
+    if end_index is None:
+        return None
+    return "\n".join(lines[1:end_index])
+
+
+def load_frontmatter_payload(frontmatter: str) -> object:
+    return yaml.safe_load(frontmatter) or {}
+
+
+def _find_frontmatter_end_index(lines: list[str]) -> int | None:
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return index
+    return None
 
 
 def _extract_frontmatter_name(payload: dict[object, object]) -> str:

@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, replace
+from typing import Literal, Protocol
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.skills._skill_snapshot import SkillSnapshot
-from astrbot.core.star.star import PluginRegistry
 
 READ_SKILL_TOOL_NAME = "read_skill"
 READ_SKILL_MODEL_NAME = "read_skill"
@@ -96,6 +95,10 @@ WEB_SEARCH_PROVIDER_TOOLS: Mapping[str, tuple[str, ...]] = {
 }
 
 
+class PluginLookup(Protocol):
+    def get_by_module(self, module_path: str | None) -> object | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ToolCatalogInputs:
     snapshot: SkillSnapshot
@@ -115,7 +118,7 @@ class ToolCatalogInputs:
     sandbox_booter: str = "shipyard_neo"
     sandbox_capabilities: Sequence[str] | None = None
     webchat_step_up_actions: frozenset[str] = frozenset()
-    plugins: PluginRegistry | None = None
+    plugins: PluginLookup | None = None
 
 
 def assemble_tool_catalog(inputs: ToolCatalogInputs) -> ToolSet:
@@ -193,9 +196,77 @@ def resolve_catalog_surface(
 
 
 def tool_required_actions(tool: FunctionTool) -> tuple[str, ...]:
-    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+    """Classify a tool from its type, name, and declared actions."""
+    from astrbot.core.agent.handoff import HandoffTool
 
-    return FunctionToolExecutor._required_actions(tool)
+    if isinstance(tool, HandoffTool):
+        return ("agent.manage",)
+    if isinstance(tool, MCPTool):
+        annotations = getattr(tool, "annotations", {}) or {}
+        if isinstance(annotations, dict):
+            read_only_hint = annotations.get("readOnlyHint")
+            if read_only_hint is None:
+                read_only_hint = annotations.get("read_only_hint")
+        else:
+            read_only_hint = getattr(annotations, "readOnlyHint", None)
+            if read_only_hint is None:
+                read_only_hint = getattr(annotations, "read_only_hint", None)
+        is_read_only = bool(read_only_hint)
+        return ("tool.mcp_read" if is_read_only else "tool.mcp_write",)
+    name = str(getattr(tool, "name", ""))
+    if name == "read_skill":
+        return ("skill.read",)
+    if name in {"astrbot_execute_shell", "astrbot_shell_session"}:
+        return ("tool.local_exec",)
+    if name in {"astrbot_execute_ipython", "astrbot_execute_python"}:
+        return ("tool.python_exec",)
+    if name in {
+        "astrbot_file_write_tool",
+        "astrbot_file_edit_tool",
+        "astrbot_upload_file",
+        "astrbot_download_file",
+    }:
+        return ("tool.file_write",)
+    if name in {"astrbot_file_read_tool", "astrbot_grep_tool"}:
+        return ("tool.file_read",)
+    if name.startswith("astrbot_cua_"):
+        return ("tool.computer_use",)
+    if "browser" in name:
+        return ("tool.browser_control",)
+    if "skill" in name and name.startswith("astrbot_"):
+        return ("extension.manage",)
+    if name in {"send_message_to_user", "send_poke_to_user"}:
+        return ("agent.manage",)
+    if "history" in name or name.startswith("get_"):
+        return ("session.read",)
+    declared = getattr(tool, "required_actions", ())
+    if (
+        isinstance(declared, tuple)
+        and declared
+        and all(isinstance(action, str) and action for action in declared)
+    ):
+        return declared
+    return ()
+
+
+def merge_existing_tools(
+    inputs: ToolCatalogInputs,
+    existing: Iterable[FunctionTool],
+) -> ToolCatalogInputs:
+    """Re-ingest request tools through the same catalog surface."""
+    registered = dict(inputs.registered_tools)
+    session_names = set(inputs.session_tool_names)
+    for tool in existing:
+        name = getattr(tool, "name", None)
+        if not isinstance(name, str) or not name:
+            continue
+        registered[name] = tool
+        session_names.add(name)
+    return replace(
+        inputs,
+        registered_tools=registered,
+        session_tool_names=frozenset(session_names),
+    )
 
 
 def _candidate_union(inputs: ToolCatalogInputs) -> set[str]:
@@ -303,7 +374,7 @@ def _apply_plugin_filter(
     *,
     plugin_names: Sequence[str] | None,
     registered_tools: Mapping[str, FunctionTool],
-    plugins: PluginRegistry | None,
+    plugins: PluginLookup | None,
 ) -> set[str]:
     if plugin_names is None:
         return set(names)
@@ -322,7 +393,9 @@ def _apply_plugin_filter(
         if plugin is None:
             kept.add(name)
             continue
-        if plugin.name in allowed or plugin.reserved:
+        plugin_name = getattr(plugin, "name", None)
+        reserved = bool(getattr(plugin, "reserved", False))
+        if plugin_name in allowed or reserved:
             kept.add(name)
     return kept
 

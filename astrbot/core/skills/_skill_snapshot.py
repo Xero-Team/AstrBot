@@ -9,6 +9,13 @@ from astrbot.core.skills._skill_frontmatter import (
     SkillFrontmatter,
     parse_skill_frontmatter,
 )
+from astrbot.core.skills._skill_fs import (
+    MAX_SKILL_SNAPSHOT_BYTES,
+    MAX_SKILL_SNAPSHOT_FILES,
+    TRUNCATION_NOTE,
+    list_regular_skill_files,
+    read_nofollow_capped,
+)
 from astrbot.core.skills._skill_inventory import (
     SANDBOX_WORKSPACE_ROOT,
     SkillInfo,
@@ -33,6 +40,15 @@ class FrozenSkill:
     plugin_name: str = ""
     host_readable: bool = True
     skill_markdown: str | None = None
+    file_bodies: tuple[tuple[str, str], ...] = ()
+
+    def file_body(self, relative_path: str) -> str | None:
+        if relative_path == "SKILL.md" and self.skill_markdown is not None:
+            return self.skill_markdown
+        for path, body in self.file_bodies:
+            if path == relative_path:
+                return body
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +158,7 @@ def _freeze_sandbox_skill(
         plugin_name=skill.plugin_name,
         host_readable=False,
         skill_markdown=None,
+        file_bodies=(),
     )
 
 
@@ -153,9 +170,11 @@ def _freeze_host_skill(skill: SkillInfo) -> FrozenSkill | None:
         resolved_root = skill_md.parent.resolve()
     except OSError:
         return None
-    if not resolved_root.is_dir():
+    if not resolved_root.is_dir() or resolved_root.is_symlink():
         return None
-    text, digest = _read_host_skill_markdown(skill_md)
+    bodies = _freeze_host_skill_files(resolved_root)
+    text = dict(bodies).get("SKILL.md", "")
+    digest = _digest(text.encode("utf-8"))
     frontmatter = (
         parse_skill_frontmatter(text)
         if text
@@ -180,7 +199,28 @@ def _freeze_host_skill(skill: SkillInfo) -> FrozenSkill | None:
         plugin_name=skill.plugin_name,
         host_readable=True,
         skill_markdown=text or None,
+        file_bodies=bodies,
     )
+
+
+def _freeze_host_skill_files(root: Path) -> tuple[tuple[str, str], ...]:
+    bodies: list[tuple[str, str]] = []
+    total_bytes = 0
+    for relative in list_regular_skill_files(root):
+        if len(bodies) >= MAX_SKILL_SNAPSHOT_FILES:
+            break
+        try:
+            text = read_nofollow_capped(root, relative)
+        except OSError:
+            continue
+        encoded = text.encode("utf-8")
+        if total_bytes + len(encoded) > MAX_SKILL_SNAPSHOT_BYTES and bodies:
+            break
+        bodies.append((relative, text))
+        total_bytes += min(len(encoded), MAX_SKILL_SNAPSHOT_BYTES)
+        if text.endswith(TRUNCATION_NOTE) and relative == "SKILL.md":
+            continue
+    return tuple(bodies)
 
 
 def _host_frontmatter_if_available(skill: SkillInfo) -> SkillFrontmatter | None:
@@ -190,24 +230,13 @@ def _host_frontmatter_if_available(skill: SkillInfo) -> SkillFrontmatter | None:
     if path.name != "SKILL.md":
         return None
     try:
-        if not path.is_file():
+        root = path.parent.resolve()
+        if not root.is_dir() or root.is_symlink():
             return None
-        text = path.read_text(encoding="utf-8")
+        text = read_nofollow_capped(root, "SKILL.md")
     except OSError:
         return None
     return parse_skill_frontmatter(text)
-
-
-def _read_host_skill_markdown(path: Path) -> tuple[str, str]:
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return "", _digest(b"")
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        text = data.decode("utf-8", errors="replace")
-    return text, _digest(data)
 
 
 def _sandbox_identity(

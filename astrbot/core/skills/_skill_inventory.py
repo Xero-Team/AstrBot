@@ -3,8 +3,6 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-import yaml
-
 SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
 WORKSPACE_SKILLS_ROOT = "skills"
@@ -127,36 +125,6 @@ def _parse_frontmatter_description(text: str) -> str:
     from astrbot.core.skills._skill_frontmatter import parse_skill_frontmatter
 
     return parse_skill_frontmatter(text).description
-
-
-def _extract_frontmatter_block(text: str) -> str | None:
-    if not text.startswith("---"):
-        return None
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None
-    end_index = _find_frontmatter_end_index(lines)
-    if end_index is None:
-        return None
-    return "\n".join(lines[1:end_index])
-
-
-def _find_frontmatter_end_index(lines: list[str]) -> int | None:
-    for index, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            return index
-    return None
-
-
-def _load_frontmatter_payload(frontmatter: str) -> object:
-    return yaml.safe_load(frontmatter) or {}
-
-
-def _extract_frontmatter_description_value(payload: dict[object, object]) -> str:
-    description = payload.get("description", "")
-    if not isinstance(description, str):
-        return ""
-    return description.strip()
 
 
 def _read_skill_description(skill_md: Path) -> str:

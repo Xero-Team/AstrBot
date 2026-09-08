@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ import pytest
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.skills._skill_frontmatter import parse_skill_frontmatter
+from astrbot.core.skills._skill_fs import MAX_SKILL_FILE_BYTES, opened_path_is_under
 from astrbot.core.skills._skill_inventory import SkillInfo, build_skills_prompt
 from astrbot.core.skills._skill_read import (
     GENERIC_SKILL_READ_ERROR,
@@ -24,6 +26,7 @@ from astrbot.core.tool_catalog import (
     NEO_LIFECYCLE_TOOLS,
     ToolCatalogInputs,
     assemble_tool_catalog_names,
+    merge_existing_tools,
     sandbox_computer_tool_names,
 )
 from astrbot.core.tools.skill_tools import ReadSkillTool
@@ -136,6 +139,35 @@ def test_read_skill_opens_relative_file_and_freezes_body(tmp_path: Path):
     assert "# notes" in body
     referenced = read_host_skill_file(frozen, "refs/a.md")
     assert "ref-body" in referenced
+    Path(frozen.resolved_root, "refs", "a.md").write_text(
+        "replaced-ref", encoding="utf-8"
+    )
+    assert read_host_skill_file(frozen, "refs/a.md") == referenced
+    with pytest.raises(SkillReadError):
+        read_host_skill_file(frozen, "refs/missing.md")
+
+
+def test_read_skill_caps_host_markdown_and_skips_symlink_skill_md(tmp_path: Path):
+    huge = _skill(tmp_path, "huge")
+    Path(huge.host_path).write_bytes(b"H" * (MAX_SKILL_FILE_BYTES + 32))
+    snapshot = freeze_skill_snapshot([huge], runtime="none")
+    frozen = lookup_frozen_skill(snapshot, "huge")
+    assert frozen.skill_markdown is not None
+    assert len(frozen.skill_markdown.encode("utf-8")) <= MAX_SKILL_FILE_BYTES + 200
+    linked = _skill(tmp_path, "linked")
+    outside = tmp_path / "secret.md"
+    outside.write_text("secret", encoding="utf-8")
+    skill_md = Path(linked.host_path)
+    skill_md.unlink()
+    try:
+        skill_md.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    linked_snapshot = freeze_skill_snapshot([linked], runtime="none")
+    frozen_linked = lookup_frozen_skill(linked_snapshot, "linked")
+    assert frozen_linked.skill_markdown is None
+    with pytest.raises(SkillReadError):
+        read_host_skill_file(frozen_linked, "SKILL.md")
 
 
 def test_read_skill_rejects_symlink_escape(tmp_path: Path):
@@ -284,6 +316,28 @@ def test_allowed_tools_only_skill_adds_nothing(tmp_path: Path):
             ),
         )
     )
+    assert names == ("read_skill",)
+
+
+def test_existing_tools_reingest_through_persona_and_surface(tmp_path: Path):
+    snapshot = freeze_skill_snapshot([_skill(tmp_path, "notes")], runtime="none")
+    shell = _tool("astrbot_execute_shell", actions=("tool.local_exec",))
+    extra = _tool("extra_tool")
+    registered = _registered(
+        read_skill=_tool("read_skill", actions=("skill.read",)),
+        extra_tool=extra,
+        astrbot_execute_shell=shell,
+    )
+    inputs = ToolCatalogInputs(
+        snapshot=snapshot,
+        persona_tools=[],
+        surface="im",
+        computer_use_runtime="local",
+        plugin_names=None,
+        registered_tools=registered,
+    )
+    merged = merge_existing_tools(inputs, [shell, extra])
+    names = assemble_tool_catalog_names(merged)
     assert names == ("read_skill",)
 
 
@@ -536,8 +590,52 @@ def test_read_skill_reconfirms_opened_path_under_snapshot_root(
     snapshot = freeze_skill_snapshot([skill], runtime="none")
     frozen = lookup_frozen_skill(snapshot, "notes")
     monkeypatch.setattr(
-        "astrbot.core.skills._skill_read._opened_path_is_under",
+        "astrbot.core.skills._skill_fs.opened_path_is_under",
         lambda *_args, **_kwargs: False,
     )
-    with pytest.raises(SkillReadError):
-        read_host_skill_file(frozen, "refs/a.md")
+    from astrbot.core.skills._skill_fs import read_nofollow_capped
+
+    with pytest.raises(OSError):
+        read_nofollow_capped(Path(frozen.resolved_root), "refs/a.md")
+
+
+def test_open_nofollow_portable_rejects_symlink_and_reads_regular_file(
+    tmp_path: Path,
+):
+    from astrbot.core.skills import _skill_fs
+
+    skill = _skill(tmp_path, "notes", extra_files={"refs/a.md": "ref-body"})
+    root = Path(skill.host_path).parent
+    fd = _skill_fs._open_nofollow_portable(root, ("refs", "a.md"))
+    try:
+        body = _skill_fs.decode_skill_bytes(_skill_fs.read_fd_capped(fd))
+    finally:
+        os.close(fd)
+    assert "ref-body" in body
+    outside = tmp_path / "secret.txt"
+    outside.write_text("secret", encoding="utf-8")
+    link = root / "escape.md"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(OSError):
+        _skill_fs._open_nofollow_portable(root, ("escape.md",))
+
+
+def test_opened_path_is_under_fails_closed_without_fd_path(tmp_path: Path, monkeypatch):
+    skill_dir = tmp_path / "notes"
+    skill_dir.mkdir()
+    target = skill_dir / "SKILL.md"
+    target.write_text("ok", encoding="utf-8")
+    other = tmp_path / "other.md"
+    other.write_text("other", encoding="utf-8")
+    fd = os.open(other, os.O_RDONLY)
+    try:
+        monkeypatch.setattr(
+            "astrbot.core.skills._skill_fs.path_from_fd",
+            lambda *_args, **_kwargs: None,
+        )
+        assert opened_path_is_under(fd, skill_dir, target) is False
+    finally:
+        os.close(fd)

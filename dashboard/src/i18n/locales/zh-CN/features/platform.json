@@ -284,11 +284,14 @@
         "idle": "未开始",
         "starting": "正在获取二维码",
         "pending": "等待扫码确认",
+        "need_verifycode": "请输入手机微信显示的数字",
         "created": "登录成功，记得点击下方保存按钮！",
         "denied": "用户取消",
         "expired": "已过期",
         "error": "登录失败"
-      }
+      },
+      "verifyCodePlaceholder": "输入微信显示的数字",
+      "verifyCodeSubmit": "继续"
     },
     "dingtalk": {
       "title": "钉钉扫码创建",

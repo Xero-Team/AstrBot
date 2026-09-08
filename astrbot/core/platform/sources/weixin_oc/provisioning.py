@@ -41,9 +41,11 @@ async def provision_weixin_oc_registration(
     ).strip()
     if not qrcode:
         raise PlatformProvisioningValidationError("Missing qrcode")
+    verify_code = str(payload.get("verify_code") or "").strip() or None
     result = await poll_weixin_oc_login_once(
         platform_config=platform_config,
         qrcode=qrcode,
+        verify_code=verify_code,
     )
     if result.get("status") == "created":
         result["platform_id_suffix"] = random_platform_id_suffix()

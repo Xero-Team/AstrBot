@@ -43,6 +43,34 @@
         </v-icon>
         {{ getStatusText(flow.status) }}
       </div>
+
+      <div
+        v-if="
+          platformConfig?.type === 'weixin_oc' &&
+          flow.status === 'need_verifycode'
+        "
+        class="registration-verify-code mt-3"
+      >
+        <v-text-field
+          v-model="verifyCode"
+          density="compact"
+          hide-details
+          variant="outlined"
+          :placeholder="tm('registrationAction.weixinOc.verifyCodePlaceholder')"
+          @keyup.enter="submitVerifyCode"
+        ></v-text-field>
+        <v-btn
+          class="mt-2"
+          color="primary"
+          variant="tonal"
+          size="small"
+          block
+          :disabled="!verifyCode.trim()"
+          @click="submitVerifyCode"
+        >
+          {{ tm('registrationAction.weixinOc.verifyCodeSubmit') }}
+        </v-btn>
+      </div>
     </div>
 
     <div v-if="flow.message" class="registration-action-message mt-2">
@@ -165,6 +193,7 @@ const { tm } = useModuleI18n('features/platform');
 const flow = ref<RegistrationFlow>({ status: 'idle' });
 const loading = ref(false);
 const pollTimer = ref<ReturnType<typeof window.setTimeout> | null>(null);
+const verifyCode = ref('');
 
 const action = computed<RegistrationAction | null>(
   () => REGISTRATION_ACTIONS[props.platformConfig?.type ?? ''] ?? null,
@@ -191,6 +220,7 @@ function stopPolling(): void {
 
 function resetFlow(): void {
   stopPolling();
+  verifyCode.value = '';
   flow.value = { status: 'idle' };
 }
 
@@ -277,6 +307,10 @@ async function pollAction(): Promise<void> {
   if (flow.value.bind_key) {
     pollPayload.bind_key = flow.value.bind_key;
   }
+  const trimmedVerifyCode = verifyCode.value.trim();
+  if (trimmedVerifyCode) {
+    pollPayload.verify_code = trimmedVerifyCode;
+  }
   try {
     const res = await botApi.registration(
       props.platformConfig.type,
@@ -310,6 +344,10 @@ async function pollAction(): Promise<void> {
       schedulePoll(nextInterval);
       return;
     }
+    if (flow.value.status === 'need_verifycode') {
+      stopPolling();
+      return;
+    }
     stopPolling();
   } catch (error) {
     const errorMessage = resolveErrorMessage(
@@ -324,6 +362,13 @@ async function pollAction(): Promise<void> {
     emit('error', errorMessage);
     stopPolling();
   }
+}
+
+function submitVerifyCode(): void {
+  if (!verifyCode.value.trim() || flow.value.status !== 'need_verifycode') {
+    return;
+  }
+  void pollAction();
 }
 
 function applyRegistrationResult(data: RegistrationFlow): void {
@@ -372,6 +417,7 @@ function getStatusColor(status: string): string {
     case 'starting':
     case 'pending':
     case 'slow_down':
+    case 'need_verifycode':
       return 'warning';
     default:
       return 'grey';
@@ -390,6 +436,7 @@ function getStatusIcon(status: string): string {
       return 'mdi-loading';
     case 'pending':
     case 'slow_down':
+    case 'need_verifycode':
       return 'mdi-timer-sand';
     default:
       return 'mdi-circle-outline';
@@ -501,7 +548,8 @@ onBeforeUnmount(() => {
 }
 
 .registration-action-status,
-.registration-action-message {
+.registration-action-message,
+.registration-verify-code {
   width: 190px;
   text-align: center;
   font-size: 13px;

@@ -536,7 +536,7 @@ async def my_custom_hook_1(
 >
 > `req.system_prompt += ...` is suitable for stable, long-lived role settings or global rules. Do not append content that changes every round to `system_prompt`, such as the current time, affinity score, status panel, short-term memory snippets, or retrieval summaries. Doing so makes the system prompt different for each request, which can break provider-side prompt caching and significantly increase both cost and time to first token.
 >
-> For small or medium-sized dynamic prompts that change every round, append the context to `req.extra_user_content_parts` and call `mark_as_temp()`. This keeps `system_prompt` stable and keeps the transient text out of conversation history:
+> The built-in `local` Agent Runner consumes `req.extra_user_content_parts` and appends those parts after the user message (`req.prompt`). For small or medium-sized dynamic prompts that change every round, append the context to that list and call `mark_as_temp()`. This keeps `system_prompt` stable and keeps the transient text out of conversation history:
 >
 > ```python
 > from astrbot.api.event import filter, AstrMessageEvent
@@ -558,7 +558,31 @@ async def my_custom_hook_1(
 >     )
 > ```
 >
-> Omitting `mark_as_temp()` persists the part with the user message in conversation history. Prefer an `llm_tool` for transient state, sensitive data, or large long-term-memory, knowledge-base, and external-query results so the model reads them only when needed.
+> Omitting `mark_as_temp()` persists the part with the user message in conversation history.
+>
+> Third-party Agent Runners such as Dify, Coze, Alibaba Cloud Bailian, and DeerFlow read only `req.prompt`, images, and `system_prompt`. They do not consume `extra_user_content_parts`, so content appended with the example above is silently dropped on those runners. Rewrite `req.prompt` instead, and prepend the dynamic context to the current user input:
+>
+> ```python
+> from astrbot.api.event import filter, AstrMessageEvent
+> from astrbot.api.provider import ProviderRequest
+>
+>
+> @filter.on_llm_request()
+> async def add_dynamic_prompt_for_third_party(
+>     self, event: AstrMessageEvent, req: ProviderRequest
+> ):
+>     original_prompt = req.prompt or ""
+>     dynamic_context = (
+>         "<dynamic_context>\n"
+>         "Current time: 2026-05-03 20:00\n"
+>         "Affinity: 72\n"
+>         "Relevant memory: The user prefers concise and direct answers.\n"
+>         "</dynamic_context>"
+>     )
+>     req.prompt = f"{dynamic_context}\n\n{original_prompt}"
+> ```
+>
+> Changing `req.prompt` also changes the user message later saved in conversation history, so add only content that may be persisted. Prefer an `llm_tool` for transient state, sensitive data, or large long-term-memory, knowledge-base, and external-query results so the model reads them only when needed.
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 

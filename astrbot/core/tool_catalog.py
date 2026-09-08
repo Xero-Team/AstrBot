@@ -345,21 +345,34 @@ def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]
     return visible
 
 
+def tool_is_surface_stripped(
+    actions: Iterable[str],
+    *,
+    surface: CatalogSurface,
+    webchat_step_up_actions: frozenset[str] = frozenset(),
+) -> bool:
+    """Return True when a tool must stay out of the catalog for this surface."""
+    blocked = set(actions) & WEBCHAT_INSTANCE_TOOL_ACTIONS
+    if not blocked:
+        return False
+    if surface in SOCIAL_SURFACES:
+        return True
+    if surface != "webchat_authenticated":
+        return False
+    return not blocked <= webchat_step_up_actions
+
+
 def _apply_surface_strip(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]:
-    if inputs.surface == "webchat_authenticated" and inputs.webchat_step_up_actions:
-        return set(names)
-    if (
-        inputs.surface not in SOCIAL_SURFACES
-        and inputs.surface != "webchat_authenticated"
-    ):
-        return set(names)
     kept: set[str] = set()
     for name in names:
         tool = inputs.registered_tools.get(name)
         if tool is None:
             continue
-        actions = set(tool_required_actions(tool))
-        if actions & WEBCHAT_INSTANCE_TOOL_ACTIONS:
+        if tool_is_surface_stripped(
+            tool_required_actions(tool),
+            surface=inputs.surface,
+            webchat_step_up_actions=inputs.webchat_step_up_actions,
+        ):
             continue
         kept.add(name)
     return kept

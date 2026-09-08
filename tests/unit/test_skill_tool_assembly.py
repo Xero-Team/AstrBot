@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.skills._skill_frontmatter import parse_skill_frontmatter
 from astrbot.core.skills._skill_inventory import SkillInfo, build_skills_prompt
@@ -15,6 +16,7 @@ from astrbot.core.skills._skill_read import (
     SkillReadError,
     lookup_frozen_skill,
     read_host_skill_file,
+    resolve_sandbox_skill_file,
     resolve_skill_relative_path,
 )
 from astrbot.core.skills._skill_snapshot import freeze_skill_snapshot
@@ -187,6 +189,23 @@ def test_same_name_precedence_and_sandbox_path_validation(tmp_path: Path):
     frozen = sandbox.get("sb")
     assert frozen is not None
     assert frozen.runtime_copy == "/workspace/skills/sb/SKILL.md"
+    assert (
+        resolve_sandbox_skill_file(frozen, "SKILL.md", sandbox.sandbox_root)
+        == "/workspace/skills/sb/SKILL.md"
+    )
+    assert (
+        resolve_sandbox_skill_file(frozen, "refs/a.md", sandbox.sandbox_root)
+        == "/workspace/skills/sb/refs/a.md"
+    )
+    escaped = replace(
+        frozen,
+        resolved_root="/tmp/evil/sb",
+        runtime_copy="/tmp/evil/sb/SKILL.md",
+    )
+    with pytest.raises(SkillReadError):
+        resolve_sandbox_skill_file(escaped, "SKILL.md", sandbox.sandbox_root)
+    with pytest.raises(SkillReadError):
+        resolve_sandbox_skill_file(frozen, "SKILL.md", "/other")
 
 
 def test_persona_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
@@ -354,6 +373,24 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
         )
     )
     assert "astrbot_execute_shell" in webchat_names
+    partial_step_up = assemble_tool_catalog_names(
+        ToolCatalogInputs(
+            snapshot=snapshot,
+            persona_tools=None,
+            surface="webchat_authenticated",
+            computer_use_runtime="local",
+            plugin_names=None,
+            registered_tools=_registered(
+                **registered,
+                astrbot_execute_python=_tool(
+                    "astrbot_execute_python", actions=("tool.python_exec",)
+                ),
+            ),
+            webchat_step_up_actions=frozenset({"tool.local_exec"}),
+        )
+    )
+    assert "astrbot_execute_shell" in partial_step_up
+    assert "astrbot_execute_python" not in partial_step_up
     for name in im_names:
         actions = set(registered[name].required_actions)
         assert not actions & WEBCHAT_INSTANCE_TOOL_ACTIONS
@@ -373,7 +410,19 @@ def test_skills_like_does_not_change_catalog_set(tmp_path: Path):
         ),
         memory_enabled=True,
     )
-    assert assemble_tool_catalog_names(inputs) == assemble_tool_catalog_names(inputs)
+    names = assemble_tool_catalog_names(inputs)
+    toolset = ToolSet(
+        [
+            inputs.registered_tools[name]
+            for name in names
+            if name in inputs.registered_tools
+        ]
+    )
+    light = toolset.get_light_tool_set()
+    assert tuple(sorted(toolset.names())) == names
+    assert tuple(sorted(light.names())) == names
+    for tool in light.tools:
+        assert tool.parameters == {"type": "object", "properties": {}}
 
 
 def test_neo_lifecycle_tools_are_on_demand_computer_layer():
@@ -400,6 +449,71 @@ def test_neo_lifecycle_tools_are_on_demand_computer_layer():
 
 
 @pytest.mark.asyncio
+async def test_read_skill_sandbox_path_stays_under_snapshot_root():
+    snapshot = freeze_skill_snapshot(
+        [
+            SkillInfo(
+                name="sb",
+                description="sandbox",
+                path="/tmp/evil/sb/SKILL.md",
+                active=True,
+                source_type="sandbox_only",
+                sandbox_exists=True,
+                local_exists=False,
+            )
+        ],
+        runtime="sandbox",
+        sandbox_root="/workspace",
+    )
+    frozen = snapshot.get("sb")
+    assert frozen is not None
+    reads: list[str] = []
+
+    class _Fs:
+        async def read_file(self, remote: str):
+            reads.append(remote)
+            return {"success": True, "content": "# sandbox"}
+
+    class _Booter:
+        fs = _Fs()
+
+    class _Runtime:
+        async def get_booter(self, *_args, **_kwargs):
+            return _Booter()
+
+    tool = ReadSkillTool()
+    event = MagicMock()
+    event.get_extra.return_value = snapshot
+    event.unified_msg_origin = "umo"
+    context = SimpleNamespace(
+        context=SimpleNamespace(
+            event=event,
+            context=SimpleNamespace(computer_runtime=_Runtime()),
+        )
+    )
+    result = await tool.call(context, name="sb", path="refs/a.md")
+    assert reads == ["/workspace/skills/sb/refs/a.md"]
+    assert "Skill: sb" in result
+    assert "Path: refs/a.md" in result
+    assert "# sandbox" in result
+
+    escaped_snapshot = replace(
+        snapshot,
+        skills=(
+            replace(
+                frozen,
+                resolved_root="/tmp/evil/sb",
+                runtime_copy="/tmp/evil/sb/SKILL.md",
+            ),
+        ),
+    )
+    event.get_extra.return_value = escaped_snapshot
+    escaped = await tool.call(context, name="sb")
+    assert escaped == GENERIC_SKILL_READ_ERROR
+    assert reads == ["/workspace/skills/sb/refs/a.md"]
+
+
+@pytest.mark.asyncio
 async def test_read_skill_tool_returns_generic_error_without_host_path(tmp_path: Path):
     skill = _skill(tmp_path, "notes")
     snapshot = freeze_skill_snapshot([skill], runtime="none")
@@ -413,3 +527,17 @@ async def test_read_skill_tool_returns_generic_error_without_host_path(tmp_path:
     assert result == GENERIC_SKILL_READ_ERROR
     host_path = str(tmp_path)
     assert host_path not in result
+
+
+def test_read_skill_reconfirms_opened_path_under_snapshot_root(
+    tmp_path: Path, monkeypatch
+):
+    skill = _skill(tmp_path, "notes", extra_files={"refs/a.md": "ref-body"})
+    snapshot = freeze_skill_snapshot([skill], runtime="none")
+    frozen = lookup_frozen_skill(snapshot, "notes")
+    monkeypatch.setattr(
+        "astrbot.core.skills._skill_read._opened_path_is_under",
+        lambda *_args, **_kwargs: False,
+    )
+    with pytest.raises(SkillReadError):
+        read_host_skill_file(frozen, "refs/a.md")

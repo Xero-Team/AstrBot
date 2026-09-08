@@ -14,7 +14,6 @@ from astrbot import logger
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
-from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
@@ -64,26 +63,15 @@ from astrbot.core.tool_catalog import (
     ToolCatalogInputs,
     assemble_tool_catalog,
     resolve_catalog_surface,
+    tool_is_surface_stripped,
+    tool_required_actions,
 )
 from astrbot.core.tools.computer_tools import (
     normalize_umo_for_workspace,
 )
-from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.tools.knowledge_base_tools import (
     retrieve_knowledge_base,
-)
-from astrbot.core.tools.web_search_tools import (
-    AnySearchWebSearchTool,
-    BaiduWebSearchTool,
-    BochaWebSearchTool,
-    BraveWebSearchTool,
-    ExaGetContentsTool,
-    ExaWebSearchTool,
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
-    TavilyExtractWebPageTool,
-    TavilyWebSearchTool,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
@@ -1244,15 +1232,16 @@ def _assemble_request_tool_catalog(
             for tool in full_tools
             if isinstance(name := getattr(tool, "name", None), str) and name
         )
+    surface = resolve_catalog_surface(
+        source=source,
+        authenticated=authenticated,
+        subject_kind=subject_kind,
+    )
     catalog = assemble_tool_catalog(
         ToolCatalogInputs(
             snapshot=snapshot,
             persona_tools=persona_tools,
-            surface=resolve_catalog_surface(
-                source=source,
-                authenticated=authenticated,
-                subject_kind=subject_kind,
-            ),
+            surface=surface,
             computer_use_runtime=config.computer_use_runtime,
             plugin_names=event.plugins_name,
             registered_tools=registered_tools,
@@ -1277,56 +1266,18 @@ def _assemble_request_tool_catalog(
     )
     existing = req.func_tool
     if existing is not None:
-        from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
-        from astrbot.core.tool_catalog import SOCIAL_SURFACES, tool_required_actions
-
-        surface = resolve_catalog_surface(
-            source=source,
-            authenticated=authenticated,
-            subject_kind=subject_kind,
-        )
         for tool in existing.tools:
             if catalog.get_tool(tool.name) is not None:
                 continue
-            actions = set(tool_required_actions(tool))
-            if surface in SOCIAL_SURFACES and actions & WEBCHAT_INSTANCE_TOOL_ACTIONS:
+            if tool_is_surface_stripped(
+                tool_required_actions(tool),
+                surface=surface,
+                webchat_step_up_actions=step_up_actions,
+            ):
                 continue
             catalog.add_tool(tool)
     req.func_tool = catalog
     _add_subagent_tools(req, plugin_context, tool_manager)
-
-
-def _plugin_tool_fix(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    plugin_context: CoreExecutionContext,
-) -> None:
-    """根据事件中的插件设置，过滤请求中的工具列表。
-
-    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
-    因为它们不属于任何插件，不应被插件过滤逻辑影响。
-    """
-    if event.plugins_name is not None and req.func_tool:
-        new_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
-            if isinstance(tool, MCPTool):
-                # 保留 MCP 工具
-                new_tool_set.add_tool(tool)
-                continue
-            mp = tool.handler_module_path
-            if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-                # 不应受到会话插件过滤影响。
-                new_tool_set.add_tool(tool)
-                continue
-            plugin = plugin_context.catalogs.plugins.get_by_module(mp)
-            if not plugin:
-                # 无法解析插件归属时，保守保留工具，避免误过滤。
-                new_tool_set.add_tool(tool)
-                continue
-            if plugin.name in event.plugins_name or plugin.reserved:
-                new_tool_set.add_tool(tool)
-        req.func_tool = new_tool_set
 
 
 async def _handle_webchat(
@@ -1430,51 +1381,6 @@ def _apply_sandbox_tools(
             "for text input; use text=`\\n` for Enter.\n"
         )
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
-
-
-def _proactive_cron_job_tools(
-    req: ProviderRequest,
-    plugin_context: CoreExecutionContext,
-) -> None:
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FutureTaskTool))
-
-
-async def _apply_web_search_tools(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    plugin_context: CoreExecutionContext,
-) -> None:
-    cfg = plugin_context.get_config(umo=event.unified_msg_origin)
-    prov_settings = cfg.get("provider_settings", {})
-
-    if not prov_settings.get("web_search", False):
-        return
-
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-
-    tool_mgr = plugin_context.get_llm_tool_manager()
-    provider = prov_settings.get("websearch_provider", "tavily")
-    if provider == "tavily":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyExtractWebPageTool))
-    elif provider == "bocha":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
-    elif provider == "brave":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
-    elif provider == "firecrawl":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
-    elif provider == "baidu_ai_search":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
-    elif provider == "exa":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
-    elif provider == "anysearch":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
 
 
 def _apply_web_search_citation_prompt(

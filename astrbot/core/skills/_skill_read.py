@@ -5,7 +5,11 @@ import re
 import stat
 from pathlib import Path, PurePosixPath
 
-from astrbot.core.skills._skill_snapshot import FrozenSkill, SkillSnapshot
+from astrbot.core.skills._skill_snapshot import (
+    FrozenSkill,
+    SkillSnapshot,
+    _sandbox_path_under_root,
+)
 
 MAX_SKILL_FILE_BYTES = 64 * 1024
 GENERIC_SKILL_READ_ERROR = "Unable to read the requested Skill file."
@@ -57,6 +61,25 @@ def lookup_frozen_skill(snapshot: SkillSnapshot, name: str) -> FrozenSkill:
     return skill
 
 
+def resolve_sandbox_skill_file(
+    skill: FrozenSkill,
+    relative_path: str,
+    sandbox_root: str,
+) -> str:
+    """Resolve a sandbox Skill path that stays under the frozen snapshot root."""
+    safe_path = resolve_skill_relative_path(relative_path)
+    if not sandbox_root or not skill.resolved_root:
+        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
+    if not _sandbox_path_under_root(skill.resolved_root, sandbox_root):
+        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
+    remote = str(PurePosixPath(skill.resolved_root) / safe_path)
+    if not _sandbox_path_under_root(remote, skill.resolved_root):
+        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
+    if not _sandbox_path_under_root(remote, sandbox_root):
+        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
+    return remote
+
+
 def read_host_skill_file(skill: FrozenSkill, relative_path: str) -> str:
     safe_path = resolve_skill_relative_path(relative_path)
     if safe_path == "SKILL.md" and skill.skill_markdown is not None:
@@ -67,8 +90,8 @@ def read_host_skill_file(skill: FrozenSkill, relative_path: str) -> str:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
             raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-            if not _opened_path_is_under(fd, root, root / safe_path):
-                raise SkillReadError(GENERIC_SKILL_READ_ERROR)
+        if not _opened_path_is_under(fd, root, root / safe_path):
+            raise SkillReadError(GENERIC_SKILL_READ_ERROR)
         data = _read_fd_capped(fd)
     finally:
         os.close(fd)

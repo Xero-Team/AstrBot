@@ -8,17 +8,17 @@ This page records current runtime behavior. Implemented clauses now live in [Arc
 
 Related user docs: [Skills](/en/use/skills), [Computer Use](/en/use/computer), [Authorization](/en/use/authorization). Config fields: [AstrBot configuration](/en/dev/astrbot-config).
 
-## Problem
+## Problem and current behavior
 
-Skills should be on-demand task manuals. Reading a manual must not require a host shell, and a Skill must not grant extra privilege by declaring tools.
+Skills are on-demand task manuals. Reading a manual does not require a host shell, and a Skill cannot grant extra privilege by declaring tools.
 
-The current code has three real defects:
+The runtime now closes the three former gaps:
 
-1. **The tool catalog is not computed from enabled Skills.** `SKILL.md` frontmatter only parses `description` (Neo sync also writes `name`). There is no tool-name declaration. Main-Agent assembly is the Persona whitelist unioned with computer, search, and memory tools added later. `agent_runner.config.misc.tool_schema_mode=skills_like` is a two-stage light schema; it does not shrink the catalog by Skill.
-2. **Reading a Skill is bound to `tool.local_exec`.** `build_skills_prompt()` requires `cat` / `type` on an absolute path. `computer_use_runtime=none` still injects the Skill inventory and says the agent cannot use a shell. There is no runtime-owned read action. Memory and retrieval Skills cannot load their manuals without Computer Use.
-3. **Social surfaces do not hard-strip high-risk tools from the catalog.** Skills cannot currently declare `execute_shell`, so they cannot yet expand privilege that way. After Persona merge, `_apply_local_env_tools` / `_apply_sandbox_tools` still hang Shell, Python, and file-write tools unconditionally. IM and similar surfaces deny at execution time, but the model still sees and tries those tools.
+1. **The tool catalog is computed from enabled Skills.** `SKILL.md` frontmatter parses `name`, `description`, and `tools:` once. Main-Agent assembly uses `assemble_tool_catalog()` over the four candidate layers, then intersects Persona three-state policy, visibility, and surface hard-strip. `agent_runner.config.misc.tool_schema_mode=skills_like` remains a two-stage light schema; it does not shrink the catalog.
+2. **Manuals load through `read_skill`.** `build_skills_prompt()` requires `read_skill` and no longer mentions `cat` / `type`. The authorization action is low-risk `skill.read`. `computer_use_runtime=none` still injects the Skill inventory and says the agent cannot execute Shell or Python, but manuals remain readable.
+3. **Social surfaces hard-strip high-risk tools from the catalog.** `_apply_local_env_tools` / `_apply_sandbox_tools` write runtime prompts only. IM, anonymous WebChat, plugins, agents, and API keys remove tools whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`. Authenticated WebChat keeps only the actions covered by the current step-up set.
 
-## Goals
+## Current behavior
 
 1. Keep multi-root discovery. The system prompt lists only Skill **names and short descriptions**.
 2. Load manuals through a runtime tool `read_skill`, with paths locked inside the registered Skill directory. Computer Use is not required.
@@ -42,34 +42,34 @@ If the user names a Skill, the host may inject `SKILL.md` into the current reque
 
 ## Comparison
 
-| Concern             | Current AstrBot                                 | Codex shape not to copy                        | This requirement                                                                                                                           |
-| ------------------- | ----------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Discovery           | Multi-root scan; inventory in the system prompt | Same                                           | Keep                                                                                                                                       |
-| Body load           | Prompt requires `cat` / `type`                  | `$mention` host inject or `skills.read`        | `read_skill` only; named inject is optional                                                                                                |
-| Paths               | Absolute paths handed to the shell              | `package` + `skill://`, sandbox-aware          | `name` + relative path, locked to the registered directory                                                                                 |
-| Tool declaration    | None                                            | `openai.yaml` `dependencies.tools` (MCP-heavy) | `SKILL.md` frontmatter `tools:` with existing tool names                                                                                   |
-| Declaration meaning | —                                               | Prompt to install missing MCP                  | Filter, not authorization                                                                                                                  |
-| Catalog             | Persona whitelist ∪ later computer tools        | Built-in tools not filtered by Skill           | Platform baseline ∪ session plugin/MCP ∪ Skill declarations ∪ on-demand computer tools, then ∩ Persona ∩ visibility filter ∩ surface strip |
-| Social surface      | High-risk tools in the catalog; deny at execute | Local CLI permission model                     | IM / anonymous WebChat / API keys: strip `WEBCHAT_INSTANCE_TOOL_ACTIONS` from the catalog                                                  |
-| Manual-read auth    | `tool.local_exec`                               | Dedicated `skills.read`                        | `skill.read` or an equivalent low-risk action; works with `computer_use_runtime=none`                                                      |
+| Concern             | Current AstrBot                                                                                                                            | Codex shape not to copy                        | This requirement                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Discovery           | Multi-root scan; inventory in the system prompt                                                                                            | Same                                           | Keep                                                                                  |
+| Body load           | `read_skill`                                                                                                                               | `$mention` host inject or `skills.read`        | `read_skill` only; named inject is optional                                           |
+| Paths               | `name` + relative path, locked to the registered directory                                                                                 | `package` + `skill://`, sandbox-aware          | `name` + relative path, locked to the registered directory                            |
+| Tool declaration    | `SKILL.md` frontmatter `tools:`                                                                                                            | `openai.yaml` `dependencies.tools` (MCP-heavy) | `SKILL.md` frontmatter `tools:` with existing tool names                              |
+| Declaration meaning | Filter, not authorization; `allowed-tools` is ignored                                                                                      | Prompt to install missing MCP                  | Filter, not authorization                                                             |
+| Catalog             | Platform baseline ∪ session plugin/MCP ∪ Skill declarations ∪ on-demand computer tools, then ∩ Persona ∩ visibility filter ∩ surface strip | Built-in tools not filtered by Skill           | Same as current AstrBot                                                               |
+| Social surface      | IM / anonymous WebChat / API keys: strip `WEBCHAT_INSTANCE_TOOL_ACTIONS` from the catalog                                                  | Local CLI permission model                     | Same as current AstrBot                                                               |
+| Manual-read auth    | `skill.read`; works with `computer_use_runtime=none`                                                                                       | Dedicated `skills.read`                        | `skill.read` or an equivalent low-risk action; works with `computer_use_runtime=none` |
 
 ## Current anchors
 
-Implement against these symbols. Do not add a parallel assembly path:
+Use these symbols. Do not add a parallel assembly path:
 
-| Duty                   | Location                                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- |
-| Skill inventory prompt | `build_skills_prompt()` in `astrbot/core/skills/_skill_inventory.py`                                  |
-| Frontmatter parse      | `_parse_frontmatter_description()`; Neo sync also accepts `name`                                      |
-| Request-scoped filter  | `_append_skills_prompt()`, `_filter_skills_for_current_config()` in `astrbot/core/astr_main_agent.py` |
-| Persona tool merge     | `_merge_persona_tools()`                                                                              |
-| Computer-tool hang     | `_apply_local_env_tools()`, `_apply_sandbox_tools()`                                                  |
-| Plugin/MCP filter      | `_plugin_tool_fix()`                                                                                  |
-| Execute-time auth      | `FunctionToolExecutor._authorize_execution()` in `astrbot/core/astr_agent_tool_exec.py`               |
-| High-risk actions      | `HIGH_RISK_ACTIONS` (control plane + tools), `WEBCHAT_INSTANCE_TOOL_ACTIONS` (catalog strip)          |
-| Two-stage schema       | `tool_schema_mode=skills_like` in `tool_loop_agent_runner.py`                                         |
+| Duty                    | Location                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| Skill inventory prompt  | `build_skills_prompt()` in `astrbot/core/skills/_skill_inventory.py`                           |
+| Frontmatter parse       | `parse_skill_frontmatter()` in `astrbot/core/skills/_skill_frontmatter.py`                     |
+| Request-scoped snapshot | `_skill_snapshot.py`; `_append_skills_prompt()` stores it on the event extra                   |
+| Catalog assembly        | `assemble_tool_catalog()` in `astrbot/core/tool_catalog.py`                                    |
+| Computer runtime prompt | `_apply_local_env_tools()`, `_apply_sandbox_tools()` write prompts only, and do not hang tools |
+| Plugin/MCP filter       | Session plugin filtering inside `assemble_tool_catalog()`                                      |
+| Execute-time auth       | `FunctionToolExecutor._authorize_execution()` in `astrbot/core/astr_agent_tool_exec.py`        |
+| High-risk actions       | `HIGH_RISK_ACTIONS` (control plane + tools), `WEBCHAT_INSTANCE_TOOL_ACTIONS` (catalog strip)   |
+| Two-stage schema        | `tool_schema_mode=skills_like` in `tool_loop_agent_runner.py`                                  |
 
-## Target assembly
+## Current assembly
 
 For each main-Agent request, the eight steps are normative. The formula is a summary; if it omits a clause, follow the steps and the baseline table.
 
@@ -77,8 +77,8 @@ For each main-Agent request, the eight steps are normative. The formula is a sum
 2. Take the **candidate union** (see the baseline table): platform baseline ∪ session-enabled plugin/MCP tools that are not high-risk ∪ `tools:` from enabled Skills ∪ on-demand computer tools for this runtime. A Skill declaration may only add already-registered tool names. It cannot install MCP, open private-network MCP, or pull in a plugin tool that is not enabled for the session.
 3. Dedupe. If several Skills declare the same tool, keep it once. Unknown tool names are ignored and logged.
 4. Intersect with the Persona tool whitelist. Persona `tools is None` does not shrink this layer, so the step-2 union (including plugin/MCP tools) remains. An empty list means no ordinary tools (still keep `read_skill`; see the three-state table).
-5. Intersect with session plugin filtering (current `_plugin_tool_fix()` semantics: keep MCP tools and tools with no plugin owner), then filter visibility by each tool's `required_actions` risk metadata and the request surface. Assembly does not call full `authorize()`.
-6. **Hard-strip social surfaces**: remove every tool whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`. Current set: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, `tool.computer_use`. Strip by action intersection, not a tool-name blacklist. Remove them from the catalog for IM, anonymous WebChat, plugins, agents, and API keys. Do not only deny at execution. Authenticated Dashboard-driven WebChat still uses the existing one-time step-up and cannot bypass it through a Skill. Control-plane members of `HIGH_RISK_ACTIONS` such as `identity.operator.write` and `system.pip_install` must not appear in the main-Agent tool catalog anyway.
+5. Intersect with session plugin filtering (keep MCP tools and tools with no plugin owner), then filter visibility by each tool's `required_actions` risk metadata and the request surface. Assembly does not call full `authorize()`.
+6. **Hard-strip social surfaces**: remove every tool whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`. Current set: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, `tool.computer_use`. Strip by action intersection, not a tool-name blacklist. Remove them from the catalog for IM, anonymous WebChat, plugins, agents, and API keys. Do not only deny at execution. Authenticated Dashboard-driven WebChat keeps only actions covered by `webchat_step_up_actions`; a Skill cannot bypass step-up, and one stepped-up action does not unstrip the rest. Control-plane members of `HIGH_RISK_ACTIONS` such as `identity.operator.write` and `system.pip_install` must not appear in the main-Agent tool catalog anyway.
 7. When `computer_use_runtime=none`, Shell, Python, and file-write tools stay out of the catalog even if a Skill declared them. `tool.file_read` is not in the hard-strip set; whether a social surface may see workspace file-read must be specified and tested separately. Default: hang it only for local/sandbox after Persona and visibility filters; a Skill declaration alone must not expose workspace file-read on IM.
 8. `_apply_local_env_tools` / `_apply_sandbox_tools` expose the runtime capability list. The assembler adds computer tools from the intersection. Do not hang the full set unconditionally.
 
@@ -95,18 +95,18 @@ catalog = surface_strip(
 
 Keep `read_skill` according to the Persona three-state table (omit it when the Skill snapshot is empty). `skills_like` may remain a token optimization. It is orthogonal to catalog computation.
 
-Catalog computation must be one pure function, suggested name `assemble_tool_catalog(...)`, in a dedicated module under `astrbot/core/`. Do not keep growing `astr_main_agent.py`. Inputs: the frozen Skill snapshot, Persona three-state policy, request surface, `computer_use_runtime`, session plugin filter, and the registered-tool table. Output: a tool-name set, then one materialized `ToolSet`.
+Catalog computation is one pure function, `assemble_tool_catalog(...)` in `astrbot/core/tool_catalog.py`. Inputs: the frozen Skill snapshot, Persona three-state policy, request surface, `computer_use_runtime`, session plugin filter, and the registered-tool table. Output: a tool-name set, then one materialized `ToolSet`. Tools already present on the request are reattached only after the same surface strip.
 
 ### Baseline and candidate layers
 
 Persona `tools is None` (“use all”) means “do not shrink the four layers below”. It does not mean “drop plugin tools unless a Skill named them”. A Skill with no `tools:` field only supplies a manual: it adds no tools and does not remove other layers.
 
-| Layer                    | Enters the candidate set when                                                                 | Examples                                                                                                                                                                                        | Depends on Skill `tools:`?                                         |
-| ------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Platform baseline        | The matching capability is on                                                                 | Memory search (`search_memory` and siblings), proactive messaging, enabled web search, group history (when configured), `read_skill` (when Skills are enabled or kept by the three-state table) | No                                                                 |
-| Session plugin / MCP     | The plugin is active and passes `_plugin_tool_fix()`; MCP tools with no plugin owner are kept | User plugin tools, MCP read tools                                                                                                                                                               | No. A Skill cannot install MCP or open private-network MCP         |
-| Skill declarations       | Enabled Skill frontmatter `tools:`                                                            | A retrieval Skill listing `search_memory`                                                                                                                                                       | Yes. Filter existing names only                                    |
-| On-demand computer tools | `computer_use_runtime` is `local` or `sandbox`, after Persona and hard-strip                  | Shell, Python, file write, Neo lifecycle tools, browser (when sandbox capabilities allow)                                                                                                       | May declare, cannot grant. This layer is empty when `runtime=none` |
+| Layer                    | Enters the candidate set when                                                                     | Examples                                                                                                                                                                                        | Depends on Skill `tools:`?                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Platform baseline        | The matching capability is on                                                                     | Memory search (`search_memory` and siblings), proactive messaging, enabled web search, group history (when configured), `read_skill` (when Skills are enabled or kept by the three-state table) | No                                                                 |
+| Session plugin / MCP     | The plugin is active and passes session plugin filtering; MCP tools with no plugin owner are kept | User plugin tools, MCP read tools                                                                                                                                                               | No. A Skill cannot install MCP or open private-network MCP         |
+| Skill declarations       | Enabled Skill frontmatter `tools:`                                                                | A retrieval Skill listing `search_memory`                                                                                                                                                       | Yes. Filter existing names only                                    |
+| On-demand computer tools | `computer_use_runtime` is `local` or `sandbox`, after Persona and hard-strip                      | Shell, Python, file write, Neo lifecycle tools, browser (when sandbox capabilities allow)                                                                                                       | May declare, cannot grant. This layer is empty when `runtime=none` |
 
 Neo lifecycle tools (`astrbot_create_skill_payload` and siblings) belong to the sandbox + `shipyard_neo` on-demand computer layer. They are not platform baseline and must not be hung unconditionally.
 
@@ -140,7 +140,7 @@ After same-name source precedence is resolved, only the selected source remains 
 
 ## `read_skill`
 
-Add a built-in tool. Suggested registration name: `astrbot_read_skill`. The model-facing name may be `read_skill`. Do not reuse `astrbot_file_read_tool` or the shell.
+The built-in tool registration name and the model-facing name are both `read_skill`. Do not reuse `astrbot_file_read_tool` or the shell.
 
 ### Input
 
@@ -197,7 +197,7 @@ tools:
 Rules:
 
 - Values are registered AstrBot tool names, such as `astrbot_execute_shell` or `search_memory`. Parse registered names; do not accept model-facing aliases.
-- Do not list `astrbot_read_skill` / `read_skill` in `tools:`. It is kept by the Persona three-state table, not by declaration.
+- Do not list `read_skill` in `tools:`. It is kept by the Persona three-state table, not by declaration.
 - Only `tools:` is recognized. Do not read `allowed-tools` or other Claude / Codex aliases, and do not import `Bash(gh:*)` pattern language. Semantics: **filter, not pre-approval**. The Agent Skills spec marks `allowed-tools` as experimental pre-approval; this repository does not implement or map that field. User docs must say community manuals that only set `allowed-tools` are ignored and do not gain privilege.
 - Unknown tool names are ignored and logged. Do not fail the whole Skill.
 - Missing `tools:` means the Skill **adds no extra tools**. Baseline tools remain. Do not treat omission as “the full tool pool”.
@@ -222,22 +222,22 @@ Hard constraints:
 
 ## Delivery slices
 
-Split the work so prompt, catalog, and authorization do not change in one dump.
+Slice 1 and slice 2 are current behavior. Do not add a parallel assembly path.
 
 ### Slice 1: Unbind manual reads from the shell
 
-- Implement `astrbot_read_skill` with a locked path and low-risk authorization.
-- Build a request-scoped Skill snapshot shared by the prompt and `read_skill`.
-- Change `build_skills_prompt()`; remove `cat` / `type`.
-- Put `read_skill` in the catalog when `runtime=none`.
+- `read_skill` uses a locked path and low-risk `skill.read` authorization.
+- A request-scoped Skill snapshot is shared by the prompt and `read_skill`.
+- `build_skills_prompt()` no longer mentions `cat` / `type`.
+- `read_skill` stays in the catalog when `runtime=none`.
 - Regression: a memory Skill can read `SKILL.md` without Computer Use; `../` and absolute paths fail.
 
 ### Slice 2: Declaration filter and hard strip
 
 - Parse frontmatter `tools:`.
-- Build a pure candidate-tool set first, then materialize one `ToolSet`; `_apply_local_env_tools` / `_apply_sandbox_tools` should expose runtime capabilities rather than unconditionally mutating the request catalog.
-- Extract `assemble_tool_catalog`. Compute the catalog from the eight steps and the baseline table; do not treat the summary formula as complete. Add computer tools on demand; do not hang the full set.
-- Hard-strip `WEBCHAT_INSTANCE_TOOL_ACTIONS` on social surfaces, including MCP write tools.
+- Build a pure candidate-tool set first, then materialize one `ToolSet`; `_apply_local_env_tools` / `_apply_sandbox_tools` write runtime prompts and do not unconditionally mutate the request catalog.
+- `assemble_tool_catalog` computes the catalog from the eight steps and the baseline table. Add computer tools on demand; do not hang the full set.
+- Hard-strip `WEBCHAT_INSTANCE_TOOL_ACTIONS` on social surfaces, including MCP write tools. Authenticated WebChat keeps only the stepped-up action intersection.
 - Regression: two Skills declaring the same tool yield one catalog entry; IM cannot see Shell; WebChat step-up is not bypassed by a Skill; an empty Persona skill list still disables workspace Skills; Persona `tools is None` still keeps undeclared plugin tools.
 
 ### Explicitly out of slice 3
@@ -246,7 +246,7 @@ Host auto-inject of `SKILL.md` when the user names a Skill, paginated `skills.li
 
 ## Acceptance
 
-The implementing PR must cover these behaviors. Put tests next to existing coverage (usually `tests/unit/`):
+These behaviors are covered by `tests/unit/test_skill_tool_assembly.py` and main-Agent catalog tests:
 
 1. The system prompt lists enabled Skill names and descriptions and does not require `cat` / `type`.
 2. `read_skill` opens only files under an enabled Skill directory. `../etc/passwd`, absolute paths, and other Skill directories fail.
@@ -267,10 +267,10 @@ The implementing PR must cover these behaviors. Put tests next to existing cover
 
 ## Docs and config sync
 
-The same change must:
+Current docs already match:
 
-- Update [Skills](/en/use/skills) for the load steps, Local runtime notes, and the rule that only `tools:` is recognized, `allowed-tools` is ignored, and a declaration does not grant privilege.
-- Update this page: mark implemented clauses as current behavior, or move them into [Architecture](/en/dev/architecture).
-- If `skill.read` is added, sync authorization docs and `astrbot/core/auth/registry.py`.
+- [Skills](/en/use/skills) documents the load steps, Local runtime notes, and the rule that only `tools:` is recognized, `allowed-tools` is ignored, and a declaration does not grant privilege.
+- This page records the assembly formula and acceptance boundaries. Implemented clauses also live in [Architecture](/en/dev/architecture).
+- `skill.read` is registered in authorization docs and `astrbot/core/auth/registry.py`.
 - Keep this page structurally aligned with the Chinese [Skills 读取与工具目录装配](/dev/skill-tool-assembly).
 - Do not point at `docs.astrbot.app`.

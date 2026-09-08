@@ -10,7 +10,6 @@ import pytest
 
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
-from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.request_preparation import prepare_provider_request
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -737,12 +736,18 @@ class TestApplyKb:
     async def test_apply_kb_with_agentic_mode(self, mock_event, mock_context):
         """Test applying knowledge base in agentic mode."""
         module = ama
+        kb_tool = _named_tool("astr_kb_search")
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet()
+        tmgr.iter_builtin_tools.return_value = [kb_tool]
         req = ProviderRequest(prompt="test question")
         config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
         await module._apply_kb(mock_event, req, mock_context, config)
+        module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
         assert req.func_tool is not None
+        assert "astr_kb_search" in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_apply_kb_no_prompt(self, mock_event, mock_context):
@@ -820,9 +825,15 @@ async def test_memory_retrieval_tools_are_available_for_default_persona(
     mock_context,
 ):
     req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
+    memory_tools = [
+        _named_tool("search_memory"),
+        _named_tool("get_person_profile"),
+        _named_tool("query_episode"),
+        _named_tool("maintain_memory"),
+    ]
     tool_mgr = MagicMock()
     tool_mgr.get_full_tool_set.return_value = ToolSet()
-    tool_mgr.get_builtin_tool.side_effect = lambda cls: cls()
+    tool_mgr.iter_builtin_tools.return_value = memory_tools
     mock_context.get_llm_tool_manager.return_value = tool_mgr
 
     class MemoryManager:
@@ -832,6 +843,7 @@ async def test_memory_retrieval_tools_are_available_for_default_persona(
     mock_context.memory_manager = MemoryManager()
 
     await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
     assert {
@@ -865,6 +877,12 @@ async def test_memory_retrieval_tools_respect_explicit_empty_persona_tools(
     )
     tool_mgr = MagicMock()
     tool_mgr.get_full_tool_set.return_value = ToolSet()
+    tool_mgr.iter_builtin_tools.return_value = [
+        _named_tool("search_memory"),
+        _named_tool("get_person_profile"),
+        _named_tool("query_episode"),
+        _named_tool("maintain_memory"),
+    ]
     mock_context.get_llm_tool_manager.return_value = tool_mgr
 
     class MemoryManager:
@@ -874,6 +892,7 @@ async def test_memory_retrieval_tools_respect_explicit_empty_persona_tools(
     mock_context.memory_manager = MemoryManager()
 
     await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
     assert req.func_tool.names() == []
@@ -900,10 +919,10 @@ async def test_memory_retrieval_tool_can_be_enabled_by_explicit_persona_tool(
             False,
         )
     )
+    search_memory = _named_tool("search_memory")
     tool_mgr = MagicMock()
-    tool_mgr.get_tool.side_effect = lambda name: (
-        ama.SearchMemoryTool() if name == "search_memory" else None
-    )
+    tool_mgr.get_full_tool_set.return_value = ToolSet()
+    tool_mgr.iter_builtin_tools.return_value = [search_memory]
     mock_context.get_llm_tool_manager.return_value = tool_mgr
 
     class MemoryManager:
@@ -913,6 +932,7 @@ async def test_memory_retrieval_tool_can_be_enabled_by_explicit_persona_tool(
     mock_context.memory_manager = MemoryManager()
 
     await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
     assert req.func_tool.names() == ["search_memory"]
@@ -959,92 +979,113 @@ async def test_apply_kb_with_existing_tools(mock_event, mock_context):
     config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
     await module._apply_kb(mock_event, req, mock_context, config)
+    kb_tool = _named_tool("astr_kb_search")
+    tmgr = mock_context.get_llm_tool_manager.return_value
+    tmgr.get_full_tool_set.return_value = ToolSet()
+    tmgr.iter_builtin_tools.return_value = [kb_tool]
+    module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
     assert req.func_tool is not None
+    assert "astr_kb_search" in req.func_tool.names()
+
+
+def _catalog_config(**overrides):
+    values = {
+        "tool_call_timeout": 60,
+        "computer_use_runtime": "none",
+        "kb_agentic_mode": False,
+        "add_cron_tools": False,
+        "sandbox_cfg": {},
+    }
+    values.update(overrides)
+    return ama.MainAgentBuildConfig(**values)
+
+
+def _named_tool(
+    name: str,
+    *,
+    actions: tuple[str, ...] = ("session.read",),
+    handler_module_path: str | None = None,
+) -> FunctionTool:
+    return FunctionTool(
+        name=name,
+        description=name,
+        parameters={"type": "object", "properties": {}},
+        required_actions=actions,
+        handler_module_path=handler_module_path,
+        active=True,
+    )
 
 
 class TestBuiltinToolInjection:
     """Tests for builtin tool injection paths."""
 
-    @pytest.mark.asyncio
-    async def test_apply_web_search_tools_uses_builtin_tool_manager(
-        self, mock_event, mock_context
-    ):
-        """Test web search tool injection through the builtin tool manager."""
-        module = ama
-        req = ProviderRequest()
+    def _assemble(self, mock_event, mock_context, req, **config):
         mock_context.get_config.return_value = {
-            "provider_settings": {
-                "web_search": True,
-                "websearch_provider": "baidu_ai_search",
-            }
+            "provider_settings": config.get(
+                "provider_settings",
+                {
+                    "web_search": True,
+                    "websearch_provider": "baidu_ai_search",
+                },
+            )
         }
-        builtin_tool = MagicMock(spec=FunctionTool)
-        builtin_tool.name = "web_search_baidu"
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.return_value = builtin_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
+        ama._assemble_request_tool_catalog(
+            mock_event,
+            req,
+            mock_context,
+            _catalog_config(),
+        )
 
-        await module._apply_web_search_tools(mock_event, req, mock_context)
-
-        tool_mgr.get_builtin_tool.assert_called_once_with(module.BaiduWebSearchTool)
+    def test_catalog_includes_enabled_web_search_tools(self, mock_event, mock_context):
+        search_tool = _named_tool("web_search_baidu")
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet()
+        tmgr.iter_builtin_tools.return_value = [search_tool]
+        req = ProviderRequest()
+        self._assemble(mock_event, mock_context, req)
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
+        assert req.func_tool.get_tool("web_search_baidu") is search_tool
 
-    @pytest.mark.asyncio
-    async def test_apply_web_search_tools_adds_firecrawl_search_and_extract_tools(
+    def test_catalog_includes_firecrawl_search_and_extract_tools(
         self, mock_event, mock_context
     ):
-        """Test Firecrawl web search injects search and extract tools."""
-        module = ama
-        req = ProviderRequest()
+        search_tool = _named_tool("web_search_firecrawl")
+        extract_tool = _named_tool("firecrawl_extract_web_page")
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet()
+        tmgr.iter_builtin_tools.return_value = [search_tool, extract_tool]
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
                 "websearch_provider": "firecrawl",
             }
         }
-        search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = "web_search_firecrawl"
-        extract_tool = MagicMock(spec=FunctionTool)
-        extract_tool.name = "firecrawl_extract_web_page"
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
-        await module._apply_web_search_tools(mock_event, req, mock_context)
-
-        assert tool_mgr.get_builtin_tool.call_args_list == [
-            ((module.FirecrawlWebSearchTool,),),
-            ((module.FirecrawlExtractWebPageTool,),),
-        ]
+        req = ProviderRequest()
+        ama._assemble_request_tool_catalog(
+            mock_event, req, mock_context, _catalog_config()
+        )
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
         assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
 
-    @pytest.mark.asyncio
-    async def test_apply_web_search_tools_adds_anysearch_tool(
-        self, mock_event, mock_context
-    ):
-        module = ama
-        req = ProviderRequest()
+    def test_catalog_includes_anysearch_tool(self, mock_event, mock_context):
+        search_tool = _named_tool("web_search_anysearch")
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet()
+        tmgr.iter_builtin_tools.return_value = [search_tool]
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
                 "websearch_provider": "anysearch",
             }
         }
-        builtin_tool = MagicMock(spec=FunctionTool)
-        builtin_tool.name = "web_search_anysearch"
-        tool_mgr = MagicMock()
-        tool_mgr.get_builtin_tool.return_value = builtin_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
-        await module._apply_web_search_tools(mock_event, req, mock_context)
-
-        tool_mgr.get_builtin_tool.assert_called_once_with(module.AnySearchWebSearchTool)
+        req = ProviderRequest()
+        ama._assemble_request_tool_catalog(
+            mock_event, req, mock_context, _catalog_config()
+        )
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_anysearch") is builtin_tool
+        assert req.func_tool.get_tool("web_search_anysearch") is search_tool
 
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
         module = ama
@@ -1086,20 +1127,18 @@ class TestBuiltinToolInjection:
 
         assert module.WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
 
-    def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
-        """Test cron tool injection through the builtin tool manager."""
-        module = ama
+    def test_catalog_includes_cron_tool_when_enabled(self, mock_event, mock_context):
+        future_task_tool = _named_tool("future_task")
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet()
+        tmgr.iter_builtin_tools.return_value = [future_task_tool]
         req = ProviderRequest()
-        tool_mgr = MagicMock()
-
-        future_task_tool = MagicMock(spec=FunctionTool)
-        future_task_tool.name = "future_task"
-        tool_mgr.get_builtin_tool.return_value = future_task_tool
-        mock_context.get_llm_tool_manager.return_value = tool_mgr
-
-        module._proactive_cron_job_tools(req, mock_context)
-
-        tool_mgr.get_builtin_tool.assert_called_once_with(module.FutureTaskTool)
+        ama._assemble_request_tool_catalog(
+            mock_event,
+            req,
+            mock_context,
+            _catalog_config(add_cron_tools=True),
+        )
         assert req.func_tool is not None
         assert req.func_tool.get_tool("future_task") is future_task_tool
 
@@ -1737,95 +1776,92 @@ class TestDecorateLlmRequest:
         assert req.prompt == "Hello"
 
 
-class TestPluginToolFix:
-    """Tests for _plugin_tool_fix function."""
+class TestPluginToolFilter:
+    """Session plugin filtering is owned by catalog assembly."""
 
-    def test_plugin_tool_fix_none_plugins(self, mock_event):
-        """Test plugin tool fix when no plugins specified."""
-        module = ama
-        req = ProviderRequest(func_tool=ToolSet())
+    def test_catalog_keeps_unfiltered_session_when_plugins_unspecified(
+        self, mock_event, mock_context
+    ):
         mock_event.plugins_name = None
-
-        module._plugin_tool_fix(
-            mock_event,
-            req,
-            SimpleNamespace(catalogs=RuntimeCatalogs()),
+        req = ProviderRequest(func_tool=ToolSet())
+        ama._assemble_request_tool_catalog(
+            mock_event, req, mock_context, _catalog_config()
         )
-
         assert req.func_tool is not None
 
-    def test_plugin_tool_fix_filters_by_plugin(self, mock_event):
-        """Test plugin tool fix filters tools by enabled plugins."""
-        module = ama
-        mcp_tool = MagicMock(spec=MCPTool)
-        mcp_tool.name = "mcp_tool"
-
-        plugin_tool = MagicMock()
-        plugin_tool.name = "plugin_tool"
-        plugin_tool.handler_module_path = "test_plugin"
-        plugin_tool.active = True
-
-        tool_set = ToolSet()
-        tool_set.add_tool(mcp_tool)
-        tool_set.add_tool(plugin_tool)
-
-        req = ProviderRequest(func_tool=tool_set)
-        mock_event.plugins_name = ["test_plugin"]
-
-        catalogs = RuntimeCatalogs()
-        catalogs.plugins.publish(
-            StarMetadata(name="test_plugin", module_path="test_plugin")
+    def test_catalog_keeps_enabled_plugin_tools(self, mock_event, mock_context):
+        plugin_tool = _named_tool(
+            "plugin_tool", handler_module_path="plugin.test_plugin"
         )
-        module._plugin_tool_fix(mock_event, req, SimpleNamespace(catalogs=catalogs))
-
-        assert "mcp_tool" in req.func_tool.names()
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([plugin_tool])
+        tmgr.iter_builtin_tools.return_value = []
+        mock_event.plugins_name = ["test_plugin"]
+        mock_context.catalogs.plugins.publish(
+            StarMetadata(name="test_plugin", module_path="plugin.test_plugin")
+        )
+        req = ProviderRequest()
+        ama._assemble_request_tool_catalog(
+            mock_event, req, mock_context, _catalog_config()
+        )
+        assert req.func_tool is not None
         assert "plugin_tool" in req.func_tool.names()
 
-    def test_plugin_tool_fix_mcp_preserved(self, mock_event):
-        """Test that MCP tools are always preserved."""
-        module = ama
-        mcp_tool = MagicMock(spec=MCPTool)
-        mcp_tool.name = "mcp_tool"
-        mcp_tool.active = True
-
-        tool_set = ToolSet()
-        tool_set.add_tool(mcp_tool)
-
-        req = ProviderRequest(func_tool=tool_set)
+    def test_catalog_preserves_tools_without_plugin_origin(
+        self, mock_event, mock_context
+    ):
+        handoff_tool = _named_tool("transfer_to_demo_agent")
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([handoff_tool])
+        tmgr.iter_builtin_tools.return_value = []
         mock_event.plugins_name = ["other_plugin"]
-
-        module._plugin_tool_fix(
-            mock_event,
-            req,
-            SimpleNamespace(catalogs=RuntimeCatalogs()),
+        req = ProviderRequest()
+        ama._assemble_request_tool_catalog(
+            mock_event, req, mock_context, _catalog_config()
         )
-
-        assert "mcp_tool" in req.func_tool.names()
-
-    def test_plugin_tool_fix_preserves_tools_without_plugin_origin(self, mock_event):
-        """Tools without handler_module_path should not be filtered out."""
-        module = ama
-        handoff_tool = FunctionTool(
-            name="transfer_to_demo_agent",
-            description="Delegate to demo agent",
-            parameters={"type": "object", "properties": {}},
-            handler_module_path=None,
-            active=True,
-        )
-
-        tool_set = ToolSet()
-        tool_set.add_tool(handoff_tool)
-
-        req = ProviderRequest(func_tool=tool_set)
-        mock_event.plugins_name = ["other_plugin"]
-
-        module._plugin_tool_fix(
-            mock_event,
-            req,
-            SimpleNamespace(catalogs=RuntimeCatalogs()),
-        )
-
+        assert req.func_tool is not None
         assert "transfer_to_demo_agent" in req.func_tool.names()
+
+    def test_existing_high_risk_tools_are_stripped_on_social_surface(
+        self, mock_event, mock_context
+    ):
+        shell = _named_tool("astrbot_execute_shell", actions=("tool.local_exec",))
+        mock_event.auth_context = SimpleNamespace(
+            source="im",
+            authenticated=False,
+            metadata={},
+        )
+        req = ProviderRequest(func_tool=ToolSet([shell]))
+        ama._assemble_request_tool_catalog(
+            mock_event,
+            req,
+            mock_context,
+            _catalog_config(computer_use_runtime="local"),
+        )
+        assert req.func_tool is not None
+        assert "astrbot_execute_shell" not in req.func_tool.names()
+
+    def test_authenticated_webchat_keeps_only_stepped_up_actions(
+        self, mock_event, mock_context
+    ):
+        shell = _named_tool("astrbot_execute_shell", actions=("tool.local_exec",))
+        python = _named_tool("astrbot_execute_python", actions=("tool.python_exec",))
+        mock_event.auth_context = SimpleNamespace(
+            source="webchat",
+            authenticated=True,
+            metadata={"webchat_step_up_tokens": {"tool.local_exec": "proof"}},
+        )
+        mock_event.subject = SimpleNamespace(kind="dashboard-account")
+        req = ProviderRequest(func_tool=ToolSet([shell, python]))
+        ama._assemble_request_tool_catalog(
+            mock_event,
+            req,
+            mock_context,
+            _catalog_config(computer_use_runtime="local"),
+        )
+        assert req.func_tool is not None
+        assert "astrbot_execute_shell" in req.func_tool.names()
+        assert "astrbot_execute_python" not in req.func_tool.names()
 
 
 class TestBuildMainAgent:
@@ -2523,8 +2559,6 @@ class TestBuildMainAgent:
         with (
             patch.object(module, "_decorate_llm_request", AsyncMock()),
             patch.object(module, "_apply_kb", AsyncMock()),
-            patch.object(module, "_apply_web_search_tools", AsyncMock()),
-            patch.object(module, "_plugin_tool_fix"),
         ):
             ok = await module._prepare_request_for_agent(
                 mock_event,

@@ -8,17 +8,17 @@ outline: deep
 
 相关用户文档：[技能 Skills](/use/skills)、[使用电脑能力](/use/computer)、[授权](/use/authorization)。配置字段见 [AstrBot 配置文件](/dev/astrbot-config)。
 
-## 问题
+## 问题与当前行为
 
-Skills 应是按需加载的任务手册，不应把读手册绑到本机 Shell，也不应靠手册声明扩权。
+Skills 是按需加载的任务手册：读手册不绑本机 Shell，手册声明不能扩权。
 
-当前实现有三条真实缺陷：
+当前运行时对应三条已关闭的缺口：
 
-1. **工具目录不按已启用 Skill 计算。** `SKILL.md` 前言只解析 `description`（Neo 同步再写 `name`），没有工具名声明。主 Agent 装配是人格白名单并上后来硬加的电脑、检索、记忆工具。`agent_runner.config.misc.tool_schema_mode=skills_like` 只做两阶段轻 schema，不按 Skill 收目录。
-2. **读 Skill 绑死 `tool.local_exec`。** `build_skills_prompt()` 强制用 `cat` / `type` 读绝对路径。`computer_use_runtime=none` 仍注入 Skill 清单，同时写「不能用 Shell」。没有运行时拥有的读取动作。记忆、检索类 Skill 在未开电脑能力时读不了手册。
-3. **社交表面不从目录硬裁高权限工具。** Skill 现在声明不了 `execute_shell`，所以还不能靠手册扩权。但 `_apply_local_env_tools` / `_apply_sandbox_tools` 在人格合并之后无条件把 Shell、Python、写文件挂进目录。IM 等社交表面只在执行时授权拒绝，模型仍能看见并尝试调用。
+1. **工具目录按已启用 Skill 计算。** `SKILL.md` 前言一次解析 `name`、`description`、`tools:`。主 Agent 目录由 `assemble_tool_catalog()` 按四层候选再与人格三态、可见性、表面硬裁求交。`agent_runner.config.misc.tool_schema_mode=skills_like` 仍只做两阶段轻 schema，不收目录。
+2. **读手册走 `read_skill`。** `build_skills_prompt()` 要求调用 `read_skill`，不再写 `cat` / `type`。授权动作是低风险 `skill.read`。`computer_use_runtime=none` 仍注入 Skill 清单，并写「不能执行 Shell / Python」，但可以读手册。
+3. **社交表面从目录硬裁高权限工具。** `_apply_local_env_tools` / `_apply_sandbox_tools` 只写运行时提示词。IM、匿名 WebChat、插件、Agent、API Key 按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 从目录移除对应工具。已认证 WebChat 只放行已 step-up 的动作交集。
 
-## 目标
+## 当前行为
 
 1. 多根扫描不变，系统提示只放 Skill **名称和短描述**。
 2. 读手册走运行时工具 `read_skill`，路径锁在已登记 Skill 目录内。不要求电脑能力。
@@ -42,34 +42,34 @@ Skills 应是按需加载的任务手册，不应把读手册绑到本机 Shell�
 
 ## 对照
 
-| 项         | 当前 AstrBot                  | 不要照搬的 Codex 形态                           | 本需求                                                                                 |
-| ---------- | ----------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 发现       | 多根扫描，清单进系统提示      | 同左                                            | 保持                                                                                   |
-| 读正文     | 提示词要求 `cat` / `type`     | `$mention` 主机注入或 `skills.read`             | 只要 `read_skill`；点名注入是可选优化                                                  |
-| 路径       | 绝对路径交给 Shell            | `package` + `skill://`，沙箱感知                | `name` + 相对路径，锁已登记目录                                                        |
-| 工具声明   | 无                            | `openai.yaml` 的 `dependencies.tools`（偏 MCP） | `SKILL.md` 前言 `tools:`，值为已有工具名                                               |
-| 声明语义   | —                             | 缺 MCP 时弹安装                                 | 过滤不是授权                                                                           |
-| 目录怎么算 | 人格白名单 ∪ 事后全挂电脑工具 | 未按 Skill 收内置工具                           | 平台基线 ∪ 会话插件/MCP ∪ Skill 声明 ∪ 按需电脑工具，再 ∩ 人格 ∩ 可见性过滤 ∩ 表面硬裁 |
-| 社交表面   | 目录里有高权限，执行时拒绝    | 本机 CLI 权限模型                               | IM / 匿名 WebChat / API Key 按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 从目录硬裁              |
-| 读手册授权 | `tool.local_exec`             | 独立 `skills.read`                              | `skill.read` 或等价低风险动作；`computer_use_runtime=none` 也能读                      |
+| 项         | 当前 AstrBot                                                                           | 不要照搬的 Codex 形态                           | 本需求                                                            |
+| ---------- | -------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
+| 发现       | 多根扫描，清单进系统提示                                                               | 同左                                            | 保持                                                              |
+| 读正文     | `read_skill`                                                                           | `$mention` 主机注入或 `skills.read`             | 只要 `read_skill`；点名注入是可选优化                             |
+| 路径       | `name` + 相对路径，锁已登记目录                                                        | `package` + `skill://`，沙箱感知                | `name` + 相对路径，锁已登记目录                                   |
+| 工具声明   | `SKILL.md` 前言 `tools:`                                                               | `openai.yaml` 的 `dependencies.tools`（偏 MCP） | `SKILL.md` 前言 `tools:`，值为已有工具名                          |
+| 声明语义   | 过滤不是授权；忽略 `allowed-tools`                                                     | 缺 MCP 时弹安装                                 | 过滤不是授权                                                      |
+| 目录怎么算 | 平台基线 ∪ 会话插件/MCP ∪ Skill 声明 ∪ 按需电脑工具，再 ∩ 人格 ∩ 可见性过滤 ∩ 表面硬裁 | 未按 Skill 收内置工具                           | 同左                                                              |
+| 社交表面   | IM / 匿名 WebChat / API Key 按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 从目录硬裁              | 本机 CLI 权限模型                               | 同左                                                              |
+| 读手册授权 | `skill.read`；`computer_use_runtime=none` 也能读                                       | 独立 `skills.read`                              | `skill.read` 或等价低风险动作；`computer_use_runtime=none` 也能读 |
 
 ## 现状锚点
 
-实现时以这些符号为准，不要发明平行装配路径：
+以这些符号为准，不要发明平行装配路径：
 
-| 职责           | 位置                                                                                                  |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| Skill 清单提示 | `astrbot/core/skills/_skill_inventory.py` 的 `build_skills_prompt()`                                  |
-| 前言解析       | `_parse_frontmatter_description()`；Neo 同步另认 `name`                                               |
-| 请求级过滤     | `astrbot/core/astr_main_agent.py` 的 `_append_skills_prompt()`、`_filter_skills_for_current_config()` |
-| 人格工具合并   | `_merge_persona_tools()`                                                                              |
-| 电脑工具硬挂   | `_apply_local_env_tools()`、`_apply_sandbox_tools()`                                                  |
-| 插件/MCP 过滤  | `_plugin_tool_fix()`                                                                                  |
-| 执行期授权     | `astrbot/core/astr_agent_tool_exec.py` 的 `FunctionToolExecutor._authorize_execution()`               |
-| 高风险动作     | `HIGH_RISK_ACTIONS`（控制面 + 工具）、`WEBCHAT_INSTANCE_TOOL_ACTIONS`（工具目录硬裁）                 |
-| 两阶段 schema  | `tool_loop_agent_runner.py` 的 `tool_schema_mode=skills_like`                                         |
+| 职责           | 位置                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Skill 清单提示 | `astrbot/core/skills/_skill_inventory.py` 的 `build_skills_prompt()`                    |
+| 前言解析       | `astrbot/core/skills/_skill_frontmatter.py` 的 `parse_skill_frontmatter()`              |
+| 请求级快照     | `astrbot/core/skills/_skill_snapshot.py`；`_append_skills_prompt()` 写入事件 extra      |
+| 目录装配       | `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()`                             |
+| 电脑运行时提示 | `_apply_local_env_tools()`、`_apply_sandbox_tools()` 只写提示词，不挂工具               |
+| 插件/MCP 过滤  | `assemble_tool_catalog()` 内的会话插件过滤                                              |
+| 执行期授权     | `astrbot/core/astr_agent_tool_exec.py` 的 `FunctionToolExecutor._authorize_execution()` |
+| 高风险动作     | `HIGH_RISK_ACTIONS`（控制面 + 工具）、`WEBCHAT_INSTANCE_TOOL_ACTIONS`（工具目录硬裁）   |
+| 两阶段 schema  | `tool_loop_agent_runner.py` 的 `tool_schema_mode=skills_like`                           |
 
-## 目标装配
+## 当前装配
 
 对每一次主 Agent 请求，以 8 步为准。下面的公式是摘要，漏项以步骤和基线表为准。
 
@@ -77,8 +77,8 @@ Skills 应是按需加载的任务手册，不应把读手册绑到本机 Shell�
 2. 取出**候选工具并集**（见基线表）：平台基线 ∪ 会话已启用的插件/MCP（非高风险） ∪ 已启用 Skill 的 `tools:` ∪ 本请求运行时按需电脑工具。Skill 声明只往并集里加已注册工具名，不能安装 MCP、不能放开私网、不能把未启用的插件工具拉进来。
 3. 去重。多个 Skill 声明同一工具只保留一次。未知工具名忽略并记日志。
 4. 与人格工具白名单求交。人格 `tools is None` 表示不额外收缩这一层，因此步骤 2 的并集（含插件/MCP）都还在；空列表表示不要普通工具（仍保留 `read_skill`，见三态表）。
-5. 与会话插件过滤求交（现有 `_plugin_tool_fix()` 语义：MCP 和无插件归属的工具保留），再按每个工具的 `required_actions` 风险标签和入口表面做可见性过滤。装配阶段不调用完整 `authorize()`。
-6. **社交表面硬裁**：从目录移除任何 `required_actions` 与 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 有交集的工具。当前集合是 `tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。按动作交集裁，不维护工具名黑名单。IM、匿名 WebChat、插件、Agent、API Key 从目录移除，不只在执行时拒绝。已认证 Dashboard 驱动的 WebChat 仍走现有一次性 step-up，不靠 Skill 绕过。`HIGH_RISK_ACTIONS` 里的控制面动作（如 `identity.operator.write`、`system.pip_install`）本来就不该出现在主 Agent 工具目录。
+5. 与会话插件过滤求交（MCP 和无插件归属的工具保留），再按每个工具的 `required_actions` 风险标签和入口表面做可见性过滤。装配阶段不调用完整 `authorize()`。
+6. **社交表面硬裁**：从目录移除任何 `required_actions` 与 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 有交集的工具。当前集合是 `tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。按动作交集裁，不维护工具名黑名单。IM、匿名 WebChat、插件、Agent、API Key 从目录移除，不只在执行时拒绝。已认证 Dashboard 驱动的 WebChat 只放行 `webchat_step_up_actions` 已覆盖的动作，不靠 Skill 绕过，也不因任意一个 step-up 动作放行全部高权限工具。`HIGH_RISK_ACTIONS` 里的控制面动作（如 `identity.operator.write`、`system.pip_install`）本来就不该出现在主 Agent 工具目录。
 7. `computer_use_runtime=none` 时，即使 Skill 声明了 Shell、Python、写文件，这些工具也不进目录。`tool.file_read` 不在硬裁集合里；社交表面是否允许读工作区文件必须单独规定并测试，默认：仅 local/sandbox 且已通过人格与可见性过滤时才进目录，IM 上不要仅因 Skill 声明就挂出工作区读文件。
 8. `_apply_local_env_tools` / `_apply_sandbox_tools` 只提供运行时能力清单，由装配函数按交集补电脑工具，禁止无条件全挂。
 
@@ -95,7 +95,7 @@ Skills 应是按需加载的任务手册，不应把读手册绑到本机 Shell�
 
 `read_skill` 按人格三态始终保留（空 Skill 快照时可不挂）。`skills_like` 可继续作为 token 优化，与目录计算正交。
 
-目录计算必须是单一纯函数，建议 `assemble_tool_catalog(...)`，放在 `astrbot/core/` 下独立模块，不要继续堆进 `astr_main_agent.py`。输入是冻结的 Skill 快照、人格三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再一次性物化 `ToolSet`。
+目录计算是单一纯函数 `assemble_tool_catalog(...)`，位于 `astrbot/core/tool_catalog.py`。输入是冻结的 Skill 快照、人格三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再一次性物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。
 
 ### 基线与候选层
 
@@ -104,7 +104,7 @@ Skills 应是按需加载的任务手册，不应把读手册绑到本机 Shell�
 | 层             | 何时进入候选                                                     | 例子                                                                                                                            | 是否靠 Skill `tools:`                         |
 | -------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | 平台基线       | 对应能力已开                                                     | 记忆检索（`search_memory` 等）、主动消息、已开启的网页搜索、群历史（配置打开时）、`read_skill`（有已启用 Skill 或按三态保留时） | 否                                            |
-| 会话插件 / MCP | 插件已激活且通过 `_plugin_tool_fix()`；MCP 无插件归属则保留      | 用户插件工具、MCP 读工具                                                                                                        | 否。Skill 不能安装或放开私网 MCP              |
+| 会话插件 / MCP | 插件已激活且通过会话插件过滤；MCP 无插件归属则保留               | 用户插件工具、MCP 读工具                                                                                                        | 否。Skill 不能安装或放开私网 MCP              |
 | Skill 声明     | 本请求已启用 Skill 前言 `tools:`                                 | 某张检索 Skill 声明 `search_memory`                                                                                             | 是。只过滤已有工具名                          |
 | 按需电脑工具   | `computer_use_runtime` 为 `local` 或 `sandbox`，且通过人格与硬裁 | Shell、Python、写文件、Neo 生命周期工具、浏览器（sandbox 能力允许时）                                                           | 可声明，但不能扩权。`runtime=none` 时本层为空 |
 
@@ -140,7 +140,7 @@ Neo 生命周期工具（`astrbot_create_skill_payload` 等）属于 sandbox + `
 
 ## `read_skill`
 
-新增内置工具，建议注册名 `astrbot_read_skill`，模型侧可暴露为 `read_skill`。不要复用 `astrbot_file_read_tool` 或 Shell。
+内置工具注册名和模型侧名称都是 `read_skill`。不要复用 `astrbot_file_read_tool` 或 Shell。
 
 ### 输入
 
@@ -197,7 +197,7 @@ tools:
 规则：
 
 - 值是 AstrBot 已注册工具名的字符串列表，例如 `astrbot_execute_shell`、`search_memory`。解析用注册名，不认模型侧别名。
-- 不要把 `astrbot_read_skill` / `read_skill` 写进 `tools:`。它按人格三态保留，不靠声明。
+- 不要把 `read_skill` 写进 `tools:`。它按人格三态保留，不靠声明。
 - 只认 `tools:`。不读 `allowed-tools` 或其他 Claude / Codex 别名，也不引入 `Bash(gh:*)` 模式语言。语义是**过滤不是预批准**。Agent Skills 规范里的 `allowed-tools` 是实验性预批准字段；本仓库不实现、不兼容映射。用户文档必须写明：社区手册里的 `allowed-tools` 会被忽略，也不会升权。
 - 未知工具名忽略并记日志，不失败整个 Skill。
 - 缺省 `tools:` 表示该 Skill **不额外往目录里加工具**，只提供手册。基线工具仍在。不要把缺省解释成「全工具池」。
@@ -222,22 +222,22 @@ Skill 正文和描述属于可不完全信任的数据。`read_skill` 返回时�
 
 ## 落地切面
 
-按这个顺序拆，避免一次同时改提示词、目录和授权。
+第一刀和第二刀已经落地。不要再加平行装配路径。
 
 ### 第一刀：读手册与 Shell 解绑
 
-- 实现 `astrbot_read_skill`，路径锁死，低风险授权。
-- 同时建立请求级 Skill 快照，供提示词和 `read_skill` 共用。
-- 改 `build_skills_prompt()`，删除 `cat` / `type`。
+- `read_skill` 路径锁死，低风险授权 `skill.read`。
+- 请求级 Skill 快照供提示词和 `read_skill` 共用。
+- `build_skills_prompt()` 不再写 `cat` / `type`。
 - `runtime=none` 也把 `read_skill` 放进目录。
 - 回归：未开电脑能力时，记忆类 Skill 能读 `SKILL.md`；`../` 和绝对路径被拒。
 
 ### 第二刀：声明过滤与硬裁
 
 - 前言解析 `tools:`。
-- 先生成纯函数式的候选工具集合，再一次性物化 `ToolSet`；`_apply_local_env_tools` / `_apply_sandbox_tools` 只提供运行时能力，不直接无条件修改请求目录。
-- 抽出 `assemble_tool_catalog`；按 8 步和基线表计算目录，不以摘要公式替代。电脑工具改为按需补，不再全挂。
-- 社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁，包括 MCP 写工具。
+- 先生成纯函数式的候选工具集合，再一次性物化 `ToolSet`；`_apply_local_env_tools` / `_apply_sandbox_tools` 只提供运行时提示，不直接无条件修改请求目录。
+- `assemble_tool_catalog` 按 8 步和基线表计算目录。电脑工具按需补，不再全挂。
+- 社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁，包括 MCP 写工具。已认证 WebChat 按已 step-up 动作交集放行。
 - 回归：两个 Skill 声明同一工具只出现一次；IM 上看不见 Shell；WebChat step-up 不被 Skill 绕过；人格空 Skills 列表仍禁用工作区 Skill；人格 `tools is None` 时未声明的插件工具仍在。
 
 ### 明确不做的第三刀
@@ -246,7 +246,7 @@ Skill 正文和描述属于可不完全信任的数据。`read_skill` 返回时�
 
 ## 验收
 
-实现 PR 必须覆盖这些行为，测试放在最近的现有目录（通常是 `tests/unit/`）：
+这些行为由 `tests/unit/test_skill_tool_assembly.py` 和主 Agent 装配测试覆盖：
 
 1. 系统提示列出已启用 Skill 的名称和描述，且不含 `cat` / `type` 必读规则。
 2. `read_skill` 只打开已启用 Skill 目录内文件；`../etc/passwd`、绝对路径、其它 Skill 目录均失败。
@@ -267,10 +267,10 @@ Skill 正文和描述属于可不完全信任的数据。`read_skill` 返回时�
 
 ## 文档与配置同步
 
-落地同一变更必须：
+当前文档已经对齐：
 
-- 更新 [技能 Skills](/use/skills) 的加载步骤、Local 执行环境说明，以及「只认 `tools:`、忽略 `allowed-tools`、声明不升权」。
-- 更新本页状态：已实现条款改为「当前行为」，或迁入 [项目架构](/dev/architecture)。
-- 若新增 `skill.read` 动作，同步授权文档与 `astrbot/core/auth/registry.py`。
+- [技能 Skills](/use/skills) 写明加载步骤、Local 执行环境，以及「只认 `tools:`、忽略 `allowed-tools`、声明不升权」。
+- 本页记录当前装配公式和验收边界；实现条款已迁入 [项目架构](/dev/architecture)。
+- `skill.read` 已写入授权文档与 `astrbot/core/auth/registry.py`。
 - 英文页 [Skill reading and tool-catalog assembly](/en/dev/skill-tool-assembly) 必须保持结构对齐。
 - 不要指向 `docs.astrbot.app`。

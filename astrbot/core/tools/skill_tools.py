@@ -13,6 +13,7 @@ from astrbot.core.skills._skill_read import (
     format_skill_read_result,
     lookup_frozen_skill,
     read_host_skill_file,
+    resolve_sandbox_skill_file,
     resolve_skill_relative_path,
     split_truncated_text,
 )
@@ -104,9 +105,11 @@ async def _read_sandbox_skill_file(
     skill: FrozenSkill,
     relative_path: str,
 ) -> str:
-    from pathlib import PurePosixPath
-
-    remote = str(PurePosixPath(skill.resolved_root) / relative_path)
+    remote = resolve_sandbox_skill_file(
+        skill,
+        relative_path,
+        snapshot.sandbox_root,
+    )
     runtime = getattr(context.context.context, "computer_runtime", None)
     if runtime is None:
         raise SkillReadError(GENERIC_SKILL_READ_ERROR)
@@ -120,7 +123,6 @@ async def _read_sandbox_skill_file(
     content = result.get("content")
     if not isinstance(content, str):
         raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    _ = snapshot.sandbox_root
     return content
 
 

@@ -58,6 +58,8 @@ const PROVIDER_ICONS: Record<string, string> = {
     'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
   openrouter:
     'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
+  'opencode-go':
+    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg',
   ssycloud: 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
   tokenpony: 'https://tokenpony.cn/tokenpony-web/logo.png',
   compshare: 'https://compshare.cn/favicon.ico',
@@ -99,6 +101,7 @@ const MONOCHROME_PROVIDER_ICONS = new Set([
   'xiaomi',
   'xiaomi-token-plan',
   'openrouter',
+  'opencode-go',
 ]);
 
 export function isMonochromeProviderIcon(type: string): boolean {

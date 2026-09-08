@@ -46,6 +46,7 @@ from astrbot.core.utils.network_utils import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .request_extra_headers import extra_headers_kwargs
 from .request_retry import retry_provider_request
 
 _request_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -504,9 +505,8 @@ class ProviderOpenAIChatCompletions(Provider):
     def _request_extra_headers(self) -> dict[str, str] | None:
         return None
 
-    def _request_extra_headers_kwargs(self) -> Any:
-        headers = self._request_extra_headers()
-        return {"extra_headers": headers} if headers else {}
+    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers())
 
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)

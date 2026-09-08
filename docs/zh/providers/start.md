@@ -41,7 +41,7 @@ Provider 数据保存在配置档的两个数组中：
 
 - 服务明确提供 OpenAI Chat Completions 兼容端点时，使用 **OpenAI Chat Completions** 或对应预设。
 - 需要 OpenAI Responses 的远端会话状态、后台响应或原生 Web Search 时，选择 **OpenAI Responses**；它不是 Chat Completions 的同义名称。
-- 接入 OpenCode Go 时必须选择 **OpenCode Go Chat Completions**、**OpenCode Go Messages** 或 **OpenCode Go Responses** 专用类型；不要把官方 OpenAI / Anthropic / OpenAI Responses 来源指向 `https://opencode.ai/zen/go/v1`。
+- 接入 OpenCode Go 时必须选择 **OpenCode Go Chat Completions**、**OpenCode Go Messages** 或 **OpenCode Go Responses** 专用类型，并与模型端点匹配；不要把官方 OpenAI / Anthropic / OpenAI Responses 来源指向 `https://opencode.ai/zen/go/v1`。协议对照见 [Provider 配置](./llm)。
 - Anthropic 和 Gemini 应优先使用各自原生适配器，以保留 thinking、原生搜索、图片输出或安全设置。Anthropic 的 API Base 填 `https://api.anthropic.com`，不要带 `/v1`。
 - “OpenAI 兼容”只表示请求协议相近，不保证工具调用、视觉、音频、流式 usage 或 reasoning 字段都兼容。逐项测试实际模型能力。
 

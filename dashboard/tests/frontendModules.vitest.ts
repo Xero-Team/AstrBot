@@ -149,6 +149,8 @@ describe('frontend modules', () => {
     expect(normalizeTextInput('ok')).toBe('ok');
     expect(stepUpHeaders('tok')['X-AstrBot-Step-Up']).toBe('tok');
     expect(getProviderIcon('openai')).toContain('openai');
+    expect(getProviderIcon('opencode-go')).toContain('opencode.svg');
+    expect(isMonochromeProviderIcon('opencode-go')).toBe(true);
     expect(isMonochromeProviderIcon('openai')).toBe(true);
     expect(isMonochromeProviderIcon('google')).toBe(false);
     expect(

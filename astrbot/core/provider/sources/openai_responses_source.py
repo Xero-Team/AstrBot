@@ -34,6 +34,7 @@ from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..register import register_provider_adapter
+from .request_extra_headers import extra_headers_kwargs
 from .request_retry import retry_provider_request
 
 
@@ -212,9 +213,8 @@ class ProviderOpenAIResponses(Provider):
     def _request_extra_headers(self) -> dict[str, str] | None:
         return None
 
-    def _request_extra_headers_kwargs(self) -> Any:
-        headers = self._request_extra_headers()
-        return {"extra_headers": headers} if headers else {}
+    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers())
 
     def _validate_config(self) -> None:
         mode = self.provider_config.get("responses_state_mode", "stateless")
@@ -862,7 +862,9 @@ class ProviderOpenAIResponses(Provider):
                 matching_state.data.get("conversation_id") if matching_state else None
             )
             if not isinstance(conversation_id, str) or not conversation_id:
-                conversation = await client.conversations.create()
+                conversation = await client.conversations.create(
+                    **self._request_extra_headers_kwargs(),
+                )
                 conversation_id = _value(conversation, "id")
             options["conversation"] = conversation_id
             options["store"] = True
@@ -1006,7 +1008,10 @@ class ProviderOpenAIResponses(Provider):
         try:
             await retry_provider_request(
                 "OpenAI Responses",
-                lambda: client.responses.cancel(response_id),
+                lambda: client.responses.cancel(
+                    response_id,
+                    **self._request_extra_headers_kwargs(),
+                ),
             )
         except asyncio.CancelledError:
             raise
@@ -1071,7 +1076,10 @@ class ProviderOpenAIResponses(Provider):
                 )
             response = await retry_provider_request(
                 "OpenAI Responses",
-                lambda: client.responses.retrieve(response_id),
+                lambda: client.responses.retrieve(
+                    response_id,
+                    **self._request_extra_headers_kwargs(),
+                ),
                 max_attempts=request_max_retries,
             )
         return response
@@ -1167,6 +1175,7 @@ class ProviderOpenAIResponses(Provider):
                                 if state.last_sequence_number is not None
                                 else 0
                             ),
+                            **self._request_extra_headers_kwargs(),
                         ),
                         max_attempts=kwargs.get("request_max_retries"),
                     ),

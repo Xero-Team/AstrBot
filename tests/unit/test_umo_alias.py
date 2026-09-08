@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from astrbot.api import Subject
 from astrbot.builtin_stars.builtin_commands.commands.session import SessionCommands
 from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.register.star_handler import get_handler_declaration
@@ -47,6 +48,9 @@ def make_session_context(db) -> SimpleNamespace:
             normalize_name=normalize_umo_name,
         ),
         i18n=FakeI18n(),
+        config=SimpleNamespace(
+            get=lambda: {"platform_settings": {"unique_session": False}}
+        ),
     )
 
 
@@ -194,6 +198,67 @@ async def test_session_name_without_alias_shows_current_names(temp_db):
             "Alias: Backend Room",
         ]
     )
+
+
+@pytest.mark.asyncio
+async def test_session_info_includes_im_subject_id():
+    context = make_session_context(SimpleNamespace())
+    event = SimpleNamespace(
+        unified_msg_origin="weixin:FriendMessage:o9cq803CRKHW0uZPXPl42e_6HmJI",
+        get_group_id=lambda: "",
+        get_sender_id=lambda: "o9cq803CRKHW0uZPXPl42e_6HmJI",
+        get_self_id=lambda: "wxid_bot",
+        get_platform_name=lambda: "weixin",
+        get_platform_id=lambda: "weixin_personal_pwtw",
+        session=SimpleNamespace(
+            platform_id="weixin_personal_pwtw",
+            message_type=SimpleNamespace(value="FriendMessage"),
+            session_id="o9cq803CRKHW0uZPXPl42e_6HmJI",
+        ),
+        set_result=MagicMock(),
+        subject=None,
+    )
+
+    await SessionCommands(context).info(event)
+
+    subject_id = Subject.im(
+        platform_instance="weixin_personal_pwtw",
+        bot_account_id="wxid_bot",
+        sender_id="o9cq803CRKHW0uZPXPl42e_6HmJI",
+    ).id
+    result = event.set_result.call_args.args[0]
+    assert f"Subject ID: {subject_id}" in result.chain[0].text
+    assert subject_id.startswith("im:weixin_personal_pwtw:wxid_bot:")
+
+
+@pytest.mark.asyncio
+async def test_session_info_uses_attached_subject_id():
+    context = make_session_context(SimpleNamespace())
+    attached = Subject.im(
+        platform_instance="napcat",
+        bot_account_id="bot",
+        sender_id="42",
+    )
+    event = SimpleNamespace(
+        unified_msg_origin="napcat:FriendMessage:42",
+        get_group_id=lambda: "",
+        get_sender_id=lambda: "other",
+        get_self_id=lambda: "other-bot",
+        get_platform_name=lambda: "napcat",
+        get_platform_id=lambda: "napcat",
+        session=SimpleNamespace(
+            platform_id="napcat",
+            message_type=SimpleNamespace(value="FriendMessage"),
+            session_id="42",
+        ),
+        set_result=MagicMock(),
+        subject=attached,
+    )
+
+    await SessionCommands(context).info(event)
+
+    result = event.set_result.call_args.args[0]
+    assert f"Subject ID: {attached.id}" in result.chain[0].text
 
 
 def test_session_name_requires_session_manage_action():

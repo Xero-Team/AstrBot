@@ -62,6 +62,7 @@ from astrbot.core.star.star import PluginRegistry
 from astrbot.core.tool_catalog import (
     ToolCatalogInputs,
     assemble_tool_catalog,
+    elevated_instance_tool_actions_from_metadata,
     merge_existing_tools,
     resolve_catalog_surface,
 )
@@ -1201,9 +1202,8 @@ def _assemble_request_tool_catalog(
     subject = getattr(event, "subject", None)
     subject_kind = getattr(subject, "kind", None)
     metadata = getattr(auth_context, "metadata", {}) or {}
-    step_up_tokens = metadata.get("webchat_step_up_tokens")
-    step_up_actions = (
-        frozenset(step_up_tokens) if isinstance(step_up_tokens, dict) else frozenset()
+    elevated_instance_tool_actions = elevated_instance_tool_actions_from_metadata(
+        metadata if isinstance(metadata, dict) else None
     )
     computer_runtime = getattr(plugin_context, "computer_runtime", None)
     existing_booter = None
@@ -1260,7 +1260,7 @@ def _assemble_request_tool_catalog(
         add_cron_tools=config.add_cron_tools,
         sandbox_booter=str(config.sandbox_cfg.get("booter", "shipyard_neo")),
         sandbox_capabilities=sandbox_capabilities,
-        webchat_step_up_actions=step_up_actions,
+        elevated_instance_tool_actions=elevated_instance_tool_actions,
         plugins=plugin_context.catalogs.plugins,
     )
     existing = req.func_tool

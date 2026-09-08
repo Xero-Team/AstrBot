@@ -1,7 +1,25 @@
-from astrbot.api import star
+from astrbot.api import Subject, star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n
+
+
+def _authorization_subject_id(event: AstrMessageEvent) -> str:
+    """Return the authorization subject id for Dashboard binding import."""
+    attached = getattr(event, "subject", None)
+    attached_id = getattr(attached, "id", None)
+    if isinstance(attached_id, str) and attached_id:
+        return attached_id
+    get_platform_id = getattr(event, "get_platform_id", None)
+    platform_id = get_platform_id() if callable(get_platform_id) else None
+    platform_instance = (
+        platform_id if isinstance(platform_id, str) else event.get_platform_name()
+    )
+    return Subject.im(
+        platform_instance=platform_instance,
+        bot_account_id=event.get_self_id() or "default",
+        sender_id=event.get_sender_id() or "unknown",
+    ).id
 
 
 class SessionCommands:
@@ -28,6 +46,7 @@ class SessionCommands:
             "session.info.body",
             umo=umo,
             user_id=str(event.get_sender_id()),
+            subject_id=_authorization_subject_id(event),
             platform_id=event.session.platform_id,
             message_type=event.session.message_type.value,
             session_id=event.session.session_id,

@@ -64,4 +64,4 @@ Skills 是按需加载的任务手册。手册里的脚本仍需要执行环境�
 你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。未开启电脑能力时，仍可通过 `read_skill` 读取记忆、检索类 Skill 手册。
 
 > [!NOTE]
-> 如果您使用 Local 作为执行环境，Shell、Python 和本机文件写入分别按 `tool.local_exec`、`tool.python_exec` 和 `tool.file_write` 授权。已认证 Dashboard 驱动的 WebChat 可在当前 session/config 内通过 WebChat step-up 使用这些高风险动作；全局控制面仍仅限 Dashboard，匿名 WebChat、IM、插件、Agent 和 API Key 不会继承 Dashboard 角色。Skill 前言声明工具不会绕过这些限制。
+> 如果您使用 Local 作为执行环境，Shell、Python 和本机文件写入分别按 `tool.local_exec`、`tool.python_exec` 和 `tool.file_write` 授权。已认证 Dashboard 驱动的 WebChat 可在当前 session/config 内通过 WebChat step-up 使用这些高风险动作。IM 发送者若绑成该配置的 `instance_operator`，可免 step-up 使用同一组动作。全局控制面仍仅限 Dashboard；匿名 WebChat、插件、Agent、API Key 和未绑定的 IM member 不会继承 Dashboard 角色。Skill 前言声明工具不会绕过这些限制。

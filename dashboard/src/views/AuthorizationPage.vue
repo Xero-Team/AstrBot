@@ -620,6 +620,8 @@ onMounted(refresh);
           <v-text-field
             v-model="bindingForm.subjectId"
             :label="t('features.authorization.subject')"
+            :hint="t('features.authorization.subjectHint')"
+            persistent-hint
           />
           <v-select
             v-model="bindingForm.role"

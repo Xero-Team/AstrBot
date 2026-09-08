@@ -13,6 +13,7 @@ from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.request_preparation import prepare_provider_request
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import Face, Image, Json, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -1916,6 +1917,30 @@ class TestPluginToolFilter:
         assert req.func_tool is not None
         assert "astrbot_execute_shell" in req.func_tool.names()
         assert "astrbot_execute_python" not in req.func_tool.names()
+
+    def test_im_instance_operator_keeps_elevated_instance_tools(
+        self, mock_event, mock_context
+    ):
+        shell = _named_tool("astrbot_execute_shell", actions=("tool.local_exec",))
+        mock_event.auth_context = SimpleNamespace(
+            source="im",
+            authenticated=True,
+            metadata={
+                "elevated_instance_tool_actions": tuple(
+                    sorted(WEBCHAT_INSTANCE_TOOL_ACTIONS)
+                )
+            },
+        )
+        mock_event.subject = SimpleNamespace(kind="im")
+        req = ProviderRequest(func_tool=ToolSet([shell]))
+        ama._assemble_request_tool_catalog(
+            mock_event,
+            req,
+            mock_context,
+            _catalog_config(computer_use_runtime="local"),
+        )
+        assert req.func_tool is not None
+        assert "astrbot_execute_shell" in req.func_tool.names()
 
 
 class TestBuildMainAgent:

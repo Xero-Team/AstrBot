@@ -124,7 +124,8 @@ Dashboard 账户在所选配置文件上拥有 `instance_operator` 或更高角�
 
 此功能不会授予修改账户、提供商、插件、系统设置、导出或重启等全局 Dashboard
 操作权限。账户现有的 Persona、工具、沙箱和路径限制仍然生效。匿名 WebChat、API Key、
-IM 消息、插件和后台续跑不能复用该授权。
+IM 消息、插件和后台续跑不能复用该授权。IM 发送者要使用同一组实例工具，需把
+`/session info` 里的授权主体绑成该配置的 `instance_operator`，见 [授权管理](./authorization)。
 
 > [!NOTE]
 > 为保证消息接收顺序，同一浏览器会话建议只保留一个 ChatUI 页面。如果你在多个标签页中同时打开聊天页面，系统可能会提示需要重新建立连接。

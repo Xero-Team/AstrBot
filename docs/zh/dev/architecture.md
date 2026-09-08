@@ -206,7 +206,7 @@ Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 worksp
 
 人格 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表移除普通工具，仍保留 `read_skill`。非空列表与白名单求交，`read_skill` 仍保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。Neo 生命周期工具属于 sandbox + `shipyard_neo` 的按需电脑层，不是平台基线。
 
-社交表面（IM、匿名 WebChat、插件、Agent、API Key）按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 从目录硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。已认证 WebChat 只放行已 step-up 的动作交集。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。
+社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
 
 `read_skill` 使用请求创建时冻结的快照，不按名称重扫全局目录。宿主冻结单文件 64 KiB、目录合计 256 KiB / 32 个文件。路径相对 Skill 目录；拒绝 `..`、绝对路径、符号链接逃逸。Unix 使用 `O_NOFOLLOW`。前言只认 `tools:`，忽略 `allowed-tools`；声明是过滤不是授权。不要照搬 Claude Code 预批准、Codex `$mention` / `skill://`、或 OpenCode 全工具池目录。
 
@@ -281,35 +281,35 @@ guest:<id>
 
 动作使用 `domain.verb`。内置命令通过 `@filter.permission("session.manage")` 声明能力，最终仍调用 `authorize()`。高风险动作不能从父动作静默继承。
 
-| 动作                                              | 默认允许角色                                   | 高风险             |
-| ------------------------------------------------- | ---------------------------------------------- | ------------------ |
-| `session.read`                                    | member 及以上（当前会话）                      | 否                 |
-| `session.manage`                                  | session_admin 及以上                           | 否                 |
-| `session.assign`                                  | session_owner 及以上                           | 跨会话时需更高角色 |
-| `provider.use` / `provider.read`                  | member 及以上                                  | 否；凭据永不返回   |
-| `provider.manage`                                 | instance_operator 及以上                       | 否                 |
-| `provider.credentials.write`                      | instance_operator 及以上                       | 是                 |
-| `platform.manage`                                 | instance_operator 及以上                       | 是                 |
-| `agent.manage`                                    | session_owner 及以上                           | 部分               |
-| `extension.read` / `extension.manage`             | member / instance_operator 及以上              | 部分               |
-| `extension.plugin_install`                        | instance_operator 及以上 + Dashboard step-up   | 是                 |
-| `data.manage` / `data.export_all`                 | 资源所有者 / instance_operator 及以上          | 全量导出是高风险   |
-| `system.manage`                                   | root；部分只读给 operator                      | 否                 |
-| `system.restart` / `system.pip_install`           | root + step-up                                 | 是                 |
-| `identity.manage`                                 | session_owner 及以上（作用域受限）             | 是                 |
-| `identity.operator.write` / `identity.root.write` | root + step-up                                 | 是                 |
-| `dashboard.account.manage`                        | root + step-up                                 | 是                 |
-| `filesystem.read` / `filesystem.write`            | operator、root                                 | 否                 |
-| `filesystem.manage`                               | root + step-up                                 | 是                 |
-| `tool.file_read` / `tool.mcp_read`                | member 及以上                                  | 否                 |
-| `skill.read`                                      | member 及以上                                  | 否                 |
-| `tool.local_exec` 等实例工具                      | instance_operator 及以上；WebChat 另需 step-up | 是                 |
+| 动作                                              | 默认允许角色                                                                                     | 高风险             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------ |
+| `session.read`                                    | member 及以上（当前会话）                                                                        | 否                 |
+| `session.manage`                                  | session_admin 及以上                                                                             | 否                 |
+| `session.assign`                                  | session_owner 及以上                                                                             | 跨会话时需更高角色 |
+| `provider.use` / `provider.read`                  | member 及以上                                                                                    | 否；凭据永不返回   |
+| `provider.manage`                                 | instance_operator 及以上                                                                         | 否                 |
+| `provider.credentials.write`                      | instance_operator 及以上                                                                         | 是                 |
+| `platform.manage`                                 | instance_operator 及以上                                                                         | 是                 |
+| `agent.manage`                                    | session_owner 及以上                                                                             | 部分               |
+| `extension.read` / `extension.manage`             | member / instance_operator 及以上                                                                | 部分               |
+| `extension.plugin_install`                        | instance_operator 及以上 + Dashboard step-up                                                     | 是                 |
+| `data.manage` / `data.export_all`                 | 资源所有者 / instance_operator 及以上                                                            | 全量导出是高风险   |
+| `system.manage`                                   | root；部分只读给 operator                                                                        | 否                 |
+| `system.restart` / `system.pip_install`           | root + step-up                                                                                   | 是                 |
+| `identity.manage`                                 | session_owner 及以上（作用域受限）                                                               | 是                 |
+| `identity.operator.write` / `identity.root.write` | root + step-up                                                                                   | 是                 |
+| `dashboard.account.manage`                        | root + step-up                                                                                   | 是                 |
+| `filesystem.read` / `filesystem.write`            | operator、root                                                                                   | 否                 |
+| `filesystem.manage`                               | root + step-up                                                                                   | 是                 |
+| `tool.file_read` / `tool.mcp_read`                | member 及以上                                                                                    | 否                 |
+| `skill.read`                                      | member 及以上                                                                                    | 否                 |
+| `tool.local_exec` 等实例工具                      | instance_operator 及以上；WebChat 另需 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up | 是                 |
 
 插件自定义动作必须使用 `plugin:<plugin-id>:<action>` 命名空间，并通过 `self.context.authz.authorize()` 再次调用核心授权。未声明的插件写操作默认拒绝。工具最终权限是“用户授权 ∩ Persona 工具策略 ∩ 工具自身策略”；子 Agent handoff 不能提升调用者。
 
 ### Step-up、审计与 API Key
 
-全局高风险操作只接受 Dashboard 控制面的一次性密码/TOTP step-up，凭证绑定 account、Dashboard `sid`、action、资源和上下文摘要，TTL 不超过 5 分钟，只能原子消费一次。Dashboard 驱动的 WebChat 使用独立的 `/authorization/webchat-step-up`，只覆盖六个实例级工具：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。
+全局高风险操作只接受 Dashboard 控制面的一次性密码/TOTP step-up，凭证绑定 account、Dashboard `sid`、action、资源和上下文摘要，TTL 不超过 5 分钟，只能原子消费一次。Dashboard 驱动的 WebChat 使用独立的 `/authorization/webchat-step-up`，覆盖 `WEBCHAT_INSTANCE_TOOL_ACTIONS`。IM 主体在该配置上为 `instance_operator` 及以上时，同一集合免 step-up；重启、装插件等控制面动作仍 Dashboard-only。
 
 拒绝、高风险 allow、step-up 和绑定变更写脱敏审计。高风险 allow 在有界审计队列已满时 fail closed；绑定变更与 step-up 签发在同一业务事务中落库。
 

@@ -206,7 +206,7 @@ catalog = surface-strip(visibility-filter(Persona whitelist ∩ candidates))
 
 Persona `tools is None` means “do not shrink these four layers”. It does not mean “drop plugin tools unless a Skill named them”. An empty list removes ordinary tools and still keeps `read_skill`. A non-empty list intersects the whitelist and still keeps `read_skill`. Assembly uses static visibility only; it does not call full `authorize()`. Neo lifecycle tools belong to the sandbox + `shipyard_neo` computer layer, not the platform baseline.
 
-Social surfaces (IM, anonymous WebChat, plugins, agents, API keys) hard-strip tools whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`. Authenticated WebChat keeps only actions covered by the current step-up set. Do not use the full `HIGH_RISK_ACTIONS` set as a catalog blacklist. `tool.file_read` is not in the strip set; IM must not mount workspace file-read tools merely because a Skill declared them.
+Social surfaces hard-strip tools whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`. Anonymous WebChat, plugins, agents, and API keys always strip that set. Authenticated WebChat keeps only actions covered by the current step-up set. IM mounts the whole set without Dashboard step-up when the IM subject is `instance_operator` or above on that config; adding an action to the set is the compatibility hook. Do not use the full `HIGH_RISK_ACTIONS` set as a catalog blacklist. `tool.file_read` is not in the strip set; IM must not mount workspace file-read tools merely because a Skill declared them. Global `root`/`operator` bindings do not apply to IM subjects.
 
 `read_skill` uses the snapshot frozen at request creation and must not rescan global Skill directories by name. Host freeze caps are 64 KiB per file and 256 KiB / 32 files per tree. Paths are relative to the Skill directory; `..`, absolute paths, and symlink escapes are rejected. Unix opens with `O_NOFOLLOW`. Frontmatter recognizes only `tools:`; `allowed-tools` is ignored. The field is a filter, not a grant. Do not copy Claude Code pre-approval, Codex `$mention` / `skill://`, or OpenCode's full-pool catalog.
 
@@ -281,35 +281,35 @@ A role names who the subject is; the scope decides where that authority applies.
 
 Actions use `domain.verb`. Built-in commands declare them with `@filter.permission("session.manage")` and still call `authorize()`. High-risk actions are never inherited silently from a parent action.
 
-| Action                                            | Default roles                                  | High risk                          |
-| ------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
-| `session.read`                                    | member+ on the current session                 | no                                 |
-| `session.manage`                                  | session_admin+                                 | no                                 |
-| `session.assign`                                  | session_owner+                                 | yes across sessions                |
-| `provider.use` / `provider.read`                  | member+                                        | no; credentials are never returned |
-| `provider.manage`                                 | instance_operator+                             | no                                 |
-| `provider.credentials.write`                      | instance_operator+                             | yes                                |
-| `platform.manage`                                 | instance_operator+                             | yes                                |
-| `agent.manage`                                    | session_owner+                                 | partial                            |
-| `extension.read` / `extension.manage`             | member+ / instance_operator+                   | partial                            |
-| `extension.plugin_install`                        | instance_operator+ with Dashboard step-up      | yes                                |
-| `data.manage` / `data.export_all`                 | owner / instance_operator+                     | full export is high risk           |
-| `system.manage`                                   | root; limited read for operator                | no                                 |
-| `system.restart` / `system.pip_install`           | root + step-up                                 | yes                                |
-| `identity.manage`                                 | session_owner+ within scope                    | yes                                |
-| `identity.operator.write` / `identity.root.write` | root + step-up                                 | yes                                |
-| `dashboard.account.manage`                        | root + step-up                                 | yes                                |
-| `filesystem.read` / `filesystem.write`            | operator, root                                 | no                                 |
-| `filesystem.manage`                               | root + step-up                                 | yes                                |
-| `tool.file_read` / `tool.mcp_read`                | member+                                        | no                                 |
-| `skill.read`                                      | member+                                        | no                                 |
-| instance tools such as `tool.local_exec`          | instance_operator+; WebChat also needs step-up | yes                                |
+| Action                                            | Default roles                                                                                                                       | High risk                          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `session.read`                                    | member+ on the current session                                                                                                      | no                                 |
+| `session.manage`                                  | session_admin+                                                                                                                      | no                                 |
+| `session.assign`                                  | session_owner+                                                                                                                      | yes across sessions                |
+| `provider.use` / `provider.read`                  | member+                                                                                                                             | no; credentials are never returned |
+| `provider.manage`                                 | instance_operator+                                                                                                                  | no                                 |
+| `provider.credentials.write`                      | instance_operator+                                                                                                                  | yes                                |
+| `platform.manage`                                 | instance_operator+                                                                                                                  | yes                                |
+| `agent.manage`                                    | session_owner+                                                                                                                      | partial                            |
+| `extension.read` / `extension.manage`             | member+ / instance_operator+                                                                                                        | partial                            |
+| `extension.plugin_install`                        | instance_operator+ with Dashboard step-up                                                                                           | yes                                |
+| `data.manage` / `data.export_all`                 | owner / instance_operator+                                                                                                          | full export is high risk           |
+| `system.manage`                                   | root; limited read for operator                                                                                                     | no                                 |
+| `system.restart` / `system.pip_install`           | root + step-up                                                                                                                      | yes                                |
+| `identity.manage`                                 | session_owner+ within scope                                                                                                         | yes                                |
+| `identity.operator.write` / `identity.root.write` | root + step-up                                                                                                                      | yes                                |
+| `dashboard.account.manage`                        | root + step-up                                                                                                                      | yes                                |
+| `filesystem.read` / `filesystem.write`            | operator, root                                                                                                                      | no                                 |
+| `filesystem.manage`                               | root + step-up                                                                                                                      | yes                                |
+| `tool.file_read` / `tool.mcp_read`                | member+                                                                                                                             | no                                 |
+| `skill.read`                                      | member+                                                                                                                             | no                                 |
+| instance tools such as `tool.local_exec`          | instance_operator+; WebChat also needs step-up; IM skips step-up when the IM subject is bound as `instance_operator` on that config | yes                                |
 
 Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.authz.authorize()` again. Undeclared plugin writes are denied. Tool authority is the intersection of user authorization, Persona tool policy, and the tool's own policy. Sub-agent handoff cannot escalate the caller.
 
 ### Step-up, audit, and API keys
 
-Global high-risk operations accept only a one-time Dashboard password/TOTP step-up bound to the account, Dashboard `sid`, action, resource, and context digest. TTL is at most five minutes, and the token is consumed atomically. Dashboard-driven WebChat uses `/authorization/webchat-step-up` for six instance tools only: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`.
+Global high-risk operations accept only a one-time Dashboard password/TOTP step-up bound to the account, Dashboard `sid`, action, resource, and context digest. TTL is at most five minutes, and the token is consumed atomically. Dashboard-driven WebChat uses `/authorization/webchat-step-up` for `WEBCHAT_INSTANCE_TOOL_ACTIONS`. An IM subject bound as `instance_operator` or above on that config uses the same set without step-up. Control-plane actions such as restart and plugin install stay Dashboard-only.
 
 Denials, high-risk allows, step-up, and binding mutations write redacted audit events. A full bounded audit queue fails closed for high-risk allows. Binding mutations and step-up issuance commit in the same business transaction.
 

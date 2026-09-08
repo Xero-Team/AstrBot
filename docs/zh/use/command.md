@@ -57,7 +57,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### 会话信息
 
-- `/session info`：显示 UMO、用户 ID、平台 ID、消息类型和会话 ID。
+- `/session info`：显示 UMO、用户 ID、授权主体（`im:{platform}:{bot}:{sender}`）、平台 ID、消息类型和会话 ID。
 - `/session name`：显示当前自动名称和已保存别名，需要 `session.manage`。
 - `/session name <名称>`：设置当前 UMO 的展示别名，需要 `session.manage`。名称由 `GreedyStr` 接收，可以包含空格。
 

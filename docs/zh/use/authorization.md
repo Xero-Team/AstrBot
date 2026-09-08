@@ -64,11 +64,14 @@ AstrBot 把 Dashboard 登录、IM 会话管理和高风险操作拆开。把群�
 
 ChatUI 里的高风险工具（本机 Shell、文件写入、浏览器等）是另一次、只覆盖当前 WebChat 会话的 step-up，说明见 [WebUI](./webui#chatui-中的高风险工具)。它不会把 IM 用户变成全局 operator，也不会授权改账户、装插件或重启。
 
+要在微信等 IM 上使用同一组实例工具，发送 `/session info`，把「授权主体」绑成当前配置的 `instance_operator`。这条路径免 step-up，只覆盖 `WEBCHAT_INSTANCE_TOOL_ACTIONS`，不会继承 Dashboard `root`/`operator`。`/admin grant` 仍然只给本会话 `session_admin`。
+
 读 Skill 手册使用低风险动作 `skill.read`。当前会话的 member 及以上可以调用 `read_skill`。它不授予 Shell、Python 或写文件权限。
 
 ## 常见误配
 
-1. 用 `/admin grant` 之后，以为对方可以登录 WebUI。
+1. 用 `/admin grant` 之后，以为对方可以登录 WebUI，或以为可以用本机 Shell。
 2. 把 Dashboard 的 `operator` 当成群管理开关。
 3. 在 A 群授权，却在 B 群或另一份配置文件上期望同样生效。
 4. 把匿名 WebChat 或 API Key 当成 Dashboard `root`。
+5. 绑 `instance_operator` 时填 UID，而不是 `/session info` 里的授权主体。

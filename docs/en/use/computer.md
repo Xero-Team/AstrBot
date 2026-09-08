@@ -75,7 +75,7 @@ Computer Use uses the unified authorization service. There is no “Require Astr
 - `tool.file_write`
 - `tool.browser_control`
 
-`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, and `tool.computer_use` are high-risk: an authenticated Dashboard-driven WebChat may use them only in its current session/config after the WebChat one-time step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, IM, plugins, agents, and API keys do not inherit Dashboard roles. Sandbox, path, Persona, and declared-tool restrictions still apply.
+`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use` are instance-scoped high-risk actions: an authenticated Dashboard-driven WebChat may use them only in its current session/config after the WebChat one-time step-up. An IM sender bound as `instance_operator` on that config may use the same set without step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, plugins, agents, API keys, and unbound IM members do not inherit Dashboard roles. Sandbox, path, Persona, and declared-tool restrictions still apply.
 
 In `local` mode, ordinary session members may read:
 
@@ -85,7 +85,7 @@ In `local` mode, ordinary session members may read:
 - AstrBot temporary directories
 - `.astrbot` under the system temporary directory
 
-Writes and edits remain limited to the current session workspace and temporary directories. Grant matching actions from the Dashboard [authorization page](/en/use/authorization). `/admin grant` only creates current-session `session_admin`; it does not turn an IM user into a global operator. See [Architecture](/en/dev/architecture#unified-authorization) for the developer model.
+Writes and edits remain limited to the current session workspace and temporary directories. Bind the IM sender as `instance_operator` on that config from the Dashboard [authorization page](/en/use/authorization). `/admin grant` only creates current-session `session_admin`; it does not turn an IM user into a global operator. See [Architecture](/en/dev/architecture#unified-authorization) for the developer model.
 
 ## Sandbox Mode
 

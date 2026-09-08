@@ -18,6 +18,7 @@ from astrbot import logger
 from astrbot.core.auth.models import (
     GLOBAL_SCOPE_ID,
     HIGH_RISK_ACTIONS,
+    INSTANCE_TOOL_ROLES,
     ROLE_ORDER,
     STEP_UP_TTL_SECONDS,
     WEBCHAT_INSTANCE_TOOL_ACTIONS,
@@ -187,6 +188,23 @@ def _control_plane_bindings_apply(subject: Subject, context: AuthContext) -> boo
         context.source == "webchat"
         and subject.kind == "dashboard-account"
         and context.authenticated
+    )
+
+
+def _im_instance_tools_skip_step_up(
+    subject: Subject,
+    context: AuthContext,
+    action: str,
+    role: Role | None,
+) -> bool:
+    """Return whether IM instance_operator+ may use an instance tool without step-up."""
+
+    return (
+        context.source == "im"
+        and subject.kind == "im"
+        and context.authenticated
+        and action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+        and role in INSTANCE_TOOL_ROLES
     )
 
 
@@ -1454,19 +1472,22 @@ class AuthorizationService:
         role = display_role(matched) or await self._resolve_role(
             subject, resource, context
         )
-        if context.source == "webchat" and action in WEBCHAT_INSTANCE_TOOL_ACTIONS:
-            if role not in {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}:
-                return Decision(
-                    False,
-                    subject,
-                    action,
-                    resource,
-                    role,
-                    "role_scope_denied",
-                    audit_id=audit_id,
-                    matched_relations=tuple(item.relation.value for item in matched),
-                    relation_sources=tuple(item.source for item in matched),
-                )
+        if (
+            context.source in {"webchat", "im"}
+            and action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+            and role not in INSTANCE_TOOL_ROLES
+        ):
+            return Decision(
+                False,
+                subject,
+                action,
+                resource,
+                role,
+                "role_scope_denied",
+                audit_id=audit_id,
+                matched_relations=tuple(item.relation.value for item in matched),
+                relation_sources=tuple(item.source for item in matched),
+            )
         override_allowed = await self._policy_override_allows(action, resource, role)
         if not granted and not override_allowed:
             return Decision(
@@ -1481,7 +1502,9 @@ class AuthorizationService:
                 relation_sources=tuple(item.source for item in matched),
             )
         step_up_id: str | None = None
-        if _requires_step_up(action, resource, context):
+        if _requires_step_up(
+            action, resource, context
+        ) and not _im_instance_tools_skip_step_up(subject, context, action, role):
             if context.source not in {"dashboard", "webchat"}:
                 return Decision(
                     False,
@@ -1734,6 +1757,22 @@ class AuthorizationService:
                 )
             )
         return facts
+
+    async def elevated_instance_tool_actions(
+        self, subject: Subject, resource: Resource, context: AuthContext
+    ) -> frozenset[str]:
+        """Return instance-tool actions this IM actor may mount without step-up.
+
+        Catalog assembly stays static: the caller stashes this set on the
+        request context. Execution still goes through ``authorize()``.
+        """
+
+        if context.source != "im" or subject.kind != "im" or not context.authenticated:
+            return frozenset()
+        facts = await self._collect_relation_facts(subject, resource, context)
+        if not any(role in INSTANCE_TOOL_ROLES for role, _, _ in facts):
+            return frozenset()
+        return WEBCHAT_INSTANCE_TOOL_ACTIONS
 
     async def _resolve_role(
         self, subject: Subject, resource: Resource, context: AuthContext

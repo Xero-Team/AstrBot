@@ -95,6 +95,30 @@ describe('AuthorizationPage', () => {
     expect(wrapper.find('.mdi-lock-outline').exists()).toBe(true);
   });
 
+  it('shows the IM subject-id hint on the binding form', async () => {
+    const wrapper = mountWithVuetify(AuthorizationPage, {
+      global: {
+        stubs: {
+          VDialog: {
+            props: ['modelValue'],
+            template: '<div><slot /></div>',
+          },
+        },
+      },
+    });
+    await flushPromises();
+
+    const grantButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Grant binding'));
+    expect(grantButton).toBeDefined();
+    await grantButton!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('im:{platform}:{bot}:{sender}');
+    expect(wrapper.text()).toContain('Do not paste the UID');
+  });
+
   it('filters bindings by the search query', async () => {
     const wrapper = mountWithVuetify(AuthorizationPage);
     await flushPromises();

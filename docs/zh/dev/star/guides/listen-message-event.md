@@ -538,11 +538,41 @@ async def my_custom_hook_1(
 >
 > `req.system_prompt += ...` 适合追加稳定、长期有效的角色设定或全局规则。不建议把每轮都会变化的内容追加到 `system_prompt`，例如当前时间、好感度、状态栏、短期记忆片段、检索摘要等。这类写法会让系统提示词在每轮请求中变化，容易破坏模型服务端的提示词缓存，显著增加请求成本和首 token 延迟。
 >
-> 对于每轮都会变化、内容量中小的提示词，可以保留原始 `req.prompt`，再把动态上下文添加到本轮用户输入之前。这样不会让 `system_prompt` 每轮变化，也不会意外覆盖用户的原始消息：
+> 内置 `local` Agent 执行器会消费 `req.extra_user_content_parts`，并把这些内容块追加在用户消息（`req.prompt`）之后。对于每轮都会变化、内容量中小的提示词，把动态上下文追加到该列表并调用 `mark_as_temp()`。这样不会让 `system_prompt` 每轮变化，也不会把瞬时内容写入会话历史：
 >
 > ```python
+> from astrbot.api.event import filter, AstrMessageEvent
+> from astrbot.api.provider import ProviderRequest, TextPart
+>
+>
 > @filter.on_llm_request()
 > async def add_dynamic_prompt(self, event: AstrMessageEvent, req: ProviderRequest):
+>     req.extra_user_content_parts.append(
+>         TextPart(
+>             text=(
+>                 "<dynamic_context>\n"
+>                 "当前时间：2026-05-03 20:00\n"
+>                 "好感度：72\n"
+>                 "相关记忆：用户喜欢简洁直接的回答。\n"
+>                 "</dynamic_context>"
+>             )
+>         ).mark_as_temp()
+>     )
+> ```
+>
+> 省略 `mark_as_temp()` 时，该内容块会随用户消息写入会话历史。
+>
+> Dify、Coze、阿里云百炼应用、DeerFlow 等第三方 Agent 执行器只读取 `req.prompt`、图片和 `system_prompt`，不会消费 `extra_user_content_parts`。在这些执行器上按上面示例追加的内容会被静默丢弃。此时应改写 `req.prompt`，并把动态上下文放到用户输入之前：
+>
+> ```python
+> from astrbot.api.event import filter, AstrMessageEvent
+> from astrbot.api.provider import ProviderRequest
+>
+>
+> @filter.on_llm_request()
+> async def add_dynamic_prompt_for_third_party(
+>     self, event: AstrMessageEvent, req: ProviderRequest
+> ):
 >     original_prompt = req.prompt or ""
 >     dynamic_context = (
 >         "<dynamic_context>\n"
@@ -554,7 +584,7 @@ async def my_custom_hook_1(
 >     req.prompt = f"{dynamic_context}\n\n{original_prompt}"
 > ```
 >
-> 修改 `req.prompt` 也会改变随后保存到会话历史的用户消息，因此只应放入允许持久化的内容。当前公共插件 SDK 尚未导出可标记为“仅本轮、不保存”的消息内容块；瞬时状态、敏感数据或较大的长期记忆、知识库和外部查询结果应优先注册为 `llm_tool`，让模型按需读取。
+> 修改 `req.prompt` 也会改变随后保存到会话历史的用户消息，因此只应放入允许持久化的内容。瞬时状态、敏感数据或较大的长期记忆、知识库和外部查询结果应优先注册为 `llm_tool`，让模型按需读取。
 
 #### LLM 请求完成时
 

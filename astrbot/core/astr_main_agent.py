@@ -442,10 +442,11 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
     prefix = cfg.get("prompt_prefix")
     if not prefix:
         return
+    prompt = req.prompt or ""
     if "{{prompt}}" in prefix:
-        req.prompt = interpolate_placeholders(prefix, {"prompt": req.prompt})
+        req.prompt = interpolate_placeholders(prefix, {"prompt": prompt})
     else:
-        req.prompt = f"{prefix}{req.prompt}"
+        req.prompt = f"{prefix}{prompt}"
 
 
 def _get_workspace_path_for_umo(umo: str) -> Path:

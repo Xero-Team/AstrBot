@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 from astrbot.core.utils.string_utils import interpolate_placeholders
@@ -11,6 +12,24 @@ LLM_PLACEHOLDER_MODULES = (
     "astrbot/core/astr_agent_tool_exec.py",
     "astrbot/core/agent/runners/tool_loop_agent_runner.py",
 )
+
+
+def _imported_module_names(source: str) -> set[str]:
+    tree = ast.parse(source)
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+    return names
+
+
+def _imports_jinja2(source: str) -> bool:
+    return any(
+        name == "jinja2" or name.startswith("jinja2.")
+        for name in _imported_module_names(source)
+    )
 
 
 def test_interpolate_placeholders_replaces_known_keys():
@@ -45,4 +64,11 @@ def test_interpolate_placeholders_stringifies_values():
 def test_llm_placeholder_modules_do_not_import_jinja2():
     for rel in LLM_PLACEHOLDER_MODULES:
         source = (ROOT / rel).read_text(encoding="utf-8")
-        assert "jinja2" not in source, rel
+        assert not _imports_jinja2(source), rel
+
+
+def test_jinja2_import_check_ignores_non_import_mentions():
+    assert not _imports_jinja2('"""jinja2"""\n# import jinja2\nvalue = "jinja2"\n')
+    assert _imports_jinja2("import jinja2\n")
+    assert _imports_jinja2("from jinja2 import Environment\n")
+    assert _imports_jinja2("import jinja2.environment\n")

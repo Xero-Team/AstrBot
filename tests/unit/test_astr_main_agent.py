@@ -1739,6 +1739,24 @@ class TestDecorateLlmRequest:
         assert req.prompt == "AI :"
 
     @pytest.mark.asyncio
+    async def test_decorate_llm_request_prefix_none_prompt_prepends_empty(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        req = ProviderRequest(prompt=None)
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={"prompt_prefix": "AI: "},
+        )
+
+        with patch.object(mock_context, "get_config") as mock_get_config:
+            mock_get_config.return_value = {}
+
+            await module._decorate_llm_request(mock_event, req, mock_context, config)
+
+        assert req.prompt == "AI: "
+
+    @pytest.mark.asyncio
     async def test_decorate_llm_request_no_conversation(self, mock_event, mock_context):
         """Test decoration when no conversation exists."""
         module = ama

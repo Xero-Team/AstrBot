@@ -9,13 +9,13 @@ AstrBot supports connecting a personal WeChat account through the `Personal WeCh
 
 ## Supported Message Types
 
-| Message Type | Receive | Send | Notes                                                                            |
-| ------------ | ------- | ---- | -------------------------------------------------------------------------------- |
-| Text         | Yes     | Yes  |                                                                                  |
-| Image        | Yes     | Yes  | Downloaded and decrypted into the local temp directory on receive                |
-| Voice        | Yes\*   | No   | \*WeChat cloud-side transcription is used, so no local transcription is required |
-| Video        | Yes     | Yes  | Downloaded and decrypted into the local temp directory on receive                |
-| File         | Yes     | Yes  | Downloaded and decrypted into the local temp directory on receive                |
+| Message Type | Receive | Send | Notes                                                                |
+| ------------ | ------- | ---- | -------------------------------------------------------------------- |
+| Text         | Yes     | Yes  |                                                                      |
+| Image        | Yes     | Yes  | Downloaded and decrypted into the local temp directory on receive    |
+| Voice        | Yes\*   | Yes  | \*Inbound uses WeChat cloud transcription; outbound converts to Silk |
+| Video        | Yes     | Yes  | Downloaded and decrypted into the local temp directory on receive    |
+| File         | Yes     | Yes  | Downloaded and decrypted into the local temp directory on receive    |
 
 ## Create the Bot
 
@@ -48,6 +48,8 @@ After you select `Personal WeChat`, AstrBot automatically requests a login QR co
 
 After login succeeds and the bot is saved, AstrBot will automatically persist the login state. On later restarts, if the session is still valid, you usually do not need to scan again.
 
+Some accounts prompt for a number shown in WeChat after scanning. Enter that number in the create-bot dialog and continue.
+
 > [!NOTE]
 > If the QR code expires, close and reopen the create-bot dialog, or select `Personal WeChat` again to request a new QR code.
 
@@ -69,3 +71,6 @@ These files are temporary cached files and can be further used by plugins, agent
 
 - This adapter logs in by scanning a QR code with a personal WeChat account, so its setup flow is different from WeChat Official Account and WeCom.
 - No public callback URL is required, and Unified Webhook Mode is not needed.
+- Newer WeChat clients may quote a message by server ID only. The adapter reconstructs the quote from recent inbound/outbound cache; quotes older than that local cache cannot be restored after a restart.
+- Outbound text is split at 4000 characters. When streaming replies are enabled, chunks are coalesced at about 200 characters or 3 seconds of idle time.
+- Tool calls send structured WeChat progress items (start / result), in addition to the typing indicator.

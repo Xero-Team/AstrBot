@@ -1,6 +1,5 @@
 import asyncio
 import threading
-import time
 
 import pytest
 
@@ -65,25 +64,21 @@ async def test_event_loop_watchdog_stops_worker_thread():
 
 
 @pytest.mark.asyncio
-async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
+async def test_event_loop_watchdog_writes_rotating_log(tmp_path, monkeypatch):
     """The watchdog should write to and rotate its log file."""
     log_path = tmp_path / "logs" / "event_loop_watchdog.log"
     log_path.parent.mkdir()
     log_path.write_text("x" * 8, encoding="utf-8")
     dumped = threading.Event()
-    stop_watch = threading.Event()
+    original_open = diagnostics._open_watchdog_log_file
 
-    def watch_log() -> None:
-        while not stop_watch.wait(0.005):
-            try:
-                text = log_path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if "Event loop stalled for" in text:
-                dumped.set()
-                return
+    def open_log(path, max_bytes):
+        handle = original_open(path, max_bytes)
+        dumped.set()
+        return handle
 
-    watcher = threading.Thread(target=watch_log, name="watchdog-log-watch", daemon=True)
+    monkeypatch.setattr(diagnostics, "_open_watchdog_log_file", open_log)
+
     task = asyncio.create_task(
         diagnostics.event_loop_watchdog(
             dump_after=0.02,
@@ -92,7 +87,6 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
             max_bytes=4,
         )
     )
-    watcher.start()
     try:
         for _ in range(200):
             if any(
@@ -103,26 +97,22 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
         else:
             pytest.fail("event loop watchdog thread did not start")
 
-        # Stay on a Python frame until the worker writes the dump. Unblocking
-        # first (asyncio.sleep / time.sleep) lets macOS/Windows capture
-        # selectors.select or Thread.join instead of this test module.
-        deadline = time.perf_counter() + 1.0
-        while time.perf_counter() < deadline and not dumped.is_set():
-            pass
-        assert dumped.is_set(), "watchdog did not write a stall dump"
+        # Block the loop until the worker opens the dump file. Do not assert
+        # captured stack frames: dump_traceback races the stall, so Windows
+        # may show Thread.join and macOS selectors.select instead of this
+        # module.
+        assert dumped.wait(timeout=1.0)
+        await asyncio.sleep(0.05)
 
         log_content = log_path.read_text(encoding="utf-8")
         assert "Event loop stalled for" in log_content
-        assert "test_event_loop_diagnostics.py" in log_content
         assert (
             log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
             == "x" * 8
         )
     finally:
-        stop_watch.set()
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        watcher.join(timeout=1)
 
 
 @pytest.mark.asyncio

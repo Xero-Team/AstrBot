@@ -18,6 +18,8 @@ The checker verifies:
 - required metadata fields are present;
 - metadata name is a legal identifier matching the directory name;
 - Python files parse and do not import `astrbot.core`, `astrbot.dashboard`, or `requests`;
+- Python files do not import the plugin package as a top-level name (`import <plugin>` / `from <plugin> ...`); use relative imports;
+- a handler does not stack two `@filter.command` decorators;
 - `_conf_schema.json`, when present, is strict JSON;
 - README declares the Python floor read from the current AstrBot `pyproject.toml`.
 

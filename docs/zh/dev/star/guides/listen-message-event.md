@@ -8,6 +8,8 @@
 from astrbot.api.event import filter, AstrMessageEvent
 ```
 
+包内相邻模块请用相对导入，见[插件开发指南](../plugin-new)。
+
 ## 消息与事件
 
 AstrBot 接收消息平台下发的消息，并将其封装为 `AstrMessageEvent` 对象，传递给插件进行处理。
@@ -258,7 +260,7 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"结果是: {a - b}")
 ```
 
-指令组函数内不需要实现任何函数，请直接 `pass` 或者添加函数内注释。指令组的子指令使用 `指令组名.command` 来注册。
+指令组函数内不需要实现任何函数，请直接 `pass` 或者添加函数内注释。指令组的子指令使用 `指令组名.command` 来注册。叠两个 `@filter.command` 不是别名，见[多个过滤器](#多个过滤器)。
 
 当用户没有输入子指令时，会报告不完整指令并列出该组的子指令树。根指令组已识别、但子指令不存在时会报告 `UNKNOWN_SUBCOMMAND`，不会再落入 LLM；只有完全未知的根指令保持 LLM fallback。
 
@@ -406,7 +408,7 @@ if not decision.allowed:
 
 ### 多个过滤器
 
-支持同时使用多个过滤器，只需要在函数上添加多个装饰器即可。过滤器使用 `AND` 逻辑。也就是说，只有所有的过滤器都通过了，才会执行函数。
+支持同时使用多个过滤器，只需要在函数上添加多个装饰器即可。过滤器使用 `AND` 逻辑。也就是说，只有所有的过滤器都通过了，才会执行函数。`@filter.command("a")` 再叠 `@filter.command("b")` 不是别名，也不会变成 OR，那种写法永远不会匹配。多个名字用 `alias={...}`，见[指令别名](#指令别名)。
 
 ```python
 @filter.command("helloworld")

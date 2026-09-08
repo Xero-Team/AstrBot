@@ -15,7 +15,9 @@ async def hello(self, event: AstrMessageEvent):
     yield event.plain_result(f"Hello, {event.get_sender_name()}!")
 ```
 
-Use `filter.command_group()` for a resource with subcommands. Follow Orbit
+Use `filter.command_group()` for a resource with subcommands. Do not stack two
+`@filter.command` decorators on one handler: filters use AND, so two command
+filters never match. Extra names belong in `alias={...}`. Follow Orbit
 Command Syntax: use lowercase explicit command names, typed scalar parameters,
 `GreedyStr` for trailing free text, and `filter.option()` for named options.
 Never re-split `event.message_str` or implement shell expansion in a handler.

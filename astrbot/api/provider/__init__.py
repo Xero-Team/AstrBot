@@ -3,6 +3,7 @@ from astrbot.core.agent.llm_types import (
     ProviderContentBlock,
     ProviderRequest,
 )
+from astrbot.core.agent.message import ContentPart, TextPart
 from astrbot.core.persona_runtime.models import Personality
 from astrbot.core.provider import Provider, STTProvider
 from astrbot.core.provider.entities import (
@@ -11,6 +12,7 @@ from astrbot.core.provider.entities import (
 )
 
 __all__ = [
+    "ContentPart",
     "LLMResponse",
     "Personality",
     "Provider",
@@ -19,4 +21,5 @@ __all__ = [
     "ProviderRequest",
     "ProviderType",
     "STTProvider",
+    "TextPart",
 ]

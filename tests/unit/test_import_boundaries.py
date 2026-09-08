@@ -104,6 +104,22 @@ def _sync_config_saves_in_async_functions(tree: ast.AST) -> list[tuple[int, int]
     return visitor.calls
 
 
+def test_plugin_sdk_exports_text_part_and_content_part() -> None:
+    import astrbot.api.provider as provider_api
+    from astrbot.api.provider import ContentPart, ProviderRequest, TextPart
+    from astrbot.core.agent.message import ContentPart as CoreContentPart
+    from astrbot.core.agent.message import TextPart as CoreTextPart
+
+    assert TextPart is CoreTextPart
+    assert ContentPart is CoreContentPart
+    assert "TextPart" in provider_api.__all__
+    assert "ContentPart" in provider_api.__all__
+    part = TextPart(text="temporary").mark_as_temp()
+    assert part.is_temp is True
+    request = ProviderRequest(prompt="hello", extra_user_content_parts=[part])
+    assert request.extra_user_content_parts[0] is part
+
+
 def test_import_boundaries_exclude_generated_files() -> None:
     for path in (ROOT / "astrbot").rglob("*.py"):
         if "generated" in path.parts:

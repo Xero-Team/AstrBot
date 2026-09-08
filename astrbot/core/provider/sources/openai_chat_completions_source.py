@@ -46,6 +46,7 @@ from astrbot.core.utils.network_utils import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .request_extra_headers import extra_headers_kwargs
 from .request_retry import retry_provider_request
 
 _request_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -501,6 +502,12 @@ class ProviderOpenAIChatCompletions(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _request_extra_headers(self) -> dict[str, str] | None:
+        return None
+
+    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers())
+
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
         if isinstance(value, str):
@@ -581,7 +588,9 @@ class ProviderOpenAIChatCompletions(Provider):
             models_str = []
             models = await retry_provider_request(
                 "OpenAI",
-                lambda: self.client.models.list(),
+                lambda: self.client.models.list(
+                    **self._request_extra_headers_kwargs(),
+                ),
             )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
@@ -701,6 +710,7 @@ class ProviderOpenAIChatCompletions(Provider):
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
+                    **self._request_extra_headers_kwargs(),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -748,6 +758,7 @@ class ProviderOpenAIChatCompletions(Provider):
                     stream=True,
                     extra_body=extra_body,
                     stream_options={"include_usage": True},
+                    **self._request_extra_headers_kwargs(),
                 ),
                 max_attempts=request_max_retries,
             )

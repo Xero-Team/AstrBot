@@ -26,6 +26,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..register import register_provider_adapter
+from .request_extra_headers import extra_headers_kwargs
 from .request_retry import retry_provider_request, retry_provider_request_context
 
 
@@ -102,6 +103,12 @@ class ProviderAnthropic(Provider):
             self._init_api_key(provider_config)
 
         self.set_model(provider_config.get("model", "unknown"))
+
+    def _request_extra_headers(self) -> dict[str, str] | None:
+        return None
+
+    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers())
 
     def _init_api_key(self, provider_config: dict) -> None:
         self.chosen_api_key: str = ""
@@ -524,7 +531,10 @@ class ProviderAnthropic(Provider):
             completion = await retry_provider_request(
                 "Anthropic",
                 lambda: self.client.messages.create(
-                    **payloads, stream=False, extra_body=extra_body
+                    **payloads,
+                    stream=False,
+                    extra_body=extra_body,
+                    **self._request_extra_headers_kwargs(),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -624,7 +634,11 @@ class ProviderAnthropic(Provider):
 
         async with retry_provider_request_context(
             "Anthropic",
-            lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
+            lambda: self.client.messages.stream(
+                **payloads,
+                extra_body=extra_body,
+                **self._request_extra_headers_kwargs(),
+            ),
             max_attempts=request_max_retries,
         ) as stream:
             async for event in stream:
@@ -1005,7 +1019,9 @@ class ProviderAnthropic(Provider):
         models_str = []
         models = await retry_provider_request(
             "Anthropic",
-            lambda: self.client.models.list(),
+            lambda: self.client.models.list(
+                **self._request_extra_headers_kwargs(),
+            ),
         )
         models = sorted(models.data, key=lambda x: x.id)
         for model in models:

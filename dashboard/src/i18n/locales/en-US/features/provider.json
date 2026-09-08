@@ -25,6 +25,9 @@
       "openai_chat_completions": "Compatible with OpenAI /chat/completions services.",
       "openai_responses": "OpenAI /responses with native tools, state modes, and web search.",
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
+      "opencode_go_chat_completion": "Dedicated OpenCode Go Chat Completions adapter. Sends the AstrBot User-Agent and a hashed session header.",
+      "opencode_go_messages": "Dedicated OpenCode Go Messages adapter. Sends the AstrBot User-Agent and a hashed session header.",
+      "opencode_go_responses": "Dedicated OpenCode Go Responses adapter. Sends the AstrBot User-Agent and a hashed session header.",
       "vllm_rerank": "Also supports Jina AI, Cohere, PPIO, and similar providers.",
       "default": ""
     }

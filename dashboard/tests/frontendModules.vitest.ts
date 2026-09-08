@@ -149,6 +149,8 @@ describe('frontend modules', () => {
     expect(normalizeTextInput('ok')).toBe('ok');
     expect(stepUpHeaders('tok')['X-AstrBot-Step-Up']).toBe('tok');
     expect(getProviderIcon('openai')).toContain('openai');
+    expect(getProviderIcon('opencode-go')).toContain('opencode.svg');
+    expect(isMonochromeProviderIcon('opencode-go')).toBe(true);
     expect(isMonochromeProviderIcon('openai')).toBe(true);
     expect(isMonochromeProviderIcon('google')).toBe(false);
     expect(
@@ -167,6 +169,27 @@ describe('frontend modules', () => {
     expect(
       getProviderDescription({ provider: 'kimi-code' }, 'Kimi', (k) => k),
     ).toContain('kimi');
+    expect(
+      getProviderDescription(
+        { type: 'opencode_go_chat_completion' },
+        'OpenCode Go Chat Completions',
+        (k) => k,
+      ),
+    ).toContain('opencode_go_chat_completion');
+    expect(
+      getProviderDescription(
+        { type: 'opencode_go_messages' },
+        'OpenCode Go Messages',
+        (k) => k,
+      ),
+    ).toContain('opencode_go_messages');
+    expect(
+      getProviderDescription(
+        { type: 'opencode_go_responses' },
+        'OpenCode Go Responses',
+        (k) => k,
+      ),
+    ).toContain('opencode_go_responses');
     expect(
       getProviderDescription({ type: 'vllm' }, 'vLLM Rerank', (k) => k),
     ).toContain('vllm');

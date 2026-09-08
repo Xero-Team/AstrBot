@@ -46,6 +46,27 @@ OpenAI Responses 来源提供以下专用设置：
 
 Provider 来源内的原生 `web_search` 只作用于 OpenAI Responses；配置档中的 `provider_settings.web_search` 是 AstrBot 自己的跨 Provider 搜索工具，两者可以独立启用，费用和来源格式也不同。
 
+## OpenCode Go
+
+OpenCode Go 提供 Chat Completions、Messages 和 Responses 三条协议。WebUI 中对应三个专用来源类型，不要用官方 OpenAI Chat Completions、Anthropic 或 OpenAI Responses 来源改 API Base 去接 Go。选与模型端点匹配的类型；模型列表以 [OpenCode Go](https://opencode.ai/docs/go/) 为准。
+
+| 类型                         | 端点                   | 模型族（2026-09-08 Go 文档）                 |
+| ---------------------------- | ---------------------- | -------------------------------------------- |
+| OpenCode Go Chat Completions | `/v1/chat/completions` | GLM、Kimi、LongCat、DeepSeek、MiMo、Hy、Omen |
+| OpenCode Go Messages         | `/v1/messages`         | MiniMax、Qwen                                |
+| OpenCode Go Responses        | `/v1/responses`        | Grok、GPT 5.6 Luna、Muse Spark               |
+
+| 字段 / 行为          | 默认值                              | 说明                                                                                                                         |
+| -------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `api_base`           | `https://opencode.ai/zen/go/v1`     | 三条类型共用。Messages 适配器会去掉末尾 `/v1`，SDK 仍请求 `/v1/messages`。                                                   |
+| `User-Agent`         | `AstrBot/<version>`                 | 运行时在空值时填入当前版本；操作员填写了非空自定义 User-Agent 时保留。                                                       |
+| `x-opencode-session` | `astrbot-<32 hex>` 或 `astrbot-aux` | 对话请求对 `session_id` 做 SHA-256 后取前 32 位十六进制。缺失、空白、`get_models()` 以及对话外的辅助调用使用 `astrbot-aux`。 |
+
+Dashboard 不展示 Go Responses 的远端会话 / 后台字段（这些表单项的 `condition` 仍只匹配官方 `openai_responses`）。默认保持无状态。若在配置 JSON 中打开 `conversation` 或 `responses_background`，适配器仍会把当前会话头带到 `conversations.create`、`responses.retrieve` 和 `responses.cancel`。
+
+> [!WARNING]
+> `session_id` 来自会话身份（UMO）。Go 适配器只发送哈希值，不会把原始 UMO 放到请求头。官方 OpenAI / Anthropic / Gemini / OpenRouter 来源不会附加这些 Go 专用头。
+
 ## 默认模型与 fallback
 
 在 **配置** 页的 Agent Runner 中配置：

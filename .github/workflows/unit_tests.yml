@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - staging
     paths-ignore:
       - 'README*.md'
       - 'changelogs/**'

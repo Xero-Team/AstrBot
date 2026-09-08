@@ -2,7 +2,7 @@ name: Build AstrBot Docs
 
 on:
   push:
-    branches: [master]
+    branches: [master, staging]
     paths:
       - 'docs/**'
       - '.github/workflows/build-docs.yml'

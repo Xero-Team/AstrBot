@@ -6,6 +6,7 @@ from astrbot.core.message.components import (
     BaseMessageComponent,
     File,
     Image,
+    Markdown,
     Mention,
     MentionAll,
     Plain,
@@ -14,7 +15,9 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.platform.send_result import DeliveryAttempt, PlatformSendResult
+
+from .weixin_oc_text import STREAM_IDLE_S, STREAM_MIN_CHARS
 
 if TYPE_CHECKING:  # pragma: no cover - typing helper
     from .weixin_oc_adapter import WeixinOCAdapter
@@ -50,6 +53,8 @@ class WeixinOCMessageEvent(AstrMessageEvent):
             return "[视频]"
         if isinstance(segment, Record):
             return "[音频]"
+        if isinstance(segment, Markdown):
+            return segment.content
         if isinstance(segment, MentionAll):
             return "@all"
         if isinstance(segment, Mention):
@@ -81,9 +86,57 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         )
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        return await self.send_non_streaming_response(
+        buffer = ""
+        attempts: list[DeliveryAttempt] = []
+
+        async def flush_text() -> None:
+            nonlocal buffer
+            text = buffer
+            buffer = ""
+            if not text.strip():
+                return
+            attempts.append(
+                await self._send_streaming_fragment(MessageChain([Plain(text)]))
+            )
+
+        stream = generator.__aiter__()
+        while True:
+            try:
+                chain = await asyncio.wait_for(anext(stream), timeout=STREAM_IDLE_S)
+            except TimeoutError:
+                await flush_text()
+                continue
+            except StopAsyncIteration:
+                break
+            if not isinstance(chain, MessageChain):
+                continue
+            if chain.type in {"reasoning", "break"}:
+                continue
+            if chain.type == "tool_call":
+                await flush_text()
+                attempts.append(await self._send_streaming_fragment(chain))
+                continue
+            for component in chain.chain:
+                if isinstance(component, Plain):
+                    buffer += component.text
+                    if len(buffer) >= STREAM_MIN_CHARS:
+                        await flush_text()
+                    continue
+                if isinstance(component, Markdown) and component.content:
+                    buffer += component.content
+                    if len(buffer) >= STREAM_MIN_CHARS:
+                        await flush_text()
+                    continue
+                await flush_text()
+                attempts.append(
+                    await self._send_streaming_fragment(MessageChain([component]))
+                )
+
+        await flush_text()
+        if not attempts:
+            return await self._record_streaming_send()
+        return await self._streaming_result_from_attempts(
+            attempts,
             generator,
-            use_fallback=use_fallback,
-            component_delay=1.2,
-            sleep=asyncio.sleep,
+            use_fallback,
         )

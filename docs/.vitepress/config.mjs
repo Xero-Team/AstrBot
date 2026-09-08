@@ -182,6 +182,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '项目架构', link: '/architecture' },
+              {
+                text: 'Skills 读取与工具目录',
+                link: '/skill-tool-assembly',
+              },
               { text: '源码开发', link: '/development' },
               { text: 'Linux 开发环境', link: '/linux' },
               {
@@ -443,6 +447,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Architecture', link: '/architecture' },
+              {
+                text: 'Skill reading and tool catalog',
+                link: '/skill-tool-assembly',
+              },
               { text: 'Source Development', link: '/development' },
               { text: 'Linux Development', link: '/linux' },
               {

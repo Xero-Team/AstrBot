@@ -1788,6 +1788,12 @@ def test_action_registry_covers_frozen_actions():
     assert policy_for("plugin:example:publish") is not None
     assert policy_for("provider.credentials.read") is None
     assert policy_for("tool.file.write") is None
+    assert "skill.read" in ACTIONS
+    skill_read = policy_for("skill.read")
+    assert skill_read is not None
+    assert skill_read.risk == "normal"
+    assert not skill_read.requires_step_up
+    assert "tool" in skill_read.resource_types
 
 
 def test_mcp_dashboard_collection_routes_are_valid_resources():

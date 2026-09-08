@@ -61,59 +61,10 @@ from astrbot.core.utils.task_utils import create_tracked_task
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     def _required_actions(cls, tool: FunctionTool) -> tuple[str, ...]:
-        """Classify every tool at the shared execution boundary.
+        """Classify every tool at the shared execution boundary."""
+        from astrbot.core.tool_catalog import tool_required_actions
 
-        Per-tool checks remain useful close to sensitive OS calls, but this
-        classifier covers direct Agent calls, Persona toolsets, SubAgent
-        handoffs, retries, and MCP before their implementation is reached.
-        """
-
-        if isinstance(tool, HandoffTool):
-            return ("agent.manage",)
-        if isinstance(tool, MCPTool):
-            annotations = getattr(tool, "annotations", {}) or {}
-            if isinstance(annotations, dict):
-                read_only_hint = annotations.get("readOnlyHint")
-                if read_only_hint is None:
-                    read_only_hint = annotations.get("read_only_hint")
-            else:
-                read_only_hint = getattr(annotations, "readOnlyHint", None)
-                if read_only_hint is None:
-                    read_only_hint = getattr(annotations, "read_only_hint", None)
-            is_read_only = bool(read_only_hint)
-            return ("tool.mcp_read" if is_read_only else "tool.mcp_write",)
-        name = str(getattr(tool, "name", ""))
-        if name in {"astrbot_execute_shell", "astrbot_shell_session"}:
-            return ("tool.local_exec",)
-        if name in {"astrbot_execute_ipython", "astrbot_execute_python"}:
-            return ("tool.python_exec",)
-        if name in {
-            "astrbot_file_write_tool",
-            "astrbot_file_edit_tool",
-            "astrbot_upload_file",
-            "astrbot_download_file",
-        }:
-            return ("tool.file_write",)
-        if name in {"astrbot_file_read_tool", "astrbot_grep_tool"}:
-            return ("tool.file_read",)
-        if name.startswith("astrbot_cua_"):
-            return ("tool.computer_use",)
-        if "browser" in name:
-            return ("tool.browser_control",)
-        if "skill" in name and name.startswith("astrbot_"):
-            return ("extension.manage",)
-        if name in {"send_message_to_user", "send_poke_to_user"}:
-            return ("agent.manage",)
-        if "history" in name or name.startswith("get_"):
-            return ("session.read",)
-        declared = getattr(tool, "required_actions", ())
-        if (
-            isinstance(declared, tuple)
-            and declared
-            and all(isinstance(action, str) and action for action in declared)
-        ):
-            return declared
-        return ()
+        return tool_required_actions(tool)
 
     @classmethod
     async def _authorize_execution(

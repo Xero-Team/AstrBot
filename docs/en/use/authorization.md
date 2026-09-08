@@ -64,6 +64,8 @@ Conversation export requires the exact `conversation:export` resource and `data.
 
 High-risk tools in ChatUI (local shell, file write, browser, and similar) use a separate step-up that covers only the current WebChat session. See [WebUI](./webui#high-risk-tools-in-chatui). It does not turn an IM user into a global operator and does not authorize account changes, plugin installs, or restarts.
 
+Reading a Skill manual uses the low-risk `skill.read` action. Current-session members and above may call `read_skill`. It does not grant shell, Python, or file-write permission.
+
 ## Common misconfigurations
 
 1. After `/admin grant`, expecting the peer to log into WebUI.

@@ -188,7 +188,7 @@ The Agent runtime is under `astrbot/core/agent/`, with main-request assembly in 
 
 Tools can come from the core, plugins, or MCP. MCP supports stdio and Streamable HTTP only. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.
 
-Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`.
+Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`. The system prompt lists names and short descriptions; manuals load through `read_skill` (`skill.read`). The tool catalog is computed by `assemble_tool_catalog()` from the platform baseline, session plugin/MCP tools, Skill `tools:` declarations, and on-demand computer tools, then intersected with Persona three-state policy, visibility, and social-surface hard-strip. Details: [Skill reading and tool-catalog assembly](/en/dev/skill-tool-assembly).
 
 SubAgents are exposed to the main Agent as `transfer_to_*` handoff tools. Enabling orchestration keeps the main Agent's own tools by default. Only the duplicate-tool option removes tools that overlap with enabled SubAgents.
 
@@ -280,6 +280,7 @@ Actions use `domain.verb`. Built-in commands declare them with `@filter.permissi
 | `filesystem.read` / `filesystem.write`            | operator, root                                 | no                                 |
 | `filesystem.manage`                               | root + step-up                                 | yes                                |
 | `tool.file_read` / `tool.mcp_read`                | member+                                        | no                                 |
+| `skill.read`                                      | member+                                        | no                                 |
 | instance tools such as `tool.local_exec`          | instance_operator+; WebChat also needs step-up | yes                                |
 
 Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.authz.authorize()` again. Undeclared plugin writes are denied. Tool authority is the intersection of user authorization, Persona tool policy, and the tool's own policy. Sub-agent handoff cannot escalate the caller.

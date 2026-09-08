@@ -64,6 +64,8 @@ AstrBot 把 Dashboard 登录、IM 会话管理和高风险操作拆开。把群�
 
 ChatUI 里的高风险工具（本机 Shell、文件写入、浏览器等）是另一次、只覆盖当前 WebChat 会话的 step-up，说明见 [WebUI](./webui#chatui-中的高风险工具)。它不会把 IM 用户变成全局 operator，也不会授权改账户、装插件或重启。
 
+读 Skill 手册使用低风险动作 `skill.read`。当前会话的 member 及以上可以调用 `read_skill`。它不授予 Shell、Python 或写文件权限。
+
 ## 常见误配
 
 1. 用 `/admin grant` 之后，以为对方可以登录 WebUI。

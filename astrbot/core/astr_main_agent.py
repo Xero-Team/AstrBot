@@ -14,14 +14,13 @@ from astrbot import logger
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
-from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import AgentRunner
@@ -39,12 +38,6 @@ from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.db.protocols import PlatformSessionStore
 from astrbot.core.execution_context import CoreExecutionContext
-from astrbot.core.memory.tools import (
-    GetPersonProfileTool,
-    MaintainMemoryTool,
-    QueryEpisodeTool,
-    SearchMemoryTool,
-)
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.json_card import coalesce_prompt_with_json_cards
 from astrbot.core.persona_error_reply import (
@@ -54,63 +47,30 @@ from astrbot.core.persona_error_reply import (
 from astrbot.core.persona_runtime.models import Personality
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.skills._skill_snapshot import (
+    PERSONA_TOOLS_EXTRA_KEY,
+    SKILL_SNAPSHOT_EXTRA_KEY,
+    SkillSnapshot,
+    freeze_skill_snapshot,
+)
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
     build_skills_prompt,
 )
 from astrbot.core.star.star import PluginRegistry
+from astrbot.core.tool_catalog import (
+    ToolCatalogInputs,
+    assemble_tool_catalog,
+    merge_existing_tools,
+    resolve_catalog_surface,
+)
 from astrbot.core.tools.computer_tools import (
-    AnnotateExecutionTool,
-    BrowserBatchExecTool,
-    BrowserExecTool,
-    CreateSkillCandidateTool,
-    CreateSkillPayloadTool,
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
-    EvaluateSkillCandidateTool,
-    ExecuteShellTool,
-    FileDownloadTool,
-    FileEditTool,
-    FileReadTool,
-    FileUploadTool,
-    FileWriteTool,
-    GetExecutionHistoryTool,
-    GetSkillPayloadTool,
-    GrepTool,
-    ListSkillCandidatesTool,
-    ListSkillReleasesTool,
-    LocalPythonTool,
-    PromoteSkillCandidateTool,
-    PythonTool,
-    RollbackSkillReleaseTool,
-    RunBrowserSkillTool,
-    ShellSessionTool,
-    SyncSkillReleaseTool,
     normalize_umo_for_workspace,
 )
-from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.tools.knowledge_base_tools import (
-    KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
-)
-from astrbot.core.tools.message_tools import (
-    GetGroupMessageHistoryTool,
-    SendMessageToUserTool,
-)
-from astrbot.core.tools.web_search_tools import (
-    AnySearchWebSearchTool,
-    BaiduWebSearchTool,
-    BochaWebSearchTool,
-    BraveWebSearchTool,
-    ExaGetContentsTool,
-    ExaWebSearchTool,
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
-    TavilyExtractWebPageTool,
-    TavilyWebSearchTool,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
@@ -428,14 +388,6 @@ async def _apply_kb(
             )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
-    else:
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            plugin_context.get_llm_tool_manager().get_builtin_tool(
-                KnowledgeBaseQueryTool
-            )
-        )
 
 
 def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
@@ -491,16 +443,7 @@ def _apply_local_env_tools(
     req: ProviderRequest,
     plugin_context: CoreExecutionContext,
 ) -> None:
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
+    _ = plugin_context
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 
@@ -607,8 +550,8 @@ def _append_skills_prompt(
     persona: Personality | None,
     event: AstrMessageEvent,
     plugin_context: CoreExecutionContext,
-) -> None:
-    runtime = cfg.get("computer_use_runtime", "none")
+) -> SkillSnapshot:
+    runtime = str(cfg.get("computer_use_runtime", "none") or "none")
     skill_manager = plugin_context.skill_manager or SkillManager(
         builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
     )
@@ -635,48 +578,42 @@ def _append_skills_prompt(
         for skill in workspace_skills:
             skills_by_name[skill.name] = skill
         skills = [skills_by_name[name] for name in sorted(skills_by_name)]
-    if not skills:
-        return
-    req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
+    snapshot = freeze_skill_snapshot(skills, runtime=runtime)
+    event.set_extra(SKILL_SNAPSHOT_EXTRA_KEY, snapshot)
+    event.set_extra(
+        PERSONA_TOOLS_EXTRA_KEY,
+        None if not persona else persona.get("tools"),
+    )
+    if not snapshot.skills:
+        return snapshot
+    req.system_prompt += (
+        f"\n{build_skills_prompt(_skill_infos_from_snapshot(snapshot))}\n"
+    )
     if runtime == "none":
         req.system_prompt += (
             "User has not enabled the Computer Use feature. "
-            "You cannot use shell or Python to perform skills. "
-            "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
+            "You cannot execute Shell or Python. "
+            "You can still read Skill manuals with `read_skill`. "
+            "If you need Shell or Python, ask the user to enable Computer Use "
+            "in the AstrBot WebUI -> Config."
         )
+    return snapshot
 
 
-def _merge_persona_tools(
-    req: ProviderRequest,
-    persona: Personality | None,
-    tool_manager,
-    memory_manager,
-) -> ToolSet:
-    if (persona and persona.get("tools") is None) or not persona:
-        persona_toolset = tool_manager.get_full_tool_set()
-        for tool in list(persona_toolset):
-            if not tool.active:
-                persona_toolset.remove_tool(tool.name)
-    else:
-        persona_toolset = ToolSet()
-        for tool_name in persona["tools"] or []:
-            if tool := tool_manager.get_tool(tool_name):
-                if tool.active:
-                    persona_toolset.add_tool(tool)
-    if req.func_tool:
-        req.func_tool.merge(persona_toolset)
-    else:
-        req.func_tool = persona_toolset
-
-    if memory_manager is not None and (not persona or persona.get("tools") is None):
-        for tool_cls in (
-            SearchMemoryTool,
-            GetPersonProfileTool,
-            QueryEpisodeTool,
-            MaintainMemoryTool,
-        ):
-            req.func_tool.add_tool(tool_manager.get_builtin_tool(tool_cls))
-    return persona_toolset
+def _skill_infos_from_snapshot(snapshot: SkillSnapshot) -> list[SkillInfo]:
+    return [
+        SkillInfo(
+            name=skill.name,
+            description=skill.description,
+            path=skill.runtime_copy,
+            active=True,
+            source_type=skill.source_type,
+            source_label=skill.source_label,
+            plugin_name=skill.plugin_name,
+            declared_tools=skill.declared_tools,
+        )
+        for skill in snapshot.skills
+    ]
 
 
 def _add_subagent_tools(
@@ -782,15 +719,11 @@ async def _ensure_persona_and_skills(
     )
 
     _append_skills_prompt(req, cfg, persona, event, plugin_context)
-    tmgr = plugin_context.get_llm_tool_manager()
-    persona_toolset = _merge_persona_tools(req, persona, tmgr, memory_manager)
-
-    _add_subagent_tools(req, plugin_context, tmgr)
     try:
         event.trace.record(
             "sel_persona",
             persona_id=persona_id,
-            persona_toolset=persona_toolset.names(),
+            persona_toolset=[],
         )
     except Exception:
         pass
@@ -1222,37 +1155,119 @@ async def _decorate_llm_request(
     _apply_workspace_extra_prompt(event, req)
 
 
-def _plugin_tool_fix(
+def _safe_iter_builtin_tools(tool_manager: FunctionToolManager) -> list[FunctionTool]:
+    try:
+        tools = tool_manager.iter_builtin_tools()
+    except Exception:
+        return []
+    if not isinstance(tools, list):
+        return []
+    return tools
+
+
+def _registered_tools_table(
+    tool_manager: FunctionToolManager,
+) -> dict[str, FunctionTool]:
+    registered: dict[str, FunctionTool] = {}
+    full_set = tool_manager.get_full_tool_set()
+    tools = getattr(full_set, "tools", None)
+    if isinstance(tools, list):
+        for tool in tools:
+            name = getattr(tool, "name", None)
+            if isinstance(name, str) and name:
+                registered[name] = tool
+    for tool in _safe_iter_builtin_tools(tool_manager):
+        name = getattr(tool, "name", None)
+        if isinstance(name, str) and name:
+            registered.setdefault(name, tool)
+    return registered
+
+
+def _assemble_request_tool_catalog(
     event: AstrMessageEvent,
     req: ProviderRequest,
     plugin_context: CoreExecutionContext,
+    config: MainAgentBuildConfig,
 ) -> None:
-    """根据事件中的插件设置，过滤请求中的工具列表。
-
-    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
-    因为它们不属于任何插件，不应被插件过滤逻辑影响。
-    """
-    if event.plugins_name is not None and req.func_tool:
-        new_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
-            if isinstance(tool, MCPTool):
-                # 保留 MCP 工具
-                new_tool_set.add_tool(tool)
-                continue
-            mp = tool.handler_module_path
-            if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-                # 不应受到会话插件过滤影响。
-                new_tool_set.add_tool(tool)
-                continue
-            plugin = plugin_context.catalogs.plugins.get_by_module(mp)
-            if not plugin:
-                # 无法解析插件归属时，保守保留工具，避免误过滤。
-                new_tool_set.add_tool(tool)
-                continue
-            if plugin.name in event.plugins_name or plugin.reserved:
-                new_tool_set.add_tool(tool)
-        req.func_tool = new_tool_set
+    snapshot = event.get_extra(SKILL_SNAPSHOT_EXTRA_KEY)
+    if not isinstance(snapshot, SkillSnapshot):
+        snapshot = SkillSnapshot(skills=(), runtime=config.computer_use_runtime)
+    persona_tools = event.get_extra(PERSONA_TOOLS_EXTRA_KEY)
+    if persona_tools is not None and not isinstance(persona_tools, list | tuple):
+        persona_tools = None
+    auth_context = getattr(event, "auth_context", None)
+    source = getattr(auth_context, "source", None) or "im"
+    authenticated = bool(getattr(auth_context, "authenticated", False))
+    subject = getattr(event, "subject", None)
+    subject_kind = getattr(subject, "kind", None)
+    metadata = getattr(auth_context, "metadata", {}) or {}
+    step_up_tokens = metadata.get("webchat_step_up_tokens")
+    step_up_actions = (
+        frozenset(step_up_tokens) if isinstance(step_up_tokens, dict) else frozenset()
+    )
+    computer_runtime = getattr(plugin_context, "computer_runtime", None)
+    existing_booter = None
+    if computer_runtime is not None:
+        getter = getattr(computer_runtime, "get_session_booter", None)
+        if callable(getter):
+            existing_booter = getter(req.session_id or event.unified_msg_origin)
+    sandbox_capabilities = None
+    if existing_booter is not None:
+        capabilities = getattr(existing_booter, "capabilities", None)
+        if isinstance(capabilities, list | tuple):
+            sandbox_capabilities = capabilities
+    cfg = plugin_context.get_config(umo=event.unified_msg_origin)
+    provider_settings = cfg.get("provider_settings", {})
+    ltm_settings = cfg.get("provider_ltm_settings", {})
+    memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
+    tool_manager = plugin_context.get_llm_tool_manager()
+    registered_tools = _registered_tools_table(tool_manager)
+    session_tool_names = frozenset(registered_tools) - frozenset(
+        getattr(tool, "name", "")
+        for tool in _safe_iter_builtin_tools(tool_manager)
+        if getattr(tool, "name", "")
+    )
+    full_set = tool_manager.get_full_tool_set()
+    full_tools = getattr(full_set, "tools", None)
+    if isinstance(full_tools, list):
+        session_tool_names = frozenset(
+            name
+            for tool in full_tools
+            if isinstance(name := getattr(tool, "name", None), str) and name
+        )
+    surface = resolve_catalog_surface(
+        source=source,
+        authenticated=authenticated,
+        subject_kind=subject_kind,
+    )
+    catalog_inputs = ToolCatalogInputs(
+        snapshot=snapshot,
+        persona_tools=persona_tools,
+        surface=surface,
+        computer_use_runtime=config.computer_use_runtime,
+        plugin_names=event.plugins_name,
+        registered_tools=registered_tools,
+        session_tool_names=session_tool_names,
+        memory_enabled=memory_manager is not None,
+        web_search_enabled=bool(provider_settings.get("web_search", False)),
+        web_search_provider=str(provider_settings.get("websearch_provider", "tavily")),
+        group_history_enabled=bool(
+            event.get_message_type() == MessageType.GROUP_MESSAGE
+            and ltm_settings.get("group_message_history_enable", False)
+        ),
+        proactive_messaging=bool(event.platform_meta.support_proactive_message),
+        kb_agentic_mode=config.kb_agentic_mode,
+        add_cron_tools=config.add_cron_tools,
+        sandbox_booter=str(config.sandbox_cfg.get("booter", "shipyard_neo")),
+        sandbox_capabilities=sandbox_capabilities,
+        webchat_step_up_actions=step_up_actions,
+        plugins=plugin_context.catalogs.plugins,
+    )
+    existing = req.func_tool
+    if existing is not None:
+        catalog_inputs = merge_existing_tools(catalog_inputs, existing.tools)
+    req.func_tool = assemble_tool_catalog(catalog_inputs)
+    _add_subagent_tools(req, plugin_context, tool_manager)
 
 
 async def _handle_webchat(
@@ -1317,31 +1332,20 @@ def _apply_sandbox_tools(
     tool_manager: FunctionToolManager,
     existing_booter: object | None = None,
 ) -> None:
+    _ = session_id
+    _ = tool_manager
     if req.func_tool is None:
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
-
-    tool_mgr = tool_manager
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     if booter == "shipyard_neo":
-        # Neo-specific path rule: filesystem tools operate relative to sandbox
-        # workspace root. Do not prepend "/workspace".
         req.system_prompt += (
             "\n[Shipyard Neo File Path Rule]\n"
             "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
             "always pass paths relative to the sandbox workspace root. "
             "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
         )
-
         req.system_prompt += (
             "\n[Neo Skill Lifecycle Workflow]\n"
             "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
@@ -1353,34 +1357,7 @@ def _apply_sandbox_tools(
             "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
             "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
         )
-
-        # Determine sandbox capabilities from the runtime-owned session booter.
-        # If no session exists yet (first request), capabilities is None and we
-        # register all tools conservatively.
-        sandbox_capabilities: tuple[str, ...] | list[str] | None = None
-        if existing_booter is not None:
-            sandbox_capabilities = getattr(existing_booter, "capabilities", None)
-
-        # Browser tools: only register if profile supports browser
-        # (or if capabilities are unknown because sandbox hasn't booted yet)
-        if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
-
-        # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
-
+        _ = existing_booter
     if booter == "cua":
         req.system_prompt += (
             "\n[CUA Desktop Control]\n"
@@ -1393,56 +1370,7 @@ def _apply_sandbox_tools(
             "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
             "for text input; use text=`\\n` for Enter.\n"
         )
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
-
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
-
-
-def _proactive_cron_job_tools(
-    req: ProviderRequest,
-    plugin_context: CoreExecutionContext,
-) -> None:
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FutureTaskTool))
-
-
-async def _apply_web_search_tools(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    plugin_context: CoreExecutionContext,
-) -> None:
-    cfg = plugin_context.get_config(umo=event.unified_msg_origin)
-    prov_settings = cfg.get("provider_settings", {})
-
-    if not prov_settings.get("web_search", False):
-        return
-
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-
-    tool_mgr = plugin_context.get_llm_tool_manager()
-    provider = prov_settings.get("websearch_provider", "tavily")
-    if provider == "tavily":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyExtractWebPageTool))
-    elif provider == "bocha":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
-    elif provider == "brave":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
-    elif provider == "firecrawl":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
-    elif provider == "baidu_ai_search":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
-    elif provider == "exa":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
-    elif provider == "anysearch":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
 
 
 def _apply_web_search_citation_prompt(
@@ -1593,8 +1521,7 @@ async def _prepare_request_for_agent(
     await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
     await _apply_kb(event, req, plugin_context, config)
     req.session_id = req.session_id or event.unified_msg_origin
-    _plugin_tool_fix(event, req, plugin_context)
-    await _apply_web_search_tools(event, req, plugin_context)
+    _assemble_request_tool_catalog(event, req, plugin_context, config)
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
     if config.computer_use_runtime == "sandbox":
@@ -2070,32 +1997,6 @@ async def build_main_agent(
         event, req, plugin_context, config, provider
     ):
         return None
-
-    if config.add_cron_tools:
-        _proactive_cron_job_tools(req, plugin_context)
-
-    ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
-        "provider_ltm_settings", {}
-    )
-    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
-        "group_message_history_enable", False
-    ):
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            plugin_context.get_llm_tool_manager().get_builtin_tool(
-                GetGroupMessageHistoryTool
-            )
-        )
-
-    if event.platform_meta.support_proactive_message:
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            plugin_context.get_llm_tool_manager().get_builtin_tool(
-                SendMessageToUserTool
-            )
-        )
 
     provider, fallback_providers = _select_request_provider(
         provider, req, plugin_context, config

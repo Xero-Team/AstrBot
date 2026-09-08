@@ -50,7 +50,7 @@ AstrBot 会从多个位置发现 Skills：
 
 系统提示只列出已启用 Skill 的名称和短描述。匹配到任务后，模型应调用 `read_skill` 读取该 Skill 的 `SKILL.md`；引用文件再传相对 `path`。读取手册不需要电脑能力，`computer_use_runtime=none` 时仍可调用 `read_skill`。授权动作为低风险 `skill.read`，不是 `tool.local_exec` 或 `tool.file_read`。
 
-前言只认 `tools:`。值为已注册工具名列表，语义是过滤不是授权。社区手册里的 `allowed-tools` 会被忽略，也不会升权。缺省 `tools:` 只提供手册，不额外加工具。
+前言只认 `tools:`。值为已注册工具名列表，例如 `tools: [search_memory]`。语义是过滤不是授权。社区手册里的 `allowed-tools` 会被忽略，也不会升权。缺省 `tools:` 只提供手册，不额外加工具。不要把 `read_skill` 写进 `tools:`。未知工具名会被忽略。社交 IM、匿名 WebChat 和 API Key 即使 Skill 声明了 `astrbot_execute_shell`，目录里也不会出现 Shell。开发侧装配公式见 [项目架构](/dev/architecture)。
 
 ## 在 AstrBot 使用 Skills
 

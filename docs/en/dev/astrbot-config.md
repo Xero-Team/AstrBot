@@ -134,7 +134,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 - `agent_runner.config.misc.max_steps` is the local Agent step cap, default `30`, and also applies to current SubAgent executions.
 - `agent_runner.config.max_steps` is the third-party runner step cap, default `30`.
 - `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
-- `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
+- `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode. `skills_like` hides parameters; it does not shrink the tool catalog.
 - `agent_runner.config.misc.sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.
 - `agent_runner.config.proxy_mode` / `proxy_url` control third-party outbound proxies: `inherit` follows the global proxy, `direct` connects without environment proxies, and `custom` uses only `proxy_url`.
 

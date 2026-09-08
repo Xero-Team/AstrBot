@@ -8,8 +8,8 @@ A Persona controls the system prompt, opening dialogue, tools, Skills, and error
 - **System prompt** defines the role, goals, boundaries, and response style. Do not store secrets or anything that must not be sent to the model.
 - **Custom error reply** is sent first when an LLM request using this Persona fails. Leave it empty to use the system default error message.
 - **Opening dialogue** contains alternating user and assistant few-shot examples and must have an even number of entries. These examples enter model context but are not written back as real conversation history.
-- **Tools / MCP tools**: `null` means all currently available tools, an explicit name list allows only those tools, and an empty list means no tools.
-- **Skills** use the same all, selected-only, or none semantics.
+- **Tools / MCP tools**: `null` means all currently available tools, an explicit name list allows only those tools, and an empty list means no ordinary tools. An empty list still keeps `read_skill` so the Agent can read manuals for Skills enabled on this request.
+- **Skills** use the same all, selected-only, or none semantics. An empty Skills list also disables workspace Skills.
 
 Tools and Skills are permission boundaries, not just prompt optimization. Apply least privilege to shell, file-write, browser, external-account, and administrative tools, and review the selection after models or plugins change.
 

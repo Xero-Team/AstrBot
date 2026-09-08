@@ -8,7 +8,7 @@ legacy example.
 
 - Read `[project].requires-python` from the checkout's `pyproject.toml` before generating a plugin. The current checkout declares `>=3.14`; `.python-version` pins `3.14.6` for development and CI. Generated plugin documentation must repeat the value read from the checkout, not a hand-maintained fallback.
 - The plugin is a Python package-like directory loaded from `data/plugins/` as `data.plugins.<root_dir_name>.<module>` (entry `main.py`).
-- Import sibling modules with relative imports (`from .foo import bar`). A top-level `import <plugin_name>` may work in the plugin checkout and fails after `plug install`.
+- Import sibling modules with relative imports (`from .foo import bar`). A top-level `import <plugin_name>` may work in the plugin checkout but fails after `plug install`.
 - `metadata.yaml` requires `name`, `desc`, `version`, and `author`. `name` must be a legal Python identifier and a single directory name. Prefer `astrbot_plugin_<name>`.
 - `main.py` contains the `Star` subclass and handler registrations. `requirements.txt`, `_conf_schema.json`, `.astrbot-plugin/i18n/`, `skills/`, and Dashboard files are opt-in.
 - Develop an independent repository outside the AstrBot checkout and connect it with `uv run astrbot plug install --editable <plugin-dir>`.

@@ -203,7 +203,10 @@ class ExamplePlugin(Star):
 加载。
 
 处理函数中的前两个参数必须是 `self` 和 `event`。业务逻辑可以放在插件包的其他
-模块中，但事件处理器本身需要注册在插件类上。
+模块中，但事件处理器本身需要注册在插件类上。用户插件在运行时以
+`data.plugins.<插件目录名>.main` 加载，因此包内模块必须使用相对导入，例如
+`from .util import helper`。不要写顶层 `import <插件名>`：这在插件仓库里可能能跑，
+但 `plug install` 之后会失败。
 
 ## 依赖与数据
 

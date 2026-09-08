@@ -221,7 +221,11 @@ on the management page, fix the code, and use the one-click reload action.
 
 The first two handler parameters must be `self` and `event`. Business logic may
 live in other modules in the plugin package, but event handlers themselves must
-be registered on the plugin class.
+be registered on the plugin class. User plugins load at runtime as
+`data.plugins.<plugin-directory>.main`, so import sibling modules with relative
+imports such as `from .util import helper`. Do not write a top-level
+`import <plugin-name>`: that may work in the plugin checkout but fails after
+`plug install`.
 
 ## Dependencies and Data
 

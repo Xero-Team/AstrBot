@@ -1089,6 +1089,36 @@ async def test_runner_clears_tools_for_provider_without_tool_use(
     assert provider.received_func_tools == [None]
 
 
+_REPEATED_TOOL_NOTICE_L1_MARK = "By the way, you have executed the same tool"
+_REPEATED_TOOL_NOTICE_L2_MARK = "Unless this repetition is clearly necessary"
+_REPEATED_TOOL_NOTICE_L3_MARK = "Repetition is now very high"
+
+
+def _assert_repeated_tool_notice(
+    content: str, *, tool_name: str, streak: int, level: int | None
+) -> None:
+    marks = (
+        _REPEATED_TOOL_NOTICE_L1_MARK,
+        _REPEATED_TOOL_NOTICE_L2_MARK,
+        _REPEATED_TOOL_NOTICE_L3_MARK,
+    )
+    if level is None:
+        for mark in marks:
+            assert mark not in content
+        return
+
+    assert "{{tool_name}}" not in content
+    assert "{{streak}}" not in content
+    assert f"`{tool_name}`" in content
+    assert f"{streak} times consecutively" in content
+    expected = marks[level - 1]
+    for mark in marks:
+        if mark == expected:
+            assert mark in content
+        else:
+            assert mark not in content
+
+
 @pytest.mark.asyncio
 async def test_same_tool_consecutive_results_include_escalating_guidance(
     runner, mock_tool_executor, mock_hooks
@@ -1129,36 +1159,18 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
     assert len(tool_messages) == total_calls
 
     tool_contents = [str(message.content) for message in tool_messages]
-    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
-    )
-    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
-    )
-    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
-    )
-
     for streak, content in enumerate(tool_contents, start=1):
         if streak < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
-            assert level_1_notice not in content
-            assert level_2_notice not in content
-            assert level_3_notice not in content
+            level = None
         elif streak < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
-            assert level_1_notice in content
-            assert level_2_notice not in content
-            assert level_3_notice not in content
+            level = 1
         elif streak < runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
-            assert level_1_notice not in content
-            assert level_2_notice in content
-            assert level_3_notice not in content
+            level = 2
         else:
-            assert level_1_notice not in content
-            assert level_2_notice not in content
-            assert level_3_notice in content
+            level = 3
+        _assert_repeated_tool_notice(
+            content, tool_name="test_tool", streak=streak, level=level
+        )
 
 
 @pytest.mark.asyncio
@@ -1211,31 +1223,24 @@ async def test_same_tool_streak_resets_after_switching_tools(
     assert len(tool_messages) == repeated_after_reset + 2
 
     tool_contents = [str(message.content) for message in tool_messages]
-    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    _assert_repeated_tool_notice(
+        tool_contents[0], tool_name="test_tool", streak=1, level=None
     )
-    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    _assert_repeated_tool_notice(
+        tool_contents[1], tool_name="other_tool", streak=1, level=None
     )
-
-    assert level_1_notice not in tool_contents[0]
-    assert level_1_notice not in tool_contents[1]
-    assert level_2_notice not in tool_contents[0]
-    assert level_2_notice not in tool_contents[1]
 
     repeated_contents = tool_contents[2:]
     for streak_after_reset, content in enumerate(repeated_contents, start=1):
         if streak_after_reset < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
-            assert level_1_notice not in content
-            assert level_2_notice not in content
+            level = None
         elif streak_after_reset < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
-            assert level_1_notice in content
-            assert level_2_notice not in content
+            level = 1
         else:
-            assert level_1_notice not in content
-            assert level_2_notice in content
+            level = 2
+        _assert_repeated_tool_notice(
+            content, tool_name="test_tool", streak=streak_after_reset, level=level
+        )
 
 
 @pytest.mark.asyncio

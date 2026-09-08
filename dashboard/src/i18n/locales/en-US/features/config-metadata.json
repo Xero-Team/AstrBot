@@ -509,7 +509,7 @@
         },
         "prompt_prefix": {
           "description": "User Prompt",
-          "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
+          "hint": "Use {{prompt}} as a placeholder for user input (logic-free {{name}} syntax, not Jinja2). If omitted, the prefix is added before the user input."
         },
         "image_compress_enabled": {
           "description": "Enable image compression",

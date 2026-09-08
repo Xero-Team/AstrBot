@@ -68,7 +68,7 @@ PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "5. Use `send_message_to_user` tool to send message to user if needed."
     "# CRON JOB CONTEXT\n"
     "The following object describes the scheduled task that triggered you:\n"
-    "{cron_job}"
+    "{{cron_job}}"
 )
 
 BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
@@ -82,7 +82,7 @@ BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
     "5. Use `send_message_to_user` tool to send message to user if needed."
     "# BACKGROUND TASK CONTEXT\n"
     "The following object describes the background task that completed:\n"
-    "{background_task_result}"
+    "{{background_task_result}}"
 )
 
 # we prevent astrbot from connecting to known malicious hosts

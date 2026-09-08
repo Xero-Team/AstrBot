@@ -20,6 +20,7 @@ from astrbot.core.db.protocols import CronStore
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.string_utils import interpolate_placeholders
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 
 if TYPE_CHECKING:
@@ -434,8 +435,9 @@ class CronJobManager:
         req.conversation = conv
         req.contexts = load_sanitized_history(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+        req.system_prompt += interpolate_placeholders(
+            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+            {"cron_job": cron_job_str},
         )
         req.prompt = (
             "You are now responding to a scheduled task. "

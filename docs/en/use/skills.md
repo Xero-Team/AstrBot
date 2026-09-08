@@ -46,16 +46,22 @@ When multiple sources contain a Skill with the same name, request-time priority 
 
 If a local Skill has been synced into the sandbox, AstrBot treats it as the same Skill. In sandbox runtime, the request will prefer the path that is readable inside the sandbox. Workspace Skills are not automatically synced into the sandbox yet.
 
+## Load steps
+
+The system prompt lists only enabled Skill names and short descriptions. When a Skill matches, the model should call `read_skill` for that Skill's `SKILL.md`, then pass a relative `path` for referenced files. Reading a manual does not require Computer Use; `read_skill` remains available when `computer_use_runtime=none`. The authorization action is low-risk `skill.read`, not `tool.local_exec` or `tool.file_read`.
+
+Only frontmatter `tools:` is recognized. Values are registered tool names. The field is a filter, not a grant. Community manuals that only set `allowed-tools` are ignored and do not gain privilege. Missing `tools:` supplies a manual and adds no tools.
+
 ## Using Skills in AstrBot
 
-Skills serve as operation manuals for Agents and often include executable Python snippets and scripts. Therefore, an Agent requires an **execution environment**.
+Skills are on-demand task manuals. Scripts inside a manual still need an execution environment, but reading the manual no longer depends on a shell.
 
 Currently, AstrBot provides two execution environments:
 
 - Local — The Agent runs in your AstrBot runtime environment. **Use with caution: this allows the Agent to execute arbitrary code in your environment, which may pose security risks.**
-- Sandbox — The Agent runs inside an isolated sandbox environment. **You must enable AstrBot sandbox mode first.** See [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox). If sandbox mode is not enabled, Skills will not be passed to the Agent.
+- Sandbox — The Agent runs inside an isolated sandbox environment. **You must enable AstrBot sandbox mode first.** See [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox).
 
-You can select the default execution environment on the `Config` page under "Computer Use".
+You can select the default execution environment on the `Config` page under "Computer Use". Memory and retrieval Skills can still load their manuals through `read_skill` when Computer Use is off.
 
 > [!NOTE]
-> Please note: if you select `Local` as the execution environment, Shell, Python, and local file writes are authorized as `tool.local_exec`, `tool.python_exec`, and `tool.file_write`. An authenticated Dashboard-driven WebChat may use these high-risk actions in its current session/config after WebChat step-up; global control-plane actions remain Dashboard-only, and anonymous WebChat, IM, plugins, agents, and API keys do not inherit Dashboard roles. Regular users receive a restriction message such as `Sorry, I cannot execute code on your local environment due to permission restrictions.`.
+> If you select `Local` as the execution environment, Shell, Python, and local file writes are authorized as `tool.local_exec`, `tool.python_exec`, and `tool.file_write`. An authenticated Dashboard-driven WebChat may use these high-risk actions in its current session/config after WebChat step-up; global control-plane actions remain Dashboard-only, and anonymous WebChat, IM, plugins, agents, and API keys do not inherit Dashboard roles. A Skill frontmatter declaration cannot bypass these limits.

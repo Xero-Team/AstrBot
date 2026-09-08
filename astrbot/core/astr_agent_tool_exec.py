@@ -80,6 +80,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             is_read_only = bool(read_only_hint)
             return ("tool.mcp_read" if is_read_only else "tool.mcp_write",)
         name = str(getattr(tool, "name", ""))
+        if name == "read_skill":
+            return ("skill.read",)
         if name in {"astrbot_execute_shell", "astrbot_shell_session"}:
             return ("tool.local_exec",)
         if name in {"astrbot_execute_ipython", "astrbot_execute_python"}:

@@ -188,7 +188,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
 
-Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。
+Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`）。工具目录由 `assemble_tool_catalog()` 按平台基线、会话插件/MCP、Skill `tools:` 和按需电脑工具计算，再与人格三态、可见性和社交表面硬裁求交。装配细节见 [Skills 读取与工具目录装配](/dev/skill-tool-assembly)。
 
 SubAgent 通过 `transfer_to_*` handoff 工具挂载到主 Agent。启用编排后，主 Agent 默认保留自身工具；只有启用“去重重复工具”时，才会移除与已启用 SubAgent 重叠的工具。
 
@@ -280,6 +280,7 @@ guest:<id>
 | `filesystem.read` / `filesystem.write`            | operator、root                                 | 否                 |
 | `filesystem.manage`                               | root + step-up                                 | 是                 |
 | `tool.file_read` / `tool.mcp_read`                | member 及以上                                  | 否                 |
+| `skill.read`                                      | member 及以上                                  | 否                 |
 | `tool.local_exec` 等实例工具                      | instance_operator 及以上；WebChat 另需 step-up | 是                 |
 
 插件自定义动作必须使用 `plugin:<plugin-id>:<action>` 命名空间，并通过 `self.context.authz.authorize()` 再次调用核心授权。未声明的插件写操作默认拒绝。工具最终权限是“用户授权 ∩ Persona 工具策略 ∩ 工具自身策略”；子 Agent handoff 不能提升调用者。

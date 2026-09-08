@@ -108,6 +108,7 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.mcp_read": _SESSION_AND_ABOVE,
     "tool.mcp_write": _INSTANCE_AND_ABOVE,
     "tool.computer_use": _INSTANCE_AND_ABOVE,
+    "skill.read": _SESSION_AND_ABOVE,
     "dashboard.account.manage": _ROOT_ONLY,
     "filesystem.read": frozenset({Role.OPERATOR, Role.ROOT}),
     "filesystem.write": frozenset({Role.OPERATOR, Role.ROOT}),
@@ -143,7 +144,7 @@ API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
     "persona": frozenset({"agent.manage"}),
     "plugin": frozenset({"extension.read", "extension.manage"}),
     "mcp": frozenset({"tool.mcp_read", "tool.mcp_write"}),
-    "skill": frozenset({"extension.manage"}),
+    "skill": frozenset({"extension.manage", "skill.read"}),
     "kb": frozenset({"data.manage"}),
     "memory": frozenset({"data.manage"}),
     "data": frozenset({"data.manage"}),
@@ -194,6 +195,8 @@ def _resource_types_for(action: str) -> frozenset[str]:
         )
     if action.startswith("agent."):
         return frozenset({"persona", "session", "tool", "dashboard-api"})
+    if action.startswith("skill."):
+        return frozenset({"tool", "skill", "session"})
     if action.startswith("extension."):
         return frozenset({"plugin", "skill", "dashboard-api"})
     if action.startswith("data."):
@@ -233,7 +236,7 @@ def _resource_types_for(action: str) -> frozenset[str]:
 
 
 def _parent_types(action: str) -> tuple[frozenset[str], int]:
-    if action.startswith(("tool.", "agent.")):
+    if action.startswith(("tool.", "agent.", "skill.")):
         return frozenset({"session", "instance"}), 1
     if action.startswith(
         (
@@ -251,7 +254,7 @@ def _parent_types(action: str) -> tuple[frozenset[str], int]:
 
 def _required_context(action: str, high_risk: bool) -> frozenset[str]:
     required = {"source"}
-    if action.startswith(("session.", "identity.", "agent.", "tool.")):
+    if action.startswith(("session.", "identity.", "agent.", "tool.", "skill.")):
         required.update({"config", "origin_session"})
     if high_risk:
         required.add("auth_strength")

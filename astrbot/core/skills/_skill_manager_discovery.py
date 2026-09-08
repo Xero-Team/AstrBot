@@ -6,7 +6,6 @@ from astrbot.core.skills._skill_inventory import (
     WORKSPACE_SKILLS_ROOT,
     SkillInfo,
     _normalize_skill_markdown_path,
-    _parse_frontmatter_description,
 )
 from astrbot.core.skills.builtin_skill_catalog import BuiltinSkillCatalog
 
@@ -141,13 +140,18 @@ class SkillManagerDiscoveryMixin:
         return resolved_skills_root
 
     @staticmethod
-    def _read_workspace_skill_description(skill_md: Path) -> str:
+    def _read_workspace_skill_frontmatter(skill_md: Path):
+        from astrbot.core.skills._skill_frontmatter import (
+            SkillFrontmatter,
+            parse_skill_frontmatter,
+        )
+
         try:
             with skill_md.open(encoding="utf-8") as file:
                 content = file.read(WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS)
-            return _parse_frontmatter_description(content)
+            return parse_skill_frontmatter(content)
         except OSError, UnicodeError:
-            return ""
+            return SkillFrontmatter(name="", description="", tools=(), warnings=())
 
     @staticmethod
     def _build_workspace_skill_info(
@@ -155,6 +159,7 @@ class SkillManagerDiscoveryMixin:
         skill_name: str,
         skill_md: Path,
         description: str,
+        declared_tools: tuple[str, ...] = (),
     ) -> SkillInfo:
         return SkillInfo(
             name=skill_name,
@@ -165,6 +170,8 @@ class SkillManagerDiscoveryMixin:
             source_label="workspace",
             local_exists=True,
             readonly=True,
+            declared_tools=declared_tools,
+            host_path=skill_md.as_posix(),
         )
 
     @staticmethod
@@ -224,10 +231,12 @@ class SkillManagerDiscoveryMixin:
         )
         if resolved_skill_md is None:
             return None
+        frontmatter = self._read_workspace_skill_frontmatter(resolved_skill_md)
         return self._build_workspace_skill_info(
             skill_name=skill_name,
             skill_md=resolved_skill_md,
-            description=self._read_workspace_skill_description(resolved_skill_md),
+            description=frontmatter.description,
+            declared_tools=frontmatter.tools,
         )
 
     @staticmethod

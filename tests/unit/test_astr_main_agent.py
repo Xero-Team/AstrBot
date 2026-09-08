@@ -50,6 +50,9 @@ def mock_context():
     ctx.persona_manager.get_runtime_persona_by_id = MagicMock(return_value=None)
     tool_mgr = MagicMock()
     tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
+    tool_mgr.get_full_tool_set.return_value = ToolSet()
+    tool_mgr.iter_builtin_tools.return_value = []
+    tool_mgr.get_tool.return_value = None
     ctx.get_llm_tool_manager.return_value = tool_mgr
     ctx.subagent_orchestrator = None
     ctx.catalogs = RuntimeCatalogs()
@@ -77,7 +80,11 @@ def mock_event():
     event.platform_meta = platform_meta
     event.session_id = "session123"
     event.unified_msg_origin = "test_platform:private:session123"
-    event.get_extra.return_value = None
+    extras: dict = {}
+    event.set_extra.side_effect = lambda key, value: extras.__setitem__(key, value)
+    event.get_extra.side_effect = lambda key=None, default=None: (
+        extras if key is None else extras.get(key, default)
+    )
     event.get_platform_name.return_value = "test_platform"
     event.get_platform_id.return_value = "test_platform"
     event.get_group_id.return_value = None
@@ -1289,10 +1296,8 @@ class TestEnsurePersonaAndSkills:
         assert "**workspace-skill**" in req.system_prompt
         assert "Workspace scoped skill." in req.system_prompt
         assert "Global scoped skill." not in req.system_prompt
-        assert (
-            str(workspace_skill_dir / "SKILL.md").replace("\\", "/")
-            in req.system_prompt
-        )
+        assert "read_skill" in req.system_prompt
+        assert "cat " not in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_skills_respects_empty_persona_skills_for_workspace(
@@ -1418,9 +1423,13 @@ class TestEnsurePersonaAndSkills:
     async def test_ensure_tools_from_persona(self, mock_event, mock_context):
         """Test applying tools from persona."""
         module = ama
-        mock_tool = MagicMock()
-        mock_tool.name = "test_tool"
-        mock_tool.active = True
+        mock_tool = FunctionTool(
+            name="test_tool",
+            description="test",
+            parameters={"type": "object", "properties": {}},
+            required_actions=("session.read",),
+            active=True,
+        )
         persona = {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
         mock_context.persona_manager.runtime_personas = [persona]
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
@@ -1428,13 +1437,21 @@ class TestEnsurePersonaAndSkills:
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.get_func.return_value = mock_tool
+        tmgr.get_full_tool_set.return_value = ToolSet([mock_tool])
+        tmgr.iter_builtin_tools.return_value = []
+        tmgr.get_tool.side_effect = lambda name: (
+            mock_tool if name == "test_tool" else None
+        )
 
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="persona")
 
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        config = module.MainAgentBuildConfig(tool_call_timeout=60)
+        module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
         assert req.func_tool is not None
+        assert "test_tool" in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_persona_empty_tools_keeps_late_builtin_tools(
@@ -1483,7 +1500,7 @@ class TestEnsurePersonaAndSkills:
         assert result is not None
         try:
             assert result.provider_request.func_tool is not None
-            assert result.provider_request.func_tool.names() == ["web_search_baidu"]
+            assert "web_search_baidu" not in result.provider_request.func_tool.names()
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
@@ -1526,8 +1543,8 @@ class TestEnsurePersonaAndSkills:
         try:
             assert result.provider_request.func_tool is not None
             tool_names = result.provider_request.func_tool.names()
-            assert "astrbot_execute_shell" in tool_names
-            assert "astrbot_execute_python" in tool_names
+            assert "astrbot_execute_shell" not in tool_names
+            assert "astrbot_execute_python" not in tool_names
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
@@ -1644,6 +1661,8 @@ class TestEnsurePersonaAndSkills:
         req.conversation = MagicMock(persona_id=None)
 
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        config = module.MainAgentBuildConfig(tool_call_timeout=60)
+        module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
         assert req.func_tool is not None
         assert "transfer_to_planner" in req.func_tool.names()
@@ -2982,8 +3001,8 @@ class TestApplySandboxTools:
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
 
-    def test_apply_sandbox_tools_adds_required_tools(self, mock_context):
-        """Test that all required sandbox tools are added."""
+    def test_apply_sandbox_tools_does_not_hang_computer_tools(self, mock_context):
+        """Sandbox prompts stay, but tools come from catalog assembly."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
@@ -2999,11 +3018,8 @@ class TestApplySandboxTools:
             mock_context.catalogs.tools,
         )
 
-        tool_names = req.func_tool.names()
-        assert "astrbot_execute_shell" in tool_names
-        assert "astrbot_execute_ipython" in tool_names
-        assert "astrbot_upload_file" in tool_names
-        assert "astrbot_download_file" in tool_names
+        assert req.func_tool is not None
+        assert req.func_tool.names() == []
 
     def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
@@ -3040,13 +3056,6 @@ class TestApplySandboxTools:
             "session-123",
             mock_context.catalogs.tools,
         )
-
-        assert req.func_tool is not None
-        tool_names = req.func_tool.names()
-        assert "astrbot_cua_screenshot" in tool_names
-        assert "astrbot_cua_mouse_click" in tool_names
-        assert "astrbot_cua_keyboard_type" in tool_names
-        assert "astrbot_cua_key_press" not in tool_names
 
         assert "Firefox" in req.system_prompt
         assert "background=true" in req.system_prompt
@@ -3104,7 +3113,7 @@ class TestApplySandboxTools:
         )
 
         assert "existing_tool" in req.func_tool.names()
-        assert "astrbot_execute_shell" in req.func_tool.names()
+        assert "astrbot_execute_shell" not in req.func_tool.names()
 
     def test_apply_sandbox_tools_appends_to_existing_system_prompt(self, mock_context):
         """Test that sandbox prompt is appended to existing system prompt."""

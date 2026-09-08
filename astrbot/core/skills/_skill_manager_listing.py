@@ -7,7 +7,7 @@ from astrbot.core.skills._skill_inventory import (
     _default_sandbox_skill_path,
     _normalize_cached_sandbox_skill_path,
     _normalize_skill_markdown_path,
-    _read_skill_description,
+    _read_skill_frontmatter,
 )
 
 
@@ -120,6 +120,12 @@ class SkillManagerListingMixin:
             sandbox_skill=sandbox_skill,
             skill_md=skill_md,
         )
+        host_path = str(skill_md).replace("\\", "/") if skill_md is not None else ""
+        declared_tools = ()
+        if skill_md is not None:
+            frontmatter = _read_skill_frontmatter(skill_md)
+            description = frontmatter.description or description
+            declared_tools = frontmatter.tools
         return SkillInfo(
             name=skill_name,
             description=description,
@@ -131,6 +137,8 @@ class SkillManagerListingMixin:
             sandbox_exists=sandbox_exists,
             plugin_name=plugin_name,
             readonly=readonly,
+            declared_tools=declared_tools,
+            host_path=host_path,
         )
 
     @staticmethod
@@ -181,7 +189,7 @@ class SkillManagerListingMixin:
 
         skills_by_name[skill_name] = self._build_listed_skill_info(
             skill_name=skill_name,
-            description=_read_skill_description(skill_md),
+            description="",
             active=active,
             runtime=runtime,
             show_sandbox_path=show_sandbox_path,

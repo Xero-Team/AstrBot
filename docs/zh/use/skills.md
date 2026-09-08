@@ -46,16 +46,22 @@ AstrBot 会从多个位置发现 Skills：
 
 如果本地 Skill 已同步到 sandbox，AstrBot 会把它视为同一个 Skill；在 sandbox 运行环境下，请求中会优先使用 sandbox 内可读取的路径。工作区 Skills 暂不会自动同步到 sandbox。
 
+## 加载步骤
+
+系统提示只列出已启用 Skill 的名称和短描述。匹配到任务后，模型应调用 `read_skill` 读取该 Skill 的 `SKILL.md`；引用文件再传相对 `path`。读取手册不需要电脑能力，`computer_use_runtime=none` 时仍可调用 `read_skill`。授权动作为低风险 `skill.read`，不是 `tool.local_exec` 或 `tool.file_read`。
+
+前言只认 `tools:`。值为已注册工具名列表，语义是过滤不是授权。社区手册里的 `allowed-tools` 会被忽略，也不会升权。缺省 `tools:` 只提供手册，不额外加工具。
+
 ## 在 AstrBot 使用 Skills
 
-Skills 提供了 Agent 操作说明书，并且内容通常包含 Python 代码段、脚本等可执行内容。因此，Agent 需要一个**执行环境**。
+Skills 是按需加载的任务手册。手册里的脚本仍需要执行环境，但读手册本身不再依赖 Shell。
 
 目前，AstrBot 提供两种执行环境：
 
 - Local（Agent 将在你的 AstrBot 运行环境中运行。**请谨慎使用，因为这会允许 Agent 在你的环境执行任意代码，可能带来安全风险**）
-- Sandbox (Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)，如果这个模式下不启动沙盒模式，将不会将 Skills 传给 Agent)
+- Sandbox（Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)）
 
-你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。
+你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。未开启电脑能力时，仍可通过 `read_skill` 读取记忆、检索类 Skill 手册。
 
 > [!NOTE]
-> 需要说明的是，如果您使用 Local 作为执行环境，Shell、Python 和本机文件写入分别按 `tool.local_exec`、`tool.python_exec` 和 `tool.file_write` 授权。已认证 Dashboard 驱动的 WebChat 可在当前 session/config 内通过 WebChat step-up 使用这些高风险动作；全局控制面仍仅限 Dashboard，匿名 WebChat、IM、插件、Agent 和 API Key 不会继承 Dashboard 角色。普通用户会收到权限限制提示，例如 `Sorry, I cannot execute code on your local environment due to permission restrictions.`。
+> 如果您使用 Local 作为执行环境，Shell、Python 和本机文件写入分别按 `tool.local_exec`、`tool.python_exec` 和 `tool.file_write` 授权。已认证 Dashboard 驱动的 WebChat 可在当前 session/config 内通过 WebChat step-up 使用这些高风险动作；全局控制面仍仅限 Dashboard，匿名 WebChat、IM、插件、Agent 和 API Key 不会继承 Dashboard 角色。Skill 前言声明工具不会绕过这些限制。

@@ -108,7 +108,9 @@ class TestApplySandboxToolsConditional:
 
         self._apply(fn, config, req)
 
-        names = self._tool_names(req)
+        from astrbot.core.tool_catalog import sandbox_computer_tool_names
+
+        names = set(sandbox_computer_tool_names(booter="shipyard_neo"))
         assert "astrbot_execute_browser" in names
         assert "astrbot_execute_browser_batch" in names
         assert "astrbot_run_browser_skill" in names
@@ -124,7 +126,14 @@ class TestApplySandboxToolsConditional:
 
         self._apply(fn, config, req, fake_booter)
 
-        names = self._tool_names(req)
+        from astrbot.core.tool_catalog import sandbox_computer_tool_names
+
+        names = set(
+            sandbox_computer_tool_names(
+                booter="shipyard_neo",
+                capabilities=["python", "shell", "filesystem", "browser"],
+            )
+        )
         assert "astrbot_execute_browser" in names
 
     def test_without_browser_capability(self):
@@ -136,11 +145,17 @@ class TestApplySandboxToolsConditional:
 
         self._apply(fn, config, req, fake_booter)
 
-        names = self._tool_names(req)
+        from astrbot.core.tool_catalog import sandbox_computer_tool_names
+
+        names = set(
+            sandbox_computer_tool_names(
+                booter="shipyard_neo",
+                capabilities=["python", "shell", "filesystem"],
+            )
+        )
         assert "astrbot_execute_browser" not in names
         assert "astrbot_execute_browser_batch" not in names
         assert "astrbot_run_browser_skill" not in names
-        # Skill tools should still be registered
         assert "astrbot_get_execution_history" in names
 
     def test_skill_tools_always_registered(self):
@@ -152,7 +167,14 @@ class TestApplySandboxToolsConditional:
 
         self._apply(fn, config, req, fake_booter)
 
-        names = self._tool_names(req)
+        from astrbot.core.tool_catalog import sandbox_computer_tool_names
+
+        names = set(
+            sandbox_computer_tool_names(
+                booter="shipyard_neo",
+                capabilities=["python"],
+            )
+        )
         assert "astrbot_create_skill_candidate" in names
         assert "astrbot_promote_skill_candidate" in names
 

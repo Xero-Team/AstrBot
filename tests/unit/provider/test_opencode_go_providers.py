@@ -10,7 +10,6 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 from astrbot.core.config.default import VERSION
 from astrbot.core.exceptions import ProviderResponseError
-from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 from astrbot.core.provider.sources.openai_chat_completions_source import (
     ProviderOpenAIChatCompletions,
 )
@@ -277,7 +276,7 @@ async def test_openai_chat_create_omits_go_headers():
 @pytest.mark.asyncio
 async def test_anthropic_create_omits_go_headers(monkeypatch):
     monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
-    provider = ProviderAnthropic(
+    provider = anthropic_source.ProviderAnthropic(
         provider_config={
             "id": "test-anthropic",
             "type": "anthropic_chat_completion",
@@ -407,7 +406,7 @@ def _make_go_messages(monkeypatch, overrides: dict | None = None):
 
 def test_opencode_go_messages_defaults_and_user_agent(monkeypatch):
     provider = _make_go_messages(monkeypatch)
-    assert issubclass(ProviderOpenCodeGoMessages, ProviderAnthropic)
+    assert issubclass(ProviderOpenCodeGoMessages, anthropic_source.ProviderAnthropic)
     assert provider.base_url == "https://opencode.ai/zen/go"
     assert provider.client.kwargs["base_url"] == "https://opencode.ai/zen/go"
     assert provider.client.kwargs["default_headers"] == {

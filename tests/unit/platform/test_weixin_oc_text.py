@@ -30,3 +30,9 @@ def test_parse_tool_progress_start_and_result():
         "tool_name": "web_search",
         "status": "completed",
     }
+    failed = parse_tool_progress("🔨 调用工具: web_search\n📎 返回结果: 失败")
+    assert failed == {
+        "phase": "end",
+        "tool_name": "web_search",
+        "status": "failed",
+    }

@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.api.message_components import Image, Plain, Record
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.weixin_oc import weixin_oc_adapter
@@ -42,6 +43,16 @@ class RuntimeConfig(dict):
 
 def _make_adapter(config: dict | None = None) -> WeixinOCAdapter:
     return WeixinOCAdapter(config or {"id": "weixin-oc-test"}, {}, asyncio.Queue())
+
+
+def _make_event(adapter: WeixinOCAdapter, *, run_id: str | None = None):
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "user-1"
+    message.sender = MessageMember("user-1", "tester")
+    message.message_str = "hi"
+    message.message = []
+    return adapter.create_event(message, run_id=run_id)
 
 
 def _patch_media_resolver(monkeypatch) -> None:
@@ -208,7 +219,7 @@ async def test_handle_inbound_message_does_not_download_voice_during_ingress(
     adapter.client.download_and_decrypt_media = AsyncMock(return_value=b"voice")
     committed = []
 
-    monkeypatch.setattr(adapter, "create_event", lambda message: message)
+    monkeypatch.setattr(adapter, "create_event", lambda message, **_kwargs: message)
     monkeypatch.setattr(adapter, "commit_event", committed.append)
     monkeypatch.setattr(adapter, "_cache_recent_message", lambda *args, **kwargs: None)
 
@@ -398,6 +409,47 @@ async def test_poll_inbound_updates_applies_server_long_poll_timeout():
 
 
 @pytest.mark.asyncio
+async def test_poll_inbound_updates_clamps_server_long_poll_timeout():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.client.request_json = AsyncMock(
+        return_value={
+            "ret": 0,
+            "msgs": [],
+            "longpolling_timeout_ms": 1,
+        }
+    )
+
+    await adapter._poll_inbound_updates()
+
+    assert adapter.long_poll_timeout_ms == adapter.MIN_LONG_POLL_TIMEOUT_MS
+
+    adapter.client.request_json = AsyncMock(
+        return_value={
+            "ret": 0,
+            "msgs": [],
+            "longpolling_timeout_ms": 999_999,
+        }
+    )
+    await adapter._poll_inbound_updates()
+    assert adapter.long_poll_timeout_ms == adapter.MAX_LONG_POLL_TIMEOUT_MS
+
+
+@pytest.mark.asyncio
+async def test_poll_inbound_updates_treats_ret_minus_14_as_timeout():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter._handle_inbound_session_timeout = AsyncMock()
+    adapter.client.request_json = AsyncMock(
+        return_value={"ret": -14, "errcode": 0, "errmsg": "timeout"}
+    )
+
+    await adapter._poll_inbound_updates()
+
+    adapter._handle_inbound_session_timeout.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_terminate_sends_notify_stop_after_start():
     adapter = _make_adapter()
     adapter.token = "token"
@@ -564,18 +616,10 @@ async def test_inbound_poll_backs_off_after_consecutive_failures(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_send_streaming_flushes_when_min_chars_reached():
-    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
-
     adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
     adapter._context_tokens["user-1"] = "ctx"
     adapter._send_items_to_session = AsyncMock(return_value=True)
-    message = AstrBotMessage()
-    message.type = MessageType.FRIEND_MESSAGE
-    message.session_id = "user-1"
-    message.sender = MessageMember("user-1", "tester")
-    message.message_str = "hi"
-    message.message = []
-    event = adapter.create_event(message)
+    event = _make_event(adapter)
 
     async def gen():
         yield MessageChain().message("a" * 120)
@@ -590,9 +634,116 @@ async def test_send_streaming_flushes_when_min_chars_reached():
     assert sent_text == ("a" * 120) + ("b" * 120)
 
 
-def test_weixin_oc_create_event_does_not_promote_roles():
-    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+@pytest.mark.asyncio
+async def test_send_streaming_idle_flush_keeps_later_chunks(monkeypatch):
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+    event = _make_event(adapter)
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.weixin_oc.weixin_oc_event.STREAM_IDLE_S",
+        0.05,
+    )
 
+    async def gen():
+        yield MessageChain().message("hello")
+        await asyncio.sleep(0.12)
+        yield MessageChain().message("world")
+
+    result = await event.send_streaming(gen())
+
+    assert adapter._send_items_to_session.await_count == 2
+    texts = [
+        call.args[1][0]["text_item"]["text"]
+        for call in adapter._send_items_to_session.await_args_list
+    ]
+    assert texts == ["hello", "world"]
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_break_flushes_before_direct_tool_send():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    sent: list[str] = []
+
+    async def fake_send_items(_user, items, **_kwargs):
+        item = items[0]
+        if item.get("type") == 1:
+            sent.append(item["text_item"]["text"])
+        else:
+            sent.append(f"tool:{item['type']}")
+        return True
+
+    adapter._send_items_to_session = AsyncMock(side_effect=fake_send_items)
+    event = _make_event(adapter, run_id="run-a")
+
+    async def gen():
+        yield MessageChain().message("prefix")
+        yield MessageChain(type="break")
+        await event.send(MessageChain(type="tool_call").message("🔨 调用工具: search"))
+        yield MessageChain().message("suffix")
+
+    await event.send_streaming(gen())
+
+    assert sent == ["prefix", f"tool:{TOOL_CALL_START_TYPE}", "suffix"]
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_empty_generator_does_not_mark_sent():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    event = _make_event(adapter)
+
+    async def gen():
+        for _ in ():
+            yield MessageChain()
+
+    result = await event.send_streaming(gen())
+
+    assert result is None
+    assert event._has_send_oper is False
+
+
+@pytest.mark.asyncio
+async def test_event_send_attaches_run_id_proactive_send_does_not():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    payloads: list[dict] = []
+
+    async def fake_request_json(*_args, **kwargs):
+        payloads.append(kwargs.get("payload") or {})
+        return {"ret": 0}
+
+    adapter.client.request_json = fake_request_json
+    event = _make_event(adapter, run_id="run-a")
+    session = MessageSession(
+        platform_name="weixin-oc-test",
+        message_type=MessageType.FRIEND_MESSAGE,
+        session_id="user-1",
+    )
+
+    await event.send(MessageChain().message("from-event"))
+    await adapter.send_by_session(session, MessageChain().message("proactive"))
+
+    assert payloads[0]["msg"]["run_id"] == "run-a"
+    assert "run_id" not in payloads[1]["msg"]
+
+
+@pytest.mark.asyncio
+async def test_send_media_segment_unlinks_silk_temp_file(tmp_path: Path):
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    silk_path = tmp_path / "out.silk"
+    silk_path.write_bytes(b"silk")
+    adapter._resolve_outbound_voice = AsyncMock(return_value=(silk_path, 1000))
+    adapter._prepare_media_item = AsyncMock(return_value={"type": 3, "voice_item": {}})
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+
+    await adapter._send_media_segment("user-1", Record(file="voice.wav"))
+
+    assert silk_path.exists() is False
+
+
+def test_weixin_oc_create_event_does_not_promote_roles():
     adapter = _make_adapter()
     message = AstrBotMessage()
     message.type = MessageType.FRIEND_MESSAGE

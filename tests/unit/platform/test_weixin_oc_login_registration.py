@@ -31,7 +31,7 @@ def test_weixin_oc_login_result_maps_confirmed_payload():
             "status": "confirmed",
             "bot_token": "token",
             "ilink_bot_id": "bot-id",
-            "baseurl": "https://example.com/",
+            "baseurl": "https://ilink-c.weixin.qq.com/",
             "ilink_user_id": "user-id",
         },
         default_base_url=DEFAULT_WEIXIN_OC_BASE_URL,
@@ -42,7 +42,7 @@ def test_weixin_oc_login_result_maps_confirmed_payload():
         "qr_status": "confirmed",
         "weixin_oc_token": "token",
         "weixin_oc_account_id": "bot-id",
-        "weixin_oc_base_url": "https://example.com",
+        "weixin_oc_base_url": "https://ilink-c.weixin.qq.com",
         "weixin_oc_user_id": "user-id",
     }
 
@@ -144,3 +144,42 @@ async def test_provision_poll_forwards_verify_code(monkeypatch):
     assert result["status"] == "need_verifycode"
     assert captured["verify_code"] == "1234"
     assert captured["qrcode"] == "qr-1"
+
+
+@pytest.mark.asyncio
+async def test_poll_weixin_oc_login_once_ignores_non_weixin_redirect_host(
+    monkeypatch,
+):
+    login_registration._QR_POLL_STATES.clear()
+    login_registration._remember_qr_poll_base_url(
+        "qr-1",
+        DEFAULT_WEIXIN_OC_BASE_URL,
+    )
+    client = AsyncMock()
+    client.get_qrcode_status.return_value = {
+        "status": "scaned_but_redirect",
+        "redirect_host": "evil.example",
+    }
+    client.close = AsyncMock()
+    monkeypatch.setattr(login_registration, "_client", lambda **kwargs: client)
+
+    result = await poll_weixin_oc_login_once(
+        platform_config={"id": "weixin-oc-test"},
+        qrcode="qr-1",
+    )
+
+    assert result["status"] == "pending"
+    assert client.get_qrcode_status.await_count == 1
+    assert login_registration._qr_poll_base_url("qr-1") == DEFAULT_WEIXIN_OC_BASE_URL
+
+
+def test_weixin_oc_login_result_rejects_non_weixin_confirmed_base_url():
+    result = weixin_oc_login_result(
+        {
+            "status": "confirmed",
+            "bot_token": "token",
+            "baseurl": "https://evil.example/",
+        },
+        default_base_url=DEFAULT_WEIXIN_OC_BASE_URL,
+    )
+    assert result["weixin_oc_base_url"] == DEFAULT_WEIXIN_OC_BASE_URL

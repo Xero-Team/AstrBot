@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
 
-from .weixin_oc_client import ILINK_FIXED_BASE_URL, WeixinOCClient
+from .weixin_oc_client import (
+    ILINK_FIXED_BASE_URL,
+    WeixinOCClient,
+    resolve_weixin_https_base_url,
+)
 
 DEFAULT_WEIXIN_OC_BASE_URL = ILINK_FIXED_BASE_URL
 DEFAULT_WEIXIN_OC_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c"
@@ -68,13 +72,16 @@ def weixin_oc_login_result(
         bot_token = _string_field(data, "bot_token")
         if not bot_token:
             return {"status": "error", "message": "登录成功但未返回 token"}
-        base_url = _string_field(data, "baseurl") or default_base_url
+        raw_base_url = _string_field(data, "baseurl") or default_base_url
+        base_url = resolve_weixin_https_base_url(
+            raw_base_url
+        ) or normalize_weixin_oc_base_url(default_base_url)
         return {
             "status": "created",
             "qr_status": raw_status,
             "weixin_oc_token": bot_token,
             "weixin_oc_account_id": _string_field(data, "ilink_bot_id"),
-            "weixin_oc_base_url": normalize_weixin_oc_base_url(base_url),
+            "weixin_oc_base_url": base_url,
             "weixin_oc_user_id": _string_field(data, "ilink_user_id"),
         }
     if raw_status == "expired":
@@ -217,13 +224,10 @@ async def poll_weixin_oc_login_once(
             existing_account_id=existing_account_id,
         )
         if result.get("qr_status") == "scaned_but_redirect":
-            redirect_host = str(result.get("redirect_host") or "").strip()
-            if redirect_host:
-                redirected_base = (
-                    redirect_host
-                    if redirect_host.startswith("https://")
-                    else f"https://{redirect_host}"
-                )
+            redirected_base = resolve_weixin_https_base_url(
+                str(result.get("redirect_host") or "")
+            )
+            if redirected_base:
                 _remember_qr_poll_base_url(qrcode, redirected_base)
                 data = await client.get_qrcode_status(
                     qrcode,

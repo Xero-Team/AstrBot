@@ -1,10 +1,11 @@
+import asyncio
 import base64
 import hashlib
 import json
 import random
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 
@@ -18,6 +19,48 @@ from .weixin_oc_quote import build_ilink_client_version
 ILINK_APP_ID = "bot"
 ILINK_FIXED_BASE_URL = "https://ilinkai.weixin.qq.com"
 CDN_UPLOAD_MAX_RETRIES = 3
+CDN_UPLOAD_RETRY_DELAY_S = 0.2
+_WEIXIN_HOST = "weixin.qq.com"
+_WEIXIN_HOST_SUFFIX = ".weixin.qq.com"
+
+
+def is_allowed_weixin_https_url(url: str) -> bool:
+    """Return whether ``url`` is https on a Weixin host without userinfo."""
+    parsed = urlparse(str(url).strip())
+    if parsed.scheme != "https" or parsed.username or parsed.password:
+        return False
+    if parsed.port not in (None, 443):
+        return False
+    host = (parsed.hostname or "").lower().rstrip(".")
+    return host == _WEIXIN_HOST or host.endswith(_WEIXIN_HOST_SUFFIX)
+
+
+def resolve_weixin_https_base_url(host_or_url: str) -> str | None:
+    """Normalize a Tencent redirect host or origin to an https Weixin base URL.
+
+    Args:
+        host_or_url: Hostname or absolute URL from the iLink protocol.
+
+    Returns:
+        Origin such as ``https://ilink-b.weixin.qq.com``, or ``None`` when the
+        value is empty, uses a non-https scheme, or is not a Weixin host.
+    """
+    raw = str(host_or_url or "").strip()
+    if not raw:
+        return None
+    lowered = raw.lower()
+    if lowered.startswith("http://"):
+        return None
+    if not lowered.startswith("https://"):
+        raw = f"https://{raw}"
+    parsed = urlparse(raw)
+    host = parsed.netloc
+    if not host:
+        return None
+    candidate = f"https://{host}"
+    if not is_allowed_weixin_https_url(candidate):
+        return None
+    return candidate.rstrip("/")
 
 
 def build_base_info() -> dict[str, str]:
@@ -146,7 +189,7 @@ class WeixinOCClient:
         aes_key_hex: str,
         media_path: Path,
     ) -> str:
-        if upload_full_url:
+        if upload_full_url and is_allowed_weixin_https_url(upload_full_url):
             cdn_url = upload_full_url
         elif upload_param:
             cdn_url = self._build_cdn_upload_url(upload_param, file_key)
@@ -180,12 +223,14 @@ class WeixinOCClient:
 
         last_error: Exception | None = None
         for attempt in range(1, CDN_UPLOAD_MAX_RETRIES + 1):
+            retryable = False
             try:
                 async with self._http_session.post(
                     cdn_url,
                     data=encrypted,
                     headers={"Content-Type": "application/octet-stream"},
                     timeout=timeout,
+                    allow_redirects=False,
                 ) as resp:
                     detail = await resp.text()
                     logger.debug(
@@ -203,27 +248,35 @@ class WeixinOCClient:
                             f"upload media to cdn failed: {resp.status} {detail}"
                         )
                     if resp.status != 200:
+                        retryable = True
                         raise RuntimeError(
                             f"upload media to cdn failed: {resp.status} {detail}"
                         )
                     download_param = resp.headers.get("x-encrypted-param")
                     if not download_param:
+                        retryable = True
                         raise RuntimeError(
                             "upload media to cdn failed: missing x-encrypted-param"
                         )
                     return download_param
+            except aiohttp.ClientError as exc:
+                retryable = True
+                last_error = exc
             except RuntimeError as exc:
-                if "failed: 4" in str(exc):
+                if not retryable:
                     raise
                 last_error = exc
-                if attempt >= CDN_UPLOAD_MAX_RETRIES:
-                    raise
-                logger.warning(
-                    "weixin_oc(%s): CDN upload attempt %s failed, retrying: %s",
-                    self.adapter_id,
-                    attempt,
-                    exc,
-                )
+            if attempt >= CDN_UPLOAD_MAX_RETRIES:
+                if last_error is not None:
+                    raise last_error
+                raise RuntimeError("upload media to cdn failed")
+            logger.warning(
+                "weixin_oc(%s): CDN upload attempt %s failed, retrying: %s",
+                self.adapter_id,
+                attempt,
+                last_error,
+            )
+            await asyncio.sleep(CDN_UPLOAD_RETRY_DELAY_S * attempt)
         if last_error is not None:
             raise last_error
         raise RuntimeError("upload media to cdn failed")
@@ -233,11 +286,12 @@ class WeixinOCClient:
         encrypted_query_param: str,
         full_url: str | None = None,
     ) -> bytes:
-        download_url = str(full_url or "").strip() or (
-            self._build_cdn_download_url(encrypted_query_param)
-            if encrypted_query_param
-            else ""
+        candidate = str(full_url or "").strip()
+        download_url = (
+            candidate if candidate and is_allowed_weixin_https_url(candidate) else ""
         )
+        if not download_url and encrypted_query_param:
+            download_url = self._build_cdn_download_url(encrypted_query_param)
         if not download_url:
             raise ValueError(
                 "CDN download URL missing (need full_url or encrypt_query_param)"
@@ -248,6 +302,7 @@ class WeixinOCClient:
         async with self._http_session.get(
             download_url,
             timeout=timeout,
+            allow_redirects=False,
         ) as resp:
             if resp.status >= 400:
                 detail = await resp.text()
@@ -311,6 +366,7 @@ class WeixinOCClient:
             json=request_payload,
             headers=merged_headers,
             timeout=timeout,
+            allow_redirects=False,
         ) as resp:
             text = await resp.text()
             if resp.status >= 400:

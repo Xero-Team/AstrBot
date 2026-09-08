@@ -64,6 +64,18 @@ async def test_event_loop_watchdog_stops_worker_thread():
     )
 
 
+def _block_event_loop(seconds: float) -> None:
+    """Busy-wait so ``sys._current_frames()`` keeps this test file on the stack.
+
+    ``time.sleep`` is a C blocking call. On Windows 3.14 the captured
+    event-loop thread stack can be ``threading.Thread.join`` instead of this
+    module, which flakes the rotating-log assertion.
+    """
+    deadline = time.perf_counter() + seconds
+    while time.perf_counter() < deadline:
+        pass
+
+
 @pytest.mark.asyncio
 async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
     """The watchdog should write to and rotate its log file."""
@@ -80,8 +92,18 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
         )
     )
     await asyncio.sleep(0)
-    time.sleep(0.05)  # noqa: ASYNC251 - Intentionally block the event loop.
-    await asyncio.sleep(0.02)
+    _block_event_loop(0.05)
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if log_path.exists() and "Event loop stalled for" in log_path.read_text(
+            encoding="utf-8"
+        ):
+            break
+        await asyncio.sleep(0.01)
+    else:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        pytest.fail("watchdog did not write a stall dump")
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
 

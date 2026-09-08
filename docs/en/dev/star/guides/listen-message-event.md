@@ -8,6 +8,8 @@ Event listener decorators are located in `astrbot.api.event.filter` and must be 
 from astrbot.api.event import filter, AstrMessageEvent
 ```
 
+User plugins load at runtime as `data.plugins.<plugin-directory>.main`. Import sibling modules with relative imports such as `from .util import helper`. Do not write a top-level `import <plugin-name>`: that may work in the plugin checkout and fails after `plug install`.
+
 ## Messages and Events
 
 AstrBot receives messages delivered by messaging platforms and encapsulates them as `AstrMessageEvent` objects, which are then passed to plugins for processing.
@@ -258,6 +260,8 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
 
 The command group function doesn't need to implement any logic; just use `pass` directly or add comments within the function. Subcommands of the command group are registered using `command_group_name.command`.
 
+Do not stack two `@filter.command` decorators on the same handler. Filters use AND: one message matches one command name, so two command filters never pass together. Extra names belong in `alias={...}`; resources with subcommands use `filter.command_group`.
+
 When a user omits the subcommand, AstrBot reports an incomplete command and lists the group's subcommand tree. A recognized root group with an unknown child reports `UNKNOWN_SUBCOMMAND` instead of falling back to the LLM. Only a completely unknown root keeps the LLM fallback.
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-1.png)
@@ -406,7 +410,7 @@ Do not use the removed `PermissionType` enum or `@filter.permission_type`.
 
 ### Multiple Filters
 
-Multiple filters can be used simultaneously by adding multiple decorators to a function. Filters use `AND` logic, meaning the function will only execute if all filters pass.
+Multiple filters can be used simultaneously by adding multiple decorators to a function. Filters use `AND` logic, meaning the function will only execute if all filters pass. Stacking `@filter.command("a")` with `@filter.command("b")` is not an alias and is not OR; that shape never matches.
 
 ```python
 @filter.command("helloworld")

@@ -855,6 +855,24 @@ async def test_command_preserves_non_ascii_space_and_rejects_trailing_newline(
 
 
 @pytest.mark.asyncio
+async def test_stacked_command_filters_do_not_activate(monkeypatch):
+    stage = await make_stage()
+
+    async def greet(self, event) -> None: ...
+
+    handler, _command_filter = make_command_handler("hello", greet)
+    extra = CommandFilter("hi")
+    extra.init_handler_md(handler)
+    handler.event_filters.append(extra)
+    install_handlers(stage, monkeypatch, [handler])
+    event = FakeEvent([Plain("/hello")], message_text="/hello")
+
+    await stage.process(event)
+
+    assert event.get_extra("activated_handlers") == []
+
+
+@pytest.mark.asyncio
 async def test_failed_and_filter_does_not_leave_bound_params(monkeypatch):
     stage = await make_stage()
 

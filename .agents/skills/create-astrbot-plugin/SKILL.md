@@ -22,6 +22,8 @@ Plugin name, commands, platforms, secrets, and whether tests or a Dashboard Exte
 ## Do not
 
 - Restore legacy `register` decorators, `event.bot`, `event.client`, or raw platform clients.
+- Import the plugin as a top-level package name. User plugins load as `data.plugins.<root_dir_name>.<module>`; use relative imports such as `from .foo import bar`.
+- Stack two `@filter.command` decorators on one handler. Filters are AND and never match; use `alias=` or `filter.command_group`.
 - Overwrite an existing plugin directory unless the user passed `--force`.
 - Write disposable state into a developer's real `data/`.
 - Vendor a copy of this skill into a sibling plugin repo; call `scripts/check_plugin.py` from this checkout.
@@ -100,7 +102,7 @@ Do not import `astrbot.core`, `astrbot.dashboard`, concrete platform adapters, o
 
 Load [references/feature-patterns.md](references/feature-patterns.md) only for the selected feature. Keep the default implementation minimal:
 
-- command or command group: use `filter.command` / `filter.command_group` and typed Orbit parameters;
+- command or command group: use `filter.command` / `filter.command_group` and typed Orbit parameters; do not stack two `@filter.command` decorators;
 - event listener: use public filters and inspect `AstrMessageEvent` without parsing shell-like arguments manually;
 - configuration: use strict JSON `_conf_schema.json`, inject `AstrBotConfig`, and validate external values in plugin code;
 - persistence: use `self.context.storage.data_directory()` or the plugin KV methods, never the source directory;

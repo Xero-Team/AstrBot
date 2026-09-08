@@ -57,7 +57,38 @@ def python_floor(root: Path) -> str:
     return f">={match.group(1)}"
 
 
-def check_python_file(path: Path, errors: list[str]) -> None:
+def _is_self_import(module: str, plugin_names: frozenset[str]) -> bool:
+    return any(
+        module == name or module.startswith(f"{name}.") for name in plugin_names if name
+    )
+
+
+def _filter_command_decorator_count(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> int:
+    count = 0
+    for decorator in func.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        target = decorator.func
+        if isinstance(target, ast.Name) and target.id == "command":
+            count += 1
+        elif (
+            isinstance(target, ast.Attribute)
+            and target.attr == "command"
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "filter"
+        ):
+            count += 1
+    return count
+
+
+def check_python_file(
+    path: Path,
+    errors: list[str],
+    *,
+    plugin_names: frozenset[str] = frozenset(),
+) -> None:
     try:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
@@ -66,17 +97,32 @@ def check_python_file(path: Path, errors: list[str]) -> None:
         return
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            names = (alias.name for alias in node.names)
+            imported = (alias.name for alias in node.names)
+            level = 0
         elif isinstance(node, ast.ImportFrom):
-            names = (node.module or "",)
+            imported = (node.module or "",)
+            level = node.level
         else:
-            continue
-        for name in names:
+            imported = ()
+            level = 0
+        for name in imported:
             if name == "requests" or name.startswith("requests."):
                 errors.append(f"{path}: use an async HTTP client instead of requests")
             if name.startswith(("astrbot.core", "astrbot.dashboard")):
                 errors.append(
                     f"{path}: import only the public astrbot.api SDK, found {name}"
+                )
+            if level == 0 and _is_self_import(name, plugin_names):
+                errors.append(
+                    f"{path}: import the plugin package with a relative import "
+                    f"(from .foo import bar); plugins load as data.plugins.<name>, "
+                    f"found {name}"
+                )
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if _filter_command_decorator_count(node) >= 2:
+                errors.append(
+                    f"{path}: stacked @filter.command on {node.name} is AND and "
+                    "never matches; use alias= or filter.command_group"
                 )
 
 
@@ -97,6 +143,7 @@ def main() -> int:
 
     metadata_path = plugin / "metadata.yaml"
     main_path = plugin / "main.py"
+    plugin_names = {plugin.name}
     if not metadata_path.is_file():
         errors.append("missing metadata.yaml")
     if not main_path.is_file():
@@ -115,6 +162,8 @@ def main() -> int:
                 if not metadata[key].strip()
             )
             name = metadata.get("name", "")
+            if name.strip():
+                plugin_names.add(name.strip())
             if not NAME_RE.fullmatch(name) or keyword.iskeyword(name):
                 errors.append("metadata.yaml: name is not a legal Python identifier")
             if name and name != plugin.name:
@@ -122,11 +171,12 @@ def main() -> int:
                     f"metadata.yaml: name {name!r} does not match directory {plugin.name!r}",
                 )
 
+    names = frozenset(plugin_names)
     if main_path.is_file():
-        check_python_file(main_path, errors)
+        check_python_file(main_path, errors, plugin_names=names)
     for path in sorted(plugin.rglob("*.py")):
         if path != main_path:
-            check_python_file(path, errors)
+            check_python_file(path, errors, plugin_names=names)
 
     schema_path = plugin / "_conf_schema.json"
     if schema_path.is_file():

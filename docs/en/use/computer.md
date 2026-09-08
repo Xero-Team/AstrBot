@@ -10,7 +10,7 @@ In WebUI, open:
 
 The key option is `Computer Use Runtime`:
 
-- `none`: disables Computer Use; Shell, Python, filesystem, and related tools are not mounted.
+- `none`: disables Computer Use; Shell, Python, filesystem, and related tools are not mounted. Skill manuals still load through `read_skill` and do not require Computer Use.
 - `local`: executes on the host machine where AstrBot is running. Use this when the Agent needs local files, command-line tools, or local dependencies.
 - `sandbox`: executes inside an isolated sandbox. Use this when you want to reduce host risk or provide automation capabilities to multiple users.
 

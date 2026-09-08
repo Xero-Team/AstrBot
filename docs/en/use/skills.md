@@ -50,7 +50,7 @@ If a local Skill has been synced into the sandbox, AstrBot treats it as the same
 
 The system prompt lists only enabled Skill names and short descriptions. When a Skill matches, the model should call `read_skill` for that Skill's `SKILL.md`, then pass a relative `path` for referenced files. Reading a manual does not require Computer Use; `read_skill` remains available when `computer_use_runtime=none`. The authorization action is low-risk `skill.read`, not `tool.local_exec` or `tool.file_read`.
 
-Only frontmatter `tools:` is recognized. Values are registered tool names. The field is a filter, not a grant. Community manuals that only set `allowed-tools` are ignored and do not gain privilege. Missing `tools:` supplies a manual and adds no tools.
+Only frontmatter `tools:` is recognized. Values are registered tool names, for example `tools: [search_memory]`. The field is a filter, not a grant. Community manuals that only set `allowed-tools` are ignored and do not gain privilege. Missing `tools:` supplies a manual and adds no tools. Do not list `read_skill` in `tools:`. Unknown names are ignored. Social IM, anonymous WebChat, and API keys never mount Shell even when a Skill declares `astrbot_execute_shell`. The developer assembly formula is in [Architecture](/en/dev/architecture).
 
 ## Using Skills in AstrBot
 

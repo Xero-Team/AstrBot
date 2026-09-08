@@ -10,7 +10,7 @@
 
 核心配置项是 `Computer Use Runtime`：
 
-- `none`：不启用电脑能力，不给 Agent 挂载 Shell、Python、文件系统等工具。
+- `none`：不启用电脑能力，不给 Agent 挂载 Shell、Python、文件系统等工具。读 Skill 手册仍走 `read_skill`，不需要电脑能力。
 - `local`：在 AstrBot 所在机器上执行，适合需要访问本机文件、命令行工具或本地依赖的场景。
 - `sandbox`：在隔离沙盒中执行，适合希望降低本机风险、或让多用户使用自动化能力的场景。
 

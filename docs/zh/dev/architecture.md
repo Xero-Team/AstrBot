@@ -188,7 +188,29 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
 
-Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`）。工具目录由 `assemble_tool_catalog()` 按平台基线、会话插件/MCP、Skill `tools:` 和按需电脑工具计算，再与人格三态、可见性和社交表面硬裁求交。装配细节见 [Skills 读取与工具目录装配](/dev/skill-tool-assembly)。
+Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`），路径锁在请求级 Skill 快照内。用户说明见 [技能 Skills](/use/skills)。
+
+工具目录由 `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()` 一次计算。输入是冻结的 Skill 快照、人格三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。`_apply_local_env_tools()` / `_apply_sandbox_tools()` 只写运行时提示词。`tool_schema_mode=skills_like` 只做两阶段轻 schema，不收目录。
+
+```text
+候选 = 平台基线 ∪ 会话插件/MCP ∪ Skill.tools ∪ 按需电脑工具
+目录 = 表面硬裁(可见性过滤(人格白名单 ∩ 候选))
+```
+
+| 层             | 何时进入候选                                                     | 是否靠 Skill `tools:`                         |
+| -------------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| 平台基线       | 对应能力已开                                                     | 否                                            |
+| 会话插件 / MCP | 插件已激活且通过会话过滤；MCP 无插件归属则保留                   | 否。Skill 不能安装或放开私网 MCP              |
+| Skill 声明     | 已启用 Skill 前言 `tools:`                                       | 是。只过滤已有工具名                          |
+| 按需电脑工具   | `computer_use_runtime` 为 `local` 或 `sandbox`，且通过人格与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
+
+人格 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表移除普通工具，仍保留 `read_skill`。非空列表与白名单求交，`read_skill` 仍保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。Neo 生命周期工具属于 sandbox + `shipyard_neo` 的按需电脑层，不是平台基线。
+
+社交表面（IM、匿名 WebChat、插件、Agent、API Key）按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 从目录硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。已认证 WebChat 只放行已 step-up 的动作交集。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。
+
+`read_skill` 使用请求创建时冻结的快照，不按名称重扫全局目录。宿主冻结单文件 64 KiB、目录合计 256 KiB / 32 个文件。路径相对 Skill 目录；拒绝 `..`、绝对路径、符号链接逃逸。Unix 使用 `O_NOFOLLOW`。前言只认 `tools:`，忽略 `allowed-tools`；声明是过滤不是授权。不要照搬 Claude Code 预批准、Codex `$mention` / `skill://`、或 OpenCode 全工具池目录。
+
+相关符号：`build_skills_prompt()`（`astrbot/core/skills/_skill_inventory.py`）、`parse_skill_frontmatter()`（`_skill_frontmatter.py`）、`_skill_snapshot.py`、`assemble_tool_catalog()`（`tool_catalog.py`）、`FunctionToolExecutor._authorize_execution()`（`astrbot/core/astr_agent_tool_exec.py`）。
 
 SubAgent 通过 `transfer_to_*` handoff 工具挂载到主 Agent。启用编排后，主 Agent 默认保留自身工具；只有启用“去重重复工具”时，才会移除与已启用 SubAgent 重叠的工具。
 

@@ -136,7 +136,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 - `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `30`，也适用于当前子代理执行。
 - `agent_runner.config.max_steps`：第三方 Runner 的 step 上限，默认 `30`。
 - `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
-- `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
+- `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema，只藏参数，不改变工具目录。
 - `agent_runner.config.misc.sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。
 - `agent_runner.config.proxy_mode` / `proxy_url`：第三方 Runner 的出站代理；`inherit` 跟随全局代理，`direct` 明确直连，`custom` 仅使用 `proxy_url`。
 

@@ -188,7 +188,29 @@ The Agent runtime is under `astrbot/core/agent/`, with main-request assembly in 
 
 Tools can come from the core, plugins, or MCP. MCP supports stdio and Streamable HTTP only. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.
 
-Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`. The system prompt lists names and short descriptions; manuals load through `read_skill` (`skill.read`). The tool catalog is computed by `assemble_tool_catalog()` from the platform baseline, session plugin/MCP tools, Skill `tools:` declarations, and on-demand computer tools, then intersected with Persona three-state policy, visibility, and social-surface hard-strip. Details: [Skill reading and tool-catalog assembly](/en/dev/skill-tool-assembly).
+Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`. The system prompt lists names and short descriptions; manuals load through `read_skill` (`skill.read`), with paths locked to the request-scoped Skill snapshot. User-facing behavior is in [Skills](/en/use/skills).
+
+The tool catalog is computed once by `assemble_tool_catalog()` in `astrbot/core/tool_catalog.py`. Inputs are the frozen Skill snapshot, Persona three-state policy, request surface, `computer_use_runtime`, session plugin filter, and the registered-tool table. The output is a tool-name set, then one materialized `ToolSet`. Tools already present on the request are reattached only after the same surface strip. `_apply_local_env_tools()` / `_apply_sandbox_tools()` write runtime prompts only. `tool_schema_mode=skills_like` is a two-stage light schema; it does not shrink the catalog.
+
+```text
+candidates = platform baseline ∪ session plugin/MCP ∪ Skill.tools ∪ on-demand computer tools
+catalog = surface-strip(visibility-filter(Persona whitelist ∩ candidates))
+```
+
+| Layer                    | Enters the candidate set when                                                          | Depends on Skill `tools:`?                                       |
+| ------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Platform baseline        | The matching capability is on                                                          | No                                                               |
+| Session plugin / MCP     | The plugin is active and passes the session filter; unowned MCP tools are kept         | No. A Skill cannot install MCP or open private-network MCP       |
+| Skill declarations       | Enabled Skill frontmatter `tools:`                                                     | Yes. Filter existing names only                                  |
+| On-demand computer tools | `computer_use_runtime` is `local` or `sandbox`, and Persona plus hard-strip allow them | May declare, but cannot grant extra privilege. Empty when `none` |
+
+Persona `tools is None` means “do not shrink these four layers”. It does not mean “drop plugin tools unless a Skill named them”. An empty list removes ordinary tools and still keeps `read_skill`. A non-empty list intersects the whitelist and still keeps `read_skill`. Assembly uses static visibility only; it does not call full `authorize()`. Neo lifecycle tools belong to the sandbox + `shipyard_neo` computer layer, not the platform baseline.
+
+Social surfaces (IM, anonymous WebChat, plugins, agents, API keys) hard-strip tools whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`. Authenticated WebChat keeps only actions covered by the current step-up set. Do not use the full `HIGH_RISK_ACTIONS` set as a catalog blacklist. `tool.file_read` is not in the strip set; IM must not mount workspace file-read tools merely because a Skill declared them.
+
+`read_skill` uses the snapshot frozen at request creation and must not rescan global Skill directories by name. Host freeze caps are 64 KiB per file and 256 KiB / 32 files per tree. Paths are relative to the Skill directory; `..`, absolute paths, and symlink escapes are rejected. Unix opens with `O_NOFOLLOW`. Frontmatter recognizes only `tools:`; `allowed-tools` is ignored. The field is a filter, not a grant. Do not copy Claude Code pre-approval, Codex `$mention` / `skill://`, or OpenCode's full-pool catalog.
+
+Related symbols: `build_skills_prompt()` (`astrbot/core/skills/_skill_inventory.py`), `parse_skill_frontmatter()` (`_skill_frontmatter.py`), `_skill_snapshot.py`, `assemble_tool_catalog()` (`tool_catalog.py`), and `FunctionToolExecutor._authorize_execution()` (`astrbot/core/astr_agent_tool_exec.py`).
 
 SubAgents are exposed to the main Agent as `transfer_to_*` handoff tools. Enabling orchestration keeps the main Agent's own tools by default. Only the duplicate-tool option removes tools that overlap with enabled SubAgents.
 

@@ -130,7 +130,10 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
 )
-from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.string_utils import (
+    interpolate_placeholders,
+    normalize_and_dedupe_strings,
+)
 from astrbot.core.utils.task_utils import create_tracked_task
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
@@ -440,7 +443,7 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
     if not prefix:
         return
     if "{{prompt}}" in prefix:
-        req.prompt = prefix.replace("{{prompt}}", req.prompt)
+        req.prompt = interpolate_placeholders(prefix, {"prompt": req.prompt})
     else:
         req.prompt = f"{prefix}{req.prompt}"
 

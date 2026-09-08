@@ -155,7 +155,8 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 ### Persona、提示词与会话
 
 - `persona_pool`：本配置档可选 Persona，`["*"]` 表示全部。
-- `prompt_prefix`：用户提示词模板，必须保留 `{{prompt}}` 才能包含原始输入。
+- `prompt_prefix`：用户提示词模板。占位符语法是无逻辑的 `{{name}}`，不是 Jinja2。允许的键只有 `prompt`。模板含 `{{prompt}}` 时替换为用户输入；不含该占位符时，把前缀拼在用户输入前面。Persona `system_prompt` 和 workspace `EXTRA_PROMPT.md` 不是模板。
+- 内置 LLM 模板使用同一套 `{{name}}` 语法。cron 唤醒允许 `cron_job`；后台任务唤醒允许 `background_task_result`；tool-loop 通知允许 `follow_up_lines`、`tool_names`、`tool_name`、`streak`、`overflow_path`、`read_tool_hint`。未知 `{{name}}` 保持字面量，替换值不会再次扫描。
 - `identifier`、`group_name_display`、`datetime_system_prompt`：向提示词加入用户 ID、群名或当前时间。
 
 默认 Persona ID 在 `agent_runner` 中配置。选择优先级见 [Persona 人格设定](../use/persona)。

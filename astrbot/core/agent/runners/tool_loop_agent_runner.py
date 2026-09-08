@@ -44,6 +44,7 @@ from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
 from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.string_utils import interpolate_placeholders
 
 from ..chat_model import ChatModel
 from ..context.compressor import ContextCompressor
@@ -132,7 +133,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "was in progress. Prioritize these follow-up instructions in your next "
         "actions. In your very next action, briefly acknowledge to the user "
         "that their follow-up message(s) were received before continuing.\n"
-        "{follow_up_lines}"
+        "{{follow_up_lines}}"
     )
     MAX_STEPS_REACHED_PROMPT = (
         "Maximum tool call limit reached. "
@@ -140,7 +141,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "summarize your task and findings, and reply to the user directly."
     )
     SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
-        "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
+        "You have decided to call tool(s): {{tool_names}}. Now call the tool(s) "
         "with required arguments using the tool schema, and follow the existing "
         "tool-use rules."
     )
@@ -159,20 +160,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     MALFORMED_TOOL_NAME_PLACEHOLDER = "__malformed_tool_name__"
     REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
-        "`{tool_name}` with the same arguments {streak} times consecutively. "
+        "`{{tool_name}}` with the same arguments {{streak}} times consecutively. "
         "Double-check whether another tool, different arguments, or a summary would "
         "move the task forward better."
     )
     REPEATED_TOOL_NOTICE_L2_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
-        "`{tool_name}` with the same arguments {streak} times consecutively. "
+        "`{{tool_name}}` with the same arguments {{streak}} times consecutively. "
         "Unless this repetition is clearly necessary, stop repeating the same action "
         "and either switch tools, refine parameters, or summarize what is still "
         "missing."
     )
     REPEATED_TOOL_NOTICE_L3_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
-        "`{tool_name}` with the same arguments {streak} times consecutively. "
+        "`{{tool_name}}` with the same arguments {{streak}} times consecutively. "
         "Repetition is now very high. Continue only if each call is clearly producing "
         "new information. Otherwise, change strategy, adjust arguments, or explain "
         "the limitation to the user."
@@ -180,7 +181,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE = (
         "Truncated tool output preview shown above. "
         "The tool output was too large to include directly and was written to "
-        "`{overflow_path}`. Use {read_tool_hint} to inspect it. "
+        "`{{overflow_path}}`. Use {{read_tool_hint}} to inspect it. "
         "Use a narrower window when reading large files."
     )
 
@@ -583,9 +584,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 return error_notice
             return f"{preview}\n\n{error_notice}"
 
-        notice = self.TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE.format(
-            overflow_path=overflow_path,
-            read_tool_hint=self._read_tool_hint(),
+        notice = interpolate_placeholders(
+            self.TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE,
+            {
+                "overflow_path": overflow_path,
+                "read_tool_hint": self._read_tool_hint(),
+            },
         )
         if not preview:
             return notice
@@ -870,8 +874,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         follow_up_lines = "\n".join(
             f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
         )
-        return self.FOLLOW_UP_NOTICE_TEMPLATE.format(
-            follow_up_lines=follow_up_lines,
+        return interpolate_placeholders(
+            self.FOLLOW_UP_NOTICE_TEMPLATE,
+            {"follow_up_lines": follow_up_lines},
         )
 
     def _merge_follow_up_notice(self, content: str) -> str:
@@ -903,20 +908,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return ""
 
         if streak >= self.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
-            return self.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
-                tool_name=tool_name,
-                streak=streak,
+            return interpolate_placeholders(
+                self.REPEATED_TOOL_NOTICE_L3_TEMPLATE,
+                {"tool_name": tool_name, "streak": streak},
             )
 
         if streak >= self.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
-            return self.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
-                tool_name=tool_name,
-                streak=streak,
+            return interpolate_placeholders(
+                self.REPEATED_TOOL_NOTICE_L2_TEMPLATE,
+                {"tool_name": tool_name, "streak": streak},
             )
 
-        return self.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
-            tool_name=tool_name,
-            streak=streak,
+        return interpolate_placeholders(
+            self.REPEATED_TOOL_NOTICE_L1_TEMPLATE,
+            {"tool_name": tool_name, "streak": streak},
         )
 
     def _sanitize_malformed_tool_calls(
@@ -2001,8 +2006,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
-        instruction = self.SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE.format(
-            tool_names=", ".join(tool_names)
+        instruction = interpolate_placeholders(
+            self.SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE,
+            {"tool_names": ", ".join(tool_names)},
         )
         if extra_instruction:
             instruction = f"{instruction}\n{extra_instruction}"

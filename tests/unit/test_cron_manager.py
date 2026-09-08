@@ -721,7 +721,10 @@ class TestRunActiveAgentJob:
             await cron_manager._woke_main_agent(
                 message="run scheduled task",
                 session_str="test:FriendMessage:user123",
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                extras={
+                    "cron_job": {"id": "job-1", "note": "see {{prompt}} {keep}"},
+                    "cron_payload": {},
+                },
             )
 
         config = captured["config"]
@@ -735,6 +738,9 @@ class TestRunActiveAgentJob:
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
+        assert '"id": "job-1"' in request.system_prompt
+        assert "see {{prompt}} {keep}" in request.system_prompt
+        assert "{{cron_job}}" not in request.system_prompt
 
     @pytest.mark.asyncio
     async def test_woke_main_agent_honors_explicit_runtime_and_safety_mode(

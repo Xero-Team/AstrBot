@@ -4127,7 +4127,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",
                         "type": "string",
-                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
+                        "hint": "可使用 {{prompt}} 作为用户输入的占位符（无逻辑 {{name}} 语法，不是 Jinja2）。不含占位符时，前缀加在用户输入前面。",
                         "collapsed": True,
                     },
                     "provider_tts_settings.dual_output": {

@@ -655,7 +655,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         run_context,
         task_id="task-id",
         tool_name="long_tool",
-        result_text="ok",
+        result_text="ok {{prompt}}",
         tool_args={},
         note="task finished",
         summary_name="BackgroundTask",
@@ -673,6 +673,8 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert "old question" not in request.system_prompt
     assert "old answer" not in request.system_prompt
     assert request.contexts == history
+    assert "ok {{prompt}}" in request.system_prompt
+    assert "{{background_task_result}}" not in request.system_prompt
     cron_context = captured["event"].auth_context
     assert cron_context is not event.auth_context
     assert cron_context.request_id != event.auth_context.request_id

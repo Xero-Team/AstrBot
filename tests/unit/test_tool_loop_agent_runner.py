@@ -23,6 +23,7 @@ from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.string_utils import interpolate_placeholders
 from tests.fixtures.auth import attach_authorized_tool_context
 
 
@@ -1129,17 +1130,26 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
     assert len(tool_messages) == total_calls
 
     tool_contents = [str(message.content) for message in tool_messages]
-    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    level_1_notice = interpolate_placeholders(
+        runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE,
+        {
+            "tool_name": "test_tool",
+            "streak": runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+        },
     )
-    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    level_2_notice = interpolate_placeholders(
+        runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE,
+        {
+            "tool_name": "test_tool",
+            "streak": runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+        },
     )
-    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
+    level_3_notice = interpolate_placeholders(
+        runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE,
+        {
+            "tool_name": "test_tool",
+            "streak": runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
+        },
     )
 
     for streak, content in enumerate(tool_contents, start=1):
@@ -1211,13 +1221,19 @@ async def test_same_tool_streak_resets_after_switching_tools(
     assert len(tool_messages) == repeated_after_reset + 2
 
     tool_contents = [str(message.content) for message in tool_messages]
-    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    level_1_notice = interpolate_placeholders(
+        runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE,
+        {
+            "tool_name": "test_tool",
+            "streak": runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+        },
     )
-    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
-        tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    level_2_notice = interpolate_placeholders(
+        runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE,
+        {
+            "tool_name": "test_tool",
+            "streak": runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+        },
     )
 
     assert level_1_notice not in tool_contents[0]

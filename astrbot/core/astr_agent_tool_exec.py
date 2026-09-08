@@ -51,7 +51,10 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
-from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.string_utils import (
+    interpolate_placeholders,
+    normalize_and_dedupe_strings,
+)
 from astrbot.core.utils.task_utils import create_tracked_task
 
 
@@ -715,8 +718,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         req.contexts = load_sanitized_history(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
+        req.system_prompt += interpolate_placeholders(
+            BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+            {"background_task_result": bg},
         )
         req.prompt = (
             "Proceed according to your system instructions. "

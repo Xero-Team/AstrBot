@@ -140,9 +140,12 @@ HIGH_RISK_ACTIONS = frozenset(
     }
 )
 
-# WebChat may use only these instance-scoped tools after a fresh Dashboard
-# factor verification.  Keep this separate from HIGH_RISK_ACTIONS: global
-# control-plane mutations must remain Dashboard-only.
+# Instance-scoped high-risk tools. WebChat mounts the current step-up
+# intersection. IM mounts the whole set when the IM subject is
+# instance_operator or above on that config, without Dashboard step-up.
+# Keep this separate from HIGH_RISK_ACTIONS: global control-plane
+# mutations must remain Dashboard-only. Adding an action here is the
+# compatibility hook for new instance tools.
 WEBCHAT_INSTANCE_TOOL_ACTIONS = frozenset(
     {
         "tool.local_exec",
@@ -153,6 +156,8 @@ WEBCHAT_INSTANCE_TOOL_ACTIONS = frozenset(
         "tool.computer_use",
     }
 )
+
+INSTANCE_TOOL_ROLES = frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT})
 
 # Dashboard and WebChat step-up credentials live at most five minutes.
 STEP_UP_TTL_SECONDS = 300

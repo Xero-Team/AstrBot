@@ -25,7 +25,7 @@
     "bot.leave.confirm": "This will make the bot leave the current group. Re-run `/bot leave --confirm` to proceed.",
     "bot.leave.ok": "Leaving the current group.",
     "bot.leave.failed": "Failed to leave the group.",
-    "session.info.body": "UMO: {umo}\nUID: {user_id}\nUse UMO to set whitelist and configure routing. Use UID to set the admin list.\n\nYour session information:\nBot ID: {platform_id}\nMessage Type: {message_type}\nSession ID: {session_id}{group_note}",
+    "session.info.body": "UMO: {umo}\nUID: {user_id}\nSubject ID: {subject_id}\nUse UMO to set whitelist and configure routing. Use UID to set the admin list. Use Subject ID to bind roles on the authorization page.\n\nYour session information:\nBot ID: {platform_id}\nMessage Type: {message_type}\nSession ID: {session_id}{group_note}",
     "session.info.group": "\n\nGroup ID: {group_id}. Set this ID to whitelist to allow the entire group.",
     "session.name.empty": "(empty)",
     "session.name.usage": "Usage: /session name <name>\nUMO: {umo}\nAuto name: {auto_name}\nAlias: {alias}",

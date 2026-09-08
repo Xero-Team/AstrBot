@@ -8,6 +8,7 @@
   "filter": "筛选绑定",
   "revokeSelected": "撤销所选绑定",
   "subject": "主体",
+  "subjectHint": "IM 绑定请粘贴 /session info 里的授权主体（im:{平台}:{机器人}:{发送者}），不要填 UID。实例工具还要把角色设为 instance_operator、作用域设为 instance。",
   "role": "角色",
   "scope": "作用域",
   "source": "来源",

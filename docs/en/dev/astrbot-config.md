@@ -176,7 +176,7 @@ The old `provider_settings.streaming_segmented` field has been removed. Do not a
 ### Computer Use and sandboxing
 
 - `computer_use_runtime` is `none`, `local`, or `sandbox` and defaults to `none`.
-- `computer_use_require_admin` is no longer a runtime authorization switch. Computer capabilities use the unified `tool.computer_use`, `tool.local_exec`, `tool.file_read`, and `tool.file_write` actions, with step-up/elevation for high-risk operations.
+- `computer_use_require_admin` is no longer a runtime authorization switch. Computer capabilities use the unified `tool.computer_use`, `tool.local_exec`, `tool.file_read`, and `tool.file_write` actions. WebChat still requires step-up for instance tools; IM skips step-up when the sender is bound as `instance_operator` on that config.
 - `sandbox.booter` selects `shipyard_neo` or `cua`; related fields store endpoint, token, profile, TTL, or CUA OS, telemetry, and local/cloud settings.
 
 Local mode operates directly on the AstrBot host and belongs only in a trusted environment. A sandbox is not an authorization boundary by itself; continue to restrict administrators, Persona tools, and external network access.

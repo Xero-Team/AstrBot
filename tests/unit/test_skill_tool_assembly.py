@@ -26,6 +26,7 @@ from astrbot.core.tool_catalog import (
     NEO_LIFECYCLE_TOOLS,
     ToolCatalogInputs,
     assemble_tool_catalog_names,
+    elevated_instance_tool_actions_from_metadata,
     merge_existing_tools,
     sandbox_computer_tool_names,
 )
@@ -423,7 +424,7 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
             computer_use_runtime="local",
             plugin_names=None,
             registered_tools=registered,
-            webchat_step_up_actions=frozenset({"tool.local_exec"}),
+            elevated_instance_tool_actions=frozenset({"tool.local_exec"}),
         )
     )
     assert "astrbot_execute_shell" in webchat_names
@@ -440,7 +441,7 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
                     "astrbot_execute_python", actions=("tool.python_exec",)
                 ),
             ),
-            webchat_step_up_actions=frozenset({"tool.local_exec"}),
+            elevated_instance_tool_actions=frozenset({"tool.local_exec"}),
         )
     )
     assert "astrbot_execute_shell" in partial_step_up
@@ -448,6 +449,94 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
     for name in im_names:
         actions = set(registered[name].required_actions)
         assert not actions & WEBCHAT_INSTANCE_TOOL_ACTIONS
+
+
+def test_im_instance_operator_keeps_full_instance_tool_group(tmp_path: Path):
+    snapshot = freeze_skill_snapshot(
+        [_skill(tmp_path, "notes", tools=["astrbot_execute_shell"])],
+        runtime="local",
+    )
+    registered = _registered(
+        read_skill=_tool("read_skill", actions=("skill.read",)),
+        astrbot_execute_shell=_tool(
+            "astrbot_execute_shell", actions=("tool.local_exec",)
+        ),
+        astrbot_execute_python=_tool(
+            "astrbot_execute_python", actions=("tool.python_exec",)
+        ),
+        astrbot_file_write_tool=_tool(
+            "astrbot_file_write_tool", actions=("tool.file_write",)
+        ),
+        astrbot_execute_browser=_tool(
+            "astrbot_execute_browser", actions=("tool.browser_control",)
+        ),
+        writable_mcp=_tool("writable_mcp", actions=("tool.mcp_write",)),
+        astrbot_cua_screenshot=_tool(
+            "astrbot_cua_screenshot", actions=("tool.computer_use",)
+        ),
+    )
+    names = assemble_tool_catalog_names(
+        ToolCatalogInputs(
+            snapshot=snapshot,
+            persona_tools=None,
+            surface="im",
+            computer_use_runtime="local",
+            plugin_names=None,
+            registered_tools=registered,
+            session_tool_names=frozenset(registered),
+            elevated_instance_tool_actions=WEBCHAT_INSTANCE_TOOL_ACTIONS,
+        )
+    )
+    assert "astrbot_execute_shell" in names
+    assert "astrbot_execute_python" in names
+    assert "astrbot_file_write_tool" in names
+    assert "astrbot_execute_browser" in names
+    assert "writable_mcp" in names
+    assert "astrbot_cua_screenshot" in names
+
+
+def test_im_elevated_actions_follow_expanded_instance_tool_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    expanded = frozenset({*WEBCHAT_INSTANCE_TOOL_ACTIONS, "tool.future_exec"})
+    monkeypatch.setattr(
+        "astrbot.core.tool_catalog.WEBCHAT_INSTANCE_TOOL_ACTIONS", expanded
+    )
+    snapshot = freeze_skill_snapshot(
+        [_skill(tmp_path, "notes", tools=["future_instance_tool"])],
+        runtime="local",
+    )
+    registered = _registered(
+        read_skill=_tool("read_skill", actions=("skill.read",)),
+        future_instance_tool=_tool(
+            "future_instance_tool", actions=("tool.future_exec",)
+        ),
+    )
+    names = assemble_tool_catalog_names(
+        ToolCatalogInputs(
+            snapshot=snapshot,
+            persona_tools=None,
+            surface="im",
+            computer_use_runtime="local",
+            plugin_names=None,
+            registered_tools=registered,
+            session_tool_names=frozenset(registered),
+            elevated_instance_tool_actions=expanded,
+        )
+    )
+    assert "future_instance_tool" in names
+
+
+def test_elevated_instance_tool_actions_from_metadata_drop_unknown_actions():
+    assert elevated_instance_tool_actions_from_metadata(
+        {
+            "webchat_step_up_tokens": {"tool.local_exec": "proof"},
+            "elevated_instance_tool_actions": (
+                "tool.file_write",
+                "tool.not_in_group",
+            ),
+        }
+    ) == frozenset({"tool.local_exec", "tool.file_write"})
 
 
 def test_skills_like_does_not_change_catalog_set(tmp_path: Path):
@@ -495,7 +584,7 @@ def test_neo_lifecycle_tools_are_on_demand_computer_layer():
                     for name in NEO_LIFECYCLE_TOOLS
                 }
             ),
-            webchat_step_up_actions=frozenset({"tool.local_exec"}),
+            elevated_instance_tool_actions=frozenset({"tool.local_exec"}),
         )
     )
     for name in NEO_LIFECYCLE_TOOLS:

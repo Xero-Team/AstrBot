@@ -28,7 +28,7 @@ outline: deep
 
 最终能否调用还要过三道关：用户授权 ∩ Persona 允许的工具 ∩ 工具自身策略。Persona 里把工具设成空列表，等于这个角色不能用工具，见 [Persona](./persona)。子 Agent handoff 不能提升调用者的权限。
 
-高风险工具（本机 Shell、文件写入、浏览器、Computer Use、可写 MCP）还要满足 [授权管理](./authorization) 和 ChatUI step-up。IM 消息不会继承 Dashboard `root`。
+高风险工具（本机 Shell、文件写入、浏览器、Computer Use、可写 MCP）还要满足 [授权管理](./authorization)。ChatUI 需要 step-up。IM 消息不会继承 Dashboard `root`；要把发送者绑成该配置的 `instance_operator` 才能使用同一组实例工具。
 
 ## 哪些模型能用
 

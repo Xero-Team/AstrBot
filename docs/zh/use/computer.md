@@ -73,7 +73,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - `tool.file_write`
 - `tool.browser_control`
 
-`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control` 和 `tool.computer_use` 是高风险动作：已认证 Dashboard 驱动的 WebChat 仅可在当前 session/config 内，经 WebChat 一次性 step-up 后使用；全局控制面仍 Dashboard-only，匿名 WebChat、IM、插件、Agent 和 API Key 一律不会继承 Dashboard 角色。沙箱、路径和 Persona/工具声明限制仍然有效。
+`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write` 和 `tool.computer_use` 是实例级高风险动作：已认证 Dashboard 驱动的 WebChat 仅可在当前 session/config 内，经 WebChat 一次性 step-up 后使用。IM 发送者若在该配置上绑了 `instance_operator`，可免 step-up 使用同一组动作。全局控制面仍 Dashboard-only；匿名 WebChat、插件、Agent、API Key 以及未绑定的 IM member 不会继承 Dashboard 角色。沙箱、路径和 Persona/工具声明限制仍然有效。
 
 `local` 模式下，普通会话成员可以读取：
 
@@ -83,7 +83,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - AstrBot 的临时目录
 - 系统临时目录中的 `.astrbot`
 
-写入和编辑仍限制在当前会话 workspace 和临时目录。请通过 Dashboard [权限页面](/use/authorization)授予匹配动作的绑定；`/admin grant` 只授予当前会话 `session_admin`，不能把 IM 用户变成全局 operator。开发模型见[项目架构](/dev/architecture#统一授权系统)。
+写入和编辑仍限制在当前会话 workspace 和临时目录。请通过 Dashboard [权限页面](/use/authorization)把 IM 发送者绑成该配置的 `instance_operator`；`/admin grant` 只授予当前会话 `session_admin`，不能把 IM 用户变成全局 operator。开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ## Sandbox 模式
 

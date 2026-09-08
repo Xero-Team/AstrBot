@@ -178,7 +178,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 ### Computer Use 与沙箱
 
 - `computer_use_runtime`：`none`、`local` 或 `sandbox`，默认 `none`。
-- `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.computer_use`、`tool.local_exec`、`tool.file_read` 和 `tool.file_write` 等动作统一授权，并对高风险操作执行 step-up/elevation。
+- `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.computer_use`、`tool.local_exec`、`tool.file_read` 和 `tool.file_write` 等动作统一授权。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
 - `sandbox.booter`：`shipyard_neo` 或 `cua`，其余字段保存 endpoint、token、profile、TTL 或 CUA 系统/遥测/本地模式配置。
 
 本地模式直接操作 AstrBot 主机，应仅在可信环境使用。沙箱也不是自动授权边界；仍需限制管理员、Persona 工具和外部网络。

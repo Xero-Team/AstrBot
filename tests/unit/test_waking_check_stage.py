@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import astrbot.core.pipeline.waking_check.stage as waking
-from astrbot.core.auth.models import Resource
+from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS, Resource
 from astrbot.core.command import (
     CommandCatalogStore,
     CommandLexer,
@@ -269,6 +269,58 @@ async def test_attach_authorization_uses_real_friend_message_type():
 
     assert event.get_extra("auth_context").message_type == "FriendMessage"
     assert waking._auth_message_type(event) == "FriendMessage"
+
+
+@pytest.mark.asyncio
+async def test_im_attach_authorization_stashes_elevated_instance_tool_actions():
+    stage = await make_stage()
+    stage.ctx.authorization = SimpleNamespace(
+        elevated_instance_tool_actions=AsyncMock(
+            return_value=WEBCHAT_INSTANCE_TOOL_ACTIONS
+        ),
+        record_platform_membership=AsyncMock(),
+    )
+    event = FakeEvent([], private=True, platform="napcat", sender_id="42")
+
+    await stage._attach_authorization(event)
+
+    context = event.get_extra("auth_context")
+    assert context.source == "im"
+    assert context.metadata["elevated_instance_tool_actions"] == tuple(
+        sorted(WEBCHAT_INSTANCE_TOOL_ACTIONS)
+    )
+    stage.ctx.authorization.elevated_instance_tool_actions.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_im_attach_authorization_omits_empty_elevated_instance_tool_actions():
+    stage = await make_stage()
+    stage.ctx.authorization = SimpleNamespace(
+        elevated_instance_tool_actions=AsyncMock(return_value=frozenset()),
+        record_platform_membership=AsyncMock(),
+    )
+    event = FakeEvent([], private=True, platform="napcat", sender_id="99")
+
+    await stage._attach_authorization(event)
+
+    context = event.get_extra("auth_context")
+    assert "elevated_instance_tool_actions" not in context.metadata
+
+
+@pytest.mark.asyncio
+async def test_im_attach_authorization_swallows_elevation_failure():
+    stage = await make_stage()
+    stage.ctx.authorization = SimpleNamespace(
+        elevated_instance_tool_actions=AsyncMock(side_effect=RuntimeError("boom")),
+        record_platform_membership=AsyncMock(),
+    )
+    event = FakeEvent([], private=True, platform="napcat", sender_id="99")
+
+    await stage._attach_authorization(event)
+
+    context = event.get_extra("auth_context")
+    assert context.source == "im"
+    assert "elevated_instance_tool_actions" not in context.metadata
 
 
 @pytest.mark.asyncio

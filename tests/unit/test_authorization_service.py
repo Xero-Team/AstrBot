@@ -1337,6 +1337,140 @@ async def test_authenticated_webchat_instance_tools_require_fresh_proof(authoriz
 
 
 @pytest.mark.asyncio
+async def test_im_instance_operator_uses_instance_tools_without_step_up(authorization):
+    subject = Subject.im(
+        platform_instance="weixin", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session(
+        "default", "weixin:FriendMessage:o9cq803CRKHW0uZPXPl42e_6HmJI"
+    )
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    context = _session_context(subject, current)
+    assert (
+        await authorization.elevated_instance_tool_actions(subject, current, context)
+        == WEBCHAT_INSTANCE_TOOL_ACTIONS
+    )
+    for action in WEBCHAT_INSTANCE_TOOL_ACTIONS:
+        tool = Resource.named("tool", action, config_id="default")
+        decision = await authorization.authorize(subject, action, tool, context)
+        assert decision.allowed
+        assert decision.reason == "allowed"
+        assert decision.step_up_id is None
+
+
+@pytest.mark.asyncio
+async def test_im_member_cannot_use_instance_tools(authorization):
+    subject = Subject.im(
+        platform_instance="weixin", bot_account_id="bot", sender_id="99"
+    )
+    current = Resource.session("default", "weixin:FriendMessage:member-1")
+    context = _session_context(subject, current)
+    assert (
+        await authorization.elevated_instance_tool_actions(subject, current, context)
+        == frozenset()
+    )
+    for action in WEBCHAT_INSTANCE_TOOL_ACTIONS:
+        tool = Resource.named("tool", action, config_id="default")
+        decision = await authorization.authorize(subject, action, tool, context)
+        assert not decision.allowed
+        assert decision.reason in {"role_scope_denied", "high_risk_dashboard_only"}
+
+
+@pytest.mark.asyncio
+async def test_im_session_admin_cannot_use_instance_tools(authorization):
+    subject = Subject.im(
+        platform_instance="weixin", bot_account_id="bot", sender_id="7"
+    )
+    current = Resource.session("default", "weixin:GroupMessage:room-1")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.SESSION_ADMIN,
+        scope_type="session",
+        scope_id=current.id,
+        config_id="default",
+        enforce_actor=False,
+    )
+    context = _session_context(subject, current)
+    assert (
+        await authorization.elevated_instance_tool_actions(subject, current, context)
+        == frozenset()
+    )
+    decision = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        Resource.named("tool", "tool.local_exec", config_id="default"),
+        context,
+    )
+    assert not decision.allowed
+    assert decision.reason in {"role_scope_denied", "high_risk_dashboard_only"}
+
+
+@pytest.mark.asyncio
+async def test_im_instance_operator_does_not_cross_config_for_instance_tools(
+    authorization,
+):
+    subject = Subject.im(
+        platform_instance="weixin", bot_account_id="bot", sender_id="42"
+    )
+    other = Resource.session("config-b", "weixin:FriendMessage:other-1")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    context = _session_context(subject, other)
+    assert (
+        await authorization.elevated_instance_tool_actions(subject, other, context)
+        == frozenset()
+    )
+    decision = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        Resource.named("tool", "tool.local_exec", config_id="config-b"),
+        context,
+    )
+    assert not decision.allowed
+
+
+@pytest.mark.asyncio
+async def test_im_instance_operator_cannot_use_control_plane_high_risk(authorization):
+    subject = Subject.im(
+        platform_instance="weixin", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "weixin:FriendMessage:operator-1")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    decision = await authorization.authorize(
+        subject,
+        "extension.plugin_install",
+        Resource.named("plugin", "install", config_id="default"),
+        _session_context(subject, current),
+    )
+    assert not decision.allowed
+    assert decision.reason == "high_risk_dashboard_only"
+
+
+@pytest.mark.asyncio
 async def test_webchat_step_up_proof_supports_multiple_tools_in_one_event(
     authorization,
 ):

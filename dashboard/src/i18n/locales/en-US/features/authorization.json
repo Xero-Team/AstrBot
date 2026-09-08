@@ -8,6 +8,7 @@
   "filter": "Filter bindings",
   "revokeSelected": "Revoke selected",
   "subject": "Subject",
+  "subjectHint": "For IM bindings, paste the Subject ID from /session info (im:{platform}:{bot}:{sender}). Do not paste the UID. Instance tools also need role instance_operator and instance scope.",
   "role": "Role",
   "scope": "Scope",
   "source": "Source",

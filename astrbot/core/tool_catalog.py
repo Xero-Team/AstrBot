@@ -120,7 +120,7 @@ class ToolCatalogInputs:
     add_cron_tools: bool = False
     sandbox_booter: str = "shipyard_neo"
     sandbox_capabilities: Sequence[str] | None = None
-    webchat_step_up_actions: frozenset[str] = frozenset()
+    elevated_instance_tool_actions: frozenset[str] = frozenset()
     plugins: PluginLookup | None = None
 
 
@@ -421,25 +421,49 @@ def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]
     return visible
 
 
+def elevated_instance_tool_actions_from_metadata(
+    metadata: Mapping[str, object] | None,
+) -> frozenset[str]:
+    """Return the instance-tool actions this request may mount.
+
+    WebChat contributes current step-up token keys. IM contributes the
+    full ``WEBCHAT_INSTANCE_TOOL_ACTIONS`` set when waking check already
+    confirmed instance_operator or above. Unknown actions are dropped so
+    metadata cannot widen the group.
+    """
+
+    actions: set[str] = set()
+    payload = metadata or {}
+    tokens = payload.get("webchat_step_up_tokens")
+    if isinstance(tokens, Mapping):
+        actions.update(str(key) for key in tokens)
+    raw = payload.get("elevated_instance_tool_actions")
+    if isinstance(raw, list | tuple | set | frozenset):
+        actions.update(str(item) for item in raw)
+    return frozenset(actions) & WEBCHAT_INSTANCE_TOOL_ACTIONS
+
+
 def tool_is_surface_stripped(
     actions: Iterable[str],
     *,
     surface: CatalogSurface,
-    webchat_step_up_actions: frozenset[str] = frozenset(),
+    elevated_instance_tool_actions: frozenset[str] = frozenset(),
 ) -> bool:
     """Return True when a tool must stay out of the catalog for this surface."""
     blocked = set(actions) & WEBCHAT_INSTANCE_TOOL_ACTIONS
     if not blocked:
         return False
+    elevated = elevated_instance_tool_actions & WEBCHAT_INSTANCE_TOOL_ACTIONS
+    if surface in {"im", "webchat_authenticated"}:
+        return not blocked <= elevated
     if surface in SOCIAL_SURFACES:
         return True
-    if surface != "webchat_authenticated":
-        return False
-    return not blocked <= webchat_step_up_actions
+    return False
 
 
 def _apply_surface_strip(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]:
     kept: set[str] = set()
+    elevated = inputs.elevated_instance_tool_actions & WEBCHAT_INSTANCE_TOOL_ACTIONS
     for name in names:
         tool = inputs.registered_tools.get(name)
         if tool is None:
@@ -447,7 +471,7 @@ def _apply_surface_strip(names: set[str], *, inputs: ToolCatalogInputs) -> set[s
         if tool_is_surface_stripped(
             tool_required_actions(tool),
             surface=inputs.surface,
-            webchat_step_up_actions=inputs.webchat_step_up_actions,
+            elevated_instance_tool_actions=elevated,
         ):
             continue
         kept.add(name)

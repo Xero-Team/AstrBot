@@ -57,7 +57,7 @@ Both `enable` and `disable` are idempotent. They write the existing `session_ena
 
 ### Session Information
 
-- `/session info`: Show the UMO, user ID, platform ID, message type, and session ID.
+- `/session info`: Show the UMO, user ID, authorization subject (`im:{platform}:{bot}:{sender}`), platform ID, message type, and session ID.
 - `/session name`: Show the current auto name and saved alias; requires `session.manage`.
 - `/session name <name>`: Set the current UMO display alias; requires `session.manage`. `GreedyStr` allows spaces.
 

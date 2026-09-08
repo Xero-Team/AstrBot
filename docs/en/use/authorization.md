@@ -64,11 +64,14 @@ Conversation export requires the exact `conversation:export` resource and `data.
 
 High-risk tools in ChatUI (local shell, file write, browser, and similar) use a separate step-up that covers only the current WebChat session. See [WebUI](./webui#high-risk-tools-in-chatui). It does not turn an IM user into a global operator and does not authorize account changes, plugin installs, or restarts.
 
+To use the same instance-tool set on WeChat or another IM, send `/session info` and bind the Subject ID as `instance_operator` on the current config. That path skips step-up, covers only `WEBCHAT_INSTANCE_TOOL_ACTIONS`, and does not inherit Dashboard `root`/`operator`. `/admin grant` still only creates current-session `session_admin`.
+
 Reading a Skill manual uses the low-risk `skill.read` action. Current-session members and above may call `read_skill`. It does not grant shell, Python, or file-write permission.
 
 ## Common misconfigurations
 
-1. After `/admin grant`, expecting the peer to log into WebUI.
+1. After `/admin grant`, expecting the peer to log into WebUI or use the local shell.
 2. Treating Dashboard `operator` as a group-admin switch.
 3. Granting in group A and expecting the same binding in group B or another profile.
 4. Treating anonymous WebChat or an API key as Dashboard `root`.
+5. Binding `instance_operator` with a UID instead of the Subject ID from `/session info`.

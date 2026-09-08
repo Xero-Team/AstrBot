@@ -28,7 +28,7 @@ On the tool panel you can:
 
 The final call still passes three gates: user authorization ∩ tools allowed by the Persona ∩ the tool's own policy. An empty tool list on a Persona means that role cannot use tools. See [Personas](./persona). A sub-agent handoff cannot raise the caller's authority.
 
-High-risk tools (local shell, file write, browser, Computer Use, writable MCP) also need [Authorization](./authorization) and ChatUI step-up. IM messages do not inherit Dashboard `root`.
+High-risk tools (local shell, file write, browser, Computer Use, writable MCP) also need [Authorization](./authorization). ChatUI needs step-up. IM messages do not inherit Dashboard `root`; bind the sender as `instance_operator` on that config to use the same instance-tool set.
 
 ## Which models work
 

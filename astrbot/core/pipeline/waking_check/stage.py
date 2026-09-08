@@ -418,6 +418,22 @@ class WakingCheckStage(Stage):
                 else {}
             ),
         )
+        authorization = getattr(self.ctx, "authorization", None)
+        if source == "im" and authorization is not None:
+            try:
+                elevated = await authorization.elevated_instance_tool_actions(
+                    subject, resource, context
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "IM instance-tool catalog elevation failed: %s",
+                    safe_error("", exc),
+                )
+                elevated = frozenset()
+            if elevated:
+                context.metadata["elevated_instance_tool_actions"] = tuple(
+                    sorted(elevated)
+                )
         attach_authorization = getattr(event, "attach_authorization", None)
         if callable(attach_authorization):
             attach_authorization(subject=subject, resource=resource, context=context)
@@ -429,7 +445,6 @@ class WakingCheckStage(Stage):
             event.set_extra("auth_resource", resource)
             event.set_extra("auth_context", context)
         event.set_extra("config_id", config_id)
-        authorization = getattr(self.ctx, "authorization", None)
         platform_member_role = getattr(event, "platform_member_role", "unknown")
         if authorization is not None and platform_member_role in {
             "owner",

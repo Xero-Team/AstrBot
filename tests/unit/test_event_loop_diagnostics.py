@@ -1,6 +1,5 @@
 import asyncio
 import threading
-import time
 
 import pytest
 
@@ -65,11 +64,20 @@ async def test_event_loop_watchdog_stops_worker_thread():
 
 
 @pytest.mark.asyncio
-async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
+async def test_event_loop_watchdog_writes_rotating_log(tmp_path, monkeypatch):
     """The watchdog should write to and rotate its log file."""
     log_path = tmp_path / "logs" / "event_loop_watchdog.log"
     log_path.parent.mkdir()
     log_path.write_text("x" * 8, encoding="utf-8")
+    dumped = threading.Event()
+    original_open = diagnostics._open_watchdog_log_file
+
+    def open_log(path, max_bytes):
+        handle = original_open(path, max_bytes)
+        dumped.set()
+        return handle
+
+    monkeypatch.setattr(diagnostics, "_open_watchdog_log_file", open_log)
 
     task = asyncio.create_task(
         diagnostics.event_loop_watchdog(
@@ -79,19 +87,32 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
             max_bytes=4,
         )
     )
-    await asyncio.sleep(0)
-    time.sleep(0.05)  # noqa: ASYNC251 - Intentionally block the event loop.
-    await asyncio.sleep(0.02)
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    try:
+        for _ in range(200):
+            if any(
+                thread.name == "event_loop_watchdog" for thread in threading.enumerate()
+            ):
+                break
+            await asyncio.sleep(0)
+        else:
+            pytest.fail("event loop watchdog thread did not start")
 
-    log_content = log_path.read_text(encoding="utf-8")
-    assert "Event loop stalled for" in log_content
-    assert "test_event_loop_diagnostics.py" in log_content
-    assert (
-        log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
-        == "x" * 8
-    )
+        # Block the loop until the worker opens the dump file. Do not assert
+        # captured stack frames: dump_traceback races the stall, so Windows
+        # may show Thread.join and macOS selectors.select instead of this
+        # module.
+        assert dumped.wait(timeout=1.0)
+        await asyncio.sleep(0.05)
+
+        log_content = log_path.read_text(encoding="utf-8")
+        assert "Event loop stalled for" in log_content
+        assert (
+            log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
+            == "x" * 8
+        )
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

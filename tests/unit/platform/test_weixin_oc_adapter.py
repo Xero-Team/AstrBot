@@ -4,9 +4,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.api.message_components import Image, Record
+from astrbot.api.message_components import Image, Plain, Record
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.weixin_oc import weixin_oc_adapter
 from astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter import WeixinOCAdapter
+from astrbot.core.platform.sources.weixin_oc.weixin_oc_text import (
+    TOOL_CALL_RESULT_TYPE,
+    TOOL_CALL_START_TYPE,
+)
 
 pytestmark = pytest.mark.platform
 
@@ -35,6 +43,16 @@ class RuntimeConfig(dict):
 
 def _make_adapter(config: dict | None = None) -> WeixinOCAdapter:
     return WeixinOCAdapter(config or {"id": "weixin-oc-test"}, {}, asyncio.Queue())
+
+
+def _make_event(adapter: WeixinOCAdapter, *, run_id: str | None = None):
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "user-1"
+    message.sender = MessageMember("user-1", "tester")
+    message.message_str = "hi"
+    message.message = []
+    return adapter.create_event(message, run_id=run_id)
 
 
 def _patch_media_resolver(monkeypatch) -> None:
@@ -201,7 +219,7 @@ async def test_handle_inbound_message_does_not_download_voice_during_ingress(
     adapter.client.download_and_decrypt_media = AsyncMock(return_value=b"voice")
     committed = []
 
-    monkeypatch.setattr(adapter, "create_event", lambda message: message)
+    monkeypatch.setattr(adapter, "create_event", lambda message, **_kwargs: message)
     monkeypatch.setattr(adapter, "commit_event", committed.append)
     monkeypatch.setattr(adapter, "_cache_recent_message", lambda *args, **kwargs: None)
 
@@ -348,10 +366,384 @@ async def test_resolve_inbound_voice_component_downloads_and_converts_on_demand(
     assert record.path == WAV_PATH
 
 
-def test_weixin_oc_create_event_does_not_promote_roles():
-    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
-    from astrbot.core.platform.message_type import MessageType
+@pytest.mark.asyncio
+async def test_build_reply_from_svr_id_uses_recent_cache():
+    adapter = _make_adapter()
+    adapter._cache_recent_message(
+        "user-1",
+        message_id="svr-99",
+        sender_id="user-1",
+        sender_nickname="user-1",
+        timestamp=1,
+        timestamp_ms=1000,
+        components=[Plain("hello quoted")],
+        message_str="hello quoted",
+    )
 
+    reply, metadata = await adapter._build_reply_component_from_ref(
+        session_id="user-1",
+        ref_msg={"svr_id": "svr-99"},
+    )
+
+    assert reply is not None
+    assert metadata.is_reply is True
+    assert metadata.quoted_text == "hello quoted"
+    assert metadata.reply_to["strategy"] == "server-message-id"
+
+
+@pytest.mark.asyncio
+async def test_poll_inbound_updates_applies_server_long_poll_timeout():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.client.request_json = AsyncMock(
+        return_value={
+            "ret": 0,
+            "msgs": [],
+            "longpolling_timeout_ms": 42_000,
+        }
+    )
+
+    await adapter._poll_inbound_updates()
+
+    assert adapter.long_poll_timeout_ms == 42_000
+
+
+@pytest.mark.asyncio
+async def test_poll_inbound_updates_clamps_server_long_poll_timeout():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.client.request_json = AsyncMock(
+        return_value={
+            "ret": 0,
+            "msgs": [],
+            "longpolling_timeout_ms": 1,
+        }
+    )
+
+    await adapter._poll_inbound_updates()
+
+    assert adapter.long_poll_timeout_ms == adapter.MIN_LONG_POLL_TIMEOUT_MS
+
+    adapter.client.request_json = AsyncMock(
+        return_value={
+            "ret": 0,
+            "msgs": [],
+            "longpolling_timeout_ms": 999_999,
+        }
+    )
+    await adapter._poll_inbound_updates()
+    assert adapter.long_poll_timeout_ms == adapter.MAX_LONG_POLL_TIMEOUT_MS
+
+
+@pytest.mark.asyncio
+async def test_poll_inbound_updates_treats_ret_minus_14_as_timeout():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter._handle_inbound_session_timeout = AsyncMock()
+    adapter.client.request_json = AsyncMock(
+        return_value={"ret": -14, "errcode": 0, "errmsg": "timeout"}
+    )
+
+    await adapter._poll_inbound_updates()
+
+    adapter._handle_inbound_session_timeout.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_terminate_sends_notify_stop_after_start():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter._notified_start = True
+    adapter.client.notify_stop = AsyncMock(return_value={"ret": 0})
+    adapter.client.notify_start = AsyncMock(return_value={"ret": 0})
+
+    await adapter.terminate()
+
+    adapter.client.notify_stop.assert_awaited_once()
+    assert adapter._notified_start is False
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_sends_record_as_voice():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._send_media_segment = AsyncMock(return_value=True)
+    session = MessageSession(
+        platform_name="weixin-oc-test",
+        message_type=MessageType.FRIEND_MESSAGE,
+        session_id="user-1",
+    )
+
+    await adapter.send_by_session(session, MessageChain([Record(file="voice.wav")]))
+
+    adapter._send_media_segment.assert_awaited_once()
+    sent_segment = adapter._send_media_segment.await_args.args[1]
+    assert isinstance(sent_segment, Record)
+
+
+@pytest.mark.asyncio
+async def test_prepare_media_item_builds_voice_payload(tmp_path: Path):
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    silk_path = tmp_path / "out.silk"
+    silk_path.write_bytes(b"silk-bytes")
+    adapter.client.request_json = AsyncMock(
+        return_value={"upload_param": "param", "upload_full_url": "https://cdn/upload"}
+    )
+    adapter.client.upload_to_cdn = AsyncMock(return_value="enc-query")
+
+    item = await adapter._prepare_media_item(
+        "user-1",
+        silk_path,
+        adapter.VOICE_UPLOAD_TYPE,
+        adapter.VOICE_ITEM_TYPE,
+        "out.silk",
+        playtime_ms=1500,
+    )
+
+    assert item["type"] == adapter.VOICE_ITEM_TYPE
+    assert item["voice_item"]["encode_type"] == adapter.VOICE_ENCODE_SILK
+    assert item["voice_item"]["sample_rate"] == adapter.VOICE_SAMPLE_RATE_HZ
+    assert item["voice_item"]["playtime"] == 1500
+    assert (
+        adapter.client.request_json.await_args.kwargs["payload"]["media_type"]
+        == adapter.VOICE_UPLOAD_TYPE
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_outbound_voice_encodes_silk(monkeypatch, tmp_path: Path):
+    wav_path = tmp_path / "in.wav"
+    wav_path.write_bytes(b"RIFF")
+    adapter = _make_adapter()
+    record = Record(file=str(wav_path))
+
+    async def fake_convert_to_file_path(self: Record) -> str:
+        return str(wav_path)
+
+    async def fake_wav_to_tencent_silk(_wav: str, output_path: str) -> float:
+        Path(output_path).write_bytes(b"silk")
+        return 1.5
+
+    monkeypatch.setattr(Record, "convert_to_file_path", fake_convert_to_file_path)
+    monkeypatch.setattr(adapter, "_resolve_inbound_media_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        weixin_oc_adapter, "wav_to_tencent_silk", fake_wav_to_tencent_silk
+    )
+
+    resolved = await adapter._resolve_outbound_voice(record)
+
+    assert resolved is not None
+    silk_path, playtime_ms = resolved
+    assert playtime_ms == 1500
+    assert silk_path.read_bytes() == b"silk"
+
+
+@pytest.mark.asyncio
+async def test_send_to_session_chunks_long_text():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+    text = "。".join(["块" * 2000, "尾" * 2000])
+
+    sent = await adapter._send_to_session("user-1", text)
+
+    assert sent is True
+    assert adapter._send_items_to_session.await_count >= 2
+    first_item = adapter._send_items_to_session.await_args_list[0].args[1][0]
+    assert first_item["type"] == 1
+    assert len(first_item["text_item"]["text"]) <= 4000
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_sends_tool_call_start_item():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+    session = MessageSession(
+        platform_name="weixin-oc-test",
+        message_type=MessageType.FRIEND_MESSAGE,
+        session_id="user-1",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(type="tool_call").message("🔨 调用工具: search"),
+    )
+
+    item = adapter._send_items_to_session.await_args.args[1][0]
+    assert item["type"] == TOOL_CALL_START_TYPE
+    assert item["tool_call_start_item"]["tool_name"] == "search"
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_sends_tool_call_result_item():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+    session = MessageSession(
+        platform_name="weixin-oc-test",
+        message_type=MessageType.FRIEND_MESSAGE,
+        session_id="user-1",
+    )
+
+    await adapter.send_by_session(
+        session,
+        MessageChain(type="tool_call").message(
+            "🔨 调用工具: search\n📎 返回结果: done"
+        ),
+    )
+
+    item = adapter._send_items_to_session.await_args.args[1][0]
+    assert item["type"] == TOOL_CALL_RESULT_TYPE
+    assert item["tool_call_result_item"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_inbound_poll_backs_off_after_consecutive_failures(monkeypatch):
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr(weixin_oc_adapter.asyncio, "sleep", fake_sleep)
+    await adapter._backoff_inbound_failure()
+    await adapter._backoff_inbound_failure()
+    await adapter._backoff_inbound_failure()
+
+    assert sleeps == [2, 2, 30]
+    assert adapter._inbound_consecutive_failures == 0
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_flushes_when_min_chars_reached():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+    event = _make_event(adapter)
+
+    async def gen():
+        yield MessageChain().message("a" * 120)
+        yield MessageChain().message("b" * 120)
+
+    await event.send_streaming(gen())
+
+    assert adapter._send_items_to_session.await_count == 1
+    sent_text = adapter._send_items_to_session.await_args.args[1][0]["text_item"][
+        "text"
+    ]
+    assert sent_text == ("a" * 120) + ("b" * 120)
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_idle_flush_keeps_later_chunks(monkeypatch):
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+    event = _make_event(adapter)
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.weixin_oc.weixin_oc_event.STREAM_IDLE_S",
+        0.05,
+    )
+
+    async def gen():
+        yield MessageChain().message("hello")
+        await asyncio.sleep(0.12)
+        yield MessageChain().message("world")
+
+    result = await event.send_streaming(gen())
+
+    assert adapter._send_items_to_session.await_count == 2
+    texts = [
+        call.args[1][0]["text_item"]["text"]
+        for call in adapter._send_items_to_session.await_args_list
+    ]
+    assert texts == ["hello", "world"]
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_break_flushes_before_direct_tool_send():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    sent: list[str] = []
+
+    async def fake_send_items(_user, items, **_kwargs):
+        item = items[0]
+        if item.get("type") == 1:
+            sent.append(item["text_item"]["text"])
+        else:
+            sent.append(f"tool:{item['type']}")
+        return True
+
+    adapter._send_items_to_session = AsyncMock(side_effect=fake_send_items)
+    event = _make_event(adapter, run_id="run-a")
+
+    async def gen():
+        yield MessageChain().message("prefix")
+        yield MessageChain(type="break")
+        await event.send(MessageChain(type="tool_call").message("🔨 调用工具: search"))
+        yield MessageChain().message("suffix")
+
+    await event.send_streaming(gen())
+
+    assert sent == ["prefix", f"tool:{TOOL_CALL_START_TYPE}", "suffix"]
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_empty_generator_does_not_mark_sent():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    event = _make_event(adapter)
+
+    async def gen():
+        for _ in ():
+            yield MessageChain()
+
+    result = await event.send_streaming(gen())
+
+    assert result is None
+    assert event._has_send_oper is False
+
+
+@pytest.mark.asyncio
+async def test_event_send_attaches_run_id_proactive_send_does_not():
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    adapter._context_tokens["user-1"] = "ctx"
+    payloads: list[dict] = []
+
+    async def fake_request_json(*_args, **kwargs):
+        payloads.append(kwargs.get("payload") or {})
+        return {"ret": 0}
+
+    adapter.client.request_json = fake_request_json
+    event = _make_event(adapter, run_id="run-a")
+    session = MessageSession(
+        platform_name="weixin-oc-test",
+        message_type=MessageType.FRIEND_MESSAGE,
+        session_id="user-1",
+    )
+
+    await event.send(MessageChain().message("from-event"))
+    await adapter.send_by_session(session, MessageChain().message("proactive"))
+
+    assert payloads[0]["msg"]["run_id"] == "run-a"
+    assert "run_id" not in payloads[1]["msg"]
+
+
+@pytest.mark.asyncio
+async def test_send_media_segment_unlinks_silk_temp_file(tmp_path: Path):
+    adapter = _make_adapter({"id": "weixin-oc-test", "weixin_oc_token": "token"})
+    silk_path = tmp_path / "out.silk"
+    silk_path.write_bytes(b"silk")
+    adapter._resolve_outbound_voice = AsyncMock(return_value=(silk_path, 1000))
+    adapter._prepare_media_item = AsyncMock(return_value={"type": 3, "voice_item": {}})
+    adapter._send_items_to_session = AsyncMock(return_value=True)
+
+    await adapter._send_media_segment("user-1", Record(file="voice.wav"))
+
+    assert silk_path.exists() is False
+
+
+def test_weixin_oc_create_event_does_not_promote_roles():
     adapter = _make_adapter()
     message = AstrBotMessage()
     message.type = MessageType.FRIEND_MESSAGE

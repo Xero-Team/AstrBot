@@ -284,11 +284,14 @@
         "idle": "Not Started",
         "starting": "Getting QR Code",
         "pending": "Waiting for Scan",
+        "need_verifycode": "Enter the number shown in WeChat",
         "created": "Login Complete - remember to click the save button!",
         "denied": "Canceled",
         "expired": "Expired",
         "error": "Login Failed"
-      }
+      },
+      "verifyCodePlaceholder": "Enter the number shown in WeChat",
+      "verifyCodeSubmit": "Continue"
     },
     "dingtalk": {
       "title": "DingTalk QR Setup",

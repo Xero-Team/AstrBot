@@ -96,7 +96,10 @@ WEB_SEARCH_PROVIDER_TOOLS: Mapping[str, tuple[str, ...]] = {
 
 
 class PluginLookup(Protocol):
-    def get_by_module(self, module_path: str | None) -> object | None: ...
+    """The narrow plugin capability required for tool activation."""
+
+    def get_by_module(self, module_path: str | None) -> object | None:
+        """Return the plugin registered for ``module_path``."""
 
 
 @dataclass(frozen=True, slots=True)

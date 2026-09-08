@@ -620,7 +620,8 @@ def test_open_nofollow_portable_rejects_symlink_and_reads_regular_file(
     except OSError:
         pytest.skip("symlinks unavailable")
     with pytest.raises(OSError):
-        _skill_fs._open_nofollow_portable(root, ("escape.md",))
+        fd = _skill_fs._open_nofollow_portable(root, ("escape.md",))
+        os.close(fd)
 
 
 def test_opened_path_is_under_fails_closed_without_fd_path(tmp_path: Path, monkeypatch):

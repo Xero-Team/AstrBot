@@ -10,14 +10,14 @@ AstrBot 把 API 来源、具体模型和 Agent 执行器分成三层：
 
 WebUI 当前提供以下 Provider 类别：
 
-| 类别            | 内置类型与代表性集成                                                                                                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat Completion | OpenAI Chat Completions/兼容接口、OpenAI Responses、Anthropic、Google Gemini，以及 Kimi Code、MiniMax Token Plan、小米、xAI、智谱、LongCat、Groq、OpenRouter、AIHubMix 等专用适配器。 |
-| Speech to Text  | OpenAI Whisper API、自托管 Whisper、SenseVoice、Mimo、Xinference。                                                                                                                    |
-| Text to Speech  | OpenAI、Mimo、Genie、Edge TTS、GPT-SoVITS、FishAudio、DashScope、Azure、MiniMax、火山引擎、Gemini、ElevenLabs。                                                                       |
-| Embedding       | OpenAI、Gemini、NVIDIA、Ollama。                                                                                                                                                      |
-| Rerank          | vLLM、Xinference、阿里云百炼、NVIDIA。                                                                                                                                                |
-| Agent Runner    | Dify、Coze、阿里云百炼应用、DeerFlow；在配置档中选择，不作为本地模型调用。                                                                                                            |
+| 类别            | 内置类型与代表性集成                                                                                                                                                                                                                                             |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat Completion | OpenAI Chat Completions/兼容接口、OpenAI Responses、Anthropic、Google Gemini，以及 OpenCode Go Chat Completions、OpenCode Go Messages、OpenCode Go Responses、Kimi Code、MiniMax Token Plan、小米、xAI、智谱、LongCat、Groq、OpenRouter、AIHubMix 等专用适配器。 |
+| Speech to Text  | OpenAI Whisper API、自托管 Whisper、SenseVoice、Mimo、Xinference。                                                                                                                                                                                               |
+| Text to Speech  | OpenAI、Mimo、Genie、Edge TTS、GPT-SoVITS、FishAudio、DashScope、Azure、MiniMax、火山引擎、Gemini、ElevenLabs。                                                                                                                                                  |
+| Embedding       | OpenAI、Gemini、NVIDIA、Ollama。                                                                                                                                                                                                                                 |
+| Rerank          | vLLM、Xinference、阿里云百炼、NVIDIA。                                                                                                                                                                                                                           |
+| Agent Runner    | Dify、Coze、阿里云百炼应用、DeerFlow；在配置档中选择，不作为本地模型调用。                                                                                                                                                                                       |
 
 模板列表来自当前代码注册表，后续版本可能变化；以 **提供商 → 新增 Provider 来源** 中实际显示的类型为准。
 
@@ -41,6 +41,7 @@ Provider 数据保存在配置档的两个数组中：
 
 - 服务明确提供 OpenAI Chat Completions 兼容端点时，使用 **OpenAI Chat Completions** 或对应预设。
 - 需要 OpenAI Responses 的远端会话状态、后台响应或原生 Web Search 时，选择 **OpenAI Responses**；它不是 Chat Completions 的同义名称。
+- 接入 OpenCode Go 时必须选择 **OpenCode Go Chat Completions**、**OpenCode Go Messages** 或 **OpenCode Go Responses** 专用类型；不要把官方 OpenAI / Anthropic / OpenAI Responses 来源指向 `https://opencode.ai/zen/go/v1`。
 - Anthropic 和 Gemini 应优先使用各自原生适配器，以保留 thinking、原生搜索、图片输出或安全设置。Anthropic 的 API Base 填 `https://api.anthropic.com`，不要带 `/v1`。
 - “OpenAI 兼容”只表示请求协议相近，不保证工具调用、视觉、音频、流式 usage 或 reasoning 字段都兼容。逐项测试实际模型能力。
 

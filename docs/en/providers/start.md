@@ -10,14 +10,14 @@ AstrBot separates API sources, concrete models, and Agent execution into three l
 
 The current WebUI exposes these Provider categories:
 
-| Category        | Built-in types and representative integrations                                                                                                                                                               |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat Completion | OpenAI Chat Completions and compatible APIs, OpenAI Responses, Anthropic, Google Gemini, plus dedicated Kimi Code, MiniMax Token Plan, Xiaomi, xAI, Zhipu, LongCat, Groq, OpenRouter, and AIHubMix adapters. |
-| Speech to Text  | OpenAI Whisper API, self-hosted Whisper, SenseVoice, Mimo, and Xinference.                                                                                                                                   |
-| Text to Speech  | OpenAI, Mimo, Genie, Edge TTS, GPT-SoVITS, FishAudio, DashScope, Azure, MiniMax, Volcengine, Gemini, and ElevenLabs.                                                                                         |
-| Embedding       | OpenAI, Gemini, NVIDIA, and Ollama.                                                                                                                                                                          |
-| Rerank          | vLLM, Xinference, Alibaba Bailian, and NVIDIA.                                                                                                                                                               |
-| Agent Runner    | Dify, Coze, Alibaba Bailian Applications, and DeerFlow; selected by a profile rather than invoked as a local model.                                                                                          |
+| Category        | Built-in types and representative integrations                                                                                                                                                                                                                                          |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat Completion | OpenAI Chat Completions and compatible APIs, OpenAI Responses, Anthropic, Google Gemini, plus dedicated OpenCode Go Chat Completions, OpenCode Go Messages, OpenCode Go Responses, Kimi Code, MiniMax Token Plan, Xiaomi, xAI, Zhipu, LongCat, Groq, OpenRouter, and AIHubMix adapters. |
+| Speech to Text  | OpenAI Whisper API, self-hosted Whisper, SenseVoice, Mimo, and Xinference.                                                                                                                                                                                                              |
+| Text to Speech  | OpenAI, Mimo, Genie, Edge TTS, GPT-SoVITS, FishAudio, DashScope, Azure, MiniMax, Volcengine, Gemini, and ElevenLabs.                                                                                                                                                                    |
+| Embedding       | OpenAI, Gemini, NVIDIA, and Ollama.                                                                                                                                                                                                                                                     |
+| Rerank          | vLLM, Xinference, Alibaba Bailian, and NVIDIA.                                                                                                                                                                                                                                          |
+| Agent Runner    | Dify, Coze, Alibaba Bailian Applications, and DeerFlow; selected by a profile rather than invoked as a local model.                                                                                                                                                                     |
 
 Templates come from the current code registry and can change in later releases. Treat the list shown under **Providers → Add Provider Source** as authoritative for the running version.
 
@@ -41,6 +41,7 @@ Do not copy old `provider` objects by hand. The current WebUI coordinates model 
 
 - Use **OpenAI Chat Completions** or a matching preset when the service explicitly exposes a compatible Chat Completions endpoint.
 - Use **OpenAI Responses** when you need its remote state modes, background responses, or native Web Search. It is not an alias for Chat Completions.
+- Use the dedicated **OpenCode Go Chat Completions**, **OpenCode Go Messages**, or **OpenCode Go Responses** types for OpenCode Go. Do not point official OpenAI, Anthropic, or OpenAI Responses sources at `https://opencode.ai/zen/go/v1`.
 - Prefer native Anthropic and Gemini adapters to retain thinking, native search, image output, or safety settings. For Anthropic, set API Base to `https://api.anthropic.com` without `/v1`.
 - “OpenAI compatible” only means the request protocol is similar. It does not guarantee compatible tools, vision, audio, streaming usage, or reasoning fields. Test each required capability.
 

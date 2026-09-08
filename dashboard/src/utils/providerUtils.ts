@@ -124,6 +124,15 @@ export function getProviderDescription(
   if (template.provider === 'kimi-code') {
     return tm('providers.description.kimi_code');
   }
+  if (type === 'opencode_go_chat_completion') {
+    return tm('providers.description.opencode_go_chat_completion');
+  }
+  if (type === 'opencode_go_messages') {
+    return tm('providers.description.opencode_go_messages');
+  }
+  if (type === 'opencode_go_responses') {
+    return tm('providers.description.opencode_go_responses');
+  }
   if (name === 'vLLM Rerank') {
     return tm('providers.description.vllm_rerank', { type });
   }

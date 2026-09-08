@@ -209,6 +209,13 @@ class ProviderOpenAIResponses(Provider):
         self.set_model(provider_config.get("model", "unknown"))
         self._validate_config()
 
+    def _request_extra_headers(self) -> dict[str, str] | None:
+        return None
+
+    def _request_extra_headers_kwargs(self) -> Any:
+        headers = self._request_extra_headers()
+        return {"extra_headers": headers} if headers else {}
+
     def _validate_config(self) -> None:
         mode = self.provider_config.get("responses_state_mode", "stateless")
         if mode not in {"stateless", "previous_response_id", "conversation"}:
@@ -260,7 +267,9 @@ class ProviderOpenAIResponses(Provider):
     async def get_models(self) -> list[str]:
         models = await retry_provider_request(
             "OpenAI Responses",
-            lambda: self._client_for(self.chosen_api_key).models.list(),
+            lambda: self._client_for(self.chosen_api_key).models.list(
+                **self._request_extra_headers_kwargs(),
+            ),
         )
         return sorted(model.id for model in models.data)
 
@@ -798,7 +807,10 @@ class ProviderOpenAIResponses(Provider):
         task = asyncio.create_task(
             retry_provider_request(
                 "OpenAI Responses",
-                lambda: client.responses.create(**options),
+                lambda: client.responses.create(
+                    **options,
+                    **self._request_extra_headers_kwargs(),
+                ),
                 max_attempts=retries,
             )
         )

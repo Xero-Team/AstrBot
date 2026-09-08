@@ -501,6 +501,13 @@ class ProviderOpenAIChatCompletions(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _request_extra_headers(self) -> dict[str, str] | None:
+        return None
+
+    def _request_extra_headers_kwargs(self) -> Any:
+        headers = self._request_extra_headers()
+        return {"extra_headers": headers} if headers else {}
+
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
         if isinstance(value, str):
@@ -581,7 +588,9 @@ class ProviderOpenAIChatCompletions(Provider):
             models_str = []
             models = await retry_provider_request(
                 "OpenAI",
-                lambda: self.client.models.list(),
+                lambda: self.client.models.list(
+                    **self._request_extra_headers_kwargs(),
+                ),
             )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
@@ -701,6 +710,7 @@ class ProviderOpenAIChatCompletions(Provider):
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
+                    **self._request_extra_headers_kwargs(),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -748,6 +758,7 @@ class ProviderOpenAIChatCompletions(Provider):
                     stream=True,
                     extra_body=extra_body,
                     stream_options={"include_usage": True},
+                    **self._request_extra_headers_kwargs(),
                 ),
                 max_attempts=request_max_retries,
             )

@@ -25,6 +25,9 @@
       "openai_chat_completions": "兼容 OpenAI /chat/completions 协议及其兼容服务。",
       "openai_responses": "OpenAI /responses 协议，支持原生工具、会话状态和 Web Search。",
       "kimi_code": "Kimi 的 CodingPlan / Kimi Code 专用接入，使用特殊的 Anthropic API 兼容适配。",
+      "opencode_go_chat_completion": "OpenCode Go Chat Completions 专用接入。发送 AstrBot User-Agent 和哈希后的会话头。",
+      "opencode_go_messages": "OpenCode Go Messages 专用接入。发送 AstrBot User-Agent 和哈希后的会话头。",
+      "opencode_go_responses": "OpenCode Go Responses 专用接入。发送 AstrBot User-Agent 和哈希后的会话头。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
     }

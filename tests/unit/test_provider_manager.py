@@ -459,6 +459,24 @@ def test_dynamic_import_provider_registers_both_openai_protocols():
     )
 
 
+def test_dynamic_import_provider_registers_opencode_go_types():
+    manager = _build_manager()
+
+    manager.dynamic_import_provider("opencode_go_chat_completion")
+    manager.dynamic_import_provider("opencode_go_messages")
+    manager.dynamic_import_provider("opencode_go_responses")
+
+    assert manager.catalog.get("opencode_go_chat_completion").cls_type.__name__ == (
+        "ProviderOpenCodeGoChat"
+    )
+    assert manager.catalog.get("opencode_go_messages").cls_type.__name__ == (
+        "ProviderOpenCodeGoMessages"
+    )
+    assert manager.catalog.get("opencode_go_responses").cls_type.__name__ == (
+        "ProviderOpenCodeGoResponses"
+    )
+
+
 def test_get_provider_config_by_id_can_merge_provider_source():
     manager = _build_manager(
         {

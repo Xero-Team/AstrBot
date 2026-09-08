@@ -46,6 +46,19 @@ An OpenAI Responses source adds these settings:
 
 Native `web_search` inside the source applies only to OpenAI Responses. Profile-level `provider_settings.web_search` is AstrBot's cross-Provider search tool. They can be enabled independently and have different cost and source formats.
 
+## OpenCode Go
+
+OpenCode Go exposes Chat Completions, Messages, and Responses. Add one of the three dedicated source types in the WebUI. Do not retarget an official OpenAI Chat Completions, Anthropic, or OpenAI Responses source at the Go API Base.
+
+| Field / behavior     | Default                             | Meaning                                                                                                                                  |
+| -------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `api_base`           | `https://opencode.ai/zen/go/v1`     | Shared by all three types. The Messages adapter strips a trailing `/v1`; the SDK still calls `/v1/messages`.                             |
+| `User-Agent`         | `AstrBot/<version>`                 | Filled at runtime when empty. A non-blank operator User-Agent is kept.                                                                   |
+| `x-opencode-session` | `astrbot-<32 hex>` or `astrbot-aux` | Chat requests hash `session_id` with SHA-256 and take the first 32 hex characters. Missing, blank, and `get_models()` use `astrbot-aux`. |
+
+> [!WARNING]
+> `session_id` is conversation identity (UMO). The Go adapters send only the hash, never the raw UMO. Official OpenAI, Anthropic, Gemini, and OpenRouter sources do not attach these Go headers.
+
 ## Default models and fallback
 
 Configure these under **Config** in the Agent Runner section:

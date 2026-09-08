@@ -158,6 +158,7 @@ class WeixinOCMessageEvent(AstrMessageEvent):
                     if not pending.cancelled():
                         raise
                 except StopAsyncIteration:
+                    # anext() already closed the generator; cancel is a no-op.
                     pass
 
         await flush_text()

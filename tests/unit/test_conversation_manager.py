@@ -60,3 +60,22 @@ async def test_conversation_manager_creates_loads_and_isolates_sessions(
         assert remaining.title == "Bob chat"
     finally:
         await preferences.terminate()
+
+
+@pytest.mark.asyncio
+async def test_delete_current_conversation_loads_persisted_selection(temp_db, tmp_path):
+    await temp_db.initialize()
+    preferences = SharedPreferences(temp_db, tmp_path / "preferences.json")
+    await preferences.initialize()
+    manager = ConversationManager(temp_db, preferences)
+    try:
+        umo = "webchat:FriendMessage:alice"
+        cid = await manager.new_conversation(umo, title="Alice chat")
+        manager.session_conversations.clear()
+
+        await manager.delete_conversation(umo)
+
+        assert await manager.get_conversation(umo, cid) is None
+        assert await preferences.session_get(umo, "sel_conv_id", None) is None
+    finally:
+        await preferences.terminate()

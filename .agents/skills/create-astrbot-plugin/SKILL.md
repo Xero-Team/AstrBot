@@ -1,11 +1,14 @@
 ---
 name: create-astrbot-plugin
-description: Create, extend, or repair an AstrBot plugin (Star) from a feature request. Use when a task involves metadata.yaml, main.py, AstrBot event handlers, plugin configuration, storage, AI calls, platform actions, plugin Skills, or Dashboard Extension pages. Follow the current Xero-Team/AstrBot source checkout and its Python floor; do not use legacy plugin APIs or internal AstrBot modules.
+description: Create, extend, or repair an AstrBot plugin (Star) using the current public SDK, including commands, configuration, and Dashboard Extensions. Use for plugin packages, not AstrBot core changes or Codex/OpenCode skills.
 ---
 
 # Create an AstrBot plugin
 
-Create a standalone plugin package that targets the current AstrBot checkout. Keep the plugin small, use only the public SDK, and leave AstrBot core files unchanged unless the user explicitly requests a core change.
+Deliver a working plugin package for the current AstrBot checkout, with usage
+documentation and checks appropriate to its behavior. Use the public SDK and
+keep core changes within the user's stated scope. Follow `AGENTS.md`; shell
+commands below work through either Codex CLI or OpenCode.
 
 ## Locked
 
@@ -17,7 +20,11 @@ Create a standalone plugin package that targets the current AstrBot checkout. Ke
 
 ## Open
 
-Plugin name, commands, platforms, secrets, and whether tests or a Dashboard Extension page are required — ask only when those decisions are missing.
+Infer the plugin name and package shape from the request and existing files.
+Ask only when behavior, supported platforms, or an external integration remains
+ambiguous. Choose tests from the behavior's risk; do not ask the user to design
+the verification. Store credentials in configuration rather than asking the
+user to paste secrets into chat.
 
 ## Do not
 
@@ -48,13 +55,13 @@ Plugin name, commands, platforms, secrets, and whether tests or a Dashboard Exte
    - [messages](../../../docs/zh/dev/star/guides/send-message.md)
    - [AI](../../../docs/zh/dev/star/guides/ai.md)
    - [Dashboard Extension](../../../docs/zh/dev/star/plugin-dashboard-extension.md)
-4. Ask only for missing decisions that change the package shape: plugin name, behavior, command/event, supported platforms, secrets/configuration, third-party dependencies, and whether tests or a Dashboard page are required.
+4. Resolve missing package decisions using the request, existing plugin, and public SDK. Ask only for choices that materially change the result; continue independent scaffolding or inspection while waiting.
 5. Place a standalone plugin outside the AstrBot source tree when possible. Install it with `uv run astrbot plug install --editable <plugin-dir>` while developing.
 
 For deterministic scaffolding, run the bundled script from the AstrBot checkout:
 
 ```bash
-python .agents/skills/create-astrbot-plugin/scripts/scaffold_plugin.py \
+uv run python .agents/skills/create-astrbot-plugin/scripts/scaffold_plugin.py \
   --astrbot-root . \
   --output ../astrbot_plugin_example \
   --name astrbot_plugin_example \
@@ -135,14 +142,14 @@ README content should state installation, commands, configuration, supported pla
 Run the bundled checker from the AstrBot checkout:
 
 ```bash
-python .agents/skills/create-astrbot-plugin/scripts/check_plugin.py \
+uv run python .agents/skills/create-astrbot-plugin/scripts/check_plugin.py \
   --astrbot-root . <plugin-dir>
 ```
 
 Then run checks appropriate to the generated files:
 
 ```bash
-python -m compileall <plugin-dir>
+uv run python -m compileall <plugin-dir>
 uv run ruff check <plugin-dir>
 uv run ruff format --check <plugin-dir>
 ```

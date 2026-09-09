@@ -1,4 +1,4 @@
 interface:
   display_name: 'Create AstrBot Plugin'
-  short_description: 'Scaffold and validate AstrBot plugins'
-  default_prompt: 'Use $create-astrbot-plugin to create a production-ready AstrBot plugin from a feature request.'
+  short_description: 'Build and verify plugins using the public AstrBot SDK'
+  default_prompt: 'Use $create-astrbot-plugin to implement the requested plugin with the current public SDK, document its usage, and run the relevant checks.'

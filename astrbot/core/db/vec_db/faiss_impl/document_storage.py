@@ -387,6 +387,33 @@ class DocumentStorage:
                 return self._document_to_dict(document)
             return None
 
+    async def relabel_kb_doc_id(self, from_doc_id: str, to_doc_id: str) -> None:
+        """Rewrite document-storage metadata ``kb_doc_id`` from staging to live.
+
+        Args:
+            from_doc_id: Staging document ID currently stored in metadata.
+            to_doc_id: Live document ID to assign.
+        """
+        if from_doc_id == to_doc_id:
+            return
+        assert self.engine is not None, "Database connection is not initialized."
+
+        async with self.get_session() as session, session.begin():
+            query = (
+                select(Document)
+                .where(text("json_extract(metadata, '$.kb_doc_id') = :from_doc_id"))
+                .params(from_doc_id=from_doc_id)
+            )
+            result = await session.execute(query)
+            documents = list(result.scalars().all())
+            now = datetime.now()
+            for document in documents:
+                metadata = json.loads(document.metadata_ or "{}")
+                metadata["kb_doc_id"] = to_doc_id
+                document.metadata_ = json.dumps(metadata)
+                document.updated_at = now
+                session.add(document)
+
     async def update_document_by_doc_id(self, doc_id: str, new_text: str) -> None:
         """Update a document by its doc_id.
 

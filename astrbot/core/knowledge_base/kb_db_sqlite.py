@@ -51,6 +51,13 @@ def posix_identity_input(raw: str) -> str:
     return "/".join(parts)
 
 
+def _prefixed_identity_key(prefix: str, posix: str) -> str:
+    if len(posix) <= _FILE_IDENTITY_POSIX_MAX:
+        return f"{prefix}:{posix}"
+    digest = hashlib.sha256(posix.encode("utf-8")).hexdigest()
+    return f"{prefix}:sha256:{digest}"
+
+
 def file_identity_key(posix: str) -> str:
     """Build a file identity key from NFC posix input.
 
@@ -61,10 +68,19 @@ def file_identity_key(posix: str) -> str:
         ``file:{posix}`` when the path is at most 700 characters, otherwise
         ``file:sha256:{digest}``.
     """
-    if len(posix) <= _FILE_IDENTITY_POSIX_MAX:
-        return f"file:{posix}"
-    digest = hashlib.sha256(posix.encode("utf-8")).hexdigest()
-    return f"file:sha256:{digest}"
+    return _prefixed_identity_key("file", posix)
+
+
+def import_identity_key(posix: str) -> str:
+    """Build an import identity key from NFC posix input.
+
+    Args:
+        posix: NFC posix relative path of the imported document name.
+
+    Returns:
+        ``import:{posix}`` or ``import:sha256:{digest}`` when over 700 characters.
+    """
+    return _prefixed_identity_key("import", posix)
 
 
 class KBSQLiteDatabase:
@@ -403,7 +419,12 @@ class KBSQLiteDatabase:
 
         return metadata_map
 
-    async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB) -> None:
+    async def delete_document_by_id(
+        self,
+        doc_id: str,
+        vec_db: FaissVecDB,
+        kb_files_dir: Path | None = None,
+    ) -> None:
         """删除单个文档及其相关数据（包括多媒体记录）"""
         async with self.get_db() as session, session.begin():
             # 删除多媒体记录
@@ -416,6 +437,28 @@ class KBSQLiteDatabase:
 
         # 在 vec db 中删除相关向量
         await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+        if kb_files_dir is not None:
+            self.unlink_document_source_blobs(kb_files_dir, doc_id)
+
+    @staticmethod
+    def unlink_document_source_blobs(kb_files_dir: Path, doc_id: str) -> None:
+        """Unlink stored source blobs for a document after a relative-path check.
+
+        Args:
+            kb_files_dir: Knowledge-base files directory.
+            doc_id: Document ID used as the relative blob name.
+        """
+        base = kb_files_dir.resolve()
+        for suffix in ("", ".staging", ".bak"):
+            candidate = kb_files_dir / f"{doc_id}{suffix}"
+            try:
+                resolved = candidate.resolve()
+            except OSError:
+                continue
+            if not resolved.is_relative_to(base):
+                continue
+            if resolved.is_file():
+                resolved.unlink()
 
     # ===== 多媒体查询 =====
 

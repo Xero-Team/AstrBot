@@ -1,7 +1,12 @@
+import asyncio
+import hashlib
 import json
+import shutil
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import aiofiles
 
@@ -35,12 +40,28 @@ from ._kb_helper_url_import import (
 )
 from .chunking.base import BaseChunker
 from .chunking.markdown import MarkdownChunker
-from .kb_db_sqlite import KBSQLiteDatabase
+from .kb_db_sqlite import (
+    KBSQLiteDatabase,
+    file_identity_key,
+    import_identity_key,
+    posix_identity_input,
+)
 from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.util import select_parser
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
+KB_SOURCE_MAX_BYTES = 128 * 1024 * 1024
+IngestStatus = Literal["created", "replaced", "unchanged"]
+
+
+@dataclass(frozen=True)
+class DocumentIngestResult:
+    """Result of creating, replacing, or skipping a knowledge-base document."""
+
+    document: KBDocument
+    ingest_status: IngestStatus
 
 
 class RateLimiter:
@@ -101,6 +122,8 @@ class KBHelper:
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
         self.sparse_retriever = None
+        self._identity_locks: dict[str, asyncio.Lock] = {}
+        self._identity_locks_mutex = asyncio.Lock()
 
     def _invalidate_bm25_cache(self) -> None:
         retriever = self.sparse_retriever
@@ -136,6 +159,9 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
+        existing = getattr(self, "vec_db", None)
+        if existing is not None:
+            return existing
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
@@ -423,6 +449,10 @@ class KBHelper:
         file_size: int,
         chunks_text: list[str],
         saved_media: list[KBMedia],
+        identity_key: str,
+        content_hash: str,
+        source_kind: str,
+        source_url: str | None,
     ) -> KBDocument:
         doc = KBDocument(
             doc_id=doc_id,
@@ -430,9 +460,13 @@ class KBHelper:
             doc_name=file_name,
             file_type=file_type,
             file_size=file_size,
-            file_path="",
+            file_path=doc_id,
             chunk_count=len(chunks_text),
-            media_count=0,
+            media_count=len(saved_media),
+            identity_key=identity_key,
+            content_hash=content_hash,
+            source_kind=source_kind,
+            source_url=source_url,
         )
         try:
             async with self.kb_db.get_db() as session:
@@ -520,13 +554,15 @@ class KBHelper:
         try:
             media_dir = self.kb_medias_dir / doc_id
             if media_dir.is_dir():
-                media_dir.rmdir()
+                shutil.rmtree(media_dir)
         except Exception as exc:
             logger.warning(
                 "Failed to remove media directory for document %s: %s",
                 doc_id,
                 exc,
             )
+
+        self._unlink_doc_blobs(doc_id)
 
     async def upload_document(
         self,
@@ -540,19 +576,246 @@ class KBHelper:
         max_retries: int = 3,
         progress_callback=None,
         pre_chunked_text: list[str] | None = None,
-    ) -> KBDocument:
-        """Upload and process a document with compensating cleanup on failure.
+        identity_key: str | None = None,
+        source_kind: str | None = None,
+        source_url: str | None = None,
+        content_hash: str | None = None,
+        source_bytes: bytes | None = None,
+    ) -> DocumentIngestResult:
+        """Upload or replace a document with compensating cleanup on failure.
 
         Args:
             progress_callback: Progress callback ``(stage, current, total)``.
+            identity_key: Stable identity; computed from ``file_name`` when omitted.
+            source_kind: ``file``, ``import``, or ``url``.
+            source_url: Canonical URL for URL imports.
+            content_hash: SHA-256 of the source; computed when omitted.
+            source_bytes: Original bytes to persist; derived when omitted.
         """
         await self._ensure_vec_db()
+        kind = self._infer_source_kind(source_kind, file_type, pre_chunked_text)
+        key = identity_key or self._identity_key_for(kind, file_name)
+        blob_bytes = self._source_blob_bytes(
+            source_bytes=source_bytes,
+            file_content=file_content,
+            pre_chunked_text=pre_chunked_text,
+        )
+        if len(blob_bytes) > KB_SOURCE_MAX_BYTES:
+            raise KnowledgeBaseUploadError(
+                stage="validation",
+                user_message="Document exceeds the 128 MB size limit.",
+            )
+        digest = content_hash or self._hash_source(
+            source_kind=kind,
+            file_content=file_content,
+            pre_chunked_text=pre_chunked_text,
+            source_bytes=source_bytes if source_bytes is not None else blob_bytes,
+        )
+        lock = await self._lock_for_identity(key)
+        async with lock:
+            existing = await self.kb_db.get_document_by_identity(self.kb.kb_id, key)
+            if existing is not None and existing.content_hash == digest:
+                return DocumentIngestResult(
+                    document=existing,
+                    ingest_status="unchanged",
+                )
+            if existing is not None:
+                return await self._replace_existing_document(
+                    existing=existing,
+                    file_name=file_name,
+                    file_content=file_content,
+                    file_type=file_type,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                    progress_callback=progress_callback,
+                    pre_chunked_text=pre_chunked_text,
+                    identity_key=key,
+                    source_kind=kind,
+                    source_url=source_url,
+                    content_hash=digest,
+                    blob_bytes=blob_bytes,
+                )
+            return await self._create_new_document(
+                file_name=file_name,
+                file_content=file_content,
+                file_type=file_type,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+                pre_chunked_text=pre_chunked_text,
+                identity_key=key,
+                source_kind=kind,
+                source_url=source_url,
+                content_hash=digest,
+                blob_bytes=blob_bytes,
+            )
+
+    async def _lock_for_identity(self, identity_key: str) -> asyncio.Lock:
+        if not hasattr(self, "_identity_locks"):
+            self._identity_locks = {}
+            self._identity_locks_mutex = asyncio.Lock()
+        async with self._identity_locks_mutex:
+            lock = self._identity_locks.get(identity_key)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._identity_locks[identity_key] = lock
+            return lock
+
+    @staticmethod
+    def _infer_source_kind(
+        source_kind: str | None,
+        file_type: str,
+        pre_chunked_text: list[str] | None,
+    ) -> str:
+        if source_kind:
+            return source_kind
+        if file_type == "url":
+            return "url"
+        if pre_chunked_text is not None:
+            return "import"
+        return "file"
+
+    @staticmethod
+    def _identity_key_for(source_kind: str, file_name: str) -> str:
+        posix = posix_identity_input(file_name) or "document"
+        if source_kind == "import":
+            return import_identity_key(posix)
+        if source_kind == "url":
+            return f"legacy:{uuid.uuid4()}"
+        return file_identity_key(posix)
+
+    @staticmethod
+    def _source_blob_bytes(
+        *,
+        source_bytes: bytes | None,
+        file_content: bytes | None,
+        pre_chunked_text: list[str] | None,
+    ) -> bytes:
+        if source_bytes is not None:
+            return source_bytes
+        if file_content is not None:
+            return file_content
+        if pre_chunked_text is not None:
+            return "\n".join(pre_chunked_text).encode("utf-8")
+        return b""
+
+    @staticmethod
+    def hash_import_chunks(chunks: list[str]) -> str:
+        payload = "".join(f"{len(chunk)}\n{chunk}" for chunk in chunks)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _hash_source(
+        *,
+        source_kind: str,
+        file_content: bytes | None,
+        pre_chunked_text: list[str] | None,
+        source_bytes: bytes,
+    ) -> str:
+        if source_kind == "import" and pre_chunked_text is not None:
+            return KBHelper.hash_import_chunks(pre_chunked_text)
+        if file_content is not None and pre_chunked_text is None:
+            return hashlib.sha256(file_content).hexdigest()
+        return hashlib.sha256(source_bytes).hexdigest()
+
+    def _resolve_doc_blob_path(self, relative_name: str) -> Path:
+        relative = Path(relative_name)
+        if relative.is_absolute() or any(part == ".." for part in relative.parts):
+            raise ValueError("invalid document source path")
+        path = (self.kb_files_dir / relative).resolve()
+        if not path.is_relative_to(self.kb_files_dir.resolve()):
+            raise ValueError("invalid document source path")
+        return path
+
+    def _doc_blob_path(self, doc_id: str, suffix: str = "") -> Path:
+        return self._resolve_doc_blob_path(f"{doc_id}{suffix}")
+
+    def _unlink_doc_blobs(self, doc_id: str) -> None:
+        self.kb_db.unlink_document_source_blobs(self.kb_files_dir, doc_id)
+
+    async def _write_blob(self, path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        async with aiofiles.open(path, "wb") as handle:
+            await handle.write(data)
+
+    async def _ingest_chunks_for_doc_id(
+        self,
+        *,
+        doc_id: str,
+        file_name: str,
+        file_content: bytes | None,
+        file_type: str,
+        media_paths: list[Path],
+        chunk_size: int,
+        chunk_overlap: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+        progress_callback,
+        pre_chunked_text: list[str] | None,
+    ) -> tuple[list[str], list[KBMedia], int]:
+        chunks_text, saved_media, file_size = await self._prepare_document_chunks(
+            doc_id=doc_id,
+            file_name=file_name,
+            file_content=file_content,
+            file_type=file_type,
+            media_paths=media_paths,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            progress_callback=progress_callback,
+            pre_chunked_text=pre_chunked_text,
+        )
+        self._validate_chunks_text(
+            chunks_text=chunks_text,
+            file_name=file_name,
+            pre_chunked_text=pre_chunked_text,
+        )
+        contents, metadatas = self._build_embedding_payload(
+            doc_id=doc_id,
+            chunks_text=chunks_text,
+        )
+        await self._report_upload_progress(progress_callback, "chunking", 100, 100)
+        await self._insert_document_embeddings(
+            file_name=file_name,
+            contents=contents,
+            metadatas=metadatas,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+        )
+        return chunks_text, saved_media, file_size
+
+    async def _create_new_document(
+        self,
+        *,
+        file_name: str,
+        file_content: bytes | None,
+        file_type: str,
+        chunk_size: int,
+        chunk_overlap: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+        progress_callback,
+        pre_chunked_text: list[str] | None,
+        identity_key: str,
+        source_kind: str,
+        source_url: str | None,
+        content_hash: str,
+        blob_bytes: bytes,
+    ) -> DocumentIngestResult:
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
         metadata_committed = False
-
         try:
-            chunks_text, saved_media, file_size = await self._prepare_document_chunks(
+            chunks_text, saved_media, _file_size = await self._ingest_chunks_for_doc_id(
                 doc_id=doc_id,
                 file_name=file_name,
                 file_content=file_content,
@@ -560,46 +823,37 @@ class KBHelper:
                 media_paths=media_paths,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
-                progress_callback=progress_callback,
-                pre_chunked_text=pre_chunked_text,
-            )
-            self._validate_chunks_text(
-                chunks_text=chunks_text,
-                file_name=file_name,
-                pre_chunked_text=pre_chunked_text,
-            )
-            contents, metadatas = self._build_embedding_payload(
-                doc_id=doc_id,
-                chunks_text=chunks_text,
-            )
-            await self._report_upload_progress(progress_callback, "chunking", 100, 100)
-            await self._insert_document_embeddings(
-                file_name=file_name,
-                contents=contents,
-                metadatas=metadatas,
                 batch_size=batch_size,
                 tasks_limit=tasks_limit,
                 max_retries=max_retries,
                 progress_callback=progress_callback,
+                pre_chunked_text=pre_chunked_text,
             )
+            await self._write_blob(self._doc_blob_path(doc_id), blob_bytes)
             doc = await self._save_document_metadata(
                 doc_id=doc_id,
                 file_name=file_name,
                 file_type=file_type,
-                file_size=file_size,
+                file_size=len(blob_bytes),
                 chunks_text=chunks_text,
                 saved_media=saved_media,
+                identity_key=identity_key,
+                content_hash=content_hash,
+                source_kind=source_kind,
+                source_url=source_url,
             )
             metadata_committed = True
             await self._refresh_uploaded_document_state(
                 doc_id=doc_id,
                 file_name=file_name,
             )
-            return doc
+            return DocumentIngestResult(document=doc, ingest_status="created")
         except Exception as exc:
             if isinstance(exc, KnowledgeBaseUploadError):
                 logger.warning(
-                    "Document upload failed: %s", exc, extra={"details": exc.details}
+                    "Document upload failed: %s",
+                    exc,
+                    extra={"details": exc.details},
                 )
             else:
                 logger.error("Document upload failed", exc_info=True)
@@ -609,6 +863,283 @@ class KBHelper:
                     media_paths=media_paths,
                 )
             raise
+
+    async def _replace_existing_document(
+        self,
+        *,
+        existing: KBDocument,
+        file_name: str,
+        file_content: bytes | None,
+        file_type: str,
+        chunk_size: int,
+        chunk_overlap: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+        progress_callback,
+        pre_chunked_text: list[str] | None,
+        identity_key: str,
+        source_kind: str,
+        source_url: str | None,
+        content_hash: str,
+        blob_bytes: bytes,
+    ) -> DocumentIngestResult:
+        live_doc_id = existing.doc_id
+        staging_id = str(uuid.uuid4())
+        live_blob = self._doc_blob_path(live_doc_id)
+        staging_blob = self._doc_blob_path(live_doc_id, ".staging")
+        bak_blob = self._doc_blob_path(live_doc_id, ".bak")
+        if live_blob.exists() and staging_blob.exists():
+            staging_blob.unlink()
+
+        media_paths: list[Path] = []
+        swapped_blob = False
+        retired_live = False
+        relabeled = False
+        try:
+            await self._write_blob(staging_blob, blob_bytes)
+            chunks_text, saved_media, _file_size = await self._ingest_chunks_for_doc_id(
+                doc_id=staging_id,
+                file_name=file_name,
+                file_content=file_content,
+                file_type=file_type,
+                media_paths=media_paths,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+                pre_chunked_text=pre_chunked_text,
+            )
+            swapped_blob = self._swap_live_blob(live_blob, staging_blob, bak_blob)
+            await self._retire_live_chunks(live_doc_id)
+            retired_live = True
+            await self._relabel_staging_generation(
+                staging_id=staging_id,
+                live_doc_id=live_doc_id,
+                saved_media=saved_media,
+            )
+            await self._commit_replaced_media(saved_media)
+            relabeled = True
+            doc = await self._update_live_document_metadata(
+                live_doc_id=live_doc_id,
+                file_name=file_name,
+                file_type=file_type,
+                file_size=len(blob_bytes),
+                chunk_count=len(chunks_text),
+                media_count=len(saved_media),
+                identity_key=identity_key,
+                content_hash=content_hash,
+                source_kind=source_kind,
+                source_url=source_url,
+            )
+            bak_blob.unlink(missing_ok=True)
+            await self._refresh_uploaded_document_state(
+                doc_id=live_doc_id,
+                file_name=file_name,
+            )
+            return DocumentIngestResult(document=doc, ingest_status="replaced")
+        except Exception as exc:
+            if isinstance(exc, KnowledgeBaseUploadError):
+                logger.warning(
+                    "Document replace failed: %s",
+                    exc,
+                    extra={"details": exc.details},
+                )
+            else:
+                logger.error("Document replace failed", exc_info=True)
+            await self._recover_failed_replace(
+                live_doc_id=live_doc_id,
+                staging_id=staging_id,
+                media_paths=media_paths,
+                swapped_blob=swapped_blob,
+                retired_live=retired_live,
+                relabeled=relabeled,
+                live_blob=live_blob,
+                staging_blob=staging_blob,
+                bak_blob=bak_blob,
+            )
+            raise
+
+    def _swap_live_blob(
+        self,
+        live_blob: Path,
+        staging_blob: Path,
+        bak_blob: Path,
+    ) -> bool:
+        if live_blob.exists():
+            live_blob.replace(bak_blob)
+        staging_blob.replace(live_blob)
+        return True
+
+    async def _retire_live_chunks(self, doc_id: str) -> None:
+        from sqlalchemy import delete
+        from sqlmodel import col
+
+        await self.vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+        self._invalidate_bm25_cache()
+        async with self.kb_db.get_db() as session, session.begin():
+            await session.execute(delete(KBMedia).where(col(KBMedia.doc_id) == doc_id))
+        media_dir = self.kb_medias_dir / doc_id
+        if media_dir.is_dir():
+            shutil.rmtree(media_dir)
+
+    async def _relabel_staging_generation(
+        self,
+        *,
+        staging_id: str,
+        live_doc_id: str,
+        saved_media: list[KBMedia],
+    ) -> None:
+        document_storage = self.vec_db.document_storage
+        await document_storage.relabel_kb_doc_id(staging_id, live_doc_id)
+        staging_dir = self.kb_medias_dir / staging_id
+        live_dir = self.kb_medias_dir / live_doc_id
+        if staging_dir.exists():
+            if live_dir.exists():
+                shutil.rmtree(live_dir)
+            staging_dir.rename(live_dir)
+        for media in saved_media:
+            media.doc_id = live_doc_id
+            media.file_path = str(live_dir / Path(media.file_path).name)
+
+    async def _update_live_document_metadata(
+        self,
+        *,
+        live_doc_id: str,
+        file_name: str,
+        file_type: str,
+        file_size: int,
+        chunk_count: int,
+        media_count: int,
+        identity_key: str,
+        content_hash: str,
+        source_kind: str,
+        source_url: str | None,
+    ) -> KBDocument:
+        from sqlalchemy import update
+        from sqlmodel import col
+
+        async with self.kb_db.get_db() as session, session.begin():
+            await session.execute(
+                update(KBDocument)
+                .where(col(KBDocument.doc_id) == live_doc_id)
+                .values(
+                    doc_name=file_name,
+                    file_type=file_type,
+                    file_size=file_size,
+                    file_path=live_doc_id,
+                    chunk_count=chunk_count,
+                    media_count=media_count,
+                    identity_key=identity_key,
+                    content_hash=content_hash,
+                    source_kind=source_kind,
+                    source_url=source_url,
+                    updated_at=datetime.now(UTC),
+                ),
+            )
+        doc = await self.kb_db.get_document_by_id(live_doc_id)
+        if doc is None:
+            raise KnowledgeBaseUploadError(
+                stage="metadata",
+                user_message="元数据保存失败：文本块已写入知识库，但文档记录保存失败。",
+                details={"file_name": file_name, "doc_id": live_doc_id},
+            )
+        return doc
+
+    async def _commit_replaced_media(self, saved_media: list[KBMedia]) -> None:
+        if not saved_media:
+            return
+        async with self.kb_db.get_db() as session, session.begin():
+            for media in saved_media:
+                session.add(media)
+
+    async def _recover_failed_replace(
+        self,
+        *,
+        live_doc_id: str,
+        staging_id: str,
+        media_paths: list[Path],
+        swapped_blob: bool,
+        retired_live: bool,
+        relabeled: bool,
+        live_blob: Path,
+        staging_blob: Path,
+        bak_blob: Path,
+    ) -> None:
+        if not retired_live:
+            await self._cleanup_failed_upload(
+                doc_id=staging_id,
+                media_paths=media_paths,
+            )
+            if swapped_blob and bak_blob.exists():
+                live_blob.unlink(missing_ok=True)
+                bak_blob.replace(live_blob)
+            staging_blob.unlink(missing_ok=True)
+            return
+
+        if not relabeled:
+            restored = await self._try_relabel_staging(staging_id, live_doc_id)
+            if not restored:
+                restored = await self._try_relabel_staging(staging_id, live_doc_id)
+            if not restored:
+                await self._cleanup_failed_upload(
+                    doc_id=staging_id,
+                    media_paths=media_paths,
+                )
+                restore_blob = bak_blob if bak_blob.exists() else live_blob
+                await self._reembed_from_stored_blob(live_doc_id, restore_blob)
+        staging_blob.unlink(missing_ok=True)
+
+    async def _try_relabel_staging(self, staging_id: str, live_doc_id: str) -> bool:
+        try:
+            await self._relabel_staging_generation(
+                staging_id=staging_id,
+                live_doc_id=live_doc_id,
+                saved_media=[],
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Failed to relabel staging document %s onto live document: %s",
+                staging_id,
+                exc,
+            )
+            return False
+
+    async def _reembed_from_stored_blob(
+        self, live_doc_id: str, blob_path: Path
+    ) -> None:
+        if not blob_path.is_file():
+            logger.warning(
+                "Cannot restore document %s; stored source is missing", live_doc_id
+            )
+            return
+        try:
+            async with aiofiles.open(blob_path, "rb") as handle:
+                blob_bytes = await handle.read()
+            media_paths: list[Path] = []
+            await self._ingest_chunks_for_doc_id(
+                doc_id=live_doc_id,
+                file_name="restored",
+                file_content=blob_bytes,
+                file_type="txt",
+                media_paths=media_paths,
+                chunk_size=self.kb.chunk_size or 512,
+                chunk_overlap=self.kb.chunk_overlap or 50,
+                batch_size=32,
+                tasks_limit=3,
+                max_retries=3,
+                progress_callback=None,
+                pre_chunked_text=None,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to restore document %s from stored source: %s",
+                live_doc_id,
+                exc,
+            )
 
     async def list_documents(
         self,
@@ -655,6 +1186,7 @@ class KBHelper:
         await self.kb_db.delete_document_by_id(
             doc_id=doc_id,
             vec_db=self.vec_db,  # type: ignore
+            kb_files_dir=self.kb_files_dir,
         )
         self._invalidate_bm25_cache()
         await self.kb_db.update_kb_stats(
@@ -770,7 +1302,7 @@ class KBHelper:
         progress_callback=None,
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
-    ) -> KBDocument:
+    ) -> DocumentIngestResult:
         """从 URL 上传并处理文档（带原子性保证和失败清理）
         Args:
             url: 要提取内容的网页 URL

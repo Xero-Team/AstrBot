@@ -39,6 +39,19 @@ def test_sanitize_upload_filename_keeps_nested_markdown_paths(filename, expected
     assert KnowledgeBaseService.sanitize_upload_filename(filename) == expected
 
 
+def test_file_identity_key_uses_untruncated_relative_path():
+    path_a = "dir-a/" + ("x" * 300) + "/note.md"
+    path_b = "dir-b/" + ("y" * 300) + "/note.md"
+    display_a = KnowledgeBaseService.sanitize_upload_filename(path_a)
+    display_b = KnowledgeBaseService.sanitize_upload_filename(path_b)
+    assert display_a == display_b == "note.md"
+    key_a = KnowledgeBaseService.file_identity_key_for(path_a)
+    key_b = KnowledgeBaseService.file_identity_key_for(path_b)
+    assert key_a != key_b
+    assert key_a.startswith("file:")
+    assert key_b.startswith("file:")
+
+
 class _EmbeddingProviderStub(EmbeddingProvider):
     def __init__(self, vectors: list[float], dim: int):
         super().__init__({}, {})
@@ -109,7 +122,14 @@ async def test_background_upload_task_aggregates_uploaded_and_failed_documents(
     assert service.upload_progress["task-upload"]["status"] == "completed"
     assert service.upload_tasks["task-upload"]["result"] == {
         "task_id": "task-upload",
-        "uploaded": [{"doc_id": "doc-1", "doc_name": "ok.txt"}],
+        "uploaded": [
+            {
+                "doc_id": "doc-1",
+                "doc_name": "ok.txt",
+                "source_stored": False,
+                "ingest_status": "created",
+            }
+        ],
         "failed": [{"file_name": "bad.md", "error": "bad.md: Document upload failed"}],
         "total": 2,
         "success_count": 1,
@@ -182,7 +202,14 @@ async def test_background_import_task_aggregates_failures_and_infers_file_types(
     assert service.upload_progress["task-import"]["status"] == "completed"
     assert service.upload_tasks["task-import"]["result"] == {
         "task_id": "task-import",
-        "uploaded": [{"doc_id": "doc-1", "doc_name": "guide.md"}],
+        "uploaded": [
+            {
+                "doc_id": "doc-1",
+                "doc_name": "guide.md",
+                "source_stored": False,
+                "ingest_status": "created",
+            }
+        ],
         "failed": [
             {
                 "file_name": "plain-text",
@@ -552,7 +579,7 @@ async def test_list_documents_clamps_pagination_and_trims_search():
     )
 
     assert result == {
-        "items": [{"doc_id": "doc-1", "file_name": "guide.md"}],
+        "items": [{"doc_id": "doc-1", "file_name": "guide.md", "source_stored": False}],
         "page": 1,
         "page_size": 1,
         "total": 3,
@@ -712,7 +739,14 @@ async def test_background_upload_from_url_task_records_completed_result():
         "status": "completed",
         "result": {
             "task_id": "url-task",
-            "uploaded": [{"doc_id": "doc-1", "file_name": "page.md"}],
+            "uploaded": [
+                {
+                    "doc_id": "doc-1",
+                    "file_name": "page.md",
+                    "source_stored": False,
+                    "ingest_status": "created",
+                }
+            ],
             "failed": [],
             "total": 1,
             "success_count": 1,
@@ -1043,7 +1077,11 @@ async def test_get_document_returns_model_dump():
 
     result = await service.get_document(kb_id="kb-1", doc_id="doc-1")
 
-    assert result == {"doc_id": "doc-1", "file_name": "guide.md"}
+    assert result == {
+        "doc_id": "doc-1",
+        "file_name": "guide.md",
+        "source_stored": False,
+    }
 
 
 @pytest.mark.asyncio

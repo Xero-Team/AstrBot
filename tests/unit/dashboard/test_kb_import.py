@@ -405,7 +405,9 @@ async def test_background_upload_from_url_task_marks_success_result():
     result = service.upload_tasks["task-url-ok"]["result"]
     assert result == {
         "task_id": "task-url-ok",
-        "uploaded": [{"doc_id": "doc-1"}],
+        "uploaded": [
+            {"doc_id": "doc-1", "source_stored": False, "ingest_status": "created"}
+        ],
         "failed": [],
         "total": 1,
         "success_count": 1,

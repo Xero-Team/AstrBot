@@ -1002,7 +1002,7 @@ const startProgressPolling = (taskId: string) => {
               'warning',
             );
           }
-        } else if (status === 'failed') {
+        } else if (status === 'failed' || status === 'interrupted') {
           // 任务失败
           stopProgressPolling();
 
@@ -1011,7 +1011,13 @@ const startProgressPolling = (taskId: string) => {
             (doc) => doc.taskId !== taskId,
           );
 
-          showSnackbar(`上传失败: ${data?.error || '未知错误'}`, 'error');
+          if (status === 'interrupted') {
+            await loadDocuments();
+            emit('refresh');
+            showSnackbar(t('documents.taskInterrupted'), 'warning');
+          } else {
+            showSnackbar(`上传失败: ${data?.error || '未知错误'}`, 'error');
+          }
         }
       } else {
         // 任务不存在，停止轮询

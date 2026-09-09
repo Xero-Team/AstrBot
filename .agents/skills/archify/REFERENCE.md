@@ -7,8 +7,8 @@ Xero-Team/AstrBot overlay. Cite `AGENTS.md` instead of pasting it.
 
 This skill is a **checkout-only maintainer tool**. It must not enter the
 Python sdist/wheel, the runtime image, or the Dashboard/docs production
-build. Agents discover it at `.agents/skills/archify/SKILL.md`. Do not copy
-it into gitignored `.opencode/`.
+build. Codex CLI and OpenCode discover it at `.agents/skills/archify/SKILL.md`.
+Do not duplicate it in gitignored `.codex/` or `.opencode/`.
 
 ## Locked
 

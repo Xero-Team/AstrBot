@@ -1,6 +1,6 @@
 ---
 name: archify
-description: Render architecture, workflow, sequence, data-flow, or lifecycle diagrams as validated standalone HTML for this AstrBot checkout. Use when the user asks to visualize runtime owners, pipeline stages, adapter-to-respond sequences, knowledge-base data flow, or agent-run states, or to convert Mermaid. Do not use for plugin scaffolding, upstream cherry-pick, or shipping diagrams in the Python package, container image, or Dashboard/docs build.
+description: Render validated HTML diagrams of AstrBot architecture, workflows, sequences, data flows, or lifecycles. Use for repository visualization or Mermaid conversion; artifacts stay in the maintainer workspace.
 license: MIT
 metadata:
   version: '2.17'
@@ -12,8 +12,10 @@ metadata:
 
 # Archify
 
-Checkout-only maintainer renderer. Read `REFERENCE.md` before authoring. Cite
-`AGENTS.md`; do not paste it.
+Produce a standalone HTML diagram grounded in the requested code or description,
+validate it, and return a link with any missing evidence. Read `REFERENCE.md`
+before authoring. Follow `AGENTS.md` and use only tools available in the active
+client; rendering works from either Codex CLI or OpenCode.
 
 ## Locked
 
@@ -32,8 +34,9 @@ Checkout-only maintainer renderer. Read `REFERENCE.md` before authoring. Cite
 
 ## Open
 
-Diagram type, scope, title, and whether motion, views, or a share card are
-required. Ask only when those choices change the artifact.
+Choose the diagram type and title from the request. Ask only when missing scope
+or presentation requirements would materially change the artifact. Use static
+delivery unless the user requested motion, views, a share card, or a live preview.
 
 ## Do not
 

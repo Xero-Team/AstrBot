@@ -29,14 +29,14 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 ## 发行边界
 
-当前 fork 不发布独立 PyPI 包、GitHub Release 资产、桌面端安装包或容器镜像。以下安装源属于 AstrBot 上游或第三方，并不是当前分支的构建产物：
+当前 fork 不发布独立 PyPI 包、桌面端安装包或带版本号的发行镜像。可选的 GHCR nightly（`ghcr.io/xero-team/astrbot:nightly`）跟踪 `master`，不是稳定发行通道。以下安装源属于 AstrBot 上游或第三方，并不是当前分支的构建产物：
 
 - `uv tool install astrbot` 与 `uv tool upgrade astrbot`；
 - 以 AstrBot 命名的 AUR 包；
 - `soulter/astrbot` 等上游镜像；
 - 上游 Release 中的 Dashboard 静态资源；启动入口不会下载或使用这些资源。
 
-源码部署应直接使用当前 checkout；容器部署应通过 `compose.yml` 或 `compose-with-napcat.yml` 构建仓库根目录的 `Dockerfile`。源码部署的 WebUI 默认只监听 `127.0.0.1:6185`；Compose 会显式将容器内监听地址设为 `0.0.0.0`，同时让宿主机端口保持环回绑定。远程发布仍需设置 `ASTRBOT_BIND_ADDRESS`，并配置防火墙和反向代理保护。
+源码部署应直接使用当前 checkout。仓库 Compose 仍通过根目录 `Dockerfile` 源码构建 `astrbot:local`。生产机也可以拉取 nightly 镜像而不在宿主机编译。源码部署的 WebUI 默认只监听 `127.0.0.1:6185`；Compose 会显式将容器内监听地址设为 `0.0.0.0`，同时让宿主机端口保持环回绑定。远程发布仍需设置 `ASTRBOT_BIND_ADDRESS`，并配置防火墙和反向代理保护。
 
 ## 它是如何实现的？
 

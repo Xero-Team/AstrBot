@@ -1,7 +1,30 @@
 # Deploy AstrBot with Docker
 
-This fork does not publish a prebuilt container image. Build the image from the
-current checkout so the backend and Dashboard stay version-matched.
+Repository Compose files still source-build the current checkout as
+`astrbot:local`. Optionally, a scheduled job publishes the `master` `runtime`
+image to GitHub Container Registry at `ghcr.io/xero-team/astrbot` with the
+rolling tag `nightly`. Nightly tracks yesterday UTC on `master`. It is not a
+versioned release and does not replace the default source-build path.
+
+## Pull the nightly image
+
+Hosts that should not compile on the machine can set `image:` and omit `build:`:
+
+```yaml
+services:
+  astrbot:
+    image: ghcr.io/xero-team/astrbot:nightly
+```
+
+```bash
+docker pull ghcr.io/xero-team/astrbot:nightly
+docker compose pull astrbot
+docker compose up -d astrbot
+```
+
+Pin a build with `sha-<7-char>` or that day's `nightly-YYYYMMDD`. The first GHCR
+package is private until a maintainer sets visibility to public; anonymous
+`docker pull` fails until then.
 
 ## Build from Source
 

@@ -1,0 +1,180 @@
+name: Publish GHCR nightly
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-nightly
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/xero-team/astrbot
+
+jobs:
+  publish:
+    name: Build and push nightly image
+    if: github.event_name == 'schedule' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          path: workflow
+
+      - name: Resolve build commit
+        id: resolve
+        working-directory: workflow
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          export TZ=UTC
+          mkdir -p .tmp
+          : > .tmp/nightly-commits.txt
+          git fetch --prune origin master
+          if [ "$EVENT_NAME" = 'schedule' ]; then
+            since="$(date -u -d 'yesterday' +%Y-%m-%d) 00:00:00 UTC"
+            until="$(date -u +%Y-%m-%d) 00:00:00 UTC"
+            date_tag="$(date -u -d 'yesterday' +%Y%m%d)"
+            sha="$(
+              git log --format=%H --since="$since" --until="$until" origin/master \
+                | awk 'NR==1 { print; exit }'
+            )"
+            if [ -z "$sha" ]; then
+              echo 'skip=true' >> "$GITHUB_OUTPUT"
+              echo "No master commits in yesterday UTC ($since .. $until); skipping."
+              exit 0
+            fi
+            git log --reverse --pretty=format:'%s (%h)' \
+              --since="$since" --until="$until" origin/master \
+              > .tmp/nightly-commits.txt
+            printf '\n' >> .tmp/nightly-commits.txt
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            echo "date=$date_tag" >> "$GITHUB_OUTPUT"
+            echo 'mode=schedule' >> "$GITHUB_OUTPUT"
+            echo "release_tag=nightly-${date_tag}" >> "$GITHUB_OUTPUT"
+          else
+            date_tag="$(date -u +%Y%m%d)"
+            short="$(printf '%.7s' "$HEAD_SHA")"
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+            echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+            echo "date=$date_tag" >> "$GITHUB_OUTPUT"
+            echo 'mode=dispatch' >> "$GITHUB_OUTPUT"
+            echo "release_tag=nightly-manual-${short}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out image sources
+        if: steps.resolve.outputs.skip != 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ steps.resolve.outputs.sha }}
+          path: image
+
+      - name: Compute image tags
+        if: steps.resolve.outputs.skip != 'true'
+        id: tags
+        env:
+          BUILD_SHA: ${{ steps.resolve.outputs.sha }}
+          DATE_TAG: ${{ steps.resolve.outputs.date }}
+        run: |
+          set -euo pipefail
+          short="$(printf '%.7s' "$BUILD_SHA")"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=sha-${short}" >> "$GITHUB_OUTPUT"
+          echo "date_tag=nightly-${DATE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        if: steps.resolve.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to the Container registry
+        if: steps.resolve.outputs.skip != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (labels) for Docker
+        if: steps.resolve.outputs.skip != 'true'
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=nightly
+          labels: |
+            org.opencontainers.image.source=https://github.com/Xero-Team/AstrBot
+            org.opencontainers.image.revision=${{ steps.resolve.outputs.sha }}
+
+      - name: Build and push Docker image
+        if: steps.resolve.outputs.skip != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: image
+          file: image/Dockerfile
+          target: runtime
+          push: true
+          provenance: false
+          platforms: linux/amd64
+          build-args: |
+            ASTRBOT_FEATURES=full
+          tags: |
+            ${{ env.IMAGE_NAME }}:nightly
+            ${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }}
+            ${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_tag }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write release notes
+        if: steps.resolve.outputs.skip != 'true'
+        working-directory: workflow
+        env:
+          BUILD_SHA: ${{ steps.resolve.outputs.sha }}
+          MODE: ${{ steps.resolve.outputs.mode }}
+          DATE_TAG: ${{ steps.tags.outputs.date_tag }}
+          SHA_TAG: ${{ steps.tags.outputs.sha_tag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/nightly_release_notes.py \
+            --image ghcr.io/xero-team/astrbot \
+            --tag nightly \
+            --tag "$DATE_TAG" \
+            --tag "$SHA_TAG" \
+            --sha "$BUILD_SHA" \
+            --mode "$MODE" \
+            --commits-file .tmp/nightly-commits.txt \
+            --output .tmp/nightly-notes.md
+
+      - name: Publish GitHub prerelease
+        if: steps.resolve.outputs.skip != 'true'
+        working-directory: workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.resolve.outputs.release_tag }}
+          BUILD_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release create "$RELEASE_TAG" \
+            --prerelease \
+            --title "$RELEASE_TAG" \
+            --notes-file .tmp/nightly-notes.md \
+            --target "$BUILD_SHA" \
+            --repo "$GITHUB_REPOSITORY"

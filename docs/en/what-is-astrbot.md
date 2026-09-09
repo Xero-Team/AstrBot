@@ -29,14 +29,14 @@ This documentation is divided into the following sections:
 
 ## Distribution Boundary
 
-This fork currently publishes no independent PyPI package, GitHub release assets, desktop build, or container image. The following install sources belong to upstream AstrBot or third parties and are not builds of this branch:
+This fork currently publishes no independent PyPI package, desktop build, or versioned release image. An optional GHCR nightly (`ghcr.io/xero-team/astrbot:nightly`) tracks `master` and is not a stable release channel. The following install sources belong to upstream AstrBot or third parties and are not builds of this branch:
 
 - `uv tool install astrbot` and `uv tool upgrade astrbot`;
 - AUR packages named after AstrBot;
 - images such as `soulter/astrbot`;
 - Dashboard assets from upstream releases; startup entry points neither download nor use them.
 
-Use the current checkout for source deployments, or build the root `Dockerfile` through `compose.yml` or `compose-with-napcat.yml`. Source deployments bind the WebUI to `127.0.0.1:6185` by default. The Compose files explicitly set the container listener to `0.0.0.0` while keeping host ports on loopback; remote publishing requires `ASTRBOT_BIND_ADDRESS` plus firewall and reverse-proxy protection.
+Use the current checkout for source deployments. Repository Compose still source-builds the root `Dockerfile` as `astrbot:local`. Production hosts may instead pull the nightly image and skip a local compile. Source deployments bind the WebUI to `127.0.0.1:6185` by default. The Compose files explicitly set the container listener to `0.0.0.0` while keeping host ports on loopback; remote publishing requires `ASTRBOT_BIND_ADDRESS` plus firewall and reverse-proxy protection.
 
 ## How It Works
 

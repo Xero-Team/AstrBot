@@ -13,7 +13,7 @@ stays in `SKILL.md`. Cite `AGENTS.md`, `GOVERNANCE.md`, and
 | Upstream provenance | `AstrBotDevs/AstrBot` (sync source only)                          |
 | Issue templates     | `.github/ISSUE_TEMPLATE/{bug_report,feature_request,task}.yml`    |
 | PR templates        | `.github/PULL_REQUEST_TEMPLATE/{feat,fix,docs,refactor,chore}.md` |
-| Published artifacts | none                                                              |
+| Published artifacts | optional GHCR nightly (`ghcr.io/xero-team/astrbot`)               |
 | Docs                | in-app `/help/`                                                   |
 | Python floor        | `>=3.14`; pin in `.python-version`                                |
 

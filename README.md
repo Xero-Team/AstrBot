@@ -78,9 +78,9 @@ If you enable local text-to-image or plugin HTML rendering, also run `uv run ast
 
 ### Docker Deployment
 
-This fork does not publish an official prebuilt image. Build from the current checkout. Compose binds the containerized Dashboard to `0.0.0.0`, while host ports bind to `127.0.0.1` by default. For remote access, explicitly set `ASTRBOT_BIND_ADDRESS=0.0.0.0` and configure a firewall or HTTPS reverse proxy.
+Repository Compose still source-builds the current checkout as `astrbot:local`. A scheduled GHCR nightly (`ghcr.io/xero-team/astrbot:nightly`) is an optional pull path for hosts that should not compile locally; it is not a versioned release. Compose binds the containerized Dashboard to `0.0.0.0`, while host ports bind to `127.0.0.1` by default. For remote access, explicitly set `ASTRBOT_BIND_ADDRESS=0.0.0.0` and configure a firewall or HTTPS reverse proxy.
 
-Then build and start it:
+Then build and start from this checkout:
 
 ```bash
 git clone https://github.com/Xero-Team/AstrBot.git

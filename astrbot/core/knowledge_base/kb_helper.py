@@ -35,8 +35,11 @@ from ._kb_helper_cleaning import (
 )
 from ._kb_helper_url_import import (
     build_url_document_name,
+    canonical_url,
     extract_url_content,
     get_tavily_keys,
+    hash_extracted_text,
+    url_identity_key,
 )
 from .chunking.base import BaseChunker
 from .chunking.markdown import MarkdownChunker
@@ -1321,15 +1324,19 @@ class KBHelper:
             ValueError: 如果 URL 为空或无法提取内容
             IOError: 如果网络请求失败
         """
+        canonical = canonical_url(url)
+        identity_key = url_identity_key(canonical)
         tavily_keys = get_tavily_keys(self.prov_mgr.acm.default_conf)
         text_content = await extract_url_content(
             url=url,
             tavily_keys=tavily_keys,
             progress_callback=progress_callback,
         )
+        source_bytes = text_content.encode("utf-8")
+        content_hash = hash_extracted_text(text_content)
         final_chunks = await self._clean_and_rechunk_content(
             content=text_content,
-            url=url,
+            url="url-import",
             progress_callback=progress_callback,
             enable_cleaning=enable_cleaning,
             cleaning_provider_id=cleaning_provider_id,
@@ -1353,6 +1360,11 @@ class KBHelper:
             max_retries=max_retries,
             progress_callback=progress_callback,
             pre_chunked_text=final_chunks,
+            identity_key=identity_key,
+            source_kind="url",
+            source_url=canonical,
+            content_hash=content_hash,
+            source_bytes=source_bytes,
         )
 
     async def _chunk_content_without_cleaning(

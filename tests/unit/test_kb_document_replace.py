@@ -214,3 +214,99 @@ async def test_listed_document_omits_file_path_and_marks_source_stored(kb_helper
     assert payload["ingest_status"] == "created"
     blob = helper.kb_files_dir / result.document.doc_id
     assert blob.is_file()
+
+
+def _enable_tavily(helper: KBHelper) -> None:
+    helper.prov_mgr.acm = MagicMock()
+    helper.prov_mgr.acm.default_conf = {
+        "provider_settings": {"websearch_tavily_key": ["test-key"]}
+    }
+
+
+@pytest.mark.asyncio
+async def test_url_import_replaces_by_canonical_url(kb_helper, monkeypatch):
+    helper, _embedding = kb_helper
+    _enable_tavily(helper)
+    pages = iter(["first extracted unique page", "second extracted unique page"])
+
+    async def fake_extract(*, url, tavily_keys, progress_callback=None):
+        return next(pages)
+
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.kb_helper.extract_url_content",
+        fake_extract,
+    )
+    first = await helper.upload_from_url("http://example.com/a")
+    second = await helper.upload_from_url("http://example.com/a#x")
+    assert first.document.doc_id == second.document.doc_id
+    assert second.ingest_status == "replaced"
+    assert second.document.source_url == "http://example.com/a"
+    joined = "\n".join(await _chunk_texts(helper, first.document.doc_id))
+    assert "second extracted unique page" in joined
+    assert "first extracted unique page" not in joined
+
+
+@pytest.mark.asyncio
+async def test_url_scheme_keeps_http_and_https_distinct(kb_helper, monkeypatch):
+    helper, _embedding = kb_helper
+    _enable_tavily(helper)
+    pages = iter(["http page unique", "https page unique"])
+
+    async def fake_extract(*, url, tavily_keys, progress_callback=None):
+        return next(pages)
+
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.kb_helper.extract_url_content",
+        fake_extract,
+    )
+    http_doc = await helper.upload_from_url("http://Example.com/a")
+    https_doc = await helper.upload_from_url("https://example.com/a#frag")
+    assert http_doc.document.doc_id != https_doc.document.doc_id
+    assert http_doc.ingest_status == "created"
+    assert https_doc.ingest_status == "created"
+
+
+@pytest.mark.asyncio
+async def test_url_extract_failure_does_not_delete_previous(kb_helper, monkeypatch):
+    helper, _embedding = kb_helper
+    _enable_tavily(helper)
+
+    async def first_extract(*, url, tavily_keys, progress_callback=None):
+        return "keep this extracted unique page"
+
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.kb_helper.extract_url_content",
+        first_extract,
+    )
+    first = await helper.upload_from_url("https://example.com/keep")
+
+    async def fail_extract(*, url, tavily_keys, progress_callback=None):
+        raise OSError("Failed to extract content from URL")
+
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.kb_helper.extract_url_content",
+        fail_extract,
+    )
+    with pytest.raises(OSError, match="Failed to extract content from URL"):
+        await helper.upload_from_url("https://example.com/keep")
+    joined = "\n".join(await _chunk_texts(helper, first.document.doc_id))
+    assert "keep this extracted unique page" in joined
+    live = await helper.get_document(first.document.doc_id)
+    assert live is not None
+
+
+@pytest.mark.asyncio
+async def test_overlong_canonical_url_fails_before_replace(kb_helper, monkeypatch):
+    helper, embedding = kb_helper
+    _enable_tavily(helper)
+    extract = AsyncMock(return_value="should not extract")
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.kb_helper.extract_url_content",
+        extract,
+    )
+    helper.upload_document = AsyncMock()
+    with pytest.raises(ValueError, match="too long"):
+        await helper.upload_from_url("https://example.com/" + ("a" * 2100))
+    extract.assert_not_awaited()
+    helper.upload_document.assert_not_awaited()
+    assert embedding.embed_calls == 0

@@ -158,7 +158,7 @@ function appendLogContent(element: HTMLPreElement, log: string): void {
     /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
   );
   if (levelMatch?.index === undefined) {
-    element.innerText = log;
+    element.textContent = log;
     return;
   }
 
@@ -169,15 +169,15 @@ function appendLogContent(element: HTMLPreElement, log: string): void {
 
   const prefixSpan = document.createElement('span');
   prefixSpan.className = 'console-log-prefix';
-  prefixSpan.innerText = prefix;
+  prefixSpan.textContent = prefix;
 
   const levelSpan = document.createElement('span');
   levelSpan.className = 'console-log-level';
-  levelSpan.innerText = levelMatch[0];
+  levelSpan.textContent = levelMatch[0];
 
   const messageSpan = document.createElement('span');
   messageSpan.className = 'console-log-message';
-  messageSpan.innerText = message;
+  messageSpan.textContent = message;
 
   element.classList.add('console-log-line--structured');
   element.appendChild(prefixSpan);
@@ -185,12 +185,7 @@ function appendLogContent(element: HTMLPreElement, log: string): void {
   element.appendChild(messageSpan);
 }
 
-function printLog(log: string): void {
-  const target = termElement.value;
-  if (!target) {
-    return;
-  }
-
+function buildLogElement(log: string): HTMLPreElement {
   const span = document.createElement('pre');
   let normalizedLog = log;
   let style = logColorAnsiMap.default;
@@ -207,7 +202,19 @@ function printLog(log: string): void {
   span.style.cssText = style;
   span.classList.add('console-log-line', 'fade-in');
   appendLogContent(span, normalizedLog);
-  target.appendChild(span);
+  return span;
+}
+
+function appendLogBatch(logs: string[]): void {
+  const target = termElement.value;
+  if (!target || logs.length === 0) {
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const log of logs) {
+    fragment.appendChild(buildLogElement(log));
+  }
+  target.appendChild(fragment);
   if (props.autoScroll) {
     target.scrollTop = target.scrollHeight;
   }
@@ -218,12 +225,10 @@ function refreshDisplay(): void {
   if (!target) {
     return;
   }
-  target.innerHTML = '';
-  for (const logItem of localLogCache.value) {
-    if (isVisible(logItem)) {
-      printLog(logItem.data);
-    }
-  }
+  target.replaceChildren();
+  appendLogBatch(
+    localLogCache.value.filter(isVisible).map((logItem) => logItem.data),
+  );
 }
 
 function processNewLogs(newLogs: unknown[]): void {
@@ -232,6 +237,7 @@ function processNewLogs(newLogs: unknown[]): void {
   }
 
   let hasUpdate = false;
+  const visibleLogs: string[] = [];
 
   for (const rawLog of newLogs) {
     const log = normalizeLogEntry(rawLog);
@@ -250,7 +256,7 @@ function processNewLogs(newLogs: unknown[]): void {
       hasUpdate = true;
 
       if (isVisible(log)) {
-        printLog(log.data);
+        visibleLogs.push(log.data);
       }
     }
   }
@@ -258,6 +264,8 @@ function processNewLogs(newLogs: unknown[]): void {
   if (!hasUpdate) {
     return;
   }
+
+  appendLogBatch(visibleLogs);
 
   localLogCache.value.sort((a, b) => a.time - b.time);
 

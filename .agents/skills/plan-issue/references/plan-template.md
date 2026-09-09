@@ -1,7 +1,8 @@
 # Plan template
 
-Write `PLAN.md` in English. Keep paths, commands, APIs, and error
-strings verbatim. Copy this skeleton; delete unused optional sections.
+Default `PLAN.md` to English unless the user requests another language. Keep
+the required English headings and verbatim paths, commands, APIs, and error
+strings. Copy this skeleton; delete unused optional sections.
 
 ````markdown
 # <Title> Implementation Plan
@@ -13,9 +14,8 @@ strings verbatim. Copy this skeleton; delete unused optional sections.
 **Architecture:** 2–3 sentences
 **Recommended approach:** name, why it wins, what was rejected
 **Depth:** `small` / `medium` / `large` / `complex`
-**Probe:** quiz `pass` / `fail` / `override` / `skipped`; user picked
-`surgical` or `better`, or skipped probe defaulted to `surgical`; job
-statement from `REFLECT.md`
+**Probe:** `skipped` for direct planning, or guided quiz verdict
+`pass` / `fail` / `override`; reason and selected approach from `REFLECT.md`
 
 ## Constraints
 
@@ -94,8 +94,8 @@ Non-blocking assumptions only. Blocking questions belong in
   reject on its own.
 - Name files and symbols. Add a short code sketch only for a new
   contract (function signature, schema field, event name). Prefer
-  existing seams; do not invent a new one unless the user picked
-  `better` and two real adapters already exist.
+  existing interfaces; justify any new one with current consumers and
+  the requested behavior rather than hypothetical adapters.
 - Every task has **Files**, **Acceptance**, and **Verify** with a real
   command from `REFERENCE.md`. **Blocked by** is required when tasks
   are not a linear chain.

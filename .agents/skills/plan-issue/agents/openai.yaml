@@ -1,7 +1,7 @@
 interface:
-  display_name: 'Plan an Issue'
-  short_description: 'Turn a GitHub Issue into a code-backed implementation plan'
-  default_prompt: 'Use $plan-issue to research this checkout, clarify the request unless the user explicitly skipped probe, and write a file-path-and-verify plan under .tmp/issue-plan/. Do not implement until the plan is approved. Cite AGENTS.md; do not paste it. Do not vendor third-party planning skill trees.'
+  display_name: 'Plan an AstrBot Issue'
+  short_description: 'Turn an issue or request into a verifiable code plan'
+  default_prompt: 'Use $plan-issue to research this request and write a validated implementation plan under .tmp/issue-plan/, asking only about unresolved decisions that change the result.'
 
 policy:
   allow_implicit_invocation: true

@@ -6,8 +6,9 @@ do not ask the user what a grep can answer.
 
 ## Language
 
-Write `RESEARCH.md` in Simplified Chinese. This file is the user-facing
-research report. `PLAN.md` stays English for the executor.
+Default `RESEARCH.md` to Simplified Chinese and `PLAN.md` to English for the
+executor. Respect an explicitly requested artifact language; keep the English
+headings required by the validator.
 
 Keep verbatim: paths, symbols, commands, APIs, error strings, SHAs,
 URLs, and the English H2 headings listed in the shape below. On first
@@ -15,13 +16,11 @@ use of a domain term, write `中文（English）`. Later mentions may use
 either form. Do not machine-translate the Issue body; quote it, then
 explain.
 
-When research completes, present that Chinese report in chat (full file
-or a dense section-by-section digest). Do not switch the file to
-English.
+When research completes, link the report and summarize the relevant findings
+in the user's language. Do not paste the full artifact into chat.
 
-Do not write a one-sentence section. Each heading below is a section
-with the bullets in the shape. A skim that only names a package is not
-done.
+Scale each section to its evidence. A short section is sufficient when it
+answers the question; package names alone do not establish behavior.
 
 ## Read the request
 
@@ -271,12 +270,11 @@ cannot apply, and say why. H2 titles stay English for the validator.
 
 ## Open questions
 
-只留研究阶段仍缺证据的问题。决策类问题留给 grill，不要写进这里充数。
+只留研究阶段仍缺证据的问题。需要用户决定的问题记入 `QUESTIONS.md`。
 没有则写「无」。
 ```
 
-After a `continue` verdict, load `references/probe.md`. Do not grill or
-write `PLAN.md` until brief, quiz, and reflect are done, unless the
-user explicitly skipped probe. On skip, write `BRIEF.md` and
-`REFLECT.md` without waiting, write `QUIZ.md` with verdict `skipped`,
-then write `PLAN.md`.
+After a `continue` verdict, load `references/probe.md`. In default direct
+mode, write concise `BRIEF.md` and `REFLECT.md` records, `QUIZ.md` with
+verdict `skipped`, and `QUESTIONS.md` with the reason and any material choices.
+Then write `PLAN.md`. Use a guided interview only when requested.

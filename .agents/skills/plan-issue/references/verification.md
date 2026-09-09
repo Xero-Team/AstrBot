@@ -31,8 +31,9 @@ zero-coverage requirements are BLOCKING.
    scope with a reason. Every coverage-ledger row is answered or
    explicitly open in the plan's Open questions.
 2. **Evidence:** current-behavior claims cite `path:line` that this
-   session read. RESEARCH.md is a detailed Chinese report (search log,
-   per-row coverage notes, named impact paths), not a heading skim.
+   session read. RESEARCH.md includes a search log, per-row coverage notes,
+   and named impact paths. Its default prose language is Chinese unless the
+   user requested another language.
    Inference is labeled as inference. Empty search is not treated as
    absence without a second surface.
 3. **Redundancy:** the plan does not rebuild an existing path.
@@ -51,20 +52,18 @@ zero-coverage requirements are BLOCKING.
    recommendation). No new dependencies without a stated need, no
    PyPI / image / `docs.astrbot.app` claims. No new seam unless two
    real adapters already exist or the path is `better` for that reason.
-9. **Probe:** `BRIEF.md` matches the plan's problem. Quiz verdict
-   `fail` without `override` must not treat the Issue body as the spec;
-   the plan must follow the inferred **job** the user confirmed.
-   `skipped` is valid only after an explicit waiver; then the plan
-   follows `REFLECT.md`'s recommendation (default `surgical`) and
-   leftover unknowns are Open questions, not silent drops. Grill
-   questions that were asked include a recommended answer.
-   Outstanding grill categories (when probe ran) are Open questions.
+9. **Decisions:** `BRIEF.md` matches the requested outcome. `skipped` is valid
+   for direct planning or a user-ended interview, with the reason recorded in
+   `QUESTIONS.md`. Never fabricate a waiver, answer, or path selection.
+   The plan follows the user's decisions and `REFLECT.md`'s recommendation;
+   unresolved non-blocking choices remain Open questions. A guided quiz score
+   does not replace concrete acceptance criteria or resolve a contradiction.
 10. **Impact:** callers, configs, tests, and bilingual docs from the
     research impact surface are tasks or explicit out-of-scope.
 11. **Consistency:** symbol names and `path:line` cites do not drift
-    across RESEARCH / BRIEF / REFLECT / PLAN. RESEARCH prose is
-    Simplified Chinese; BRIEF / REFLECT / PLAN stay English — that
-    split is not drift. Vague adjectives (fast, robust, intuitive) in
+    across RESEARCH / BRIEF / REFLECT / PLAN. Different artifact languages
+    are not drift; keep required headings and code identifiers stable.
+    Vague adjectives (fast, robust, intuitive) in
     Desired behavior without a measurable outcome are BLOCKING.
 12. **Bug loop:** a `bug` plan names the red-capable command from
     research. A missing loop is BLOCKING.
@@ -83,19 +82,20 @@ Empty BLOCKING is good if you actually checked.
 
 - A task says "add tests" without a test path and command
 - A task is "implement the feature"
-- Approaches were not compared on `medium` / `large` / `complex` work
-  with probe required
+- A material architecture choice lacks a rationale or remains unresolved
 - The Issue is a vulnerability
 - The only proof is `make check` on a behavior change
 - The plan implements the ticket patch after reflection showed a
   different job and the chosen path is `better`
 - A requirement has no task and is not in Out of scope
 - A `Modify:` path does not exist
-- Probe ran and grill coverage still has Outstanding rows that would
-  change architecture or acceptance
+- Decision coverage still has unresolved contradictions that would change
+  architecture or acceptance
 - Quiz verdict is `skipped` but the workspace `probe` is not `skipped`
 
 ## After a pass
 
-Show the workspace path. Ask for approval. Do not implement in the
-same turn.
+Show the workspace path and validation result. A planning-only request ends
+with the plan. Continue implementation if it was already authorized in this
+conversation and no blocking decision remains. Ask once for new authorization
+only when needed, after the plan is concrete and reviewable.

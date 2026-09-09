@@ -1,397 +1,127 @@
-# Brief, quiz, and reflect
+# Clarify and compare approaches
 
-Load this after `RESEARCH.md` and before grilling. Do not skip because
-the user opened the Issue or "already knows the codebase". Write the
-artifacts, then wait. Do not write `PLAN.md` in this phase unless probe
-was explicitly skipped.
+Use research and the user's stated goal to resolve the plan. Direct planning
+is the default; a guided interview is available when requested. Both Codex CLI
+and OpenCode use the same workspace fields and validator.
 
-Invariants in `AGENTS.md` stay locked even when reflection recommends a
-larger change: Python 3.14+, no legacy shims, no public security Issue,
-no fork publish/docs URL claims. `AGENTS.md` is the constitution and
-ADR stand-in. Do not create `CONTEXT.md` or `docs/adr/`.
+Facts about code are the agent's responsibility. Ask the user for decisions
+that change scope, architecture, behavior, or acceptance. Do not test their
+repository knowledge as a prerequisite to producing a plan.
 
-Facts about this tree stay the agent's job. Do not quiz or grill a
-lookup. Decisions (scope, architecture, acceptance) are the user's.
+## Direct planning
 
-## Skip
+Initialize with `--skip-probe`, or select direct mode for an existing workspace:
 
-Probe is **required** until the user waives it in this conversation.
-Valid waivers name skipping the Q&A: `skip probe`, `skip quiz`,
-`skip the questions`, `just write the plan`, `跳过问答`, `跳过提问`,
-`直接出方案`, or a clear synonym of those. Filing a ticket, calling
-the change small, or claiming tree knowledge is not a waiver.
-
-On skip:
-
-1. Run `python .agents/skills/plan-issue/scripts/issue_plan.py skip-probe`
-   (or pass `--skip-probe` on `init` if the waiver already happened).
-2. Write `BRIEF.md` from research. Do not wait for framing acceptance.
-3. Write `QUIZ.md` with `**Total:** 0/10` and `**Verdict:** skipped`.
-   Do not invent five questions. If some answers already exist, keep
-   them and mark the rest skipped.
-4. Write `REFLECT.md` with both paths. Default the recommendation to
-   `surgical` unless the request already picked `better` or `stop`.
-   Do not wait for a pick.
-5. Write `QUESTIONS.md` with `**Probe:** skipped` and the waiver
-   phrase. Score coverage from research (Clear when already answered).
-   Put leftover unknowns in the plan's Open questions. Do not grill.
-6. Continue to `PLAN.md`.
-
-The hard approval gate after the plan still applies.
-
-## Depth
-
-Set this in `RESEARCH.md` after the coverage ledger. Probe still runs
-unless the user explicitly skipped it.
-
-| Depth     | When                                         | After probe                                              |
-| --------- | -------------------------------------------- | -------------------------------------------------------- |
-| `small`   | ≤3 files, one sentence of change             | Skip 2–3 approach variants. One or two tasks.            |
-| `medium`  | Clear feature, under ~10 tasks               | Variants only if architecture forks.                     |
-| `large`   | Multi-owner or independently testable slices | Variants required. Capability map if slices diverge.     |
-| `complex` | Ambiguity, new domain, or fog past one plan  | Implicit-requirement sweep. Map fog before a giant plan. |
-
-Safety valve: if an implicit task list would exceed five steps, write
-formal tasks even if depth was `small`.
-
-A **capability map** is vertical slices plus blocking edges, each sized
-to one executor session. Do not pre-slice fog you cannot yet phrase as
-a sharp question. Out of scope is not fog.
-
-## 2. Brief
-
-Tell the user what problem this run is actually about, in this checkout,
-not a restatement of the Issue title.
-
-Write `BRIEF.md` and paste the same short block in chat:
-
-```markdown
-# Brief
-
-**Problem:** one paragraph: who is blocked, what fails or is missing now
-**Owner:** module id + primary path from research
-**Not the problem:** one or two nearby requests this Issue is not
+```bash
+uv run python .agents/skills/plan-issue/scripts/issue_plan.py skip-probe
 ```
 
-Stop. Wait for the user to accept the framing, reject it, or correct it.
-If they reject it, update `RESEARCH.md` / `BRIEF.md` and brief again.
-Do not start the quiz on a disputed problem.
+Write the following records concisely; they do not require separate approval:
 
-## 3. Quiz
+1. `BRIEF.md`: `**Problem:**` with the affected user, present behavior, and
+   desired outcome; name the runtime owner from research.
+2. `QUIZ.md`: record that no guided interview was used. Preserve any real
+   answers from an earlier guided phase, but do not invent questions.
+3. `REFLECT.md`: compare the current-path change with any justified alternative
+   using the headings below. If a larger design has no benefit, say so.
+4. `QUESTIONS.md`: record `**Probe:** skipped` and the actual reason, such as
+   direct planning, sufficient request detail, or an explicit user preference.
+   Include decisions already answered and remaining assumptions.
 
-Probe tree understanding **and** real intent. Ask **five** multiple-choice
-questions, **one per message**. Ground A–D in `RESEARCH.md`. Do not ask
-who owns the code; the brief already stated the owner. Do not ask
-generic process trivia. Do not reveal which option is tree-correct.
-
-Cover these five slots, adapted to this Issue:
-
-| #   | Slot         | What the choices distinguish                              |
-| --- | ------------ | --------------------------------------------------------- |
-| 1   | Current path | What happens now on the relevant happy or failure path    |
-| 2   | Invariant    | A do-not-restore or security lock a naive fix would break |
-| 3   | Done         | Who is unblocked and one observable that proves it        |
-| 4   | Wrong fix    | A related-looking change that is the wrong design here    |
-| 5   | Intent       | What they actually want if it is not the ticket's patch   |
-
-Every question is A/B/C/D. Exactly one option may be tree-correct on
-slots 1–4. Put diagnostic distractors on those slots (legacy restore,
-wrong layer, extra subsystem, different user-facing goal). Tag each
-chosen distractor with an intent signal in `QUIZ.md`. Slot 5 has **no**
-tree-correct answer: it is a preference.
-
-Chat shape:
-
-```markdown
-After a group mention with `llm_access.group` off, what happens now?
-
-A. ...
-B. ...
-C. ...
-D. ...
-
-Reply with A, B, C, or D.
-```
-
-If they type prose instead of a letter, map it to an option or ask them
-to pick one. After each answer, score silently; do not debate mid-quiz
-unless they ask to stop.
-
-### Rubric
-
-Slots 1–4 (tree):
-
-| Score | When                                                         |
-| ----- | ------------------------------------------------------------ |
-| 2     | Picked the tree-correct option                               |
-| 1     | Near-miss: right area, missed the invariant or path          |
-| 0     | Contradicts the tree, restores a removed surface, or no pick |
-
-Slot 5 (intent):
-
-| Score | When                                                                               |
-| ----- | ---------------------------------------------------------------------------------- |
-| 2     | One clear goal (surgical patch, structural change, or a different product outcome) |
-| 1     | Hedge / "both" / conflicts with their slot 1–4 signals                             |
-| 0     | "Whatever the Issue says" with no preference, or refuses to pick                   |
-
-Record **intent signals** from every answer, including 2-point tree
-answers (ticket-literal is itself a signal). These feed reflection.
-
-**Total** is `/10`. **Expected understanding** is **7/10**.
-
-| Verdict    | Total       | Effect                                                     |
-| ---------- | ----------- | ---------------------------------------------------------- |
-| `pass`     | >= 7        | Issue text may stay the working spec                       |
-| `fail`     | <= 6        | Do not treat the Issue body as the spec                    |
-| `override` | any         | User said proceed anyway after seeing the score            |
-| `skipped`  | 0 / partial | User waived probe. Issue body is not proven understanding. |
-
-On `fail`, say which slots scored 0/1 and what the tree actually does.
-Offer retry (new five) or `override`. Still run reflection: answers and
-intent signals outweigh the ticket wording when they disagree.
-
-Write `QUIZ.md`:
-
-```markdown
-# Quiz
-
-**Total:** 6/10
-**Verdict:** fail
-**Intent:** wants-operator-ui; ticket-literal on path
-
-### Question 1: Current path
-
-**Asked:** ...
-**Options:** A ... / B ... / C ... / D ...
-**Answer:** C
-**Score:** 0
-**Intent signal:** wants-legacy-compat
-**Note:** picked restore of `group_wake_policy`
-```
-
-Skipped stub:
+The quiz record is:
 
 ```markdown
 # Quiz
 
 **Total:** 0/10
 **Verdict:** skipped
-**Reason:** user explicitly skipped probe
+**Reason:** direct planning; no guided interview requested
 ```
 
-## 4. Reflect
+`0/10` is a mechanical field for the skipped record, not a user assessment.
+Skipping an interview does not resolve a blocking product choice. Ask that
+choice while continuing independent work; put non-blocking unknowns in the
+plan's Open questions.
 
-Use `RESEARCH.md`, the accepted brief, the quiz answers, and the intent
-signals. Infer the user's actual goal even when it diverges from the
-Issue. Then ask whether this checkout has a better way to reach that
-goal than the ticket's proposed patch.
+## Depth
 
-### Job (JTBD)
+Record depth in `RESEARCH.md` and scale the plan to the actual change:
 
-State the job as **verb + object + contextual clarifier**, with no
-product or proposed patch in it. Example: _record why a group message
-woke the bot_, not _add a wake_reasons field_. Name the executor
-(operator, plugin author, Dashboard user). The ticket text is a
-solution candidate, not the job.
+| Depth     | Typical scope                          | Design detail                                 |
+| --------- | -------------------------------------- | --------------------------------------------- |
+| `small`   | One behavior, a few files              | One approach and one or two tasks             |
+| `medium`  | A bounded feature                      | Compare meaningful architecture choices       |
+| `large`   | Several owners or independent slices   | Vertical slices with explicit dependencies    |
+| `complex` | Unresolved behavior or a new subsystem | Resolve blocking questions before task detail |
 
-### Why-chain
+Use a capability map when dependent slices would otherwise be hard to follow.
+Do not invent alternatives or requirements to fill a quota.
 
-Run Five Whys on the **request**, not only on bugs. Each why drills
-into the previous answer; do not list sibling complaints. Stop at an
-**executable root**: a code, test, design, or process change in this
-checkout. "The Issue asked for it" is a symptom. If Why 5 is still the
-ticket's patch, you stopped too early.
+## Reflection record
 
-Keep competing intent hypotheses (`CONFIRMED` / `REJECTED` /
-`UNRESOLVED`) from quiz distractors and the why-chain. The surgical
-path is the proximate fix; the better path must serve the job.
-
-### Paths
-
-In this step, **any current-path redesign is in play**: move an owner,
-delete a split, change a contract, collapse a stage, replace a store,
-re-cut a Dashboard surface. Give reasons from structure, not taste.
-Surgical remains the default recommendation unless a larger change
-removes a real invariant violation, a duplicated owner, or a design that
-cannot meet the inferred goal without more shims.
-
-Score each candidate with the **deletion test**: if deleting the module
-makes complexity vanish, it is a pass-through; if complexity reappears
-across N callers, it earns its keep. Deepening pays off on **hot spots**
-(`git log` files that keep changing), not cold code. **One adapter is a
-hypothetical seam; two adapters make a real one.** Do not add a seam
-only so a test can mock it.
-
-Label the better path:
-
-- **Surgical refactor:** behavior-preserving. Prefactor first, then the
-  feature, in separate tasks. Do not mix them.
-- **Redesign:** observable behavior changes. Say so. Prefer existing
-  seams; fewer seams is better (ideally one).
-
-Present candidates as cards, not essays:
-
-- **Files** involved
-- **Problem** (friction, shallowness, leaked seam)
-- **Solution** in plain English; no new interface yet
-- **Benefits** in locality, leverage, and how tests improve
-- **Strength** `strong` / `worth exploring` / `speculative`
-
-If a candidate contradicts `AGENTS.md` or a changelog fork deviation,
-only surface it when the friction is real enough to reopen. Mark that
-conflict on the card. Do not list every theoretical refactor those
-locks forbid.
-
-Still forbidden as "better": restoring legacy APIs, Python 3.10–3.13
-branches, weakening TLS/MCP/auth/`v-html` locks, or treating upstream
-artifacts as fork artifacts. Do not propose interfaces until the user
-picks a card.
-
-Write `REFLECT.md` and present it in chat:
+Use these headings, which the workspace validator checks:
 
 ```markdown
 # Reflect
 
 ## Inferred goal
 
-One paragraph. Job statement. Separate ticket text from what the quiz
-revealed.
+The user's desired outcome and relevant context. Distinguish explicit intent
+from an assumption; do not replace the request with an inferred larger project.
 
 ## Why-chain
 
-Why 1 … Why 5. Root cause and the executable change it implies.
-
-## Intent hypotheses
-
-| Hypothesis           | Verdict  | Signal                   |
-| -------------------- | -------- | ------------------------ |
-| ticket-literal patch | REJECTED | slot 5 picked structural |
+Explain the observed problem and the executable change that addresses it.
+Trace further only when the cause remains uncertain.
 
 ## Surgical path
 
-The smallest current-path change that satisfies the ticket as written.
-Name owners and why it is enough, or why it is not.
+The smallest current-path change that meets the request, with owners and limits.
 
 ## Better path
 
-The strongest alternative from whole-tree structure, including
-refactors. Why it is better; what it costs; what it must not restore.
+A justified structural alternative, or why no larger change is warranted.
 
 ## Recommendation
 
-`surgical` | `better` | `stop`
-Reason. If quiz verdict is `fail`, say how that moved the inferred goal.
-
-## Depth
-
-`small` | `medium` | `large` | `complex`
+`surgical` | `better` | `stop`, with evidence and the user's relevant decisions.
 ```
 
-Stop. The user picks a direction (or amends the goal). That choice is
-an input to grilling, not a license to implement.
+Prefer existing owners and interfaces. An abstraction earns its place when it
+serves current callers or removes real duplication; do not introduce one only
+for a hypothetical adapter or a mock. Repository security and no-legacy rules
+apply to every option. Ask for a path choice only if it would materially change
+the agreed scope and the conversation does not already settle it.
 
-## 5. Grill
+## Optional guided interview
 
-Only after brief, quiz, and reflect. Skip grilling when probe is
-skipped. Otherwise ask one question at a time, and only questions that
-change scope, architecture, or acceptance.
+Use this only when the user requests a quiz or facilitated design discussion.
+Initialize without `--skip-probe`. Brief the problem, invite corrections, and
+ask issue-specific questions about current behavior, constraints, acceptance,
+design tradeoffs, and intended outcome. Use the active client's question tool
+when available; otherwise ask in chat. Accept free-text answers.
 
-### Coverage scan
+For this mode, the existing quiz validator requires five `### Question`
+sections, `**Total:** n/10`, and `**Verdict:** pass|fail|override`. Use 0–2 per
+answer to record how fully it resolves the decision, with `pass` at 7 or above.
+This measures specification completeness, not the user's code knowledge. Record
+the question, options if used, actual answer, score, and remaining uncertainty.
+Explain material conflicts directly; do not force a retry or another quiz.
 
-Internally score remaining unknowns Clear / Partial / Missing across:
-functional scope, contracts, failure paths, invariants, integrations,
-terminology, and done-when. Ask at most **five** questions, highest
-**Impact × Uncertainty** first. Skip anything a grep or `RESEARCH.md`
-already answered. If nothing material remains, write `QUESTIONS.md`
-with `none` and go to plan.
+Use `override` when the user chooses to proceed despite remaining uncertainty.
+If they end the interview, run `skip-probe`, preserve their answers, mark the
+verdict `skipped`, and continue in direct mode. Neither a score nor a path
+selection authorizes implementation or external writes.
 
-Clarify is a completeness check, not a new spec file. A question whose
-answer would not change architecture, data shape, tests, or acceptance
-is deferred, not asked.
+## Closing coverage
 
-For `large` / `complex` depth, run a closing **implicit-requirement**
-sweep. Each row is a requirement or `N/A because …`. Do not invent
-scope to fill the table.
+Record functional scope, contracts, failure paths, invariants, integrations,
+terminology, and acceptance as Clear, Resolved, Deferred, or Outstanding in
+`QUESTIONS.md`. For larger changes, check relevant input bounds, authorization,
+concurrency, state transitions, external failures, and observability.
 
-| Dimension              | Cover                                     |
-| ---------------------- | ----------------------------------------- |
-| Input bounds           | Limits, formats, sanitization             |
-| Failure / partial fail | Timeouts, rollbacks, compensating cleanup |
-| Auth / rate limits     | Who may call what                         |
-| Concurrency            | Races, ordering                           |
-| State transitions      | Valid moves, guards                       |
-| External failure       | Adapter/provider/MCP down                 |
-| Observability          | What a test or log must show              |
-
-`medium` covers only dimensions obviously present. `small` skips the
-sweep.
-
-### Question kinds
-
-Prefer a short multiple-choice when the options are known. First open
-choice, if any: surgical vs better vs stop. Then walk depth-first:
-finish a branch before opening another. If an answer contradicts an
-earlier decision, surface the conflict and resolve it before the next
-question.
-
-| Kind        | Forcing shape                                      |
-| ----------- | -------------------------------------------------- |
-| Intent      | Why this job, not the nearby one?                  |
-| Choice      | Why X and not Y?                                   |
-| Tradeoff    | Which side, and what is the deciding constraint?   |
-| Dependency  | Is the blocker locked? If not, decide that first.  |
-| Uncertainty | Even at 60% confidence, what would you pick today? |
-| Kill        | What evidence would make this path wrong?          |
-
-Soft questions ("have you thought about X?") are not allowed. Follow
-**tension** (contradiction, unstated assumption, avoided path) even if
-it jumps the category list.
-
-### Chat shape
-
-```markdown
-**Question:** If a group mention arrives with `llm_access.group` off, should the plan record wake reasons or leave the event asleep?
-
-**Why it matters:** acceptance tests and the waking-check owner change with this answer.
-
-**Recommended:** B — leave it asleep — because `AGENTS.md` already forbids implicit mention wakeup.
-
-| Option | Description                                       |
-| ------ | ------------------------------------------------- |
-| A      | Record reasons and still wake                     |
-| B      | Leave asleep; record nothing                      |
-| C      | Leave asleep; still record the suppressed reasons |
-
-Reply with A, B, C, or "recommended".
-```
-
-Record each Q/A in `QUESTIONS.md` immediately, including the
-recommendation and whether the user took it. Do not reveal the rest of
-the queue. Non-blocking leftovers become plan assumptions. If the
-request still bundles independent capabilities, propose a capability
-map before writing one giant plan.
-
-Stop grilling when remaining unknowns would not change architecture or
-acceptance, the user says proceed, or five questions are asked. Flag
-deferred high-impact items in the plan's Open questions.
-
-Write a coverage summary at the end of `QUESTIONS.md`:
-
-```markdown
-## Coverage
-
-| Category      | Status                                    |
-| ------------- | ----------------------------------------- |
-| Functional    | Resolved / Deferred / Clear / Outstanding |
-| Contracts     | …                                         |
-| Failure paths | …                                         |
-| Invariants    | …                                         |
-| Integrations  | …                                         |
-| Terminology   | …                                         |
-| Done-when     | …                                         |
-```
-
-Outstanding or Deferred high-impact rows must appear in the plan's Open
-questions. Do not start `PLAN.md` while a blocking contradiction is
-unresolved.
+Ask only about unresolved high-impact decisions. Keep non-blocking assumptions
+in the plan and continue. A blocking contradiction must be resolved before the
+plan can be described as ready to execute. Deliver the concrete plan before
+requesting any new implementation authorization; existing authorization remains
+valid across planning stages.

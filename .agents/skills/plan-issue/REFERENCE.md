@@ -44,15 +44,18 @@ Created by `scripts/issue_plan.py init` at `.tmp/issue-plan/<run-id>/`:
   BRIEF.md         # problem framing
   QUIZ.md          # five questions, scores, verdict — or skipped stub
   REFLECT.md       # JTBD, why-chain, surgical vs better path
-  QUESTIONS.md     # grill log, coverage summary, or skip record
+  QUESTIONS.md     # decisions, coverage summary, and direct/guided mode reason
   PLAN.md          # executor plan
 ```
 
 `<run-id>` is `issue-<number>` or `local-<slug>`. `.tmp/` is gitignored.
 Do not relocate the run into `docs/` or `data/`.
 
-`probe` is `required` (default) or `skipped`. Set `skipped` only after
-an explicit Q&A waiver (`init --skip-probe` or `skip-probe`).
+`probe` is `required` or `skipped`. The CLI initializes `required` unless
+passed `--skip-probe`; the skill uses that flag for its default direct
+planning workflow. Omit it for a requested guided interview. `skip-probe`
+switches an existing run to direct planning. Record the actual reason in
+`QUESTIONS.md`; an explicit user waiver is not required.
 
 If `status` shows an in-progress run at the same SHA and same issue or
 slug, resume it. If the SHA drifted, start a new run and say so. Do not

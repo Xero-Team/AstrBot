@@ -619,7 +619,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument(
         "--skip-probe",
         action="store_true",
-        help="record an explicit user waiver of brief/quiz/reflect/grill",
+        help="use direct planning without a guided interview",
     )
     init.set_defaults(func=cmd_init)
 
@@ -638,7 +638,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     skip_probe = sub.add_parser(
         "skip-probe",
-        help="record an explicit user waiver of brief/quiz/reflect/grill",
+        help="switch an existing workspace to direct planning",
     )
     skip_probe.set_defaults(func=cmd_skip_probe)
     return parser

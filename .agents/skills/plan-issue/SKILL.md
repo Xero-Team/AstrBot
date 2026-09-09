@@ -1,296 +1,147 @@
 ---
 name: plan-issue
-description: >
-  Turn a GitHub Issue or a pasted change request into a code-backed
-  implementation plan for this Xero-Team/AstrBot checkout. Use when the
-  user asks to plan, shape, triage, spec, or turn an issue into tasks —
-  even if they say 方案, 规划, or 可落地. Do not use for plugin scaffolding,
-  upstream cherry-pick, product audits, or starting implementation.
+description: Turn an AstrBot GitHub Issue or change request into a code-backed implementation plan with file paths, acceptance criteria, and verification commands. Use when planning, triage, or a specification is requested; not for direct implementation, plugin scaffolding, upstream sync, or product audits.
 license: AGPL-3.0-or-later
 compatibility: >
-  Requires this Xero-Team/AstrBot checkout, Python 3.14+, git, and gh
-  when fetching a GitHub Issue. Working state lives under .tmp/issue-plan/.
+  Codex CLI or OpenCode in the Xero-Team/AstrBot checkout. Requires
+  Python 3.14+, git, and gh when fetching a GitHub Issue.
 metadata:
   author: Xero-Team
   checkout: Xero-Team/AstrBot
 ---
 
-# Plan an Issue against this checkout
+# Plan an AstrBot issue
 
-Convert an Issue or pasted request into a plan an executor can follow
-without the planning chat. Ground every claim in this worktree. Stop at
-the written plan unless the user approved implementation in this
-conversation.
+Deliver a plan an executor can follow without the planning conversation. Ground
+it in this worktree, name the relevant files and symbols, and explain how each
+task will be verified. A planning request ends with the validated plan. If the
+user already authorized implementation after planning in this conversation,
+continue with that work once the plan is concrete and no blocking choice remains.
 
-Cite `AGENTS.md`, `GOVERNANCE.md`, `AI_POLICY.md`, this folder's
-`REFERENCE.md`, and `references/sources.md`. Do not paste those files.
-Do not vendor third-party planning skill trees into `.agents/skills/`.
+Follow `AGENTS.md`, `GOVERNANCE.md`, and `AI_POLICY.md`. Cite those policies
+instead of copying them into the plan. Keep working state under
+`.tmp/issue-plan/<run-id>/`; do not create planning trees under `docs/`,
+`tasks/`, or `.specify/`.
 
-## Locked
+## Choose the workflow
 
-- Plans and working state live under `.tmp/issue-plan/<run-id>/`
-  (gitignored). Do not write them into `docs/`, `tasks/`, `dev/plans/`,
-  or `docs/superpowers/`.
-- Python 3.14+, source-build `compose.yml` / `astrbot:local`, in-app docs
-  at `/help/`. Do not restore legacy shims or treat upstream PyPI,
-  `soulter/astrbot`, or `docs.astrbot.app` as fork artifacts.
-- Open Issues and PRs against `Xero-Team/AstrBot` with
-  `--repo Xero-Team/AstrBot`. Do not open them on `AstrBotDevs/AstrBot`
-  unless the user explicitly confirms that upstream target.
-- Security reports follow `SECURITY.md`. Do not plan a public Issue or
-  public PR for a vulnerability.
-- Agents may commit this skill when asked. They must not merge, push
-  `master`, tag, or publish. See
-  `.agents/shared/ai-contribution/REFERENCE.md`.
-- Do not implement, scaffold, or edit production code during planning.
+Default to direct planning: inspect, resolve material ambiguities, compare
+approaches where useful, and write the plan. Do not quiz the user about code
+facts or require approval of each intermediate document. Use the existing
+`--skip-probe` workspace mode to record that a guided interview is unnecessary.
+This skips the interview, not research or verification.
 
-## Open
+Use guided probe only when the user asks for an interview, quiz, or facilitated
+design discussion. Read `references/probe.md` for that mode. A user can leave
+it at any time; keep their answers and continue without repeating questions.
 
-Which Issue or pasted request to plan, spike vs bounded vs feature
-depth, whether to fetch with `gh`, and whether the user **explicitly**
-skipped probe. Ask only when those choices change the artifact. Default
-depth is **feature** when the user asked for a written plan. Default
-probe is **required**.
+Ask only about unresolved decisions that change scope, architecture, behavior,
+or acceptance. Use a question tool when the active client provides one, or a
+concise chat question otherwise. Continue independent research while waiting.
+Record reasonable defaults for non-blocking unknowns. Never infer approval from
+silence or elapsed time.
 
-## Do not
+Route plugin packages to `create-astrbot-plugin`, upstream integration to
+`sync-upstream`, and product audits to `audit-product`. Do not start this
+planning workflow merely because an implementation task has several steps.
 
-- Jump to implementation because the change "looks small".
-- Invent file paths, line numbers, APIs, or tests that were not read.
-- Restore `platform_settings.group_wake_policy`,
-  `disable_builtin_commands`, handler-name `alter_cmd` lookup, or other
-  removed surfaces listed in `AGENTS.md`.
-- Install GitHub Spec Kit, create `.specify/`, or copy Superpowers /
-  mattpocock / addyosmani skill trees into this checkout.
-- Auto-comment on GitHub during planning unless the user asked.
-- Split work by layer (all models, then all routes, then all UI) when a
-  vertical slice can ship one observable behavior.
-- Dump full implementations into every task. Name paths, symbols, and
-  contracts; add a code sketch only when a new signature is easy to get
-  wrong.
-- Claim a command was verified unless this session ran it.
-- Skip brief, quiz, reflect, or grill unless the user explicitly waived
-  probe in this conversation. Filing an Issue, "this is small", or "I
-  know the tree" is not a waiver.
-- Ask the user a fact this tree already answers.
-- Treat an empty grep as proof the behavior is absent.
-- Create `CONTEXT.md`, `docs/adr/`, `.specify/`, or an HTML architecture
-  report in this checkout. Cite `AGENTS.md` instead.
-- Propose a new seam or interface before the user picks a path.
-- Mix a behavior-preserving refactor with a feature change in one task.
+## Read as needed
 
-## Handoff
+- `REFERENCE.md`: checkout facts, workspace layout, and GitHub commands.
+- `references/research.md`: evidence collection and research artifact fields.
+- `references/probe.md`: direct planning records and optional guided interview.
+- `references/plan-template.md`: plan fields and task format.
+- `references/verification.md`: judgment checks after the plan exists.
+- `references/sources.md`: methodology provenance; cite rather than vendor it.
+- `.agents/shared/ai-contribution/REFERENCE.md` and
+  `.agents/shared/conventional-commit/REFERENCE.md`: only for requested
+  contribution actions.
 
-Load only the file the current step needs:
+## Inspect and initialize
 
-- Checkout overlay and `gh` commands: `REFERENCE.md`
-- Research protocol: `references/research.md`
-- Brief, quiz, reflect: `references/probe.md`
-- Plan shape: `references/plan-template.md`
-- Plan checker: `references/verification.md`
-- Provenance (cite, do not paste): `references/sources.md`
-- Plugin packages: `.agents/skills/create-astrbot-plugin/SKILL.md`
-- Upstream absorb: `.agents/skills/sync-upstream/SKILL.md`
-- Product audit: `.agents/skills/audit-product/SKILL.md`
-- Diagrams, if the plan needs one: `.agents/skills/archify/SKILL.md`
-- Commit shape: `.agents/shared/conventional-commit/REFERENCE.md` only
-  if committing this skill
+Read `REFERENCE.md` and `references/research.md`. Inspect
+`git status --short --branch` and `git rev-parse HEAD`; preserve unrelated work.
+Resume a workspace only when its request and SHA still match.
 
-## Operating modes
-
-- **Research mode:** read the Issue, search the tree, write a detailed
-  Chinese `RESEARCH.md`. No plan yet if a stop condition fires.
-- **Probe mode:** brief the problem, quiz the user, reflect on a better
-  whole-tree path. Required after research unless the user explicitly
-  skipped it. See `references/probe.md`.
-- **Clarify mode:** grill only after probe. Record answers in
-  `QUESTIONS.md`. Completeness check, not a new spec file. Skipped with
-  probe.
-- **Plan mode (default end state):** write `PLAN.md`, then validate.
-- **Check mode:** re-validate an existing workspace.
-- **Implement mode:** enter only after the user explicitly approved the
-  plan in this conversation. That is a different task; keep the plan
-  stable and follow it.
-
-After research, classify **depth** (`small` / `medium` / `large` /
-`complex`) in `RESEARCH.md`. Probe still runs unless waived. Small
-skips approach variants. Large or complex work that still has fog
-writes a capability map before one giant plan. See `references/probe.md`.
-
-Treat these phrases as an explicit skip, and only these (or a clear
-synonym that names skipping the Q&A): `skip probe`, `skip quiz`,
-`skip the questions`, `just write the plan`, `跳过问答`, `跳过提问`,
-`直接出方案`. Record `probe: skipped` in the workspace:
+For a GitHub Issue, use:
 
 ```bash
-python .agents/skills/plan-issue/scripts/issue_plan.py skip-probe
+uv run python .agents/skills/plan-issue/scripts/issue_plan.py init --issue 123 --skip-probe
+uv run python .agents/skills/plan-issue/scripts/issue_plan.py fetch --issue 123
+uv run python .agents/skills/plan-issue/scripts/issue_plan.py status
 ```
 
-Pass `--skip-probe` on `init` only when that waiver already happened.
-Do not infer a skip.
+For a pasted request, use `--slug <short-name>` instead of `--issue` and write
+the request to `ISSUE.md`. Omit `--skip-probe` only for a requested guided
+interview. For an existing workspace, `skip-probe` selects direct planning.
+Record the reason in `QUESTIONS.md`; do not fabricate a user waiver.
 
-## Preflight
+Use `--repo Xero-Team/AstrBot` for GitHub operations. A new feature needs a
+development Issue before its follow-up PR; record that requirement without
+blocking local research or automatically posting to GitHub. Security reports
+follow `SECURITY.md` and must not become public Issues or PR descriptions.
 
-1. Read `REFERENCE.md` and `references/research.md`. Cite `AGENTS.md`;
-   do not paste it.
-2. Inspect `git status --short --branch` and `git rev-parse HEAD`. Do
-   not stash, reset, or discard unrelated work.
-3. Create or resume the workspace:
+## Research
 
-   ```bash
-   python .agents/skills/plan-issue/scripts/issue_plan.py init --issue 123
-   python .agents/skills/plan-issue/scripts/issue_plan.py fetch --issue 123
-   python .agents/skills/plan-issue/scripts/issue_plan.py status
-   ```
+Write `RESEARCH.md` using `references/research.md`. Keep required English
+headings and verbatim identifiers; research prose defaults to Simplified
+Chinese unless the user requests another language. Summarize the findings in
+the user's language instead of pasting the entire report into chat.
 
-   For a pasted request with no Issue number, pass `--slug <short-name>`
-   instead of `--issue`. New user-facing features still need a
-   development Issue before the follow-up PR (`GOVERNANCE.md`); note
-   that in the plan rather than blocking research.
+Record the request kind and depth, current behavior with `path:line` evidence,
+coverage questions, search results, owners, tests, bilingual docs, affected
+contracts, and remaining hypotheses. Check existing implementations and prior
+rejections before proposing new work. An empty search needs a synonym or a
+second relevant surface before claiming absence.
 
-4. Route away when the request is owned by another skill: plugin package
-   → `create-astrbot-plugin`; upstream absorb → `sync-upstream`; product
-   audit → `audit-product`.
+For bugs, name a command capable of exposing the reported symptom before
+settling on a cause. Distinguish commands actually run from proposed checks.
+Report an already-implemented request, a documented rejection, or a security
+reporting boundary before drafting tasks that would contradict that evidence.
 
-## Workflow
+## Resolve the design
 
-### 1. Research
+Follow `references/probe.md` to write `BRIEF.md`, `QUIZ.md`, `REFLECT.md`, and
+`QUESTIONS.md`. In direct mode these are concise agent-authored records;
+`QUIZ.md` records `skipped` and never invents answers or a score for the user.
 
-Follow `references/research.md`. Write `RESEARCH.md` in Simplified
-Chinese (English H2 headings, verbatim paths/symbols/commands). Present
-it in Chinese in chat. Done when `RESEARCH.md` records:
+Prefer the smallest current-path design that satisfies the request. Compare a
+larger alternative only when it removes a real duplicated owner, invariant
+violation, or limitation. Keep behavior-preserving refactors and feature changes
+in separate tasks. Do not restore removed APIs, add speculative interfaces, or
+expand the user's scope to justify an alternative.
 
-- `Kind` plus `Depth`, and a coverage ledger of 2–7 current-state
-  questions, each answered or explicitly open, with a paragraph per row
-- a search log of queries, synonyms or a second surface, and hits
-- current behavior as trigger → path → result, with `path:line` evidence
-- redundancy result (already implemented or not, and where searched)
-- prior-rejection result for all four sources (`AGENTS.md`, changelog
-  fork deviations, closed wontfix / duplicate Issues,
-  `upstream-decisions.jsonl` when applicable)
-- owners, tests, matching `docs/zh/` + `docs/en/` pages, and a named
-  impact surface
-- hypotheses labeled `CONFIRMED` / `REJECTED` / `UNRESOLVED` with
-  confidence
-- stop, spike, or continue
+For small work, one approach and one or two tasks may be enough. For larger
+work, explain meaningful tradeoffs and divide independently testable behaviors
+into vertical slices with explicit dependencies. Ask for a choice only when
+available evidence and the user's instructions do not resolve it.
 
-Stop and report, do not write a build plan, when the change is already
-implemented, previously rejected, a security vulnerability, or owned by
-another skill.
+## Write and validate
 
-For a `bug`, name one **red-capable** command that would catch the
-reporter's symptom before hypothesising a mechanism. If this session
-ran it, paste redacted output. If not, say so.
+Use `references/plan-template.md`. Each task names exact paths, durable symbols,
+acceptance criteria, dependencies, and a real verification command. Include
+OpenAPI generation and matching `docs/en/` and `docs/zh/` updates where the
+behavior requires them. Do not paste full implementations into the plan.
 
-### 2–4. Brief, quiz, reflect
-
-Follow `references/probe.md` in order unless probe is skipped. Do not
-skip to grilling on the agent's own judgment.
-
-If probe is **skipped**, do not wait and do not quiz. Write `BRIEF.md`
-and `REFLECT.md` from research (default path `surgical` unless the
-request already picked one), write `QUIZ.md` with `**Verdict:** skipped`,
-write `QUESTIONS.md` with the skip record, then go to the plan. Remaining
-unknowns become plan Open questions, not a stall.
-
-Otherwise:
-
-1. **Brief** the problem in this checkout. Wait for the user to accept
-   or correct the framing (`BRIEF.md`).
-2. **Quiz** with five issue-specific multiple-choice questions, one at
-   a time. Do not ask who owns the code or any fact a grep can answer.
-   Score 0–2 each (expected total **7/10**). Use answers, including
-   distractors, to infer real intent. Write `QUIZ.md`. A `fail` does
-   not abort the run; it means the Issue text is not yet the spec.
-3. **Reflect** on the inferred **job** (JTBD: verb + object + context,
-   no proposed patch). Run a Five Whys chain on the request until the
-   root is an executable change. Compare a surgical current-path
-   change with a better whole-tree design, including refactors.
-   Recommend one. Wait for the user to pick (`REFLECT.md`).
-
-If they waive probe after it started, keep answers already recorded,
-run `skip-probe`, mark the rest skipped, and continue.
-
-### 5. Grill
-
-Skip this step when probe is skipped. Otherwise ask one question at a
-time, and only when the answer changes scope, architecture, or
-acceptance. Scan remaining unknowns Clear / Partial / Missing; ask at
-most five, highest Impact × Uncertainty first. Prefer a short
-multiple-choice with a **recommended** answer. First open choice, if
-any: surgical vs better vs stop. Record each Q/A in `QUESTIONS.md`.
-
-List remaining non-blocking assumptions in the plan instead of stalling.
-If the request bundles several independently testable capabilities, or
-the way to the destination is still fog, stop and propose a capability
-map (vertical slices + blocking edges) before writing one giant plan.
-Close grilling with a coverage summary: Resolved / Deferred / Clear /
-Outstanding.
-
-### 6. Choose an approach
-
-Work inside the path the user picked after reflection (`surgical` or
-`better`). If probe was skipped, use the `REFLECT.md` recommendation
-(default `surgical`) and record rejected alternatives in the plan; do
-not wait for another pick. Present remaining candidates as Files /
-Problem / Solution / Benefits. Apply the deletion test and the
-one-adapter rule (`references/probe.md`). Prefer existing seams; fewer
-seams is better. Do not propose a new interface until they pick. For
-`medium`/`large`/`complex` work with probe required, present 2–3
-variants of that path with trade-offs and one recommendation. Small
-work, and skipped probe, may skip variants. Do not silently fall back
-to a local patch if they chose the better-path refactor.
-
-### 7. Write the plan
-
-Use `references/plan-template.md`. Each task is a vertical slice with
-exact paths, symbols, acceptance, and a real verify command from this
-checkout. No `TBD`, no "add tests", no "similar to Task N".
-
-Then validate:
+Run:
 
 ```bash
-python .agents/skills/plan-issue/scripts/issue_plan.py validate
+uv run python .agents/skills/plan-issue/scripts/issue_plan.py validate
+uv run python .agents/skills/plan-issue/scripts/issue_plan.py status
 ```
 
-### 8. Hard gate
+Then apply `references/verification.md`. Fix incomplete paths, missing
+requirements, unsupported claims, or unsuitable verification commands before
+handoff. A passing script is only the mechanical part of review.
 
-Show the plan path. Ask the user to approve it. Do not start
-implementation in the same turn that first presents the plan.
+## Deliver
 
-## Verify
+Return the plan link, recommended approach, validation result, and any decision
+that still blocks execution. A complete workspace includes `RESEARCH.md`,
+`BRIEF.md`, `QUIZ.md`, `REFLECT.md`, `QUESTIONS.md`, and `PLAN.md`, with an
+empty blocking list. Record the fork Issue URL or the local-slug reason.
 
-```bash
-python .agents/skills/plan-issue/scripts/issue_plan.py validate
-python .agents/skills/plan-issue/scripts/issue_plan.py status
-```
-
-A finished planning run has `RESEARCH.md` (with depth), `BRIEF.md`,
-`QUIZ.md` (`pass` / `fail` / `override`, or `skipped` after an explicit
-waiver), `REFLECT.md`, `QUESTIONS.md` coverage or skip record,
-`PLAN.md`, a passing validator with empty BLOCKING, and either an Issue
-URL under `github.com/Xero-Team/AstrBot` or an explicit local-slug note
-that a development Issue is still required before a feature PR.
-
-## Anti-rationalization
-
-| Excuse                                    | Rebuttal                                                                     |
-| ----------------------------------------- | ---------------------------------------------------------------------------- |
-| "It is obvious, I will just code it"      | This skill's output is the plan. Implementation is a later, gated task.      |
-| "I know this kind of bot, so I can skip"  | Bounded means this repo already has the flow. Read it.                       |
-| "File paths will go stale, so omit them"  | The executor starts now, on this SHA. Record paths plus durable symbols.     |
-| "I will add verification later"           | A task without a command is incomplete. Fix it before handoff.               |
-| "Spec Kit / Superpowers is more complete" | Cite those URLs. Do not vendor their trees or their default directories.     |
-| "The Issue is on upstream, close enough"  | Plan against `Xero-Team/AstrBot` unless the user confirmed upstream.         |
-| "I will restore the old flag for compat"  | Compatibility shims are out of scope. Design on the current path.            |
-| "They filed the Issue, skip the quiz"     | A ticket is not a waiver. Probe unless they explicitly skipped it.           |
-| "Low quiz score, abort"                   | Reflect and grill until the inferred goal is explicit. Then plan.            |
-| "Reflection is gold-plating"              | It is a recommendation. The user picks. The plan records that choice.        |
-| "One grep found nothing, so it is new"    | Empty lane is not absence. Report queries, a synonym, and a second surface.  |
-| "Ask the user how the code works"         | Facts are yours. Decisions are theirs.                                       |
-| "The ticket is the job"                   | State the JTBD without the proposed patch. Then plan for that job.           |
-| "Better means rewrite the tree"           | Deletion test + YAGNI hot spots. Cold code stays.                            |
-| "Add a seam so tests can mock it"         | One adapter is hypothetical; two adapters make a real seam.                  |
-| "I can see the bug in the stack trace"    | Name a red-capable command first. Then hypothesise.                          |
-| "Small change, skip probe"                | Small only skips approach variants. Probe still runs unless waived.          |
-| "User said they know this tree"           | Knowledge is not a skip phrase. Wait for `skip probe` / `跳过问答`.          |
-| "User explicitly skipped probe"           | Skip interactive Q&A. Still research, still write BRIEF/REFLECT, still gate. |
+For a planning-only request, stop here. For implementation already authorized
+in this conversation, use the finished plan and proceed. If implementation
+needs new authorization, ask once after the plan is reviewable and explain
+that the original request covered planning only.

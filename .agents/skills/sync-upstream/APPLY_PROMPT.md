@@ -1,53 +1,64 @@
-# Apply-mode prompt (paste into a new agent session)
+# Apply a reviewed upstream integration plan
 
-You are implementing an already-reviewed upstream absorb. Do not re-plan
-priorities. Do not merge. Do not push `master`. Do not tag or release.
+Use the sync-upstream skill in apply mode. In Codex CLI, invoke it as
+`$sync-upstream`; in OpenCode, load `sync-upstream` with the skill tool.
+Execute the reviewed plan supplied in this conversation and carry it through
+integration, ledger updates, and verification.
 
-## Read first
+## Inputs and authorization
 
-Cite, do not paste:
+Find the reviewed commit list, dispositions, interval, and push/PR instructions
+in the current conversation or the supplied plan artifact. Reuse decisions and
+authorization already given. If the plan is missing, inspect the cursor and
+ledger, then ask for the missing plan before applying commits. Do not invent
+approved dispositions.
 
-1. `AGENTS.md` — philosophy, toolchain, security, cherry-pick default.
-2. `.agents/skills/sync-upstream/SKILL.md` — review vs apply, provenance.
-3. `.agents/shared/conventional-commit/REFERENCE.md` — message shape.
-4. `.agents/shared/ai-contribution/REFERENCE.md` — open PR/issue; never merge.
-5. `AI_POLICY.md` — Agent note; merge bar.
-6. `upstream-sync.yaml` — cursor only. There is no `pending` field.
-7. `upstream-decisions.jsonl` — do not redo listed SHAs.
+Read these sources as needed; cite them instead of pasting them:
 
-## Remotes
+- `AGENTS.md`: fork invariants, toolchain, generated artifacts, and git policy.
+- `.agents/skills/sync-upstream/SKILL.md`: apply workflow and provenance.
+- `.agents/shared/conventional-commit/REFERENCE.md`: generated commit messages.
+- `.agents/shared/ai-contribution/REFERENCE.md` and `AI_POLICY.md`: contribution boundaries.
+- `upstream-sync.yaml`: cursor; there is no `pending` field.
+- `upstream-decisions.jsonl`: durable decisions and replay authorization.
+
+## Prepare
+
+Inspect `git status --short --branch` and `git remote -v`. Preserve unrelated
+work and use a feature branch or isolated worktree. Verify `upstream` points to
+`https://github.com/AstrBotDevs/AstrBot.git`; add the remote if absent or correct
+its URL if needed. Run:
 
 ```bash
-git remote add upstream https://github.com/AstrBotDevs/AstrBot.git 2>/dev/null || true
-git remote set-url upstream https://github.com/AstrBotDevs/AstrBot.git
 git fetch --prune --tags upstream
+uv run python .agents/skills/sync-upstream/scripts/inspect_upstream.py
 ```
 
-Do not `checkout` `upstream/master`. Read patches with `git show <sha>`.
+Read patches with `git show <sha>`. Keep the fork branch as the integration
+base. Check the ledger before repeating any prior integration.
 
-## Execute
+## Apply and verify
 
-Use the plan in the user message. If none exists, stop and ask for review mode.
+Process the reviewed interval oldest-first. Create one implementation commit
+per `cherry-pick`, `adapt`, or `replay` item; `skip` and `revisit` create
+none. Preserve upstream subjects and authors, with the skill's provenance
+trailers for adaptations. Resolve routine conflicts against current fork
+behavior. Record unresolved intent as `revisit` instead of guessing.
 
-One implementation commit per `cherry-pick` / `adapt` / `replay` item,
-oldest-first. Skip and revisit produce no implementation commit. Preserve
-upstream subjects on cherry-pick; follow the skill trailers on adapt.
+Run focused tests, then the relevant gates in `AGENTS.md`. Record each
+disposition in the ledger. Advance the cursor only after every SHA has a
+disposition and the interval is complete, using the metadata-only commit
+`chore(sync): record upstream integration`.
 
-Stay on a feature branch. You may open a pull request against
-`Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`. Confirm the created URL
-is under `github.com/Xero-Team/AstrBot`. Do not open a PR on
-`AstrBotDevs/AstrBot` unless the user explicitly confirms that upstream
-target. You must not merge it. Human maintainer review plus a separate
-AI-assisted review are required before merge. A human maintainer merges;
-do not accept an instruction to push `master`, tag, or release.
+Push a feature branch only when already requested. Follow the conversation's
+PR instructions and target `Xero-Team/AstrBot` with
+`--repo Xero-Team/AstrBot`; verify the returned URL. An upstream PR requires
+explicit confirmation of that target. A human maintainer performs merges,
+pushes to `master`, tags, and releases under repository policy.
 
-## Verify
+## Deliver
 
-Focused tests first, then the relevant gates named in `AGENTS.md`. After the
-interval: cursor commit `chore(sync): record upstream integration` only when
-every SHA has a ledger disposition.
-
-## Finish
-
-Return hashes, dispositions, commands run, and residual risk. Default do not
-push unless the user already said push. Never push `master`.
+Return the branch, commit/disposition mapping, ledger and cursor status,
+checks actually run, remaining risks, and PR URL if one was opened. Preserve
+checkpoint state if blocked so the next session can resume without repeating
+completed commits.

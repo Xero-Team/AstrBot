@@ -1,6 +1,6 @@
 ---
 name: sync-upstream
-description: Review and integrate AstrBot upstream/master changes into the Xero-Team/AstrBot fork while maintaining a searchable decision ledger and provenance-preserving per-commit history. Use for upstream synchronization, cherry-pick planning, manual adaptation, skipped-commit review, conflict handling, sync commit author/message policy, or updates to upstream-sync.yaml.
+description: Review or integrate AstrBot upstream commits with per-commit provenance and a searchable decision ledger. Use for upstream sync, cherry-pick adaptation, conflict resolution, or revisiting recorded sync decisions.
 ---
 
 # Sync AstrBot upstream
@@ -9,6 +9,10 @@ Use this skill to keep the fork's upstream cursor and integration decisions
 auditable without repeatedly loading the entire sync history into context.
 Treat `AGENTS.md` as the policy source of truth and
 `upstream-decisions.jsonl` as the durable decision ledger.
+
+Use the requested mode and existing conversation authorization. Review requests
+end with a plan; requests to execute an approved plan continue through integration
+and verification. Both Codex CLI and OpenCode use the same scripts and ledger.
 
 Cite `.agents/shared/ai-contribution/REFERENCE.md` and `AI_POLICY.md` when
 opening a branch, Issue, or PR. Paste-ready apply prompt:
@@ -57,8 +61,9 @@ session, unless the user already froze the plan in this conversation.
 - **Review mode (default):** inspect the repository, fetch and compare
   `upstream/master`, classify every pending commit, query prior decisions, and
   return a focused plan. Do not cherry-pick, edit files, commit, or push.
-- **Apply mode:** enter only after the user explicitly asks to execute the
-  approved plan. Apply commits oldest-first, one at a time, and record each
+- **Apply mode:** use when the user has asked to execute the approved plan in
+  this conversation; do not ask for that authorization again. Apply commits
+  oldest-first, one at a time, and record each
   final decision. Stay on a feature branch. You may open a pull request on
   `Xero-Team/AstrBot` with `--repo Xero-Team/AstrBot`. Do not merge, push
   `master`, release, or tag.

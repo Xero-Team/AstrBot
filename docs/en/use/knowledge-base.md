@@ -27,7 +27,7 @@ Uploads can override chunk settings. Knowledge-base settings also store defaults
 | `chunk_size`    | `512`   | Approximate characters per chunk     |
 | `chunk_overlap` | `50`    | Overlap so sentences are not cut off |
 
-Markdown is split on headings. Changing chunk size does not rewrite documents already stored; re-upload them.
+Markdown is split on headings. Uploading the same file identity or the same canonical URL **replaces** the existing document instead of appending a snapshot. An unchanged SHA-256 skips embedding (`unchanged`). Changing `chunk_size` / `chunk_overlap` does not change the hash; use **Reindex** on the document list or document detail to rebuild chunks. Changing the embedding model or dimension is not migrated; reindex returns 400. Create a new knowledge base or re-upload. FAISS remains the only vector store. There is no directory watch or automatic sync. Older URL imports have no recoverable source URL; delete and import again. Original files and extracted URL text are stored under `data/knowledge_base/` and included in backup.
 
 An upload writes the document store, metadata, and local vectors together. Any step that fails runs compensating cleanup: after the API reports failure, that document must not stay queryable. Storage is SQLite in the runtime directory plus FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. Runtime startup enforces that with `data/astrbot.lock`; on POSIX it also locks the `data/` directory, so deleting the lock file cannot bypass the singleton. SQLite WAL and `busy_timeout` are not an instance lock. The operating system releases this advisory lock when the process exits, and a leftover lock file does not mean an instance is still running. If Compose mounts the same `./data` into a second full instance, the later container is expected to fail.
 
@@ -65,7 +65,7 @@ Use Agentic when some turns need documents and some are small talk. Use default 
 ## Common misconfigurations
 
 1. The knowledge base exists, but profile `kb_names` is still empty.
-2. You changed the embedding model or dimension and kept the old index.
+2. You changed the embedding model or dimension and kept the old index. Reindex refuses that case; it does not silently corrupt the index.
 3. A custom rule `kb_ids` points at a deleted base, so retrieval looks dead.
 4. Agentic is on, but the model cannot call tools or the Persona forbids the tool.
 5. A failed upload is still searchable — treat that as a defect, clean up, and re-upload.

@@ -13,6 +13,17 @@
           {{ t('title') }}
         </p>
       </div>
+      <v-spacer />
+      <v-btn
+        prepend-icon="mdi-refresh"
+        color="primary"
+        variant="tonal"
+        :loading="reindexing"
+        :disabled="loading || reindexing"
+        @click="reindexDocument"
+      >
+        {{ t('info.reindex') }}
+      </v-btn>
     </div>
 
     <!-- 加载状态 -->
@@ -303,6 +314,8 @@ interface KnowledgeDocument {
   file_size?: number;
   chunk_count?: number;
   created_at?: string;
+  source_stored?: boolean;
+  identity_key?: string;
 }
 
 interface KnowledgeChunk {
@@ -322,6 +335,7 @@ const docId = ref(route.params.docId as string);
 
 // 状态
 const loading = ref(true);
+const reindexing = ref(false);
 const loadingChunks = ref(false);
 const loadError = ref(false);
 const chunksLoadError = ref(false);
@@ -364,6 +378,31 @@ const filteredChunks = computed(() => {
     chunk.content.toLowerCase().includes(query),
   );
 });
+
+const reindexDocument = async () => {
+  reindexing.value = true;
+  try {
+    const response = await knowledgeApi.reindexDocument(
+      kbId.value,
+      docId.value,
+    );
+    if (response.data.status === 'ok') {
+      document.value = response.data.data;
+      showSnackbar(t('actions.reindexSuccess'));
+      await loadChunks();
+    } else {
+      showSnackbar(
+        response.data.message || t('actions.reindexFailed'),
+        'error',
+      );
+    }
+  } catch (error) {
+    console.error('Failed to reindex document:', error);
+    showSnackbar(t('actions.reindexFailed'), 'error');
+  } finally {
+    reindexing.value = false;
+  }
+};
 
 // 加载文档详情
 const loadDocument = async () => {

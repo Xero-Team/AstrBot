@@ -71,6 +71,17 @@
           {{ formatDate(item.created_at) }}
         </template>
 
+        <template #item.ingest_status="{ item }">
+          <v-chip
+            v-if="item.ingest_status"
+            size="small"
+            variant="tonal"
+            :color="ingestStatusColor(item.ingest_status)"
+          >
+            {{ ingestStatusText(item.ingest_status) }}
+          </v-chip>
+        </template>
+
         <template #item.actions="{ item }">
           <v-btn
             icon="mdi-eye"
@@ -79,6 +90,15 @@
             color="info"
             :aria-label="t('documents.view')"
             @click="viewDocument(item)"
+          />
+          <v-btn
+            icon="mdi-refresh"
+            variant="text"
+            size="small"
+            color="primary"
+            :disabled="item.uploading || reindexingId === item.doc_id"
+            :aria-label="t('documents.reindex')"
+            @click="reindexDocument(item)"
           />
           <v-btn
             icon="mdi-delete"
@@ -478,6 +498,7 @@ interface DocumentItem {
   file_size: number;
   chunk_count: number;
   created_at: string;
+  ingest_status?: 'created' | 'replaced' | 'unchanged';
   uploading?: boolean;
   taskId?: string;
   uploadProgress?: UploadProgressState;
@@ -532,6 +553,7 @@ interface KnowledgeTaskProgressPayload {
 interface KnowledgeTaskResultPayload {
   success_count?: number;
   failed_count?: number;
+  uploaded?: Array<{ ingest_status?: string }>;
 }
 
 interface KnowledgeTaskPayload {
@@ -647,6 +669,7 @@ const headers = [
   { title: t('documents.size'), key: 'file_size', sortable: false },
   { title: t('documents.chunks'), key: 'chunk_count', sortable: false },
   { title: t('documents.createdAt'), key: 'created_at', sortable: false },
+  { title: t('documents.status'), key: 'ingest_status', sortable: false },
   {
     title: t('documents.actions'),
     key: 'actions',
@@ -955,7 +978,10 @@ const startProgressPolling = (taskId: string) => {
           emit('refresh');
 
           if (failedCount === 0) {
-            showSnackbar(`成功上传 ${successCount} 个文档`);
+            showSnackbar(
+              ingestSummary(result?.uploaded) ||
+                `成功上传 ${successCount} 个文档`,
+            );
           } else {
             showSnackbar(
               `上传完成: ${successCount} 个成功, ${failedCount} 个失败`,
@@ -1034,6 +1060,58 @@ const viewDocument = (doc: DocumentItem) => {
 };
 
 // 确认删除
+const ingestStatusText = (status: string) => {
+  if (status === 'replaced') return t('documents.statusReplaced');
+  if (status === 'unchanged') return t('documents.statusUnchanged');
+  return t('documents.statusCreated');
+};
+
+const ingestStatusColor = (status: string) => {
+  if (status === 'replaced') return 'info';
+  if (status === 'unchanged') return 'secondary';
+  return 'success';
+};
+
+const ingestSummary = (uploaded?: Array<{ ingest_status?: string }>) => {
+  if (!uploaded?.length) return '';
+  const created = uploaded.filter(
+    (item) => item.ingest_status === 'created',
+  ).length;
+  const replaced = uploaded.filter(
+    (item) => item.ingest_status === 'replaced',
+  ).length;
+  const unchanged = uploaded.filter(
+    (item) => item.ingest_status === 'unchanged',
+  ).length;
+  if (!created && !replaced && !unchanged) return '';
+  return t('documents.ingestSummary', { created, replaced, unchanged });
+};
+
+const reindexingId = ref<string | null>(null);
+
+const reindexDocument = async (doc: DocumentItem) => {
+  if (doc.uploading) return;
+  reindexingId.value = doc.doc_id;
+  try {
+    const response = await knowledgeApi.reindexDocument(props.kbId, doc.doc_id);
+    if (response.data.status === 'ok') {
+      showSnackbar(t('documents.reindexSuccess'));
+      await loadDocuments();
+      emit('refresh');
+    } else {
+      showSnackbar(
+        response.data.message || t('documents.reindexFailed'),
+        'error',
+      );
+    }
+  } catch (error) {
+    console.error('Failed to reindex document:', error);
+    showSnackbar(t('documents.reindexFailed'), 'error');
+  } finally {
+    reindexingId.value = null;
+  }
+};
+
 const confirmDelete = (doc: DocumentItem) => {
   deleteTarget.value = doc;
   showDeleteDialog.value = true;

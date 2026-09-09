@@ -96,6 +96,13 @@ export const knowledgeApi = {
       }),
     );
   },
+  reindexDocument(kbId: string, documentId: string) {
+    return typed<KnowledgeDocumentData>(
+      openApiV1.reindexKnowledgeDocument({
+        path: { kb_id: kbId, document_id: documentId },
+      }),
+    );
+  },
   chunks(
     kbId: string,
     params?: { document_id?: string; page?: number; page_size?: number },

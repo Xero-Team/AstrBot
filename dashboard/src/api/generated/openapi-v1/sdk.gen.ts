@@ -451,6 +451,9 @@ import type {
   RegenerateChatMessageResponses,
   RegisterBotTypeData,
   RegisterBotTypeResponses,
+  ReindexKnowledgeDocumentData,
+  ReindexKnowledgeDocumentErrors,
+  ReindexKnowledgeDocumentResponses,
   ReloadFailedPluginData,
   ReloadFailedPluginResponses,
   ReloadPluginData,
@@ -4766,6 +4769,27 @@ export const getKnowledgeDocument = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}',
+    ...options,
+  });
+
+/**
+ * Reindex a knowledge base document from stored source bytes
+ */
+export const reindexKnowledgeDocument = <ThrowOnError extends boolean = false>(
+  options: Options<ReindexKnowledgeDocumentData, ThrowOnError>,
+): RequestResult<
+  ReindexKnowledgeDocumentResponses,
+  ReindexKnowledgeDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ReindexKnowledgeDocumentResponses,
+    ReindexKnowledgeDocumentErrors,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}/reindex',
     ...options,
   });
 

@@ -12,7 +12,13 @@
     "type": "File Type",
     "size": "File Size",
     "chunkCount": "Chunk Count",
-    "createdAt": "Uploaded At"
+    "createdAt": "Uploaded At",
+    "reindex": "Reindex",
+    "sourceStored": "Source stored"
+  },
+  "actions": {
+    "reindexSuccess": "Document rebuilt with current chunk settings",
+    "reindexFailed": "Failed to reindex document"
   },
   "chunks": {
     "title": "Chunks",

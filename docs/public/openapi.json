@@ -3876,6 +3876,30 @@
         }
       }
     },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{document_id}/reindex": {
+      "post": {
+        "tags": ["Knowledge Base"],
+        "summary": "Reindex a knowledge base document from stored source bytes",
+        "operationId": "reindexKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/knowledge-bases/{kb_id}/chunks": {
       "get": {
         "tags": ["Knowledge Base"],
@@ -5316,6 +5340,16 @@
           }
         }
       },
+      "Error": {
+        "description": "Standard AstrBot error response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
       "Text": {
         "description": "Text response",
         "content": {
@@ -5620,6 +5654,21 @@
           "data": {
             "$ref": "#/components/schemas/SkillInventoryData"
           }
+        },
+        "additionalProperties": false
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["status", "message"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "error"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {}
         },
         "additionalProperties": false
       },

@@ -1,6 +1,6 @@
 # 接入 MiraRouter
 
-[MiraRouter](https://mirarouter.com/) 提供稳定、安全且兼容 OpenAI 格式的统一模型 API，可通过一个 API Key 接入多种主流模型，并集中管理密钥、用量与成本。
+MiraRouter 提供兼容 OpenAI 格式的统一模型 API。
 
 ## 获取 API Key
 
@@ -19,7 +19,7 @@
 
 AstrBot 会自动为 MiraRouter 请求添加 `X-APP-CODE: astrbot` 标识。
 
-保存来源后，根据 [MiraRouter 模型与价格](https://mirarouter.com/models) 页面中的模型列表添加需要使用的模型。
+保存来源后，按服务提供的模型 ID 添加需要使用的模型。
 
 ## 设为默认模型
 

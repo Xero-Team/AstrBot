@@ -1,10 +1,10 @@
 # Connect ShengSuanYun
 
-[ShengSuanYun](https://www.shengsuanyun.com/?from=CH_T70U2X9L) provides a unified OpenAI Chat Completions-compatible API for accessing multiple models with one API key.
+ShengSuanYun provides an OpenAI Chat Completions-compatible API.
 
 ## Get an API Key
 
-1. Sign up and log in at [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_T70U2X9L).
+1. Sign up and log in at [ShengSuanYun](https://www.shengsuanyun.com/).
 2. Open the console and create an API key.
 
 ## Configure AstrBot

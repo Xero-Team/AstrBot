@@ -1,10 +1,10 @@
 # 接入胜算云
 
-[胜算云](https://www.shengsuanyun.com/?from=CH_T70U2X9L) 提供兼容 OpenAI Chat Completions 的统一模型接口，可通过一个 API Key 接入多种模型。
+胜算云提供兼容 OpenAI Chat Completions 的统一模型接口。
 
 ## 获取 API Key
 
-1. 前往[胜算云](https://www.shengsuanyun.com/?from=CH_T70U2X9L)注册并登录。
+1. 前往[胜算云](https://www.shengsuanyun.com/)注册并登录。
 2. 进入控制台创建并复制 API Key。
 
 ## 在 AstrBot 中配置

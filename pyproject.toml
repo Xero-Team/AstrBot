@@ -175,7 +175,7 @@ allow-direct-references = true
 artifacts = ["astrbot/dashboard/dist/**"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.agents"]
+exclude = ["/.agents", "/.codex/**", "/.opencode/**"]
 
 # Custom build hook: builds the Vue dashboard and copies dist into the package.
 [tool.hatch.build.hooks.custom]

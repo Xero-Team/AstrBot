@@ -187,6 +187,22 @@ pnpm run docs:build
 
 GitHub Actions 必须固定到完整 commit SHA，并按 job 授予实际状态变更所需的最小 scope。发布制品、上报代码扫描结果和维护 Issue 等写操作都必须分别论证，不能给整个 workflow 泛化写权限。
 
+## 编码智能体的 Skills 与 MCP
+
+仓库技能位于 `.agents/skills/`，目录中的 `README.md` 列出了可用技能。
+`AGENTS.md` 保留共享约束，并将具体任务所需的细节指向
+`.agents/shared/checkout/REFERENCE.md`。只加载当前工作需要的技能和参考资料。
+Issue 规划产出 `.tmp/issue-plan/<run-id>/PLAN.md`，不要求测验或中间报告。
+
+受跟踪的 `.codex/config.toml` 和 `.opencode/opencode.json` 默认禁用可选的
+开发 MCP 服务，避免加载用不到的工具目录。需要时，将 Codex 配置中的
+`enabled = true` 或 OpenCode 配置中的 `"enabled": true` 设为启用，再重新连接
+或重启客户端。两者均配置了 Vuetify；OpenCode 还配置了 Context7 和 Playwright。
+Playwright 使用 PATH 中的 `npx`。检查明确选定的 SQLite 数据库可使用
+`sqlite3 -readonly <database-path>`。其他本地智能体元数据仍被忽略，不要把凭据
+或机器专用路径写入受跟踪配置。这些配置属于编码客户端，与 AstrBot 运行时的
+Skills 和 MCP 分开管理。
+
 ## 提交前
 
 至少运行与改动相称的测试，然后执行：

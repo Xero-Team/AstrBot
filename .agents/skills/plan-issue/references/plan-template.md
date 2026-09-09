@@ -1,112 +1,75 @@
 # Plan template
 
-Write `PLAN.md` in English. Keep paths, commands, APIs, and error
-strings verbatim. Copy this skeleton; delete unused optional sections.
+Use the headings below for `issue_plan.py validate`; write prose in the user's
+language. Keep evidence and decisions in this document. Add separate notes only
+when the investigation needs them.
 
 ````markdown
-# <Title> Implementation Plan
+# <Title>
 
-**Goal:** one sentence
-**Issue:** URL under github.com/Xero-Team/AstrBot, or `local-<slug>` plus
-"open a development Issue before the PR"
-**SHA:** full object name this plan was researched against
-**Architecture:** 2–3 sentences
-**Recommended approach:** name, why it wins, what was rejected
-**Depth:** `small` / `medium` / `large` / `complex`
-**Probe:** quiz `pass` / `fail` / `override` / `skipped`; user picked
-`surgical` or `better`, or skipped probe defaulted to `surgical`; job
-statement from `REFLECT.md`
+**Issue:** <fork Issue URL or local-slug>
+**SHA:** <full checkout SHA>
+
+## Goal
+
+Who needs which observable outcome?
+
+## Architecture
+
+The current owner, proposed change, and a real tradeoff if one exists.
 
 ## Constraints
 
-- Python `>=3.14`; no 3.10–3.13 branches
-- No legacy shims; current-path design only
-- In-app docs at `/help/`; no `docs.astrbot.app`
-- Agents must not merge or push `master`
+Task-specific constraints; cite AGENTS.md for repository-wide rules.
 
 ## Current behavior
 
-Cite `path:line`. Note the impact surface (callers, configs, tests,
-docs) a change here would touch.
+Trigger → code path → result, citing inspected `path:line` and symbols.
 
 ## Desired behavior
 
-Testable outcomes, including failure paths that matter. Prefer
-WHEN/THEN (or WHILE/IF) so each line has one interpretation.
+Testable outcomes and relevant failure behavior.
 
 ## Out of scope
 
-Bullet list. Include adjacent features that will look related.
+Only material scope boundaries.
 
 ## Tasks
 
-### Task 1: <observable slice>
+### Task 1: <observable change>
 
-**Blocked by:** none (or Task N)
+**Blocked by:** none
 
 **Files:**
 
-- Modify: `exact/path.py` (`symbol_name`)
-- Test: `tests/unit/test_exact.py`
+- Modify: `exact/path.py` (`symbol`)
+- Test: `tests/unit/test_area.py`
 
 **Acceptance:**
 
-- [ ] WHEN <trigger> THEN <observable>
-- [ ] IF <failure> THEN <observable>
+- [ ] <trigger and expected result>
 
 **Verify:**
 
 ```bash
-uv run pytest tests/unit/test_exact.py::test_name
+uv run pytest tests/unit/test_area.py
 ```
-
-Expected: PASS (or the named failure if this is a red test)
-
-### Task 2: <next slice>
-
-...
 
 ## Verification
 
-End-to-end commands for the whole change, focused first, then the
-smallest extra gate the slice actually touches.
+Focused commands for the whole change, with expected outcomes.
 
 ## Docs / OpenAPI
 
-`none` or the bilingual pages plus `openspec/openapi-v1.yaml` regeneration
-commands from `AGENTS.md`.
+Affected bilingual pages and generated contracts, or why none apply.
 
-## Risks
+## Risks and open questions
 
-| Risk | Impact       | Mitigation |
-| ---- | ------------ | ---------- |
-| ...  | high/med/low | ...        |
-
-## Open questions
-
-Non-blocking assumptions only. Blocking questions belong in
-`QUESTIONS.md` until answered.
+Relevant assumptions, remaining decisions, and failure risks.
 ````
 
-## Task rules
-
-- One vertical slice per task: a behavior a reviewer could accept or
-  reject on its own.
-- Name files and symbols. Add a short code sketch only for a new
-  contract (function signature, schema field, event name). Prefer
-  existing seams; do not invent a new one unless the user picked
-  `better` and two real adapters already exist.
-- Every task has **Files**, **Acceptance**, and **Verify** with a real
-  command from `REFERENCE.md`. **Blocked by** is required when tasks
-  are not a linear chain.
-- Fold scaffolding, config, and docs into the task that needs them.
-- If a task would exceed about five files or two independent
-  subsystems, split it.
-- A behavior-preserving prefactor and the feature change are separate
-  tasks. Do not mix them.
-- A wide mechanical rename whose blast radius cannot stay green as a
-  vertical slice uses expand → migrate batches → contract, not one
-  tracer bullet.
-- Conventional Commit type for the follow-up PR goes in the last task
-  or a short Handoff line (`feat` / `fix` / `docs` / `chore`, …). Do
-  not commit during planning.
+Repeat Task sections only for independently reviewable work. Use `Create:`
+for new paths, `Modify:` for existing files, and `Blocked by: Task N` for
+dependencies. Include a concrete verification command for every task.
+Do not prescribe new tests for a low-impact edit that only needs existing
+format or contract checks. Avoid placeholder code and full implementations.

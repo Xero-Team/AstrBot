@@ -6,46 +6,25 @@ stays in `SKILL.md`. Cite `AGENTS.md`, `docs/zh/dev/architecture.md`, and
 
 ## Product identity
 
-| Field               | Value                                                     |
-| ------------------- | --------------------------------------------------------- |
-| Product             | AstrBot (Xero-Team fork)                                  |
-| Repository          | `Xero-Team/AstrBot`                                       |
-| Upstream provenance | `AstrBotDevs/AstrBot` (sync source only)                  |
-| Support surface     | current `master` only; see `SECURITY.md`                  |
-| Published artifacts | none (no fork PyPI, GitHub Release, or container publish) |
-| Runtime image tag   | source-build `astrbot:local` via `compose.yml`            |
-| Docs                | in-app `/help/` from the Dashboard                        |
-| Python floor        | `>=3.14`; pin in `.python-version`                        |
-| Dashboard stack     | Vue + Vuetify + Vite; FastAPI `/api/v1`                   |
+| Field               | Value                                                          |
+| ------------------- | -------------------------------------------------------------- |
+| Product             | AstrBot (Xero-Team fork)                                       |
+| Repository          | `Xero-Team/AstrBot`                                            |
+| Upstream provenance | `AstrBotDevs/AstrBot` (sync source only)                       |
+| Support surface     | current `master` only; see `SECURITY.md`                       |
+| Published artifacts | optional GHCR nightly; no fork PyPI or versioned image channel |
+| Runtime image tag   | source-build `astrbot:local` via `compose.yml`                 |
+| Docs                | in-app `/help/` from the Dashboard                             |
+| Python floor        | `>=3.14`; pin in `.python-version`                             |
+| Dashboard stack     | Vue + Vuetify + Vite; FastAPI `/api/v1`                        |
 
 Do not describe this fork as the PyPI package `astrbot` or the image
 `soulter/astrbot`.
 
-## Acceptance-test lab
+## Live checks
 
-Default live target when the user does not override host, origin, or
-account. **Acceptance-test only. Never production.**
-
-| Field    | Value                                                                         |
-| -------- | ----------------------------------------------------------------------------- |
-| Target   | Current-branch process in this worktree, not `soulter/astrbot` or another SHA |
-| Origin   | `http://127.0.0.1:6185`                                                       |
-| Username | `astrbot`                                                                     |
-| Password | `Astrbot123`                                                                  |
-| Use      | Live Dashboard login, operator-path evidence, optional CWV/axe                |
-
-If `127.0.0.1:6185` is already bound, confirm it is this worktree
-(`make status`, startup log, or process cwd) before logging in. If it
-is down, start this checkout (`make dev` unless the user asked for
-`make run`) and record the command plus HEAD SHA in `manifest.json`.
-A SHA/bind mismatch is an inventory assumption, not a silent login.
-
-Do not write the lab password into `REPORT.md`, `CHAPTER.md`, Issues, or
-changelogs. Cite "acceptance-test lab in `REFERENCE.md`". Do not copy
-this password into product `default.py`, docs, Compose, or images.
-Shipped first-start remains: username `astrbot`, random password in the
-startup log (`AGENTS.md`). Finding `Astrbot123` hardcoded as a product
-default is a separate insecure-default finding, not this lab convention.
+Read [references/lab.md](references/lab.md) only for live Dashboard checks.
+It contains acceptance-test credentials, not shipped product defaults.
 
 ## Comparison sources
 

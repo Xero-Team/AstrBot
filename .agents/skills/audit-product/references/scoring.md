@@ -68,8 +68,14 @@ agents with powerful tools.
 
 ## Confidence
 
-See `SKILL.md`. Severity and confidence are independent: a `suspected`
-`critical` stays suspected until traced.
+Severity and confidence are independent:
+
+- `confirmed`: traced code plus a test, command, or safe reproduction.
+- `likely`: traced code without contradicting evidence, but no reproduction.
+- `suspected`: incomplete trace or adjacent evidence only.
+- `not_assessed`: skipped verification with a reason.
+
+A suspected critical finding stays suspected until the evidence supports it.
 
 ## Kind
 
@@ -118,7 +124,7 @@ Every completed module writes:
 - ratings for core dimensions 1–11 (or `unrated` + reason)
 - extra dimensions that the module owns
 - counts of open findings by severity
-- 3–8 sentence rationale in Chinese for the chapter header
+- concise evidence-backed rationale in the report's language
 
 Product synthesis writes the same for the whole product, plus readiness.
 

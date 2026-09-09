@@ -127,13 +127,11 @@ async def core_lifecycle_td(tmp_path_factory):
     try:
         yield core_lifecycle
     finally:
-        # Stop the core lifecycle first to release background resources.
         try:
             _stop_res = core_lifecycle.stop()
             if asyncio.iscoroutine(_stop_res):
                 await _stop_res
         except Exception:
-            # Cleanup should continue even if lifecycle shutdown raises.
             pass
 
 

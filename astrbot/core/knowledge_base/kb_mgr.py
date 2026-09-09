@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from sqlalchemy.exc import IntegrityError  # type: ignore
 
 from astrbot import logger
@@ -15,9 +13,6 @@ from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
 
-FILES_PATH = get_astrbot_knowledge_base_path()
-DB_PATH = Path(FILES_PATH) / "kb.db"
-"""Knowledge Base storage root directory"""
 CHUNKER = RecursiveCharacterChunker()
 _KB_INITIALIZATION_ERROR = "Knowledge base initialization failed"
 
@@ -30,7 +25,6 @@ class KnowledgeBaseManager:
         self,
         provider_manager: ProviderManager,
     ) -> None:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.provider_manager = provider_manager
         self._session_deleted_callback_registered = False
 
@@ -59,9 +53,9 @@ class KnowledgeBaseManager:
             logger.error("知识库模块初始化失败: %s", safe_error("", exc))
 
     async def _init_kb_database(self) -> None:
-        self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
+        self.kb_db = KBSQLiteDatabase()
         await self.kb_db.initialize()
-        logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
+        logger.info("KnowledgeBase database initialized: %s", self.kb_db.db_path)
 
     async def load_kbs(self) -> None:
         """加载所有知识库实例"""
@@ -237,7 +231,7 @@ class KnowledgeBaseManager:
             kb_db=self.kb_db,
             kb=kb,
             provider_manager=self.provider_manager,
-            kb_root_dir=FILES_PATH,
+            kb_root_dir=get_astrbot_knowledge_base_path(),
             chunker=CHUNKER,
         )
         retrieval_manager = getattr(self, "retrieval_manager", None)

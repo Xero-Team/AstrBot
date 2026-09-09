@@ -1,4 +1,4 @@
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db import BaseDatabase, sqlite_async_url
 from astrbot.core.db.schema import initialize_sqlite_schema
 from astrbot.core.db.stores.aliases import UmoAliasStoreMixin
 from astrbot.core.db.stores.api_keys import ApiKeyStoreMixin
@@ -37,7 +37,7 @@ class SQLiteDatabase(
 ):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
-        self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
+        self.DATABASE_URL = sqlite_async_url(db_path)
         super().__init__()
 
     async def initialize(self) -> None:

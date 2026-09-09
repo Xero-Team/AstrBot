@@ -122,6 +122,20 @@ def _signal_asyncio_process(
         return
 
 
+def _signal_posix_process_group(pid: int, sig: int) -> bool:
+    """Signal a POSIX process group.
+
+    Returns:
+        True when ``killpg`` was delivered. macOS reports an already-reaped
+        group as ``PermissionError`` rather than ``ProcessLookupError``.
+    """
+    try:
+        os.killpg(pid, sig)
+        return True
+    except ProcessLookupError, PermissionError:
+        return False
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     _sessions: dict[str, _LocalShellSession] = field(default_factory=dict, init=False)
@@ -528,10 +542,11 @@ class LocalShellComponent(ShellComponent):
                     getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
                 )
             else:
-                try:
-                    os.killpg(session.process.pid, signal.SIGINT)
-                except ProcessLookupError:
-                    pass
+                if not _signal_posix_process_group(session.process.pid, signal.SIGINT):
+                    try:
+                        session.process.send_signal(signal.SIGINT)
+                    except ProcessLookupError:
+                        pass
         return await self.poll_session(
             owner_id=owner_id,
             session_id=session_id,
@@ -677,20 +692,16 @@ class LocalShellComponent(ShellComponent):
             except Exception:
                 _signal_asyncio_process(process, terminate=True)
         else:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            if not _signal_posix_process_group(process.pid, signal.SIGTERM):
+                _signal_asyncio_process(process, terminate=True)
         try:
             await asyncio.wait_for(process.wait(), 5)
         except TimeoutError:
             if sys.platform == "win32":
                 _signal_asyncio_process(process, terminate=False)
             else:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                if not _signal_posix_process_group(process.pid, signal.SIGKILL):
+                    _signal_asyncio_process(process, terminate=False)
             try:
                 await process.wait()
             except ProcessLookupError:

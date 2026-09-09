@@ -213,7 +213,7 @@ Rules:
   (weights change; Lighthouse 13+ uses Performance Insights).
 - Thresholds apply only if this session measured: LCP < 2.5s, INP < 200ms,
   CLS < 0.1 at the stated percentile/viewport.
-- Default live origin is the current-branch lab in `REFERENCE.md`
+- Default live origin is the current-branch lab in `references/lab.md`
   (`http://127.0.0.1:6185`). If it is down, start this checkout unless
   the user forbade it. If it still cannot run: `未评估` plus the
   command that would measure it. Do not block the audit on Chrome

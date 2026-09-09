@@ -14,9 +14,6 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 FORK_REPO = "Xero-Team/AstrBot"
-PROBE_REQUIRED = "required"
-PROBE_SKIPPED = "skipped"
-PROBE_VALUES = (PROBE_REQUIRED, PROBE_SKIPPED)
 UPSTREAM_HOST = "github.com/AstrBotDevs/AstrBot"
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 ISSUE_ID_RE = re.compile(r"^issue-\d+$")
@@ -31,19 +28,6 @@ REQUIRED_HEADINGS = (
     "Tasks",
     "Verification",
 )
-RESEARCH_HEADINGS = (
-    "Request",
-    "Coverage ledger",
-    "Search log",
-    "Current behavior",
-    "Redundancy",
-    "Prior rejection",
-    "Owners and tests",
-    "Docs",
-    "Impact surface",
-    "Hypotheses",
-    "Open questions",
-)
 PLACEHOLDER_RE = re.compile(
     r"\bTBD\b|\bTODO\b|implement later|add appropriate|"
     r"similar to Task|fill in details|add tests for the above",
@@ -55,41 +39,13 @@ FORBIDDEN_RE = re.compile(
     re.IGNORECASE,
 )
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.*\S)\s*$")
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+PATH_CITE_RE = re.compile(r"`[^`\n]+?:\d+`")
 TASK_HEADING_RE = re.compile(r"^###\s+Task\b", re.IGNORECASE)
 FILES_RE = re.compile(r"^\*{0,2}Files:\*{0,2}\s*$", re.IGNORECASE)
 VERIFY_RE = re.compile(r"^\*{0,2}Verify:\*{0,2}\s*$", re.IGNORECASE)
-COMMAND_RE = re.compile(
-    r"```(?:bash|sh|zsh)?\s*$|^\s*(?:uv |make |pnpm |python |\./|cd )",
-    re.IGNORECASE | re.MULTILINE,
-)
-ALIGN_FILES = ("RESEARCH.md", "BRIEF.md", "QUIZ.md", "REFLECT.md")
-QUESTION_HEADING_RE = re.compile(r"^###\s+Question\b", re.IGNORECASE)
-TOTAL_RE = re.compile(
-    r"^\*{0,2}Total:\*{0,2}\s*(\d+)\s*/\s*10\s*$",
-    re.IGNORECASE | re.MULTILINE,
-)
-VERDICT_RE = re.compile(
-    r"^\*{0,2}Verdict:\*{0,2}\s*(pass|fail|override|skipped)\s*$",
-    re.IGNORECASE | re.MULTILINE,
-)
-DEPTH_RE = re.compile(
-    r"^\*{0,2}Depth:\*{0,2}\s*(small|medium|large|complex)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-KIND_RE = re.compile(
-    r"^\*{0,2}Kind:\*{0,2}\s*(bug|enhancement|task|mixed)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-RESEARCH_VERDICT_RE = re.compile(
-    r"^\*{0,2}Verdict:\*{0,2}\s*(continue|already-implemented|rejected|"
-    r"route:\S+|security)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-PATH_CITE_RE = re.compile(r"`[^`\n]+?:\d+`")
-PROBLEM_RE = re.compile(
-    r"^\*{0,2}Problem:\*{0,2}\s+\S",
-    re.IGNORECASE | re.MULTILINE,
-)
+ACCEPTANCE_RE = re.compile(r"^\*{0,2}Acceptance:\*{0,2}\s*$", re.IGNORECASE)
+COMMAND_RE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 SHA_LINE_RE = re.compile(
     r"^\*{0,2}SHA:\*{0,2}\s*([0-9a-f]{7,40})\b",
     re.IGNORECASE | re.MULTILINE,
@@ -101,22 +57,7 @@ BLOCKED_BY_RE = re.compile(
 )
 TASK_ID_RE = re.compile(r"^Task\s+(\d+)\b", re.IGNORECASE)
 TASK_REF_RE = re.compile(r"Task\s+(\d+)\b", re.IGNORECASE)
-REFLECT_HEADINGS = (
-    "Inferred goal",
-    "Why-chain",
-    "Surgical path",
-    "Better path",
-    "Recommendation",
-)
-STATUS_FILES = (
-    "ISSUE.md",
-    "RESEARCH.md",
-    "BRIEF.md",
-    "QUIZ.md",
-    "REFLECT.md",
-    "QUESTIONS.md",
-    "PLAN.md",
-)
+STATUS_FILES = ("ISSUE.md", "PLAN.md")
 
 
 class PlanError(RuntimeError):
@@ -178,7 +119,21 @@ def validate_run_id(run_id: str) -> None:
 def split_sections(markdown: str) -> list[tuple[int, str, str]]:
     lines = markdown.splitlines()
     starts: list[tuple[int, int, str]] = []
+    fence = ""
     for index, line in enumerate(lines):
+        marker = FENCE_RE.match(line)
+        if marker:
+            delimiter, suffix = marker.groups()
+            if not fence:
+                fence = delimiter
+            elif (
+                delimiter[0] == fence[0]
+                and len(delimiter) >= len(fence)
+                and not suffix.strip()
+            ):
+                fence = ""
+        if marker or fence:
+            continue
         match = HEADING_RE.match(line)
         if match is None:
             continue
@@ -195,6 +150,34 @@ def heading_titles(sections: list[tuple[int, str, str]], level: int) -> set[str]
     return {title for sec_level, title, _body in sections if sec_level == level}
 
 
+def validate_task(title: str, body: str) -> list[str]:
+    """Require file scope, acceptance criteria, and an executable check."""
+    errors: list[str] = []
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    if not any(FILES_RE.match(line) for line in lines):
+        errors.append(f"{title}: missing Files")
+    acceptance = next(
+        (i for i, line in enumerate(lines) if ACCEPTANCE_RE.match(line)), None
+    )
+    verify = next((i for i, line in enumerate(lines) if VERIFY_RE.match(line)), None)
+    if acceptance is None:
+        errors.append(f"{title}: missing Acceptance")
+    elif not any(not VERIFY_RE.match(line) for line in lines[acceptance + 1 : verify]):
+        errors.append(f"{title}: Acceptance is empty")
+    if verify is None:
+        errors.append(f"{title}: missing Verify")
+    else:
+        verification = "\n".join(lines[verify + 1 :])
+        commands = COMMAND_RE.findall(verification)
+        if not any(
+            line.strip() and not line.lstrip().startswith("#")
+            for command in commands
+            for line in command.splitlines()
+        ):
+            errors.append(f"{title}: Verify has no command")
+    return errors
+
+
 def validate_plan(markdown: str) -> list[str]:
     """Return mechanical errors for a PLAN.md body."""
     errors: list[str] = []
@@ -208,6 +191,13 @@ def validate_plan(markdown: str) -> list[str]:
     for heading in REQUIRED_HEADINGS:
         if heading not in titles:
             errors.append(f"missing heading: {heading}")
+    current_behavior = "\n".join(
+        body
+        for level, title, body in sections
+        if level == 2 and title == "Current behavior"
+    )
+    if PATH_CITE_RE.search(current_behavior) is None:
+        errors.append("Current behavior missing `path:line` evidence")
     tasks = [
         (title, body)
         for level, title, body in sections
@@ -216,68 +206,12 @@ def validate_plan(markdown: str) -> list[str]:
     if not tasks:
         errors.append("missing ### Task section")
     for title, body in tasks:
-        lines = [line.strip() for line in body.splitlines() if line.strip()]
-        if not any(FILES_RE.match(line) for line in lines):
-            errors.append(f"{title}: missing Files")
-        if not any(VERIFY_RE.match(line) for line in lines):
-            errors.append(f"{title}: missing Verify")
-        elif not COMMAND_RE.search(body):
-            errors.append(f"{title}: Verify has no command")
+        errors.extend(validate_task(title, body))
     if PLACEHOLDER_RE.search(markdown):
         errors.append("placeholder text is not allowed")
     forbidden = FORBIDDEN_RE.search(markdown)
     if forbidden:
         errors.append(f"forbidden artifact: {forbidden.group(0)}")
-    return errors
-
-
-def validate_research(markdown: str) -> list[str]:
-    """Return mechanical errors for a RESEARCH.md body."""
-    errors: list[str] = []
-    text = markdown.strip()
-    if not text:
-        return ["RESEARCH.md is empty"]
-    titles = heading_titles(split_sections(markdown), 2)
-    for heading in RESEARCH_HEADINGS:
-        if heading not in titles:
-            errors.append(f"RESEARCH.md missing heading: {heading}")
-    if DEPTH_RE.search(markdown) is None:
-        errors.append("RESEARCH.md missing **Depth:** small|medium|large|complex")
-    if KIND_RE.search(markdown) is None:
-        errors.append("RESEARCH.md missing **Kind:** bug|enhancement|task|mixed")
-    verdict_match = RESEARCH_VERDICT_RE.search(markdown)
-    if verdict_match is None:
-        errors.append(
-            "RESEARCH.md missing **Verdict:** continue|already-implemented|"
-            "rejected|route:<skill>|security"
-        )
-    else:
-        verdict = verdict_match.group(1).lower()
-        needs_cite = not (verdict == "security" or verdict.startswith("route:"))
-        if needs_cite and PATH_CITE_RE.search(markdown) is None:
-            errors.append("RESEARCH.md missing `path:line` evidence")
-    return errors
-
-
-def validate_brief(markdown: str) -> list[str]:
-    """Return mechanical errors for a BRIEF.md body."""
-    if not markdown.strip():
-        return ["BRIEF.md is empty"]
-    if PROBLEM_RE.search(markdown) is None:
-        return ["BRIEF.md missing **Problem:**"]
-    return []
-
-
-def validate_reflect(markdown: str) -> list[str]:
-    """Return mechanical errors for a REFLECT.md body."""
-    errors: list[str] = []
-    text = markdown.strip()
-    if not text:
-        return ["REFLECT.md is empty"]
-    titles = heading_titles(split_sections(markdown), 2)
-    for heading in REFLECT_HEADINGS:
-        if heading not in titles:
-            errors.append(f"REFLECT.md missing heading: {heading}")
     return errors
 
 
@@ -368,39 +302,6 @@ def validate_sha_match(markdown: str, expected: str | None) -> list[str]:
     return [f"PLAN.md SHA {found} does not match workspace {want}"]
 
 
-def quiz_verdict(markdown: str) -> str | None:
-    match = VERDICT_RE.search(markdown)
-    if match is None:
-        return None
-    return match.group(1).lower()
-
-
-def validate_quiz(markdown: str, *, probe: str = PROBE_REQUIRED) -> list[str]:
-    """Return mechanical errors for a QUIZ.md body."""
-    errors: list[str] = []
-    verdict = quiz_verdict(markdown)
-    if verdict is None:
-        errors.append("QUIZ.md missing **Verdict:** pass|fail|override|skipped")
-        return errors
-    if verdict == PROBE_SKIPPED:
-        if probe != PROBE_SKIPPED:
-            errors.append("QUIZ.md verdict skipped but workspace probe is required")
-        return errors
-    questions = [
-        line for line in markdown.splitlines() if QUESTION_HEADING_RE.match(line)
-    ]
-    if len(questions) < 5:
-        errors.append(
-            f"QUIZ.md needs five ### Question sections, found {len(questions)}"
-        )
-    total = TOTAL_RE.search(markdown)
-    if total is None:
-        errors.append("QUIZ.md missing **Total:** n/10")
-    elif int(total.group(1)) > 10:
-        errors.append("QUIZ.md total exceeds 10")
-    return errors
-
-
 def resolve_run_dir(root: Path, explicit: str | None) -> Path:
     runs_root = default_runs_root(root)
     if explicit:
@@ -463,10 +364,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         "sha": run_git(root, "rev-parse", "HEAD"),
         "branch": run_git(root, "rev-parse", "--abbrev-ref", "HEAD"),
         "created_at_utc": now_utc(),
-        "status": "research",
-        "probe": (
-            PROBE_SKIPPED if getattr(args, "skip_probe", False) else PROBE_REQUIRED
-        ),
+        "status": "planning",
     }
     write_json(run_dir / "manifest.json", manifest)
     latest_pointer(default_runs_root(root)).write_text(run_id + "\n", encoding="utf-8")
@@ -552,31 +450,6 @@ def cmd_validate(args: argparse.Namespace) -> int:
     sha = manifest.get("sha")
     if isinstance(sha, str):
         errors.extend(validate_sha_match(plan_text, sha))
-    probe = str(manifest.get("probe", PROBE_REQUIRED))
-    if probe not in PROBE_VALUES:
-        errors.append(f"invalid probe: {probe}")
-        probe = PROBE_REQUIRED
-    if not args.plan_only:
-        for name in ALIGN_FILES:
-            if not (run_dir / name).is_file():
-                errors.append(f"missing {name}")
-        research_path = run_dir / "RESEARCH.md"
-        if research_path.is_file():
-            errors.extend(validate_research(research_path.read_text(encoding="utf-8")))
-        brief_path = run_dir / "BRIEF.md"
-        if brief_path.is_file():
-            errors.extend(validate_brief(brief_path.read_text(encoding="utf-8")))
-        quiz_path = run_dir / "QUIZ.md"
-        if quiz_path.is_file():
-            errors.extend(
-                validate_quiz(
-                    quiz_path.read_text(encoding="utf-8"),
-                    probe=probe,
-                )
-            )
-        reflect_path = run_dir / "REFLECT.md"
-        if reflect_path.is_file():
-            errors.extend(validate_reflect(reflect_path.read_text(encoding="utf-8")))
     if errors:
         raise PlanError("\n".join(errors))
     print(f"ok\t{plan_path}")
@@ -591,19 +464,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(
         f"{manifest['run_id']}\t{manifest.get('sha', '')}\t"
         f"{manifest.get('status', '')}\t"
-        f"{manifest.get('probe', PROBE_REQUIRED)}\t"
         f"{','.join(files) or 'none'}\t{run_dir}"
     )
-    return 0
-
-
-def cmd_skip_probe(args: argparse.Namespace) -> int:
-    root = repo_root()
-    run_dir = resolve_run_dir(root, args.run_dir)
-    manifest = load_manifest(run_dir)
-    manifest["probe"] = PROBE_SKIPPED
-    write_json(run_dir / "manifest.json", manifest)
-    print(f"probe\tskipped\t{run_dir}")
     return 0
 
 
@@ -616,11 +478,6 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--issue", type=int)
     init.add_argument("--slug")
     init.add_argument("--force", action="store_true")
-    init.add_argument(
-        "--skip-probe",
-        action="store_true",
-        help="record an explicit user waiver of brief/quiz/reflect/grill",
-    )
     init.set_defaults(func=cmd_init)
 
     fetch = sub.add_parser("fetch", help="write ISSUE.md from GitHub")
@@ -630,17 +487,11 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.set_defaults(func=cmd_fetch)
 
     validate = sub.add_parser("validate", help="check PLAN.md")
-    validate.add_argument("--plan-only", action="store_true")
     validate.set_defaults(func=cmd_validate)
 
     status = sub.add_parser("status", help="print workspace status")
     status.set_defaults(func=cmd_status)
 
-    skip_probe = sub.add_parser(
-        "skip-probe",
-        help="record an explicit user waiver of brief/quiz/reflect/grill",
-    )
-    skip_probe.set_defaults(func=cmd_skip_probe)
     return parser
 
 

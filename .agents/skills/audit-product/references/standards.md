@@ -408,10 +408,11 @@ blocking` is the required gate, not the full suite unless asked.
 
 - Title: Playwright
 - URL: <https://playwright.dev/>
-- When: `dashboard/tests/e2e/`, archify `visual-check`
+- When: `dashboard/tests/e2e/`
 - Product checks: CI Chromium is the required project. Firefox/WebKit
-  in `playwright.config.ts` are not a blocking gap. Skip visual-check
-  when Playwright cannot run and say so.
+  in `playwright.config.ts` are not a blocking gap. Record unavailable
+  browser tests as unassessed. Archify `visual-check` uses Chrome/Chromium
+  directly; see its delivery contract rather than requiring Playwright.
 
 ### `pnpm`
 

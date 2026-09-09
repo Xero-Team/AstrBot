@@ -63,8 +63,10 @@ venv/
 
 # Agent / workspace local metadata
 /.agent/
-/.codex/
-/.opencode/
+/.codex/*
+!/.codex/config.toml
+/.opencode/*
+!/.opencode/opencode.json
 .agents/skills/archify/node_modules/
 /.kilocode/
 /.worktrees/

@@ -1,6 +1,6 @@
 ---
 name: archify
-description: Render architecture, workflow, sequence, data-flow, or lifecycle diagrams as validated standalone HTML for this AstrBot checkout. Use when the user asks to visualize runtime owners, pipeline stages, adapter-to-respond sequences, knowledge-base data flow, or agent-run states, or to convert Mermaid. Do not use for plugin scaffolding, upstream cherry-pick, or shipping diagrams in the Python package, container image, or Dashboard/docs build.
+description: Render validated standalone HTML diagrams of this checkout, including architecture, workflows, sequences, data flow, lifecycles, and Mermaid conversions.
 license: MIT
 metadata:
   version: '2.17'
@@ -12,81 +12,34 @@ metadata:
 
 # Archify
 
-Checkout-only maintainer renderer. Read `REFERENCE.md` before authoring. Cite
-`AGENTS.md`; do not paste it.
+Render code-backed diagrams with `node .agents/skills/archify/bin/archify.mjs`
+from the checkout root. Keep specifications and artifacts in `.tmp/archify/`.
+This vendored maintainer tool stays out of product builds.
 
-## Locked
+Choose the diagram type from the requested relationship. Read
+[authoring-contract.md](references/authoring-contract.md), the matching
+`schemas/<type>.schema.json`, `schemas/common.schema.json`, and one matching
+example under `examples/`. Examples supply field shapes, not repository facts.
+New workflows use `schema_version: 2`.
 
-- CLI from the AstrBot checkout root:
-  `node .agents/skills/archify/bin/archify.mjs`.
-- Node 26.x from this checkout. Do not add a skill-local `node_modules` unless
-  `doctor` fails without it. Runtime rendering needs no npm install.
-- Write JSON IR and delivered HTML under `.tmp/archify/` (gitignored). Do not
-  commit generated HTML, PNG, SVG, WebM, or share cards.
-- Do not run `scripts/check-update.mjs` or download Archify updates.
-- Diagrams of this repository must match current code. Use `Xero-Team/AstrBot`
-  for fork-owned identity. Label `AstrBotDevs/AstrBot` only as upstream
-  provenance.
-- Python 3.14+, source-build `compose.yml` / `astrbot:local`, in-app docs at
-  `/help/`. Brand capture is HTTPS-only.
+Use current code as topology evidence. Omit brand marks unless a real product
+has a permitted built-in or digest-pinned mark. Read
+[brand-marks.md](references/brand-marks.md) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) only when using brands, and
+[viewer-runtime.md](references/viewer-runtime.md) for optional viewer features.
 
-## Open
-
-Diagram type, scope, title, and whether motion, views, or a share card are
-required. Ask only when those choices change the artifact.
-
-## Do not
-
-- Use this skill for plugin scaffolding or upstream cherry-pick. Those are
-  `create-astrbot-plugin` and `sync-upstream`.
-- Invent topology, wake policy, provider modules, or Dashboard routes.
-- Point cards or labels at `docs.astrbot.app`, `soulter/astrbot`, or claim this
-  fork publishes PyPI, GitHub Release, or container artifacts.
-- Copy this tree into the Python sdist, wheel, runtime image, or Dashboard/docs
-  build. It is a developer tool, not a product feature.
-- Write disposable state into `data/`, `docs/`, or the Dashboard tree unless
-  the user explicitly asked for a documentation figure. User-facing docs still
-  need matching `docs/zh/` and `docs/en/` pages.
-- Start `preview` or pass `--open` unless the user asked for a live window.
-- Capture unpinned brand marks. Omit `brand` unless the node names a real
-  product and a built-in or digest-pinned mark exists. Do not fetch `http://`
-  brand URLs.
-
-## Handoff
-
-- Checkout overlay: `REFERENCE.md`
-- Authoring: `references/authoring-contract.md`
-- Delivery receipts: `references/delivery-contract.md`
-- Viewer features: `references/viewer-runtime.md`
-- Commit shape: `.agents/shared/conventional-commit/REFERENCE.md`
-
-Read one matching schema in `schemas/` plus `schemas/common.schema.json` and one
-matching JSON example in `examples/`. Use the example for field shape, not
-facts. New workflows use `schema_version: 2`.
-
-Suggested maps (inspect code; do not copy example facts):
-
-| Type           | Typical scope                                             |
-| -------------- | --------------------------------------------------------- |
-| `architecture` | Runtime owners, adapters, pipeline, Dashboard, providers  |
-| `workflow`     | Pipeline stages in `astrbot/core/pipeline/stage_order.py` |
-| `sequence`     | Adapter → EventBus → scheduler → Process → Respond        |
-| `dataflow`     | Knowledge-base upload, vectors, compensating cleanup      |
-| `lifecycle`    | Session, conversation, or agent-run states                |
-
-Group wake is explicit (`llm_access.group`, `llm_access.reply_to_bot`,
-continuation). Mentions are message-chain markers, not a wake policy.
-Do not draw `platform_settings.group_wake_policy`.
-
-## Verify
+Validate the final candidate and deliver it atomically:
 
 ```bash
-node .agents/skills/archify/bin/archify.mjs doctor
-node .agents/skills/archify/scripts/check-checkout.mjs
 node .agents/skills/archify/bin/archify.mjs validate <type> .tmp/archify/<name>.json --quality showcase --json
 node .agents/skills/archify/bin/archify.mjs deliver <type> .tmp/archify/<name>.json .tmp/archify/<name>.html --quality showcase --json
 ```
 
-A showcase pass needs all 9 artifact checks and 0 composition errors or
-warnings. Skip `visual-check` when Playwright cannot run, and say that browser
-evidence was not collected. Do not call a non-zero exit success.
+Read [delivery-contract.md](references/delivery-contract.md) for browser
+evidence and the handoff receipt. Distinguish deterministic validation,
+automated browser evidence, and actual visual review. Report unavailable
+checks honestly. Start preview or use `--open` only for a requested live window.
+
+Runtime rendering needs no npm install. If the CLI fails, run `doctor`;
+when changing the vendor tree, read [REFERENCE.md](REFERENCE.md) and run
+`make check-archify`. Do not download vendor updates during diagram work.

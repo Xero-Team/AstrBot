@@ -4,6 +4,8 @@
 .git
 .github/
 .agents/
+.codex/
+.opencode/
 .*ignore
 # User-specific stuff
 .idea/

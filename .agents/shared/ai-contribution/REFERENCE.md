@@ -1,58 +1,21 @@
 # AI contribution reference
 
-Policy source: `/AI_POLICY.md`. Commit-message source:
-`.agents/shared/conventional-commit/REFERENCE.md`. Do not paste those files
-into a prompt; cite them.
+[AI_POLICY.md](../../../AI_POLICY.md) is the authority for contributions.
+Read it when committing, pushing, posting an Issue/PR, or preparing review.
 
-## Load this when
+Agents may commit and push feature branches and open development Issues/PRs
+within the task's scope. Target `Xero-Team/AstrBot` explicitly with
+`gh --repo Xero-Team/AstrBot` and verify the resulting URL. Upstream posting
+needs explicit confirmation for that target.
 
-The agent will commit, push, open an Issue, open a Pull Request, comment on
-review, or decide whether a change is ready to merge.
+Agents must not merge, push `master`, force-push protected branches, tag,
+publish, change protection/secrets, fabricate reviews, or publicly disclose
+vulnerabilities. A human maintainer merges after human and separate
+AI-assisted reviews; the author agent's write-up does not count.
 
-## Locked
-
-- Agents **may** maintain the repository: edit, run checks, commit, push
-  feature branches, open development Issues/PRs on `Xero-Team/AstrBot`,
-  comment, and request review. Pass `--repo Xero-Team/AstrBot` (or set
-  `GH_REPO=Xero-Team/AstrBot`) so `gh` cannot default to upstream. Confirm
-  the created URL is under `github.com/Xero-Team/AstrBot`. Do not open an
-  Issue or PR on `AstrBotDevs/AstrBot` unless the user explicitly confirms
-  that upstream target.
-- Agents **must not** merge PRs, push `master`, force-push protected branches,
-  tag, publish releases, change branch protection or secrets, or file a public
-  security report. A human maintainer does those actions. Do not treat a
-  verbal exception as authorization.
-- A PR lands only after a **human maintainer** review **and** a separate
-  **AI-assisted review** on that PR. The authoring agent's write-up is not
-  that review.
-- English Conventional Commits. AI-finalized messages need `AI-Generated: true`
-  and UTC `Generated-At:` from `date -u '+%Y-%m-%dT%H:%M:%SZ'`.
-- Human authors add `## Human note` in their own words. Agent authors add
-  `## Agent note`. Never fabricate the other. Open PRs with the typed
-  template under `.github/PULL_REQUEST_TEMPLATE/` (`feat.md`, `fix.md`,
-  `docs.md`; `perf`/`style` → `refactor.md`; `build`/`ops`/`test` →
-  `chore.md`).
-- Cite `AGENTS.md`, named skills, and named docs. Do not dump them.
-
-## Open
-
-Which feature branch, how many commits, and whether to open the PR in this
-session are open unless the user already decided. Prefer one concern per
-commit.
-
-## Do not
-
-- Merge, even when CI is green.
-- Open an Issue or PR on `AstrBotDevs/AstrBot` without explicit user
-  confirmation for that upstream target.
-- Claim a check passed unless this session ran it or a linked CI run did.
-- Restore legacy shims, Python 3.10-3.13 fallbacks, or upstream publish/docs
-  URLs as fork artifacts.
-- Skip bilingual docs for user-visible behavior.
-
-## Handoff
-
-- Commit message shape: `.agents/shared/conventional-commit/REFERENCE.md`.
-- Upstream absorb: `.agents/skills/sync-upstream/SKILL.md`.
-- Plugin packages: `.agents/skills/create-astrbot-plugin/SKILL.md`.
-- Merge decision: stop and name the human maintainer. Do not self-merge.
+Use [conventional-commit/REFERENCE.md](../conventional-commit/REFERENCE.md)
+for commit messages. Select the matching template in
+`.github/PULL_REQUEST_TEMPLATE/`: `feat`, `fix`, `docs`, `refactor`
+(also perf/style), or `chore` (also build/ops/test).
+End agent-authored Issues/PRs with `## Agent note`: goal, touched paths,
+actual checks, residual risks, and AI tools used. Never fabricate a Human note.

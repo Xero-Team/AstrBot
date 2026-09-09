@@ -1,22 +1,22 @@
 # Archify maps for a product audit
 
 Load `.agents/skills/archify/SKILL.md` before authoring. Facts come from
-current code at the frozen SHA. Use `schema_version: 2`. Author
-`meta.locale: "zh-CN"` and Simplified Chinese copy. Keep code identifiers
-verbatim.
+current code at the frozen SHA. New workflows use `schema_version: 2`.
+Match `meta.locale` and diagram copy to the report language (default `zh-CN`).
+Keep code identifiers verbatim.
 
 Write IR under `.tmp/product-audit/<run-id>/diagrams/<name>.json`, deliver
 HTML beside it, and also keep the archify working copies under
 `.tmp/archify/` if the renderer expects that tree.
 
 ```bash
-node .agents/skills/archify/bin/archify.mjs doctor
 node .agents/skills/archify/bin/archify.mjs validate <type> <ir.json> --quality showcase --json
 node .agents/skills/archify/bin/archify.mjs deliver <type> <ir.json> <out.html> --quality showcase --json
 ```
 
-Record each success with `audit_ledger.py diagram`. Skip `visual-check` when
-Playwright cannot run; say so in the appendix.
+Record each success with `audit_ledger.py diagram`. The renderer's
+`visual-check` uses Chrome/Chromium directly; record its receipt status
+and keep browser evidence distinct from deterministic validation.
 
 ## Required for a full-product run
 

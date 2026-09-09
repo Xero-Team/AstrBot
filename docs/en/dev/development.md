@@ -189,6 +189,24 @@ Keep dependency files synchronized as groups:
 
 GitHub Actions must be pinned to full commit SHAs and grant each job only the scopes required for its actual state changes. Artifact publication, code-scanning uploads, and Issue maintenance are separate write use cases and must each be justified; do not grant broad workflow-wide write access.
 
+## Coding Agent Skills and MCPs
+
+Repository skills live in `.agents/skills/`; see its `README.md` for the catalog.
+`AGENTS.md` contains shared constraints and routes to task-specific details in
+`.agents/shared/checkout/REFERENCE.md`. Load only the skill and references needed
+for the current work. Issue planning produces `.tmp/issue-plan/<run-id>/PLAN.md`;
+it does not require a quiz or intermediate reports.
+
+The tracked `.codex/config.toml` and `.opencode/opencode.json` disable optional
+development MCP servers by default to avoid loading unused tool catalogs.
+Enable a needed server with `enabled = true` in Codex or `"enabled": true` in
+OpenCode, then reconnect or restart the client. Vuetify is configured in both;
+Context7 and Playwright are configured in OpenCode. Playwright uses `npx` from
+PATH. Inspect an explicitly chosen SQLite database with
+`sqlite3 -readonly <database-path>`. Other local agent metadata stays ignored;
+keep credentials and machine-specific paths out of the tracked configs.
+These are coding-client settings, separate from AstrBot's runtime Skills and MCPs.
+
 ## Before Submitting
 
 Run tests proportional to the change, then at least:

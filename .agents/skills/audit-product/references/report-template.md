@@ -1,6 +1,7 @@
 # Chinese report template
 
-Write `REPORT.md` in Simplified Chinese. Keep identifiers verbatim.
+Default `REPORT.md` to Simplified Chinese; follow the user's language choice.
+Keep identifiers verbatim.
 Fill from the ledger; do not leave placeholder prose.
 
 Copy this outline. Delete a section only if the run's scope makes it
@@ -27,8 +28,8 @@ meaningless, and say so under 范围.
 
 - 这是什么产品，默认部署形态（回环 Dashboard、源码构建）。
 - 总体就绪度：可内部使用 / 有条件对外 / 不建议对外暴露 / 尚不适合内部依赖。
-- 最严重的 5 个发现（ID + 一句话）。
-- 已经做得好、不应拆掉的控制（3–7 条）。
+- 优先处理的发现（ID + 一句话）。
+- 已经生效、值得保留的控制。
 - 若只做三件事，按顺序做什么。
 
 禁止在摘要里出现未写入台账的新问题。
@@ -43,7 +44,7 @@ meaningless, and say so under 范围.
 
 例如：上游 PyPI 发行、未连接的真实 IM 账号、付费模型供应商账号、生产数据目录。
 默认活体目标是当前分支 `http://127.0.0.1:6185`（验收测试环境账户，口令见
-技能 `REFERENCE.md`，不要写入本报告；生产环境禁止使用）。未运行的动态
+技能 `references/lab.md`，不要写入本报告；生产环境禁止使用）。未运行的动态
 测试要写明。本机 Dashboard 未测的 Core Web Vitals、未跑的 axe-core 抽样、
 未做的智能体可用性测试（AUT）标 `未评估`，不要写成通过。
 
@@ -132,9 +133,8 @@ enum.
 
 ## Length
 
-A full-product `REPORT.md` should be long enough that a module is not a
-stub: typically 150–400 lines for the roll-up, plus per-module chapters of
-80–250 lines. If a chapter is under ~40 lines, the module was not audited.
+Use enough detail to support the conclusions and reproduce the checks.
+Report and chapter length depend on scope and evidence, not line quotas.
 
 ## Linking diagrams
 

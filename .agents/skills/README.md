@@ -1,68 +1,65 @@
-# Skills
+# Repository skills and MCPs
 
-`.agents/skills/` is the only skill source in this repository. Each skill is a
-directory with `SKILL.md` (policy) plus optional `REFERENCE.md`, `scripts/`,
-and `agents/openai.yaml`.
+Skills live in `.agents/skills/`. Their short descriptions support discovery;
+load a `SKILL.md` only for a matching task, then read supporting references
+as needed. Keep shared repository policy in `AGENTS.md`, detailed checkout
+facts in `.agents/shared/checkout/REFERENCE.md`, and skill-specific procedures
+beside their skill.
 
-Shared locks live under `.agents/shared/`:
+| Skill                                                   | Use for                                              |
+| ------------------------------------------------------- | ---------------------------------------------------- |
+| [sync-upstream](sync-upstream/SKILL.md)                 | Review or integrate upstream commits with provenance |
+| [create-astrbot-plugin](create-astrbot-plugin/SKILL.md) | Build or repair a standalone AstrBot plugin          |
+| [archify](archify/SKILL.md)                             | Render validated standalone HTML diagrams            |
+| [audit-product](audit-product/SKILL.md)                 | Audit product quality, security, or completeness     |
+| [plan-issue](plan-issue/SKILL.md)                       | Write a code-backed implementation plan              |
 
-| Path                               | Role                                             |
-| ---------------------------------- | ------------------------------------------------ |
-| `conventional-commit/REFERENCE.md` | Commit message shape                             |
-| `ai-contribution/REFERENCE.md`     | What agents may open vs what they must not merge |
+## Writing skills
 
-## Catalog
+State the outcome, non-obvious constraints, and useful commands. Avoid repeating
+`AGENTS.md`, generic tutorials, mandatory Q&A, or fixed report/check counts
+without a correctness reason. Descriptions should distinguish tasks; headings
+and extra files are optional. Preserve existing authorization and invocation
+policy. Validate only what the change needs.
 
-| Skill                   | Load when                                                             |
-| ----------------------- | --------------------------------------------------------------------- |
-| `sync-upstream`         | Absorb `AstrBotDevs/AstrBot` `master`                                 |
-| `create-astrbot-plugin` | Create or repair a plugin (Star) package                              |
-| `archify`               | Checkout-only diagram renderer; not shipped in sdist, wheel, or image |
-| `audit-product`         | Baseline or module product audit; Chinese Markdown report + diagrams  |
-| `plan-issue`            | Issue or pasted request → research, clarify, file-path plan           |
+This design follows the [GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md#prompting-best-practices):
+audit conflicting instructions, carry authorized work through, and calibrate
+verification. The skills remain usable with other capable models.
 
-Do not add a skill that only restates `AGENTS.md`. Split a skill when a
-second, independently loadable workflow appears.
+## Working artifacts
 
-## `SKILL.md` contract
+- Planning: `.tmp/issue-plan/`; only `PLAN.md` is required by its validator.
+- Product audits: `.tmp/product-audit/`; query the ledger to resume.
+- Diagrams: `.tmp/archify/`; keep the vendored renderer and generated
+  artifacts out of product builds. Vendor provenance is in
+  [archify/REFERENCE.md](archify/REFERENCE.md); check changes with
+  `make check-archify`.
+- Plugins: prefer a sibling repository and call this checkout's checker
+  rather than copying the skill.
 
-Frontmatter `name` and `description` must say **when to load** and **when not
-to**. The body uses these headings when they apply:
+Commit/PR work uses [AI contribution guidance](../shared/ai-contribution/REFERENCE.md)
+and the [commit reference](../shared/conventional-commit/REFERENCE.md).
+Security findings follow `SECURITY.md`.
 
-- **Locked** — toolchain or behavior the agent must not change
-- **Open** — product design the agent may decide
-- **Do not** — hard stops
-- **Handoff** — other skills or files to cite, not paste
-- **Verify** — focused commands after the change
+## Development MCPs
 
-Cite `AGENTS.md` and shared references. Do not inline those files.
+The tracked defaults in `.codex/config.toml` and `.opencode/opencode.json`
+keep optional servers disabled, so ordinary sessions do not load their tool
+catalogs. Enable only a server needed by the task with `enabled = true`
+(Codex TOML) or `"enabled": true` (OpenCode JSON), and reconnect/restart
+the client. Local enablement edits need not be committed.
 
-Plugin sibling repositories should call this checkout's
-`create-astrbot-plugin/scripts/check_plugin.py` rather than vendoring a copy of
-the skill.
+| Server      | Configured client | Enable for                      |
+| ----------- | ----------------- | ------------------------------- |
+| vuetify-mcp | Codex, OpenCode   | Vuetify component API questions |
+| context7    | OpenCode          | External library documentation  |
+| playwright  | OpenCode          | Interactive browser inspection  |
 
-`archify` is a vendored MIT renderer from
-[tt-a1i/archify](https://github.com/tt-a1i/archify). It is a checkout-only
-maintainer tool: hatch sdist excludes `/.agents`, and `.dockerignore` drops
-`.agents/` from the image build context. Keep the overlay in
-`archify/REFERENCE.md` and the pin in `archify/VENDOR.json`. Agents load it
-from `.agents/skills/archify/SKILL.md`. Verify with `make check-archify`; that
-target is not part of `make check`.
+For SQLite inspection, use `sqlite3 -readonly <explicit-database-path>`;
+there is no development MCP attached to runtime data. Prefer an isolated
+database for experiments. The Playwright server uses `npx` from PATH.
 
-`audit-product` writes working state under `.tmp/product-audit/` (gitignored)
-and diagrams via `archify`. Reports stay out of `docs/` unless the user
-explicitly asks to promote a figure. Security findings follow `SECURITY.md`.
-Official-standard URLs live in `audit-product/references/standards.md`; cite
-them, do not paste the specs. Independent disprove, variant sweeps, and GHA
-bars live in `audit-product/references/verification.md`. Do not vendor
-third-party audit skill trees into `.agents/skills/`.
-
-`plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). It
-stops at `PLAN.md` until the user approves implementation. Brief, quiz,
-reflect, and grill are required unless the user explicitly skips that
-Q&A. Cite `plan-issue/references/sources.md` for Superpowers, triage,
-Spec Kit, grilling, JTBD, and related planning skills; do not vendor
-those trees or their default `docs/superpowers/`, `tasks/`, `.specify/`,
-or `dev/plans/` directories. The plan checker in
-`plan-issue/references/verification.md` is the agent judgment pass;
-`scripts/issue_plan.py validate` owns mechanical bars.
+Only these two configuration files are tracked; other local agent metadata
+stays ignored. Never commit credentials or machine-specific paths.
+These settings configure coding clients; AstrBot's runtime MCP integration
+and user-configured runtime Skills are separate product features.

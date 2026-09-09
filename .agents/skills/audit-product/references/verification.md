@@ -13,8 +13,9 @@ reproduction detail in `SENSITIVE.md`.
 After `add-finding` for `kind` in `{security, defect}` and `confidence` in
 `{confirmed, likely}`, and **before** `score`:
 
-1. Spawn one research agent **that did not write the finding**. One finding
-   per agent. Parallelize independent findings.
+1. Use the active client's delegation tool to start a research agent **that
+   did not write the finding**. Give it one finding at a time and keep
+   concurrent work within the client's available capacity.
 2. Give it only: `finding_id`, title, `location`, claimed data flow / sink,
    and the frozen SHA. Do not paste the chapter.
 3. Its job is to **disprove** the finding. It must read every cited
@@ -31,6 +32,11 @@ After `add-finding` for `kind` in `{security, defect}` and `confidence` in
 
 Same-session parent reread is not a substitute. Inventory explore agents
 still must not create findings from summaries alone (`long-run.md`).
+
+If independent agents are unavailable or disabled, record verification as
+blocked in the chapter and keep the module blocked for independent review.
+Continue other modules and report the limitation during synthesis; do not
+score the affected module or silently relax the independence requirement.
 
 Do **not** launch a Cloudflare-style fleet of 8–12 hunters that write the
 ledger. Hunt parallelism is read-only mapping only.

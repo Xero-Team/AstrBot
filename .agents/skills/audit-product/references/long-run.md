@@ -72,8 +72,9 @@ After each module:
 7. `validate` passes for that module
 8. User-visible progress: module id, overall rating, open high+, next module
 
-Stop the session cleanly at a checkpoint. Do not leave `in_progress` with
-unwritten findings. Do not `score` before the disprove step.
+Flush findings at each checkpoint and continue to the next pending module.
+If the user pauses the audit or the client interrupts, leave enough state to
+resume. Do not leave unwritten findings or `score` before the disprove step.
 
 Rewrite `.tmp/product-audit/<run-id>/CURRENT.md` (10–20 lines): SHA, next
 `module_id`, open high+, last command actually run, whether the lab at

@@ -202,6 +202,30 @@ def test_terminate_process_ignores_windows_process_lookup(monkeypatch):
     asyncio.run(LocalShellComponent()._terminate_process(DeadProcess()))
 
 
+def test_terminate_process_ignores_posix_killpg_permission(monkeypatch):
+    class DeadProcess:
+        pid = 12345
+        returncode = None
+
+        def terminate(self):
+            raise ProcessLookupError
+
+        def kill(self):
+            raise ProcessLookupError
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    def fake_killpg(_pid, _sig):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(local_booter.sys, "platform", "darwin")
+    monkeypatch.setattr(local_booter.os, "killpg", fake_killpg)
+
+    asyncio.run(LocalShellComponent()._terminate_process(DeadProcess()))
+
+
 def test_local_shell_component_kills_posix_process_group_on_timeout(monkeypatch):
     """A shell timeout must reap commands spawned by the shell as well."""
 

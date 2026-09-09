@@ -139,6 +139,7 @@ class AstrBotExporter:
             self._write_json_entry(zf, f"databases/kb_{kb_id}/documents.json", doc_data)
             await self._export_faiss_index(zf, kb_helper, kb_id)
             await self._export_kb_media_files(zf, kb_helper, kb_id)
+            await self._export_kb_source_files(zf, kb_helper, kb_id)
 
         await self._report_progress(
             progress_callback,
@@ -391,6 +392,27 @@ class AstrBotExporter:
             raise
         except Exception as exc:
             logger.warning("导出知识库媒体文件失败: %s", safe_error("", exc))
+
+    async def _export_kb_source_files(
+        self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
+    ) -> None:
+        """Export stored knowledge-base source blobs."""
+        try:
+            files_dir = kb_helper.kb_files_dir
+            if not files_dir.exists():
+                return
+            for root, _, files in os.walk(files_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    rel_path = file_path.relative_to(files_dir)
+                    if any(part == ".." for part in rel_path.parts):
+                        continue
+                    archive_path = f"files/kb_files/{kb_id}/{rel_path.as_posix()}"
+                    zf.write(str(file_path), archive_path)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("导出知识库源文件失败: %s", safe_error("", exc))
 
     async def _export_directories(
         self, zf: zipfile.ZipFile

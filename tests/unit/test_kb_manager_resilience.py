@@ -291,19 +291,20 @@ async def test_ensure_vec_db_clears_stale_init_error(
     helper.kb_medias_dir = helper.kb_dir / "medias" / mock_knowledge_base.kb_id
     helper.kb_files_dir = helper.kb_dir / "files" / mock_knowledge_base.kb_id
 
-    # Mock FaissVecDB initialization
     mock_vec_db = MagicMock()
     mock_vec_db.initialize = AsyncMock()
     mock_vec_db.close = AsyncMock()
 
+    class FakeFaissVecDB:
+        def __new__(cls, *args, **kwargs):
+            return mock_vec_db
+
     with patch(
         "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
-        return_value=mock_vec_db,
+        FakeFaissVecDB,
     ):
-        # Execute _ensure_vec_db
         await helper._ensure_vec_db()
 
-        # Verify: init_error should be cleared
         assert helper.init_error is None
         assert helper.vec_db is mock_vec_db
 

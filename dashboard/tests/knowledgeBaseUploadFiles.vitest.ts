@@ -49,6 +49,20 @@ describe('knowledgeBaseUploadFiles', () => {
     expect(isSupportedKnowledgeBaseUploadFile('README')).toBe(false);
   });
 
+  it('keeps distinct long relative paths that share a basename', () => {
+    const first = withUploadRelativeName(
+      makeFile('note.md'),
+      `dir-a/${'x'.repeat(300)}/note.md`,
+    );
+    const second = withUploadRelativeName(
+      makeFile('note.md'),
+      `dir-b/${'y'.repeat(300)}/note.md`,
+    );
+    expect(first.name).not.toBe(second.name);
+    expect(first.name.endsWith('/note.md')).toBe(true);
+    expect(second.name.endsWith('/note.md')).toBe(true);
+  });
+
   it('keeps nested relative names for dropped markdown trees', () => {
     const original = makeFile('阿米娅.md');
     const renamed = withUploadRelativeName(

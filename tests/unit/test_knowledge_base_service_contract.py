@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import Request
 
+from astrbot.core.knowledge_base.kb_helper import DocumentIngestResult
+from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.dashboard.api.knowledge_bases import (
     list_knowledge_bases,
@@ -293,7 +295,19 @@ async def test_upload_document_accepts_more_than_ten_files_and_cleans_staging_di
 
     kb_helper = SimpleNamespace(
         upload_document=AsyncMock(
-            return_value=SimpleNamespace(model_dump=lambda: {"doc_id": "doc-1"})
+            return_value=DocumentIngestResult(
+                document=KBDocument(
+                    doc_id="doc-1",
+                    kb_id="kb-1",
+                    doc_name="document-0.txt",
+                    file_type="txt",
+                    file_size=1,
+                    file_path="doc-1",
+                    identity_key="file:document-0.txt",
+                    source_kind="file",
+                ),
+                ingest_status="created",
+            )
         )
     )
     kb_manager = SimpleNamespace(get_kb=AsyncMock(return_value=kb_helper))

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import delete
 
 from astrbot import logger
+from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.utils.error_redaction import safe_error
 
 from .constants import KB_METADATA_MODELS
@@ -47,6 +48,18 @@ async def clear_kb_data(kb_manager: KnowledgeBaseManager | None) -> None:
     kb_manager.kb_insts.clear()
 
 
+def _normalize_kb_document_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Fill identity columns so pre-identity backups import with unique keys."""
+    normalized = dict(row)
+    doc_id = str(normalized.get("doc_id") or "")
+    if not normalized.get("identity_key"):
+        normalized["identity_key"] = f"legacy:{doc_id}" if doc_id else ""
+    normalized.setdefault("content_hash", "")
+    normalized.setdefault("source_kind", "file")
+    normalized.setdefault("source_url", None)
+    return normalized
+
+
 async def import_kb_metadata_tables(
     kb_manager: KnowledgeBaseManager | None,
     kb_meta_data: dict[str, list[dict[str, Any]]],
@@ -76,6 +89,14 @@ async def import_kb_metadata_tables(
                 for row in rows:
                     try:
                         normalized_row = convert_datetime_fields(row, model_class)
+                        if model_class is KBDocument:
+                            normalized_row = _normalize_kb_document_row(normalized_row)
+                        allowed = set(model_class.model_fields)
+                        normalized_row = {
+                            key: value
+                            for key, value in normalized_row.items()
+                            if key in allowed
+                        }
                         session.add(model_class(**normalized_row))
                         count += 1
                     except asyncio.CancelledError:

@@ -38,8 +38,17 @@
     "size": "Size",
     "chunks": "Chunks",
     "createdAt": "Uploaded At",
+    "status": "Status",
+    "statusCreated": "Created",
+    "statusReplaced": "Replaced",
+    "statusUnchanged": "Unchanged",
     "actions": "Actions",
     "view": "View",
+    "reindex": "Reindex",
+    "reindexUnavailable": "Source file is not stored; reindex is unavailable",
+    "reindexSuccess": "Document rebuilt with current chunk settings",
+    "reindexFailed": "Failed to reindex document",
+    "ingestSummary": "Upload finished: {created} created, {replaced} replaced, {unchanged} unchanged",
     "delete": "Delete",
     "deleteConfirm": "Are you sure you want to delete document '{name}'?",
     "deleteWarning": "This will delete the document and all its chunks. This action cannot be undone.",
@@ -126,6 +135,6 @@
     "save": "Save Settings",
     "saveSuccess": "Settings saved successfully",
     "saveFailed": "Failed to save settings",
-    "tips": "Tip: Modifying retrieval settings will affect subsequent knowledge base queries."
+    "tips": "Tip: Retrieval setting changes apply to later queries. After changing chunk size, reindex documents. Changing the embedding model or dimension is not migrated; reindex will fail."
   }
 }

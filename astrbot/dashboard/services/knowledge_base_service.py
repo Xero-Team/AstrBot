@@ -10,7 +10,17 @@ from starlette.datastructures import UploadFile
 
 from astrbot import logger
 from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.knowledge_base.kb_db_sqlite import (
+    file_identity_key,
+    import_identity_key,
+    posix_identity_input,
+)
+from astrbot.core.knowledge_base.kb_helper import (
+    KB_SOURCE_MAX_BYTES,
+    DocumentIngestResult,
+)
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
@@ -21,7 +31,9 @@ from astrbot.dashboard.utils import generate_tsne_visualization
 
 
 class KnowledgeBaseServiceError(Exception):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 _BACKGROUND_TASK_ERROR = "Knowledge base task failed"
@@ -42,7 +54,7 @@ class KnowledgeBaseService:
         return data if isinstance(data, dict) else {}
 
     @staticmethod
-    def sanitize_upload_filename(filename: str | None) -> str:
+    def sanitize_upload_filename(filename: str | None, *, truncate: bool = True) -> str:
         """Return a document name that is safe to store as metadata.
 
         Nested relative paths are kept so a dropped Markdown folder still
@@ -51,6 +63,8 @@ class KnowledgeBaseService:
 
         Args:
             filename: Original multipart filename.
+            truncate: When true, collapse names longer than 255 characters to
+                the basename. Identity keys must be computed before truncation.
 
         Returns:
             Sanitized document name, or ``document`` when nothing usable remains.
@@ -66,10 +80,54 @@ class KnowledgeBaseService:
         if not parts:
             return "document"
         sanitized = "/".join(parts)
-        if len(sanitized) <= _DOC_NAME_MAX_LENGTH:
+        if not truncate or len(sanitized) <= _DOC_NAME_MAX_LENGTH:
             return sanitized
         basename = parts[-1][:_DOC_NAME_MAX_LENGTH]
         return basename or "document"
+
+    @staticmethod
+    def file_identity_key_for(filename: str | None) -> str:
+        posix = posix_identity_input(filename or "") or "document"
+        return file_identity_key(posix)
+
+    @staticmethod
+    def import_identity_key_for(filename: str | None) -> str:
+        posix = posix_identity_input(filename or "") or "document"
+        return import_identity_key(posix)
+
+    @staticmethod
+    def document_public_payload(
+        result: object,
+        *,
+        ingest_status: str | None = None,
+    ) -> dict[str, Any]:
+        """Serialize a document for API and task payloads without ``file_path``."""
+        status = ingest_status
+        document = result
+        if isinstance(result, DocumentIngestResult):
+            status = result.ingest_status
+            document = result.document
+        if not isinstance(document, KBDocument):
+            raise TypeError("document payload requires KBDocument")
+        payload: dict[str, Any] = {
+            "doc_id": document.doc_id,
+            "kb_id": document.kb_id,
+            "doc_name": document.doc_name,
+            "file_type": document.file_type,
+            "file_size": document.file_size,
+            "chunk_count": document.chunk_count,
+            "media_count": document.media_count,
+            "identity_key": document.identity_key,
+            "content_hash": document.content_hash,
+            "source_kind": document.source_kind,
+            "source_url": document.source_url,
+            "source_stored": bool(document.file_path),
+            "created_at": document.created_at,
+            "updated_at": document.updated_at,
+        }
+        if status is not None:
+            payload["ingest_status"] = status
+        return payload
 
     @staticmethod
     def _canonical_kb_payload(data: object) -> dict[str, Any]:
@@ -232,6 +290,11 @@ class KnowledgeBaseService:
                     progress_callback = self.make_progress_callback(
                         task_id, file_idx, file_info["file_name"]
                     )
+                    if len(file_content) > KB_SOURCE_MAX_BYTES:
+                        raise KnowledgeBaseUploadError(
+                            stage="validation",
+                            user_message="Document exceeds the 128 MB size limit.",
+                        )
                     doc = await kb_helper.upload_document(
                         file_name=file_info["file_name"],
                         file_content=file_content,
@@ -242,8 +305,10 @@ class KnowledgeBaseService:
                         tasks_limit=tasks_limit,
                         max_retries=max_retries,
                         progress_callback=progress_callback,
+                        identity_key=file_info.get("identity_key"),
+                        source_kind=file_info.get("source_kind") or "file",
                     )
-                    uploaded_docs.append(doc.model_dump())
+                    uploaded_docs.append(self.document_public_payload(doc))
                 except Exception as exc:
                     logger.error(
                         "上传文档 %s 失败: %s",
@@ -326,13 +391,21 @@ class KnowledgeBaseService:
                     progress_callback = self.make_progress_callback(
                         task_id, file_idx, file_name
                     )
+                    identity_name = str(doc_info.get("file_name") or file_name)
+                    display_name = self.sanitize_upload_filename(identity_name)
+                    joined = "".join(f"{len(chunk)}\n{chunk}" for chunk in chunks)
+                    if len(joined.encode("utf-8")) > KB_SOURCE_MAX_BYTES:
+                        raise KnowledgeBaseUploadError(
+                            stage="validation",
+                            user_message="Document exceeds the 128 MB size limit.",
+                        )
                     doc = await kb_helper.upload_document(
-                        file_name=file_name,
+                        file_name=display_name,
                         file_content=None,
                         file_type=doc_info.get("file_type")
                         or (
-                            file_name.rsplit(".", 1)[-1].lower()
-                            if "." in file_name
+                            display_name.rsplit(".", 1)[-1].lower()
+                            if "." in display_name
                             else "txt"
                         ),
                         batch_size=batch_size,
@@ -340,8 +413,10 @@ class KnowledgeBaseService:
                         max_retries=max_retries,
                         progress_callback=progress_callback,
                         pre_chunked_text=chunks,
+                        identity_key=self.import_identity_key_for(identity_name),
+                        source_kind="import",
                     )
-                    uploaded_docs.append(doc.model_dump())
+                    uploaded_docs.append(self.document_public_payload(doc))
                 except Exception as exc:
                     logger.error(
                         "导入文档 %s 失败: %s",
@@ -572,7 +647,7 @@ class KnowledgeBaseService:
         )
         total = await kb_helper.count_documents(search=search)
         return {
-            "items": [doc.model_dump() for doc in doc_list],
+            "items": [self.document_public_payload(doc) for doc in doc_list],
             "page": page,
             "page_size": page_size,
             "total": total,
@@ -608,6 +683,7 @@ class KnowledgeBaseService:
         files_to_upload = []
         try:
             for file in files:
+                identity_key = self.file_identity_key_for(file.filename)
                 file_name = self.sanitize_upload_filename(file.filename)
                 stored_name = Path(file_name).name or "document"
                 temp_file_path = staging_dir / f"{uuid.uuid4()}_{stored_name}"
@@ -617,6 +693,8 @@ class KnowledgeBaseService:
                 files_to_upload.append(
                     {
                         "file_name": file_name,
+                        "identity_key": identity_key,
+                        "source_kind": "file",
                         "temp_file_path": temp_file_path,
                         "file_type": file_type,
                     },
@@ -760,7 +838,7 @@ class KnowledgeBaseService:
         doc = await kb_helper.get_document(doc_id)
         if not doc:
             raise KnowledgeBaseServiceError("文档不存在")
-        return doc.model_dump()
+        return self.document_public_payload(doc)
 
     async def delete_document(self, data: object) -> tuple[None, str]:
         payload = self._payload(data)
@@ -775,6 +853,28 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
         await kb_helper.delete_document(doc_id)
         return None, "删除文档成功"
+
+    async def reindex_document(
+        self,
+        *,
+        kb_id: str | None,
+        doc_id: str | None,
+    ) -> dict[str, Any]:
+        if not kb_id:
+            raise KnowledgeBaseServiceError("缺少参数 kb_id", status_code=400)
+        if not doc_id:
+            raise KnowledgeBaseServiceError("缺少参数 doc_id", status_code=400)
+        kb_helper = await self.get_kb_manager().get_kb(kb_id)
+        if not kb_helper:
+            raise KnowledgeBaseServiceError("知识库不存在", status_code=400)
+        try:
+            result = await kb_helper.reindex_document(doc_id)
+        except KnowledgeBaseUploadError as exc:
+            raise KnowledgeBaseServiceError(
+                exc.user_message,
+                status_code=400,
+            ) from exc
+        return self.document_public_payload(result)
 
     async def delete_chunk(self, data: object) -> tuple[None, str]:
         payload = self._payload(data)
@@ -939,7 +1039,7 @@ class KnowledgeBaseService:
                 "completed",
                 result={
                     "task_id": task_id,
-                    "uploaded": [doc.model_dump()],
+                    "uploaded": [self.document_public_payload(doc)],
                     "failed": [],
                     "total": 1,
                     "success_count": 1,

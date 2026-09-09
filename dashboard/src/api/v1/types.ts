@@ -368,12 +368,20 @@ export interface KnowledgeBaseData {
 export interface KnowledgeDocumentData {
   document_id?: string;
   doc_id?: string;
+  kb_id?: string;
   doc_name: string;
   file_type?: string;
   file_size?: number;
   chunk_count?: number;
+  media_count?: number;
+  identity_key?: string;
+  content_hash?: string;
+  source_kind?: string;
+  source_url?: string | null;
+  source_stored?: boolean;
+  ingest_status?: 'created' | 'replaced' | 'unchanged';
   created_at?: string;
-  [key: string]: unknown;
+  updated_at?: string;
 }
 
 export interface KnowledgeChunkData {

@@ -697,6 +697,27 @@ export type KnowledgeDocumentUrlImportRequest = {
   parser?: string;
 };
 
+export type KnowledgeDocument = {
+  doc_id: string;
+  kb_id: string;
+  doc_name: string;
+  file_type?: string;
+  file_size?: number;
+  chunk_count?: number;
+  media_count?: number;
+  identity_key?: string;
+  content_hash?: string;
+  source_kind?: 'file' | 'url' | 'import';
+  source_url?: string;
+  source_stored?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  /**
+   * Present on background task item results only.
+   */
+  ingest_status?: 'created' | 'replaced' | 'unchanged';
+};
+
 export type KnowledgeRetrieveRequest = {
   query: string;
   top_k?: number;
@@ -5232,6 +5253,36 @@ export type GetKnowledgeDocumentResponses = {
 
 export type GetKnowledgeDocumentResponse =
   GetKnowledgeDocumentResponses[keyof GetKnowledgeDocumentResponses];
+
+export type ReindexKnowledgeDocumentData = {
+  body?: never;
+  path: {
+    kb_id: string;
+    document_id: string;
+  };
+  query?: never;
+  url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}/reindex';
+};
+
+export type ReindexKnowledgeDocumentErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  400: ErrorEnvelope;
+};
+
+export type ReindexKnowledgeDocumentError =
+  ReindexKnowledgeDocumentErrors[keyof ReindexKnowledgeDocumentErrors];
+
+export type ReindexKnowledgeDocumentResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ReindexKnowledgeDocumentResponse =
+  ReindexKnowledgeDocumentResponses[keyof ReindexKnowledgeDocumentResponses];
 
 export type ListKnowledgeChunksData = {
   body?: never;

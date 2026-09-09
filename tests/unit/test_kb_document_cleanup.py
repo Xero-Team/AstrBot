@@ -51,6 +51,7 @@ async def seeded_doc(kb_db, seeded_kb):
         file_type="txt",
         file_size=100,
         file_path="",
+        identity_key="file:test_doc.txt",
     )
     async with kb_db.get_db() as session, session.begin():
         session.add(doc)
@@ -116,17 +117,66 @@ async def test_delete_document_cleans_media_records(kb_db, seeded_media):
 
 
 @pytest.mark.asyncio
+async def test_delete_document_unlinks_source_blobs(kb_db, seeded_doc, tmp_path):
+    _kb_id, doc_id = seeded_doc
+    files_dir = tmp_path / "kb_files"
+    files_dir.mkdir()
+    (files_dir / doc_id).write_bytes(b"live")
+    (files_dir / f"{doc_id}.staging").write_bytes(b"staging")
+    (files_dir / f"{doc_id}.bak").write_bytes(b"bak")
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(b"keep")
+
+    mock_vec_db = MagicMock()
+    mock_vec_db.delete_documents = AsyncMock()
+    await kb_db.delete_document_by_id(doc_id, mock_vec_db, kb_files_dir=files_dir)
+
+    assert not (files_dir / doc_id).exists()
+    assert not (files_dir / f"{doc_id}.staging").exists()
+    assert not (files_dir / f"{doc_id}.bak").exists()
+    assert outside.read_bytes() == b"keep"
+
+
+@pytest.mark.asyncio
+async def test_delete_document_skips_blobs_outside_files_dir(kb_db, tmp_path):
+    files_dir = tmp_path / "kb_files"
+    files_dir.mkdir()
+    outside = tmp_path / "secret.bin"
+    outside.write_bytes(b"secret")
+    mock_vec_db = MagicMock()
+    mock_vec_db.delete_documents = AsyncMock()
+
+    await kb_db.delete_document_by_id(
+        "../secret.bin",
+        mock_vec_db,
+        kb_files_dir=files_dir,
+    )
+
+    assert outside.read_bytes() == b"secret"
+
+
+@pytest.mark.asyncio
 async def test_delete_document_keeps_other_doc_media(kb_db, seeded_kb):
     """删除一个文档时, 其他文档的多媒体记录不应受影响。"""
     kb_id = seeded_kb
 
     # 创建文档 A
     doc_a = KBDocument(
-        kb_id=kb_id, doc_name="doc_a.txt", file_type="txt", file_size=100, file_path=""
+        kb_id=kb_id,
+        doc_name="doc_a.txt",
+        file_type="txt",
+        file_size=100,
+        file_path="",
+        identity_key="file:doc_a.txt",
     )
     # 创建文档 B
     doc_b = KBDocument(
-        kb_id=kb_id, doc_name="doc_b.txt", file_type="txt", file_size=200, file_path=""
+        kb_id=kb_id,
+        doc_name="doc_b.txt",
+        file_type="txt",
+        file_size=200,
+        file_path="",
+        identity_key="file:doc_b.txt",
     )
     async with kb_db.get_db() as session, session.begin():
         session.add(doc_a)

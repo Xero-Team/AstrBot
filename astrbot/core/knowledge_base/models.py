@@ -83,10 +83,22 @@ class KBDocument(BaseKBModel, table=True):
     file_path: str = Field(max_length=512, nullable=False)
     chunk_count: int = Field(default=0, nullable=False)
     media_count: int = Field(default=0, nullable=False)
+    identity_key: str = Field(max_length=768, nullable=False, default="")
+    content_hash: str = Field(max_length=64, nullable=False, default="")
+    source_kind: str = Field(max_length=20, nullable=False, default="file")
+    source_url: str | None = Field(default=None, max_length=2048)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "kb_id",
+            "identity_key",
+            name="uix_kb_identity",
+        ),
     )
 
 

@@ -1092,3 +1092,128 @@ class TestBackupIntegration:
             # 读取主数据库
             main_db = json.loads(zf.read("databases/main_db.json"))
             assert "platform_stats" in main_db
+
+
+@pytest.mark.asyncio
+async def test_kb_source_blobs_export_import_roundtrip(tmp_path):
+    from astrbot.core.backup._importer_kb import _normalize_kb_document_row
+
+    kb_id = "kb-roundtrip"
+    files_dir = tmp_path / "src" / "files" / kb_id
+    files_dir.mkdir(parents=True)
+    (files_dir / "doc-1").write_bytes(b"stored source unique")
+    (files_dir / "doc-1.staging").write_bytes(b"staging leftover")
+    (files_dir / "doc-1.bak").write_bytes(b"bak leftover")
+    helper = MagicMock()
+    helper.kb_files_dir = files_dir
+    exporter = AstrBotExporter.__new__(AstrBotExporter)
+    zip_path = tmp_path / "backup.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        await exporter._export_kb_source_files(zf, helper, kb_id)
+        names = zf.namelist()
+        assert f"files/kb_files/{kb_id}/doc-1" in names
+        assert f"files/kb_files/{kb_id}/doc-1.staging" not in names
+        assert f"files/kb_files/{kb_id}/doc-1.bak" not in names
+
+    importer = AstrBotImporter.__new__(AstrBotImporter)
+    importer.kb_root_dir = str(tmp_path / "restored")
+    result = ImportResult()
+    kb_dir = tmp_path / "restored" / kb_id
+    kb_dir.mkdir(parents=True)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        await importer._import_single_kb_source_files(zf, kb_id, kb_dir, result)
+    restored = kb_dir / "files" / kb_id / "doc-1"
+    assert restored.read_bytes() == b"stored source unique"
+    row = _normalize_kb_document_row(
+        {"doc_id": "doc-1", "kb_id": kb_id, "doc_name": "a.md"}
+    )
+    assert row["identity_key"] == "legacy:doc-1"
+
+
+@pytest.mark.asyncio
+async def test_kb_source_import_skips_path_escape(tmp_path):
+    kb_id = "kb-escape"
+    zip_path = tmp_path / "evil.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr(f"files/kb_files/{kb_id}/../../outside.bin", b"evil")
+    importer = AstrBotImporter.__new__(AstrBotImporter)
+    importer.kb_root_dir = str(tmp_path / "restored")
+    kb_dir = tmp_path / "restored" / kb_id
+    kb_dir.mkdir(parents=True)
+    result = ImportResult()
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        await importer._import_single_kb_source_files(zf, kb_id, kb_dir, result)
+    assert not (tmp_path / "restored" / "outside.bin").exists()
+    assert not (tmp_path / "outside.bin").exists()
+
+
+@pytest.mark.asyncio
+async def test_restored_source_blob_can_reindex(tmp_path):
+    from unittest.mock import AsyncMock
+
+    from astrbot.core.knowledge_base.chunking.recursive import RecursiveCharacterChunker
+    from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.models import KnowledgeBase
+    from astrbot.core.provider.provider import EmbeddingProvider
+
+    class HashEmbeddingProvider(EmbeddingProvider):
+        def __init__(self, dim: int = 8) -> None:
+            super().__init__({"embedding_dimensions": dim}, {})
+
+        async def get_embedding(self, text: str):
+            digest = __import__("hashlib").sha256(text.encode()).digest()
+            return [digest[i] / 255.0 for i in range(self.get_dim())]
+
+        async def get_embeddings(self, text):
+            return [await self.get_embedding(item) for item in text]
+
+    db = KBSQLiteDatabase(str(tmp_path / "kb.db"))
+    await db.initialize()
+    kb = KnowledgeBase(
+        kb_name="Backup KB",
+        embedding_provider_id="emb-1",
+        chunk_size=64,
+        chunk_overlap=0,
+    )
+    async with db.get_db() as session, session.begin():
+        session.add(kb)
+        await session.flush()
+    embedding = HashEmbeddingProvider()
+    provider_manager = MagicMock()
+    provider_manager.get_provider_by_id = AsyncMock(return_value=embedding)
+    helper = KBHelper(
+        kb_db=db,
+        kb=kb,
+        provider_manager=provider_manager,
+        kb_root_dir=str(tmp_path / "kbs"),
+        chunker=RecursiveCharacterChunker(chunk_size=64, chunk_overlap=0),
+    )
+    await helper.initialize()
+    try:
+        uploaded = await helper.upload_document(
+            file_name="restored.md",
+            file_content=b"restored unique source body for reindex",
+            file_type="md",
+        )
+        exporter = AstrBotExporter.__new__(AstrBotExporter)
+        zip_path = tmp_path / "kb.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            await exporter._export_kb_source_files(zf, helper, helper.kb.kb_id)
+        blob = helper.kb_files_dir / uploaded.document.doc_id
+        blob.unlink()
+        importer = AstrBotImporter.__new__(AstrBotImporter)
+        result = ImportResult()
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            await importer._import_single_kb_source_files(
+                zf,
+                helper.kb.kb_id,
+                helper.kb_dir,
+                result,
+            )
+        assert blob.is_file()
+        reindexed = await helper.reindex_document(uploaded.document.doc_id)
+        assert reindexed.document.doc_id == uploaded.document.doc_id
+    finally:
+        await helper.terminate()
+        await db.close()

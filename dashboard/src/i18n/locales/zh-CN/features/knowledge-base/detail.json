@@ -38,8 +38,17 @@
     "size": "大小",
     "chunks": "分块数",
     "createdAt": "上传时间",
+    "status": "状态",
+    "statusCreated": "新建",
+    "statusReplaced": "已替换",
+    "statusUnchanged": "未变化",
     "actions": "操作",
     "view": "查看",
+    "reindex": "重建索引",
+    "reindexUnavailable": "没有保存源文件，无法重建索引",
+    "reindexSuccess": "文档已按当前分块设置重建",
+    "reindexFailed": "重建索引失败",
+    "ingestSummary": "上传完成：{created} 个新建，{replaced} 个替换，{unchanged} 个未变化",
     "delete": "删除",
     "deleteConfirm": "确定要删除文档「{name}」吗?",
     "deleteWarning": "此操作将删除文档及其所有分块,不可恢复。",
@@ -126,6 +135,6 @@
     "save": "保存设置",
     "saveSuccess": "设置保存成功",
     "saveFailed": "设置保存失败",
-    "tips": "提示: 修改检索设置后,将影响后续的知识库查询效果。"
+    "tips": "提示: 修改检索设置后,将影响后续的知识库查询效果。分块大小变更后请对文档使用重建索引；更换嵌入模型或维度不会迁移，重建索引会失败。"
   }
 }

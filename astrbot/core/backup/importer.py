@@ -644,6 +644,7 @@ class AstrBotImporter:
         await self._import_single_kb_documents(zf, kb_id, result)
         await self._import_single_kb_faiss_index(zf, kb_id, kb_dir, result)
         await self._import_single_kb_media_files(zf, kb_id, kb_dir, result)
+        await self._import_single_kb_source_files(zf, kb_id, kb_dir, result)
 
     async def _import_single_kb_documents(
         self,
@@ -705,6 +706,34 @@ class AstrBotImporter:
                 raise
             except Exception as exc:
                 result.add_internal_warning("导入知识库媒体文件失败", exc)
+
+    async def _import_single_kb_source_files(
+        self,
+        zf: zipfile.ZipFile,
+        kb_id: str,
+        kb_dir: Path,
+        result: ImportResult,
+    ) -> None:
+        files_prefix = f"files/kb_files/{kb_id}/"
+        kb_files_dir = kb_dir / "files" / kb_id
+        for name in zf.namelist():
+            if not name.startswith(files_prefix) or name.endswith("/"):
+                continue
+            try:
+                rel_path = name[len(files_prefix) :]
+                target_path = kb_files_dir / rel_path
+                if not _validate_path_within(
+                    target_path, kb_files_dir
+                ) or not _validate_path_within(target_path, kb_dir):
+                    logger.warning("知识库源文件路径越界，已跳过")
+                    continue
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(name) as src, open(target_path, "wb") as dst:
+                    dst.write(src.read())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                result.add_internal_warning("导入知识库源文件失败", exc)
 
     async def _import_kb_documents(self, kb_id: str, doc_data: dict) -> None:
         """导入知识库文档到向量数据库"""

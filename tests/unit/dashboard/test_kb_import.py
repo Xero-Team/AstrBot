@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from starlette.datastructures import UploadFile
 
 from astrbot.core.exceptions import KnowledgeBaseUploadError
-from astrbot.core.knowledge_base.kb_helper import KBHelper
+from astrbot.core.knowledge_base.kb_helper import DocumentIngestResult, KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.dashboard.api.auth import AuthContext
@@ -379,8 +379,19 @@ def test_get_upload_progress_rejects_missing_or_unknown_task():
 
 @pytest.mark.asyncio
 async def test_background_upload_from_url_task_marks_success_result():
-    uploaded_doc = MagicMock()
-    uploaded_doc.model_dump.return_value = {"doc_id": "doc-1"}
+    uploaded_doc = DocumentIngestResult(
+        document=KBDocument(
+            doc_id="doc-1",
+            kb_id="kb-1",
+            doc_name="page.url",
+            file_type="url",
+            file_size=10,
+            file_path="doc-1",
+            identity_key="url:sha256:abc",
+            source_kind="url",
+        ),
+        ingest_status="replaced",
+    )
     kb_helper = AsyncMock()
     kb_helper.upload_from_url = AsyncMock(return_value=uploaded_doc)
 
@@ -403,14 +414,16 @@ async def test_background_upload_from_url_task_marks_success_result():
 
     assert service.upload_tasks["task-url-ok"]["status"] == "completed"
     result = service.upload_tasks["task-url-ok"]["result"]
-    assert result == {
-        "task_id": "task-url-ok",
-        "uploaded": [{"doc_id": "doc-1"}],
-        "failed": [],
-        "total": 1,
-        "success_count": 1,
-        "failed_count": 0,
-    }
+    uploaded = result["uploaded"][0]
+    assert result["task_id"] == "task-url-ok"
+    assert uploaded["doc_id"] == "doc-1"
+    assert uploaded["ingest_status"] == "replaced"
+    assert uploaded["source_stored"] is True
+    assert "file_path" not in uploaded
+    assert result["failed"] == []
+    assert result["total"] == 1
+    assert result["success_count"] == 1
+    assert result["failed_count"] == 0
     kb_helper.upload_from_url.assert_awaited_once()
 
 
@@ -686,6 +699,8 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
     assert background_call["files_to_upload"] == [
         {
             "file_name": "unsafe name.txt",
+            "identity_key": "file:unsafe name.txt",
+            "source_kind": "file",
             "temp_file_path": next(staging_dir.iterdir()),
             "file_type": "txt",
         }
@@ -833,3 +848,56 @@ async def test_list_chunks_returns_items_and_offset_page_metadata():
         limit=2,
     )
     kb_helper.get_chunk_count_by_doc_id.assert_awaited_once_with("doc-1")
+
+
+@pytest.mark.asyncio
+async def test_reindex_document_route_returns_document(
+    asgi_client: httpx.AsyncClient,
+    kb_helper: AsyncMock,
+):
+    document = KBDocument(
+        doc_id="test_doc_id",
+        kb_id="test_kb_id",
+        doc_name="test_file.txt",
+        file_type="txt",
+        file_size=100,
+        file_path="test_doc_id",
+        chunk_count=3,
+        media_count=0,
+        identity_key="file:test_file.txt",
+        content_hash="a" * 64,
+        source_kind="file",
+    )
+    kb_helper.reindex_document.return_value = DocumentIngestResult(
+        document=document,
+        ingest_status="replaced",
+    )
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents/test_doc_id/reindex",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["data"]["doc_id"] == "test_doc_id"
+    assert "file_path" not in payload["data"]
+    kb_helper.reindex_document.assert_awaited_once_with("test_doc_id")
+
+
+@pytest.mark.asyncio
+async def test_reindex_document_route_returns_400_without_path(
+    asgi_client: httpx.AsyncClient,
+    kb_helper: AsyncMock,
+):
+    kb_helper.reindex_document.side_effect = KnowledgeBaseUploadError(
+        stage="reindex",
+        user_message="source file is not stored; upload again",
+    )
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents/test_doc_id/reindex",
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["message"] == "source file is not stored; upload again"
+    assert "/tmp" not in response.text
+    assert "file_path" not in response.text

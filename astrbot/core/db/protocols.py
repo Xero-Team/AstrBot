@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         CommandConflict,
         ConversationV2,
         CronJob,
+        KnowledgeBaseTask,
         MemoryEpisode,
         MemoryFact,
         MemoryOperationLog,
@@ -47,6 +48,35 @@ class DatabaseSessionStore(Protocol):
     """Expose scoped SQLAlchemy sessions without domain operations."""
 
     def get_db(self) -> AbstractAsyncContextManager[AsyncSession]: ...
+
+
+@runtime_checkable
+class KnowledgeBaseTaskStore(Protocol):
+    """Operations for durable Dashboard knowledge-base task state."""
+
+    async def create_knowledge_base_task(
+        self, *, task_id: str, operation_kind: str, kb_id: str
+    ) -> KnowledgeBaseTask: ...
+
+    async def get_knowledge_base_task(
+        self, task_id: str
+    ) -> KnowledgeBaseTask | None: ...
+
+    async def update_knowledge_base_task(
+        self,
+        *,
+        task_id: str,
+        status: str,
+        progress: dict | None = None,
+        result: dict | None = None,
+        error: str | None = None,
+    ) -> KnowledgeBaseTask | None: ...
+
+    async def interrupt_active_knowledge_base_tasks(self) -> int: ...
+
+    async def prune_knowledge_base_tasks(
+        self, *, older_than: datetime.datetime, max_records: int
+    ) -> int: ...
 
 
 @runtime_checkable

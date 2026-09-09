@@ -6,6 +6,7 @@ from astrbot.core.db.stores.attachments import AttachmentStoreMixin
 from astrbot.core.db.stores.commands import CommandStoreMixin
 from astrbot.core.db.stores.conversations import ConversationStoreMixin
 from astrbot.core.db.stores.cron import CronStoreMixin
+from astrbot.core.db.stores.knowledge_base import KnowledgeBaseTaskStoreMixin
 from astrbot.core.db.stores.memory import MemoryStoreMixin
 from astrbot.core.db.stores.message_history import MessageHistoryStoreMixin
 from astrbot.core.db.stores.persona_runtime import PersonaRuntimeStoreMixin
@@ -18,6 +19,7 @@ from astrbot.core.db.stores.webchat import WebChatThreadStoreMixin
 
 
 class SQLiteDatabase(
+    KnowledgeBaseTaskStoreMixin,
     StatisticsStoreMixin,
     PersonaRuntimeStoreMixin,
     MemoryStoreMixin,

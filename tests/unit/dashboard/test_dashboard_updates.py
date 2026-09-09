@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403

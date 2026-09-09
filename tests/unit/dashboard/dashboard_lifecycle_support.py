@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import io
+import os
 import sys
 import uuid
 import zipfile
@@ -52,8 +53,6 @@ from tests.fixtures.helpers import (
     create_isolated_runtime_services,
     create_mock_updater_install,
     create_mock_updater_update,
-    install_test_astrbot_root,
-    restore_test_astrbot_root,
 )
 from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
@@ -96,48 +95,44 @@ def _assert_cookie_samesite_strict(cookie_header: str) -> None:
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     runtime_root = tmp_path_factory.mktemp("astrbot-runtime")
-    previous_root = install_test_astrbot_root(runtime_root)
-    try:
-        tmp_db_path = runtime_root / "data" / "test_data_v3.db"
-        log_broker = LogBroker()
-        services = create_isolated_runtime_services(runtime_root, tmp_db_path)
-        core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
-        await core_lifecycle.initialize()
-        generated_password = getattr(
+    tmp_db_path = runtime_root / "data" / "test_data_v3.db"
+    log_broker = LogBroker()
+    services = create_isolated_runtime_services(runtime_root, tmp_db_path)
+    core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
+    await core_lifecycle.initialize()
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = ""
+        await set_password_storage_upgraded(
             core_lifecycle.astrbot_config,
-            "_generated_dashboard_password",
-            None,
+            True,
         )
-        dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
-        if not generated_password:
-            core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
-                hash_dashboard_password(dashboard_password)
-            )
-            core_lifecycle.astrbot_config["dashboard"]["password"] = ""
-            await set_password_storage_upgraded(
-                core_lifecycle.astrbot_config,
-                True,
-            )
-            await set_password_change_required(
-                core_lifecycle.astrbot_config,
-                False,
-            )
-        object.__setattr__(
-            core_lifecycle,
-            "_dashboard_plain_password",
-            dashboard_password,
+        await set_password_change_required(
+            core_lifecycle.astrbot_config,
+            False,
         )
-        try:
-            yield core_lifecycle
-        finally:
-            try:
-                _stop_res = core_lifecycle.stop()
-                if asyncio.iscoroutine(_stop_res):
-                    await _stop_res
-            except Exception:
-                pass
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
+    try:
+        yield core_lifecycle
     finally:
-        restore_test_astrbot_root(previous_root)
+        try:
+            _stop_res = core_lifecycle.stop()
+            if asyncio.iscoroutine(_stop_res):
+                await _stop_res
+        except Exception:
+            pass
 
 
 @pytest.fixture(scope="module")

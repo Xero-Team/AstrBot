@@ -3,7 +3,6 @@
 提供统一的测试辅助工具，减少测试代码重复。
 """
 
-import os
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -40,32 +39,6 @@ class NoopAwaitable:
         if False:
             yield
         return None
-
-
-def install_test_astrbot_root(root: Path) -> str | None:
-    """Point ``ASTRBOT_ROOT`` at a test-owned directory.
-
-    Args:
-        root: Temporary AstrBot runtime root.
-
-    Returns:
-        Previous ``ASTRBOT_ROOT`` value, or ``None`` when unset.
-    """
-    previous = os.environ.get("ASTRBOT_ROOT")
-    os.environ["ASTRBOT_ROOT"] = str(root.resolve())
-    return previous
-
-
-def restore_test_astrbot_root(previous: str | None) -> None:
-    """Restore ``ASTRBOT_ROOT`` after ``install_test_astrbot_root``.
-
-    Args:
-        previous: Value returned by ``install_test_astrbot_root``.
-    """
-    if previous is None:
-        os.environ.pop("ASTRBOT_ROOT", None)
-        return
-    os.environ["ASTRBOT_ROOT"] = previous
 
 
 def create_isolated_runtime_services(

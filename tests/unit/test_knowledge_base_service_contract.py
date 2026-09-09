@@ -18,6 +18,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
 )
+from tests.helpers.knowledge_base_tasks import InMemoryKnowledgeBaseTaskStore
 
 
 class FakeEmbeddingProvider(EmbeddingProvider):
@@ -37,8 +38,9 @@ class FakeEmbeddingProvider(EmbeddingProvider):
 def make_service(kb_manager) -> KnowledgeBaseService:
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
     return service
 
 

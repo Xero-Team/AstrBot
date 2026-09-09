@@ -280,7 +280,7 @@ def create_dashboard_asgi_app(
         ),
         cron=CronService(runtime.cron_manager, runtime.astrbot_config_mgr),
         files=FileService(runtime.services.file_token_service),
-        knowledge_bases=KnowledgeBaseService(runtime.knowledge_base_manager),
+        knowledge_bases=KnowledgeBaseService(runtime.knowledge_base_manager, db),
         memory=MemoryService(db, runtime.memory_manager),
         webchat=WebChatService(
             db,
@@ -473,6 +473,7 @@ def create_dashboard_asgi_app(
     app.openapi = dashboard_openapi
 
     async def shutdown_plugin_dashboard_services() -> None:
+        await app.state.services.knowledge_bases.shutdown()
         await app.state.services.updates.shutdown()
         await plugin_page_sessions.shutdown()
         await plugin_file_tickets.shutdown()

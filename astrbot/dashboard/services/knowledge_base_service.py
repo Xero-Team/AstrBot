@@ -2,6 +2,7 @@ import asyncio
 import shutil
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -9,6 +10,7 @@ import aiofiles
 from starlette.datastructures import UploadFile
 
 from astrbot import logger
+from astrbot.core.db.protocols import KnowledgeBaseTaskStore
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.kb_db_sqlite import (
     file_identity_key,
@@ -24,7 +26,7 @@ from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.task_utils import create_tracked_task
+from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 from astrbot.dashboard.schemas import KnowledgeBaseRequest
 from astrbot.dashboard.upload_utils import save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
@@ -40,14 +42,22 @@ _BACKGROUND_TASK_ERROR = "Knowledge base task failed"
 _DOCUMENT_UPLOAD_ERROR = "Document upload failed"
 _KB_INITIALIZATION_ERROR = "Knowledge base initialization failed"
 _DOC_NAME_MAX_LENGTH = 255
+_TASK_RETENTION = timedelta(days=7)
+_MAX_TERMINAL_TASKS = 1000
+_INTERRUPTED_TASK_ERROR = "Knowledge base task interrupted"
 
 
 class KnowledgeBaseService:
-    def __init__(self, knowledge_base_manager: KnowledgeBaseManager) -> None:
+    def __init__(
+        self,
+        knowledge_base_manager: KnowledgeBaseManager,
+        task_store: KnowledgeBaseTaskStore,
+    ) -> None:
         self.knowledge_base_manager = knowledge_base_manager
-        self.upload_progress: dict[str, dict[str, Any]] = {}
-        self.upload_tasks: dict[str, dict[str, Any]] = {}
+        self.task_store = task_store
         self._background_tasks: set[asyncio.Task] = set()
+        self._initialized = False
+        self._initialization_lock = asyncio.Lock()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -152,29 +162,62 @@ class KnowledgeBaseService:
             self._background_tasks = task_set
         return task_set
 
-    def init_task(self, task_id: str, status: str = "pending") -> None:
-        self.upload_tasks[task_id] = {
-            "status": status,
-            "result": None,
-            "error": None,
-        }
+    async def shutdown(self) -> None:
+        """Cancel owned ingestion work and make unfinished tasks observable."""
+        await cancel_tracked_tasks(self._get_background_tasks())
+        await self.task_store.interrupt_active_knowledge_base_tasks()
 
-    def set_task_result(
+    async def _ensure_task_lifecycle(self) -> None:
+        if getattr(self, "_initialized", False):
+            return
+        lock = getattr(self, "_initialization_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._initialization_lock = lock
+        async with lock:
+            if getattr(self, "_initialized", False):
+                return
+            await self.task_store.interrupt_active_knowledge_base_tasks()
+            await self.task_store.prune_knowledge_base_tasks(
+                older_than=datetime.now(UTC) - _TASK_RETENTION,
+                max_records=_MAX_TERMINAL_TASKS,
+            )
+            self._initialized = True
+
+    async def init_task(
+        self,
+        task_id: str,
+        *,
+        operation_kind: str,
+        kb_id: str,
+    ) -> None:
+        await self._ensure_task_lifecycle()
+        await self.task_store.create_knowledge_base_task(
+            task_id=task_id,
+            operation_kind=operation_kind,
+            kb_id=kb_id,
+        )
+
+    async def set_task_result(
         self,
         task_id: str,
         status: str,
         result: Any = None,
         error: str | None = None,
     ) -> None:
-        self.upload_tasks[task_id] = {
-            "status": status,
-            "result": result,
-            "error": error,
-        }
-        if task_id in self.upload_progress:
-            self.upload_progress[task_id]["status"] = status
+        task = await self.task_store.get_knowledge_base_task(task_id)
+        progress = dict(task.progress) if task is not None else None
+        if progress is not None:
+            progress["status"] = status
+        await self.task_store.update_knowledge_base_task(
+            task_id=task_id,
+            status=status,
+            progress=progress,
+            result=result,
+            error=error,
+        )
 
-    def update_progress(
+    async def update_progress(
         self,
         task_id: str,
         *,
@@ -185,9 +228,10 @@ class KnowledgeBaseService:
         current: int | None = None,
         total: int | None = None,
     ) -> None:
-        if task_id not in self.upload_progress:
+        task = await self.task_store.get_knowledge_base_task(task_id)
+        if task is None:
             return
-        progress = self.upload_progress[task_id]
+        progress = dict(task.progress)
         if status is not None:
             progress["status"] = status
         if file_index is not None:
@@ -200,10 +244,15 @@ class KnowledgeBaseService:
             progress["current"] = current
         if total is not None:
             progress["total"] = total
+        await self.task_store.update_knowledge_base_task(
+            task_id=task_id,
+            status=progress.get("status", task.status),
+            progress=progress,
+        )
 
     def make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
         async def _callback(stage: str, current: int, total: int) -> None:
-            self.update_progress(
+            await self.update_progress(
                 task_id,
                 status="processing",
                 file_index=file_idx,
@@ -259,15 +308,18 @@ class KnowledgeBaseService:
         max_retries: int,
     ) -> None:
         try:
-            self.init_task(task_id, status="processing")
-            self.upload_progress[task_id] = {
-                "status": "processing",
-                "file_index": 0,
-                "file_total": len(files_to_upload),
-                "stage": "waiting",
-                "current": 0,
-                "total": 100,
-            }
+            await self.task_store.update_knowledge_base_task(
+                task_id=task_id,
+                status="processing",
+                progress={
+                    "status": "processing",
+                    "file_index": 0,
+                    "file_total": len(files_to_upload),
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": 100,
+                },
+            )
 
             uploaded_docs = []
             failed_docs = []
@@ -278,7 +330,7 @@ class KnowledgeBaseService:
                     temp_file_path = Path(file_info["temp_file_path"])
                     async with aiofiles.open(temp_file_path, "rb") as file_obj:
                         file_content = await file_obj.read()
-                    self.update_progress(
+                    await self.update_progress(
                         task_id,
                         status="processing",
                         file_index=file_idx,
@@ -327,7 +379,7 @@ class KnowledgeBaseService:
                     file_content = None
                     Path(file_info["temp_file_path"]).unlink(missing_ok=True)
 
-            self.set_task_result(
+            await self.set_task_result(
                 task_id,
                 "completed",
                 result={
@@ -347,7 +399,7 @@ class KnowledgeBaseService:
                 task_id,
                 safe_error("", exc),
             )
-            self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
+            await self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
         finally:
             self._cleanup_upload_staging_dir(staging_dir)
 
@@ -361,15 +413,18 @@ class KnowledgeBaseService:
         max_retries: int,
     ) -> None:
         try:
-            self.init_task(task_id, status="processing")
-            self.upload_progress[task_id] = {
-                "status": "processing",
-                "file_index": 0,
-                "file_total": len(documents),
-                "stage": "waiting",
-                "current": 0,
-                "total": 100,
-            }
+            await self.task_store.update_knowledge_base_task(
+                task_id=task_id,
+                status="processing",
+                progress={
+                    "status": "processing",
+                    "file_index": 0,
+                    "file_total": len(documents),
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": 100,
+                },
+            )
 
             uploaded_docs = []
             failed_docs = []
@@ -379,7 +434,7 @@ class KnowledgeBaseService:
                 chunks = doc_info.get("chunks", [])
 
                 try:
-                    self.update_progress(
+                    await self.update_progress(
                         task_id,
                         status="processing",
                         file_index=file_idx,
@@ -430,7 +485,7 @@ class KnowledgeBaseService:
                         },
                     )
 
-            self.set_task_result(
+            await self.set_task_result(
                 task_id,
                 "completed",
                 result={
@@ -442,13 +497,15 @@ class KnowledgeBaseService:
                     "failed_count": len(failed_docs),
                 },
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             logger.error(
                 "后台导入任务 %s 失败: %s",
                 task_id,
                 safe_error("", exc),
             )
-            self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
+            await self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
 
     async def list_kbs(self, *, page: int, page_size: int) -> dict[str, Any]:
         kb_manager = self.get_kb_manager()
@@ -713,7 +770,7 @@ class KnowledgeBaseService:
             raise
 
         try:
-            self.init_task(task_id, status="pending")
+            await self.init_task(task_id, operation_kind="upload", kb_id=kb_id)
             create_tracked_task(
                 self._get_background_tasks(),
                 self.background_upload_task(
@@ -783,7 +840,7 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
 
         task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
+        await self.init_task(task_id, operation_kind="import", kb_id=kb_id)
         create_tracked_task(
             self._get_background_tasks(),
             self.background_import_task(
@@ -802,24 +859,25 @@ class KnowledgeBaseService:
             "message": "import task created, processing in background",
         }
 
-    def get_upload_progress(self, task_id: str | None) -> dict[str, Any]:
+    async def get_upload_progress(self, task_id: str | None) -> dict[str, Any]:
         if not task_id:
             raise KnowledgeBaseServiceError("缺少参数 task_id")
-        if task_id not in self.upload_tasks:
+        await self._ensure_task_lifecycle()
+        task_info = await self.task_store.get_knowledge_base_task(task_id)
+        if task_info is None:
             raise KnowledgeBaseServiceError("找不到该任务")
 
-        task_info = self.upload_tasks[task_id]
-        status = task_info["status"]
+        status = task_info.status
         response_data = {
             "task_id": task_id,
             "status": status,
         }
-        if status == "processing" and task_id in self.upload_progress:
-            response_data["progress"] = self.upload_progress[task_id]
+        if status == "processing":
+            response_data["progress"] = task_info.progress
         if status == "completed":
-            response_data["result"] = task_info["result"]
-        if status == "failed":
-            response_data["error"] = task_info["error"]
+            response_data["result"] = task_info.result
+        if status in {"failed", "interrupted"}:
+            response_data["error"] = task_info.error
         return response_data
 
     async def get_document(
@@ -975,7 +1033,7 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
 
         task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
+        await self.init_task(task_id, operation_kind="url_import", kb_id=kb_id)
         create_tracked_task(
             self._get_background_tasks(),
             self.background_upload_from_url_task(
@@ -1012,16 +1070,19 @@ class KnowledgeBaseService:
         cleaning_provider_id: str | None,
     ) -> None:
         try:
-            self.init_task(task_id, status="processing")
-            self.upload_progress[task_id] = {
-                "status": "processing",
-                "file_index": 0,
-                "file_total": 1,
-                "file_name": f"URL: {url}",
-                "stage": "extracting",
-                "current": 0,
-                "total": 100,
-            }
+            await self.task_store.update_knowledge_base_task(
+                task_id=task_id,
+                status="processing",
+                progress={
+                    "status": "processing",
+                    "file_index": 0,
+                    "file_total": 1,
+                    "file_name": f"URL: {url}",
+                    "stage": "extracting",
+                    "current": 0,
+                    "total": 100,
+                },
+            )
             progress_callback = self.make_progress_callback(task_id, 0, f"URL: {url}")
             doc = await kb_helper.upload_from_url(
                 url=url,
@@ -1034,7 +1095,7 @@ class KnowledgeBaseService:
                 enable_cleaning=enable_cleaning,
                 cleaning_provider_id=cleaning_provider_id,
             )
-            self.set_task_result(
+            await self.set_task_result(
                 task_id,
                 "completed",
                 result={
@@ -1046,13 +1107,15 @@ class KnowledgeBaseService:
                     "failed_count": 0,
                 },
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             logger.error(
                 "后台上传URL任务 %s 失败: %s",
                 task_id,
                 safe_error("", exc),
             )
-            self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
+            await self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
 
 
 __all__ = ["KnowledgeBaseService", "KnowledgeBaseServiceError"]

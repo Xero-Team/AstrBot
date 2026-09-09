@@ -6,11 +6,16 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, desc
 
 from astrbot import logger
-from astrbot.core.db import dispose_async_engine, track_aiosqlite_workers
+from astrbot.core.db import (
+    create_sqlite_async_engine,
+    dispose_async_engine,
+    sqlite_async_url,
+    track_aiosqlite_workers,
+)
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
@@ -94,19 +99,11 @@ class KBSQLiteDatabase:
         if db_path is None:
             db_path = str(Path(get_astrbot_knowledge_base_path()) / "kb.db")
         self.db_path = db_path
-        self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
+        self.DATABASE_URL = sqlite_async_url(db_path)
         self.inited = False
 
-        # 确保目录存在
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-
-        # 创建异步引擎
-        self.engine = create_async_engine(
-            self.DATABASE_URL,
-            echo=False,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-        )
+        self.engine = create_sqlite_async_engine(db_path)
         self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
 
         # 创建会话工厂
@@ -130,11 +127,9 @@ class KBSQLiteDatabase:
 
     async def initialize(self) -> None:
         """初始化数据库,创建表并配置 SQLite 参数"""
-        async with self.engine.begin() as conn:
-            # 创建所有知识库相关表
+        async with self.engine.connect() as conn:
             await conn.run_sync(BaseKBModel.metadata.create_all)
-
-            # 配置 SQLite 性能优化参数
+            await conn.commit()
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
             await conn.execute(text("PRAGMA cache_size=20000"))

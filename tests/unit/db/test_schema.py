@@ -318,10 +318,11 @@ async def test_close_joins_aiosqlite_worker_threads(tmp_path):
     await db.initialize()
     async with db.get_db() as session:
         await session.execute(text("SELECT 1"))
-
-    workers = [
-        thread for thread in threading.enumerate() if is_aiosqlite_worker_thread(thread)
-    ]
-    assert workers
+        workers = [
+            thread
+            for thread in threading.enumerate()
+            if is_aiosqlite_worker_thread(thread)
+        ]
+        assert workers
     await db.close()
     assert not any(thread.is_alive() for thread in workers)

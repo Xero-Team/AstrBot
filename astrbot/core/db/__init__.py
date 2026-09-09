@@ -14,8 +14,45 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 _AIOSQLITE_JOIN_TIMEOUT_SEC = 1.0
+_SQLITE_BUSY_TIMEOUT_SEC = 30
+
+
+def sqlite_async_url(db_path: str) -> str:
+    """Return an aiosqlite URL that keeps Windows paths from being escaped.
+
+    Args:
+        db_path: Filesystem path to the SQLite file.
+
+    Returns:
+        SQLAlchemy URL using forward slashes.
+    """
+    posix_path = str(db_path).replace("\\", "/")
+    return f"sqlite+aiosqlite:///{posix_path}"
+
+
+def create_sqlite_async_engine(db_path: str) -> AsyncEngine:
+    """Create a SQLite async engine that does not pool connections.
+
+    SQLite allows one writer. QueuePool plus aiosqlite can leave a worker
+    blocked in ``sqlite3`` on Windows; later engines in the same process then
+    hang on the process-wide SQLite mutex.
+
+    Args:
+        db_path: Filesystem path to the SQLite file.
+
+    Returns:
+        Async engine bound to ``db_path``.
+    """
+    return create_async_engine(
+        sqlite_async_url(db_path),
+        echo=False,
+        future=True,
+        poolclass=NullPool,
+        connect_args={"timeout": _SQLITE_BUSY_TIMEOUT_SEC},
+    )
 
 
 def is_aiosqlite_worker_thread(thread: threading.Thread) -> bool:
@@ -83,14 +120,23 @@ class BaseDatabase(abc.ABC):
         # timeout the driver raises "database is locked" instantly when a
         # second write is attempted. Setting timeout=30 tells SQLite to wait
         # up to 30 s for the lock, which is enough for brief write bursts.
+        # NullPool is required: QueuePool plus aiosqlite can deadlock on
+        # Windows file locks and block later SQLite engines in-process.
         is_sqlite = "sqlite" in self.DATABASE_URL
-        connect_args = {"timeout": 30} if is_sqlite else {}
-        self.engine = create_async_engine(
-            self.DATABASE_URL,
-            echo=False,
-            future=True,
-            connect_args=connect_args,
-        )
+        if is_sqlite:
+            self.engine = create_async_engine(
+                self.DATABASE_URL,
+                echo=False,
+                future=True,
+                poolclass=NullPool,
+                connect_args={"timeout": _SQLITE_BUSY_TIMEOUT_SEC},
+            )
+        else:
+            self.engine = create_async_engine(
+                self.DATABASE_URL,
+                echo=False,
+                future=True,
+            )
         self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,

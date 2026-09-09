@@ -374,3 +374,34 @@ async def test_init_kb_database_does_not_run_legacy_migration(
     mock_db.initialize.assert_awaited_once()
     mock_db.migrate_to_v1.assert_not_called()
     assert kb_mgr.kb_db is mock_db
+
+
+@pytest.mark.asyncio
+async def test_init_kb_database_uses_current_astrbot_root(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    monkeypatch,
+    tmp_path,
+):
+    from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    mock_db = MagicMock()
+    mock_db.initialize = AsyncMock()
+
+    with patch(
+        "astrbot.core.knowledge_base.kb_mgr.KBSQLiteDatabase",
+        return_value=mock_db,
+    ) as kb_db_cls:
+        await KnowledgeBaseManager._init_kb_database(kb_mgr)
+
+    kb_db_cls.assert_called_once_with()
+    real_db = KBSQLiteDatabase()
+    try:
+        expected = Path(tmp_path).resolve() / "data" / "knowledge_base" / "kb.db"
+        assert Path(real_db.db_path).resolve() == expected
+    finally:
+        await real_db.close()

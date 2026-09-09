@@ -20,7 +20,11 @@ from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
-from tests.fixtures.helpers import create_isolated_runtime_services
+from tests.fixtures.helpers import (
+    create_isolated_runtime_services,
+    install_test_astrbot_root,
+    restore_test_astrbot_root,
+)
 from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
@@ -106,36 +110,40 @@ async def _create_step_up(
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     runtime_root = tmp_path_factory.mktemp("astrbot-runtime")
-    tmp_db_path = runtime_root / "data" / "test_data_api_key.db"
-    log_broker = LogBroker()
-    services = create_isolated_runtime_services(runtime_root, tmp_db_path)
-    core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
-    await core_lifecycle.initialize()
-    generated_password = getattr(
-        core_lifecycle.astrbot_config,
-        "_generated_dashboard_password",
-        None,
-    )
-    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
-    if not generated_password:
-        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
-            hash_dashboard_password(dashboard_password)
-        )
-        core_lifecycle.astrbot_config["dashboard"]["password"] = ""
-    object.__setattr__(
-        core_lifecycle,
-        "_dashboard_plain_password",
-        dashboard_password,
-    )
+    previous_root = install_test_astrbot_root(runtime_root)
     try:
-        yield core_lifecycle
-    finally:
+        tmp_db_path = runtime_root / "data" / "test_data_api_key.db"
+        log_broker = LogBroker()
+        services = create_isolated_runtime_services(runtime_root, tmp_db_path)
+        core_lifecycle = AstrBotCoreLifecycle(log_broker, services)
+        await core_lifecycle.initialize()
+        generated_password = getattr(
+            core_lifecycle.astrbot_config,
+            "_generated_dashboard_password",
+            None,
+        )
+        dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+        if not generated_password:
+            core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+                hash_dashboard_password(dashboard_password)
+            )
+            core_lifecycle.astrbot_config["dashboard"]["password"] = ""
+        object.__setattr__(
+            core_lifecycle,
+            "_dashboard_plain_password",
+            dashboard_password,
+        )
         try:
-            stop_result = core_lifecycle.stop()
-            if asyncio.iscoroutine(stop_result):
-                await stop_result
-        except Exception:
-            pass
+            yield core_lifecycle
+        finally:
+            try:
+                stop_result = core_lifecycle.stop()
+                if asyncio.iscoroutine(stop_result):
+                    await stop_result
+            except Exception:
+                pass
+    finally:
+        restore_test_astrbot_root(previous_root)
 
 
 @pytest.fixture(scope="module")

@@ -27,9 +27,9 @@ async def initialize_sqlite_schema(engine: AsyncEngine) -> None:
         engine: Async SQLAlchemy engine bound to the main database file.
     """
     import_all_models()
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
     async with engine.connect() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.commit()
         for pragma in _SQLITE_RUNTIME_PRAGMAS:
             await conn.execute(text(pragma))
         await conn.commit()

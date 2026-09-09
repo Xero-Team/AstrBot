@@ -113,7 +113,15 @@ describe('http client', () => {
     localStorage.setItem('astrbot-locale', 'zh-CN');
     const handlers = (
       apiV1Client.interceptors.request as unknown as {
-        handlers: Array<{ fulfilled: (config: any) => any }>;
+        handlers: Array<{
+          fulfilled: (config: {
+            url?: string;
+            headers: Record<string, string>;
+          }) => {
+            url?: string;
+            headers: Record<string, string>;
+          };
+        }>;
       }
     ).handlers;
     const handler = handlers[0]!.fulfilled;

@@ -330,7 +330,9 @@ class CronJobManager:
             status = "failed"
             last_error = safe_error("", e)
             log_job_id = job_id.replace("\r", "").replace("\n", "")
-            logger.error("Cron job %s failed: %s", log_job_id, last_error, exc_info=True)
+            logger.error(
+                "Cron job %s failed: %s", log_job_id, last_error, exc_info=True
+            )
         finally:
             next_run = self._get_next_run_time(job_id)
             await self.db.update_cron_job(

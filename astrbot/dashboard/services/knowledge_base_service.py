@@ -31,7 +31,9 @@ from astrbot.dashboard.utils import generate_tsne_visualization
 
 
 class KnowledgeBaseServiceError(Exception):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 _BACKGROUND_TASK_ERROR = "Knowledge base task failed"
@@ -859,6 +861,28 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
         await kb_helper.delete_document(doc_id)
         return None, "删除文档成功"
+
+    async def reindex_document(
+        self,
+        *,
+        kb_id: str | None,
+        doc_id: str | None,
+    ) -> dict[str, Any]:
+        if not kb_id:
+            raise KnowledgeBaseServiceError("缺少参数 kb_id", status_code=400)
+        if not doc_id:
+            raise KnowledgeBaseServiceError("缺少参数 doc_id", status_code=400)
+        kb_helper = await self.get_kb_manager().get_kb(kb_id)
+        if not kb_helper:
+            raise KnowledgeBaseServiceError("知识库不存在", status_code=400)
+        try:
+            result = await kb_helper.reindex_document(doc_id)
+        except KnowledgeBaseUploadError as exc:
+            raise KnowledgeBaseServiceError(
+                exc.user_message,
+                status_code=400,
+            ) from exc
+        return self.document_public_payload(result)
 
     async def delete_chunk(self, data: object) -> tuple[None, str]:
         payload = self._payload(data)

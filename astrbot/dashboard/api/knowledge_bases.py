@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
 
@@ -78,7 +79,11 @@ async def _run(operation, *, prefix: str):
             return ok(data, message)
         return ok(result)
     except KnowledgeBaseServiceError as exc:
-        return error(str(exc))
+        payload = error(str(exc))
+        status_code = getattr(exc, "status_code", None)
+        if status_code:
+            return JSONResponse(payload, status_code=status_code)
+        return payload
     except Exception as exc:
         return internal_error_response(logger, prefix, exc)
 
@@ -273,6 +278,19 @@ async def delete_knowledge_base_document(
     return await _run(
         lambda: service.delete_document({"kb_id": kb_id, "doc_id": document_id}),
         prefix="删除文档失败",
+    )
+
+
+@router.post("/knowledge-bases/{kb_id}/documents/{document_id}/reindex")
+async def reindex_knowledge_base_document(
+    kb_id: str,
+    document_id: str,
+    _auth: AuthContext = Depends(require_kb_scope),
+    service: KnowledgeBaseService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.reindex_document(kb_id=kb_id, doc_id=document_id),
+        prefix="重建文档索引失败",
     )
 
 

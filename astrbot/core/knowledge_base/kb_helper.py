@@ -584,6 +584,7 @@ class KBHelper:
         source_url: str | None = None,
         content_hash: str | None = None,
         source_bytes: bytes | None = None,
+        force_replace: bool = False,
     ) -> DocumentIngestResult:
         """Upload or replace a document with compensating cleanup on failure.
 
@@ -617,7 +618,11 @@ class KBHelper:
         lock = await self._lock_for_identity(key)
         async with lock:
             existing = await self.kb_db.get_document_by_identity(self.kb.kb_id, key)
-            if existing is not None and existing.content_hash == digest:
+            if (
+                existing is not None
+                and existing.content_hash == digest
+                and not force_replace
+            ):
                 return DocumentIngestResult(
                     document=existing,
                     ingest_status="unchanged",
@@ -1365,6 +1370,88 @@ class KBHelper:
             source_url=canonical,
             content_hash=content_hash,
             source_bytes=source_bytes,
+        )
+
+    async def reindex_document(self, doc_id: str) -> DocumentIngestResult:
+        """Rebuild chunks from the stored source using current KB settings.
+
+        Args:
+            doc_id: Live document ID.
+
+        Returns:
+            Ingest result for the rebuilt document.
+
+        Raises:
+            KnowledgeBaseUploadError: If the source is missing or the embedding
+                dimension does not match the on-disk index.
+        """
+        await self._ensure_vec_db()
+        doc = await self.get_document(doc_id)
+        if doc is None:
+            raise KnowledgeBaseUploadError(
+                stage="reindex",
+                user_message="文档不存在",
+            )
+        embedding_provider = await self.get_ep()
+        index_dimension = self.vec_db.embedding_storage.dimension
+        if embedding_provider.get_dim() != index_dimension:
+            raise KnowledgeBaseUploadError(
+                stage="reindex",
+                user_message=(
+                    "embedding settings are incompatible with this knowledge base index"
+                ),
+            )
+        missing = KnowledgeBaseUploadError(
+            stage="reindex",
+            user_message="source file is not stored; upload again",
+        )
+        if not doc.file_path:
+            raise missing
+        try:
+            blob_path = self._resolve_doc_blob_path(doc.file_path)
+        except ValueError as exc:
+            raise missing from exc
+        if not blob_path.is_file():
+            raise missing
+        async with aiofiles.open(blob_path, "rb") as handle:
+            blob_bytes = await handle.read()
+        chunk_size = self.kb.chunk_size or 512
+        chunk_overlap = self.kb.chunk_overlap or 50
+        if doc.source_kind in {"url", "import"}:
+            text = blob_bytes.decode("utf-8")
+            chunks = _compact_chunks(
+                await self.chunker.chunk(
+                    text,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                ),
+            )
+            return await self.upload_document(
+                file_name=doc.doc_name,
+                file_content=None,
+                file_type=doc.file_type,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                pre_chunked_text=chunks,
+                identity_key=doc.identity_key,
+                source_kind=doc.source_kind,
+                source_url=doc.source_url,
+                content_hash=doc.content_hash,
+                source_bytes=blob_bytes,
+                force_replace=True,
+            )
+        return await self.upload_document(
+            file_name=doc.doc_name,
+            file_content=blob_bytes,
+            file_type=doc.file_type,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            identity_key=doc.identity_key,
+            source_kind=doc.source_kind or "file",
+            source_url=doc.source_url,
+            content_hash=doc.content_hash,
+            source_bytes=blob_bytes,
+            force_replace=True,
         )
 
     async def _chunk_content_without_cleaning(

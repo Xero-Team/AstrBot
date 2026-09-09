@@ -3475,6 +3475,21 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/knowledge-bases/{kb_id}/documents/{document_id}/reindex:
+    post:
+      tags: [Knowledge Base]
+      summary: Reindex a knowledge base document from stored source bytes
+      operationId: reindexKnowledgeDocument
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '400':
+          $ref: '#/components/responses/Error'
+
   /api/v1/knowledge-bases/{kb_id}/chunks:
     get:
       tags: [Knowledge Base]

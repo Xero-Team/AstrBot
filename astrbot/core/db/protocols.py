@@ -1017,6 +1017,7 @@ class DashboardStore(
     ApiKeyStore,
     ChatStore,
     CommandStore,
+    KnowledgeBaseTaskStore,
     ConversationStore,
     DatabaseSessionStore,
     MemoryStore,

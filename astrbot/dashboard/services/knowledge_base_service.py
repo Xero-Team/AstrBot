@@ -868,7 +868,7 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("找不到该任务")
 
         status = task_info.status
-        response_data = {
+        response_data: dict[str, Any] = {
             "task_id": task_id,
             "status": status,
         }

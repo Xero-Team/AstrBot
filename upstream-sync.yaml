@@ -5,16 +5,13 @@ upstream:
   branch: master
 
 last_synced:
-  commit: a412146401426c0cdff8bbefb8627a03da519da8
-  synced_at_utc: 2026-09-07T17:04:55Z
-  sync_method: adapt
-  source_pr: '9975'
+  commit: 6494ac22e536d38ef6e07014d27b808d8c114bd2
+  synced_at_utc: 2026-09-09T08:23:59Z
+  sync_method: skip
+  source_pr: '9898'
   note: >-
-    Reviewed 1651ef245e0f0dde69af0155d8b7c9a4ffd59b2b..a412146401426c0cdff8bbefb8627a03da519da8
-    (4 commits). Adapted 2, skipped 2, no cherry-picks. Skipped #9955 Japanese
-    i18n (zh-CN/en-US only; no ru-RU or docs.astrbot.app). Adapted #9973 onto
-    MetricsRuntime._post_metrics
-    (909c5748bbde7afad624a222e2d25628c0f4e03f). Skipped #9974 docker/setup-qemu-action
-    because this fork has no docker-image.yml. Adapted #9975 to 4.28.0,
-    renamed changelogs/v4.28.0-beta.1.md, dropped [WIP]
-    (1b3f6839bfcffab09c8c9e46810949f8a5ff3342). Cursor matches upstream/master.
+    Reviewed a412146401426c0cdff8bbefb8627a03da519da8..6494ac22e536d38ef6e07014d27b808d8c114bd2
+    (1 commit). Skipped 1, no cherry-picks, no adaptations. Skipped #9898
+    because this fork does not ship AstrBot Desktop or maintain desktop-managed
+    WebUI repair. Completeness checking of JS/CSS entries is not absorbed as a
+    standalone change. Cursor matches upstream/master.

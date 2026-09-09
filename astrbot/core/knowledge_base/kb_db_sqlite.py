@@ -314,6 +314,20 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def list_document_ids_by_kb(self, kb_id: str) -> set[str]:
+        """Return document IDs that belong to a knowledge base.
+
+        Args:
+            kb_id: Knowledge base ID.
+
+        Returns:
+            Set of ``doc_id`` values.
+        """
+        async with self.get_db() as session:
+            stmt = select(col(KBDocument.doc_id)).where(col(KBDocument.kb_id) == kb_id)
+            result = await session.execute(stmt)
+            return set(result.scalars().all())
+
     async def list_documents_by_kb(
         self,
         kb_id: str,

@@ -1102,13 +1102,18 @@ async def test_kb_source_blobs_export_import_roundtrip(tmp_path):
     files_dir = tmp_path / "src" / "files" / kb_id
     files_dir.mkdir(parents=True)
     (files_dir / "doc-1").write_bytes(b"stored source unique")
+    (files_dir / "doc-1.staging").write_bytes(b"staging leftover")
+    (files_dir / "doc-1.bak").write_bytes(b"bak leftover")
     helper = MagicMock()
     helper.kb_files_dir = files_dir
     exporter = AstrBotExporter.__new__(AstrBotExporter)
     zip_path = tmp_path / "backup.zip"
     with zipfile.ZipFile(zip_path, "w") as zf:
         await exporter._export_kb_source_files(zf, helper, kb_id)
-        assert f"files/kb_files/{kb_id}/doc-1" in zf.namelist()
+        names = zf.namelist()
+        assert f"files/kb_files/{kb_id}/doc-1" in names
+        assert f"files/kb_files/{kb_id}/doc-1.staging" not in names
+        assert f"files/kb_files/{kb_id}/doc-1.bak" not in names
 
     importer = AstrBotImporter.__new__(AstrBotImporter)
     importer.kb_root_dir = str(tmp_path / "restored")

@@ -310,3 +310,64 @@ async def test_overlong_canonical_url_fails_before_replace(kb_helper, monkeypatc
     extract.assert_not_awaited()
     helper.upload_document.assert_not_awaited()
     assert embedding.embed_calls == 0
+
+
+def test_url_ingest_without_identity_key_raises():
+    with pytest.raises(ValueError, match="identity_key"):
+        KBHelper._identity_key_for("url", "https://example.com/a")
+
+
+@pytest.mark.asyncio
+async def test_reembed_from_stored_blob_uses_original_file_type(kb_helper):
+    helper, _embedding = kb_helper
+    first = await helper.upload_document(
+        file_name="handbook.md",
+        file_content=b"# heading unique markdown body",
+        file_type="md",
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_ingest(**kwargs):
+        captured.update(kwargs)
+        return ["chunk"], [], 1
+
+    helper._ingest_chunks_for_doc_id = fake_ingest
+    await helper._reembed_from_stored_blob(
+        first.document.doc_id,
+        helper._doc_blob_path(first.document.doc_id),
+    )
+    assert captured["file_name"] == "handbook.md"
+    assert captured["file_type"] == "md"
+    assert captured["doc_id"] == first.document.doc_id
+
+
+@pytest.mark.asyncio
+async def test_recover_interrupted_replace_drops_orphans_and_rebuilds(kb_helper):
+    helper, _embedding = kb_helper
+    first = await helper.upload_document(
+        file_name="live.md",
+        file_content=b"recoverable unique live body",
+        file_type="md",
+    )
+    live_id = first.document.doc_id
+    await helper.vec_db.insert_batch(
+        contents=["orphan staging unique chunk"],
+        metadatas=[
+            {
+                "kb_id": helper.kb.kb_id,
+                "kb_doc_id": "orphan-staging",
+                "chunk_index": 0,
+            }
+        ],
+    )
+    await helper.vec_db.delete_documents(metadata_filters={"kb_doc_id": live_id})
+    assert await _chunk_texts(helper, live_id) == []
+    await helper.initialize()
+    orphans = await helper.vec_db.document_storage.get_documents(
+        metadata_filters={"kb_doc_id": "orphan-staging"},
+        offset=None,
+        limit=None,
+    )
+    assert orphans == []
+    joined = "\n".join(await _chunk_texts(helper, live_id))
+    assert "recoverable unique live body" in joined

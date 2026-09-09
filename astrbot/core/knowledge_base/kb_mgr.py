@@ -9,8 +9,8 @@ from astrbot.core.utils.error_redaction import safe_error
 
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
-from .kb_helper import KBHelper
-from .models import KBDocument, KnowledgeBase
+from .kb_helper import DocumentIngestResult, KBHelper
+from .models import KnowledgeBase
 from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
@@ -416,7 +416,7 @@ class KnowledgeBaseManager:
         tasks_limit: int = 3,
         max_retries: int = 3,
         progress_callback=None,
-    ) -> KBDocument:
+    ) -> DocumentIngestResult:
         """从 URL 上传文档到指定的知识库
 
         Args:
@@ -430,7 +430,7 @@ class KnowledgeBaseManager:
             progress_callback: 进度回调函数
 
         Returns:
-            KBDocument: 上传的文档对象
+            DocumentIngestResult: 上传或替换后的文档结果
 
         Raises:
             ValueError: 如果知识库不存在或 URL 为空

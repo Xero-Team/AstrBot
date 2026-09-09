@@ -4,11 +4,41 @@ from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
+from astrbot.core.knowledge_base.kb_helper import DocumentIngestResult
+from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
 )
+
+
+def _kb_document(**overrides) -> KBDocument:
+    payload = {
+        "doc_id": "doc-1",
+        "kb_id": "kb-1",
+        "doc_name": "ok.txt",
+        "file_type": "txt",
+        "file_size": 2,
+        "file_path": "",
+        "chunk_count": 1,
+        "media_count": 0,
+        "identity_key": "file:ok.txt",
+        "content_hash": "",
+        "source_kind": "file",
+    }
+    payload.update(overrides)
+    return KBDocument(**payload)
+
+
+def _ingest(
+    document: KBDocument | None = None,
+    status: str = "created",
+) -> DocumentIngestResult:
+    return DocumentIngestResult(
+        document=document or _kb_document(),
+        ingest_status=status,
+    )
 
 
 def _make_service(*, kb_manager=None) -> KnowledgeBaseService:
@@ -81,8 +111,10 @@ class _RerankProviderStub(RerankProvider):
 async def test_background_upload_task_aggregates_uploaded_and_failed_documents(
     tmp_path,
 ):
-    uploaded_doc = MagicMock()
-    uploaded_doc.model_dump.return_value = {"doc_id": "doc-1", "doc_name": "ok.txt"}
+    uploaded_doc = _ingest(
+        _kb_document(doc_id="doc-1", doc_name="ok.txt"),
+        status="replaced",
+    )
     kb_helper = AsyncMock()
     kb_helper.upload_document = AsyncMock(
         side_effect=[uploaded_doc, RuntimeError("embedding failed")]
@@ -124,10 +156,7 @@ async def test_background_upload_task_aggregates_uploaded_and_failed_documents(
         "task_id": "task-upload",
         "uploaded": [
             {
-                "doc_id": "doc-1",
-                "doc_name": "ok.txt",
-                "source_stored": False,
-                "ingest_status": "created",
+                **KnowledgeBaseService.document_public_payload(uploaded_doc),
             }
         ],
         "failed": [{"file_name": "bad.md", "error": "bad.md: Document upload failed"}],
@@ -178,8 +207,10 @@ async def test_background_upload_task_marks_failed_when_file_shape_breaks_outer_
 
 @pytest.mark.asyncio
 async def test_background_import_task_aggregates_failures_and_infers_file_types():
-    uploaded_doc = MagicMock()
-    uploaded_doc.model_dump.return_value = {"doc_id": "doc-1", "doc_name": "guide.md"}
+    uploaded_doc = _ingest(
+        _kb_document(doc_id="doc-1", doc_name="guide.md", file_type="md"),
+        status="unchanged",
+    )
     kb_helper = AsyncMock()
     kb_helper.upload_document = AsyncMock(
         side_effect=[uploaded_doc, RuntimeError("chunk validation failed")]
@@ -204,10 +235,7 @@ async def test_background_import_task_aggregates_failures_and_infers_file_types(
         "task_id": "task-import",
         "uploaded": [
             {
-                "doc_id": "doc-1",
-                "doc_name": "guide.md",
-                "source_stored": False,
-                "ingest_status": "created",
+                **KnowledgeBaseService.document_public_payload(uploaded_doc),
             }
         ],
         "failed": [
@@ -562,8 +590,7 @@ async def test_update_kb_rejects_missing_current_or_updated_kb():
 
 @pytest.mark.asyncio
 async def test_list_documents_clamps_pagination_and_trims_search():
-    doc = MagicMock()
-    doc.model_dump.return_value = {"doc_id": "doc-1", "file_name": "guide.md"}
+    doc = _kb_document(doc_id="doc-1", doc_name="guide.md", file_type="md")
     kb_helper = MagicMock(
         list_documents=AsyncMock(return_value=[doc]),
         count_documents=AsyncMock(return_value=3),
@@ -579,7 +606,7 @@ async def test_list_documents_clamps_pagination_and_trims_search():
     )
 
     assert result == {
-        "items": [{"doc_id": "doc-1", "file_name": "guide.md", "source_stored": False}],
+        "items": [KnowledgeBaseService.document_public_payload(doc)],
         "page": 1,
         "page_size": 1,
         "total": 3,
@@ -717,8 +744,10 @@ async def test_retrieve_redacts_debug_visualization_errors(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_background_upload_from_url_task_records_completed_result():
-    uploaded_doc = MagicMock()
-    uploaded_doc.model_dump.return_value = {"doc_id": "doc-1", "file_name": "page.md"}
+    uploaded_doc = _ingest(
+        _kb_document(doc_id="doc-1", doc_name="page.md", file_type="md"),
+        status="replaced",
+    )
     kb_helper = MagicMock(upload_from_url=AsyncMock(return_value=uploaded_doc))
     service = _make_service()
 
@@ -740,12 +769,7 @@ async def test_background_upload_from_url_task_records_completed_result():
         "result": {
             "task_id": "url-task",
             "uploaded": [
-                {
-                    "doc_id": "doc-1",
-                    "file_name": "page.md",
-                    "source_stored": False,
-                    "ingest_status": "created",
-                }
+                KnowledgeBaseService.document_public_payload(uploaded_doc),
             ],
             "failed": [],
             "total": 1,
@@ -1068,20 +1092,16 @@ async def test_get_document_validates_inputs_and_missing_entities():
 
 
 @pytest.mark.asyncio
-async def test_get_document_returns_model_dump():
-    document = MagicMock()
-    document.model_dump.return_value = {"doc_id": "doc-1", "file_name": "guide.md"}
+async def test_get_document_returns_public_payload():
+    document = _kb_document(doc_id="doc-1", doc_name="guide.md", file_type="md")
     kb_helper = MagicMock(get_document=AsyncMock(return_value=document))
     kb_manager = MagicMock(get_kb=AsyncMock(return_value=kb_helper))
     service = _make_service(kb_manager=kb_manager)
 
     result = await service.get_document(kb_id="kb-1", doc_id="doc-1")
 
-    assert result == {
-        "doc_id": "doc-1",
-        "file_name": "guide.md",
-        "source_stored": False,
-    }
+    assert result == KnowledgeBaseService.document_public_payload(document)
+    assert "file_path" not in result
 
 
 @pytest.mark.asyncio

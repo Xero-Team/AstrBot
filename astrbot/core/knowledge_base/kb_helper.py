@@ -135,6 +135,16 @@ class KBHelper:
 
     async def initialize(self) -> None:
         await self._ensure_vec_db()
+        try:
+            await self._recover_interrupted_replace()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Failed to recover interrupted document replace for %s: %s",
+                self.kb.kb_id,
+                exc,
+            )
 
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
@@ -162,9 +172,13 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
+        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
         existing = getattr(self, "vec_db", None)
-        if existing is not None:
+        if isinstance(existing, FaissVecDB):
             return existing
+        if existing is not None:
+            raise TypeError("knowledge base vector store is not FaissVecDB")
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
@@ -176,8 +190,6 @@ class KBHelper:
             logger.warning(
                 f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
             )
-
-        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
@@ -665,9 +677,6 @@ class KBHelper:
             )
 
     async def _lock_for_identity(self, identity_key: str) -> asyncio.Lock:
-        if not hasattr(self, "_identity_locks"):
-            self._identity_locks = {}
-            self._identity_locks_mutex = asyncio.Lock()
         async with self._identity_locks_mutex:
             lock = self._identity_locks.get(identity_key)
             if lock is None:
@@ -695,7 +704,7 @@ class KBHelper:
         if source_kind == "import":
             return import_identity_key(posix)
         if source_kind == "url":
-            return f"legacy:{uuid.uuid4()}"
+            raise ValueError("URL ingest requires identity_key")
         return file_identity_key(posix)
 
     @staticmethod
@@ -1000,8 +1009,8 @@ class KBHelper:
         live_doc_id: str,
         saved_media: list[KBMedia],
     ) -> None:
-        document_storage = self.vec_db.document_storage
-        await document_storage.relabel_kb_doc_id(staging_id, live_doc_id)
+        vec_db = await self._ensure_vec_db()
+        await vec_db.document_storage.relabel_kb_doc_id(staging_id, live_doc_id)
         staging_dir = self.kb_medias_dir / staging_id
         live_dir = self.kb_medias_dir / live_doc_id
         if staging_dir.exists():
@@ -1090,8 +1099,6 @@ class KBHelper:
         if not relabeled:
             restored = await self._try_relabel_staging(staging_id, live_doc_id)
             if not restored:
-                restored = await self._try_relabel_staging(staging_id, live_doc_id)
-            if not restored:
                 await self._cleanup_failed_upload(
                     doc_id=staging_id,
                     media_paths=media_paths,
@@ -1124,15 +1131,31 @@ class KBHelper:
                 "Cannot restore document %s; stored source is missing", live_doc_id
             )
             return
+        doc = await self.get_document(live_doc_id)
+        file_name = doc.doc_name if doc is not None else "restored"
+        file_type = doc.file_type if doc is not None else "txt"
+        source_kind = doc.source_kind if doc is not None else "file"
         try:
             async with aiofiles.open(blob_path, "rb") as handle:
                 blob_bytes = await handle.read()
             media_paths: list[Path] = []
+            file_content: bytes | None = blob_bytes
+            pre_chunked_text: list[str] | None = None
+            if source_kind in {"url", "import"}:
+                text = blob_bytes.decode("utf-8")
+                pre_chunked_text = _compact_chunks(
+                    await self.chunker.chunk(
+                        text,
+                        chunk_size=self.kb.chunk_size or 512,
+                        chunk_overlap=self.kb.chunk_overlap or 50,
+                    ),
+                )
+                file_content = None
             await self._ingest_chunks_for_doc_id(
                 doc_id=live_doc_id,
-                file_name="restored",
-                file_content=blob_bytes,
-                file_type="txt",
+                file_name=file_name,
+                file_content=file_content,
+                file_type=file_type,
                 media_paths=media_paths,
                 chunk_size=self.kb.chunk_size or 512,
                 chunk_overlap=self.kb.chunk_overlap or 50,
@@ -1140,7 +1163,7 @@ class KBHelper:
                 tasks_limit=3,
                 max_retries=3,
                 progress_callback=None,
-                pre_chunked_text=None,
+                pre_chunked_text=pre_chunked_text,
             )
         except Exception as exc:
             logger.warning(
@@ -1148,6 +1171,34 @@ class KBHelper:
                 live_doc_id,
                 exc,
             )
+
+    async def _recover_interrupted_replace(self) -> None:
+        """Drop orphan staging vectors and rebuild live docs that lost chunks."""
+        vec_db = await self._ensure_vec_db()
+        live_ids = await self.kb_db.list_document_ids_by_kb(self.kb.kb_id)
+        stored_ids = await vec_db.document_storage.list_kb_doc_ids()
+        orphans = stored_ids - live_ids
+        for orphan_id in orphans:
+            await vec_db.delete_documents(metadata_filters={"kb_doc_id": orphan_id})
+        if orphans:
+            self._invalidate_bm25_cache()
+        for doc_id in live_ids:
+            self._doc_blob_path(doc_id, ".staging").unlink(missing_ok=True)
+            chunk_count = await vec_db.count_documents(
+                metadata_filter={"kb_doc_id": doc_id},
+            )
+            bak_blob = self._doc_blob_path(doc_id, ".bak")
+            if chunk_count:
+                bak_blob.unlink(missing_ok=True)
+                continue
+            live_blob = self._doc_blob_path(doc_id)
+            restore_blob = live_blob if live_blob.is_file() else bak_blob
+            if not restore_blob.is_file():
+                continue
+            await self._reembed_from_stored_blob(doc_id, restore_blob)
+            if restore_blob.resolve() != live_blob.resolve() and restore_blob.is_file():
+                restore_blob.replace(live_blob)
+            bak_blob.unlink(missing_ok=True)
 
     async def list_documents(
         self,
@@ -1324,7 +1375,7 @@ class KBHelper:
                 - current: 当前进度
                 - total: 总数
         Returns:
-            KBDocument: 上传的文档对象
+            DocumentIngestResult: 上传或替换后的文档结果
         Raises:
             ValueError: 如果 URL 为空或无法提取内容
             IOError: 如果网络请求失败
@@ -1385,7 +1436,7 @@ class KBHelper:
             KnowledgeBaseUploadError: If the source is missing or the embedding
                 dimension does not match the on-disk index.
         """
-        await self._ensure_vec_db()
+        vec_db = await self._ensure_vec_db()
         doc = await self.get_document(doc_id)
         if doc is None:
             raise KnowledgeBaseUploadError(
@@ -1393,7 +1444,7 @@ class KBHelper:
                 user_message="文档不存在",
             )
         embedding_provider = await self.get_ep()
-        index_dimension = self.vec_db.embedding_storage.dimension
+        index_dimension = vec_db.embedding_storage.dimension
         if embedding_provider.get_dim() != index_dimension:
             raise KnowledgeBaseUploadError(
                 stage="reindex",

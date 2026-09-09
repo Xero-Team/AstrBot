@@ -45,6 +45,7 @@
     "actions": "操作",
     "view": "查看",
     "reindex": "重建索引",
+    "reindexUnavailable": "没有保存源文件，无法重建索引",
     "reindexSuccess": "文档已按当前分块设置重建",
     "reindexFailed": "重建索引失败",
     "ingestSummary": "上传完成：{created} 个新建，{replaced} 个替换，{unchanged} 个未变化",

@@ -19,7 +19,12 @@
         color="primary"
         variant="tonal"
         :loading="reindexing"
-        :disabled="loading || reindexing"
+        :disabled="loading || reindexing || document.source_stored === false"
+        :title="
+          document.source_stored === false
+            ? t('info.reindexUnavailable')
+            : t('info.reindex')
+        "
         @click="reindexDocument"
       >
         {{ t('info.reindex') }}
@@ -380,6 +385,7 @@ const filteredChunks = computed(() => {
 });
 
 const reindexDocument = async () => {
+  if (document.value.source_stored === false) return;
   reindexing.value = true;
   try {
     const response = await knowledgeApi.reindexDocument(

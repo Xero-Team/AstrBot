@@ -96,8 +96,21 @@
             variant="text"
             size="small"
             color="primary"
-            :disabled="item.uploading || reindexingId === item.doc_id"
-            :aria-label="t('documents.reindex')"
+            :disabled="
+              item.uploading ||
+              reindexingId === item.doc_id ||
+              item.source_stored === false
+            "
+            :aria-label="
+              item.source_stored === false
+                ? t('documents.reindexUnavailable')
+                : t('documents.reindex')
+            "
+            :title="
+              item.source_stored === false
+                ? t('documents.reindexUnavailable')
+                : t('documents.reindex')
+            "
             @click="reindexDocument(item)"
           />
           <v-btn
@@ -499,6 +512,7 @@ interface DocumentItem {
   chunk_count: number;
   created_at: string;
   ingest_status?: 'created' | 'replaced' | 'unchanged';
+  source_stored?: boolean;
   uploading?: boolean;
   taskId?: string;
   uploadProgress?: UploadProgressState;
@@ -1090,7 +1104,7 @@ const ingestSummary = (uploaded?: Array<{ ingest_status?: string }>) => {
 const reindexingId = ref<string | null>(null);
 
 const reindexDocument = async (doc: DocumentItem) => {
-  if (doc.uploading) return;
+  if (doc.uploading || doc.source_stored === false) return;
   reindexingId.value = doc.doc_id;
   try {
     const response = await knowledgeApi.reindexDocument(props.kbId, doc.doc_id);

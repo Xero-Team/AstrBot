@@ -379,8 +379,19 @@ def test_get_upload_progress_rejects_missing_or_unknown_task():
 
 @pytest.mark.asyncio
 async def test_background_upload_from_url_task_marks_success_result():
-    uploaded_doc = MagicMock()
-    uploaded_doc.model_dump.return_value = {"doc_id": "doc-1"}
+    uploaded_doc = DocumentIngestResult(
+        document=KBDocument(
+            doc_id="doc-1",
+            kb_id="kb-1",
+            doc_name="page.url",
+            file_type="url",
+            file_size=10,
+            file_path="doc-1",
+            identity_key="url:sha256:abc",
+            source_kind="url",
+        ),
+        ingest_status="replaced",
+    )
     kb_helper = AsyncMock()
     kb_helper.upload_from_url = AsyncMock(return_value=uploaded_doc)
 
@@ -403,16 +414,16 @@ async def test_background_upload_from_url_task_marks_success_result():
 
     assert service.upload_tasks["task-url-ok"]["status"] == "completed"
     result = service.upload_tasks["task-url-ok"]["result"]
-    assert result == {
-        "task_id": "task-url-ok",
-        "uploaded": [
-            {"doc_id": "doc-1", "source_stored": False, "ingest_status": "created"}
-        ],
-        "failed": [],
-        "total": 1,
-        "success_count": 1,
-        "failed_count": 0,
-    }
+    uploaded = result["uploaded"][0]
+    assert result["task_id"] == "task-url-ok"
+    assert uploaded["doc_id"] == "doc-1"
+    assert uploaded["ingest_status"] == "replaced"
+    assert uploaded["source_stored"] is True
+    assert "file_path" not in uploaded
+    assert result["failed"] == []
+    assert result["total"] == 1
+    assert result["success_count"] == 1
+    assert result["failed_count"] == 0
     kb_helper.upload_from_url.assert_awaited_once()
 
 

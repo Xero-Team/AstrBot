@@ -14,6 +14,7 @@
     "chunkCount": "分块数量",
     "createdAt": "上传时间",
     "reindex": "重建索引",
+    "reindexUnavailable": "没有保存源文件，无法重建索引",
     "sourceStored": "已保存源文件"
   },
   "actions": {

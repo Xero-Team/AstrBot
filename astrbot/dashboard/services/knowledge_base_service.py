@@ -107,28 +107,24 @@ class KnowledgeBaseService:
         if isinstance(result, DocumentIngestResult):
             status = result.ingest_status
             document = result.document
-        if isinstance(document, KBDocument):
-            payload: dict[str, Any] = {
-                "doc_id": document.doc_id,
-                "kb_id": document.kb_id,
-                "doc_name": document.doc_name,
-                "file_type": document.file_type,
-                "file_size": document.file_size,
-                "chunk_count": document.chunk_count,
-                "media_count": document.media_count,
-                "identity_key": document.identity_key,
-                "content_hash": document.content_hash,
-                "source_kind": document.source_kind,
-                "source_url": document.source_url,
-                "source_stored": bool(document.file_path),
-                "created_at": document.created_at,
-                "updated_at": document.updated_at,
-            }
-        else:
-            dumped = document.model_dump() if hasattr(document, "model_dump") else {}
-            payload = dict(dumped)
-            payload.pop("file_path", None)
-            payload.setdefault("source_stored", False)
+        if not isinstance(document, KBDocument):
+            raise TypeError("document payload requires KBDocument")
+        payload: dict[str, Any] = {
+            "doc_id": document.doc_id,
+            "kb_id": document.kb_id,
+            "doc_name": document.doc_name,
+            "file_type": document.file_type,
+            "file_size": document.file_size,
+            "chunk_count": document.chunk_count,
+            "media_count": document.media_count,
+            "identity_key": document.identity_key,
+            "content_hash": document.content_hash,
+            "source_kind": document.source_kind,
+            "source_url": document.source_url,
+            "source_stored": bool(document.file_path),
+            "created_at": document.created_at,
+            "updated_at": document.updated_at,
+        }
         if status is not None:
             payload["ingest_status"] = status
         return payload
@@ -312,9 +308,7 @@ class KnowledgeBaseService:
                         identity_key=file_info.get("identity_key"),
                         source_kind=file_info.get("source_kind") or "file",
                     )
-                    uploaded_docs.append(
-                        self.document_public_payload(doc, ingest_status="created"),
-                    )
+                    uploaded_docs.append(self.document_public_payload(doc))
                 except Exception as exc:
                     logger.error(
                         "上传文档 %s 失败: %s",
@@ -422,9 +416,7 @@ class KnowledgeBaseService:
                         identity_key=self.import_identity_key_for(identity_name),
                         source_kind="import",
                     )
-                    uploaded_docs.append(
-                        self.document_public_payload(doc, ingest_status="created"),
-                    )
+                    uploaded_docs.append(self.document_public_payload(doc))
                 except Exception as exc:
                     logger.error(
                         "导入文档 %s 失败: %s",
@@ -1047,9 +1039,7 @@ class KnowledgeBaseService:
                 "completed",
                 result={
                     "task_id": task_id,
-                    "uploaded": [
-                        self.document_public_payload(doc, ingest_status="created")
-                    ],
+                    "uploaded": [self.document_public_payload(doc)],
                     "failed": [],
                     "total": 1,
                     "success_count": 1,

@@ -45,6 +45,7 @@
     "actions": "Actions",
     "view": "View",
     "reindex": "Reindex",
+    "reindexUnavailable": "Source file is not stored; reindex is unavailable",
     "reindexSuccess": "Document rebuilt with current chunk settings",
     "reindexFailed": "Failed to reindex document",
     "ingestSummary": "Upload finished: {created} created, {replaced} replaced, {unchanged} unchanged",

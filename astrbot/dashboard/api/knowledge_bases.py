@@ -205,7 +205,7 @@ async def upload_knowledge_base_document(
                 max_part_size=KB_UPLOAD_MAX_PART_SIZE,
             )
         except MultiPartException as exc:
-            raise KnowledgeBaseServiceError(exc.message) from exc
+            raise KnowledgeBaseServiceError("上传表单无效") from exc
         form_data = {
             key: value
             for key, value in form.multi_items()

@@ -14,6 +14,7 @@
     "chunkCount": "Chunk Count",
     "createdAt": "Uploaded At",
     "reindex": "Reindex",
+    "reindexUnavailable": "Source file is not stored; reindex is unavailable",
     "sourceStored": "Source stored"
   },
   "actions": {

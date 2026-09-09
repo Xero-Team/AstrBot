@@ -414,6 +414,23 @@ class DocumentStorage:
                 document.updated_at = now
                 session.add(document)
 
+    async def list_kb_doc_ids(self) -> set[str]:
+        """Return distinct ``kb_doc_id`` values stored in chunk metadata.
+
+        Returns:
+            Set of knowledge-base document IDs referenced by chunks.
+        """
+        if self.engine is None:
+            return set()
+        async with self.get_session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT DISTINCT json_extract(metadata, '$.kb_doc_id') "
+                    "AS kb_doc_id FROM documents",
+                ),
+            )
+            return {row[0] for row in result.fetchall() if row[0]}
+
     async def update_document_by_doc_id(self, doc_id: str, new_text: str) -> None:
         """Update a document by its doc_id.
 

@@ -221,7 +221,7 @@ def test_terminate_process_ignores_posix_killpg_permission(monkeypatch):
         raise PermissionError(1, "Operation not permitted")
 
     monkeypatch.setattr(local_booter.sys, "platform", "darwin")
-    monkeypatch.setattr(local_booter.os, "killpg", fake_killpg)
+    monkeypatch.setattr(local_booter.os, "killpg", fake_killpg, raising=False)
 
     asyncio.run(LocalShellComponent()._terminate_process(DeadProcess()))
 

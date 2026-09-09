@@ -1,6 +1,6 @@
 # Connect MiraRouter
 
-[MiraRouter](https://mirarouter.com/) provides stable and secure OpenAI-compatible APIs for accessing popular AI models with one API key, while centralizing key, usage, and cost management.
+MiraRouter provides an OpenAI-compatible API.
 
 ## Get an API Key
 
@@ -19,7 +19,7 @@ Open the AstrBot dashboard and go to **Providers → Add Provider Source → Mir
 
 AstrBot automatically adds the `X-APP-CODE: astrbot` identifier to MiraRouter requests.
 
-Save the source, then add the models you want to use from the [MiraRouter models and pricing](https://mirarouter.com/models) page.
+Save the source, then add the models you want to use with their service-provided model IDs.
 
 ## Set as Default
 

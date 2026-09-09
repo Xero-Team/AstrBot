@@ -847,6 +847,8 @@ async def test_anysearch_search_maps_results(monkeypatch):
                             "title": "AstrBot Documentation",
                             "url": "https://example.com/docs",
                             "content": "Getting started with AstrBot...",
+                            "score": 0.9,
+                            "metadata": {"source": "docs"},
                         },
                     ]
                 },
@@ -876,7 +878,7 @@ async def test_anysearch_search_maps_results(monkeypatch):
         tools.SearchResult(
             title="AstrBot Documentation",
             url="https://example.com/docs",
-            snippet="Getting started with AstrBot...",
+            snippet='Getting started with AstrBot...\nscore: 0.9\nmetadata: {"source": "docs"}',
         ),
     ]
 
@@ -962,7 +964,27 @@ async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
     context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
 
     await tool.call(context, query="test", max_results=99)
-    assert session.posted["json"]["max_results"] == 20
+    assert session.posted["json"]["max_results"] == 10
 
     await tool.call(context, query="test", max_results=0)
     assert session.posted["json"]["max_results"] == 1
+
+    await tool.call(
+        context,
+        query="test",
+        params={"symbol": "AAPL"},
+        zone="global",
+    )
+    assert session.posted["json"]["params"] == {"symbol": "AAPL"}
+    assert "zone" not in session.posted["json"]
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_raises_for_http_200_business_error(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=200, json_data={"code": 4001, "message": "bad params"})
+    )
+    monkeypatch.setattr(tools, "_client_session", lambda: session)
+
+    with pytest.raises(Exception, match="bad params"):
+        await tools._anysearch_search({}, {"query": "test"})

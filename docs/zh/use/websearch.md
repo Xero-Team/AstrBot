@@ -51,4 +51,4 @@ AstrBot 当前支持 7 种网页搜索源接入方式：`Tavily`、`BoCha`、`�
 
 前往 [AnySearch 控制台](https://anysearch.com/console/api-keys) 获取 API Key，然后填写在相应的配置项。
 
-AnySearch 除通用网页搜索外，还提供学术、代码文档、金融、法律、安全情报等垂直领域检索能力。若 API Key 留空，将以匿名模式调用，每日有免费额度，便于快速试用。
+AnySearch 除通用网页搜索外，还可通过服务商支持的领域标签和 `params` 对象进行垂直检索。兼容的结构化结果字段会以文本保留。`max_results` 限制为 1–10，支持的结果区域为 `cn` 和 `intl`。若 API Key 留空，将以匿名模式调用，每日有免费额度。

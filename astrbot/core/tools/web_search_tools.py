@@ -1374,7 +1374,10 @@ async def _anysearch_search(
                         snippet = item.get("snippet") or item.get("content") or ""
                         fields = []
                         for key, value in item.items():
-                            if key in {"title", "url", "snippet", "content", "favicon"} or value is None:
+                            if (
+                                key in {"title", "url", "snippet", "content", "favicon"}
+                                or value is None
+                            ):
                                 continue
                             if isinstance(value, dict | list):
                                 value = json.dumps(value, ensure_ascii=False)

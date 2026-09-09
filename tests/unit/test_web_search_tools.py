@@ -982,7 +982,9 @@ async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
 @pytest.mark.asyncio
 async def test_anysearch_search_raises_for_http_200_business_error(monkeypatch):
     session = _FakeFirecrawlSession(
-        _FakeFirecrawlResponse(status=200, json_data={"code": 4001, "message": "bad params"})
+        _FakeFirecrawlResponse(
+            status=200, json_data={"code": 4001, "message": "bad params"}
+        )
     )
     monkeypatch.setattr(tools, "_client_session", lambda: session)
 

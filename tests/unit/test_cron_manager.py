@@ -613,28 +613,42 @@ class TestRunJob:
         mock_db.update_cron_job.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_active_agent_job_records_completed_status(self, cron_manager, mock_db):
+    async def test_active_agent_job_records_completed_status(
+        self, cron_manager, mock_db
+    ):
         job = CronJob(
-            job_id="active-job", name="Active", job_type="active_agent",
-            cron_expression="0 9 * * *", enabled=True, persistent=True,
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
         )
         mock_db.get_cron_job.return_value = job
         cron_manager._run_active_agent_job = AsyncMock()
 
         await cron_manager._run_job(job.job_id)
 
-        assert mock_db.update_cron_job.await_args_list[-1].kwargs["status"] == "completed"
+        assert (
+            mock_db.update_cron_job.await_args_list[-1].kwargs["status"] == "completed"
+        )
         assert mock_db.update_cron_job.await_args_list[-1].kwargs["last_error"] is None
 
     @pytest.mark.asyncio
     async def test_active_agent_job_redacts_failed_status(self, cron_manager, mock_db):
         job = CronJob(
-            job_id="active-job", name="Active", job_type="active_agent",
-            cron_expression="0 9 * * *", enabled=True, persistent=True,
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
         )
         mock_db.get_cron_job.return_value = job
         cron_manager._run_active_agent_job = AsyncMock(
-            side_effect=RuntimeError("Bearer secret-token https://example.test/key /private/data")
+            side_effect=RuntimeError(
+                "Bearer secret-token https://example.test/key /private/data"
+            )
         )
 
         await cron_manager._run_job(job.job_id)

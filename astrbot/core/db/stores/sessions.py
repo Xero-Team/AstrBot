@@ -57,7 +57,9 @@ class PlatformSessionStoreMixin(DatabaseStoreMixin):
 
         async with store_session(self) as session:
             session: AsyncSession
-            query = select(PlatformSession).where(col(PlatformSession.session_id).in_(session_ids))
+            query = select(PlatformSession).where(
+                col(PlatformSession.session_id).in_(session_ids)
+            )
             if platform_id:
                 query = query.where(col(PlatformSession.platform_id) == platform_id)
             result = await session.execute(query)

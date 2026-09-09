@@ -108,7 +108,9 @@ class ConversationService:
         return {
             "conversations": [
                 self._serialize_conversation(
-                    conversation, alias_map, webchat_titles.get(conversation.user_id, "")
+                    conversation,
+                    alias_map,
+                    webchat_titles.get(conversation.user_id, ""),
                 )
                 for conversation in conversations
             ],
@@ -165,7 +167,9 @@ class ConversationService:
         return {
             "user_id": user_id,
             "cid": cid,
-            "title": conversation.title or webchat_titles.get(conversation.user_id) or None,
+            "title": conversation.title
+            or webchat_titles.get(conversation.user_id)
+            or None,
             "persona_id": conversation.persona_id,
             "history": conversation.history,
             "created_at": conversation.created_at,
@@ -280,7 +284,9 @@ class ConversationService:
             except Exception as exc:
                 error = safe_error("", exc)
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - {error}")
-                logger.error("导出对话失败: user_id=%s, cid=%s, error=%s", user_id, cid, error)
+                logger.error(
+                    "导出对话失败: user_id=%s, cid=%s, error=%s", user_id, cid, error
+                )
 
         if exported_count == 0:
             raise ConversationServiceError("没有成功导出任何对话")
@@ -351,12 +357,23 @@ class ConversationService:
                 list(set(session_ids.values())), platform_id="webchat"
             )
         except Exception as exc:
-            logger.warning("WebChat session title lookup failed: %s", safe_error("", exc))
+            logger.warning(
+                "WebChat session title lookup failed: %s", safe_error("", exc)
+            )
             return {}
-        names = {session.session_id: session.display_name for session in sessions if session.display_name}
-        return {user_id: names.get(session_id, "") for user_id, session_id in session_ids.items()}
+        names = {
+            session.session_id: session.display_name
+            for session in sessions
+            if session.display_name
+        }
+        return {
+            user_id: names.get(session_id, "")
+            for user_id, session_id in session_ids.items()
+        }
 
-    def _serialize_conversation(self, conversation, alias_map: dict, webchat_title: str = "") -> dict:
+    def _serialize_conversation(
+        self, conversation, alias_map: dict, webchat_title: str = ""
+    ) -> dict:
         result = {
             **asdict(conversation),
             "title": conversation.title or webchat_title or None,

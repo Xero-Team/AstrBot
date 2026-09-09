@@ -18,6 +18,7 @@ from astrbot.dashboard.services.file_service import FileService, FileServiceErro
 from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
 from astrbot.dashboard.services.memory_service import MemoryService
 from astrbot.dashboard.services.skills_service import SkillsService
+from tests.helpers.knowledge_base_tasks import InMemoryKnowledgeBaseTaskStore
 
 _SENSITIVE_ERROR = (
     "api_key=api-key-top-secret "
@@ -58,8 +59,7 @@ def _backup_service() -> BackupService:
 def _knowledge_base_service() -> KnowledgeBaseService:
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = MagicMock()
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
     service._background_tasks = set()
     return service
 
@@ -219,7 +219,7 @@ async def test_knowledge_base_document_failure_result_and_log_are_redacted(
             max_retries=1,
         )
 
-    result = service.upload_tasks["kb-document"]["result"]
+    result = service.task_store.tasks["kb-document"].result
     assert result["failed"] == [
         {"file_name": "document.txt", "error": "document.txt: Document upload failed"}
     ]
@@ -250,10 +250,10 @@ async def test_knowledge_base_url_background_failure_is_generic_and_redacted(
             cleaning_provider_id=None,
         )
 
-    task = service.upload_tasks["kb-url"]
-    assert task["status"] == "failed"
-    assert task["error"] == "Knowledge base task failed"
-    _assert_no_sensitive_values(task["error"], caplog.text)
+    task = service.task_store.tasks["kb-url"]
+    assert task.status == "failed"
+    assert task.error == "Knowledge base task failed"
+    _assert_no_sensitive_values(task.error, caplog.text)
 
 
 @pytest.mark.asyncio
@@ -276,10 +276,10 @@ async def test_knowledge_base_import_background_failure_is_generic_and_redacted(
             max_retries=1,
         )
 
-    task = service.upload_tasks["kb-import"]
-    assert task["status"] == "failed"
-    assert task["error"] == "Knowledge base task failed"
-    _assert_no_sensitive_values(task["error"], caplog.text)
+    task = service.task_store.tasks["kb-import"]
+    assert task.status == "failed"
+    assert task.error == "Knowledge base task failed"
+    _assert_no_sensitive_values(task.error, caplog.text)
 
 
 @pytest.mark.asyncio

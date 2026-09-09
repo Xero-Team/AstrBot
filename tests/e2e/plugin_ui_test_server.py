@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -60,6 +60,32 @@ FONT_PATH = (
 
 REQUESTS: list[dict[str, object]] = []
 REQUESTS_LOCK = threading.Lock()
+
+KNOWLEDGE_BASE_ID = "kb-e2e"
+KNOWLEDGE_DOCUMENT_ID = "doc-e2e"
+KNOWLEDGE_CHUNK_ID = "chunk-e2e"
+KNOWLEDGE_DOCUMENT_NAME = "operator-guide.md"
+KNOWLEDGE_CHUNK_CONTENT = "Operators use the E2E knowledge-base guide."
+KNOWLEDGE_PRIVATE_PROVIDER_ERROR = "provider://secret-e2e-token@internal.invalid"
+KNOWLEDGE_PRIVATE_PATH = "/tmp/astrbot-e2e/private-provider-trace"
+KNOWLEDGE_BASE_LOCK = threading.Lock()
+KNOWLEDGE_BASE_STATE: dict[str, object] = {}
+
+
+def reset_knowledge_base_state() -> None:
+    """Restore the deterministic knowledge-base fixture to an empty state."""
+    with KNOWLEDGE_BASE_LOCK:
+        KNOWLEDGE_BASE_STATE.clear()
+        KNOWLEDGE_BASE_STATE.update(
+            {
+                "knowledge_base": None,
+                "document": None,
+                "tasks": {},
+            }
+        )
+
+
+reset_knowledge_base_state()
 
 TEST_PLUGIN = {
     "name": TEST_PLUGIN_NAME,
@@ -386,12 +412,201 @@ class SpikeHandler(BaseHTTPRequestHandler):
         value = json.loads(self.rfile.read(length))
         return value if isinstance(value, dict) else {}
 
+    @staticmethod
+    def _knowledge_base() -> dict[str, object]:
+        return {
+            "kb_id": KNOWLEDGE_BASE_ID,
+            "kb_name": "E2E Operator Guide",
+            "description": "Deterministic Dashboard browser fixture",
+            "emoji": "📚",
+            "doc_count": 1 if KNOWLEDGE_BASE_STATE["document"] else 0,
+            "chunk_count": 1 if KNOWLEDGE_BASE_STATE["document"] else 0,
+            "embedding_provider_id": "embedding-e2e",
+            "rerank_provider_id": None,
+            "chunk_size": 512,
+            "chunk_overlap": 50,
+            "created_at": "2026-09-09T00:00:00Z",
+            "updated_at": "2026-09-09T00:00:00Z",
+        }
+
+    @staticmethod
+    def _knowledge_document() -> dict[str, object]:
+        return {
+            "doc_id": KNOWLEDGE_DOCUMENT_ID,
+            "kb_id": KNOWLEDGE_BASE_ID,
+            "doc_name": KNOWLEDGE_DOCUMENT_NAME,
+            "file_type": "md",
+            "file_size": len(KNOWLEDGE_CHUNK_CONTENT),
+            "chunk_count": 1,
+            "created_at": "2026-09-09T00:00:00Z",
+            "source_stored": True,
+            "identity_key": f"file:{KNOWLEDGE_DOCUMENT_NAME}",
+            "ingest_status": "created",
+        }
+
+    def _send_knowledge_task(self, task_id: str) -> None:
+        with KNOWLEDGE_BASE_LOCK:
+            tasks = KNOWLEDGE_BASE_STATE["tasks"]
+            assert isinstance(tasks, dict)
+            task = tasks.get(task_id)
+            if not isinstance(task, dict):
+                self._send_json(
+                    {"status": "error", "message": "Task not found", "data": None},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            task["polls"] = int(task["polls"]) + 1
+            if task["polls"] == 1:
+                data = {
+                    "task_id": task_id,
+                    "status": "processing",
+                    "progress": {
+                        "file_index": 0,
+                        "stage": "embedding",
+                        "current": 1,
+                        "total": 2,
+                    },
+                }
+            elif task["failed"]:
+                data = {
+                    "task_id": task_id,
+                    "status": "failed",
+                    "error": "Knowledge base task failed",
+                }
+            else:
+                KNOWLEDGE_BASE_STATE["document"] = self._knowledge_document()
+                data = {
+                    "task_id": task_id,
+                    "status": "completed",
+                    "result": {
+                        "success_count": 1,
+                        "failed_count": 0,
+                        "uploaded": [{"ingest_status": "created"}],
+                    },
+                }
+        self._send_json({"status": "ok", "message": None, "data": data})
+
     def do_GET(self) -> None:  # noqa: N802
         path = urlsplit(self.path).path
         if path == "/health":
             self._send(b"ok", content_type="text/plain")
             return
         if self.server.server_port == BACKEND_PORT:
+            if path == "/api/v1/providers":
+                if not self._require_authorized():
+                    return
+                provider_type = parse_qs(urlsplit(self.path).query).get(
+                    "provider_type", [""]
+                )[0]
+                providers = (
+                    [
+                        {
+                            "id": "embedding-e2e",
+                            "provider_type": "embedding",
+                            "embedding_model": "Test Embedding",
+                            "embedding_dimensions": 2,
+                        }
+                    ]
+                    if provider_type == "embedding"
+                    else []
+                )
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "message": None,
+                        "data": {"providers": providers, "model_metadata": {}},
+                    }
+                )
+                return
+            if path == "/api/v1/knowledge-bases":
+                if not self._require_authorized():
+                    return
+                with KNOWLEDGE_BASE_LOCK:
+                    knowledge_base = KNOWLEDGE_BASE_STATE["knowledge_base"]
+                    items = [self._knowledge_base()] if knowledge_base else []
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "message": None,
+                        "data": {
+                            "items": items,
+                            "page": 1,
+                            "page_size": 20,
+                            "total": len(items),
+                        },
+                    }
+                )
+                return
+            if path.startswith("/api/v1/knowledge-bases/tasks/"):
+                if not self._require_authorized():
+                    return
+                self._send_knowledge_task(path.rsplit("/", 1)[-1])
+                return
+            if path == f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}":
+                if not self._require_authorized():
+                    return
+                with KNOWLEDGE_BASE_LOCK:
+                    knowledge_base = KNOWLEDGE_BASE_STATE["knowledge_base"]
+                    data = self._knowledge_base() if knowledge_base else None
+                self._send_json({"status": "ok", "message": None, "data": data})
+                return
+            documents_path = f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}/documents"
+            if path == documents_path:
+                if not self._require_authorized():
+                    return
+                with KNOWLEDGE_BASE_LOCK:
+                    document = KNOWLEDGE_BASE_STATE["document"]
+                    items = [document] if document else []
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "message": None,
+                        "data": {
+                            "items": items,
+                            "page": 1,
+                            "page_size": 10,
+                            "total": len(items),
+                        },
+                    }
+                )
+                return
+            if path == f"{documents_path}/{KNOWLEDGE_DOCUMENT_ID}":
+                if not self._require_authorized():
+                    return
+                with KNOWLEDGE_BASE_LOCK:
+                    document = KNOWLEDGE_BASE_STATE["document"]
+                self._send_json({"status": "ok", "message": None, "data": document})
+                return
+            if path == f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}/chunks":
+                if not self._require_authorized():
+                    return
+                with KNOWLEDGE_BASE_LOCK:
+                    has_document = bool(KNOWLEDGE_BASE_STATE["document"])
+                chunks = (
+                    [
+                        {
+                            "chunk_id": KNOWLEDGE_CHUNK_ID,
+                            "chunk_index": 0,
+                            "content": KNOWLEDGE_CHUNK_CONTENT,
+                            "char_count": len(KNOWLEDGE_CHUNK_CONTENT),
+                        }
+                    ]
+                    if has_document
+                    else []
+                )
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "message": None,
+                        "data": {
+                            "items": chunks,
+                            "page": 1,
+                            "page_size": 10,
+                            "total": len(chunks),
+                        },
+                    }
+                )
+                return
             if path in {
                 "/api/v1/chat/projects",
                 "/api/v1/chat/sessions",
@@ -718,6 +933,78 @@ class SpikeHandler(BaseHTTPRequestHandler):
             return
         if not self._require_authorized():
             return
+        if path == "/api/e2e/knowledge-base/reset":
+            reset_knowledge_base_state()
+            self._send_json({"status": "ok", "message": None, "data": {}})
+            return
+        if path == "/api/v1/knowledge-bases":
+            self._read_json()
+            with KNOWLEDGE_BASE_LOCK:
+                KNOWLEDGE_BASE_STATE["knowledge_base"] = self._knowledge_base()
+            self._send_json(
+                {
+                    "status": "ok",
+                    "message": "Knowledge base created successfully",
+                    "data": {
+                        "kb_id": KNOWLEDGE_BASE_ID,
+                        "kb_name": "E2E Operator Guide",
+                    },
+                }
+            )
+            return
+        documents_path = f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}/documents"
+        if path == documents_path:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            body = self.rfile.read(length) if length else b""
+            failed = b"broken-provider.md" in body
+            task_id = (
+                "knowledge-upload-failed" if failed else "knowledge-upload-success"
+            )
+            with KNOWLEDGE_BASE_LOCK:
+                tasks = KNOWLEDGE_BASE_STATE["tasks"]
+                assert isinstance(tasks, dict)
+                tasks[task_id] = {
+                    "failed": failed,
+                    "polls": 0,
+                    "private_diagnostic": (
+                        f"{KNOWLEDGE_PRIVATE_PROVIDER_ERROR} {KNOWLEDGE_PRIVATE_PATH}"
+                    ),
+                }
+            self._send_json(
+                {
+                    "status": "ok",
+                    "message": None,
+                    "data": {"task_id": task_id, "file_count": 1},
+                }
+            )
+            return
+        if path == f"{documents_path}/{KNOWLEDGE_DOCUMENT_ID}/reindex":
+            with KNOWLEDGE_BASE_LOCK:
+                document = KNOWLEDGE_BASE_STATE["document"]
+            self._send_json({"status": "ok", "message": None, "data": document})
+            return
+        if path == f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}/retrieve":
+            self._read_json()
+            with KNOWLEDGE_BASE_LOCK:
+                has_document = bool(KNOWLEDGE_BASE_STATE["document"])
+            results = (
+                [
+                    {
+                        "chunk_id": KNOWLEDGE_CHUNK_ID,
+                        "chunk_index": 0,
+                        "doc_name": KNOWLEDGE_DOCUMENT_NAME,
+                        "char_count": len(KNOWLEDGE_CHUNK_CONTENT),
+                        "score": 0.99,
+                        "content": KNOWLEDGE_CHUNK_CONTENT,
+                    }
+                ]
+                if has_document
+                else []
+            )
+            self._send_json(
+                {"status": "ok", "message": None, "data": {"results": results}}
+            )
+            return
         if path == (
             f"/api/v1/plugins/{TEST_EXTENSION_ID}/dashboard/pages/"
             f"{TEST_PAGE_ID}/session"
@@ -815,6 +1102,34 @@ class SpikeHandler(BaseHTTPRequestHandler):
                     ),
                 },
             )
+            return
+        self._send_json(
+            {"status": "error", "message": "Not found", "data": None},
+            status=HTTPStatus.NOT_FOUND,
+        )
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        path = urlsplit(self.path).path
+        if self.server.server_port != BACKEND_PORT:
+            self._send(
+                b"Not found",
+                content_type="text/plain",
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        if not self._require_authorized():
+            return
+        documents_path = f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}/documents"
+        if path == f"{documents_path}/{KNOWLEDGE_DOCUMENT_ID}":
+            with KNOWLEDGE_BASE_LOCK:
+                KNOWLEDGE_BASE_STATE["document"] = None
+            self._send_json({"status": "ok", "message": None, "data": {}})
+            return
+        if path == f"/api/v1/knowledge-bases/{KNOWLEDGE_BASE_ID}":
+            with KNOWLEDGE_BASE_LOCK:
+                KNOWLEDGE_BASE_STATE["knowledge_base"] = None
+                KNOWLEDGE_BASE_STATE["document"] = None
+            self._send_json({"status": "ok", "message": None, "data": {}})
             return
         self._send_json(
             {"status": "error", "message": "Not found", "data": None},

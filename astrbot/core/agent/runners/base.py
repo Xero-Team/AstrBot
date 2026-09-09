@@ -70,6 +70,11 @@ class BaseAgentRunner[TContext]:
         """
         ...
 
+    @property
+    def state(self) -> AgentState:
+        """Return the current agent state."""
+        return self._state
+
     def _transition_state(self, new_state: AgentState) -> None:
         """Transition the agent state."""
         if self._state != new_state:

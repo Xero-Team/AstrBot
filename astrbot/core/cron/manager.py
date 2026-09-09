@@ -11,6 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.conversation_mgr import load_sanitized_history
@@ -20,6 +21,7 @@ from astrbot.core.db.protocols import CronStore
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.string_utils import interpolate_placeholders
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 
@@ -326,8 +328,8 @@ class CronJobManager:
                 raise ValueError(f"Unknown cron job type: {job.job_type}")
         except Exception as e:  # noqa: BLE001
             status = "failed"
-            last_error = str(e)
-            logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
+            last_error = safe_error("", e)
+            logger.error("Cron job %s failed: %s", job_id, last_error, exc_info=True)
         finally:
             next_run = self._get_next_run_time(job_id)
             await self.db.update_cron_job(
@@ -456,14 +458,20 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
+            raise RuntimeError("Failed to build main agent for cron job.")
 
         runner = result.agent_runner
         async for _ in runner.step_until_done(max_agent_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if getattr(runner, "state", AgentState.DONE) == AgentState.ERROR:
+            detail = (
+                f": {llm_resp.completion_text}"
+                if llm_resp and llm_resp.completion_text
+                else ""
+            )
+            raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 from sqlmodel import col, delete, desc, func, or_, select, update
 
-from astrbot.core.db.po import ConversationV2, Persona, Preference
+from astrbot.core.db.po import ConversationV2, Persona, PlatformSession, Preference
 from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
@@ -77,6 +77,22 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                 conditions.append(col(ConversationV2.platform_id).in_(platform_ids))
             if search_query:
                 search_pattern = _ilike_pattern(search_query)
+                webchat_title_match = (
+                    select(1)
+                    .where(col(PlatformSession.platform_id) == "webchat")
+                    .where(
+                        col(PlatformSession.display_name).ilike(
+                            search_pattern, escape="\\"
+                        )
+                    )
+                    .where(
+                        col(ConversationV2.user_id).like(
+                            "%!" + col(PlatformSession.session_id)
+                        )
+                    )
+                    .where(col(ConversationV2.platform_id) == "webchat")
+                    .exists()
+                )
                 conditions.append(
                     or_(
                         col(ConversationV2.title).ilike(search_pattern, escape="\\"),
@@ -86,6 +102,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                             search_pattern,
                             escape="\\",
                         ),
+                        webchat_title_match,
                     ),
                 )
             keyword_query = str(kwargs.get("keyword_query") or "").strip()

@@ -37,3 +37,26 @@ async def test_filter_options_keep_configured_webchat_id():
     options = await service.get_filter_options()
 
     assert options["bots"] == [{"id": "webchat-main", "type": "webchat"}]
+
+
+@pytest.mark.asyncio
+async def test_webchat_titles_are_batched_and_scoped_to_webchat():
+    lookup = AsyncMock(
+        return_value=[SimpleNamespace(session_id="session-a", display_name="Alice")]
+    )
+    service = ConversationService(
+        db_helper=SimpleNamespace(get_platform_sessions_by_ids=lookup),
+        conversation_manager=SimpleNamespace(),
+        config={},
+    )
+    conversations = [
+        SimpleNamespace(
+            platform_id="webchat", user_id="webchat:FriendMessage:webchat!u!session-a"
+        ),
+        SimpleNamespace(platform_id="qq", user_id="qq:FriendMessage:session-a"),
+    ]
+
+    titles = await service._get_webchat_titles(conversations)
+
+    assert titles == {"webchat:FriendMessage:webchat!u!session-a": "Alice"}
+    lookup.assert_awaited_once_with(["session-a"], platform_id="webchat")

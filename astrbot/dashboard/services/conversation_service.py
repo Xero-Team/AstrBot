@@ -8,15 +8,22 @@ from typing import Protocol
 from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db.protocols import ConversationStore, UmoAliasStore
+from astrbot.core.db.protocols import (
+    ConversationStore,
+    PlatformSessionStore,
+    UmoAliasStore,
+)
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.utils.error_redaction import safe_error
 
 
 class ConversationServiceError(Exception):
     pass
 
 
-class ConversationDashboardStore(ConversationStore, UmoAliasStore, Protocol):
+class ConversationDashboardStore(
+    ConversationStore, PlatformSessionStore, UmoAliasStore, Protocol
+):
     """Conversation listing plus UMO alias lookup for Dashboard serialization."""
 
 
@@ -96,10 +103,13 @@ class ConversationService:
         )
         umos = sorted({conv.user_id for conv in conversations if conv.user_id})
         alias_map = build_umo_alias_map(await self.db_helper.get_umo_aliases(umos))
+        webchat_titles = await self._get_webchat_titles(conversations)
 
         return {
             "conversations": [
-                self._serialize_conversation(conversation, alias_map)
+                self._serialize_conversation(
+                    conversation, alias_map, webchat_titles.get(conversation.user_id, "")
+                )
                 for conversation in conversations
             ],
             "pagination": {
@@ -151,10 +161,11 @@ class ConversationService:
             raise ConversationServiceError("对话不存在")
 
         alias_map = build_umo_alias_map(await self.db_helper.get_umo_aliases([user_id]))
+        webchat_titles = await self._get_webchat_titles([conversation])
         return {
             "user_id": user_id,
             "cid": cid,
-            "title": conversation.title,
+            "title": conversation.title or webchat_titles.get(conversation.user_id) or None,
             "persona_id": conversation.persona_id,
             "history": conversation.history,
             "created_at": conversation.created_at,
@@ -232,31 +243,33 @@ class ConversationService:
         jsonl_lines = []
         exported_count = 0
         failed_items = []
+        resolved_conversations = []
 
         for conv_info in conversations_to_export:
             user_id = conv_info.get("user_id")
             cid = conv_info.get("cid")
-
             if not user_id or not cid:
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
                 continue
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id, conversation_id=cid
+            )
+            if not conversation:
+                failed_items.append(f"user_id:{user_id}, cid:{cid} - 对话不存在")
+                continue
+            resolved_conversations.append(conversation)
+        webchat_titles = await self._get_webchat_titles(resolved_conversations)
 
+        for conversation in resolved_conversations:
+            user_id = conversation.user_id
+            cid = conversation.cid
             try:
-                conversation = await self.conv_mgr.get_conversation(
-                    unified_msg_origin=user_id,
-                    conversation_id=cid,
-                )
-
-                if not conversation:
-                    failed_items.append(f"user_id:{user_id}, cid:{cid} - 对话不存在")
-                    continue
-
                 content = json.loads(conversation.history)
                 export_record = {
                     "cid": cid,
                     "user_id": user_id,
                     "platform_id": conversation.platform_id,
-                    "title": conversation.title,
+                    "title": conversation.title or webchat_titles.get(user_id) or None,
                     "persona_id": conversation.persona_id,
                     "created_at": conversation.created_at,
                     "updated_at": conversation.updated_at,
@@ -265,10 +278,9 @@ class ConversationService:
                 jsonl_lines.append(json.dumps(export_record, ensure_ascii=False))
                 exported_count += 1
             except Exception as exc:
-                failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")
-                logger.error(
-                    f"导出对话失败: user_id={user_id}, cid={cid}, error={exc!s}"
-                )
+                error = safe_error("", exc)
+                failed_items.append(f"user_id:{user_id}, cid:{cid} - {error}")
+                logger.error("导出对话失败: user_id=%s, cid=%s, error=%s", user_id, cid, error)
 
         if exported_count == 0:
             raise ConversationServiceError("没有成功导出任何对话")
@@ -321,11 +333,36 @@ class ConversationService:
             "failed_items": failed_items,
         }
 
-    def _serialize_conversation(self, conversation, alias_map: dict) -> dict:
-        return {
+    @staticmethod
+    def _webchat_session_id(user_id: str | None) -> str:
+        return (user_id or "").rsplit("!", 1)[-1] if "!" in (user_id or "") else ""
+
+    async def _get_webchat_titles(self, conversations) -> dict[str, str]:
+        session_ids = {
+            conversation.user_id: self._webchat_session_id(conversation.user_id)
+            for conversation in conversations
+            if conversation.platform_id == "webchat"
+            and self._webchat_session_id(conversation.user_id)
+        }
+        if not session_ids:
+            return {}
+        try:
+            sessions = await self.db_helper.get_platform_sessions_by_ids(
+                list(set(session_ids.values())), platform_id="webchat"
+            )
+        except Exception as exc:
+            logger.warning("WebChat session title lookup failed: %s", safe_error("", exc))
+            return {}
+        names = {session.session_id: session.display_name for session in sessions if session.display_name}
+        return {user_id: names.get(session_id, "") for user_id, session_id in session_ids.items()}
+
+    def _serialize_conversation(self, conversation, alias_map: dict, webchat_title: str = "") -> dict:
+        result = {
             **asdict(conversation),
+            "title": conversation.title or webchat_title or None,
             "umo_info": self._build_umo_info(conversation.user_id, alias_map),
         }
+        return result
 
     @staticmethod
     def _build_umo_info(umo: str | None, alias_map: dict) -> dict:

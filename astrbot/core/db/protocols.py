@@ -817,7 +817,7 @@ class PlatformSessionStore(Protocol):
     ) -> PlatformSession | None: ...
 
     async def get_platform_sessions_by_ids(
-        self, session_ids: list[str]
+        self, session_ids: list[str], platform_id: str | None = None
     ) -> list[PlatformSession]: ...
 
     async def get_platform_sessions_by_creator(

@@ -13,11 +13,12 @@ forward-looking instead of extending compatibility indefinitely.
 - Target Python 3.14+ only. Do not restore Python 3.10-3.13 fallbacks.
 - Prefer the smallest current design that solves the actual problem. A change
   that only works by resurrecting a deprecated path is the wrong design.
-- This fork does not currently publish its own PyPI package, release assets, or
-  container image. Never present upstream artifacts as fork artifacts.
+- This fork does not publish a PyPI package. It may publish an optional GHCR
+  nightly (`ghcr.io/xero-team/astrbot:nightly`) from `master`. Never present
+  upstream artifacts as fork artifacts.
 - `compose.yml` and `compose-with-napcat.yml` intentionally build this checkout
   with `build:` and tag it `astrbot:local`. Preserve that source-build contract;
-  do not replace it with `soulter/astrbot` or another upstream prebuilt image.
+  do not replace it with an upstream prebuilt image or with the fork nightly.
   Documentation is served from the Dashboard at `/help/`; do not restore a
   separate docs container or `docs.astrbot.app` links.
 - Agents may maintain this repository. They may commit, push feature branches,
@@ -525,11 +526,11 @@ head.
 
 ## Releases
 
-Release preparation is a source-management workflow, not proof that assets will
-be published. This fork's `.github` workflows do not publish GitHub assets, PyPI
-packages, or container images. The documentation workflow only builds and uploads
-a short-lived CI artifact; it has no deployment credentials or external publish
-step.
+Release preparation is a source-management workflow, not proof that versioned
+assets will be published. The nightly workflow may push `runtime` images to
+GHCR and open GitHub prereleases for those nightlies. It does not publish PyPI
+packages or a versioned release image channel. The documentation workflow only
+builds and uploads a short-lived CI artifact.
 
 `scripts/prepare_release.py` uses the latest tag reachable from the selected
 base branch as its changelog lower bound. This fork currently has no
@@ -578,4 +579,5 @@ The generated changelog is only a draft of raw commit subjects. Before the PR:
 After review, open the release branch PR to `master`. A post-merge tag does not
 publish fork-owned PyPI, GitHub Release, or container artifacts; create a separate,
 explicitly authorized publication workflow only when the fork establishes those
-release targets and credentials.
+release targets and credentials. The GHCR nightly workflow is that optional
+container path; it is not a versioned release channel.

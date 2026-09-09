@@ -1,7 +1,28 @@
 # 使用 Docker 部署 AstrBot
 
-当前 fork 不发布预构建容器镜像。请从当前 checkout 构建，确保后端与 Dashboard
-版本匹配。
+仓库里的 Compose 文件仍从当前 checkout 源码构建，标签为 `astrbot:local`。
+可选地，日程任务会把 `master` 的 `runtime` 镜像推到 GitHub 容器注册表
+（GitHub Container Registry）`ghcr.io/xero-team/astrbot`，滚动标签是 `nightly`。
+Nightly 跟踪昨天 UTC 的 `master`，不是带版本号的发行版，也不能替代仓库默认的源码构建路径。
+
+## 拉取 nightly 镜像
+
+生产机不想在宿主机编译时，可以只写 `image:`，不要 `build:`：
+
+```yaml
+services:
+  astrbot:
+    image: ghcr.io/xero-team/astrbot:nightly
+```
+
+```bash
+docker pull ghcr.io/xero-team/astrbot:nightly
+docker compose pull astrbot
+docker compose up -d astrbot
+```
+
+需要钉死某次构建时，改用 `sha-<7 位短哈希>` 或当天的 `nightly-YYYYMMDD`。
+首次推送后的 GHCR 包默认私有；维护者把包可见性改成公开之前，匿名 `docker pull` 会失败。
 
 ## 从源码构建
 

@@ -125,16 +125,40 @@ def validate_version(version: str) -> str:
     return version
 
 
-def latest_tag() -> str:
-    """Return the most recent reachable tag, if one exists.
+def is_version_tag(tag: str) -> bool:
+    """Return whether a git tag is a product version tag.
+
+    Nightly and other operational tags are ignored so they cannot become the
+    changelog lower bound.
+
+    Args:
+        tag: Git tag name, with or without a leading ``v``.
 
     Returns:
-        The latest tag name, or an empty string when the repository has no tags.
+        True when the tag matches the project version pattern.
+    """
+    name = tag[1:] if tag.startswith("v") else tag
+    return bool(VERSION_PATTERN.fullmatch(name))
+
+
+def latest_tag() -> str:
+    """Return the most recent reachable version tag, if one exists.
+
+    Returns:
+        The latest version tag name, or an empty string when none exist.
     """
     try:
-        return git(["describe", "--tags", "--abbrev=0"], capture_output=True)
+        output = git(
+            ["tag", "--merged", "HEAD", "--sort=-creatordate"],
+            capture_output=True,
+        )
     except ReleaseError:
         return ""
+    for line in output.splitlines():
+        tag = line.strip()
+        if tag and is_version_tag(tag):
+            return tag
+    return ""
 
 
 def release_commits(tag: str) -> list[str]:

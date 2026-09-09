@@ -329,7 +329,8 @@ class CronJobManager:
         except Exception as e:  # noqa: BLE001
             status = "failed"
             last_error = safe_error("", e)
-            logger.error("Cron job %s failed: %s", job_id, last_error, exc_info=True)
+            log_job_id = job_id.replace("\r", "").replace("\n", "")
+            logger.error("Cron job %s failed: %s", log_job_id, last_error, exc_info=True)
         finally:
             next_run = self._get_next_run_time(job_id)
             await self.db.update_cron_job(

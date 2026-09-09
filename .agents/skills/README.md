@@ -1,8 +1,36 @@
 # Skills
 
 `.agents/skills/` is the only skill source in this repository. Each skill is a
-directory with `SKILL.md` (policy) plus optional `REFERENCE.md`, `scripts/`,
-and `agents/openai.yaml`.
+directory with `SKILL.md` (shared instructions) plus optional `REFERENCE.md`,
+`scripts/`, and `agents/openai.yaml` (Codex UI metadata).
+
+## Codex CLI and OpenCode
+
+Both clients discover `.agents/skills/<name>/SKILL.md`. Keep one source tree;
+do not copy skills into `.codex/` or `.opencode/`. Repository rules remain in
+`AGENTS.md`, which both clients support.
+
+In Codex, invoke a skill with a `$skill-name` mention, for example:
+
+```text
+Use $plan-issue to turn issue 123 into a plan with exact files and checks.
+```
+
+In OpenCode, ask for the same skill by name; its `skill` tool loads the shared
+instructions. For example:
+
+```text
+Use the plan-issue skill to turn issue 123 into a plan with exact files and checks.
+```
+
+`agents/openai.yaml` supplies short labels and starter prompts for Codex. It
+must not contain workflow requirements missing from `SKILL.md`; OpenCode does
+not need that metadata to execute the skill. Use the active client's available
+shell, question, browser, and delegation tools. If a tool is missing, use an
+equivalent capability or report the specific unverified part.
+
+Discovery references: [Codex skills](https://learn.chatgpt.com/docs/build-skills)
+and [OpenCode skills](https://opencode.ai/docs/skills/).
 
 Shared locks live under `.agents/shared/`:
 
@@ -26,8 +54,10 @@ second, independently loadable workflow appears.
 
 ## `SKILL.md` contract
 
-Frontmatter `name` and `description` must say **when to load** and **when not
-to**. The body uses these headings when they apply:
+Frontmatter uses a stable directory-matching `name` and a concise `description`
+that leads with the capability and trigger. Add exclusions only to prevent
+likely misrouting. Keep workflow detail in the body and load supporting
+references when needed. The body may use these headings where helpful:
 
 - **Locked** — toolchain or behavior the agent must not change
 - **Open** — product design the agent may decide
@@ -57,10 +87,12 @@ them, do not paste the specs. Independent disprove, variant sweeps, and GHA
 bars live in `audit-product/references/verification.md`. Do not vendor
 third-party audit skill trees into `.agents/skills/`.
 
-`plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). It
-stops at `PLAN.md` until the user approves implementation. Brief, quiz,
-reflect, and grill are required unless the user explicitly skips that
-Q&A. Cite `plan-issue/references/sources.md` for Superpowers, triage,
+`plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). Direct
+planning is the default; use `init --skip-probe` and record the reason without
+inventing a user waiver. A guided interview is optional when requested. A
+planning-only request ends at validated `PLAN.md`; implementation authorization
+already given in the conversation remains valid. Cite
+`plan-issue/references/sources.md` for Superpowers, triage,
 Spec Kit, grilling, JTBD, and related planning skills; do not vendor
 those trees or their default `docs/superpowers/`, `tasks/`, `.specify/`,
 or `dev/plans/` directories. The plan checker in

@@ -189,6 +189,25 @@ Keep dependency files synchronized as groups:
 
 GitHub Actions must be pinned to full commit SHAs and grant each job only the scopes required for its actual state changes. Artifact publication, code-scanning uploads, and Issue maintenance are separate write use cases and must each be justified; do not grant broad workflow-wide write access.
 
+## Codex CLI and OpenCode
+
+Both clients use the root `AGENTS.md` and the shared skills under
+`.agents/skills/`. In Codex CLI, use a `$skill-name` mention, such as
+`Use $plan-issue to plan issue 123`. In OpenCode, ask for the skill by name,
+such as `Use the plan-issue skill to plan issue 123`; its skill tool loads the
+same instructions. The catalog is in `.agents/skills/README.md`.
+
+Keep reusable instructions in `SKILL.md`. The optional `agents/openai.yaml`
+contains Codex labels and starter prompts; OpenCode does not need it to run
+the shared workflow. Do not duplicate skills in local `.codex/` or `.opencode/`
+directories. These maintainer skills are separate from AstrBot runtime Skills.
+
+`plan-issue` defaults to direct planning and asks only about unresolved choices
+that change the result. A guided interview is available when requested. A
+planning-only request ends with a validated plan; implementation authorization
+already given in the conversation does not need to be repeated. Repository
+rules still reserve merges, pushes to `master`, tags, and releases for humans.
+
 ## Before Submitting
 
 Run tests proportional to the change, then at least:

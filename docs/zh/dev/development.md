@@ -187,6 +187,24 @@ pnpm run docs:build
 
 GitHub Actions 必须固定到完整 commit SHA，并按 job 授予实际状态变更所需的最小 scope。发布制品、上报代码扫描结果和维护 Issue 等写操作都必须分别论证，不能给整个 workflow 泛化写权限。
 
+## Codex CLI 与 OpenCode
+
+两个客户端共用根目录的 `AGENTS.md` 和 `.agents/skills/` 下的技能。
+Codex CLI 使用 `$skill-name` 引用，例如
+`Use $plan-issue to plan issue 123`。在 OpenCode 中按名称请求技能，例如
+`使用 plan-issue 技能规划 Issue 123`，由其 skill 工具加载同一份指令。
+技能目录见 `.agents/skills/README.md`。
+
+可复用指令写在 `SKILL.md` 中。可选的 `agents/openai.yaml` 只提供 Codex
+展示名称和起始提示词，OpenCode 执行共享流程不依赖它。不要向本地
+`.codex/` 或 `.opencode/` 目录复制技能。这些维护者技能与 AstrBot 运行时
+Skills 分开管理。
+
+`plan-issue` 默认直接研究并编写方案，只询问会改变结果的未决选择。
+需要引导式问答时可以明确提出。仅请求规划时，以通过校验的方案结束；
+如果本次对话已经授权后续实现，无须重复授权。仓库仍规定合并、推送到
+`master`、打标签和发布由人类维护者执行。
+
 ## 提交前
 
 至少运行与改动相称的测试，然后执行：

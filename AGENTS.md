@@ -1,6 +1,29 @@
 # AGENTS.md
 
-This file provides guidance to agents working in this repository.
+Shared repository instructions for Codex CLI and OpenCode.
+
+## Working in this checkout
+
+- Inspect the working tree and relevant code before editing. Preserve unrelated
+  changes and use the smallest change that completes the user's request.
+- Carry implementation requests through the relevant checks. For a review,
+  diagnosis, or plan, return the requested evidence or artifact; enter
+  implementation when the user has authorized it in this conversation.
+- Resolve code facts locally. Ask only for missing decisions that materially
+  change scope, behavior, or acceptance; state reasonable assumptions and
+  continue independent work. Do not repeat questions already answered.
+- Give concise progress updates during sustained work. Finish with the result,
+  changed paths, checks actually run, and any remaining blocker. Match the
+  user's language unless the requested artifact has a language requirement.
+- Use the tools exposed by the active client. Do not assume a particular
+  shell, question widget, browser, MCP server, or subagent tool exists. Use
+  equivalent available tools without changing repository policy or claiming
+  an unavailable check passed.
+- Load task-specific instructions from `.agents/skills/`; see its
+  [catalog](.agents/skills/README.md). Codex uses `$skill-name` mentions;
+  OpenCode can load the same skill by name through its skill tool. Keep shared
+  instructions in `SKILL.md` and Codex UI metadata in `agents/openai.yaml`.
+  Maintain one shared skill tree; `.codex/` and `.opencode/` remain local.
 
 ## Project philosophy
 

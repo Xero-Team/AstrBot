@@ -4690,7 +4690,7 @@ CONFIG_METADATA_3 = {
     },
 }
 
-CONFIG_METADATA_3["btw"] = {
+CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
     "description": "BTW 双循环",
     "type": "object",
     "items": {

@@ -193,6 +193,12 @@ When `btw.enabled` is enabled for a local Agent profile, `btw.conversation_loop.
 
 The selected provider must still be a configured chat model. An unavailable or incompatible loop provider fails through the existing model-selection error path; it does not silently switch to the other loop's model. Existing model fallback and retry settings continue to apply to the selected primary provider.
 
+### Computer Use boundaries
+
+With BTW enabled, the conversation loop runs with Computer Use set to `none`, including handoffs and explicitly supplied tools. Host shell, Python, filesystem, browser, CUA, and sandbox Skill lifecycle tools stay outside its tool catalog. Ordinary Skill manuals remain available through `read_skill`.
+
+`btw.work_loop.computer_use_runtime` accepts `inherit` (default), `none`, `local`, or `sandbox`. `inherit` uses `provider_settings.computer_use_runtime`. The effective runtime applies to the work request and its handoffs; `none` excludes computer tools even when they were explicitly declared. Disabling BTW preserves the existing Computer Use configuration. These settings select capabilities; they do not grant roles or bypass authorization, WebChat step-up, path restrictions, or sandbox checks.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.

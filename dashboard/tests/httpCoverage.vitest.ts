@@ -26,6 +26,19 @@ describe('http client', () => {
     expect(headers.get('Accept-Language')).toBe('zh-CN');
   });
 
+  it('does not attach credentials to cross-origin fetch requests', async () => {
+    localStorage.setItem('token', 'tok');
+    localStorage.setItem('astrbot-locale', 'zh-CN');
+    const fetchMock = vi.fn(async () => new Response('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchWithAuth('https://example.test/resource');
+    await fetchWithAuth(new Request('http://localhost:3001/resource'));
+
+    expect(fetchMock.mock.calls[0]?.[1]).toBeUndefined();
+    expect(fetchMock.mock.calls[1]?.[1]).toBeUndefined();
+  });
+
   it('normalizes 401 and 429 axios errors', async () => {
     setupHttpClient();
     setupHttpClient();
@@ -92,6 +105,40 @@ describe('http client', () => {
     });
     const response = await apiV1Client.get('/healthy');
     expect(response.data).toEqual({ ok: true });
+  });
+
+  it('keeps explicit Axios authorization and omits headers cross-origin', () => {
+    setupHttpClient();
+    localStorage.setItem('token', 'abc');
+    localStorage.setItem('astrbot-locale', 'zh-CN');
+    const handlers = (
+      apiV1Client.interceptors.request as unknown as {
+        handlers: Array<{
+          fulfilled: (config: {
+            url?: string;
+            headers: Record<string, string>;
+          }) => {
+            url?: string;
+            headers: Record<string, string>;
+          };
+        }>;
+      }
+    ).handlers;
+    const handler = handlers[0]!.fulfilled;
+
+    const explicit = handler({
+      url: '/api/v1/ping',
+      headers: { Authorization: 'Basic explicit' },
+    });
+    expect(explicit.headers.Authorization).toBe('Basic explicit');
+    expect(explicit.headers['Accept-Language']).toBe('zh-CN');
+
+    const crossOrigin = handler({
+      url: 'http://localhost:3001/ping',
+      headers: {},
+    });
+    expect(crossOrigin.headers.Authorization).toBeUndefined();
+    expect(crossOrigin.headers['Accept-Language']).toBeUndefined();
   });
 
   it('ignores unparsable 401 request URLs and 429 responses without messages', async () => {

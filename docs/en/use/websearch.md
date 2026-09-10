@@ -51,4 +51,4 @@ If you use Tavily as your web search source, you will get a better experience op
 
 Go to the [AnySearch Console](https://anysearch.com/console/api-keys) to get your API Key, then fill it in the corresponding configuration field.
 
-In addition to general web search, AnySearch also provides domain-specific retrieval capabilities across academic research, code documentation, finance, legal, and security intelligence. If the API Key is left empty, it will use anonymous mode with a daily free quota, making it easy to try out quickly.
+In addition to general web search, AnySearch can accept a provider-supported domain tag and a `params` object for domain-specific retrieval. Results preserve compatible structured fields as text. `max_results` is limited to 1–10 and the supported result regions are `cn` and `intl`. If the API Key is left empty, it uses anonymous mode with a daily free quota.

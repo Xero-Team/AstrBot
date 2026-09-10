@@ -16,7 +16,7 @@ fi
 PYTEST_TARGETS=("$@")
 
 echo "[ci] syncing dependencies with uv"
-uv sync --group dev --locked
+"$ROOT_DIR/scripts/uv_sync_ci.sh" --group dev --locked
 
 if ((${#PYTEST_TARGETS[@]} > 0)); then
   echo "[ci] running tests: ${PYTEST_TARGETS[*]}"

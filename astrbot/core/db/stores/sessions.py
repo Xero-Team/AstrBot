@@ -49,7 +49,7 @@ class PlatformSessionStoreMixin(DatabaseStoreMixin):
             return result.scalar_one_or_none()
 
     async def get_platform_sessions_by_ids(
-        self, session_ids: list[str]
+        self, session_ids: list[str], platform_id: str | None = None
     ) -> list[PlatformSession]:
         """Get platform sessions by IDs."""
         if not session_ids:
@@ -60,6 +60,8 @@ class PlatformSessionStoreMixin(DatabaseStoreMixin):
             query = select(PlatformSession).where(
                 col(PlatformSession.session_id).in_(session_ids)
             )
+            if platform_id:
+                query = query.where(col(PlatformSession.platform_id) == platform_id)
             result = await session.execute(query)
             return list(result.scalars().all())
 

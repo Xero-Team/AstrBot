@@ -33,14 +33,32 @@ function setAxiosHeader(
   headers[key] = value;
 }
 
+function hasAxiosHeader(
+  headers: InternalAxiosRequestConfig['headers'],
+  key: string,
+) {
+  return typeof headers.has === 'function'
+    ? headers.has(key)
+    : Boolean(headers[key]);
+}
+
 function attachAxiosHeaders(config: InternalAxiosRequestConfig) {
+  try {
+    const requestUrl = new URL(axios.getUri(config), window.location.href);
+    if (requestUrl.origin !== window.location.origin) {
+      return config;
+    }
+  } catch {
+    return config;
+  }
+
   const token = getToken();
-  if (token) {
+  if (token && !hasAxiosHeader(config.headers, AUTH_HEADER)) {
     setAxiosHeader(config.headers, AUTH_HEADER, `Bearer ${token}`);
   }
 
   const locale = getLocale();
-  if (locale) {
+  if (locale && !hasAxiosHeader(config.headers, LOCALE_HEADER)) {
     setAxiosHeader(config.headers, LOCALE_HEADER, locale);
   }
 
@@ -114,6 +132,17 @@ function installAxiosInterceptors(instance: AxiosInstance) {
 
 export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  try {
+    const requestUrl = new URL(
+      input instanceof Request ? input.url : input,
+      window.location.href,
+    );
+    if (requestUrl.origin !== window.location.origin) {
+      return fetchImpl(input, init);
+    }
+  } catch {
+    return fetchImpl(input, init);
+  }
   const token = getToken();
   const locale = getLocale();
 

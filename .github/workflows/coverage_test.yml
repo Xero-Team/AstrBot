@@ -41,7 +41,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --group dev --locked
+          bash scripts/uv_sync_ci.sh --group dev --locked
 
       - name: Run tests
         run: |

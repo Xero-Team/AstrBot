@@ -612,6 +612,78 @@ class TestRunJob:
         # Should not update status
         mock_db.update_cron_job.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_active_agent_job_records_completed_status(
+        self, cron_manager, mock_db
+    ):
+        job = CronJob(
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+        )
+        mock_db.get_cron_job.return_value = job
+        cron_manager._run_active_agent_job = AsyncMock()
+
+        await cron_manager._run_job(job.job_id)
+
+        assert (
+            mock_db.update_cron_job.await_args_list[-1].kwargs["status"] == "completed"
+        )
+        assert mock_db.update_cron_job.await_args_list[-1].kwargs["last_error"] is None
+
+    @pytest.mark.asyncio
+    async def test_active_agent_job_redacts_failed_status(self, cron_manager, mock_db):
+        job = CronJob(
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+        )
+        mock_db.get_cron_job.return_value = job
+        cron_manager._run_active_agent_job = AsyncMock(
+            side_effect=RuntimeError(
+                "Bearer secret-token https://example.test/key /private/data"
+            )
+        )
+
+        await cron_manager._run_job(job.job_id)
+
+        final_update = mock_db.update_cron_job.await_args_list[-1].kwargs
+        assert final_update["status"] == "failed"
+        assert "secret-token" not in final_update["last_error"]
+        assert "example.test" not in final_update["last_error"]
+        assert "/private/data" not in final_update["last_error"]
+
+    @pytest.mark.asyncio
+    async def test_failed_job_sanitizes_job_id_before_logging(
+        self, cron_manager, mock_db
+    ):
+        job = CronJob(
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+        )
+        mock_db.get_cron_job.return_value = job
+        cron_manager._run_active_agent_job = AsyncMock(
+            side_effect=RuntimeError("failed")
+        )
+
+        with patch("astrbot.core.cron.manager.logger") as mock_logger:
+            await cron_manager._run_job("active-job\r\nforged-entry")
+
+        logged_job_id = mock_logger.error.call_args.args[1]
+        assert logged_job_id == "active-jobforged-entry"
+        assert "\r" not in logged_job_id
+        assert "\n" not in logged_job_id
+
 
 class TestRunBasicJob:
     """Tests for _run_basic_job method."""

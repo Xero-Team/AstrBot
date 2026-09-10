@@ -1361,16 +1361,36 @@ async def _anysearch_search(
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    body = data.get("data") or data
-                    return [
-                        SearchResult(
-                            title=item.get("title", ""),
-                            url=item.get("url", ""),
-                            snippet=item.get("snippet") or item.get("content", ""),
+                    code = data.get("code")
+                    if code not in (None, 0):
+                        raise Exception(
+                            f"AnySearch web search failed: {data.get('message') or code}"
                         )
-                        for item in body.get("results", [])
-                        if item.get("url")
-                    ]
+                    body = data.get("data") or data
+                    results = []
+                    for item in body.get("results", []):
+                        if not item.get("url"):
+                            continue
+                        snippet = item.get("snippet") or item.get("content") or ""
+                        fields = []
+                        for key, value in item.items():
+                            if (
+                                key in {"title", "url", "snippet", "content", "favicon"}
+                                or value is None
+                            ):
+                                continue
+                            if isinstance(value, dict | list):
+                                value = json.dumps(value, ensure_ascii=False)
+                            if isinstance(value, str | int | float | bool):
+                                fields.append(f"{key}: {value}")
+                        results.append(
+                            SearchResult(
+                                title=item.get("title", ""),
+                                url=item["url"],
+                                snippet="\n".join([snippet, *fields]).strip(),
+                            )
+                        )
+                    return results
                 reason = await response.text()
                 if response.status in _ANYSEARCH_RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
@@ -1394,7 +1414,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_anysearch"
     description: str = (
         "A web search tool powered by AnySearch. Supports general web search and "
-        "domain-specific search over academic, code, finance, legal and security sources."
+        "domain-specific retrieval when a compatible tag and parameters are supplied."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -1403,13 +1423,13 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
                 "query": {"type": "string", "description": "Required. Search query."},
                 "max_results": {
                     "type": "integer",
-                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-20.",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-10.",
                 },
                 "tag": {
                     "type": "string",
                     "description": (
                         'Optional. Domain capability tag in "{domain}.{subdomain}" form, '
-                        'for example "academic.paper" or "finance.news". Omit it for general web search.'
+                        'for example "academic.search" or "finance.quote". Omit it for general web search.'
                     ),
                 },
                 "zone": {
@@ -1419,6 +1439,10 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
                 "language": {
                     "type": "string",
                     "description": 'Optional. Preferred result language, for example "zh-CN" or "en".',
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Optional provider-specific parameters for the selected tag.",
                 },
             },
             "required": ["query"],
@@ -1432,7 +1456,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
             max_results = int(kwargs.get("max_results", 10))
         except TypeError, ValueError:
             max_results = 10
-        max_results = min(max(max_results, 1), 20)
+        max_results = min(max(max_results, 1), 10)
 
         payload: dict = {
             "query": kwargs["query"],
@@ -1451,6 +1475,10 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
         language = str(kwargs.get("language", "")).strip()
         if language:
             payload["language"] = language
+
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            payload["params"] = params
 
         results = await _anysearch_search(provider_settings, payload)
         if not results:

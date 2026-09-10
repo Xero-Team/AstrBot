@@ -791,6 +791,14 @@
         "description": "Slack Webhook Port",
         "hint": "Only valid when Slack connection mode is `webhook`."
       },
+      "start_message": {
+        "description": "启动消息",
+        "hint": "Telegram 机器人启动时发送的消息。"
+      },
+      "telegram_api_base_url": {
+        "description": "Telegram API 基础 URL",
+        "hint": "Telegram Bot API 请求地址前缀，例如 https://api.telegram.org/bot。"
+      },
       "telegram_command_auto_refresh": {
         "description": "Telegram 命令自动刷新",
         "hint": "启用后，AstrBot 将会在运行时自动刷新 Telegram 命令。(单独设置此项无效)"
@@ -806,6 +814,10 @@
       "telegram_polling_restart_delay": {
         "description": "Telegram 轮询重启延迟",
         "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
+      },
+      "telegram_file_base_url": {
+        "description": "Telegram 文件 API 基础 URL",
+        "hint": "Telegram 文件下载地址前缀，例如 https://api.telegram.org/file/bot。"
       },
       "telegram_token": {
         "description": "Bot Token",

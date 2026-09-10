@@ -797,6 +797,14 @@
         "description": "Slack Webhook Port",
         "hint": "Only valid when Slack connection mode is `webhook`."
       },
+      "start_message": {
+        "description": "Startup Message",
+        "hint": "Message sent when the Telegram bot starts."
+      },
+      "telegram_api_base_url": {
+        "description": "Telegram API Base URL",
+        "hint": "Telegram Bot API endpoint prefix, for example https://api.telegram.org/bot."
+      },
       "telegram_command_auto_refresh": {
         "description": "Telegram Command Auto Refresh",
         "hint": "When enabled, AstrBot automatically refreshes Telegram commands at runtime. (Setting this alone has no effect)"
@@ -812,6 +820,10 @@
       "telegram_polling_restart_delay": {
         "description": "Telegram Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
+      },
+      "telegram_file_base_url": {
+        "description": "Telegram File API Base URL",
+        "hint": "Telegram file download endpoint prefix, for example https://api.telegram.org/file/bot."
       },
       "telegram_token": {
         "description": "Bot Token",

@@ -976,18 +976,6 @@ class TelegramPlatformAdapter(Platform):
         self.media_group_cache.clear()
         self._media_group_tasks.clear()
 
-    async def process_media_group(self, media_group_id: str) -> None:
-        """Process a complete media group by merging all collected messages.
-
-        Args:
-            media_group_id: The unique identifier for this media group
-        """
-        entry = self.media_group_cache.pop(media_group_id, None)
-        if entry is None:
-            logger.warning(f"Media group {media_group_id} not found in cache")
-            return
-        await self._process_media_group_entry(media_group_id, entry)
-
     async def _process_media_group_entry(
         self, media_group_id: str, entry: dict
     ) -> None:

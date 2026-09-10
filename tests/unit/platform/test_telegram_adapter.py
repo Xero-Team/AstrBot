@@ -1280,13 +1280,17 @@ async def test_telegram_media_group_max_wait_is_a_hard_deadline():
         {},
         asyncio.Queue(),
     )
-    adapter.media_group_timeout = 0.04
-    adapter.media_group_max_wait = 0.06
+    adapter.media_group_timeout = 0.10
+    adapter.media_group_max_wait = 0.12
     delivered = asyncio.Event()
+    started_at = asyncio.get_running_loop().time()
+    processed_at: float | None = None
 
     async def process(media_group_id: str, entry: dict) -> None:
+        nonlocal processed_at
         assert media_group_id == "album-deadline"
-        assert len(entry["items"]) == 2
+        assert len(entry["items"]) == 3
+        processed_at = asyncio.get_running_loop().time()
         delivered.set()
 
     adapter._process_media_group_entry = process
@@ -1294,12 +1298,18 @@ async def test_telegram_media_group_max_wait_is_a_hard_deadline():
     await adapter.handle_media_group_message(
         create_mock_update(media_group_id="album-deadline", message_id=1), context
     )
-    await asyncio.sleep(0.03)
+    await asyncio.sleep(0.05)
     await adapter.handle_media_group_message(
         create_mock_update(media_group_id="album-deadline", message_id=2), context
     )
+    await asyncio.sleep(0.05)
+    await adapter.handle_media_group_message(
+        create_mock_update(media_group_id="album-deadline", message_id=3), context
+    )
 
     await asyncio.wait_for(delivered.wait(), timeout=0.25)
+    assert processed_at is not None
+    assert processed_at - started_at < 0.17
     assert not adapter.media_group_cache
 
 
@@ -1328,7 +1338,7 @@ async def test_telegram_media_group_capacity_rejects_new_albums():
 
 
 @pytest.mark.asyncio
-async def test_telegram_process_media_group_merges_media_without_later_reply_chain():
+async def test_telegram_media_group_entry_merges_media_without_later_reply_chain():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -1372,12 +1382,15 @@ async def test_telegram_process_media_group_merges_media_without_later_reply_cha
         caption="second caption",
         reply_to_message=second_reply,
     )
-    adapter.media_group_cache["album-1"] = {
-        "created_at": MagicMock(),
-        "items": [(first_update, _build_context()), (second_update, _build_context())],
-    }
-
-    await adapter.process_media_group("album-1")
+    await adapter._process_media_group_entry(
+        "album-1",
+        {
+            "items": [
+                (first_update, _build_context()),
+                (second_update, _build_context()),
+            ]
+        },
+    )
 
     adapter.handle_msg.assert_awaited_once()
     merged_message = adapter.handle_msg.await_args.args[0]
@@ -1398,7 +1411,7 @@ async def test_telegram_process_media_group_merges_media_without_later_reply_cha
 
 
 @pytest.mark.asyncio
-async def test_telegram_process_media_group_returns_when_first_message_cannot_convert():
+async def test_telegram_media_group_entry_returns_when_first_message_cannot_convert():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -1407,19 +1420,20 @@ async def test_telegram_process_media_group_returns_when_first_message_cannot_co
     )
     adapter.convert_message = AsyncMock(return_value=None)
     adapter.handle_msg = AsyncMock()
-    adapter.media_group_cache["album-empty"] = {
-        "created_at": MagicMock(),
-        "items": [(create_mock_update(media_group_id="album-empty"), _build_context())],
-    }
-
-    await adapter.process_media_group("album-empty")
+    await adapter._process_media_group_entry(
+        "album-empty",
+        {
+            "items": [
+                (create_mock_update(media_group_id="album-empty"), _build_context())
+            ]
+        },
+    )
 
     adapter.handle_msg.assert_not_awaited()
-    assert "album-empty" not in adapter.media_group_cache
 
 
 @pytest.mark.asyncio
-async def test_telegram_process_media_group_skips_later_items_that_convert_to_none():
+async def test_telegram_media_group_entry_skips_later_items_that_convert_to_none():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -1432,8 +1446,7 @@ async def test_telegram_process_media_group_skips_later_items_that_convert_to_no
         message_id="m1",
         session_id="session-1",
     )
-    adapter.media_group_cache["album-skip-none"] = {
-        "created_at": MagicMock(),
+    entry = {
         "items": [
             (create_mock_update(media_group_id="album-skip-none"), _build_context()),
             (create_mock_update(media_group_id="album-skip-none"), _build_context()),
@@ -1441,14 +1454,13 @@ async def test_telegram_process_media_group_skips_later_items_that_convert_to_no
     }
     adapter.convert_message = AsyncMock(side_effect=[first_abm, None])
 
-    await adapter.process_media_group("album-skip-none")
+    await adapter._process_media_group_entry("album-skip-none", entry)
 
     adapter.handle_msg.assert_awaited_once_with(first_abm)
-    assert "album-skip-none" not in adapter.media_group_cache
 
 
 @pytest.mark.asyncio
-async def test_telegram_process_media_group_returns_when_cache_missing():
+async def test_telegram_media_group_entry_returns_when_items_empty():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -1456,34 +1468,13 @@ async def test_telegram_process_media_group_returns_when_cache_missing():
         asyncio.Queue(),
     )
     adapter.handle_msg = AsyncMock()
-
-    await adapter.process_media_group("missing-album")
+    await adapter._process_media_group_entry("album-empty-items", {"items": []})
 
     adapter.handle_msg.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_telegram_process_media_group_returns_when_cached_items_empty():
-    TelegramPlatformAdapter = _load_telegram_adapter()
-    adapter = TelegramPlatformAdapter(
-        make_platform_config("telegram"),
-        {},
-        asyncio.Queue(),
-    )
-    adapter.handle_msg = AsyncMock()
-    adapter.media_group_cache["album-empty-items"] = {
-        "created_at": MagicMock(),
-        "items": [],
-    }
-
-    await adapter.process_media_group("album-empty-items")
-
-    adapter.handle_msg.assert_not_awaited()
-    assert "album-empty-items" not in adapter.media_group_cache
-
-
-@pytest.mark.asyncio
-async def test_telegram_process_media_group_swallows_exceptions_from_later_items():
+async def test_telegram_media_group_entry_swallows_exceptions_from_later_items():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -1497,8 +1488,7 @@ async def test_telegram_process_media_group_swallows_exceptions_from_later_items
         session_id="session-1",
     )
     second_update = create_mock_update(media_group_id="album-error")
-    adapter.media_group_cache["album-error"] = {
-        "created_at": MagicMock(),
+    entry = {
         "items": [
             (create_mock_update(media_group_id="album-error"), _build_context()),
             (second_update, _build_context()),
@@ -1508,10 +1498,9 @@ async def test_telegram_process_media_group_swallows_exceptions_from_later_items
         side_effect=[first_abm, RuntimeError("extra convert failed")]
     )
 
-    await adapter.process_media_group("album-error")
+    await adapter._process_media_group_entry("album-error", entry)
 
     adapter.handle_msg.assert_not_awaited()
-    assert "album-error" not in adapter.media_group_cache
 
 
 @pytest.mark.asyncio

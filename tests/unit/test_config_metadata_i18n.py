@@ -10,6 +10,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_2,
     CONFIG_METADATA_3,
     CONFIG_METADATA_3_SYSTEM,
+    DEFAULT_CONFIG,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.platform.sources.line.line_adapter import (
@@ -132,6 +133,13 @@ def test_config_metadata_locale_trees_match() -> None:
     en_keys = set(_load_locale("en-US"))
     assert sorted(zh_keys - en_keys) == []
     assert sorted(en_keys - zh_keys) == []
+
+
+def test_every_btw_profile_field_reaches_dashboard_controls() -> None:
+    converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+    items = converted["plugin_group"]["metadata"]["btw"]["items"]
+    expected_fields = {f"btw.{field}" for field in _flatten(DEFAULT_CONFIG["btw"])}
+    assert set(items) == expected_fields
 
 
 def test_btw_controls_survive_dashboard_metadata_conversion() -> None:

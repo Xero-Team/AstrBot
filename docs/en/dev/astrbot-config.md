@@ -187,6 +187,12 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 
 `image_compress_enabled` and `image_compress_options.max_size/quality` control image handling in the request-preparation choke point `prepare_provider_request`. The main-agent chat path, SDK `llm_generate`, and `tool_loop_agent` share that step. Provider-bound images are converted to JPEG there; the long edge is downscaled only and never upscaled. Animated GIF/WebP sources are dhash-sampled, at most 8 frames. Disabling compression still converts to JPEG without resizing. The main agent only materializes adapter refs to local paths and does not pre-encode chat attachments to JPEG. `max_quoted_fallback_images` and `quoted_message_parser` limit quoted and forwarded-message expansion to prevent unbounded fetching. For `quoted_message_parser`, `0` is a valid boundary: depth limits keep the root level but stop child recursion, and `max_forward_fetch=0` disables recursive `get_forward_msg` calls. Negative or invalid values fall back to defaults; this setting does not globally disable a direct quoted-message `get_msg` fallback.
 
+## BTW model selection
+
+When `btw.enabled` is enabled for a local Agent profile, `btw.conversation_loop.provider_id` and `btw.work_loop.provider_id` select the chat model for each loop. A configured loop model takes priority over the event/session model selection. An empty field preserves the current selection, including the profile default. Messages without an explicit work-loop marker use the conversation model. Disabling BTW ignores both overrides.
+
+The selected provider must still be a configured chat model. An unavailable or incompatible loop provider fails through the existing model-selection error path; it does not silently switch to the other loop's model. Existing model fallback and retry settings continue to apply to the selected primary provider.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.

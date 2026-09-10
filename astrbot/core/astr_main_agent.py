@@ -186,6 +186,8 @@ class MainAgentBuildConfig:
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
+    provider_id_override: str = ""
+    """Optional request-scoped chat provider override."""
     fallback_provider_ids: list[str] = field(default_factory=list)
     request_max_retries: int = 5
     subagent_orchestrator: dict = field(default_factory=dict)
@@ -317,10 +319,12 @@ def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
 
 
 def _select_provider(
-    event: AstrMessageEvent, plugin_context: CoreExecutionContext
+    event: AstrMessageEvent,
+    plugin_context: CoreExecutionContext,
+    provider_id_override: str = "",
 ) -> ChatModel | None:
     """Select chat provider for the event."""
-    sel_provider = event.get_extra("selected_provider")
+    sel_provider = provider_id_override or event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if provider is None:
@@ -1952,7 +1956,9 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    provider = provider or _select_provider(
+        event, plugin_context, config.provider_id_override
+    )
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):

@@ -2,8 +2,55 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.message.components import Json
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("enabled", "loop", "conversation_provider", "work_provider", "expected"),
+    [
+        (True, None, "conversation-model", "work-model", "conversation-model"),
+        (
+            True,
+            "conversation",
+            "conversation-model",
+            "work-model",
+            "conversation-model",
+        ),
+        (True, "work", "conversation-model", "work-model", "work-model"),
+        (True, "invalid", "conversation-model", "work-model", "conversation-model"),
+        (True, "work", "conversation-model", "", ""),
+        (True, None, None, "work-model", ""),
+        (False, "work", "conversation-model", "work-model", ""),
+    ],
+)
+async def test_btw_loop_provider_selection_is_request_scoped(
+    monkeypatch, enabled, loop, conversation_provider, work_provider, expected
+):
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.ctx = _pipeline_context(_internal_plugin_context())
+    stage.ctx.astrbot_config = {
+        "btw": {
+            "enabled": enabled,
+            "conversation_loop": {"provider_id": conversation_provider},
+            "work_loop": {"provider_id": work_provider},
+        }
+    }
+    stage.main_agent_cfg = MainAgentBuildConfig(tool_call_timeout=60)
+    result = SimpleNamespace(provider=SimpleNamespace(provider_config={}))
+    build = AsyncMock(return_value=result)
+    monkeypatch.setattr(internal, "build_main_agent", build)
+    event = FakeEvent(extras={"btw_loop": loop, "selected_provider": "session-model"})
+
+    assert await stage._build_checked_agent_runner(event, False) is result
+
+    config = build.await_args.kwargs["config"]
+    assert config.provider_id_override == expected
+    assert config.streaming_response is False
+    assert stage.main_agent_cfg.provider_id_override == ""
+    assert event.get_extra("selected_provider") == "session-model"
 
 
 @pytest.mark.asyncio

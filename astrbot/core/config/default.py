@@ -190,7 +190,8 @@ DEFAULT_CONFIG = {
     },
     "btw": {
         "enabled": False,
-        "work_loop": {"enabled": False, "max_concurrent": 2},
+        "conversation_loop": {"provider_id": ""},
+        "work_loop": {"enabled": False, "provider_id": "", "max_concurrent": 2},
         "work_session": {"max_age_seconds": 3600},
     },
     "provider_stt_settings": {
@@ -4699,10 +4700,24 @@ CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
             "type": "bool",
             "hint": "实验功能，默认关闭。开启后，普通 AI 请求通过对话循环进入现有 Agent。",
         },
+        "btw.conversation_loop.provider_id": {
+            "description": "对话循环模型",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。",
+            "condition": {"btw.enabled": True},
+        },
         "btw.work_loop.enabled": {
             "description": "启用工作循环",
             "type": "bool",
             "hint": "默认关闭；允许显式工作请求使用工作执行器。",
+            "condition": {"btw.enabled": True},
+        },
+        "btw.work_loop.provider_id": {
+            "description": "工作循环模型",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。",
             "condition": {"btw.enabled": True},
         },
         "btw.work_loop.max_concurrent": {

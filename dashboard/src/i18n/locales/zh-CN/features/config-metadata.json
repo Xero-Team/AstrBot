@@ -1184,12 +1184,22 @@
           "max_concurrent": {
             "description": "工作任务执行并发",
             "hint": "同时执行的工作任务数，默认 2。此值不是等待队列的长度限制。"
+          },
+          "provider_id": {
+            "description": "工作循环模型",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。"
           }
         },
         "work_session": {
           "max_age_seconds": {
             "description": "终态工作会话保留秒数",
             "hint": "已完成、失败或取消的工作会话保留时间，默认 3600 秒。"
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "对话循环模型",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。"
           }
         }
       }

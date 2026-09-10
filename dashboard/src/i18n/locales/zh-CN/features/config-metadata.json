@@ -1172,6 +1172,12 @@
     "btw": {
       "description": "BTW 双循环",
       "btw": {
+        "classifier": {
+          "enabled": {
+            "description": "启用任务分类",
+            "hint": "可选的启发式规则，默认关闭。开启后按内置规则把疑似工作请求转入工作循环；/work 指令不依赖此开关。"
+          }
+        },
         "enabled": {
           "description": "启用 BTW 双循环",
           "hint": "实验功能，默认关闭。普通且已通过准入的 AI 请求经对话入口使用现有 Agent。"

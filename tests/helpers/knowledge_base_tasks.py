@@ -54,4 +54,24 @@ class InMemoryKnowledgeBaseTaskStore:
         return len(active)
 
     async def prune_knowledge_base_tasks(self, *, older_than, max_records):
-        return 0
+        terminal_tasks = [
+            (task_id, task)
+            for task_id, task in self.tasks.items()
+            if task.status in {"completed", "failed", "interrupted"}
+        ]
+        delete_ids = {
+            task_id for task_id, task in terminal_tasks if task.updated_at < older_than
+        }
+        retained = sorted(
+            (
+                (task_id, task)
+                for task_id, task in terminal_tasks
+                if task_id not in delete_ids
+            ),
+            key=lambda item: item[1].updated_at,
+            reverse=True,
+        )
+        delete_ids.update(task_id for task_id, _task in retained[max(max_records, 0) :])
+        for task_id in delete_ids:
+            del self.tasks[task_id]
+        return len(delete_ids)

@@ -45,6 +45,7 @@ _DOC_NAME_MAX_LENGTH = 255
 _TASK_RETENTION = timedelta(days=7)
 _MAX_TERMINAL_TASKS = 1000
 _INTERRUPTED_TASK_ERROR = "Knowledge base task interrupted"
+_TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "interrupted"})
 
 
 class KnowledgeBaseService:
@@ -166,6 +167,14 @@ class KnowledgeBaseService:
         """Cancel owned ingestion work and make unfinished tasks observable."""
         await cancel_tracked_tasks(self._get_background_tasks())
         await self.task_store.interrupt_active_knowledge_base_tasks()
+        await self._prune_terminal_tasks()
+
+    async def _prune_terminal_tasks(self) -> None:
+        """Retain only the configured age and count of terminal task records."""
+        await self.task_store.prune_knowledge_base_tasks(
+            older_than=datetime.now(UTC) - _TASK_RETENTION,
+            max_records=_MAX_TERMINAL_TASKS,
+        )
 
     async def _ensure_task_lifecycle(self) -> None:
         if getattr(self, "_initialized", False):
@@ -178,10 +187,7 @@ class KnowledgeBaseService:
             if getattr(self, "_initialized", False):
                 return
             await self.task_store.interrupt_active_knowledge_base_tasks()
-            await self.task_store.prune_knowledge_base_tasks(
-                older_than=datetime.now(UTC) - _TASK_RETENTION,
-                max_records=_MAX_TERMINAL_TASKS,
-            )
+            await self._prune_terminal_tasks()
             self._initialized = True
 
     async def init_task(
@@ -216,6 +222,8 @@ class KnowledgeBaseService:
             result=result,
             error=error,
         )
+        if status in _TERMINAL_TASK_STATUSES:
+            await self._prune_terminal_tasks()
 
     async def update_progress(
         self,

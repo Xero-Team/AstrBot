@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
@@ -7,6 +7,7 @@ import pytest
 from astrbot.core.knowledge_base.kb_helper import DocumentIngestResult
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.dashboard.services import knowledge_base_service
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
@@ -80,6 +81,29 @@ async def test_shutdown_marks_owned_active_tasks_interrupted():
     task = service.task_store.tasks["shutdown-task"]
     assert task.status == "interrupted"
     assert task.error == "Knowledge base task interrupted"
+
+
+@pytest.mark.asyncio
+async def test_terminal_task_updates_prune_expired_and_excess_records(monkeypatch):
+    service = _make_service()
+    monkeypatch.setattr(knowledge_base_service, "_MAX_TERMINAL_TASKS", 1)
+    now = datetime.now(UTC)
+    for task_id, updated_at in (
+        ("expired-task", now - timedelta(days=8)),
+        ("retained-task", now - timedelta(minutes=1)),
+        ("new-task", now),
+    ):
+        await service.task_store.create_knowledge_base_task(
+            task_id=task_id, operation_kind="upload", kb_id="kb-1"
+        )
+        await service.task_store.update_knowledge_base_task(
+            task_id=task_id, status="completed"
+        )
+        service.task_store.tasks[task_id].updated_at = updated_at
+
+    await service.set_task_result("new-task", "completed", result={"ok": True})
+
+    assert set(service.task_store.tasks) == {"new-task"}
 
 
 @pytest.mark.parametrize(

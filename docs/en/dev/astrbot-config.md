@@ -211,6 +211,12 @@ With BTW enabled, **MCP server loop assignments** selects conversation, work, or
 
 Assignments are saved per configuration profile. They control tool visibility and do not replace MCP read/write authorization or the existing connection, private-network, and redirect restrictions.
 
+## BTW Skill visibility
+
+With BTW enabled, **Skill loop assignments** chooses conversation, work, or both for each enabled ordinary Skill. Ordinary Skills default to both loops; choosing one loop saves an override, and choosing both removes it. Workspace Skills are available only to the work loop with the `local` runtime. Disabling BTW preserves the standard Skill selection path.
+
+Loop assignments narrow the enabled Skills before the request's Skill snapshot is frozen. The prompt, `read_skill`, and Skill-declared tool candidates therefore use the same selection. Persona and plugin restrictions still apply, including an empty Persona Skill list. A loop assignment never grants execution permission: `read_skill` can read permitted Skill manuals when Computer Use is `none`, while Shell and Python remain unavailable.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.

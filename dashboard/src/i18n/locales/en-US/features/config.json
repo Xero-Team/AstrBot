@@ -215,6 +215,8 @@
     "conversation": "Conversation only",
     "work": "Work only",
     "both": "Conversation and Work",
-    "emptyMcp": "There are no enabled MCP servers."
+    "emptyMcp": "There are no enabled MCP servers.",
+    "skillHint": "Skills default to both loops. Workspace Skills remain available only to the work loop. Workspace Skills remain work-only with the local runtime.",
+    "emptySkill": "There are no enabled Skills."
   }
 }

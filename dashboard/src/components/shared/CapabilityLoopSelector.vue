@@ -40,15 +40,16 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { mcpApi } from '@/api/v1';
+import { mcpApi, skillApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 
-type CapabilityKind = 'mcp';
+type CapabilityKind = 'mcp' | 'skill';
 type LoopMode = 'conversation' | 'work' | 'both';
-type RouteKey = 'server_name';
+type RouteKey = 'server_name' | 'skill_name';
 
 interface RouteEntry {
   server_name?: unknown;
+  skill_name?: unknown;
   loop?: unknown;
 }
 
@@ -70,10 +71,26 @@ const { tm } = useModuleI18n('features/config');
 const loading = ref(false);
 const capabilities = ref<CapabilityItem[]>([]);
 
-const routeKey = computed<RouteKey>(() => 'server_name');
-const defaultLoop = computed<LoopMode>(() => 'work');
-const hint = computed(() => tm('capabilityLoopSelector.mcpHint'));
-const emptyMessage = computed(() => tm('capabilityLoopSelector.emptyMcp'));
+const routeKey = computed<RouteKey>(() =>
+  props.kind === 'mcp' ? 'server_name' : 'skill_name',
+);
+const defaultLoop = computed<LoopMode>(() =>
+  props.kind === 'mcp' ? 'work' : 'both',
+);
+const hint = computed(() =>
+  tm(
+    props.kind === 'mcp'
+      ? 'capabilityLoopSelector.mcpHint'
+      : 'capabilityLoopSelector.skillHint',
+  ),
+);
+const emptyMessage = computed(() =>
+  tm(
+    props.kind === 'mcp'
+      ? 'capabilityLoopSelector.emptyMcp'
+      : 'capabilityLoopSelector.emptySkill',
+  ),
+);
 const loopOptions = computed(() => [
   { title: tm('capabilityLoopSelector.conversation'), value: 'conversation' },
   { title: tm('capabilityLoopSelector.work'), value: 'work' },
@@ -117,7 +134,7 @@ function normalizeItems(value: unknown): CapabilityItem[] {
       (item): item is Record<string, unknown> =>
         item !== null && typeof item === 'object',
     )
-    .filter((item) => item.active !== false)
+    .filter((item) => item.active !== false && item.plugin_active !== false)
     .map((item) => {
       const id = typeof item.name === 'string' ? item.name.trim() : '';
       const description =
@@ -133,12 +150,26 @@ function normalizeItems(value: unknown): CapabilityItem[] {
   );
 }
 
+function normalizeSkillsPayload(value: unknown): unknown[] {
+  if (value === null || typeof value !== 'object') return [];
+  const skills = (value as { skills?: unknown }).skills;
+  return Array.isArray(skills) ? skills : [];
+}
+
 async function loadCapabilities() {
   loading.value = true;
   try {
-    const response = await mcpApi.list();
+    if (props.kind === 'mcp') {
+      const response = await mcpApi.list();
+      capabilities.value =
+        response.data.status === 'ok' ? normalizeItems(response.data.data) : [];
+      return;
+    }
+
+    const response = await skillApi.list();
+    const skills = normalizeSkillsPayload(response.data.data);
     capabilities.value =
-      response.data.status === 'ok' ? normalizeItems(response.data.data) : [];
+      response.data.status === 'ok' ? normalizeItems(skills) : [];
   } catch {
     capabilities.value = [];
   } finally {

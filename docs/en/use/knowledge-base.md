@@ -16,7 +16,7 @@ After you choose an embedding model, do not change that provider's **model name*
 
 ## Upload and chunking
 
-Upload after create. Select many files, or drop a whole folder (for example a Markdown tree). Nested directories are collected recursively. There is no 10-file batch cap. Each file may be up to 128 MB.
+Upload after create. Select files, or drop a whole folder (for example a Markdown tree). Nested directories are collected recursively. A request accepts at most 100 files, each file may be up to 128 MiB, and the complete multipart request may be up to 512 MiB. These are resource boundaries, replacing the former 10-file batch rule.
 
 ![Upload files](https://files.astrbot.app/docs/en/use/image-4.png)
 
@@ -27,11 +27,13 @@ Uploads can override chunk settings. Knowledge-base settings also store defaults
 | `chunk_size`    | `512`   | Approximate characters per chunk     |
 | `chunk_overlap` | `50`    | Overlap so sentences are not cut off |
 
+For uploads and URL imports, `chunk_size` is 1-8192 and `chunk_overlap` is 0-8191; the overlap must be smaller than the chunk size. All three import paths use `batch_size` 1-128, `tasks_limit` 1-8, and `max_retries` 0-10. AstrBot accepts at most two knowledge-base ingestion jobs at once, so it can make at most 16 embedding requests concurrently. When capacity is full, the Dashboard returns a retry-later error before it creates an ingestion task or copies files to the task staging directory.
+
 Markdown is split on headings. Uploading the same file identity or the same canonical URL **replaces** the existing document instead of appending a snapshot. An unchanged SHA-256 skips embedding (`unchanged`). URL identity is the SHA-256 of the canonical URL; `http` and `https` are distinct. Changing `chunk_size` / `chunk_overlap` does not change the hash; use **Reindex** on the document list or document detail to rebuild chunks. Documents without a stored source cannot be reindexed. Changing the embedding model or dimension is not migrated; reindex returns 400. Create a new knowledge base or re-upload. FAISS remains the only vector store. There is no directory watch or automatic sync. Older URL imports have no recoverable source URL; delete and import again. Original files and extracted URL text are stored under `data/knowledge_base/` and included in backup.
 
 An upload writes the document store, metadata, and local vectors together. Any step that fails runs compensating cleanup: after the API reports failure, that document must not stay queryable. Storage is SQLite in the runtime directory plus FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. Runtime startup enforces that with `data/astrbot.lock`; on POSIX it also locks the `data/` directory, so deleting the lock file cannot bypass the singleton. SQLite WAL and `busy_timeout` are not an instance lock. The operating system releases this advisory lock when the process exits, and a leftover lock file does not mean an instance is still running. If Compose mounts the same `./data` into a second full instance, the later container is expected to fail.
 
-The Dashboard task id returned by a file upload, pre-chunk import, or URL import can be queried after a normal restart. Task progress and results are retained for seven days, with at most 1,000 completed, failed, or interrupted task records kept. Work that was pending or processing when AstrBot stops is reported as `interrupted`; it is not resumed automatically. The document list remains the source of truth for material that completed before the interruption.
+The Dashboard task id returned by a file upload, pre-chunk import, or URL import can be queried after a normal restart. Task progress and results are retained for seven days, with at most 1,000 completed, failed, or interrupted task records kept. Work that was pending or processing when AstrBot stops is reported as `interrupted`; it is not resumed automatically. Its task slot and upload staging directory are released during cancellation. The document list remains the source of truth for material that completed before the interruption.
 
 ## Attach to a session
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import shutil
 import uuid
@@ -45,6 +47,33 @@ _DOC_NAME_MAX_LENGTH = 255
 _TASK_RETENTION = timedelta(days=7)
 _MAX_TERMINAL_TASKS = 1000
 _TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "interrupted"})
+KB_UPLOAD_MAX_FILES = 100
+KB_UPLOAD_MAX_BYTES = 512 * 1024 * 1024
+KB_UPLOAD_MAX_PART_SIZE = 128 * 1024 * 1024
+KB_MAX_ACTIVE_JOBS = 2
+KB_CHUNK_SIZE_MIN = 1
+KB_CHUNK_SIZE_MAX = 8192
+KB_BATCH_SIZE_MIN = 1
+KB_BATCH_SIZE_MAX = 128
+KB_TASKS_LIMIT_MIN = 1
+KB_TASKS_LIMIT_MAX = 8
+KB_MAX_RETRIES_MIN = 0
+KB_MAX_RETRIES_MAX = 10
+_CAPACITY_UNAVAILABLE_ERROR = (
+    "Knowledge base ingestion capacity is unavailable; retry later"
+)
+
+
+class _KnowledgeBaseJobLease:
+    def __init__(self, service: KnowledgeBaseService) -> None:
+        self._service = service
+        self._released = False
+
+    async def release(self) -> None:
+        if self._released:
+            return
+        self._released = True
+        await self._service._release_job_slot()
 
 
 class KnowledgeBaseService:
@@ -58,6 +87,8 @@ class KnowledgeBaseService:
         self._background_tasks: set[asyncio.Task] = set()
         self._initialized = False
         self._initialization_lock = asyncio.Lock()
+        self._active_jobs = 0
+        self._job_capacity_lock = asyncio.Lock()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -162,11 +193,129 @@ class KnowledgeBaseService:
             self._background_tasks = task_set
         return task_set
 
+    def _get_job_capacity_lock(self) -> asyncio.Lock:
+        lock = getattr(self, "_job_capacity_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._job_capacity_lock = lock
+        return lock
+
+    async def _try_acquire_job_slot(self) -> _KnowledgeBaseJobLease:
+        async with self._get_job_capacity_lock():
+            active_jobs = getattr(self, "_active_jobs", 0)
+            if active_jobs >= KB_MAX_ACTIVE_JOBS:
+                raise KnowledgeBaseServiceError(
+                    _CAPACITY_UNAVAILABLE_ERROR,
+                    status_code=503,
+                )
+            self._active_jobs = active_jobs + 1
+        return _KnowledgeBaseJobLease(self)
+
+    async def _release_job_slot(self) -> None:
+        async with self._get_job_capacity_lock():
+            self._active_jobs = max(getattr(self, "_active_jobs", 1) - 1, 0)
+
+    def _schedule_background_job(
+        self,
+        *,
+        lease: _KnowledgeBaseJobLease,
+        coroutine,
+        name: str,
+    ) -> None:
+        async def _run() -> None:
+            try:
+                await coroutine
+            finally:
+                await lease.release()
+
+        runner = _run()
+        try:
+            create_tracked_task(self._get_background_tasks(), runner, name=name)
+        except Exception:
+            runner.close()
+            close = getattr(coroutine, "close", None)
+            if close is not None:
+                close()
+            raise
+
     async def shutdown(self) -> None:
         """Cancel owned ingestion work and make unfinished tasks observable."""
         await cancel_tracked_tasks(self._get_background_tasks())
         await self.task_store.interrupt_active_knowledge_base_tasks()
         await self._prune_terminal_tasks()
+
+    @staticmethod
+    def _parse_ingest_int(
+        value: Any,
+        *,
+        name: str,
+        default: int,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        if value is None or value == "":
+            return default
+        if isinstance(value, bool):
+            raise KnowledgeBaseServiceError(f"Invalid {name}", status_code=422)
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError) as exc:
+            raise KnowledgeBaseServiceError(f"Invalid {name}", status_code=422) from exc
+        if not minimum <= parsed <= maximum:
+            raise KnowledgeBaseServiceError(f"Invalid {name}", status_code=422)
+        return parsed
+
+    @classmethod
+    def validate_ingest_options(
+        cls,
+        data: dict[str, Any],
+        *,
+        include_chunking: bool,
+        defaults: dict[str, int] | None = None,
+    ) -> dict[str, int]:
+        defaults = defaults or {}
+        options = {
+            "batch_size": cls._parse_ingest_int(
+                data.get("batch_size"),
+                name="batch_size",
+                default=defaults.get("batch_size", 32),
+                minimum=KB_BATCH_SIZE_MIN,
+                maximum=KB_BATCH_SIZE_MAX,
+            ),
+            "tasks_limit": cls._parse_ingest_int(
+                data.get("tasks_limit"),
+                name="tasks_limit",
+                default=defaults.get("tasks_limit", 3),
+                minimum=KB_TASKS_LIMIT_MIN,
+                maximum=KB_TASKS_LIMIT_MAX,
+            ),
+            "max_retries": cls._parse_ingest_int(
+                data.get("max_retries"),
+                name="max_retries",
+                default=defaults.get("max_retries", 3),
+                minimum=KB_MAX_RETRIES_MIN,
+                maximum=KB_MAX_RETRIES_MAX,
+            ),
+        }
+        if not include_chunking:
+            return options
+        chunk_size = cls._parse_ingest_int(
+            data.get("chunk_size"),
+            name="chunk_size",
+            default=defaults.get("chunk_size", 512),
+            minimum=KB_CHUNK_SIZE_MIN,
+            maximum=KB_CHUNK_SIZE_MAX,
+        )
+        chunk_overlap = cls._parse_ingest_int(
+            data.get("chunk_overlap"),
+            name="chunk_overlap",
+            default=defaults.get("chunk_overlap", 50),
+            minimum=0,
+            maximum=KB_CHUNK_SIZE_MAX - 1,
+        )
+        if chunk_overlap >= chunk_size:
+            raise KnowledgeBaseServiceError("Invalid chunk_overlap", status_code=422)
+        return {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap, **options}
 
     async def _prune_terminal_tasks(self) -> None:
         """Retain only the configured age and count of terminal task records."""
@@ -539,6 +688,11 @@ class KnowledgeBaseService:
     async def create_kb(self, data: object) -> tuple[dict[str, Any], str]:
         kb_manager = self.get_kb_manager()
         payload = self._canonical_kb_payload(data)
+        chunking = (
+            self.validate_ingest_options(payload, include_chunking=True)
+            if {"chunk_size", "chunk_overlap"}.intersection(payload)
+            else None
+        )
         kb_name = payload.get("kb_name")
         if not kb_name:
             raise KnowledgeBaseServiceError("知识库名称不能为空")
@@ -588,8 +742,12 @@ class KnowledgeBaseService:
             emoji=payload.get("emoji"),
             embedding_provider_id=embedding_provider_id,
             rerank_provider_id=rerank_provider_id,
-            chunk_size=payload.get("chunk_size"),
-            chunk_overlap=payload.get("chunk_overlap"),
+            chunk_size=chunking["chunk_size"]
+            if chunking
+            else payload.get("chunk_size"),
+            chunk_overlap=(
+                chunking["chunk_overlap"] if chunking else payload.get("chunk_overlap")
+            ),
             top_k_dense=payload.get("top_k_dense"),
             top_k_sparse=payload.get("top_k_sparse"),
             top_m_final=payload.get("top_m_final"),
@@ -630,6 +788,24 @@ class KnowledgeBaseService:
         if not current_kb:
             raise KnowledgeBaseServiceError("知识库不存在")
         current = current_kb.kb
+        chunking = None
+        if {"chunk_size", "chunk_overlap"}.intersection(provided_updates):
+            chunking = self.validate_ingest_options(
+                provided_updates,
+                include_chunking=True,
+                defaults={
+                    "chunk_size": (
+                        current.chunk_size
+                        if isinstance(current.chunk_size, int)
+                        else 512
+                    ),
+                    "chunk_overlap": (
+                        current.chunk_overlap
+                        if isinstance(current.chunk_overlap, int)
+                        else 50
+                    ),
+                },
+            )
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
             kb_name=provided_updates.get("kb_name", current.kb_name),
@@ -643,10 +819,9 @@ class KnowledgeBaseService:
                 "rerank_provider_id",
                 current.rerank_provider_id,
             ),
-            chunk_size=provided_updates.get("chunk_size", current.chunk_size),
-            chunk_overlap=provided_updates.get(
-                "chunk_overlap",
-                current.chunk_overlap,
+            chunk_size=chunking["chunk_size"] if chunking else current.chunk_size,
+            chunk_overlap=(
+                chunking["chunk_overlap"] if chunking else current.chunk_overlap
             ),
             top_k_dense=provided_updates.get("top_k_dense", current.top_k_dense),
             top_k_sparse=provided_updates.get("top_k_sparse", current.top_k_sparse),
@@ -728,23 +903,32 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")
 
         kb_id = form_data.get("kb_id")
-        chunk_size = int(form_data.get("chunk_size", 512))
-        chunk_overlap = int(form_data.get("chunk_overlap", 50))
-        batch_size = int(form_data.get("batch_size", 32))
-        tasks_limit = int(form_data.get("tasks_limit", 3))
-        max_retries = int(form_data.get("max_retries", 3))
+        options = self.validate_ingest_options(form_data, include_chunking=True)
+        chunk_size = options["chunk_size"]
+        chunk_overlap = options["chunk_overlap"]
+        batch_size = options["batch_size"]
+        tasks_limit = options["tasks_limit"]
+        max_retries = options["max_retries"]
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
 
         if not files:
             raise KnowledgeBaseServiceError("缺少文件")
+        if len(files) > KB_UPLOAD_MAX_FILES:
+            raise KnowledgeBaseServiceError("Too many files", status_code=422)
 
-        task_id = str(uuid.uuid4())
-        temp_root = Path(get_astrbot_temp_path())
-        temp_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        staging_dir = temp_root / f"kb_upload_{task_id}"
-        staging_dir.mkdir(mode=0o700)
+        lease = await self._try_acquire_job_slot()
+        try:
+            temp_root = Path(get_astrbot_temp_path())
+            temp_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            task_id = str(uuid.uuid4())
+            staging_dir = temp_root / f"kb_upload_{task_id}"
+            staging_dir.mkdir(mode=0o700)
+        except Exception:
+            await lease.release()
+            raise
         files_to_upload = []
+        total_bytes = 0
         try:
             for file in files:
                 identity_key = self.file_identity_key_for(file.filename)
@@ -763,9 +947,24 @@ class KnowledgeBaseService:
                         "file_type": file_type,
                     },
                 )
-                await save_upload_to_path(file, temp_file_path)
+                written_bytes = await save_upload_to_path(
+                    file,
+                    temp_file_path,
+                    max_bytes=min(
+                        KB_UPLOAD_MAX_PART_SIZE,
+                        KB_UPLOAD_MAX_BYTES - total_bytes,
+                    ),
+                )
+                total_bytes += written_bytes
+        except ValueError as exc:
+            self._cleanup_upload_staging_dir(staging_dir)
+            await lease.release()
+            raise KnowledgeBaseServiceError(
+                "Upload exceeds request size limit", status_code=422
+            ) from exc
         except Exception:
             self._cleanup_upload_staging_dir(staging_dir)
+            await lease.release()
             raise
 
         try:
@@ -774,13 +973,14 @@ class KnowledgeBaseService:
                 raise KnowledgeBaseServiceError("知识库不存在")
         except Exception:
             self._cleanup_upload_staging_dir(staging_dir)
+            await lease.release()
             raise
 
         try:
             await self.init_task(task_id, operation_kind="upload", kb_id=kb_id)
-            create_tracked_task(
-                self._get_background_tasks(),
-                self.background_upload_task(
+            self._schedule_background_job(
+                lease=lease,
+                coroutine=self.background_upload_task(
                     task_id=task_id,
                     kb_helper=kb_helper,
                     files_to_upload=files_to_upload,
@@ -795,6 +995,7 @@ class KnowledgeBaseService:
             )
         except Exception:
             self._cleanup_upload_staging_dir(staging_dir)
+            await lease.release()
             raise
         return {
             "task_id": task_id,
@@ -812,6 +1013,10 @@ class KnowledgeBaseService:
         if not documents or not isinstance(documents, list):
             raise KnowledgeBaseServiceError("缺少参数 documents 或格式错误")
 
+        if len(documents) > KB_UPLOAD_MAX_FILES:
+            raise KnowledgeBaseServiceError("Too many documents", status_code=422)
+
+        total_bytes = 0
         for doc in documents:
             if (
                 not isinstance(doc, dict)
@@ -827,13 +1032,31 @@ class KnowledgeBaseService:
                 isinstance(chunk, str) and chunk.strip() for chunk in doc["chunks"]
             ):
                 raise KnowledgeBaseServiceError("chunks 必须是非空字符串列表")
+            source_bytes = "".join(
+                f"{len(chunk)}\n{chunk}" for chunk in doc["chunks"]
+            ).encode("utf-8")
+            if len(source_bytes) > KB_SOURCE_MAX_BYTES:
+                raise KnowledgeBaseServiceError(
+                    "Document exceeds the 128 MB size limit.", status_code=422
+                )
+            total_bytes += len(source_bytes)
+            if total_bytes > KB_UPLOAD_MAX_BYTES:
+                raise KnowledgeBaseServiceError(
+                    "Knowledge base import exceeds the 512 MB request limit.",
+                    status_code=422,
+                )
+
+        options = KnowledgeBaseService.validate_ingest_options(
+            data,
+            include_chunking=False,
+        )
 
         return (
             kb_id,
             documents,
-            data.get("batch_size", 32),
-            data.get("tasks_limit", 3),
-            data.get("max_retries", 3),
+            options["batch_size"],
+            options["tasks_limit"],
+            options["max_retries"],
         )
 
     async def import_documents(self, data: object) -> dict[str, Any]:
@@ -846,20 +1069,25 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
+        lease = await self._try_acquire_job_slot()
         task_id = str(uuid.uuid4())
-        await self.init_task(task_id, operation_kind="import", kb_id=kb_id)
-        create_tracked_task(
-            self._get_background_tasks(),
-            self.background_import_task(
-                task_id=task_id,
-                kb_helper=kb_helper,
-                documents=documents,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-            ),
-            name=f"kb-import:{task_id}",
-        )
+        try:
+            await self.init_task(task_id, operation_kind="import", kb_id=kb_id)
+            self._schedule_background_job(
+                lease=lease,
+                coroutine=self.background_import_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    documents=documents,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                ),
+                name=f"kb-import:{task_id}",
+            )
+        except Exception:
+            await lease.release()
+            raise
         return {
             "task_id": task_id,
             "doc_count": len(documents),
@@ -1034,29 +1262,35 @@ class KnowledgeBaseService:
         url = payload.get("url")
         if not url:
             raise KnowledgeBaseServiceError("缺少参数 url")
+        options = self.validate_ingest_options(payload, include_chunking=True)
 
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
+        lease = await self._try_acquire_job_slot()
         task_id = str(uuid.uuid4())
-        await self.init_task(task_id, operation_kind="url_import", kb_id=kb_id)
-        create_tracked_task(
-            self._get_background_tasks(),
-            self.background_upload_from_url_task(
-                task_id=task_id,
-                kb_helper=kb_helper,
-                url=url,
-                chunk_size=payload.get("chunk_size", 512),
-                chunk_overlap=payload.get("chunk_overlap", 50),
-                batch_size=payload.get("batch_size", 32),
-                tasks_limit=payload.get("tasks_limit", 3),
-                max_retries=payload.get("max_retries", 3),
-                enable_cleaning=payload.get("enable_cleaning", False),
-                cleaning_provider_id=payload.get("cleaning_provider_id"),
-            ),
-            name=f"kb-upload-url:{task_id}",
-        )
+        try:
+            await self.init_task(task_id, operation_kind="url_import", kb_id=kb_id)
+            self._schedule_background_job(
+                lease=lease,
+                coroutine=self.background_upload_from_url_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    url=url,
+                    chunk_size=options["chunk_size"],
+                    chunk_overlap=options["chunk_overlap"],
+                    batch_size=options["batch_size"],
+                    tasks_limit=options["tasks_limit"],
+                    max_retries=options["max_retries"],
+                    enable_cleaning=payload.get("enable_cleaning", False),
+                    cleaning_provider_id=payload.get("cleaning_provider_id"),
+                ),
+                name=f"kb-upload-url:{task_id}",
+            )
+        except Exception:
+            await lease.release()
+            raise
         return {
             "task_id": task_id,
             "url": url,

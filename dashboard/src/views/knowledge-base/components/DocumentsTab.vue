@@ -352,6 +352,8 @@
                   :hint="t('upload.chunkSizeHint')"
                   persistent-hint
                   type="number"
+                  min="1"
+                  max="8192"
                   variant="outlined"
                   density="compact"
                   :placeholder="props.kb?.chunk_size?.toString() || '512'"
@@ -364,6 +366,8 @@
                   :hint="t('upload.chunkOverlapHint')"
                   persistent-hint
                   type="number"
+                  min="0"
+                  max="8191"
                   variant="outlined"
                   density="compact"
                   :placeholder="props.kb?.chunk_overlap?.toString() || '50'"
@@ -382,6 +386,8 @@
                   hint="每批处理的文本数量"
                   persistent-hint
                   type="number"
+                  min="1"
+                  max="128"
                   variant="outlined"
                   density="compact"
                 />
@@ -393,6 +399,8 @@
                   hint="并发任务数量限制"
                   persistent-hint
                   type="number"
+                  min="1"
+                  max="8"
                   variant="outlined"
                   density="compact"
                 />
@@ -404,6 +412,8 @@
                   hint="失败时的最大重试次数"
                   persistent-hint
                   type="number"
+                  min="0"
+                  max="10"
                   variant="outlined"
                   density="compact"
                 />

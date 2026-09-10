@@ -479,6 +479,89 @@ async def test_import_documents_schedules_background_task(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"batch_size": 0}, "batch_size"),
+        ({"tasks_limit": 9}, "tasks_limit"),
+        ({"max_retries": -1}, "max_retries"),
+        ({"chunk_size": 0}, "chunk_size"),
+        ({"chunk_size": 10, "chunk_overlap": 10}, "chunk_overlap"),
+    ],
+)
+def test_validate_ingest_options_rejects_invalid_numeric_bounds(payload, message):
+    with pytest.raises(KnowledgeBaseServiceError, match=message) as exc_info:
+        KnowledgeBaseService.validate_ingest_options(payload, include_chunking=True)
+
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_documents_rejects_aggregate_source_before_task_creation(
+    monkeypatch,
+):
+    kb_manager = MagicMock(get_kb=AsyncMock())
+    service = _make_service(kb_manager=kb_manager)
+    monkeypatch.setattr(knowledge_base_service, "KB_UPLOAD_MAX_BYTES", 8)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="512 MB") as exc_info:
+        await service.import_documents(
+            {
+                "kb_id": "kb-1",
+                "documents": [
+                    {"file_name": "one.txt", "chunks": ["four"]},
+                    {"file_name": "two.txt", "chunks": ["four"]},
+                ],
+            }
+        )
+
+    assert exc_info.value.status_code == 422
+    kb_manager.get_kb.assert_not_awaited()
+    assert service.task_store.tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_import_documents_rejects_when_service_capacity_is_full(monkeypatch):
+    kb_helper = AsyncMock()
+    kb_manager = MagicMock(get_kb=AsyncMock(return_value=kb_helper))
+    service = _make_service(kb_manager=kb_manager)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    active = 0
+
+    async def blocked_background_import_task(**kwargs):
+        nonlocal active
+        active += 1
+        if active == 2:
+            started.set()
+        await release.wait()
+
+    monkeypatch.setattr(
+        service,
+        "background_import_task",
+        blocked_background_import_task,
+    )
+    payload = {
+        "kb_id": "kb-1",
+        "documents": [{"file_name": "one.txt", "chunks": ["x"]}],
+    }
+
+    await service.import_documents(payload)
+    await service.import_documents(payload)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="capacity") as exc_info:
+        await service.upload_document_from_url(
+            {"kb_id": "kb-1", "url": "https://example.com/document"}
+        )
+
+    assert exc_info.value.status_code == 503
+    assert len(service.task_store.tasks) == 2
+    release.set()
+    await asyncio.gather(*list(service._background_tasks))
+    assert service._active_jobs == 0
+
+
 @pytest.mark.asyncio
 async def test_upload_document_from_url_schedules_background_task(monkeypatch):
     kb_helper = AsyncMock()
@@ -621,6 +704,22 @@ async def test_update_kb_uses_existing_name_when_payload_omits_it():
         top_k_sparse=None,
         top_m_final=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_update_kb_rejects_chunk_size_smaller_than_existing_overlap():
+    current_kb = MagicMock()
+    current_kb.kb.kb_name = "Current Name"
+    current_kb.kb.chunk_size = 512
+    current_kb.kb.chunk_overlap = 50
+    kb_manager = MagicMock(get_kb=AsyncMock(return_value=current_kb))
+    service = _make_service(kb_manager=kb_manager)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="chunk_overlap") as exc_info:
+        await service.update_kb({"kb_id": "kb-1", "chunk_size": 50})
+
+    assert exc_info.value.status_code == 422
+    kb_manager.update_kb.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1017,8 +1116,9 @@ async def test_upload_document_rejects_invalid_input_shapes():
 async def test_upload_document_rejects_missing_kb_after_staging_files(
     monkeypatch, tmp_path
 ):
-    async def fake_save_upload_to_path(file, path):
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None):
         path.write_bytes(file.content)
+        return len(file.content)
 
     monkeypatch.setattr(
         "astrbot.dashboard.services.knowledge_base_service.save_upload_to_path",
@@ -1051,8 +1151,9 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
     scheduled_tasks: list[asyncio.Task] = []
     scheduled_calls: list[dict] = []
 
-    async def fake_save_upload_to_path(file, path):
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None):
         path.write_bytes(file.content)
+        return len(file.content)
 
     async def fake_background_upload_task(**kwargs):
         scheduled_calls.append(kwargs)

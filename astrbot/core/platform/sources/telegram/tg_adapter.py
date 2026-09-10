@@ -4,6 +4,7 @@ import uuid
 from contextlib import suppress
 from typing import override
 
+import httpx
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
@@ -144,20 +145,42 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
-        route = resolve_proxy_route(
+        api_host = destination_host_from_url(self.base_url)
+        api_route = resolve_proxy_route(
             local_config=self.config,
-            destination_host=destination_host_from_url(self.base_url),
+            destination_host=api_host,
         )
-        request_kwargs = {
-            "proxy": route.httpx_proxy,
-            "httpx_kwargs": {
-                "trust_env": route.trust_env,
-                "verify": build_ssl_context_with_certifi(),
-            },
+        file_host = destination_host_from_url(self.file_base_url)
+        file_route = resolve_proxy_route(
+            local_config=self.config,
+            destination_host=file_host,
+        )
+        ssl_context = build_ssl_context_with_certifi()
+        bot_httpx_kwargs = {
+            "trust_env": api_route.trust_env,
+            "verify": ssl_context,
         }
+        if file_host and file_route.httpx_proxy != api_route.httpx_proxy:
+            bot_httpx_kwargs["mounts"] = {
+                f"all://{file_host}": httpx.AsyncHTTPTransport(
+                    proxy=file_route.httpx_proxy,
+                    verify=ssl_context,
+                )
+            }
+
         builder = ApplicationBuilder()
-        builder.request(HTTPXRequest(**request_kwargs))
-        builder.get_updates_request(HTTPXRequest(**request_kwargs))
+        builder.request(
+            HTTPXRequest(proxy=api_route.httpx_proxy, httpx_kwargs=bot_httpx_kwargs)
+        )
+        builder.get_updates_request(
+            HTTPXRequest(
+                proxy=api_route.httpx_proxy,
+                httpx_kwargs={
+                    "trust_env": api_route.trust_env,
+                    "verify": ssl_context,
+                },
+            )
+        )
         self.application = (
             builder.token(self.config["telegram_token"])
             .base_url(self.base_url)

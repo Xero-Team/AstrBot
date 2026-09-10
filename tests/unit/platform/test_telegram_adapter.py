@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
+import httpx
 import pytest
 from telegram.request import HTTPXRequest
 
@@ -160,6 +161,78 @@ async def test_telegram_request_clients_use_explicit_proxy_route(
             assert ssl_context.verify_mode == ssl.CERT_REQUIRED
         finally:
             await request._client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("no_proxy", "api_uses_proxy", "file_uses_proxy"),
+    [
+        (["files.telegram.example"], True, False),
+        (["api.telegram.example"], False, True),
+    ],
+)
+async def test_telegram_request_client_routes_distinct_file_host(
+    no_proxy: list[str],
+    api_uses_proxy: bool,
+    file_uses_proxy: bool,
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.build.return_value = MockTelegramBuilder.create_application()
+    set_global_network_config(
+        http_proxy="http://127.0.0.1:7890",
+        no_proxy=no_proxy,
+    )
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+            "HTTPXRequest": HTTPXRequest,
+        },
+    ):
+        TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_api_base_url="https://api.telegram.example/bot",
+                telegram_file_base_url="https://files.telegram.example/file/bot",
+            ),
+            {},
+            asyncio.Queue(),
+        )
+
+    bot_request = builder.request.call_args.args[0]
+    updates_request = builder.get_updates_request.call_args.args[0]
+    try:
+        api_transport = bot_request._client._transport_for_url(
+            httpx.URL("https://api.telegram.example/botTEST/getMe")
+        )
+        file_transport = bot_request._client._transport_for_url(
+            httpx.URL("https://files.telegram.example/file/botTEST/photo.jpg")
+        )
+        updates_transport = updates_request._client._transport_for_url(
+            httpx.URL("https://api.telegram.example/botTEST/getUpdates")
+        )
+
+        assert (getattr(api_transport._pool, "_proxy_url", None) is not None) is (
+            api_uses_proxy
+        )
+        assert (getattr(file_transport._pool, "_proxy_url", None) is not None) is (
+            file_uses_proxy
+        )
+        assert (getattr(updates_transport._pool, "_proxy_url", None) is not None) is (
+            api_uses_proxy
+        )
+    finally:
+        await bot_request._client.aclose()
+        await updates_request._client.aclose()
 
 
 @pytest.mark.asyncio

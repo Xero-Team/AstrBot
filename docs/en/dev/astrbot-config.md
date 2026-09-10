@@ -229,6 +229,7 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 - `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
 - `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
 - `http_proxy` / `no_proxy` are the global outbound proxy and bypass list. They are no longer exported as process `HTTP_PROXY`.
+- Telegram applies this explicit route to both Bot API requests and `getUpdates` long polling. When no proxy applies, both clients connect directly without inheriting process proxy variables.
 - Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
 - No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
 - `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.

@@ -4,6 +4,7 @@ import uuid
 from contextlib import suppress
 from typing import override
 
+import httpx
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
@@ -11,6 +12,7 @@ from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
+from telegram.request import HTTPXRequest
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -28,6 +30,11 @@ from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.proxy_route import (
+    destination_host_from_url,
+    resolve_proxy_route,
+)
+from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
 
 from .tg_event import TelegramPlatformEvent
 
@@ -138,9 +145,44 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
+        api_host = destination_host_from_url(self.base_url)
+        api_route = resolve_proxy_route(
+            local_config=self.config,
+            destination_host=api_host,
+        )
+        file_host = destination_host_from_url(self.file_base_url)
+        file_route = resolve_proxy_route(
+            local_config=self.config,
+            destination_host=file_host,
+        )
+        ssl_context = build_ssl_context_with_certifi()
+        bot_httpx_kwargs = {
+            "trust_env": api_route.trust_env,
+            "verify": ssl_context,
+        }
+        if file_host and file_route.httpx_proxy != api_route.httpx_proxy:
+            bot_httpx_kwargs["mounts"] = {
+                f"all://{file_host}": httpx.AsyncHTTPTransport(
+                    proxy=file_route.httpx_proxy,
+                    verify=ssl_context,
+                )
+            }
+
+        builder = ApplicationBuilder()
+        builder.request(
+            HTTPXRequest(proxy=api_route.httpx_proxy, httpx_kwargs=bot_httpx_kwargs)
+        )
+        builder.get_updates_request(
+            HTTPXRequest(
+                proxy=api_route.httpx_proxy,
+                httpx_kwargs={
+                    "trust_env": api_route.trust_env,
+                    "verify": ssl_context,
+                },
+            )
+        )
         self.application = (
-            ApplicationBuilder()
-            .token(self.config["telegram_token"])
+            builder.token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
             .build()

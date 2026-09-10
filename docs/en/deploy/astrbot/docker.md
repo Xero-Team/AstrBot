@@ -90,7 +90,7 @@ docker build --target dev -t astrbot:dev .
 
 `ASTRBOT_FEATURES` is a Docker **build argument**, not a runtime container
 environment variable. Compose passes it to the Dockerfile's `runtime` stage.
-It defaults to `full`, which preserves the complete feature set. Changing it
+It defaults to `full`, which enables every runtime feature group. Changing it
 requires rebuilding the image; an existing container is not changed in place.
 Use one of these forms:
 
@@ -130,6 +130,13 @@ Available feature groups:
 - `node`: Node.js, npm, npx, and pnpm for MCP launchers.
 - `docker`: Docker CLI and Compose plugin.
 
+Every runtime profile includes `python`, `uv`, and `uvx`, so the documented
+`uvx` MCP launcher is immediately available. `full` means every **runtime**
+feature group above; it does not copy every maintenance tool from the `dev`
+image. The `dev` target additionally provides Claude Code, PowerShell, Typst,
+Quarto, quality tools, and terminal helpers. Build that target explicitly when
+those tools are needed.
+
 Note that `node` is not required to serve the WebUI. The Dashboard is built
 with Node.js in the Dockerfile's `builder` stage, and the generated static
 files are copied into the `runtime` image. AstrBot's Python/FastAPI service
@@ -146,8 +153,9 @@ docker compose config
 Use this command to inspect the final `ASTRBOT_FEATURES` build argument passed
 by Compose. The `minimal` profile keeps the Python application and core shell
 utilities; enable the groups required by your integrations explicitly.
-The builder still retains the toolchain needed to produce the Dashboard and
-documentation, while the selected features affect the final runtime image.
+The builder still retains the Node.js toolchain needed to produce the Dashboard
+and documentation. Even without runtime Node.js, `minimal` serves the WebUI and
+`/help/`; selected features affect only the final runtime image.
 
 ```bash
 docker compose up -d --build

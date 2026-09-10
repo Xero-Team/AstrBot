@@ -784,6 +784,19 @@ async def test_upload_route_rejects_more_than_knowledge_base_file_limit(
 
 
 @pytest.mark.asyncio
+async def test_import_route_rejects_document_without_chunks(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents/import",
+        json={"documents": [{"file_name": "empty.txt", "chunks": []}]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["status"] == "error"
+
+
+@pytest.mark.asyncio
 async def test_get_document_raises_when_document_is_missing():
     kb_helper = AsyncMock()
     kb_helper.get_document = AsyncMock(return_value=None)

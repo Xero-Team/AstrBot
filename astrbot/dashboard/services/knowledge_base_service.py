@@ -918,18 +918,16 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("Too many files", status_code=422)
 
         lease = await self._try_acquire_job_slot()
+        staging_dir: Path | None = None
+        lease_handed_off = False
         try:
             temp_root = Path(get_astrbot_temp_path())
             temp_root.mkdir(mode=0o700, parents=True, exist_ok=True)
             task_id = str(uuid.uuid4())
             staging_dir = temp_root / f"kb_upload_{task_id}"
             staging_dir.mkdir(mode=0o700)
-        except Exception:
-            await lease.release()
-            raise
-        files_to_upload = []
-        total_bytes = 0
-        try:
+            files_to_upload = []
+            total_bytes = 0
             for file in files:
                 identity_key = self.file_identity_key_for(file.filename)
                 file_name = self.sanitize_upload_filename(file.filename)
@@ -947,36 +945,23 @@ class KnowledgeBaseService:
                         "file_type": file_type,
                     },
                 )
-                written_bytes = await save_upload_to_path(
-                    file,
-                    temp_file_path,
-                    max_bytes=min(
-                        KB_UPLOAD_MAX_PART_SIZE,
-                        KB_UPLOAD_MAX_BYTES - total_bytes,
-                    ),
-                )
+                try:
+                    written_bytes = await save_upload_to_path(
+                        file,
+                        temp_file_path,
+                        max_bytes=min(
+                            KB_UPLOAD_MAX_PART_SIZE,
+                            KB_UPLOAD_MAX_BYTES - total_bytes,
+                        ),
+                    )
+                except ValueError as exc:
+                    raise KnowledgeBaseServiceError(
+                        "Upload exceeds request size limit", status_code=422
+                    ) from exc
                 total_bytes += written_bytes
-        except ValueError as exc:
-            self._cleanup_upload_staging_dir(staging_dir)
-            await lease.release()
-            raise KnowledgeBaseServiceError(
-                "Upload exceeds request size limit", status_code=422
-            ) from exc
-        except Exception:
-            self._cleanup_upload_staging_dir(staging_dir)
-            await lease.release()
-            raise
-
-        try:
             kb_helper = await self.get_kb_manager().get_kb(kb_id)
             if not kb_helper:
                 raise KnowledgeBaseServiceError("知识库不存在")
-        except Exception:
-            self._cleanup_upload_staging_dir(staging_dir)
-            await lease.release()
-            raise
-
-        try:
             await self.init_task(task_id, operation_kind="upload", kb_id=kb_id)
             self._schedule_background_job(
                 lease=lease,
@@ -993,10 +978,12 @@ class KnowledgeBaseService:
                 ),
                 name=f"kb-upload:{task_id}",
             )
-        except Exception:
-            self._cleanup_upload_staging_dir(staging_dir)
-            await lease.release()
-            raise
+            lease_handed_off = True
+        finally:
+            if not lease_handed_off:
+                if staging_dir is not None:
+                    self._cleanup_upload_staging_dir(staging_dir)
+                await lease.release()
         return {
             "task_id": task_id,
             "file_count": len(files_to_upload),
@@ -1028,6 +1015,10 @@ class KnowledgeBaseService:
                 )
             if not isinstance(doc["chunks"], list):
                 raise KnowledgeBaseServiceError("chunks 必须是列表")
+            if not doc["chunks"]:
+                raise KnowledgeBaseServiceError(
+                    "chunks 必须是非空字符串列表", status_code=422
+                )
             if not all(
                 isinstance(chunk, str) and chunk.strip() for chunk in doc["chunks"]
             ):
@@ -1071,6 +1062,7 @@ class KnowledgeBaseService:
 
         lease = await self._try_acquire_job_slot()
         task_id = str(uuid.uuid4())
+        lease_handed_off = False
         try:
             await self.init_task(task_id, operation_kind="import", kb_id=kb_id)
             self._schedule_background_job(
@@ -1085,9 +1077,10 @@ class KnowledgeBaseService:
                 ),
                 name=f"kb-import:{task_id}",
             )
-        except Exception:
-            await lease.release()
-            raise
+            lease_handed_off = True
+        finally:
+            if not lease_handed_off:
+                await lease.release()
         return {
             "task_id": task_id,
             "doc_count": len(documents),
@@ -1270,6 +1263,7 @@ class KnowledgeBaseService:
 
         lease = await self._try_acquire_job_slot()
         task_id = str(uuid.uuid4())
+        lease_handed_off = False
         try:
             await self.init_task(task_id, operation_kind="url_import", kb_id=kb_id)
             self._schedule_background_job(
@@ -1288,9 +1282,10 @@ class KnowledgeBaseService:
                 ),
                 name=f"kb-upload-url:{task_id}",
             )
-        except Exception:
-            await lease.release()
-            raise
+            lease_handed_off = True
+        finally:
+            if not lease_handed_off:
+                await lease.release()
         return {
             "task_id": task_id,
             "url": url,

@@ -563,6 +563,35 @@ async def test_import_documents_rejects_when_service_capacity_is_full(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_import_documents_releases_capacity_when_setup_is_cancelled(monkeypatch):
+    kb_helper = AsyncMock()
+    kb_manager = MagicMock(get_kb=AsyncMock(return_value=kb_helper))
+    service = _make_service(kb_manager=kb_manager)
+    setup_started = asyncio.Event()
+
+    async def cancelled_init_task(*args, **kwargs):
+        setup_started.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(service, "init_task", cancelled_init_task)
+    task = asyncio.create_task(
+        service.import_documents(
+            {
+                "kb_id": "kb-1",
+                "documents": [{"file_name": "one.txt", "chunks": ["x"]}],
+            }
+        )
+    )
+    await setup_started.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert service._active_jobs == 0
+
+
+@pytest.mark.asyncio
 async def test_upload_document_from_url_schedules_background_task(monkeypatch):
     kb_helper = AsyncMock()
     kb_manager = MagicMock(get_kb=AsyncMock(return_value=kb_helper))
@@ -1057,6 +1086,10 @@ async def test_delete_kb_returns_success_message():
             "chunks 必须是列表",
         ),
         (
+            {"kb_id": "kb-1", "documents": [{"file_name": "doc.txt", "chunks": []}]},
+            "chunks 必须是非空字符串列表",
+        ),
+        (
             {
                 "kb_id": "kb-1",
                 "documents": [{"file_name": "doc.txt", "chunks": ["ok", "  "]}],
@@ -1139,6 +1172,43 @@ async def test_upload_document_rejects_missing_kb_after_staging_files(
             form_data={"kb_id": "kb-1"},
             files=[file],
         )
+
+
+@pytest.mark.asyncio
+async def test_upload_document_cancellation_releases_capacity_and_staging(
+    monkeypatch, tmp_path
+):
+    save_started = asyncio.Event()
+
+    async def blocked_save_upload_to_path(file, path, *, max_bytes=None):
+        path.write_bytes(b"partial")
+        save_started.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.save_upload_to_path",
+        blocked_save_upload_to_path,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+    service = _make_service()
+    task = asyncio.create_task(
+        service.upload_document(
+            content_type="multipart/form-data",
+            form_data={"kb_id": "kb-1"},
+            files=[MagicMock(filename="guide.md")],
+        )
+    )
+    await save_started.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert service._active_jobs == 0
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.asyncio

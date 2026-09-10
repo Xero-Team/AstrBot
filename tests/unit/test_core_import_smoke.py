@@ -4,6 +4,34 @@ import sys
 from pathlib import Path
 
 
+def test_btw_sdk_enable_check_does_not_construct_runtime(tmp_path: Path) -> None:
+    root = tmp_path / "runtime-root"
+    environment = {**os.environ, "ASTRBOT_ROOT": str(root)}
+    code = """
+import os
+import pathlib
+import sys
+from astrbot.api import btw_work_loop_enabled
+from astrbot.api import btw_work_latest_status
+from astrbot.core.agent.btw import runtime_registry
+assert callable(btw_work_latest_status)
+assert runtime_registry._managers == {}
+assert btw_work_loop_enabled({'btw': {'enabled': True, 'work_loop': {'enabled': True}}})
+assert not btw_work_loop_enabled(None)
+assert 'astrbot.core.agent.btw.work_loop' not in sys.modules
+assert 'astrbot.core.pipeline.scheduler' not in sys.modules
+assert not pathlib.Path(os.environ['ASTRBOT_ROOT']).exists()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_importing_core_does_not_create_runtime_services(tmp_path: Path) -> None:
     """The package boundary must stay inert in a fresh interpreter."""
     root = tmp_path / "runtime-root"

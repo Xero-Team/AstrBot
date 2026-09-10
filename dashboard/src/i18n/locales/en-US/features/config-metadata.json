@@ -1181,6 +1181,48 @@
         "enabled": {
           "description": "Enable BTW dual loops",
           "hint": "Experimental and disabled by default. Ordinary admitted AI requests use the conversation entry over the existing Agent."
+        },
+        "work_loop": {
+          "enabled": {
+            "description": "Enable work loop",
+            "hint": "Disabled by default. Allow explicit work execution."
+          },
+          "max_concurrent": {
+            "description": "Concurrent work execution",
+            "hint": "Active execution limit, default 2. This is not a waiting-queue length limit."
+          },
+          "provider_id": {
+            "description": "Work loop model",
+            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
+          },
+          "computer_use_runtime": {
+            "description": "Work loop Computer Use runtime",
+            "hint": "inherit uses the existing Computer Use setting. The conversation loop has no computer or file tools. Work still follows existing role, path, and sandbox authorization rules."
+          }
+        },
+        "work_session": {
+          "max_age_seconds": {
+            "description": "Terminal work retention (seconds)",
+            "hint": "Keep completed, failed or cancelled records for 3600 seconds by default."
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "Conversation loop model",
+            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
+          }
+        },
+        "plugin_routes": {
+          "description": "Plugin tool loop assignments",
+          "hint": "Plugin LLM tools default to the work loop; explicitly assign an enabled plugin to the conversation loop or both when needed."
+        },
+        "mcp_routes": {
+          "description": "MCP server loop assignments",
+          "hint": "MCP tools default to the work loop; explicitly assign an enabled server to the conversation loop or both when needed."
+        },
+        "skill_routes": {
+          "description": "Skill loop assignments",
+          "hint": "Skills default to both loops; explicitly restrict an enabled Skill to one loop when needed. Workspace Skills remain work-only with the local runtime."
         }
       }
     }

@@ -24,6 +24,88 @@ from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("enabled", "loop", "override", "expected"),
+    [
+        (True, None, "sandbox", "none"),
+        (True, "conversation", "local", "none"),
+        (True, "work", "inherit", "local"),
+        (True, "work", "none", "none"),
+        (True, "work", "sandbox", "sandbox"),
+        (True, "work", "local", "local"),
+        (True, "work", {"invalid": True}, "local"),
+        (False, "conversation", "sandbox", "local"),
+    ],
+)
+async def test_btw_build_applies_runtime_before_request_preparation(
+    monkeypatch,
+    mock_event,
+    mock_context,
+    mock_provider,
+    enabled,
+    loop,
+    override,
+    expected,
+):
+    mock_event.set_extra("btw_loop", loop)
+    mock_context.get_config.return_value = {
+        "btw": {"enabled": enabled, "work_loop": {"computer_use_runtime": override}},
+    }
+    config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        computer_use_runtime="local",
+        provider_settings={
+            "computer_use_runtime": "local",
+            "image_compress_enabled": False,
+        },
+    )
+    prepare = AsyncMock(return_value=False)
+    monkeypatch.setattr(ama, "_prepare_request_for_agent", prepare)
+    monkeypatch.setattr(ama, "prepare_event_attachments", AsyncMock())
+
+    await ama.build_main_agent(
+        event=mock_event,
+        plugin_context=mock_context,
+        config=config,
+        provider=mock_provider,
+        req=ProviderRequest(prompt="test"),
+    )
+
+    effective = prepare.await_args.args[3]
+    assert effective.computer_use_runtime == expected
+    assert effective.provider_settings["computer_use_runtime"] == expected
+    assert effective.allow_computer_tools is (expected != "none")
+    assert effective.provider_settings["image_compress_enabled"] is False
+    assert config.computer_use_runtime == "local"
+    assert config.provider_settings["computer_use_runtime"] == "local"
+
+
+def test_btw_catalog_rejects_reintroduced_computer_tools(mock_event, mock_context):
+    from astrbot.core.tool_catalog import COMPUTER_TOOL_NAMES
+
+    tools = [
+        FunctionTool(name=name, description=name, parameters={})
+        for name in sorted(COMPUTER_TOOL_NAMES | {"weather"})
+    ]
+    req = ProviderRequest(prompt="test", func_tool=ToolSet(tools))
+
+    ama._assemble_request_tool_catalog(
+        mock_event,
+        req,
+        mock_context,
+        ama.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="none",
+            allow_computer_tools=False,
+        ),
+    )
+
+    assert req.func_tool is not None
+    assert "weather" in req.func_tool.names()
+    assert not COMPUTER_TOOL_NAMES.intersection(req.func_tool.names())
+
+
 @pytest.fixture
 def mock_provider():
     """Create a mock provider."""
@@ -530,6 +612,31 @@ class TestMainAgentBuildConfig:
 
 class TestSelectProvider:
     """Tests for _select_provider function."""
+
+    def test_loop_override_takes_priority_without_changing_event(
+        self, mock_event, mock_context, mock_provider
+    ):
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.return_value = mock_provider
+
+        assert (
+            ama._select_provider(mock_event, mock_context, "loop-model")
+            is mock_provider
+        )
+        mock_context.get_provider_by_id.assert_called_once_with("loop-model")
+        mock_context.get_using_provider.assert_not_called()
+        assert mock_event.get_extra("selected_provider") == "session-model"
+
+    @pytest.mark.parametrize("provider", [None, "not-a-chat-provider"])
+    def test_invalid_loop_override_does_not_fall_back(
+        self, mock_event, mock_context, provider
+    ):
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.return_value = provider
+
+        assert ama._select_provider(mock_event, mock_context, "loop-model") is None
+        assert mock_event.get_extra(ama.LLM_ERROR_MESSAGE_EXTRA_KEY)
+        mock_context.get_using_provider.assert_not_called()
 
     def test_select_provider_by_id(self, mock_event, mock_context, mock_provider):
         """Test selecting provider by ID from event extra."""

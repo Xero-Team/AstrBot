@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 from astrbot import logger
+from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
@@ -80,6 +81,24 @@ CUA_COMPUTER_TOOLS: tuple[str, ...] = (
     "astrbot_cua_keyboard_type",
 )
 
+COMPUTER_TOOL_NAMES: frozenset[str] = frozenset(
+    LOCAL_COMPUTER_TOOLS
+    + SANDBOX_BASE_COMPUTER_TOOLS
+    + SANDBOX_BROWSER_TOOLS
+    + NEO_LIFECYCLE_TOOLS
+    + CUA_COMPUTER_TOOLS
+)
+COMPUTER_TOOL_ACTIONS: frozenset[str] = frozenset(
+    {
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.file_read",
+        "tool.file_write",
+        "tool.browser_control",
+        "tool.computer_use",
+    }
+)
+
 WORKSPACE_FILE_READ_TOOLS: frozenset[str] = frozenset(
     {"astrbot_file_read_tool", "astrbot_grep_tool"}
 )
@@ -121,7 +140,10 @@ class ToolCatalogInputs:
     sandbox_booter: str = "shipyard_neo"
     sandbox_capabilities: Sequence[str] | None = None
     elevated_instance_tool_actions: frozenset[str] = frozenset()
+    allow_computer_tools: bool = True
     plugins: PluginLookup | None = None
+    btw_config: Mapping[str, object] | None = None
+    loop_mode: str = "conversation"
 
 
 def assemble_tool_catalog(inputs: ToolCatalogInputs) -> ToolSet:
@@ -403,6 +425,39 @@ def _apply_plugin_filter(
     return kept
 
 
+def tool_is_available_in_loop(
+    tool: FunctionTool,
+    *,
+    btw_config: Mapping[str, object] | None,
+    loop_mode: str,
+    plugins: PluginLookup | None,
+) -> bool:
+    """Apply the same BTW capability assignment in the catalog and handoffs."""
+    if not btw_config or not btw_config.get("enabled", False):
+        return True
+    raw_tool = getattr(tool, "_wrapped", tool)
+    if isinstance(raw_tool, MCPTool):
+        return route_is_available_in_loop(
+            btw_config.get("mcp_routes"),
+            route_key="server_name",
+            route_id=raw_tool.mcp_server_name,
+            loop_mode=loop_mode,
+            default_loop="work",
+        )
+    module_path = getattr(raw_tool, "handler_module_path", None)
+    plugin = plugins.get_by_module(module_path) if plugins and module_path else None
+    if plugin is None or getattr(plugin, "reserved", False):
+        return True
+    plugin_id = getattr(plugin, "root_dir_name", None) or getattr(plugin, "name", "")
+    return route_is_available_in_loop(
+        btw_config.get("plugin_routes"),
+        route_key="plugin_id",
+        route_id=plugin_id,
+        loop_mode=loop_mode,
+        default_loop="work",
+    )
+
+
 def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]:
     visible: set[str] = set()
     computer_names = _on_demand_computer_tools(inputs)
@@ -410,7 +465,18 @@ def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]
         tool = inputs.registered_tools.get(name)
         if tool is None or not getattr(tool, "active", True):
             continue
+        if not tool_is_available_in_loop(
+            tool,
+            btw_config=inputs.btw_config,
+            loop_mode=inputs.loop_mode,
+            plugins=inputs.plugins,
+        ):
+            continue
         actions = tool_required_actions(tool)
+        if not inputs.allow_computer_tools and (
+            name in COMPUTER_TOOL_NAMES or COMPUTER_TOOL_ACTIONS.intersection(actions)
+        ):
+            continue
         if name in WORKSPACE_FILE_READ_TOOLS and name not in computer_names:
             continue
         if inputs.computer_use_runtime == "none" and _is_computer_capability_action(

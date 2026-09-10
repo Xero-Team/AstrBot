@@ -16,6 +16,7 @@ from .commands import (
     ProviderCommands,
     SessionCommands,
     VariableCommands,
+    WorkCommands,
 )
 
 
@@ -34,6 +35,7 @@ class Main(star.Star):
         self.provider_c = ProviderCommands(self.context)
         self.session_c = SessionCommands(self.context)
         self.variable_c = VariableCommands(self.context)
+        self.work_c = WorkCommands(self.context)
 
     @filter.command("help")
     async def help(
@@ -107,6 +109,16 @@ class Main(star.Star):
     @filter.command_group("task")
     def task(self) -> None:
         """Manage running tasks"""
+
+    @filter.permission("session.read")
+    @filter.command("work")
+    async def work(
+        self,
+        event: AstrMessageEvent,
+        task: GreedyStr = GreedyStr(""),
+    ) -> None:
+        """Submit a BTW work task, or show the latest status"""
+        await self.work_c.handle(event, task)
 
     @filter.permission("session.manage")
     @task.command("stop")

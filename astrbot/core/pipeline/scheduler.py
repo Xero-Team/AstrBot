@@ -8,6 +8,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .bootstrap import builtin_stage_classes
 from .context import PipelineContext
+from .result_decorate.stage import ResultDecorateStage
 from .stage import Stage
 
 
@@ -33,6 +34,50 @@ class PipelineScheduler:
             stage_instance = stage_cls()  # 创建实例
             await stage_instance.initialize(self.ctx)
             self.stages.append(stage_instance)
+        for stage in self.stages:
+            configure = getattr(stage, "configure_detached_work", None)
+            if callable(configure):
+                configure(
+                    background_tasks=self.ctx.execution_context.background_tasks,
+                    result_dispatcher=self.deliver_detached_result,
+                    event_finalizer=self.finalize_detached_event,
+                )
+
+    async def close(self) -> None:
+        """Close profile-owned background work before replacing this scheduler."""
+        for stage in reversed(self.stages):
+            close = getattr(stage, "close", None)
+            if callable(close):
+                await cast(Awaitable[None], close())
+
+    async def deliver_detached_result(self, event: AstrMessageEvent) -> None:
+        """Replay response decoration and delivery with onion ordering intact."""
+        index = next(
+            (
+                i
+                for i, stage in enumerate(self.stages)
+                if isinstance(stage, ResultDecorateStage)
+            ),
+            None,
+        )
+        if index is None:
+            raise RuntimeError("ResultDecorateStage is not configured")
+        if not event.is_stopped():
+            await self._process_stages(event, index)
+
+    async def finalize_detached_event(self, event: AstrMessageEvent) -> None:
+        """Complete a retained request once, then release its resources."""
+        if event.get_extra("btw_detached_work_finished"):
+            return
+        event.set_extra("btw_detached_work_finished", True)
+        try:
+            if event.requires_empty_completion and not event.get_extra(
+                "skip_empty_completion"
+            ):
+                await cast(_EmptyCompletionEvent, event).send(None)
+        finally:
+            event.cleanup_temporary_local_files()
+            self.ctx.execution_context.active_event_registry.unregister(event)
 
     async def _process_stages(self, event: AstrMessageEvent, from_stage=0) -> None:
         """依次执行各个阶段
@@ -91,8 +136,10 @@ class PipelineScheduler:
             await self._process_stages(event)
 
             # 发送一个空消息, 以便于后续的处理
-            if event.requires_empty_completion and not event.get_extra(
-                "skip_empty_completion"
+            if (
+                event.requires_empty_completion
+                and not event.get_extra("skip_empty_completion")
+                and not event.get_extra("btw_detached_work")
             ):
                 # Only adapters whose send implementation accepts ``None`` set this
                 # flag. The base event contract deliberately remains message-only.
@@ -112,5 +159,6 @@ class PipelineScheduler:
             else:
                 logger.debug("pipeline execution completed.")
         finally:
-            event.cleanup_temporary_local_files()
-            self.ctx.execution_context.active_event_registry.unregister(event)
+            if not event.get_extra("btw_detached_work"):
+                event.cleanup_temporary_local_files()
+                self.ctx.execution_context.active_event_registry.unregister(event)

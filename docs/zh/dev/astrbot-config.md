@@ -189,6 +189,36 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 `image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制请求准备卡口 `prepare_provider_request` 中的图片处理，主智能体聊天路径、SDK `llm_generate` 与 `tool_loop_agent` 共用该卡口。送给模型的图片在此处转为 JPEG，最长边只缩小、从不放大；动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。关闭压缩时仍会转 JPEG，但不缩放。主智能体只把适配器引用物化为本地路径，不在组装附件时预编码 JPEG。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
 
+## BTW 模型选择
+
+本地 Agent 配置启用 `btw.enabled` 后，`btw.conversation_loop.provider_id` 与 `btw.work_loop.provider_id` 分别选择两个循环的对话模型。已配置的循环模型优先于事件或会话的模型选择；留空则沿用当前选择，包括配置档默认模型。没有显式工作循环标记的消息使用对话循环模型。关闭 BTW 后不应用这两个覆盖项。
+
+所选提供商仍须是已配置的对话模型。不存在或类型不适用的循环提供商沿用现有模型选择错误路径，不会静默改用另一个循环的模型。已有模型回退和重试设置继续作用于所选主模型。
+
+### Computer Use 边界
+
+启用 BTW 后，对话循环的 Computer Use 固定为 `none`，并约束其子代理转交与显式传入的工具。宿主机 Shell、Python、文件系统、浏览器、CUA 和沙箱 Skill 生命周期工具不会进入对话循环工具目录。普通 Skill 手册仍可通过 `read_skill` 阅读。
+
+`btw.work_loop.computer_use_runtime` 支持 `inherit`（默认）、`none`、`local` 和 `sandbox`。`inherit` 沿用 `provider_settings.computer_use_runtime`。实际运行时同时作用于工作请求及其子代理转交；`none` 也会排除显式声明的电脑工具。关闭 BTW 后沿用现有 Computer Use 配置。这些设置只选择能力，不授予角色，也不绕过授权、WebChat step-up、路径限制或沙箱检查。
+
+## BTW 插件工具循环分配
+
+在配置档中启用 BTW 后，可通过 **配置文件 → BTW 双循环 → 插件工具循环分配** 为每个已启用的非系统插件选择对话循环、工作循环或两者。未分配的插件默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通工具可用性。
+
+主 Agent 与其子 Agent handoff 应用相同分配，并继续遵守 Persona、配置档与授权限制。循环分配不会授予工具执行权限。插件事件处理器和显式命令保留原有执行路径；此设置不会把整个插件转换为后台任务。
+
+## BTW MCP 工具循环分配
+
+启用 BTW 后，可通过 **MCP 服务器循环分配** 为每个已启用服务器选择对话循环、工作循环或两者。服务器的所有工具在主 Agent 和子 Agent handoff 中遵循同一分配。没有覆盖条目的服务器默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通 MCP 工具可用性。
+
+分配按配置档保存，只控制工具可见性，不替代 MCP 读写授权，也不改变现有连接、私网访问和重定向限制。
+
+## BTW Skill 循环可见性
+
+启用 BTW 后，可通过 **Skills 循环分配** 为每个已启用的普通 Skill 选择对话循环、工作循环或两者。普通 Skill 默认在两个循环可见；选择单一循环会保存覆盖，重新选择两者会移除覆盖。工作区 Skill 仅在使用 `local` 运行时的工作循环中可用。关闭 BTW 后保留标准 Skill 选择路径。
+
+循环分配在请求 Skill 快照冻结之前筛选已启用的 Skill，因此提示词、`read_skill` 和 Skill 声明的候选工具使用同一选择结果。Persona 与插件限制继续生效，包括 Persona 的空 Skill 列表。循环分配不会授予执行权限：Computer Use 为 `none` 时，`read_skill` 仍可读取允许的 Skill 手册，但 Shell 和 Python 仍不可用。
+
 ## 子代理、语音与知识库
 
 - `subagent_orchestrator.main_enable`：启用 handoff。
@@ -206,6 +236,10 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 `btw.enabled` 默认为 `false`。开启后，普通且已通过准入的 AI 请求经对话循环进入现有 Agent 执行器，不绕过消息准入、会话 AI 开关或插件请求处理。关闭 BTW 时，流水线直接使用当前 Agent 请求路径，并保留其能力。
 
 自动分类器候选将分别评估。开启此入口不会选定自动路由方案。
+
+工作执行器还需要开启 `btw.work_loop.enabled`，默认同样为 `false`。它复用 Agent 执行器并记录排队、运行、完成、失败、取消状态。`btw.work_loop.max_concurrent` 限制正在执行的任务数，默认 `2`，不限制等待队列长度。`btw.work_session.max_age_seconds` 默认保留终态记录 `3600` 秒；活动任务不会过期，终态过期记录在下次会话操作时清除。调度器接入后台服务后，由运行时拥有工作任务的执行和清理。
+
+后台工作在执行前确认接收，再通过当前回复装饰与发送阶段回送结果，包括回复内容检查；不重复运行入站阶段。WebChat 持续使用原请求标识，确认消息不会结束请求。事件临时文件保留到工作完成、失败或取消后再释放。配置档替换、删除以及运行时关闭会取消并回收其工作任务。
 
 ## WebUI 与认证
 

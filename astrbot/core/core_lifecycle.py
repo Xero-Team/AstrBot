@@ -723,6 +723,8 @@ class AstrBotCoreLifecycle:
 
             if not self._cleanup_stack_closed:
                 self._cleanup_stack_closed = True
+                for scheduler in self.pipeline_scheduler_mapping.values():
+                    self._register_cleanup("pipeline work tasks", scheduler.close)
                 await self._cleanup_stack.aclose()
 
             self._initialized = False
@@ -830,6 +832,9 @@ class AstrBotCoreLifecycle:
                 getattr(self.services, "authorization", None),
             ),
         )
+        old_scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+        if old_scheduler is not None:
+            await old_scheduler.close()
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler
         manager = getattr(self, "turn_window_manager", None)
@@ -838,4 +843,6 @@ class AstrBotCoreLifecycle:
 
     async def remove_pipeline_scheduler(self, conf_id: str) -> None:
         """Remove the scheduler associated with a deleted configuration profile."""
-        self.pipeline_scheduler_mapping.pop(conf_id, None)
+        scheduler = self.pipeline_scheduler_mapping.pop(conf_id, None)
+        if scheduler is not None:
+            await scheduler.close()

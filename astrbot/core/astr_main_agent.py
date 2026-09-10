@@ -6,11 +6,13 @@ import platform
 import re
 import zoneinfo
 from collections.abc import Coroutine, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, TypeGuard, cast
 
 from astrbot import logger
+from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
+from astrbot.core.agent.btw.runtime_policy import resolve_computer_runtime
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
@@ -182,10 +184,14 @@ class MainAgentBuildConfig:
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
+    allow_computer_tools: bool = True
+    """Whether request tools may include computer capabilities."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
+    provider_id_override: str = ""
+    """Optional request-scoped chat provider override."""
     fallback_provider_ids: list[str] = field(default_factory=list)
     request_max_retries: int = 5
     subagent_orchestrator: dict = field(default_factory=dict)
@@ -317,10 +323,12 @@ def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
 
 
 def _select_provider(
-    event: AstrMessageEvent, plugin_context: CoreExecutionContext
+    event: AstrMessageEvent,
+    plugin_context: CoreExecutionContext,
+    provider_id_override: str = "",
 ) -> ChatModel | None:
     """Select chat provider for the event."""
-    sel_provider = event.get_extra("selected_provider")
+    sel_provider = provider_id_override or event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if provider is None:
@@ -553,6 +561,11 @@ def _append_skills_prompt(
     plugin_context: CoreExecutionContext,
 ) -> SkillSnapshot:
     runtime = str(cfg.get("computer_use_runtime", "none") or "none")
+    profile = plugin_context.get_config(umo=event.unified_msg_origin)
+    btw_config = profile.get("btw", {})
+    btw_config = btw_config if isinstance(btw_config, dict) else {}
+    btw_enabled = bool(btw_config.get("enabled", False))
+    loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
     skill_manager = plugin_context.skill_manager or SkillManager(
         builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
     )
@@ -561,11 +574,22 @@ def _append_skills_prompt(
         cfg,
         plugin_context.catalogs.plugins,
     )
+    if btw_enabled:
+        skills = [
+            skill
+            for skill in skills
+            if route_is_available_in_loop(
+                btw_config.get("skill_routes"),
+                route_key="skill_name",
+                route_id=skill.name,
+                loop_mode=loop_mode,
+            )
+        ]
     workspace_skills = (
         skill_manager.list_workspace_skills(
             _get_workspace_path_for_umo(event.unified_msg_origin)
         )
-        if runtime == "local"
+        if runtime == "local" and (not btw_enabled or loop_mode == "work")
         else []
     )
     if persona and persona.get("skills") is not None:
@@ -1219,6 +1243,7 @@ def _assemble_request_tool_catalog(
     cfg = plugin_context.get_config(umo=event.unified_msg_origin)
     provider_settings = cfg.get("provider_settings", {})
     ltm_settings = cfg.get("provider_ltm_settings", {})
+    btw_config = cfg.get("btw", {})
     memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
     tool_manager = plugin_context.get_llm_tool_manager()
     registered_tools = _registered_tools_table(tool_manager)
@@ -1245,6 +1270,7 @@ def _assemble_request_tool_catalog(
         persona_tools=persona_tools,
         surface=surface,
         computer_use_runtime=config.computer_use_runtime,
+        allow_computer_tools=config.allow_computer_tools,
         plugin_names=event.plugins_name,
         registered_tools=registered_tools,
         session_tool_names=session_tool_names,
@@ -1262,6 +1288,8 @@ def _assemble_request_tool_catalog(
         sandbox_capabilities=sandbox_capabilities,
         elevated_instance_tool_actions=elevated_instance_tool_actions,
         plugins=plugin_context.catalogs.plugins,
+        btw_config=btw_config if isinstance(btw_config, dict) else None,
+        loop_mode="work" if event.get_extra("btw_loop") == "work" else "conversation",
     )
     existing = req.func_tool
     if existing is not None:
@@ -1952,7 +1980,24 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    profile = plugin_context.get_config(umo=event.unified_msg_origin)
+    btw = profile.get("btw", {})
+    if isinstance(btw, Mapping) and btw.get("enabled", False):
+        runtime = resolve_computer_runtime(
+            profile, event.get_extra("btw_loop"), config.computer_use_runtime
+        )
+        config = replace(
+            config,
+            computer_use_runtime=runtime,
+            allow_computer_tools=runtime != "none",
+            provider_settings={
+                **config.provider_settings,
+                "computer_use_runtime": runtime,
+            },
+        )
+    provider = provider or _select_provider(
+        event, plugin_context, config.provider_id_override
+    )
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):

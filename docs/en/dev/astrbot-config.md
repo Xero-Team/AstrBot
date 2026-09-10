@@ -187,6 +187,36 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 
 `image_compress_enabled` and `image_compress_options.max_size/quality` control image handling in the request-preparation choke point `prepare_provider_request`. The main-agent chat path, SDK `llm_generate`, and `tool_loop_agent` share that step. Provider-bound images are converted to JPEG there; the long edge is downscaled only and never upscaled. Animated GIF/WebP sources are dhash-sampled, at most 8 frames. Disabling compression still converts to JPEG without resizing. The main agent only materializes adapter refs to local paths and does not pre-encode chat attachments to JPEG. `max_quoted_fallback_images` and `quoted_message_parser` limit quoted and forwarded-message expansion to prevent unbounded fetching. For `quoted_message_parser`, `0` is a valid boundary: depth limits keep the root level but stop child recursion, and `max_forward_fetch=0` disables recursive `get_forward_msg` calls. Negative or invalid values fall back to defaults; this setting does not globally disable a direct quoted-message `get_msg` fallback.
 
+## BTW model selection
+
+When `btw.enabled` is enabled for a local Agent profile, `btw.conversation_loop.provider_id` and `btw.work_loop.provider_id` select the chat model for each loop. A configured loop model takes priority over the event/session model selection. An empty field preserves the current selection, including the profile default. Messages without an explicit work-loop marker use the conversation model. Disabling BTW ignores both overrides.
+
+The selected provider must still be a configured chat model. An unavailable or incompatible loop provider fails through the existing model-selection error path; it does not silently switch to the other loop's model. Existing model fallback and retry settings continue to apply to the selected primary provider.
+
+### Computer Use boundaries
+
+With BTW enabled, the conversation loop runs with Computer Use set to `none`, including handoffs and explicitly supplied tools. Host shell, Python, filesystem, browser, CUA, and sandbox Skill lifecycle tools stay outside its tool catalog. Ordinary Skill manuals remain available through `read_skill`.
+
+`btw.work_loop.computer_use_runtime` accepts `inherit` (default), `none`, `local`, or `sandbox`. `inherit` uses `provider_settings.computer_use_runtime`. The effective runtime applies to the work request and its handoffs; `none` excludes computer tools even when they were explicitly declared. Disabling BTW preserves the existing Computer Use configuration. These settings select capabilities; they do not grant roles or bypass authorization, WebChat step-up, path restrictions, or sandbox checks.
+
+## BTW plugin tool assignments
+
+When BTW is enabled in a configuration profile, **Config → BTW dual loops → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.
+
+The main Agent and its subagent handoffs apply the same assignment, together with existing Persona, profile, and authorization restrictions. An assignment never grants permission to execute a tool. Plugin event handlers and explicit commands keep their existing execution path; this setting does not turn an entire plugin into a background task.
+
+## BTW MCP tool assignments
+
+With BTW enabled, **MCP server loop assignments** selects conversation, work, or both for every enabled MCP server. All tools from that server share the assignment in the main Agent and subagent handoffs. Servers without an override default to work; selecting both saves an explicit override, and selecting work removes it. Disabling BTW preserves ordinary MCP tool availability.
+
+Assignments are saved per configuration profile. They control tool visibility and do not replace MCP read/write authorization or the existing connection, private-network, and redirect restrictions.
+
+## BTW Skill visibility
+
+With BTW enabled, **Skill loop assignments** chooses conversation, work, or both for each enabled ordinary Skill. Ordinary Skills default to both loops; choosing one loop saves an override, and choosing both removes it. Workspace Skills are available only to the work loop with the `local` runtime. Disabling BTW preserves the standard Skill selection path.
+
+Loop assignments narrow the enabled Skills before the request's Skill snapshot is frozen. The prompt, `read_skill`, and Skill-declared tool candidates therefore use the same selection. Persona and plugin restrictions still apply, including an empty Persona Skill list. A loop assignment never grants execution permission: `read_skill` can read permitted Skill manuals when Computer Use is `none`, while Shell and Python remain unavailable.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.
@@ -204,6 +234,10 @@ Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disab
 `btw.enabled` defaults to `false`. Enabling it sends ordinary admitted AI requests through the conversation loop and the existing Agent executor. It does not bypass message admission, session AI switches, or plugin request handling. With BTW disabled, the pipeline directly uses the current Agent request path and retains its capabilities.
 
 Automatic classifier candidates are evaluated separately. Enabling this entry does not select an automatic routing strategy.
+
+The work executor additionally requires `btw.work_loop.enabled`, also `false` by default. It reuses the Agent executor and records pending, running, completed, failed, and cancelled task states. `btw.work_loop.max_concurrent` limits active execution (default `2`); it does not impose a waiting-queue length limit. `btw.work_session.max_age_seconds` retains terminal states for `3600` seconds by default; active tasks do not expire, and expired terminal records are removed during the next session operation. Runtime-owned background services perform task execution and cleanup when attached by the scheduler.
+
+Detached work acknowledges receipt before execution and returns results through the current response-decoration and delivery stages, including reply content checks. Inbound stages are not rerun. WebChat keeps the original request identifier open through the final result; acknowledgement does not end the request. Temporary event files remain available to the worker and are released on completion, failure, or cancellation. Replacing or removing a profile cancels its owned work; runtime shutdown also reclaims it.
 
 ## WebUI and authentication
 

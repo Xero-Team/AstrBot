@@ -1175,6 +1175,48 @@
         "enabled": {
           "description": "启用 BTW 双循环",
           "hint": "实验功能，默认关闭。普通且已通过准入的 AI 请求经对话入口使用现有 Agent。"
+        },
+        "work_loop": {
+          "enabled": {
+            "description": "启用工作循环",
+            "hint": "默认关闭；允许显式工作请求使用工作执行器。"
+          },
+          "max_concurrent": {
+            "description": "工作任务执行并发",
+            "hint": "同时执行的工作任务数，默认 2。此值不是等待队列的长度限制。"
+          },
+          "provider_id": {
+            "description": "工作循环模型",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。"
+          },
+          "computer_use_runtime": {
+            "description": "工作循环 Computer Use 运行时",
+            "hint": "inherit 沿用当前 Computer Use 配置。对话循环始终禁用电脑和文件工具；工作循环仍须满足已有角色、路径和沙箱授权规则。"
+          }
+        },
+        "work_session": {
+          "max_age_seconds": {
+            "description": "终态工作会话保留秒数",
+            "hint": "已完成、失败或取消的工作会话保留时间，默认 3600 秒。"
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "对话循环模型",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。"
+          }
+        },
+        "plugin_routes": {
+          "description": "插件工具循环分配",
+          "hint": "插件 LLM 工具默认仅在工作循环可用；可为每个已启用插件显式改为对话循环或两者。"
+        },
+        "mcp_routes": {
+          "description": "MCP 服务器循环分配",
+          "hint": "MCP 工具默认仅在工作循环可用；可为每个已启用服务器显式改为对话循环或两者。"
+        },
+        "skill_routes": {
+          "description": "Skills 循环分配",
+          "hint": "Skill 默认注入两个循环；可为每个已启用 Skill 显式限制到单一循环。 工作区 Skill 仅在本地工作循环可用。"
         }
       }
     }

@@ -4,6 +4,12 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from astrbot.core.agent.btw.runtime_registry import (
+        latest_status as btw_work_latest_status,
+    )
+    from astrbot.core.agent.btw.types import (
+        is_work_loop_enabled as btw_work_loop_enabled,
+    )
     from astrbot.core.agent.tool import FunctionTool, ToolSet
     from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
     from astrbot.core.auth import AuthContext, Decision, Resource, Role, Subject
@@ -13,6 +19,14 @@ if TYPE_CHECKING:
     from astrbot.core.utils.error_redaction import safe_error
 
 _EXPORTS = {
+    "btw_work_latest_status": (
+        "astrbot.core.agent.btw.runtime_registry",
+        "latest_status",
+    ),
+    "btw_work_loop_enabled": (
+        "astrbot.core.agent.btw.types",
+        "is_work_loop_enabled",
+    ),
     "AuthContext": ("astrbot.core.auth", "AuthContext"),
     "Decision": ("astrbot.core.auth", "Decision"),
     "Resource": ("astrbot.core.auth", "Resource"),
@@ -78,6 +92,8 @@ __all__ = [
     "Subject",
     "ToolSet",
     "agent",
+    "btw_work_loop_enabled",
+    "btw_work_latest_status",
     "llm_tool",
     "logger",
     "safe_error",

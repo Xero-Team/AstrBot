@@ -1,0 +1,251 @@
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+
+from astrbot.core.agent.btw.types import WorkSessionStatus
+from astrbot.core.agent.btw.work_loop import WorkLoop
+from astrbot.core.agent.btw.work_sessions import WorkSessionManager
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.pipeline.stage import Stage
+from astrbot.core.utils.active_event_registry import ActiveEventRegistry
+from astrbot.core.webchat.emitter import emit_webchat_response
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
+from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
+
+
+class WorkEvent:
+    requires_empty_completion = True
+
+    def __init__(self, run, queues, attachments):
+        self.message_id = run.request_id
+        self.unified_msg_origin = "webchat:FriendMessage:shared"
+        self.message_str = "run work"
+        self.queues = queues
+        self.attachments = attachments
+        self.extras = {}
+        self.result = None
+        self.cleaned = 0
+        self.trace = []
+
+    def get_extra(self, key, default=None):
+        return self.extras.get(key, default)
+
+    def set_extra(self, key, value):
+        self.extras[key] = value
+
+    def set_result(self, result):
+        self.result = result
+
+    def is_stopped(self):
+        return False
+
+    def get_platform_id(self):
+        return "webchat"
+
+    def get_message_outline(self):
+        return self.message_str
+
+    def cleanup_temporary_local_files(self):
+        self.cleaned += 1
+
+    async def send(self, message):
+        return await emit_webchat_response(
+            self.queues, self.message_id, message, attachments_dir=self.attachments
+        )
+
+
+class BlockingExecutor:
+    def __init__(self):
+        self.started = {}
+        self.release = {}
+
+    async def process(self, event):
+        self.started[event.message_id].set()
+        await self.release[event.message_id].wait()
+        await event.send(MessageChain(type="agent_stats").message('{"calls": 1}'))
+        event.set_result(MessageEventResult().message("finished " + event.message_id))
+        yield
+
+
+class SubmitStage(Stage):
+    def __init__(self, work):
+        self.work = work
+
+    async def initialize(self, ctx):
+        pass
+
+    def configure_detached_work(self, **kwargs):
+        self.work.configure_detached_execution(**kwargs)
+
+    async def process(self, event):
+        async for progress in self.work.submit(event):
+            yield progress
+
+    async def close(self):
+        await self.work.close()
+
+
+class DecorateStage(ResultDecorateStage):
+    async def initialize(self, ctx):
+        pass
+
+    async def process(self, event):
+        if event.result is None:
+            return
+        event.trace.append("decorate-before")
+        yield
+        event.trace.append("decorate-after")
+
+
+class SendStage(Stage):
+    async def initialize(self, ctx):
+        pass
+
+    async def process(self, event):
+        if event.result is None:
+            return
+        event.trace.append("send")
+        await event.send(event.result)
+        event.result = None
+
+
+async def setup_work(tmp_path):
+    queues = WebChatQueueManager()
+    coordinator = WebChatRunCoordinator(queues)
+    executor = BlockingExecutor()
+    sessions = WorkSessionManager()
+    work = WorkLoop(executor, sessions)
+    ctx = SimpleNamespace(
+        execution_context=SimpleNamespace(
+            active_event_registry=ActiveEventRegistry(),
+            background_tasks=set(),
+        )
+    )
+    scheduler = PipelineScheduler(ctx)
+    scheduler.stage_classes = [lambda: SubmitStage(work), DecorateStage, SendStage]
+    await scheduler.initialize()
+    events = []
+    for request_id in ("first", "second"):
+        run = coordinator.create_run(
+            session_id="shared", username="test", request_id=request_id
+        )
+        executor.started[request_id] = asyncio.Event()
+        executor.release[request_id] = asyncio.Event()
+        events.append(WorkEvent(run, queues, tmp_path))
+    return scheduler, work, executor, queues, events
+
+
+@pytest.mark.asyncio
+async def test_background_webchat_keeps_each_request_until_its_final_result(tmp_path):
+    scheduler, work, executor, queues, events = await setup_work(tmp_path)
+    first, second = events
+    try:
+        await scheduler.execute(first)
+        await scheduler.execute(second)
+        await asyncio.wait_for(executor.started["first"].wait(), timeout=1)
+        await asyncio.wait_for(executor.started["second"].wait(), timeout=1)
+        for event in events:
+            ack = queues.back_queues[event.message_id].get_nowait()
+            assert ack["type"] == "plain"
+            assert ack["message_id"] == event.message_id
+            assert queues.back_queues[event.message_id].empty()
+            assert event.cleaned == 0
+
+        executor.release["first"].set()
+        first_task = next(t for t, (event, _) in work._tasks.items() if event is first)
+        await asyncio.wait_for(first_task, timeout=1)
+        messages = [queues.back_queues["first"].get_nowait() for _ in range(3)]
+        assert [message["type"] for message in messages] == ["plain", "plain", "end"]
+        assert messages[0]["chain_type"] == "agent_stats"
+        assert messages[1]["data"] == "finished first"
+        assert {message["message_id"] for message in messages} == {"first"}
+        assert queues.back_queues["second"].empty()
+        assert first.cleaned == 1 and second.cleaned == 0
+        assert first.trace == ["decorate-before", "send", "decorate-after"] * 2
+        await scheduler.finalize_detached_event(first)
+        assert first.cleaned == 1
+    finally:
+        await scheduler.close()
+    assert second.cleaned == 1
+    assert queues.back_queues["second"].get_nowait()["type"] == "end"
+
+
+@pytest.mark.asyncio
+async def test_closing_scheduler_cleans_work_cancelled_before_it_starts(tmp_path):
+    scheduler, work, _, queues, events = await setup_work(tmp_path)
+    event = events[0]
+    await scheduler.execute(event)
+    await scheduler.close()
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert event.cleaned == 1
+    assert not scheduler.ctx.execution_context.active_event_registry._events
+    assert [
+        queues.back_queues[event.message_id].get_nowait()["type"] for _ in range(2)
+    ] == ["plain", "end"]
+
+
+@pytest.mark.asyncio
+async def test_finalizer_releases_resources_even_when_completion_delivery_fails(
+    tmp_path,
+):
+    scheduler, _, _, _, events = await setup_work(tmp_path)
+    event = events[0]
+    scheduler.ctx.execution_context.active_event_registry.register(event)
+
+    async def fail(message):
+        raise OSError("delivery unavailable")
+
+    event.send = fail
+    with pytest.raises(OSError, match="delivery unavailable"):
+        await scheduler.finalize_detached_event(event)
+    assert event.cleaned == 1
+    assert not scheduler.ctx.execution_context.active_event_registry._events
+
+
+@pytest.mark.asyncio
+async def test_work_delivery_failure_marks_failed_and_finishes_the_request(tmp_path):
+    scheduler, work, executor, _, events = await setup_work(tmp_path)
+    event = events[0]
+    await scheduler.execute(event)
+    await asyncio.wait_for(executor.started[event.message_id].wait(), timeout=1)
+
+    async def fail_delivery(event):
+        raise OSError("cannot deliver")
+
+    work._result_dispatcher = fail_delivery
+    task = next(iter(work._tasks))
+    executor.release[event.message_id].set()
+    await task
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session.status is WorkSessionStatus.FAILED
+    assert session.error == "Work task failed."
+    assert event.cleaned == 1
+
+
+@pytest.mark.asyncio
+async def test_close_during_acknowledgement_prevents_late_background_submission(
+    tmp_path,
+):
+    scheduler, work, _, _, events = await setup_work(tmp_path)
+    event = events[0]
+    admission = work.submit(event)
+    await anext(admission)
+    await work.close()
+    assert [item async for item in admission] == []
+    assert not work._tasks
+    assert not event.get_extra("btw_detached_work")
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session.status is WorkSessionStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_closed_work_rejects_submission_without_creating_a_session(tmp_path):
+    scheduler, work, _, _, events = await setup_work(tmp_path)
+    await work.close()
+    await scheduler.execute(events[0])
+    assert await work.sessions.get_for_origin(events[0].unified_msg_origin) is None
+    assert not work._tasks

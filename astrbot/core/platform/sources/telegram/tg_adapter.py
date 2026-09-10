@@ -506,7 +506,11 @@ class TelegramPlatformAdapter(Platform):
         return str(file_path)
 
     @staticmethod
-    def _apply_telegram_caption(message: AstrBotMessage, telegram_message) -> None:
+    def _apply_telegram_caption(
+        message: AstrBotMessage,
+        telegram_message,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
         if telegram_message.caption:
             message.message_str = telegram_message.caption
             message.message.append(Comp.Plain(message.message_str))
@@ -516,7 +520,12 @@ class TelegramPlatformAdapter(Platform):
                     name = telegram_message.caption[
                         entity.offset + 1 : entity.offset + entity.length
                     ]
-                    message.message.append(Comp.Mention(target=name, name=name))
+                    target = (
+                        str(context.bot.id)
+                        if name.lower() == context.bot.username.lower()
+                        else name
+                    )
+                    message.message.append(Comp.Mention(target=target, name=name))
 
     async def _populate_telegram_message_content(
         self,
@@ -536,20 +545,17 @@ class TelegramPlatformAdapter(Platform):
                 if entity.type != "mention":
                     continue
                 name = raw_text[entity.offset + 1 : entity.offset + entity.length]
-                message.message.append(Comp.Mention(target=name, name=name))
+                target = (
+                    str(context.bot.id)
+                    if name.lower() == context.bot.username.lower()
+                    else name
+                )
+                message.message.append(Comp.Mention(target=target, name=name))
                 if name.lower() == context.bot.username.lower():
                     plain_text = (
                         plain_text[: entity.offset]
                         + plain_text[entity.offset + entity.length :]
                     )
-
-            if (
-                message.type == MessageType.GROUP_MESSAGE
-                and telegram_message.reply_to_message
-                and telegram_message.reply_to_message.from_user
-                and telegram_message.reply_to_message.from_user.id == context.bot.id
-            ):
-                plain_text = f"/@{context.bot.username} " + plain_text
 
             if plain_text.startswith("/"):
                 command_parts = plain_text.split(" ", 1)
@@ -584,7 +590,7 @@ class TelegramPlatformAdapter(Platform):
                 )
             )
             message.message.append(record)
-            self._apply_telegram_caption(message, telegram_message)
+            self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.photo:
             photo = telegram_message.photo[-1]
             image = Comp.Image(file="")
@@ -592,7 +598,7 @@ class TelegramPlatformAdapter(Platform):
                 lambda photo=photo: self._resolve_telegram_attachment_file_path(photo)
             )
             message.message.append(image)
-            self._apply_telegram_caption(message, telegram_message)
+            self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.sticker:
             sticker = telegram_message.sticker
             sticker_attachment = sticker
@@ -621,7 +627,7 @@ class TelegramPlatformAdapter(Platform):
                 )
             )
             message.message.append(file_component)
-            self._apply_telegram_caption(message, telegram_message)
+            self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.video:
             file_name = telegram_message.video.file_name or uuid.uuid4().hex
             video = Comp.Video(file="")
@@ -631,7 +637,7 @@ class TelegramPlatformAdapter(Platform):
                 )
             )
             message.message.append(video)
-            self._apply_telegram_caption(message, telegram_message)
+            self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.video_note:
             video_note = telegram_message.video_note
             video = Comp.Video(file="")
@@ -739,7 +745,7 @@ class TelegramPlatformAdapter(Platform):
             str(_from_user.id),
             _from_user.username or "Unknown",
         )
-        message.self_id = str(context.bot.username)
+        message.self_id = str(context.bot.id)
         message.raw_message = update
         message.message_str = ""
         message.message = []

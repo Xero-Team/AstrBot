@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import aclosing
 from typing import Protocol
 
 from astrbot.core.message.message_event_result import MessageEventResult
@@ -48,6 +49,8 @@ class WorkLoop:
         self._background_tasks: set[asyncio.Task] | None = None
         self._result_dispatcher: ResultDispatcher | None = None
         self._event_finalizer: EventFinalizer | None = None
+        self._tasks: dict[asyncio.Task, tuple[AstrMessageEvent, str]] = {}
+        self._closed = False
 
     def configure_detached_execution(
         self,
@@ -90,6 +93,17 @@ class WorkLoop:
         Falls back to inline execution when no runtime task registry is
         attached, which keeps the primitive usable in isolated tests.
         """
+        if self._closed:
+            event.set_result(
+                MessageEventResult().message(
+                    work_i18n.text(
+                        work_i18n.resolve_event_locale(event),
+                        "btw.work.status.cancelled",
+                    )
+                )
+            )
+            yield
+            return
         if (
             self._background_tasks is None
             or self._result_dispatcher is None
@@ -112,15 +126,43 @@ class WorkLoop:
         )
         yield
 
+        if self._closed:
+            await self.sessions.update_status(session.id, WorkSessionStatus.CANCELLED)
+            return
+
         # The first yield returns only after the normal response stages deliver
         # the acknowledgement.  Marking it here prevents the scheduler from
         # releasing event-owned temporary files before the worker needs them.
         event.set_extra("btw_detached_work", True)
-        create_tracked_task(
+        task = create_tracked_task(
             self._background_tasks,
             self._run_detached(event, session.id),
             name=f"btw_work:{session.id}",
         )
+        self._tasks[task] = (event, session.id)
+        task.add_done_callback(lambda done: self._tasks.pop(done, None))
+
+    async def close(self) -> None:
+        """Cancel and finalize this profile's work, including unstarted tasks."""
+        self._closed = True
+        tasks = dict(self._tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        finalizers = []
+        if self._event_finalizer is not None:
+            for event, session_id in tasks.values():
+                if not event.get_extra("btw_detached_work_finished"):
+                    await self.sessions.update_status(
+                        session_id, WorkSessionStatus.CANCELLED
+                    )
+                    finalizers.append(self._event_finalizer(event))
+        if finalizers:
+            results = await asyncio.gather(*finalizers, return_exceptions=True)
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
 
     @staticmethod
     def _prepare_event(event: AstrMessageEvent, session_id: str) -> None:
@@ -157,9 +199,18 @@ class WorkLoop:
             )
             raise
         else:
+            failed = bool(event.get_extra("btw_work_failed"))
+            cancelled = bool(event.get_extra("agent_stop_requested"))
             await self.sessions.update_status(
                 session_id,
-                WorkSessionStatus.COMPLETED,
+                WorkSessionStatus.FAILED
+                if failed
+                else (
+                    WorkSessionStatus.CANCELLED
+                    if cancelled
+                    else WorkSessionStatus.COMPLETED
+                ),
+                error="Work task failed." if failed else None,
             )
 
     async def _run_detached(self, event: AstrMessageEvent, session_id: str) -> None:
@@ -167,7 +218,16 @@ class WorkLoop:
         assert self._result_dispatcher is not None
         assert self._event_finalizer is not None
         try:
-            async for _ in self._execute(event, session_id):
-                await self._result_dispatcher(event)
+            async with aclosing(self._execute(event, session_id)) as execution:
+                async for _ in execution:
+                    await self._result_dispatcher(event)
+        except asyncio.CancelledError:
+            await self.sessions.update_status(session_id, WorkSessionStatus.CANCELLED)
+            raise
+        except Exception:
+            await self.sessions.update_status(
+                session_id, WorkSessionStatus.FAILED, error="Work task failed."
+            )
+            raise
         finally:
             await self._event_finalizer(event)

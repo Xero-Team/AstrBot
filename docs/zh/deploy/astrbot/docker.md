@@ -81,7 +81,7 @@ docker build --target dev -t astrbot:dev .
 ### 选择运行时功能
 
 `ASTRBOT_FEATURES` 是 Docker **构建参数**，不是容器启动后的运行时环境变量。
-Compose 会把它传给 `Dockerfile` 的 `runtime` 阶段；不设置时默认为 `full`，保持完整功能。
+Compose 会把它传给 `Dockerfile` 的 `runtime` 阶段；不设置时默认为 `full`，即启用全部运行时功能组。
 修改功能后必须重新构建镜像，已有容器不会自动变化。可以按下面三种方式设置：
 
 一次性设置（只影响本次构建）：
@@ -119,6 +119,12 @@ ASTRBOT_FEATURES=browser,node,docker \
 - `node`：供 MCP 启动器使用的 Node.js、npm、npx、pnpm。
 - `docker`：Docker CLI 和 Compose 插件。
 
+所有运行时配置都包含 `python`、`uv` 和 `uvx`，因此可以直接使用文档中的
+`uvx` MCP 启动器。`full` 只包含上表的全部**运行时**功能组，并不等于把
+`dev` 镜像中的所有维护工具都复制到生产容器。`dev` 另外提供 Claude Code、
+PowerShell、Typst、Quarto、质量检查器和终端辅助工具；需要它们时请明确构建
+`dev` 目标。
+
 注意：`node` 不是 WebUI 正常运行所必需的。Dashboard 会在 Dockerfile 的
 `builder` 阶段用 Node.js 构建，生成的静态文件会复制进 `runtime` 镜像；运行时由
 AstrBot 的 Python/FastAPI 服务直接提供。因此 `minimal` 仍然包含并可以访问 WebUI，
@@ -132,7 +138,8 @@ docker compose config
 
 上面的命令可以检查 Compose 最终传入的 `ASTRBOT_FEATURES` 构建参数。
 `minimal` 保留 Python 应用和核心 Shell 工具；需要某项可选集成时再显式加入对应功能。
-构建阶段仍会保留生成 Dashboard 和文档所需的工具链；这些开关影响最终运行镜像。
+构建阶段仍会保留生成 Dashboard 和文档所需的 Node.js 工具链；即使 `minimal`
+不含运行时 Node.js，也能提供 WebUI 和 `/help/`。这些开关只影响最终运行镜像。
 
 ```bash
 docker compose up -d --build

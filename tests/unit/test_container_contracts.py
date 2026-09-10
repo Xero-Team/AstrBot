@@ -104,6 +104,37 @@ def test_runtime_image_copies_changelogs() -> None:
     )
 
 
+def test_runtime_assets_export_uv_and_uvx() -> None:
+    """MCP's documented uvx launcher must be present in every runtime profile."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    runtime_assets = dockerfile.split("FROM builder AS runtime-assets", 1)[1].split(
+        "FROM builder AS dev", 1
+    )[0]
+
+    assert "install -m 0755 /usr/local/bin/uv " in runtime_assets
+    assert "install -m 0755 /usr/local/bin/uvx " in runtime_assets
+
+
+def test_runtime_build_does_not_depend_on_dev_stage() -> None:
+    """Runtime must copy its packages and assets before the dev-only stage."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    runtime_assets_at = dockerfile.index("FROM builder AS runtime-assets")
+    dev_at = dockerfile.index("FROM builder AS dev")
+    runtime_at = dockerfile.index("FROM python:3.14.6-slim", dev_at)
+
+    assert runtime_assets_at < dev_at < runtime_at
+    assert (
+        'uv pip install "playwright==${PLAYWRIGHT_VERSION}"'
+        in dockerfile[:runtime_assets_at]
+    )
+    assert "bandit[toml]" in dockerfile[dev_at:runtime_at]
+    assert (
+        "COPY --from=builder /usr/local/lib/python3.14/site-packages/"
+        in dockerfile[runtime_at:]
+    )
+
+
 def test_dockerfile_builds_docs_into_dashboard_help() -> None:
     """The runtime image must bundle VitePress output under the WebUI help path."""
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
@@ -135,6 +166,19 @@ def test_ci_validates_compose_and_dockerfile_build_syntax() -> None:
         assert command in workflow
 
     assert "Dockerfile.docs" not in workflow
+
+
+def test_container_runtime_ci_builds_and_probes_feature_profiles() -> None:
+    """Container changes must exercise the promised runtime commands."""
+    workflow = (REPO_ROOT / ".github/workflows/container-runtime.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for feature in ("minimal", "browser,node", "full"):
+        assert f"features: {feature}" in workflow
+    assert "target: runtime" in workflow
+    assert "load: true" in workflow
+    assert "scripts/check_container_runtime.py" in workflow
 
 
 def test_makefile_builds_docs_into_dashboard_help() -> None:

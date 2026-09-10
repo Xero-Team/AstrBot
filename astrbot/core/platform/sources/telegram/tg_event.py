@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlsplit
 
 import telegramify_markdown
@@ -27,6 +27,8 @@ from astrbot.core.platform import AstrBotMessage, Group, MessageType, PlatformMe
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import DeliveryAttempt, PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
+
+DraftSendOutcome = Literal["sent", "bad_request", "failed", "skipped"]
 
 
 def format_telegram_topic_target(
@@ -512,7 +514,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         text: str,
         message_thread_id: str | None = None,
         parse_mode: str | None = None,
-    ) -> None:
+    ) -> DraftSendOutcome:
         """通过 Bot.send_message_draft 发送草稿消息（流式推送部分消息）。
 
         该 API 仅支持私聊。
@@ -523,17 +525,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text: 消息文本，1-4096 字符
             message_thread_id: 可选，目标消息线程 ID
             parse_mode: 可选，消息文本的解析模式
+
+        Returns:
+            ``sent``、``bad_request``、``failed`` 或 ``skipped``。
         """
         if not text or not text.strip():
-            return
-
-        kwargs: dict[str, Any] = {}
-        if message_thread_id:
-            kwargs["message_thread_id"] = int(message_thread_id)
-        if parse_mode:
-            kwargs["parse_mode"] = parse_mode
+            return "skipped"
 
         try:
+            kwargs: dict[str, Any] = {}
+            if message_thread_id:
+                kwargs["message_thread_id"] = int(message_thread_id)
+            if parse_mode:
+                kwargs["parse_mode"] = parse_mode
             logger.debug(
                 f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}"
             )
@@ -543,8 +547,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 text=text,
                 **kwargs,
             )
+            return "sent"
+        except asyncio.CancelledError:
+            raise
+        except (TypeError, ValueError) as e:
+            logger.warning(f"[Telegram] sendMessageDraft 参数无效: {safe_error('', e)}")
+            return "failed"
+        except BadRequest as e:
+            logger.warning(f"[Telegram] sendMessageDraft 请求无效: {safe_error('', e)}")
+            return "bad_request" if parse_mode else "failed"
         except Exception as e:
-            logger.warning(f"[Telegram] sendMessageDraft 失败: {e!s}")
+            logger.warning(f"[Telegram] sendMessageDraft 失败: {safe_error('', e)}")
+            return "failed"
 
     async def _process_chain_items(
         self,
@@ -668,6 +682,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
             while not done:
                 await text_changed.wait()
                 text_changed.clear()
+                if done:
+                    break
                 # 发送最新的缓冲区内容（MarkdownV2 渲染，与真实消息一致）
                 if delta and delta != last_sent_text:
                     draft_text = delta[: self.MAX_MESSAGE_LENGTH]
@@ -676,28 +692,32 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             md = telegramify_markdown.markdownify(
                                 draft_text,
                             )
-                            await self._send_message_draft(
+                            outcome = await self._send_message_draft(
                                 user_name,
                                 draft_id,
                                 md,
                                 message_thread_id,
                                 parse_mode="MarkdownV2",
                             )
-                            last_sent_text = draft_text
-                        except Exception:
-                            # markdownify 对未闭合语法可能失败，回退纯文本
-                            try:
-                                await self._send_message_draft(
+                            if outcome == "bad_request":
+                                outcome = await self._send_message_draft(
                                     user_name,
                                     draft_id,
                                     draft_text,
                                     message_thread_id,
                                 )
+                            if outcome == "sent":
                                 last_sent_text = draft_text
-                            except Exception as e2:
-                                logger.debug(
-                                    f"[Telegram] sendMessageDraft failed (ignored): {e2!s}"
-                                )
+                        except Exception:
+                            # markdownify 对未闭合语法可能失败，回退纯文本
+                            outcome = await self._send_message_draft(
+                                user_name,
+                                draft_id,
+                                draft_text,
+                                message_thread_id,
+                            )
+                            if outcome == "sent":
+                                last_sent_text = draft_text
 
         sender_task = asyncio.create_task(_draft_sender_loop())
 

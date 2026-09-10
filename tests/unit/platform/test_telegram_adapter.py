@@ -13,7 +13,7 @@ from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
-from astrbot.core.command import CommandCatalog
+from astrbot.core.command import CommandCatalog, CommandCatalogRegistration
 from astrbot.core.pipeline.turn_router import LlmAccess, TurnRouteInput, route_turn
 from astrbot.core.platform import Group
 from astrbot.core.star.filter.command import CommandFilter
@@ -643,13 +643,50 @@ async def test_telegram_group_command_strips_only_current_bot_mention():
     assert result is not None
     assert result.message_str == "/ask hi"
     assert any(
-        isinstance(component, Comp.Mention) and component.target == "test_bot"
+        isinstance(component, Comp.Mention)
+        and component.target == str(context.bot.id)
+        and component.name == "test_bot"
         for component in result.message
     )
     assert any(
         isinstance(component, Comp.Plain) and component.text == "/ask hi"
         for component in result.message
     )
+
+    async def ask_handler(self, event) -> None: ...
+
+    metadata = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "plugin.ask",
+        "ask",
+        "plugin.ask",
+        ask_handler,
+        [],
+    )
+    command_filter = CommandFilter("ask")
+    command_filter.init_handler_md(metadata)
+    route = route_turn(
+        TurnRouteInput(
+            message_str=result.message_str,
+            messages=tuple(result.message),
+            is_private=False,
+            command_prefixes=("/",),
+            llm_access=LlmAccess(group="off"),
+            catalog=CommandCatalog(
+                [
+                    CommandCatalogRegistration(
+                        metadata.handler_full_name,
+                        metadata,
+                        command_filter.schema,
+                        (("ask",),),
+                        command_filter,
+                    )
+                ]
+            ),
+            self_id=result.self_id,
+        )
+    )
+    assert route.should_run_command is True
 
 
 @pytest.mark.asyncio

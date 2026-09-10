@@ -4,8 +4,10 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Protocol
 
+from astrbot import logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from . import i18n as work_i18n
@@ -169,5 +171,11 @@ class WorkLoop:
         try:
             async for _ in self._execute(event, session_id):
                 await self._result_dispatcher(event)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # The task registry logs unhandled exceptions with their traceback.
+            # Consume executor failures here so provider details never reach it.
+            logger.error("BTW work task failed: %s", safe_error("", exc))
         finally:
             await self._event_finalizer(event)

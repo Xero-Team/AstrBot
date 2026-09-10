@@ -33,6 +33,13 @@ class FailingExecutor:
         yield
 
 
+class SecretFailingExecutor:
+    async def process(self, event):
+        del event
+        raise RuntimeError("provider failed: api_key=btw-work-loop-secret")
+        yield
+
+
 class BlockingExecutor:
     def __init__(self) -> None:
         self.started = asyncio.Event()
@@ -102,6 +109,32 @@ async def test_work_loop_acknowledges_then_runs_in_background():
 
     assert session.status is WorkSessionStatus.COMPLETED
     result_dispatcher.assert_awaited_once_with(event)
+    event_finalizer.assert_awaited_once_with(event)
+
+
+@pytest.mark.asyncio
+async def test_detached_work_redacts_executor_failure_from_logs(caplog):
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(SecretFailingExecutor(), sessions)
+    background_tasks: set[asyncio.Task] = set()
+    event_finalizer = AsyncMock()
+    work_loop.configure_detached_execution(
+        background_tasks=background_tasks,
+        result_dispatcher=AsyncMock(),
+        event_finalizer=event_finalizer,
+    )
+    event = FakeEvent("execute work")
+
+    with caplog.at_level("ERROR", logger="astrbot"):
+        _ = [item async for item in work_loop.submit(event)]
+        [task] = background_tasks
+        await asyncio.wait_for(task, timeout=5)
+
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+    assert session.error == "Work task failed."
+    assert "btw-work-loop-secret" not in caplog.text
     event_finalizer.assert_awaited_once_with(event)
 
 

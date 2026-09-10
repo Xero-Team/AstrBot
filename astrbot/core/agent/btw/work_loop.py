@@ -224,8 +224,12 @@ class WorkLoop:
                 async for _ in execution:
                     await self._result_dispatcher(event)
         except asyncio.CancelledError:
+            await self.sessions.update_status(session_id, WorkSessionStatus.CANCELLED)
             raise
         except Exception as exc:
+            await self.sessions.update_status(
+                session_id, WorkSessionStatus.FAILED, error="Work task failed."
+            )
             # The task registry logs unhandled exceptions with their traceback.
             # Consume executor failures here so provider details never reach it.
             logger.error("BTW work task failed: %s", safe_error("", exc))

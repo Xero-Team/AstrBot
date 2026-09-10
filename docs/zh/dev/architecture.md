@@ -186,6 +186,8 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 `/work <任务内容>` 有意使用贪婪文本参数，而非动词子命令，作为工作循环的显式入口。它仍使用原生指令 schema、`session.read` 授权和 `builtin_commands:work` 标识。内置 handler 通过延迟加载的 `astrbot.api.btw_work_loop_enabled` 查询启用状态，并将同一事件继续交给 `ProcessStage` 与 `ConversationLoop`。
 
+空参数的 `/work` 与 `/work status` 通过 `astrbot.api.btw_work_latest_status` 查询最新任务。`ProcessStage` 完成初始化后按配置 ID 注册会话管理器，关闭时仅移除属于自身的注册。查询同时限定事件的配置和 UMO，不回退到其他配置，也不跨重载持久化。
+
 核心 Agent 运行时位于 `astrbot/core/agent/`，主 Agent 的请求组装位于 `astrbot/core/astr_main_agent.py`。Provider 抽象位于 `astrbot/core/provider/`；OpenAI、Anthropic、Gemini 等具体实现位于 `provider/sources/`，并通过 `provider_modules.py` 延迟注册。Dify、Coze、DashScope 和 DeerFlow 属于 `astrbot/core/agent/runners/` 下的外部 Agent Runner，不是普通模型 Provider。
 
 工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。

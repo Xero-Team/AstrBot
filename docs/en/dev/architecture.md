@@ -186,6 +186,8 @@ Core diagnostics retain only stable error codes, Unicode code-point spans, param
 
 `/work <task>` deliberately accepts a greedy remainder instead of a verb subcommand: it is an explicit entry into the work loop. It still uses the native command schema, `session.read` authorization, and `builtin_commands:work` identity. The built-in handler reads enablement through the lazy `astrbot.api.btw_work_loop_enabled` helper and continues the same event through `ProcessStage` and `ConversationLoop`.
 
+Empty `/work` and `/work status` query the latest task through `astrbot.api.btw_work_latest_status`. `ProcessStage` registers its session manager by configuration ID after initialization and removes only that same registration when closing. Queries are scoped to both the event's profile and UMO; there is no fallback to a different profile or persistence across reloads.
+
 The Agent runtime is under `astrbot/core/agent/`, with main-request assembly in `astrbot/core/astr_main_agent.py`. Provider abstractions live in `astrbot/core/provider/`; concrete OpenAI, Anthropic, Gemini, and similar sources live in `provider/sources/` and are lazily registered through `provider_modules.py`. Dify, Coze, DashScope, and DeerFlow are external Agent Runners under `astrbot/core/agent/runners/`, not ordinary model providers.
 
 Tools can come from the core, plugins, or MCP. MCP supports stdio and Streamable HTTP only. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.

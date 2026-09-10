@@ -165,13 +165,16 @@ async def test_process_stage_initializes_only_one_agent_with_opt_in_conversation
     monkeypatch.setattr(process_stage_module, "AgentRequestSubStage", lambda: executor)
     monkeypatch.setattr(process_stage_module, "StarRequestSubStage", lambda: star)
     stage = process_stage_module.ProcessStage()
-    ctx = SimpleNamespace(astrbot_config={"btw": {"enabled": enabled}})
+    ctx = SimpleNamespace(
+        astrbot_config={"btw": {"enabled": enabled}}, astrbot_config_id="test-profile"
+    )
 
     await stage.initialize(ctx)
 
     executor.initialize.assert_awaited_once_with(ctx)
     assert stage.agent_sub_stage is executor
     assert (stage.conversation_loop is not None) is enabled
+    await stage.close()
 
 
 @pytest.mark.asyncio

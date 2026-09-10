@@ -117,7 +117,7 @@ class Main(star.Star):
         event: AstrMessageEvent,
         task: GreedyStr = GreedyStr(""),
     ) -> None:
-        """Submit a task to the BTW work loop"""
+        """Submit a BTW work task, or show the latest status"""
         await self.work_c.handle(event, task)
 
     @filter.permission("session.manage")

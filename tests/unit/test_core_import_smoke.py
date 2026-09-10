@@ -12,6 +12,10 @@ import os
 import pathlib
 import sys
 from astrbot.api import btw_work_loop_enabled
+from astrbot.api import btw_work_latest_status
+from astrbot.core.agent.btw import runtime_registry
+assert callable(btw_work_latest_status)
+assert runtime_registry._managers == {}
 assert btw_work_loop_enabled({'btw': {'enabled': True, 'work_loop': {'enabled': True}}})
 assert not btw_work_loop_enabled(None)
 assert 'astrbot.core.agent.btw.work_loop' not in sys.modules

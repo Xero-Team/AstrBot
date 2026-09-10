@@ -5,7 +5,12 @@
   },
   "commands": {
     "work.disabled": "The BTW work loop is not enabled.",
-    "work.usage": "Usage: /work <task>",
+    "work.status.none": "No BTW work task has run in this session.",
+    "work.status.pending": "Queued: {task}",
+    "work.status.running": "Running: {task}",
+    "work.status.completed": "Completed: {task}",
+    "work.status.failed": "Failed: {task}",
+    "work.status.cancelled": "Cancelled: {task}",
     "help.header": "AstrBot v{version} (WebUI: {dashboard})",
     "help.empty": "No enabled built-in commands.",
     "help.tip": "Tip: use `/help --image` to render the visual help card.",

@@ -69,6 +69,13 @@
         @update:model-value="emitUpdate"
       />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_mcp_loop_routes'">
+      <CapabilityLoopSelector
+        kind="mcp"
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
     </template>
@@ -313,6 +320,7 @@ import PersonaSelector from './PersonaSelector.vue';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import PluginSetSelector from './PluginSetSelector.vue';
 import PluginLoopSelector from './PluginLoopSelector.vue';
+import CapabilityLoopSelector from './CapabilityLoopSelector.vue';
 import T2ITemplateEditor from './T2ITemplateEditor.vue';
 import DashboardTotpManager from './DashboardTotpManager.vue';
 import { computed, ref } from 'vue';

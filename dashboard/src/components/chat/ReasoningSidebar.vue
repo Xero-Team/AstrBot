@@ -1,43 +1,36 @@
 <template>
-  <div class="reasoning-sidebar-root">
-    <transition name="slide-left">
-      <aside v-if="modelValue" class="reasoning-sidebar">
-        <div class="reasoning-sidebar-header">
-          <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
-          <v-btn
-            icon="mdi-close"
-            size="small"
-            variant="text"
-            :aria-label="t('core.common.close')"
-            @click="close"
-          />
-        </div>
+  <transition name="chat-panel">
+    <aside v-if="modelValue" class="reasoning-sidebar chat-side-panel">
+      <div class="reasoning-sidebar-header">
+        <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
+        <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
+      </div>
 
-        <div class="reasoning-sidebar-body">
-          <ReasoningTimeline
-            v-if="parts.length || reasoning"
-            :parts="parts"
-            :reasoning="reasoning"
-            :is-dark="isDark"
-          />
-          <div v-else class="reasoning-sidebar-empty">
-            {{ reasoningTitle }}
-          </div>
+      <div class="reasoning-sidebar-body">
+        <ReasoningTimeline
+          v-if="parts.length || reasoning"
+          :parts="parts"
+          :reasoning="reasoning"
+          :is-dark="isDark"
+        />
+        <div v-else class="reasoning-sidebar-empty">
+          {{ reasoningTitle }}
         </div>
-      </aside>
-    </transition>
-  </div>
+      </div>
+    </aside>
+  </transition>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import "@/components/chat/chatPanelTransition.css";
+import { computed } from "vue";
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
-} from '@/composables/useMessages';
-import type { MessagePart } from '@/domain/chat';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
+  type MessagePart,
+} from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
+import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -47,14 +40,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'update:modelValue': [value: boolean];
+  "update:modelValue": [value: boolean];
 }>();
 
-const { t } = useI18n();
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 
 const activityCounts = computed(() =>
-  reasoningActivityCounts(props.parts, props.reasoning || ''),
+  reasoningActivityCounts(props.parts, props.reasoning || ""),
 );
 
 const reasoningTitle = computed(() =>
@@ -62,44 +54,23 @@ const reasoningTitle = computed(() =>
 );
 
 function close() {
-  emit('update:modelValue', false);
+  emit("update:modelValue", false);
 }
 </script>
 
 <style scoped>
-.reasoning-sidebar-root {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .reasoning-sidebar {
-  width: 380px;
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  background: rgb(var(--v-theme-surface));
+  --chat-side-panel-width: 380px;
+  width: var(--chat-side-panel-width);
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  overflow: hidden;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-left-enter-from,
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .reasoning-sidebar-header {
@@ -138,13 +109,15 @@ function close() {
     z-index: 1300;
     width: 100vw;
     height: 100dvh;
+    margin-top: 0;
     border-left: 0;
   }
 
   .reasoning-sidebar-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+    border-bottom: 1px solid
+      var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .reasoning-sidebar-body {

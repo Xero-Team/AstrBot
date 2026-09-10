@@ -21,20 +21,21 @@
         <MarkdownRender
           v-if="entry.kind === 'think'"
           :content="entry.think || ''"
-          class="reasoning-text markdown-content"
+          class="chat-markdown reasoning-text markdown-content"
           :final="!isStreaming"
           :smooth-streaming="isStreaming ? 'auto' : false"
           :fade="false"
           :typewriter="false"
           :is-dark="isDark"
           :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+          :style="CHAT_MARKDOWN_HEADING_STYLE"
         />
 
         <div v-else-if="entry.tool" class="reasoning-tool-call-block">
           <ToolCallItem v-if="isIPythonToolCall(entry.tool)" :is-dark="isDark">
             <template #label>
               <v-icon size="16">mdi-code-json</v-icon>
-              <span>{{ entry.tool.name || 'python' }}</span>
+              <span>{{ entry.tool.name || "python" }}</span>
               <span class="tool-call-inline-status">
                 {{ toolCallStatusText(entry.tool) }}
               </span>
@@ -56,14 +57,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { MarkdownRender } from 'markstream-vue';
-import { MARKDOWN_RENDER_MAX_LIVE_NODES } from '@/components/chat/markdownRenderConfig';
-import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
-import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
-import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
-import type { MessagePart } from '@/domain/chat';
-import { useModuleI18n } from '@/i18n/composables';
+import { computed } from "vue";
+import { MarkdownRender } from "markstream-vue";
+import {
+  CHAT_MARKDOWN_HEADING_STYLE,
+  MARKDOWN_RENDER_MAX_LIVE_NODES,
+} from "@/components/chat/markdownRenderConfig";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
+import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+import type { MessagePart } from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps<{
   parts?: MessagePart[];
@@ -72,20 +76,20 @@ const props = defineProps<{
   isStreaming?: boolean;
 }>();
 
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 
 type NormalizedToolCall = Record<string, unknown>;
 
 type TimelineEntry =
   | {
       key: string;
-      kind: 'think';
+      kind: "think";
       title: string;
       think: string;
     }
   | {
       key: string;
-      kind: 'tool_call';
+      kind: "tool_call";
       title: string;
       tool: NormalizedToolCall;
     };
@@ -93,7 +97,7 @@ type TimelineEntry =
 const renderParts = computed<MessagePart[]>(() => {
   if (props.parts?.length) return props.parts;
   if (props.reasoning) {
-    return [{ type: 'think', think: props.reasoning }];
+    return [{ type: "think", think: props.reasoning }];
   }
   return [];
 });
@@ -102,26 +106,28 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
   const entries: TimelineEntry[] = [];
 
   renderParts.value.forEach((part, partIndex) => {
-    if (part.type === 'think') {
-      const think = String(part.think || '');
+    if (part.type === "think") {
+      const think = String(part.think || "");
       if (!think.trim()) return;
       entries.push({
         key: `think-${partIndex}`,
-        kind: 'think',
-        title: tm('reasoning.think'),
+        kind: "think",
+        title: tm("reasoning.think"),
         think,
       });
       return;
     }
 
-    if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) return;
+    if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) return;
 
     part.tool_calls.forEach((tool, toolIndex) => {
       const normalizedTool = normalizeToolCall(tool);
       entries.push({
-        key: `tool-${String(tool.id || tool.name || `${partIndex}-${toolIndex}`)}`,
-        kind: 'tool_call',
-        title: tm('reasoning.toolUsed'),
+        key: `tool-${String(
+          tool.id || tool.name || `${partIndex}-${toolIndex}`,
+        )}`,
+        kind: "tool_call",
+        title: tm("reasoning.toolUsed"),
         tool: normalizedTool,
       });
     });
@@ -137,24 +143,24 @@ function normalizeToolCall(tool: Record<string, unknown>) {
   );
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === 'object') {
+  if (normalized.result && typeof normalized.result === "object") {
     normalized.result = JSON.stringify(normalized.result, null, 2);
   }
   return normalized;
 }
 
 function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || '').toLowerCase();
-  return name.includes('python') || name.includes('ipython');
+  const name = String(tool.name || "").toLowerCase();
+  return name.includes("python") || name.includes("ipython");
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm('toolStatus.done');
-  return tm('toolStatus.running');
+  if (tool.finished_ts) return tm("toolStatus.done");
+  return tm("toolStatus.running");
 }
 
 function parseJsonSafe(value: unknown) {
-  if (typeof value !== 'string') return value;
+  if (typeof value !== "string") return value;
   try {
     return JSON.parse(value);
   } catch {

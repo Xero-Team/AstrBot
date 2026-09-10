@@ -15,6 +15,18 @@ import type {
 
 export type TransportMode = 'sse' | 'websocket';
 
+export function buildChatRequestFlags(
+  enableStreaming = true,
+  enableReasoning = true,
+) {
+  return {
+    enable_inline_genui: true,
+    enable_default_system_prompt: true,
+    enable_streaming: enableStreaming,
+    enable_reasoning: enableReasoning,
+  };
+}
+
 interface ActiveChatRun {
   run_id: string;
   session_id: string;
@@ -47,6 +59,7 @@ interface SendMessageStreamOptions {
   parts: MessagePart[];
   transport: TransportMode;
   enableStreaming?: boolean;
+  enableReasoning?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
   userRecord?: ChatRecord;
@@ -59,6 +72,7 @@ interface ContinueEditedMessageOptions {
   sessionId: string;
   sourceRecord: ChatRecord;
   enableStreaming?: boolean;
+  enableReasoning?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
 }
@@ -320,6 +334,7 @@ export function useMessages(options: UseMessagesOptions) {
     parts,
     transport,
     enableStreaming = true,
+    enableReasoning = true,
     selectedProvider = '',
     selectedModel = '',
     botRecord,
@@ -338,6 +353,7 @@ export function useMessages(options: UseMessagesOptions) {
         botRecord,
         userRecord,
         enableStreaming,
+        enableReasoning,
         selectedProvider,
         selectedModel,
         stepUpTokens,
@@ -351,6 +367,7 @@ export function useMessages(options: UseMessagesOptions) {
       botRecord,
       userRecord,
       enableStreaming,
+      enableReasoning,
       selectedProvider,
       selectedModel,
       skipUserHistory,
@@ -415,6 +432,7 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId,
     sourceRecord,
     enableStreaming = true,
+    enableReasoning = true,
     selectedProvider = '',
     selectedModel = '',
   }: ContinueEditedMessageOptions) {
@@ -443,6 +461,7 @@ export function useMessages(options: UseMessagesOptions) {
       botRecord,
       undefined,
       enableStreaming,
+      enableReasoning,
       selectedProvider,
       selectedModel,
       true,
@@ -456,6 +475,8 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     selectedProvider = '',
     selectedModel = '',
+    enableStreaming = true,
+    enableReasoning = true,
   ) {
     if (!sessionId || botRecord.id === undefined || botRecord.id === null) {
       return;
@@ -494,6 +515,7 @@ export function useMessages(options: UseMessagesOptions) {
           body: JSON.stringify({
             selected_provider: selectedProvider,
             selected_model: selectedModel,
+            flags: buildChatRequestFlags(enableStreaming, enableReasoning),
             _webchat_step_up_tokens: stepUpTokens,
           }),
           signal: abort.signal,
@@ -594,6 +616,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
+    enableReasoning: boolean,
     selectedProvider: string,
     selectedModel: string,
     skipUserHistory = false,
@@ -621,7 +644,7 @@ export function useMessages(options: UseMessagesOptions) {
       body: JSON.stringify({
         session_id: sessionId,
         message: parts.map(partToPayload),
-        enable_streaming: enableStreaming,
+        flags: buildChatRequestFlags(enableStreaming, enableReasoning),
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -748,6 +771,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
+    enableReasoning: boolean,
     selectedProvider: string,
     selectedModel: string,
     stepUpTokens?: Record<string, string>,
@@ -774,7 +798,7 @@ export function useMessages(options: UseMessagesOptions) {
       session_id: sessionId,
       message_id: messageId,
       message: parts.map(partToPayload),
-      enable_streaming: enableStreaming,
+      flags: buildChatRequestFlags(enableStreaming, enableReasoning),
       selected_provider: selectedProvider,
       selected_model: selectedModel,
       webchat_step_up_tokens: stepUpTokens,

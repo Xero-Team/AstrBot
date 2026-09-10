@@ -453,6 +453,11 @@ class InternalAgentSubStage:
                         and not event.platform_meta.support_streaming_message
                     )
 
+                    show_reasoning = self.show_reasoning
+                    enable_reasoning = event.get_extra("enable_reasoning")
+                    if enable_reasoning is not None:
+                        show_reasoning = bool(enable_reasoning)
+
                     if await call_event_hook(
                         event,
                         EventType.OnLLMRequestEvent,
@@ -516,7 +521,7 @@ class InternalAgentSubStage:
                                         self.max_step,
                                         self.show_tool_use,
                                         self.show_tool_call_result,
-                                        show_reasoning=self.show_reasoning,
+                                        show_reasoning=show_reasoning,
                                         buffer_intermediate_messages=self.buffer_intermediate_messages,
                                     ),
                                 ),
@@ -548,7 +553,7 @@ class InternalAgentSubStage:
                             self.show_tool_use,
                             self.show_tool_call_result,
                             stream_to_general,
-                            show_reasoning=self.show_reasoning,
+                            show_reasoning=show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield

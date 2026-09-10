@@ -178,6 +178,22 @@
                 }}
               </v-list-item-title>
             </v-list-item>
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
+              @click="$emit('toggleReasoning')"
+            >
+              <template v-slot:prepend>
+                <v-icon icon="mdi-brain" size="small"></v-icon>
+              </template>
+              <v-list-item-title>
+                {{
+                  enableReasoning
+                    ? tm("reasoning.enabled")
+                    : tm("reasoning.disabled")
+                }}
+              </v-list-item-title>
+            </v-list-item>
           </StyledMenu>
         </div>
         <div class="input-field-shell">
@@ -337,6 +353,7 @@ interface Props {
   stagedFiles?: StagedFileInfo[];
   disabled: boolean;
   enableStreaming: boolean;
+  enableReasoning: boolean;
   isRecording: boolean;
   isRunning: boolean;
   sessionId?: string | null;
@@ -367,6 +384,7 @@ const emit = defineEmits<{
   send: [];
   stop: [];
   toggleStreaming: [];
+  toggleReasoning: [];
   removeImage: [index: number];
   removeAudio: [];
   removeFile: [index: number];

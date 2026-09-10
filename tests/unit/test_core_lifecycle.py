@@ -1346,7 +1346,8 @@ class TestAstrBotCoreLifecycleLoadPipelineScheduler:
         lifecycle.astrbot_config_mgr = mock_astrbot_config_mgr
         lifecycle.plugin_manager = mock_plugin_manager
         lifecycle.execution_context = MagicMock()
-        lifecycle.pipeline_scheduler_mapping = {}
+        old_scheduler = SimpleNamespace(close=AsyncMock())
+        lifecycle.pipeline_scheduler_mapping = {"config1": old_scheduler}
 
         with (
             patch(
@@ -1360,6 +1361,7 @@ class TestAstrBotCoreLifecycleLoadPipelineScheduler:
 
             # Verify scheduler was added to mapping
             assert "config1" in lifecycle.pipeline_scheduler_mapping
+            old_scheduler.close.assert_awaited_once()
             mock_new_scheduler.initialize.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -1376,3 +1378,24 @@ class TestAstrBotCoreLifecycleLoadPipelineScheduler:
 
         with pytest.raises(ValueError, match="配置文件 .* 不存在"):
             await lifecycle.reload_pipeline_scheduler("nonexistent")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_work_closes_before_runtime_dependencies(
+    mock_log_broker, mock_db
+):
+    lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+    order = []
+
+    async def close_work():
+        order.append("work")
+
+    async def close_transport():
+        order.append("transport")
+
+    lifecycle.pipeline_scheduler_mapping = {
+        "profile": SimpleNamespace(close=close_work),
+    }
+    lifecycle._register_cleanup("transport", close_transport)
+    await lifecycle.stop()
+    assert order == ["work", "transport"]

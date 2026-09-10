@@ -1,4 +1,5 @@
-from collections.abc import AsyncGenerator
+import asyncio
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from astrbot.core.agent.conversation_loop import ConversationLoop
 from astrbot.core.agent.llm_types import ProviderRequest
@@ -28,6 +29,26 @@ class ProcessStage(Stage):
         # initialize star request sub stage
         self.star_request_sub_stage = StarRequestSubStage()
         await self.star_request_sub_stage.initialize(ctx)
+
+    def configure_detached_work(
+        self,
+        *,
+        background_tasks: set[asyncio.Task],
+        result_dispatcher: Callable[[AstrMessageEvent], Awaitable[None]],
+        event_finalizer: Callable[[AstrMessageEvent], Awaitable[None]],
+    ) -> None:
+        """Attach runtime services only to an enabled conversation loop."""
+        if self.conversation_loop is not None:
+            self.conversation_loop.configure_detached_work(
+                background_tasks=background_tasks,
+                result_dispatcher=result_dispatcher,
+                event_finalizer=event_finalizer,
+            )
+
+    async def close(self) -> None:
+        """Reclaim work before this profile's scheduler is replaced."""
+        if self.conversation_loop is not None:
+            await self.conversation_loop.close()
 
     async def process(
         self,

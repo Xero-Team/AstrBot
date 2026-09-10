@@ -785,31 +785,22 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 logger.warning(
                     "Telegram streaming submission failed: %s", safe_error("", exc)
                 )
-                if final:
-                    if current_content:
-                        attempts.append(
-                            DeliveryAttempt(
-                                status="accepted",
-                                message_count=1,
-                                message_ids=(str(message_id),),
-                                semantic_text=current_content,
-                            )
-                        )
+                if current_content:
                     attempts.append(
                         DeliveryAttempt(
-                            status="failed",
-                            semantic_text=text[len(current_content) :],
-                            error_summary="telegram streaming submission failed",
+                            status="accepted",
+                            message_count=1,
+                            message_ids=(str(message_id),),
+                            semantic_text=current_content,
                         )
                     )
-                else:
-                    attempts.append(
-                        DeliveryAttempt(
-                            status="failed",
-                            semantic_text=text,
-                            error_summary="telegram streaming submission failed",
-                        )
+                attempts.append(
+                    DeliveryAttempt(
+                        status="failed",
+                        semantic_text=text[len(current_content) :],
+                        error_summary="telegram streaming submission failed",
                     )
+                )
                 return False
 
             if final:
@@ -844,7 +835,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     )
             except asyncio.CancelledError:
                 raise
-            except (ValueError, BadRequest) as exc:
+            except Exception as exc:
                 logger.warning(
                     "Telegram streaming Markdown finalization failed: %s",
                     safe_error("", exc),
@@ -876,6 +867,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 overflow = delta[self.MAX_MESSAGE_LENGTH :]
                 delta = delta[: self.MAX_MESSAGE_LENGTH]
                 if not await finalize_segment():
+                    if overflow:
+                        attempts.append(
+                            DeliveryAttempt(
+                                status="skipped",
+                                semantic_text=overflow,
+                                error_summary="telegram stream stopped after submission failure",
+                            )
+                        )
                     delivery_failed = True
                     break
                 delta = overflow

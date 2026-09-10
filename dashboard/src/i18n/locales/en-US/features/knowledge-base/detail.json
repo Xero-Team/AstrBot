@@ -55,6 +55,7 @@
     "uploading": "Uploading...",
     "uploadSuccess": "Document uploaded successfully",
     "uploadFailed": "Failed to upload document",
+    "taskInterrupted": "Upload was interrupted by a restart and was not resumed",
     "deleteSuccess": "Document deleted successfully",
     "deleteFailed": "Failed to delete document",
     "loadFailed": "Failed to load document list"

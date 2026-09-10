@@ -31,6 +31,8 @@ Markdown is split on headings. Uploading the same file identity or the same cano
 
 An upload writes the document store, metadata, and local vectors together. Any step that fails runs compensating cleanup: after the API reports failure, that document must not stay queryable. Storage is SQLite in the runtime directory plus FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. Runtime startup enforces that with `data/astrbot.lock`; on POSIX it also locks the `data/` directory, so deleting the lock file cannot bypass the singleton. SQLite WAL and `busy_timeout` are not an instance lock. The operating system releases this advisory lock when the process exits, and a leftover lock file does not mean an instance is still running. If Compose mounts the same `./data` into a second full instance, the later container is expected to fail.
 
+The Dashboard task id returned by a file upload, pre-chunk import, or URL import can be queried after a normal restart. Task progress and results are retained for seven days, with at most 1,000 completed, failed, or interrupted task records kept. Work that was pending or processing when AstrBot stops is reported as `interrupted`; it is not resumed automatically. The document list remains the source of truth for material that completed before the interruption.
+
 ## Attach to a session
 
 Chat does not search every knowledge base you created. You must name them on the profile or a rule.

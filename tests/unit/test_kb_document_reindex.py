@@ -142,7 +142,7 @@ async def test_service_reindex_maps_missing_source_to_400():
         )
     )
     manager = MagicMock(get_kb=AsyncMock(return_value=helper))
-    service = KnowledgeBaseService(manager)
+    service = KnowledgeBaseService(manager, MagicMock())
     with pytest.raises(
         KnowledgeBaseServiceError, match="source file is not stored"
     ) as exc:

@@ -18,6 +18,7 @@ from astrbot.core.db.protocols import (
     CronStore,
     DashboardStore,
     DatabaseSessionStore,
+    KnowledgeBaseTaskStore,
     MemoryStore,
     MessageHistoryStore,
     OpenApiStore,
@@ -35,6 +36,7 @@ from astrbot.core.db.protocols import (
 from astrbot.core.db.sqlite import SQLiteDatabase
 
 DOMAIN_PROTOCOLS: tuple[type[Protocol], ...] = (
+    KnowledgeBaseTaskStore,
     StatisticsStore,
     PersonaRuntimeStore,
     MemoryStore,

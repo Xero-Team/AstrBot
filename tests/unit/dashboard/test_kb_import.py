@@ -20,6 +20,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
 )
+from tests.helpers.knowledge_base_tasks import InMemoryKnowledgeBaseTaskStore
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def knowledge_base_route_service(kb_helper: AsyncMock) -> KnowledgeBaseService:
     """Return a service wired only to the controlled KB helper."""
     kb_manager = MagicMock()
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
-    return KnowledgeBaseService(kb_manager)
+    return KnowledgeBaseService(kb_manager, InMemoryKnowledgeBaseTaskStore())
 
 
 @pytest.fixture
@@ -164,8 +165,9 @@ async def test_import_documents_returns_friendly_failure_message(
     )
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     await KnowledgeBaseService.background_import_task(
         service,
@@ -177,8 +179,8 @@ async def test_import_documents_returns_friendly_failure_message(
         max_retries=3,
     )
 
-    assert service.upload_tasks["task-1"]["status"] == "completed"
-    result = service.upload_tasks["task-1"]["result"]
+    assert service.task_store.tasks["task-1"].status == "completed"
+    result = service.task_store.tasks["task-1"].result
     assert result["success_count"] == 0
     assert result["failed_count"] == 1
     assert result["failed"][0]["file_name"] == "broken.txt"
@@ -256,8 +258,9 @@ def _make_service_with_mock_kb_helper():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
     return service, kb_helper
 
 
@@ -329,52 +332,52 @@ async def test_list_documents_route_forwards_search_query(
     )
 
 
-def test_get_upload_progress_reports_processing_completed_and_failed_states():
-    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.upload_progress = {
-        "task-processing": {"status": "processing", "current": 3, "total": 10},
-    }
-    service.upload_tasks = {
-        "task-processing": {"status": "processing", "result": None, "error": None},
-        "task-completed": {
-            "status": "completed",
-            "result": {"ok": True},
-            "error": None,
-        },
-        "task-failed": {
-            "status": "failed",
-            "result": None,
-            "error": "boom",
-        },
-    }
+@pytest.mark.asyncio
+async def test_get_upload_progress_reports_processing_completed_and_failed_states():
+    service = KnowledgeBaseService(MagicMock(), InMemoryKnowledgeBaseTaskStore())
+    service._initialized = True
+    for task_id in ("task-processing", "task-completed", "task-failed"):
+        await service.task_store.create_knowledge_base_task(
+            task_id=task_id, operation_kind="upload", kb_id="kb-1"
+        )
+    await service.task_store.update_knowledge_base_task(
+        task_id="task-processing",
+        status="processing",
+        progress={"status": "processing", "current": 3, "total": 10},
+    )
+    await service.task_store.update_knowledge_base_task(
+        task_id="task-completed", status="completed", result={"ok": True}
+    )
+    await service.task_store.update_knowledge_base_task(
+        task_id="task-failed", status="failed", error="boom"
+    )
 
-    assert service.get_upload_progress("task-processing") == {
+    assert await service.get_upload_progress("task-processing") == {
         "task_id": "task-processing",
         "status": "processing",
         "progress": {"status": "processing", "current": 3, "total": 10},
     }
-    assert service.get_upload_progress("task-completed") == {
+    assert await service.get_upload_progress("task-completed") == {
         "task_id": "task-completed",
         "status": "completed",
         "result": {"ok": True},
     }
-    assert service.get_upload_progress("task-failed") == {
+    assert await service.get_upload_progress("task-failed") == {
         "task_id": "task-failed",
         "status": "failed",
         "error": "boom",
     }
 
 
-def test_get_upload_progress_rejects_missing_or_unknown_task():
-    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.upload_progress = {}
-    service.upload_tasks = {}
+@pytest.mark.asyncio
+async def test_get_upload_progress_rejects_missing_or_unknown_task():
+    service = KnowledgeBaseService(MagicMock(), InMemoryKnowledgeBaseTaskStore())
 
     with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 task_id"):
-        service.get_upload_progress(None)
+        await service.get_upload_progress(None)
 
     with pytest.raises(KnowledgeBaseServiceError, match="找不到该任务"):
-        service.get_upload_progress("missing")
+        await service.get_upload_progress("missing")
 
 
 @pytest.mark.asyncio
@@ -396,8 +399,9 @@ async def test_background_upload_from_url_task_marks_success_result():
     kb_helper.upload_from_url = AsyncMock(return_value=uploaded_doc)
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     await service.background_upload_from_url_task(
         task_id="task-url-ok",
@@ -412,8 +416,8 @@ async def test_background_upload_from_url_task_marks_success_result():
         cleaning_provider_id="cleaner-1",
     )
 
-    assert service.upload_tasks["task-url-ok"]["status"] == "completed"
-    result = service.upload_tasks["task-url-ok"]["result"]
+    assert service.task_store.tasks["task-url-ok"].status == "completed"
+    result = service.task_store.tasks["task-url-ok"].result
     uploaded = result["uploaded"][0]
     assert result["task_id"] == "task-url-ok"
     assert uploaded["doc_id"] == "doc-1"
@@ -433,8 +437,9 @@ async def test_background_upload_from_url_task_marks_failure_result():
     kb_helper.upload_from_url = AsyncMock(side_effect=RuntimeError("fetch failed"))
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     await service.background_upload_from_url_task(
         task_id="task-url-fail",
@@ -449,11 +454,11 @@ async def test_background_upload_from_url_task_marks_failure_result():
         cleaning_provider_id=None,
     )
 
-    assert service.upload_tasks["task-url-fail"]["status"] == "failed"
+    assert service.task_store.tasks["task-url-fail"].status == "failed"
     assert (
-        service.upload_tasks["task-url-fail"]["error"] == "Knowledge base task failed"
+        service.task_store.tasks["task-url-fail"].error == "Knowledge base task failed"
     )
-    assert service.upload_progress["task-url-fail"]["status"] == "failed"
+    assert service.task_store.tasks["task-url-fail"].progress["status"] == "failed"
 
 
 @pytest.mark.asyncio
@@ -468,8 +473,9 @@ async def test_list_kbs_clamps_page_and_includes_init_error():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     result = await service.list_kbs(page=0, page_size=0)
 
@@ -513,8 +519,9 @@ async def test_create_kb_wraps_embedding_validation_failure():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     with pytest.raises(KnowledgeBaseServiceError, match="测试嵌入模型失败"):
         await service.create_kb({"kb_name": "demo", "embedding_provider_id": "embed-1"})
@@ -545,8 +552,9 @@ async def test_update_kb_uses_existing_name_when_name_is_omitted():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     result, message = await service.update_kb(
         {"kb_id": "kb-1", "description": "updated description"}
@@ -573,8 +581,9 @@ async def test_update_kb_uses_existing_name_when_name_is_omitted():
 async def test_update_kb_requires_at_least_one_field():
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = MagicMock()
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     with pytest.raises(KnowledgeBaseServiceError, match="至少需要提供一个更新字段"):
         await service.update_kb({"kb_id": "kb-1"})
@@ -587,8 +596,9 @@ async def test_delete_kb_raises_when_target_is_missing():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     with pytest.raises(KnowledgeBaseServiceError, match="知识库不存在"):
         await service.delete_kb({"kb_id": "missing"})
@@ -605,8 +615,9 @@ async def test_retrieve_reports_visualization_error_without_dropping_results(
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     async def fail_visualization(_query, _kb_names, _kb_manager):
         raise RuntimeError("tsne failed")
@@ -643,8 +654,9 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     background_calls: list[dict] = []
 
@@ -681,8 +693,8 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
     await asyncio.sleep(0)
 
     assert response["file_count"] == 1
-    assert response["task_id"] in service.upload_tasks
-    assert service.upload_tasks[response["task_id"]]["status"] == "pending"
+    assert response["task_id"] in service.task_store.tasks
+    assert service.task_store.tasks[response["task_id"]].status == "pending"
     assert len(background_calls) == 1
     background_call = background_calls[0]
     assert background_call["task_id"] == response["task_id"]
@@ -781,8 +793,9 @@ async def test_get_document_raises_when_document_is_missing():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     with pytest.raises(KnowledgeBaseServiceError, match="文档不存在"):
         await service.get_document(kb_id="kb-1", doc_id="doc-404")
@@ -798,8 +811,9 @@ async def test_delete_document_and_chunk_delegate_to_helper():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     delete_doc_result = await service.delete_document(
         {"kb_id": "kb-1", "doc_id": "doc-1"}
@@ -826,8 +840,9 @@ async def test_list_chunks_returns_items_and_offset_page_metadata():
 
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
+    service._background_tasks = set()
 
     result = await service.list_chunks(
         kb_id="kb-1",

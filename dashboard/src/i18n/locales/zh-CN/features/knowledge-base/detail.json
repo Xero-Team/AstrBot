@@ -55,6 +55,7 @@
     "uploading": "正在上传...",
     "uploadSuccess": "文档上传成功",
     "uploadFailed": "文档上传失败",
+    "taskInterrupted": "上传因重启而中断，未自动继续执行",
     "deleteSuccess": "文档删除成功",
     "deleteFailed": "文档删除失败",
     "loadFailed": "文档列表加载失败"

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
@@ -7,10 +7,12 @@ import pytest
 from astrbot.core.knowledge_base.kb_helper import DocumentIngestResult
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.dashboard.services import knowledge_base_service
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
 )
+from tests.helpers.knowledge_base_tasks import InMemoryKnowledgeBaseTaskStore
 
 
 def _kb_document(**overrides) -> KBDocument:
@@ -44,10 +46,64 @@ def _ingest(
 def _make_service(*, kb_manager=None) -> KnowledgeBaseService:
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.knowledge_base_manager = kb_manager or MagicMock()
-    service.upload_progress = {}
-    service.upload_tasks = {}
+    service.task_store = InMemoryKnowledgeBaseTaskStore()
+    service._initialized = True
     service._background_tasks = set()
     return service
+
+
+@pytest.mark.asyncio
+async def test_task_lifecycle_marks_prior_active_tasks_interrupted_on_first_access():
+    service = _make_service()
+    await service.task_store.create_knowledge_base_task(
+        task_id="interrupted-task", operation_kind="upload", kb_id="kb-1"
+    )
+    service._initialized = False
+
+    result = await service.get_upload_progress("interrupted-task")
+
+    assert result == {
+        "task_id": "interrupted-task",
+        "status": "interrupted",
+        "error": "Knowledge base task interrupted",
+    }
+
+
+@pytest.mark.asyncio
+async def test_shutdown_marks_owned_active_tasks_interrupted():
+    service = _make_service()
+    await service.task_store.create_knowledge_base_task(
+        task_id="shutdown-task", operation_kind="upload", kb_id="kb-1"
+    )
+
+    await service.shutdown()
+
+    task = service.task_store.tasks["shutdown-task"]
+    assert task.status == "interrupted"
+    assert task.error == "Knowledge base task interrupted"
+
+
+@pytest.mark.asyncio
+async def test_terminal_task_updates_prune_expired_and_excess_records(monkeypatch):
+    service = _make_service()
+    monkeypatch.setattr(knowledge_base_service, "_MAX_TERMINAL_TASKS", 1)
+    now = datetime.now(UTC)
+    for task_id, updated_at in (
+        ("expired-task", now - timedelta(days=8)),
+        ("retained-task", now - timedelta(minutes=1)),
+        ("new-task", now),
+    ):
+        await service.task_store.create_knowledge_base_task(
+            task_id=task_id, operation_kind="upload", kb_id="kb-1"
+        )
+        await service.task_store.update_knowledge_base_task(
+            task_id=task_id, status="completed"
+        )
+        service.task_store.tasks[task_id].updated_at = updated_at
+
+    await service.set_task_result("new-task", "completed", result={"ok": True})
+
+    assert set(service.task_store.tasks) == {"new-task"}
 
 
 @pytest.mark.parametrize(
@@ -150,9 +206,9 @@ async def test_background_upload_task_aggregates_uploaded_and_failed_documents(
         max_retries=5,
     )
 
-    assert service.upload_tasks["task-upload"]["status"] == "completed"
-    assert service.upload_progress["task-upload"]["status"] == "completed"
-    assert service.upload_tasks["task-upload"]["result"] == {
+    assert service.task_store.tasks["task-upload"].status == "completed"
+    assert service.task_store.tasks["task-upload"].progress["status"] == "completed"
+    assert service.task_store.tasks["task-upload"].result == {
         "task_id": "task-upload",
         "uploaded": [
             {
@@ -195,12 +251,12 @@ async def test_background_upload_task_marks_failed_when_file_shape_breaks_outer_
         max_retries=5,
     )
 
-    assert service.upload_tasks["task-upload-broken"]["status"] == "failed"
+    assert service.task_store.tasks["task-upload-broken"].status == "failed"
     assert (
-        service.upload_tasks["task-upload-broken"]["error"]
+        service.task_store.tasks["task-upload-broken"].error
         == "Knowledge base task failed"
     )
-    assert service.upload_progress["task-upload-broken"]["status"] == "failed"
+    assert service.task_store.tasks["task-upload-broken"].progress["status"] == "failed"
     kb_helper.upload_document.assert_not_awaited()
     assert not staging_dir.exists()
 
@@ -229,9 +285,9 @@ async def test_background_import_task_aggregates_failures_and_infers_file_types(
         max_retries=6,
     )
 
-    assert service.upload_tasks["task-import"]["status"] == "completed"
-    assert service.upload_progress["task-import"]["status"] == "completed"
-    assert service.upload_tasks["task-import"]["result"] == {
+    assert service.task_store.tasks["task-import"].status == "completed"
+    assert service.task_store.tasks["task-import"].progress["status"] == "completed"
+    assert service.task_store.tasks["task-import"].result == {
         "task_id": "task-import",
         "uploaded": [
             {
@@ -272,12 +328,12 @@ async def test_background_import_task_marks_failed_when_document_shape_breaks_ou
         max_retries=6,
     )
 
-    assert service.upload_tasks["task-import-broken"]["status"] == "failed"
+    assert service.task_store.tasks["task-import-broken"].status == "failed"
     assert (
-        service.upload_tasks["task-import-broken"]["error"]
+        service.task_store.tasks["task-import-broken"].error
         == "Knowledge base task failed"
     )
-    assert service.upload_progress["task-import-broken"]["status"] == "failed"
+    assert service.task_store.tasks["task-import-broken"].progress["status"] == "failed"
     kb_helper.upload_document.assert_not_awaited()
 
 
@@ -409,8 +465,8 @@ async def test_import_documents_schedules_background_task(monkeypatch):
     await asyncio.gather(*scheduled_tasks)
 
     assert result["doc_count"] == 1
-    assert result["task_id"] in service.upload_tasks
-    assert service.upload_tasks[result["task_id"]]["status"] == "pending"
+    assert result["task_id"] in service.task_store.tasks
+    assert service.task_store.tasks[result["task_id"]].status == "pending"
     assert scheduled_calls == [
         {
             "task_id": result["task_id"],
@@ -466,8 +522,8 @@ async def test_upload_document_from_url_schedules_background_task(monkeypatch):
     await asyncio.gather(*scheduled_tasks)
 
     assert result["url"] == "https://example.com/doc"
-    assert result["task_id"] in service.upload_tasks
-    assert service.upload_tasks[result["task_id"]]["status"] == "pending"
+    assert result["task_id"] in service.task_store.tasks
+    assert service.task_store.tasks[result["task_id"]].status == "pending"
     assert scheduled_calls == [
         {
             "task_id": result["task_id"],
@@ -615,6 +671,7 @@ async def test_list_documents_clamps_pagination_and_trims_search():
     kb_helper.count_documents.assert_awaited_once_with(search="guide")
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("task_id", "tasks", "message"),
     [
@@ -622,39 +679,42 @@ async def test_list_documents_clamps_pagination_and_trims_search():
         ("missing", {}, "找不到该任务"),
     ],
 )
-def test_get_upload_progress_rejects_missing_or_unknown_task(task_id, tasks, message):
+async def test_get_upload_progress_rejects_missing_or_unknown_task(
+    task_id, tasks, message
+):
     service = _make_service()
-    service.upload_tasks = tasks
 
     with pytest.raises(KnowledgeBaseServiceError, match=message):
-        service.get_upload_progress(task_id)
+        await service.get_upload_progress(task_id)
 
 
-def test_get_upload_progress_returns_state_specific_fields():
+@pytest.mark.asyncio
+async def test_get_upload_progress_returns_state_specific_fields():
     service = _make_service()
-    service.upload_tasks = {
-        "processing-task": {"status": "processing", "result": None, "error": None},
-        "completed-task": {
-            "status": "completed",
-            "result": {"uploaded": [{"doc_id": "doc-1"}]},
-            "error": None,
-        },
-        "failed-task": {
-            "status": "failed",
-            "result": None,
-            "error": "network error",
-        },
-    }
-    service.upload_progress = {
-        "processing-task": {
+    for task_id in ("processing-task", "completed-task", "failed-task"):
+        await service.task_store.create_knowledge_base_task(
+            task_id=task_id, operation_kind="upload", kb_id="kb-1"
+        )
+    await service.task_store.update_knowledge_base_task(
+        task_id="processing-task",
+        status="processing",
+        progress={
             "status": "processing",
             "stage": "embedding",
             "current": 2,
             "total": 5,
-        }
-    }
+        },
+    )
+    await service.task_store.update_knowledge_base_task(
+        task_id="completed-task",
+        status="completed",
+        result={"uploaded": [{"doc_id": "doc-1"}]},
+    )
+    await service.task_store.update_knowledge_base_task(
+        task_id="failed-task", status="failed", error="network error"
+    )
 
-    assert service.get_upload_progress("processing-task") == {
+    assert await service.get_upload_progress("processing-task") == {
         "task_id": "processing-task",
         "status": "processing",
         "progress": {
@@ -664,12 +724,12 @@ def test_get_upload_progress_returns_state_specific_fields():
             "total": 5,
         },
     }
-    assert service.get_upload_progress("completed-task") == {
+    assert await service.get_upload_progress("completed-task") == {
         "task_id": "completed-task",
         "status": "completed",
         "result": {"uploaded": [{"doc_id": "doc-1"}]},
     }
-    assert service.get_upload_progress("failed-task") == {
+    assert await service.get_upload_progress("failed-task") == {
         "task_id": "failed-task",
         "status": "failed",
         "error": "network error",
@@ -764,21 +824,18 @@ async def test_background_upload_from_url_task_records_completed_result():
         cleaning_provider_id="cleaner-1",
     )
 
-    assert service.upload_tasks["url-task"] == {
-        "status": "completed",
-        "result": {
-            "task_id": "url-task",
-            "uploaded": [
-                KnowledgeBaseService.document_public_payload(uploaded_doc),
-            ],
-            "failed": [],
-            "total": 1,
-            "success_count": 1,
-            "failed_count": 0,
-        },
-        "error": None,
+    task = service.task_store.tasks["url-task"]
+    assert task.status == "completed"
+    assert task.result == {
+        "task_id": "url-task",
+        "uploaded": [
+            KnowledgeBaseService.document_public_payload(uploaded_doc),
+        ],
+        "failed": [],
+        "total": 1,
+        "success_count": 1,
+        "failed_count": 0,
     }
-    assert service.upload_progress["url-task"]["status"] == "completed"
     kb_helper.upload_from_url.assert_awaited_once()
     upload_call = kb_helper.upload_from_url.await_args
     assert upload_call.kwargs["url"] == "https://example.com/doc"
@@ -807,12 +864,9 @@ async def test_background_upload_from_url_task_records_failures():
         cleaning_provider_id=None,
     )
 
-    assert service.upload_tasks["url-task-failed"] == {
-        "status": "failed",
-        "result": None,
-        "error": "Knowledge base task failed",
-    }
-    assert service.upload_progress["url-task-failed"]["status"] == "failed"
+    task = service.task_store.tasks["url-task-failed"]
+    assert task.status == "failed"
+    assert task.error == "Knowledge base task failed"
 
 
 @pytest.mark.asyncio
@@ -1041,8 +1095,8 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
     await asyncio.gather(*scheduled_tasks)
 
     assert result["file_count"] == 2
-    assert result["task_id"] in service.upload_tasks
-    assert service.upload_tasks[result["task_id"]]["status"] == "pending"
+    assert result["task_id"] in service.task_store.tasks
+    assert service.task_store.tasks[result["task_id"]].status == "pending"
     assert len(scheduled_calls) == 1
     scheduled_call = scheduled_calls[0]
     assert scheduled_call["task_id"] == result["task_id"]

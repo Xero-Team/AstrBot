@@ -4849,7 +4849,9 @@ export const retrieveKnowledgeBase = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Get knowledge base import task progress
+ * Get persisted knowledge base task state
+ *
+ * Returns pending, processing, completed, failed, or interrupted state. Active work from a prior process is reported as interrupted and is not resumed.
  */
 export const getKnowledgeTask = <ThrowOnError extends boolean = false>(
   options: Options<GetKnowledgeTaskData, ThrowOnError>,

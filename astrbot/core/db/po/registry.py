@@ -15,6 +15,7 @@ from astrbot.core.db.po.auth import (
 from astrbot.core.db.po.commands import CommandConfig, CommandConflict
 from astrbot.core.db.po.conversations import ConversationV2
 from astrbot.core.db.po.cron import CronJob
+from astrbot.core.db.po.knowledge_base import KnowledgeBaseTask
 from astrbot.core.db.po.memory import (
     MemoryEpisode,
     MemoryFact,
@@ -54,6 +55,7 @@ TABLE_MODELS: tuple[type, ...] = (
     CronJob,
     DashboardAccount,
     DashboardTrustedDevice,
+    KnowledgeBaseTask,
     MemoryEpisode,
     MemoryFact,
     MemoryOperationLog,

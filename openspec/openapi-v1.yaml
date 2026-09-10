@@ -3547,7 +3547,10 @@ paths:
   /api/v1/knowledge-bases/tasks/{task_id}:
     get:
       tags: [Knowledge Base]
-      summary: Get knowledge base import task progress
+      summary: Get persisted knowledge base task state
+      description: >-
+        Returns pending, processing, completed, failed, or interrupted state.
+        Active work from a prior process is reported as interrupted and is not resumed.
       operationId: getKnowledgeTask
       x-astrbot-scope: kb
       parameters:

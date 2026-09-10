@@ -122,6 +122,12 @@ class FakeDb:
     async def get_attachment_by_id(self, _attachment_id: str):
         return None
 
+    async def interrupt_active_knowledge_base_tasks(self) -> int:
+        return 0
+
+    async def prune_knowledge_base_tasks(self, *, older_than, max_records) -> int:
+        return 0
+
     def get_db(self) -> _FakeDbContext:
         return _FakeDbContext(self)
 

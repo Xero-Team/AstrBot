@@ -653,7 +653,8 @@ async def test_telegram_group_command_strips_only_current_bot_mention():
         for component in result.message
     )
 
-    async def ask_handler(self, event) -> None: ...
+    async def ask_handler(self, event) -> None:
+        return None
 
     metadata = StarHandlerMetadata(
         EventType.AdapterMessageEvent,

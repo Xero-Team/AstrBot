@@ -29,6 +29,29 @@ from astrbot.core.platform.send_result import DeliveryAttempt, PlatformSendResul
 from astrbot.core.utils.error_redaction import safe_error
 
 
+def format_telegram_topic_target(
+    chat_id: str | int,
+    message_thread_id: str | int | None,
+) -> str:
+    """Format a Telegram chat and optional topic as an AstrBot route target."""
+    target = str(chat_id)
+    if message_thread_id is not None:
+        target = f"{target}#{message_thread_id}"
+    return target
+
+
+def resolve_telegram_api_target(target_id: str) -> tuple[str, str | None]:
+    """Split an AstrBot target into Bot API chat and topic parameters.
+
+    Telegram's General topic has logical thread ID ``1`` but must be addressed
+    by the parent chat without an explicit ``message_thread_id`` parameter.
+    """
+    chat_id, separator, message_thread_id = target_id.partition("#")
+    if not separator:
+        return target_id, None
+    return chat_id, None if message_thread_id == "1" else message_thread_id
+
+
 def _is_gif(path: str) -> bool:
     if path.lower().endswith(".gif"):
         return True
@@ -241,14 +264,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         )
 
     async def send_typing(self) -> None:
-        message_thread_id = None
-        if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            user_name = self.message_obj.group_id
-        else:
-            user_name = self.get_sender_id()
-
-        if "#" in user_name:
-            user_name, message_thread_id = user_name.split("#")
+        user_name, message_thread_id = resolve_telegram_api_target(
+            self.route_identity.target_id
+        )
 
         await self._ensure_typing(user_name, message_thread_id)
 
@@ -275,10 +293,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 mention_all = True
 
         at_flag = False
-        message_thread_id = None
-        if "#" in user_name:
-            # it's a supergroup chat with message_thread_id
-            user_name, message_thread_id = user_name.split("#")
+        user_name, message_thread_id = resolve_telegram_api_target(user_name)
 
         # 根据消息链确定合适的 chat action 并发送
         action = cls._get_chat_action_for_chain(message.chain)
@@ -602,16 +617,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await self._send_text_chunks(self._client, delta, payload)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        message_thread_id = None
-
-        if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            user_name = self.message_obj.group_id
-        else:
-            user_name = self.get_sender_id()
-
-        if "#" in user_name:
-            # it's a supergroup chat with message_thread_id
-            user_name, message_thread_id = user_name.split("#")
+        user_name, message_thread_id = resolve_telegram_api_target(
+            self.route_identity.target_id
+        )
         payload = {
             "chat_id": user_name,
         }

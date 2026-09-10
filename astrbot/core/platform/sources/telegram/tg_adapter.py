@@ -38,7 +38,11 @@ from astrbot.core.utils.proxy_route import (
 )
 from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
 
-from .tg_event import TelegramPlatformEvent
+from .tg_event import (
+    TelegramPlatformEvent,
+    format_telegram_topic_target,
+    resolve_telegram_api_target,
+)
 
 
 def _telegram_member_status(raw_message: object) -> str | None:
@@ -499,9 +503,26 @@ class TelegramPlatformAdapter(Platform):
                 "Received a start command without an effective chat, skipping /start reply.",
             )
             return
+        message = update.effective_message
+        message_thread_id = (
+            message.message_thread_id
+            if message is not None and message.is_topic_message is True
+            else None
+        )
+        chat_id, api_thread_id = resolve_telegram_api_target(
+            format_telegram_topic_target(update.effective_chat.id, message_thread_id)
+        )
+        api_chat_id: str | int = chat_id
+        if chat_id.lstrip("-").isdigit():
+            api_chat_id = int(chat_id)
+        payload = {
+            "chat_id": api_chat_id,
+            "text": self.config["start_message"],
+        }
+        if api_thread_id is not None:
+            payload["message_thread_id"] = api_thread_id
         await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=self.config["start_message"],
+            **payload,
         )
 
     async def message_handler(
@@ -724,21 +745,22 @@ class TelegramPlatformAdapter(Platform):
             return None
 
         message = AstrBotMessage()
-        message.session_id = str(update.message.chat.id)
+        chat_id = str(update.message.chat.id)
+        raw_thread_id = (
+            update.message.message_thread_id
+            if update.message.is_topic_message is True
+            else None
+        )
+        message.session_id = chat_id
 
         # 获得是群聊还是私聊
         if update.message.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
+            message.session_id = format_telegram_topic_target(chat_id, raw_thread_id)
         else:
             message.type = MessageType.GROUP_MESSAGE
-            chat_id = str(update.message.chat.id)
             group_id = chat_id
             is_forum = getattr(update.message.chat, "is_forum", False) is True
-            raw_thread_id = (
-                update.message.message_thread_id
-                if update.message.is_topic_message
-                else None
-            )
             thread_id = (
                 raw_thread_id
                 if raw_thread_id and not (is_forum and raw_thread_id == 1)

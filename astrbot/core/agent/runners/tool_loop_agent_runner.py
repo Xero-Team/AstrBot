@@ -1247,6 +1247,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 for response_event in self._final_response_events(resolved_response):
                     yield response_event
                 await self._complete_with_assistant_response(resolved_response)
+                if self.streaming:
+                    if resolved_response.reasoning_content:
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(
+                                chain=MessageChain(type="reasoning").message(
+                                    resolved_response.reasoning_content,
+                                ),
+                            ),
+                        )
+                    chain = resolved_response.result_chain
+                    if not chain and resolved_response.completion_text:
+                        chain = MessageChain().message(resolved_response.completion_text)
+                    if chain:
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(chain=chain),
+                        )
                 return
             llm_resp = resolved_response
 

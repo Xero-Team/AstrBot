@@ -205,6 +205,12 @@ When BTW is enabled in a configuration profile, **Config → BTW dual loops → 
 
 The main Agent and its subagent handoffs apply the same assignment, together with existing Persona, profile, and authorization restrictions. An assignment never grants permission to execute a tool. Plugin event handlers and explicit commands keep their existing execution path; this setting does not turn an entire plugin into a background task.
 
+## BTW MCP tool assignments
+
+With BTW enabled, **MCP server loop assignments** selects conversation, work, or both for every enabled MCP server. All tools from that server share the assignment in the main Agent and subagent handoffs. Servers without an override default to work; selecting both saves an explicit override, and selecting work removes it. Disabling BTW preserves ordinary MCP tool availability.
+
+Assignments are saved per configuration profile. They control tool visibility and do not replace MCP read/write authorization or the existing connection, private-network, and redirect restrictions.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.

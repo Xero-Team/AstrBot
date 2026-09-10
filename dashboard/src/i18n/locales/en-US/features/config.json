@@ -207,5 +207,14 @@
     "work": "Work only",
     "both": "Conversation and Work",
     "empty": "There are no enabled non-system plugins."
+  },
+  "capabilityLoopSelector": {
+    "mcpHint": "MCP tools default to Work only. Expose a server to the conversation loop only when it is appropriate for chat-time use.",
+    "capability": "Capability",
+    "loop": "Available loop",
+    "conversation": "Conversation only",
+    "work": "Work only",
+    "both": "Conversation and Work",
+    "emptyMcp": "There are no enabled MCP servers."
   }
 }

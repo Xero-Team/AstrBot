@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, TypeGuard, cast
 
 from astrbot import logger
+from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
 from astrbot.core.agent.btw.runtime_policy import resolve_computer_runtime
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
@@ -560,6 +561,11 @@ def _append_skills_prompt(
     plugin_context: CoreExecutionContext,
 ) -> SkillSnapshot:
     runtime = str(cfg.get("computer_use_runtime", "none") or "none")
+    profile = plugin_context.get_config(umo=event.unified_msg_origin)
+    btw_config = profile.get("btw", {})
+    btw_config = btw_config if isinstance(btw_config, dict) else {}
+    btw_enabled = bool(btw_config.get("enabled", False))
+    loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
     skill_manager = plugin_context.skill_manager or SkillManager(
         builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
     )
@@ -568,11 +574,22 @@ def _append_skills_prompt(
         cfg,
         plugin_context.catalogs.plugins,
     )
+    if btw_enabled:
+        skills = [
+            skill
+            for skill in skills
+            if route_is_available_in_loop(
+                btw_config.get("skill_routes"),
+                route_key="skill_name",
+                route_id=skill.name,
+                loop_mode=loop_mode,
+            )
+        ]
     workspace_skills = (
         skill_manager.list_workspace_skills(
             _get_workspace_path_for_umo(event.unified_msg_origin)
         )
-        if runtime == "local"
+        if runtime == "local" and (not btw_enabled or loop_mode == "work")
         else []
     )
     if persona and persona.get("skills") is not None:

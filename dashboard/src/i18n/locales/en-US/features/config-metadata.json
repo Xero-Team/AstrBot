@@ -1219,6 +1219,10 @@
         "mcp_routes": {
           "description": "MCP server loop assignments",
           "hint": "MCP tools default to the work loop; explicitly assign an enabled server to the conversation loop or both when needed."
+        },
+        "skill_routes": {
+          "description": "Skill loop assignments",
+          "hint": "Skills default to both loops; explicitly restrict an enabled Skill to one loop when needed. Workspace Skills remain work-only with the local runtime."
         }
       }
     }

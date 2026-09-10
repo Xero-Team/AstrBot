@@ -215,6 +215,8 @@
     "conversation": "仅对话循环",
     "work": "仅工作循环",
     "both": "对话与工作循环",
-    "emptyMcp": "当前没有已启用的 MCP 服务器。"
+    "emptyMcp": "当前没有已启用的 MCP 服务器。",
+    "skillHint": "Skill 默认注入两个循环；工作区 Skill 仍仅在工作循环中可用。 工作区 Skill 仅在本地工作循环可用。",
+    "emptySkill": "当前没有已启用的 Skill。"
   }
 }

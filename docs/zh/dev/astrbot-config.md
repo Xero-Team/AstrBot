@@ -213,6 +213,12 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 分配按配置档保存，只控制工具可见性，不替代 MCP 读写授权，也不改变现有连接、私网访问和重定向限制。
 
+## BTW Skill 循环可见性
+
+启用 BTW 后，可通过 **Skills 循环分配** 为每个已启用的普通 Skill 选择对话循环、工作循环或两者。普通 Skill 默认在两个循环可见；选择单一循环会保存覆盖，重新选择两者会移除覆盖。工作区 Skill 仅在使用 `local` 运行时的工作循环中可用。关闭 BTW 后保留标准 Skill 选择路径。
+
+循环分配在请求 Skill 快照冻结之前筛选已启用的 Skill，因此提示词、`read_skill` 和 Skill 声明的候选工具使用同一选择结果。Persona 与插件限制继续生效，包括 Persona 的空 Skill 列表。循环分配不会授予执行权限：Computer Use 为 `none` 时，`read_skill` 仍可读取允许的 Skill 手册，但 Shell 和 Python 仍不可用。
+
 ## 子代理、语音与知识库
 
 - `subagent_orchestrator.main_enable`：启用 handoff。

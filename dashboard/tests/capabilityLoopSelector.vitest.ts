@@ -5,11 +5,15 @@ import { mountWithVuetify } from './utils/mountWithVuetify';
 
 const testState = vi.hoisted(() => ({
   mcpListMock: vi.fn(),
+  skillListMock: vi.fn(),
 }));
 
 vi.mock('@/api/v1', () => ({
   mcpApi: {
     list: testState.mcpListMock,
+  },
+  skillApi: {
+    list: testState.skillListMock,
   },
 }));
 
@@ -22,6 +26,22 @@ describe('CapabilityLoopSelector', () => {
           { name: 'workspace-mcp', active: true },
           { name: 'disabled-mcp', active: false },
         ],
+      },
+    });
+    testState.skillListMock.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          skills: [
+            { name: 'workspace-skill', active: true },
+            { name: 'disabled-skill', active: false },
+            {
+              name: 'disabled-plugin-skill',
+              active: true,
+              plugin_active: false,
+            },
+          ],
+        },
       },
     });
   });
@@ -48,6 +68,37 @@ describe('CapabilityLoopSelector', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([
       [[{ server_name: 'workspace-mcp', loop: 'both' }]],
     ]);
+    wrapper.unmount();
+  });
+
+  it('uses Skill names as the assignment key', async () => {
+    const wrapper = mountWithVuetify(CapabilityLoopSelector, {
+      props: {
+        kind: 'skill',
+        modelValue: [],
+      },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('workspace-skill');
+    expect(wrapper.text()).not.toContain('disabled-skill');
+    expect(wrapper.text()).not.toContain('disabled-plugin-skill');
+
+    const select = wrapper.findComponent({ name: 'VSelect' });
+    expect(select.props('modelValue')).toBe('both');
+    select.vm.$emit('update:modelValue', 'conversation');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      [[{ skill_name: 'workspace-skill', loop: 'conversation' }]],
+    ]);
+    await wrapper.setProps({
+      modelValue: [{ skill_name: 'workspace-skill', loop: 'conversation' }],
+    });
+    select.vm.$emit('update:modelValue', 'both');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[]]);
     wrapper.unmount();
   });
 });

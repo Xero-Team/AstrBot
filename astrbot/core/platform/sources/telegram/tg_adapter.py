@@ -1,4 +1,5 @@
 import asyncio
+import math
 import re
 import uuid
 from collections.abc import Sequence
@@ -57,6 +58,9 @@ def _telegram_member_status(raw_message: object) -> str | None:
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
+    _MEDIA_GROUP_MAX_ACTIVE = 128
+    _MEDIA_GROUP_MAX_ITEMS = 10
+    _MEDIA_GROUP_PROCESS_TIMEOUT = 60.0
 
     def __init__(
         self,
@@ -135,15 +139,31 @@ class TelegramPlatformAdapter(Platform):
         self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
 
-        # Media group handling
-        # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
+        # Media groups own their asyncio tasks. Command menu refresh intentionally
+        # remains on ``scheduler`` because either menu setting may be disabled.
         self.media_group_cache: dict[str, dict] = {}
-        self.media_group_timeout = self.config.get(
+        self._media_group_tasks: dict[str, asyncio.Task[None]] = {}
+        self._accept_media_groups = True
+        self.media_group_timeout = self._media_group_duration(
             "telegram_media_group_timeout", 2.5
-        )  # seconds - debounce delay between messages
-        self.media_group_max_wait = self.config.get(
+        )
+        self.media_group_max_wait = self._media_group_duration(
             "telegram_media_group_max_wait", 10.0
-        )  # max seconds - hard cap to prevent indefinite delay
+        )
+
+    def _media_group_duration(self, key: str, default: float) -> float:
+        raw_value = self.config.get(key, default)
+        if isinstance(raw_value, bool):
+            raw_value = default
+        try:
+            value = float(raw_value)
+        except TypeError, ValueError:
+            value = default
+
+        if not math.isfinite(value) or value <= 0:
+            logger.warning("Invalid '%s' value; using %.1fs", key, default)
+            return default
+        return value
 
     def _build_application(self) -> None:
         api_host = destination_host_from_url(self.base_url)
@@ -204,6 +224,7 @@ class TelegramPlatformAdapter(Platform):
             await self.register_commands()
 
         self._application_started = True
+        self._accept_media_groups = True
 
     async def _shutdown_application(
         self,
@@ -211,6 +232,7 @@ class TelegramPlatformAdapter(Platform):
         delete_commands: bool,
     ) -> None:
         self._application_started = False
+        await self._cleanup_media_groups()
 
         updater = self.application.updater
         if updater is not None:
@@ -851,8 +873,6 @@ class TelegramPlatformAdapter(Platform):
         media items before sending to the pipeline. Uses debounce mechanism with
         a hard cap (max_wait) to prevent indefinite delay.
         """
-        from datetime import datetime, timedelta
-
         if not update.message:
             return
 
@@ -860,60 +880,105 @@ class TelegramPlatformAdapter(Platform):
         if not media_group_id:
             return
 
-        # Initialize cache for this media group if needed
-        if media_group_id not in self.media_group_cache:
-            self.media_group_cache[media_group_id] = {
-                "created_at": datetime.now(),
-                "items": [],
-            }
-            logger.debug(f"Create media group cache: {media_group_id}")
+        chat_id = getattr(getattr(update, "effective_chat", None), "id", None)
+        cache_key = f"{chat_id}:{media_group_id}"
+        if not self._accept_media_groups:
+            return
 
-        # Add this message to the cache
-        entry = self.media_group_cache[media_group_id]
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        entry = self.media_group_cache.get(cache_key)
+        if entry is None:
+            if len(self._media_group_tasks) >= self._MEDIA_GROUP_MAX_ACTIVE:
+                logger.warning("Telegram media group capacity reached; dropping album")
+                return
+            entry = {
+                "created_at": now,
+                "deadline": now + self.media_group_max_wait,
+                "items": [],
+                "message_ids": set(),
+                "event": asyncio.Event(),
+                "processing": False,
+            }
+            self.media_group_cache[cache_key] = entry
+            task = asyncio.create_task(
+                self._wait_for_media_group(cache_key, media_group_id, entry),
+                name=f"telegram-media-group-{media_group_id}",
+            )
+            self._media_group_tasks[cache_key] = task
+            logger.debug("Created Telegram media group cache: %s", media_group_id)
+
+        if entry["processing"]:
+            return
+
+        message_id = getattr(update.message, "message_id", None)
+        message_ids: set[int | None] = entry["message_ids"]
+        if message_id in message_ids:
+            return
+        if len(entry["items"]) >= self._MEDIA_GROUP_MAX_ITEMS:
+            logger.warning("Telegram media group item capacity reached; dropping item")
+            return
+
+        message_ids.add(message_id)
         entry["items"].append((update, context))
         logger.debug(
             f"Add message to media group {media_group_id}, "
             f"currently has {len(entry['items'])} items.",
         )
 
-        # Calculate delay: if already waited too long, process immediately;
-        # otherwise use normal debounce timeout
-        elapsed = (datetime.now() - entry["created_at"]).total_seconds()
-        if elapsed >= self.media_group_max_wait:
-            delay = 0
-            logger.info(
-                f"Telegram media group {media_group_id} has reached max wait time "
-                f"({elapsed:.1f}s >= {self.media_group_max_wait}s), processing immediately.",
-            )
-        else:
-            delay = self.media_group_timeout
-            logger.info(
-                f"Telegram media group {media_group_id} will wait {delay:.1f}s "
-                f"to collect the full album (already waited {elapsed:.1f}s)."
-            )
-
-        # Schedule/reschedule processing (replace_existing=True handles debounce)
-        job_id = f"media_group_{media_group_id}"
-        self.scheduler.add_job(
-            self.process_media_group,
-            "date",
-            run_date=datetime.now() + timedelta(seconds=delay),
-            args=[media_group_id],
-            id=job_id,
-            replace_existing=True,
+        entry["deadline"] = min(
+            now + self.media_group_timeout,
+            entry["created_at"] + self.media_group_max_wait,
         )
+        entry["event"].set()
 
-    async def process_media_group(self, media_group_id: str) -> None:
-        """Process a complete media group by merging all collected messages.
+    async def _wait_for_media_group(
+        self, cache_key: str, media_group_id: str, entry: dict
+    ) -> None:
+        try:
+            while True:
+                remaining = entry["deadline"] - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    break
+                event: asyncio.Event = entry["event"]
+                event.clear()
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=remaining)
+                except TimeoutError:
+                    break
 
-        Args:
-            media_group_id: The unique identifier for this media group
-        """
-        if media_group_id not in self.media_group_cache:
-            logger.warning(f"Media group {media_group_id} not found in cache")
-            return
+            entry["processing"] = True
+            await asyncio.wait_for(
+                self._process_media_group_entry(media_group_id, entry),
+                timeout=self._MEDIA_GROUP_PROCESS_TIMEOUT,
+            )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            logger.warning("Telegram media group processing timed out")
+        except Exception:
+            logger.exception("Failed to process Telegram media group")
+        finally:
+            if self.media_group_cache.get(cache_key) is entry:
+                self.media_group_cache.pop(cache_key, None)
+            if self._media_group_tasks.get(cache_key) is asyncio.current_task():
+                self._media_group_tasks.pop(cache_key, None)
 
-        entry = self.media_group_cache.pop(media_group_id)
+    async def _cleanup_media_groups(self) -> None:
+        self._accept_media_groups = False
+        tasks = list(self._media_group_tasks.values())
+        current_task = asyncio.current_task()
+        for task in tasks:
+            if task is not current_task:
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.media_group_cache.clear()
+        self._media_group_tasks.clear()
+
+    async def _process_media_group_entry(
+        self, media_group_id: str, entry: dict
+    ) -> None:
         updates_and_contexts = entry["items"]
         if not updates_and_contexts:
             logger.warning(f"Media group {media_group_id} is empty")

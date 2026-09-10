@@ -80,6 +80,24 @@ CUA_COMPUTER_TOOLS: tuple[str, ...] = (
     "astrbot_cua_keyboard_type",
 )
 
+COMPUTER_TOOL_NAMES: frozenset[str] = frozenset(
+    LOCAL_COMPUTER_TOOLS
+    + SANDBOX_BASE_COMPUTER_TOOLS
+    + SANDBOX_BROWSER_TOOLS
+    + NEO_LIFECYCLE_TOOLS
+    + CUA_COMPUTER_TOOLS
+)
+COMPUTER_TOOL_ACTIONS: frozenset[str] = frozenset(
+    {
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.file_read",
+        "tool.file_write",
+        "tool.browser_control",
+        "tool.computer_use",
+    }
+)
+
 WORKSPACE_FILE_READ_TOOLS: frozenset[str] = frozenset(
     {"astrbot_file_read_tool", "astrbot_grep_tool"}
 )
@@ -121,6 +139,7 @@ class ToolCatalogInputs:
     sandbox_booter: str = "shipyard_neo"
     sandbox_capabilities: Sequence[str] | None = None
     elevated_instance_tool_actions: frozenset[str] = frozenset()
+    allow_computer_tools: bool = True
     plugins: PluginLookup | None = None
 
 
@@ -411,6 +430,10 @@ def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]
         if tool is None or not getattr(tool, "active", True):
             continue
         actions = tool_required_actions(tool)
+        if not inputs.allow_computer_tools and (
+            name in COMPUTER_TOOL_NAMES or COMPUTER_TOOL_ACTIONS.intersection(actions)
+        ):
+            continue
         if name in WORKSPACE_FILE_READ_TOOLS and name not in computer_names:
             continue
         if inputs.computer_use_runtime == "none" and _is_computer_capability_action(

@@ -191,7 +191,12 @@ DEFAULT_CONFIG = {
     "btw": {
         "enabled": False,
         "conversation_loop": {"provider_id": ""},
-        "work_loop": {"enabled": False, "provider_id": "", "max_concurrent": 2},
+        "work_loop": {
+            "enabled": False,
+            "provider_id": "",
+            "computer_use_runtime": "inherit",
+            "max_concurrent": 2,
+        },
         "work_session": {"max_age_seconds": 3600},
     },
     "provider_stt_settings": {
@@ -4718,6 +4723,13 @@ CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
             "type": "string",
             "_special": "select_provider",
             "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。",
+            "condition": {"btw.enabled": True},
+        },
+        "btw.work_loop.computer_use_runtime": {
+            "description": "工作循环 Computer Use 运行时",
+            "type": "string",
+            "options": ["inherit", "none", "local", "sandbox"],
+            "hint": "inherit 沿用当前 Computer Use 配置。对话循环始终禁用电脑和文件工具；工作循环仍须满足已有角色、路径和沙箱授权规则。",
             "condition": {"btw.enabled": True},
         },
         "btw.work_loop.max_concurrent": {

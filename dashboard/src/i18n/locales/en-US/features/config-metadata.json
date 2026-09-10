@@ -1194,6 +1194,10 @@
           "provider_id": {
             "description": "Work loop model",
             "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
+          },
+          "computer_use_runtime": {
+            "description": "Work loop Computer Use runtime",
+            "hint": "inherit uses the existing Computer Use setting. The conversation loop has no computer or file tools. Work still follows existing role, path, and sandbox authorization rules."
           }
         },
         "work_session": {

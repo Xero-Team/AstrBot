@@ -233,6 +233,70 @@ def test_build_handoff_toolset_keeps_declared_tools(runtime):
     )
 
 
+@pytest.mark.parametrize("tool_selection", ["all", "names", "objects"])
+@pytest.mark.parametrize(
+    ("enabled", "loop", "override", "expected_runtime"),
+    [
+        (True, None, "inherit", "none"),
+        (True, "conversation", "sandbox", "none"),
+        (True, "work", "inherit", "local"),
+        (True, "work", "sandbox", "sandbox"),
+        (True, "work", "none", "none"),
+        (False, "conversation", "sandbox", "local"),
+    ],
+)
+def test_handoff_respects_btw_runtime_for_all_tool_declarations(
+    tool_selection, enabled, loop, override, expected_runtime
+):
+    from astrbot.core.tool_catalog import COMPUTER_TOOL_NAMES
+
+    manager = FunctionToolManager()
+    declared = [
+        FunctionTool(name=name, description=name, parameters={})
+        for name in (
+            "weather",
+            "astrbot_file_read_tool",
+            "astrbot_create_skill_payload",
+        )
+    ]
+    manager.func_list = declared
+    event = _DummyEvent()
+    event.get_extra = lambda key, default=None: loop if key == "btw_loop" else default
+    profile = {
+        "provider_settings": {"computer_use_runtime": "local"},
+        "btw": {"enabled": enabled, "work_loop": {"computer_use_runtime": override}},
+    }
+    context = SimpleNamespace(
+        get_config=lambda **_: profile,
+        get_llm_tool_manager=lambda: manager,
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tools = (
+        None
+        if tool_selection == "all"
+        else (
+            [tool.name for tool in declared] if tool_selection == "names" else declared
+        )
+    )
+
+    toolset = FunctionToolExecutor._build_handoff_toolset(run_context, tools)
+
+    assert toolset is not None
+    names = toolset.names()
+    assert "weather" in names
+    if expected_runtime == "none":
+        assert not COMPUTER_TOOL_NAMES.intersection(names)
+    else:
+        assert "astrbot_file_read_tool" in names
+        assert "astrbot_create_skill_payload" in names
+        if tool_selection == "all":
+            assert ("astrbot_execute_python" in names) is (expected_runtime == "local")
+            assert ("astrbot_execute_ipython" in names) is (
+                expected_runtime == "sandbox"
+            )
+    assert profile["provider_settings"]["computer_use_runtime"] == "local"
+
+
 @pytest.mark.asyncio
 async def test_collect_handoff_image_urls_normalizes_filters_and_appends_event_image(
     monkeypatch: pytest.MonkeyPatch,

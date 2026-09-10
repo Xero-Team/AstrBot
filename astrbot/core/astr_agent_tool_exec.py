@@ -11,6 +11,7 @@ from dataclasses import replace
 import mcp
 
 from astrbot import logger
+from astrbot.core.agent.btw.runtime_policy import resolve_computer_runtime
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
@@ -301,6 +302,29 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {}
 
     @classmethod
+    def _filter_handoff_computer_tools(
+        cls, toolset: ToolSet, *, cfg: dict, runtime: str
+    ) -> ToolSet:
+        """Keep handoffs inside the originating loop's computer boundary."""
+        from astrbot.core.tool_catalog import COMPUTER_TOOL_ACTIONS, COMPUTER_TOOL_NAMES
+
+        btw = cfg.get("btw", {})
+        if (
+            not isinstance(btw, dict)
+            or not btw.get("enabled", False)
+            or runtime != "none"
+        ):
+            return toolset
+        return ToolSet(
+            [
+                tool
+                for tool in toolset.tools
+                if tool.name not in COMPUTER_TOOL_NAMES
+                and not COMPUTER_TOOL_ACTIONS.intersection(cls._required_actions(tool))
+            ]
+        )
+
+    @classmethod
     def _build_handoff_toolset(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
@@ -310,7 +334,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "none"))
+        runtime = resolve_computer_runtime(
+            cfg,
+            event.get_extra("btw_loop"),
+            str(provider_settings.get("computer_use_runtime", "none")),
+        )
 
         # An explicitly empty handoff tool list needs no registry lookup.  In
         # particular, this keeps the handoff execution path independent from
@@ -341,6 +369,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
+            toolset = cls._filter_handoff_computer_tools(
+                toolset, cfg=cfg, runtime=runtime
+            )
             return None if toolset.empty() else toolset
 
         toolset = ToolSet()
@@ -355,6 +386,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(runtime_tool)
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
+        toolset = cls._filter_handoff_computer_tools(toolset, cfg=cfg, runtime=runtime)
         return None if toolset.empty() else toolset
 
     @classmethod

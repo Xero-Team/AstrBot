@@ -195,6 +195,12 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 所选提供商仍须是已配置的对话模型。不存在或类型不适用的循环提供商沿用现有模型选择错误路径，不会静默改用另一个循环的模型。已有模型回退和重试设置继续作用于所选主模型。
 
+### Computer Use 边界
+
+启用 BTW 后，对话循环的 Computer Use 固定为 `none`，并约束其子代理转交与显式传入的工具。宿主机 Shell、Python、文件系统、浏览器、CUA 和沙箱 Skill 生命周期工具不会进入对话循环工具目录。普通 Skill 手册仍可通过 `read_skill` 阅读。
+
+`btw.work_loop.computer_use_runtime` 支持 `inherit`（默认）、`none`、`local` 和 `sandbox`。`inherit` 沿用 `provider_settings.computer_use_runtime`。实际运行时同时作用于工作请求及其子代理转交；`none` 也会排除显式声明的电脑工具。关闭 BTW 后沿用现有 Computer Use 配置。这些设置只选择能力，不授予角色，也不绕过授权、WebChat step-up、路径限制或沙箱检查。
+
 ## 子代理、语音与知识库
 
 - `subagent_orchestrator.main_enable`：启用 handoff。

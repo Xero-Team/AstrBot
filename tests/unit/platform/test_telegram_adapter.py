@@ -1,11 +1,13 @@
 import asyncio
 import importlib
+import ssl
 import sys
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
+from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
@@ -18,6 +20,7 @@ from astrbot.core.star.star_handler import (
     HandlerRegistry,
     StarHandlerMetadata,
 )
+from astrbot.core.utils.proxy_route import set_global_network_config
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -99,6 +102,64 @@ def _bind_runtime_registries(adapter) -> tuple[HandlerRegistry, PluginRegistry]:
     handlers = HandlerRegistry(plugins)
     adapter.bind_runtime_registries(handlers, plugins)
     return handlers, plugins
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("global_proxy", "no_proxy", "expected_proxy"),
+    [
+        ("http://127.0.0.1:7890", [], "http://127.0.0.1:7890"),
+        ("", [], None),
+        ("http://127.0.0.1:7890", ["api.telegram.org"], None),
+    ],
+)
+async def test_telegram_request_clients_use_explicit_proxy_route(
+    monkeypatch: pytest.MonkeyPatch,
+    global_proxy: str,
+    no_proxy: list[str],
+    expected_proxy: str | None,
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.build.return_value = MockTelegramBuilder.create_application()
+    monkeypatch.setenv("HTTP_PROXY", "http://environment.example:8080")
+    set_global_network_config(http_proxy=global_proxy, no_proxy=no_proxy)
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+            "HTTPXRequest": HTTPXRequest,
+        },
+    ):
+        TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+
+    bot_request = builder.request.call_args.args[0]
+    updates_request = builder.get_updates_request.call_args.args[0]
+    assert bot_request is not updates_request
+
+    for request in (bot_request, updates_request):
+        try:
+            assert isinstance(request, HTTPXRequest)
+            assert request._client_kwargs["proxy"] == expected_proxy
+            assert request._client_kwargs["trust_env"] is False
+            ssl_context = request._client_kwargs["verify"]
+            assert isinstance(ssl_context, ssl.SSLContext)
+            assert ssl_context.check_hostname is True
+            assert ssl_context.verify_mode == ssl.CERT_REQUIRED
+        finally:
+            await request._client.aclose()
 
 
 @pytest.mark.asyncio

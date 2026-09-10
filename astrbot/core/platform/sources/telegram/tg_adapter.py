@@ -11,6 +11,7 @@ from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
+from telegram.request import HTTPXRequest
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -28,6 +29,11 @@ from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.proxy_route import (
+    destination_host_from_url,
+    resolve_proxy_route,
+)
+from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
 
 from .tg_event import TelegramPlatformEvent
 
@@ -138,9 +144,22 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
+        route = resolve_proxy_route(
+            local_config=self.config,
+            destination_host=destination_host_from_url(self.base_url),
+        )
+        request_kwargs = {
+            "proxy": route.httpx_proxy,
+            "httpx_kwargs": {
+                "trust_env": route.trust_env,
+                "verify": build_ssl_context_with_certifi(),
+            },
+        }
+        builder = ApplicationBuilder()
+        builder.request(HTTPXRequest(**request_kwargs))
+        builder.get_updates_request(HTTPXRequest(**request_kwargs))
         self.application = (
-            ApplicationBuilder()
-            .token(self.config["telegram_token"])
+            builder.token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
             .build()

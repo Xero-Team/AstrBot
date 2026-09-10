@@ -48,7 +48,7 @@ class PipelineScheduler:
         for stage in reversed(self.stages):
             close = getattr(stage, "close", None)
             if callable(close):
-                await close()
+                await cast(Awaitable[None], close())
 
     async def deliver_detached_result(self, event: AstrMessageEvent) -> None:
         """Replay response decoration and delivery with onion ordering intact."""

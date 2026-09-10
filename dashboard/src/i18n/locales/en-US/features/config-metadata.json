@@ -1181,6 +1181,22 @@
         "enabled": {
           "description": "Enable BTW dual loops",
           "hint": "Experimental and disabled by default. Ordinary admitted AI requests use the conversation entry over the existing Agent."
+        },
+        "work_loop": {
+          "enabled": {
+            "description": "Enable work loop",
+            "hint": "Disabled by default. Allow explicit work execution."
+          },
+          "max_concurrent": {
+            "description": "Concurrent work execution",
+            "hint": "Active execution limit, default 2. This is not a waiting-queue length limit."
+          }
+        },
+        "work_session": {
+          "max_age_seconds": {
+            "description": "Terminal work retention (seconds)",
+            "hint": "Keep completed, failed or cancelled records for 3600 seconds by default."
+          }
         }
       }
     }

@@ -300,6 +300,7 @@ class InternalAgentSubStage:
         follow_up_consumed_marked = False
         follow_up_activated = False
         typing_requested = False
+        is_detached_work = bool(event.get_extra("btw_detached_work"))
         try:
             from astrbot.core.streaming_override import resolve_streaming_response
 
@@ -356,7 +357,9 @@ class InternalAgentSubStage:
 
             logger.debug("ready to request llm provider")
             follow_up_capture = (
-                self.ctx.execution_context.follow_up_coordinator.try_capture(event)
+                None
+                if is_detached_work
+                else self.ctx.execution_context.follow_up_coordinator.try_capture(event)
             )
             if follow_up_capture:
                 (
@@ -393,6 +396,9 @@ class InternalAgentSubStage:
             concurrent, lock_key, turn_cm, streaming_response = (
                 self._prepare_group_sender_concurrency(event, streaming_response)
             )
+            work_lock = event.get_extra("btw_agent_lock_key")
+            if is_detached_work and isinstance(work_lock, str) and work_lock:
+                lock_key = work_lock
 
             async with (
                 turn_cm,
@@ -409,6 +415,8 @@ class InternalAgentSubStage:
                         streaming_response,
                     )
                     if build_result is None:
+                        if is_detached_work:
+                            event.set_extra("btw_work_failed", True)
                         return
 
                     agent_runner = build_result.agent_runner
@@ -469,8 +477,9 @@ class InternalAgentSubStage:
                             )
                         else:
                             runner_stop_callback = None
-                    self._register_follow_up_runner(event, agent_runner, concurrent)
-                    runner_registered = True
+                    if not is_detached_work:
+                        self._register_follow_up_runner(event, agent_runner, concurrent)
+                        runner_registered = True
                     event.trace.record(
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
@@ -550,6 +559,8 @@ class InternalAgentSubStage:
                         )
 
         except Exception as e:
+            if is_detached_work:
+                event.set_extra("btw_work_failed", True)
             logger.error(
                 "Error occurred while processing agent: %s",
                 safe_error("", e),

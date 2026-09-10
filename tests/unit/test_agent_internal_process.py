@@ -496,7 +496,8 @@ async def test_internal_process_stops_when_waiting_hook_blocks(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
+@pytest.mark.parametrize("detached", [False, True])
+async def test_internal_process_continues_when_send_typing_fails(monkeypatch, detached):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.streaming_response = False
     stage.show_tool_use = True
@@ -513,6 +514,7 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
         extras={internal.LLM_ERROR_MESSAGE_EXTRA_KEY: "provider unavailable"},
     )
     event.send_typing.side_effect = RuntimeError("typing failed")
+    event.set_extra("btw_detached_work", detached)
     logger_warning = MagicMock()
 
     monkeypatch.setattr(
@@ -537,6 +539,7 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
     )
     event.stop_typing.assert_awaited_once()
     logger_warning.assert_called()
+    assert bool(event.get_extra("btw_work_failed")) is detached
 
 
 @pytest.mark.asyncio
@@ -568,7 +571,10 @@ async def test_internal_process_swallows_stop_typing_failures(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_internal_process_sends_error_for_blocked_provider_api_base(monkeypatch):
+@pytest.mark.parametrize("detached", [False, True])
+async def test_internal_process_sends_error_for_blocked_provider_api_base(
+    monkeypatch, detached
+):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.streaming_response = False
     stage.show_tool_use = True
@@ -608,6 +614,7 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
     monkeypatch.setattr(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
+    event.set_extra("btw_detached_work", detached)
     register_runner = MagicMock()
     stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
         register_runner
@@ -617,6 +624,7 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
 
     assert yielded == []
     register_runner.assert_not_called()
+    assert bool(event.get_extra("btw_work_failed")) is detached
     event.send.assert_awaited_once()
     assert (
         event.send.await_args.args[0].get_plain_text()

@@ -205,6 +205,8 @@ Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disab
 
 Automatic classifier candidates are evaluated separately. Enabling this entry does not select an automatic routing strategy.
 
+The work executor additionally requires `btw.work_loop.enabled`, also `false` by default. It reuses the Agent executor and records pending, running, completed, failed, and cancelled task states. `btw.work_loop.max_concurrent` limits active execution (default `2`); it does not impose a waiting-queue length limit. `btw.work_session.max_age_seconds` retains terminal states for `3600` seconds by default; active tasks do not expire, and expired terminal records are removed during the next session operation. Runtime-owned background services perform task execution and cleanup when attached by the scheduler.
+
 ## WebUI and authentication
 
 Important `dashboard` defaults:

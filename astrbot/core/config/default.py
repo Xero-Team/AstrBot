@@ -188,7 +188,11 @@ DEFAULT_CONFIG = {
         ),
         "agents": [],
     },
-    "btw": {"enabled": False},
+    "btw": {
+        "enabled": False,
+        "work_loop": {"enabled": False, "max_concurrent": 2},
+        "work_session": {"max_age_seconds": 3600},
+    },
     "provider_stt_settings": {
         "enable": False,
         "provider_id": "",
@@ -4694,6 +4698,24 @@ CONFIG_METADATA_3["btw"] = {
             "description": "启用 BTW 双循环",
             "type": "bool",
             "hint": "实验功能，默认关闭。开启后，普通 AI 请求通过对话循环进入现有 Agent。",
+        },
+        "btw.work_loop.enabled": {
+            "description": "启用工作循环",
+            "type": "bool",
+            "hint": "默认关闭；允许显式工作请求使用工作执行器。",
+            "condition": {"btw.enabled": True},
+        },
+        "btw.work_loop.max_concurrent": {
+            "description": "工作任务执行并发",
+            "type": "int",
+            "hint": "同时执行的工作任务数，默认 2。此值不是等待队列的长度限制。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.work_session.max_age_seconds": {
+            "description": "终态工作会话保留秒数",
+            "type": "int",
+            "hint": "已完成、失败或取消的工作会话保留时间，默认 3600 秒。",
+            "condition": {"btw.enabled": True},
         },
     },
 }

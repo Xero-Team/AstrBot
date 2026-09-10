@@ -207,6 +207,8 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 
 自动分类器候选将分别评估。开启此入口不会选定自动路由方案。
 
+工作执行器还需要开启 `btw.work_loop.enabled`，默认同样为 `false`。它复用 Agent 执行器并记录排队、运行、完成、失败、取消状态。`btw.work_loop.max_concurrent` 限制正在执行的任务数，默认 `2`，不限制等待队列长度。`btw.work_session.max_age_seconds` 默认保留终态记录 `3600` 秒；活动任务不会过期，终态过期记录在下次会话操作时清除。调度器接入后台服务后，由运行时拥有工作任务的执行和清理。
+
 ## WebUI 与认证
 
 `dashboard` 的关键默认值：

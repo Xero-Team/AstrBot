@@ -63,6 +63,12 @@ In private chats, AstrBot uses the `sendMessageDraft` API (added in Telegram Bot
 
 In group chats, since the `sendMessageDraft` API only supports private chats, AstrBot automatically falls back to the traditional `send_message` + `edit_message_text` approach. Responses longer than Telegram's 4096-character text limit are finalized and sent as ordered messages. If a segment submission fails, AstrBot stops sending and records the accepted prefix, failed fragment, and any remaining buffered text in the delivery receipt. Buffered text is not automatically retried. If the optional Markdown formatting step fails, the accepted plain-text segment remains available and streaming continues.
 
+## Topic Sessions and Routing
+
+When Telegram private-chat topics are enabled, each topic in the same private chat uses an independent AstrBot session. A regular private chat still uses its chat ID; a topic session uses `<chat_id>#<message_thread_id>` as its internal route identity, so replies, proactive messages, typing status, and streaming output return to the originating topic. Proactive sends also preserve the topic when given the complete stored target for that session.
+
+Telegram group topics remain isolated by topic. A group's General topic keeps the parent-group route, and AstrBot does not pass General topic thread `1` explicitly to the Telegram API. A private General topic keeps a distinct logical session identity but likewise omits explicit thread `1` from API calls.
+
 :::warning
 `sendMessageDraft` requires `python-telegram-bot>=22.6`.
 :::

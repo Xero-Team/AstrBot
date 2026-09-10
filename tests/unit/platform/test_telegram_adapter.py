@@ -27,6 +27,8 @@ from astrbot.api.event import MessageChain
 from astrbot.core.command import CommandCatalog, CommandCatalogRegistration
 from astrbot.core.pipeline.turn_router import LlmAccess, TurnRouteInput, route_turn
 from astrbot.core.platform import Group
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import PluginRegistry, StarMetadata
@@ -145,6 +147,27 @@ def _build_real_reply_update(
         text=text,
     )
     return Update(update_id=1, message=message)
+
+
+def _build_real_topic_update(
+    *,
+    chat_type: str,
+    chat_id: int,
+    message_thread_id: int,
+    is_forum: bool | None = None,
+    text: str = "topic message",
+) -> Update:
+    chat = Chat(id=chat_id, type=chat_type, is_forum=is_forum)
+    message = Message(
+        message_id=message_thread_id,
+        date=datetime.now(UTC),
+        chat=chat,
+        from_user=User(42, "Alice", False),
+        text=text,
+        message_thread_id=message_thread_id,
+        is_topic_message=True,
+    )
+    return Update(update_id=message_thread_id, message=message)
 
 
 def _bind_runtime_registries(adapter) -> tuple[HandlerRegistry, PluginRegistry]:
@@ -525,6 +548,252 @@ async def test_telegram_topic_group_message_uses_thread_scoped_session():
     assert result.group_id == "-1001234567890#42"
     assert result.session_id == "-1001234567890#42"
     assert result.message_str == "Hello World"
+
+
+@pytest.mark.asyncio
+async def test_telegram_real_private_topics_use_distinct_route_identities():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    context = _build_context()
+
+    first = await adapter.convert_message(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=41),
+        context,
+    )
+    second = await adapter.convert_message(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=42),
+        context,
+    )
+    ordinary = await adapter.convert_message(
+        create_mock_update(chat_type="private", chat_id=99),
+        context,
+    )
+
+    assert first is not None and second is not None and ordinary is not None
+    assert first.session_id == "99#41"
+    assert second.session_id == "99#42"
+    assert ordinary.session_id == "99"
+
+    first_event = adapter.create_event(first)
+    second_event = adapter.create_event(second)
+    assert first_event.unified_msg_origin != second_event.unified_msg_origin
+    assert first_event.route_identity.target_id == "99#41"
+    assert second_event.route_identity.target_id == "99#42"
+
+
+@pytest.mark.asyncio
+async def test_telegram_real_topic_routes_keep_general_and_group_semantics():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    context = _build_context()
+
+    private_general = await adapter.convert_message(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=1),
+        context,
+    )
+    group_general = await adapter.convert_message(
+        _build_real_topic_update(
+            chat_type="supergroup",
+            chat_id=-100123,
+            message_thread_id=1,
+            is_forum=True,
+        ),
+        context,
+    )
+    group_topic = await adapter.convert_message(
+        _build_real_topic_update(
+            chat_type="supergroup",
+            chat_id=-100123,
+            message_thread_id=42,
+            is_forum=True,
+        ),
+        context,
+    )
+
+    assert private_general is not None
+    assert private_general.session_id == "99#1"
+    client = MockTelegramBuilder.create_bot()
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        MessageChain([Comp.Plain("general")]),
+        private_general.session_id,
+    )
+    assert client.send_message.await_args.kwargs == {
+        "text": "general",
+        "parse_mode": "MarkdownV2",
+        "chat_id": "99",
+    }
+    assert group_general is not None
+    assert group_general.group_id == "-100123"
+    assert group_topic is not None
+    assert group_topic.group_id == "-100123#42"
+
+
+@pytest.mark.asyncio
+async def test_telegram_topic_standard_and_proactive_sends_restore_thread():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    client = MockTelegramBuilder.create_bot()
+    adapter.client = client
+    context = _build_context()
+    message = await adapter.convert_message(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=42),
+        context,
+    )
+    assert message is not None
+
+    event = adapter.create_event(message)
+    event.session_id = "99"
+    await event.send(MessageChain([Comp.Plain("reply")]))
+    client.send_message.assert_awaited_once_with(
+        text="reply",
+        parse_mode="MarkdownV2",
+        chat_id="99",
+        message_thread_id="42",
+    )
+
+    client.reset_mock()
+    result = await adapter.send_by_session(
+        MessageSession(
+            platform_name="test_telegram",
+            message_type=MessageType.FRIEND_MESSAGE,
+            session_id="99#42",
+        ),
+        MessageChain([Comp.Plain("proactive")]),
+    )
+    assert result is not None and result.success
+    assert result.target == "99#42"
+    client.send_message.assert_awaited_once_with(
+        text="proactive",
+        parse_mode="MarkdownV2",
+        chat_id="99",
+        message_thread_id="42",
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_private_topic_typing_uses_route_identity():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    client = MockTelegramBuilder.create_bot()
+    adapter.client = client
+    message = await adapter.convert_message(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=42),
+        _build_context(),
+    )
+    assert message is not None
+
+    event = adapter.create_event(message)
+    event.session_id = "99"
+    await event.send_typing()
+
+    client.send_chat_action.assert_awaited_once_with(
+        chat_id="99",
+        action="typing",
+        message_thread_id="42",
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_private_topic_streaming_routes_draft_and_final_message():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    client = MockTelegramBuilder.create_bot()
+    adapter.client = client
+    message = await adapter.convert_message(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=42),
+        _build_context(),
+    )
+    assert message is not None
+
+    async def generator():
+        yield MessageChain([Comp.Plain("streamed")])
+
+    event = adapter.create_event(message)
+    event.session_id = "99"
+    result = await event.send_streaming(generator())
+
+    assert result is not None and result.success
+    assert result.target == "99#42"
+    assert client.send_message_draft.await_count == 1
+    draft_call = client.send_message_draft.await_args.kwargs
+    assert draft_call["chat_id"] == 99
+    assert draft_call["message_thread_id"] == 42
+    client.send_message.assert_awaited_once_with(
+        text="streamed",
+        parse_mode="MarkdownV2",
+        chat_id="99",
+        message_thread_id="42",
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_group_topic_streaming_keeps_thread():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.return_value = SimpleNamespace(message_id=100)
+    adapter.client = client
+    message = await adapter.convert_message(
+        _build_real_topic_update(
+            chat_type="supergroup",
+            chat_id=-100123,
+            message_thread_id=42,
+            is_forum=True,
+        ),
+        _build_context(),
+    )
+    assert message is not None
+
+    async def generator():
+        yield MessageChain([Comp.Plain("streamed")])
+
+    event = adapter.create_event(message)
+    await event.send_streaming(generator())
+
+    client.send_chat_action.assert_awaited_once_with(
+        chat_id="-100123",
+        action="typing",
+        message_thread_id="42",
+    )
+    assert client.send_message.await_args.kwargs["chat_id"] == "-100123"
+    assert client.send_message.await_args.kwargs["message_thread_id"] == "42"
+
+
+@pytest.mark.asyncio
+async def test_telegram_private_topic_start_reply_restores_thread():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram", start_message="hello start"),
+        {},
+        asyncio.Queue(),
+    )
+    context = _build_context()
+    context.bot.send_message = AsyncMock()
+
+    await adapter.start(
+        _build_real_topic_update(chat_type="private", chat_id=99, message_thread_id=42),
+        context,
+    )
+
+    context.bot.send_message.assert_awaited_once_with(
+        chat_id=99,
+        text="hello start",
+        message_thread_id="42",
+    )
 
 
 @pytest.mark.asyncio

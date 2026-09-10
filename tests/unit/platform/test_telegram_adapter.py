@@ -2,16 +2,19 @@ import asyncio
 import importlib
 import ssl
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import httpx
 import pytest
+from telegram import Chat, Message, Update, User
 from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
+from astrbot.core.command import CommandCatalog
+from astrbot.core.pipeline.turn_router import LlmAccess, TurnRouteInput, route_turn
 from astrbot.core.platform import Group
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -96,6 +99,41 @@ def _build_context() -> MagicMock:
     context.bot.username = "test_bot"
     context.bot.id = 12345678
     return context
+
+
+def _build_real_reply_update(
+    text: str,
+    *,
+    reply_user_id: int = 12345678,
+    reply_username: str = "test_bot",
+) -> Update:
+    chat = Chat(id=-10001, type="group", title="Test group")
+    replied_message = Message(
+        message_id=22,
+        date=datetime.now(UTC),
+        chat=chat,
+        from_user=User(
+            id=reply_user_id,
+            first_name="Reply sender",
+            is_bot=reply_user_id == 12345678,
+            username=reply_username,
+        ),
+        text="earlier reply",
+    )
+    message = Message(
+        message_id=23,
+        date=datetime.now(UTC),
+        chat=chat,
+        from_user=User(
+            id=987654321,
+            first_name="Test user",
+            is_bot=False,
+            username="test_user",
+        ),
+        reply_to_message=replied_message,
+        text=text,
+    )
+    return Update(update_id=1, message=message)
 
 
 def _bind_runtime_registries(adapter) -> tuple[HandlerRegistry, PluginRegistry]:
@@ -479,38 +517,76 @@ async def test_telegram_topic_group_message_uses_thread_scoped_session():
 
 
 @pytest.mark.asyncio
-async def test_telegram_group_reply_to_bot_rewrites_text_as_direct_wake():
+@pytest.mark.parametrize("text", ["summarize this", "/help"])
+async def test_telegram_group_reply_to_bot_preserves_text_and_identity(text):
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
         {},
         asyncio.Queue(),
     )
-    adapter.client.username = "test_bot"
-    reply_to_bot = create_mock_update(
-        message_text="earlier reply",
-        chat_type="group",
-        chat_id=-10001,
-        user_id=12345678,
-        username="test_bot",
-        message_id=22,
-    ).message
-    update = create_mock_update(
-        message_text="summarize this",
-        chat_type="group",
-        chat_id=-10001,
-        reply_to_message=reply_to_bot,
-    )
+    context = _build_context()
+    update = _build_real_reply_update(text)
 
-    result = await adapter.convert_message(update, _build_context())
+    result = await adapter.convert_message(update, context)
 
     assert result is not None
-    assert result.message_str == "/ summarize this"
+    assert result.self_id == str(context.bot.id)
+    assert result.message_str == text
     assert isinstance(result.message[0], Comp.Reply)
+    assert result.message[0].sender_id == str(context.bot.id)
     assert any(
-        isinstance(component, Comp.Plain) and component.text == "/ summarize this"
+        isinstance(component, Comp.Plain) and component.text == text
         for component in result.message
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reply_user_id", "reply_to_bot", "group", "expected_wake"),
+    [
+        (12345678, True, "off", True),
+        (12345678, False, "off", False),
+        (20000000, True, "off", False),
+        (12345678, True, "prefix", True),
+        (12345678, False, "prefix", False),
+    ],
+)
+async def test_telegram_group_reply_wake_modes(
+    reply_user_id,
+    reply_to_bot,
+    group,
+    expected_wake,
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    result = await adapter.convert_message(
+        _build_real_reply_update(
+            "summarize this",
+            reply_user_id=reply_user_id,
+            reply_username="test_bot" if reply_user_id == 12345678 else "other_user",
+        ),
+        _build_context(),
+    )
+
+    assert result is not None
+    route = route_turn(
+        TurnRouteInput(
+            message_str=result.message_str,
+            messages=tuple(result.message),
+            is_private=False,
+            command_prefixes=("/",),
+            llm_access=LlmAccess(group=group, reply_to_bot=reply_to_bot),
+            catalog=CommandCatalog(),
+            self_id=result.self_id,
+        )
+    )
+    assert route.should_run_llm is expected_wake
+    assert ("reply_to_bot" in route.wake_reasons) is expected_wake
 
 
 @pytest.mark.asyncio

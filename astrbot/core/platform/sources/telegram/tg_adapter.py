@@ -543,14 +543,6 @@ class TelegramPlatformAdapter(Platform):
                         + plain_text[entity.offset + entity.length :]
                     )
 
-            if (
-                message.type == MessageType.GROUP_MESSAGE
-                and telegram_message.reply_to_message
-                and telegram_message.reply_to_message.from_user
-                and telegram_message.reply_to_message.from_user.id == context.bot.id
-            ):
-                plain_text = f"/@{context.bot.username} " + plain_text
-
             if plain_text.startswith("/"):
                 command_parts = plain_text.split(" ", 1)
                 if "@" in command_parts[0]:
@@ -739,7 +731,7 @@ class TelegramPlatformAdapter(Platform):
             str(_from_user.id),
             _from_user.username or "Unknown",
         )
-        message.self_id = str(context.bot.username)
+        message.self_id = str(context.bot.id)
         message.raw_message = update
         message.message_str = ""
         message.message = []

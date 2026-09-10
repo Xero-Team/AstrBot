@@ -6,11 +6,12 @@ import platform
 import re
 import zoneinfo
 from collections.abc import Coroutine, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, TypeGuard, cast
 
 from astrbot import logger
+from astrbot.core.agent.btw.runtime_policy import resolve_computer_runtime
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
@@ -182,6 +183,8 @@ class MainAgentBuildConfig:
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
+    allow_computer_tools: bool = True
+    """Whether request tools may include computer capabilities."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -1249,6 +1252,7 @@ def _assemble_request_tool_catalog(
         persona_tools=persona_tools,
         surface=surface,
         computer_use_runtime=config.computer_use_runtime,
+        allow_computer_tools=config.allow_computer_tools,
         plugin_names=event.plugins_name,
         registered_tools=registered_tools,
         session_tool_names=session_tool_names,
@@ -1956,6 +1960,21 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
+    profile = plugin_context.get_config(umo=event.unified_msg_origin)
+    btw = profile.get("btw", {})
+    if isinstance(btw, Mapping) and btw.get("enabled", False):
+        runtime = resolve_computer_runtime(
+            profile, event.get_extra("btw_loop"), config.computer_use_runtime
+        )
+        config = replace(
+            config,
+            computer_use_runtime=runtime,
+            allow_computer_tools=runtime != "none",
+            provider_settings={
+                **config.provider_settings,
+                "computer_use_runtime": runtime,
+            },
+        )
     provider = provider or _select_provider(
         event, plugin_context, config.provider_id_override
     )

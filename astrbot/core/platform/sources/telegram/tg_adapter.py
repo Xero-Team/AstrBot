@@ -1,13 +1,14 @@
 import asyncio
 import re
 import uuid
+from collections.abc import Sequence
 from contextlib import suppress
 from typing import override
 
 import httpx
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from telegram import BotCommand, Update
+from telegram import BotCommand, MessageEntity, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
@@ -506,26 +507,71 @@ class TelegramPlatformAdapter(Platform):
         return str(file_path)
 
     @staticmethod
+    def _normalize_telegram_mentions(
+        text: str,
+        entities: Sequence[MessageEntity] | None,
+        bot_username: str,
+        bot_id: int,
+    ) -> tuple[str, list[Comp.Mention]]:
+        """Extract mentions in entity order and remove own mentions from text."""
+        # Telegram offsets count UTF-16 code units, not Python code points.
+        boundaries = {0: 0}
+        offset = 0
+        for index, char in enumerate(text):
+            offset += 2 if ord(char) > 0xFFFF else 1
+            boundaries[offset] = index + 1
+
+        mentions: list[Comp.Mention] = []
+        removals: set[tuple[int, int]] = set()
+        for entity in entities or ():
+            if entity.type != "mention":
+                continue
+            if (
+                type(entity.offset) is not int
+                or type(entity.length) is not int
+                or entity.length <= 0
+            ):
+                continue
+            start = boundaries.get(entity.offset)
+            end = boundaries.get(entity.offset + entity.length)
+            if start is None or end is None:
+                continue
+            value = text[start:end]
+            if re.fullmatch(r"@[A-Za-z0-9_]+", value) is None:
+                continue
+            name = value[1:]
+            is_self_mention = name.lower() == bot_username.lower()
+            target = str(bot_id) if is_self_mention else name
+            mentions.append(Comp.Mention(target=target, name=name))
+            if is_self_mention:
+                removals.add((start, end))
+
+        parts = []
+        cursor = 0
+        for start, end in sorted(removals):
+            if start >= cursor:
+                parts.append(text[cursor:start])
+            cursor = max(cursor, end)
+        parts.append(text[cursor:])
+        return "".join(parts), mentions
+
     def _apply_telegram_caption(
+        self,
         message: AstrBotMessage,
         telegram_message,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         if telegram_message.caption:
-            message.message_str = telegram_message.caption
-            message.message.append(Comp.Plain(message.message_str))
-        if telegram_message.caption and telegram_message.caption_entities:
-            for entity in telegram_message.caption_entities:
-                if entity.type == "mention":
-                    name = telegram_message.caption[
-                        entity.offset + 1 : entity.offset + entity.length
-                    ]
-                    target = (
-                        str(context.bot.id)
-                        if name.lower() == context.bot.username.lower()
-                        else name
-                    )
-                    message.message.append(Comp.Mention(target=target, name=name))
+            text, mentions = self._normalize_telegram_mentions(
+                telegram_message.caption,
+                telegram_message.caption_entities,
+                context.bot.username,
+                context.bot.id,
+            )
+            message.message_str = text
+            if text:
+                message.message.append(Comp.Plain(text))
+            message.message.extend(mentions)
 
     async def _populate_telegram_message_content(
         self,
@@ -539,23 +585,13 @@ class TelegramPlatformAdapter(Platform):
             return True
 
         if telegram_message.text:
-            plain_text = telegram_message.text
-            raw_text = plain_text
-            for entity in telegram_message.entities or []:
-                if entity.type != "mention":
-                    continue
-                name = raw_text[entity.offset + 1 : entity.offset + entity.length]
-                target = (
-                    str(context.bot.id)
-                    if name.lower() == context.bot.username.lower()
-                    else name
-                )
-                message.message.append(Comp.Mention(target=target, name=name))
-                if name.lower() == context.bot.username.lower():
-                    plain_text = (
-                        plain_text[: entity.offset]
-                        + plain_text[entity.offset + entity.length :]
-                    )
+            plain_text, mentions = self._normalize_telegram_mentions(
+                telegram_message.text,
+                telegram_message.entities,
+                context.bot.username,
+                context.bot.id,
+            )
+            message.message.extend(mentions)
 
             if plain_text.startswith("/"):
                 command_parts = plain_text.split(" ", 1)

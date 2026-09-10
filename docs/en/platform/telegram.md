@@ -41,6 +41,10 @@ When Telegram command registration is enabled, AstrBot synchronizes every enable
 
 Plugin load, unload, reload, enable, and disable operations immediately request a menu refresh, as do command enablement, rename, and alias changes from Dashboard. The periodic refresh remains as recovery for network failures or external state changes. When no commands are eligible, AstrBot clears stale commands from the Telegram menu.
 
+## Mentions
+
+Text and media captions preserve emoji, whitespace, and other users' mentions. Mentions of this bot become mention components and are removed from the plain text, including repeated mentions. Invalid entity ranges are ignored without deleting text. Mentions alone do not enable group LLM replies; the configured group access, reply-to-bot, and continuation rules still apply.
+
 ## Streaming Output
 
 The Telegram platform supports streaming output. Enable the "Streaming Output" switch in "AI Configuration" -> "Other Settings".

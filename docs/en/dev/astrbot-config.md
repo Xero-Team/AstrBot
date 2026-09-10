@@ -199,6 +199,12 @@ With BTW enabled, the conversation loop runs with Computer Use set to `none`, in
 
 `btw.work_loop.computer_use_runtime` accepts `inherit` (default), `none`, `local`, or `sandbox`. `inherit` uses `provider_settings.computer_use_runtime`. The effective runtime applies to the work request and its handoffs; `none` excludes computer tools even when they were explicitly declared. Disabling BTW preserves the existing Computer Use configuration. These settings select capabilities; they do not grant roles or bypass authorization, WebChat step-up, path restrictions, or sandbox checks.
 
+## BTW plugin tool assignments
+
+When BTW is enabled in a configuration profile, **Config → BTW dual loops → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.
+
+The main Agent and its subagent handoffs apply the same assignment, together with existing Persona, profile, and authorization restrictions. An assignment never grants permission to execute a tool. Plugin event handlers and explicit commands keep their existing execution path; this setting does not turn an entire plugin into a background task.
+
 ## SubAgents, speech, and knowledge base
 
 - `subagent_orchestrator.main_enable` enables handoffs.

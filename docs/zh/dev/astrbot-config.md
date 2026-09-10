@@ -201,6 +201,12 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 `btw.work_loop.computer_use_runtime` 支持 `inherit`（默认）、`none`、`local` 和 `sandbox`。`inherit` 沿用 `provider_settings.computer_use_runtime`。实际运行时同时作用于工作请求及其子代理转交；`none` 也会排除显式声明的电脑工具。关闭 BTW 后沿用现有 Computer Use 配置。这些设置只选择能力，不授予角色，也不绕过授权、WebChat step-up、路径限制或沙箱检查。
 
+## BTW 插件工具循环分配
+
+在配置档中启用 BTW 后，可通过 **配置文件 → BTW 双循环 → 插件工具循环分配** 为每个已启用的非系统插件选择对话循环、工作循环或两者。未分配的插件默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通工具可用性。
+
+主 Agent 与其子 Agent handoff 应用相同分配，并继续遵守 Persona、配置档与授权限制。循环分配不会授予工具执行权限。插件事件处理器和显式命令保留原有执行路径；此设置不会把整个插件转换为后台任务。
+
 ## 子代理、语音与知识库
 
 - `subagent_orchestrator.main_enable`：启用 handoff。

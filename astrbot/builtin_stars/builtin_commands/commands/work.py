@@ -1,6 +1,6 @@
 """Explicit submission of free-text tasks to the BTW work loop."""
 
-from astrbot.api import btw_work_loop_enabled
+from astrbot.api import btw_work_latest_status, btw_work_loop_enabled
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n
@@ -13,12 +13,22 @@ class WorkCommands:
         self.context = context
 
     async def handle(self, event: AstrMessageEvent, task: str = "") -> None:
-        """Submit a task, reserving empty input and ``status`` for queries."""
+        """Query status for empty input or ``status``, otherwise submit a task."""
         stripped = (task or "").strip()
         if not stripped or stripped.lower() == "status":
-            await reply_i18n(self.context, event, "work.usage")
+            await self.status(event)
             return
         await self.submit(event, stripped)
+
+    async def status(self, event: AstrMessageEvent) -> None:
+        """Show the latest task for the command's profile and message origin."""
+        config_id = getattr(getattr(event, "resource", None), "config_id", "") or ""
+        latest = await btw_work_latest_status(config_id, event.unified_msg_origin)
+        if latest is None:
+            await reply_i18n(self.context, event, "work.status.none")
+            return
+        request, status = latest
+        await reply_i18n(self.context, event, f"work.status.{status}", task=request)
 
     async def submit(self, event: AstrMessageEvent, task: str) -> None:
         """Continue the admitted command event through the work loop."""

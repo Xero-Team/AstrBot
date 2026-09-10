@@ -170,11 +170,11 @@ async def test_work_submit_requires_both_loop_switches(config):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("task", ["", "status", " STATUS "])
-async def test_work_empty_and_status_remainders_show_usage(task):
+async def test_work_empty_and_status_remainders_query_status(task):
     command = WorkCommands(SimpleNamespace(i18n=FakeI18n()))
     event = DummyEvent(message_str="work " + task)
     await command.handle(event, task)
-    assert _plain_text(event.result) == "Usage: /work <task>"
+    assert _plain_text(event.result) == "No BTW work task has run in this session."
     assert event.is_stopped()
     assert event.get_extra("btw_force_work") is None
 

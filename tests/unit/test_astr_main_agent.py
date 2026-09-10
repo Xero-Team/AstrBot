@@ -531,6 +531,31 @@ class TestMainAgentBuildConfig:
 class TestSelectProvider:
     """Tests for _select_provider function."""
 
+    def test_loop_override_takes_priority_without_changing_event(
+        self, mock_event, mock_context, mock_provider
+    ):
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.return_value = mock_provider
+
+        assert (
+            ama._select_provider(mock_event, mock_context, "loop-model")
+            is mock_provider
+        )
+        mock_context.get_provider_by_id.assert_called_once_with("loop-model")
+        mock_context.get_using_provider.assert_not_called()
+        assert mock_event.get_extra("selected_provider") == "session-model"
+
+    @pytest.mark.parametrize("provider", [None, "not-a-chat-provider"])
+    def test_invalid_loop_override_does_not_fall_back(
+        self, mock_event, mock_context, provider
+    ):
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.return_value = provider
+
+        assert ama._select_provider(mock_event, mock_context, "loop-model") is None
+        assert mock_event.get_extra(ama.LLM_ERROR_MESSAGE_EXTRA_KEY)
+        mock_context.get_using_provider.assert_not_called()
+
     def test_select_provider_by_id(self, mock_event, mock_context, mock_provider):
         """Test selecting provider by ID from event extra."""
         module = ama

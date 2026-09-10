@@ -268,9 +268,19 @@ class InternalAgentSubStage:
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
+        btw = self._profile_config(event).get("btw", {})
+        provider_id_override = ""
+        if isinstance(btw, dict) and btw.get("enabled", False):
+            loop = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+            loop_config = btw.get(f"{loop}_loop", {})
+            if isinstance(loop_config, dict):
+                provider_id = loop_config.get("provider_id", "")
+                if isinstance(provider_id, str):
+                    provider_id_override = provider_id.strip()
         build_cfg = replace(
             self.main_agent_cfg,
             streaming_response=streaming_response,
+            provider_id_override=provider_id_override,
         )
         build_result = await build_main_agent(
             event=event,

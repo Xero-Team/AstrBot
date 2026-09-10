@@ -55,7 +55,7 @@ Telegram 平台支持流式输出。需要在「AI 配置」->「其他配置」
 
 ### 群聊流式输出
 
-在群聊中，由于 `sendMessageDraft` API 仅支持私聊，AstrBot 会自动回退到传统的 `send_message` + `edit_message_text` 方案。
+在群聊中，由于 `sendMessageDraft` API 仅支持私聊，AstrBot 会自动回退到传统的 `send_message` + `edit_message_text` 方案。超过 Telegram 单条 4096 字符限制的回答会按顺序完成并发送为多条消息。若 Telegram 拒绝某个分段，AstrBot 会保留未送达的后缀并报告部分投递，而不会静默丢弃内容。
 
 :::warning
 `sendMessageDraft` 功能需要 `python-telegram-bot>=22.6`。

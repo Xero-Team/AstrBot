@@ -55,7 +55,7 @@ In private chats, AstrBot uses the `sendMessageDraft` API (added in Telegram Bot
 
 ### Group Chat Streaming
 
-In group chats, since the `sendMessageDraft` API only supports private chats, AstrBot automatically falls back to the traditional `send_message` + `edit_message_text` approach.
+In group chats, since the `sendMessageDraft` API only supports private chats, AstrBot automatically falls back to the traditional `send_message` + `edit_message_text` approach. Responses longer than Telegram's 4096-character text limit are finalized and sent as ordered messages. If Telegram rejects a segment, AstrBot retains the undelivered suffix and reports the partial delivery instead of silently dropping it.
 
 :::warning
 `sendMessageDraft` requires `python-telegram-bot>=22.6`.

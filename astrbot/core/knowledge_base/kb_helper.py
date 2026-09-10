@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
 KB_SOURCE_MAX_BYTES = 128 * 1024 * 1024
+KB_URL_RESPONSE_MAX_BYTES = KB_SOURCE_MAX_BYTES + 8 * 1024 * 1024
 IngestStatus = Literal["created", "replaced", "unchanged"]
 
 
@@ -1387,8 +1388,14 @@ class KBHelper:
             url=url,
             tavily_keys=tavily_keys,
             progress_callback=progress_callback,
+            max_response_bytes=KB_URL_RESPONSE_MAX_BYTES,
         )
         source_bytes = text_content.encode("utf-8")
+        if len(source_bytes) > KB_SOURCE_MAX_BYTES:
+            raise KnowledgeBaseUploadError(
+                stage="validation",
+                user_message="Document exceeds the 128 MB size limit.",
+            )
         content_hash = hash_extracted_text(text_content)
         final_chunks = await self._clean_and_rechunk_content(
             content=text_content,

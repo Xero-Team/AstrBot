@@ -211,6 +211,10 @@ class KnowledgeBaseService:
             self._active_jobs = active_jobs + 1
         return _KnowledgeBaseJobLease(self)
 
+    async def acquire_ingestion_slot(self) -> _KnowledgeBaseJobLease:
+        """Reserve service-wide capacity before an ingestion request is read."""
+        return await self._try_acquire_job_slot()
+
     async def _release_job_slot(self) -> None:
         async with self._get_job_capacity_lock():
             self._active_jobs = max(getattr(self, "_active_jobs", 1) - 1, 0)
@@ -898,6 +902,7 @@ class KnowledgeBaseService:
         content_type: str | None,
         form_data,
         files: Sequence[UploadFile],
+        lease: _KnowledgeBaseJobLease | None = None,
     ) -> dict[str, Any]:
         if content_type and "multipart/form-data" not in content_type:
             raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")
@@ -917,7 +922,7 @@ class KnowledgeBaseService:
         if len(files) > KB_UPLOAD_MAX_FILES:
             raise KnowledgeBaseServiceError("Too many files", status_code=422)
 
-        lease = await self._try_acquire_job_slot()
+        lease = lease or await self._try_acquire_job_slot()
         staging_dir: Path | None = None
         lease_handed_off = False
         try:
@@ -1050,7 +1055,12 @@ class KnowledgeBaseService:
             options["max_retries"],
         )
 
-    async def import_documents(self, data: object) -> dict[str, Any]:
+    async def import_documents(
+        self,
+        data: object,
+        *,
+        lease: _KnowledgeBaseJobLease | None = None,
+    ) -> dict[str, Any]:
         payload = self._payload(data)
         kb_id, documents, batch_size, tasks_limit, max_retries = (
             self.validate_import_request(payload)
@@ -1060,7 +1070,7 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
-        lease = await self._try_acquire_job_slot()
+        lease = lease or await self._try_acquire_job_slot()
         task_id = str(uuid.uuid4())
         lease_handed_off = False
         try:

@@ -755,6 +755,50 @@ async def test_upload_route_collects_starlette_multipart_files(
 
 
 @pytest.mark.asyncio
+async def test_upload_route_rejects_capacity_before_parsing_request(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    knowledge_base_route_service._active_jobs = 2
+    parse_form = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.dashboard.api.knowledge_bases._parse_bounded_multipart_form",
+        parse_form,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents",
+        files={"file": ("document.md", b"content", "text/markdown")},
+    )
+
+    assert response.status_code == 503
+    parse_form.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_import_route_rejects_capacity_before_parsing_request(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    knowledge_base_route_service._active_jobs = 2
+    parse_json = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.dashboard.api.knowledge_bases._parse_bounded_json",
+        parse_json,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents/import",
+        json={"documents": [{"file_name": "document.md", "chunks": ["content"]}]},
+    )
+
+    assert response.status_code == 503
+    parse_json.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_upload_route_rejects_more_than_knowledge_base_file_limit(
     asgi_client: httpx.AsyncClient,
     knowledge_base_route_service: KnowledgeBaseService,

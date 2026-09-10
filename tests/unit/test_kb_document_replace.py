@@ -229,7 +229,9 @@ async def test_url_import_replaces_by_canonical_url(kb_helper, monkeypatch):
     _enable_tavily(helper)
     pages = iter(["first extracted unique page", "second extracted unique page"])
 
-    async def fake_extract(*, url, tavily_keys, progress_callback=None):
+    async def fake_extract(
+        *, url, tavily_keys, progress_callback=None, max_response_bytes=None
+    ):
         return next(pages)
 
     monkeypatch.setattr(
@@ -252,7 +254,9 @@ async def test_url_scheme_keeps_http_and_https_distinct(kb_helper, monkeypatch):
     _enable_tavily(helper)
     pages = iter(["http page unique", "https page unique"])
 
-    async def fake_extract(*, url, tavily_keys, progress_callback=None):
+    async def fake_extract(
+        *, url, tavily_keys, progress_callback=None, max_response_bytes=None
+    ):
         return next(pages)
 
     monkeypatch.setattr(
@@ -271,7 +275,9 @@ async def test_url_extract_failure_does_not_delete_previous(kb_helper, monkeypat
     helper, _embedding = kb_helper
     _enable_tavily(helper)
 
-    async def first_extract(*, url, tavily_keys, progress_callback=None):
+    async def first_extract(
+        *, url, tavily_keys, progress_callback=None, max_response_bytes=None
+    ):
         return "keep this extracted unique page"
 
     monkeypatch.setattr(
@@ -280,7 +286,9 @@ async def test_url_extract_failure_does_not_delete_previous(kb_helper, monkeypat
     )
     first = await helper.upload_from_url("https://example.com/keep")
 
-    async def fail_extract(*, url, tavily_keys, progress_callback=None):
+    async def fail_extract(
+        *, url, tavily_keys, progress_callback=None, max_response_bytes=None
+    ):
         raise OSError("Failed to extract content from URL")
 
     monkeypatch.setattr(

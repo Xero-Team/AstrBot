@@ -156,6 +156,21 @@ def test_btw_controls_survive_dashboard_metadata_conversion() -> None:
         assert catalog[enabled["hint"]]
 
 
+def test_work_loop_controls_survive_dashboard_metadata_conversion() -> None:
+    converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+    items = converted["plugin_group"]["metadata"]["btw"]["items"]
+    for field, value_type in {
+        "btw.work_loop.enabled": "bool",
+        "btw.work_loop.max_concurrent": "int",
+        "btw.work_session.max_age_seconds": "int",
+    }.items():
+        assert items[field]["type"] == value_type
+        assert items[field]["description"] == f"plugin_group.btw.{field}.description"
+        for locale in LOCALES:
+            assert _load_locale(locale)[items[field]["description"]]
+            assert _load_locale(locale)[items[field]["hint"]]
+
+
 def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
     converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
     ai_sections = converted["ai_group"]["metadata"]

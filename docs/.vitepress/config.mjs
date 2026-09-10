@@ -182,6 +182,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '项目架构', link: '/architecture' },
+              {
+                text: 'BTW 对话循环路由实验',
+                link: '/btw-conversation-routing-experiment',
+              },
               { text: '源码开发', link: '/development' },
               { text: 'Linux 开发环境', link: '/linux' },
               {
@@ -443,6 +447,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Architecture', link: '/architecture' },
+              {
+                text: 'BTW Conversation Routing Experiment',
+                link: '/btw-conversation-routing-experiment',
+              },
               { text: 'Source Development', link: '/development' },
               { text: 'Linux Development', link: '/linux' },
               {

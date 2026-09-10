@@ -60,3 +60,43 @@ async def test_webchat_titles_are_batched_and_scoped_to_webchat():
 
     assert titles == {"webchat:FriendMessage:webchat!u!session-a": "Alice"}
     lookup.assert_awaited_once_with(["session-a"], platform_id="webchat")
+
+
+@pytest.mark.asyncio
+async def test_export_continues_after_conversation_lookup_failure():
+    conversation = SimpleNamespace(
+        cid="second",
+        user_id="qq:FriendMessage:bob",
+        platform_id="qq",
+        title="Bob chat",
+        persona_id=None,
+        created_at="2026-09-10T00:00:00+00:00",
+        updated_at="2026-09-10T00:00:00+00:00",
+        history='[{"role": "user", "content": "hello"}]',
+    )
+    get_conversation = AsyncMock(
+        side_effect=[RuntimeError("temporary database failure"), conversation]
+    )
+    service = ConversationService(
+        db_helper=SimpleNamespace(),
+        conversation_manager=SimpleNamespace(get_conversation=get_conversation),
+        config={},
+    )
+
+    export = await service.export_conversations(
+        {
+            "conversations": [
+                {"user_id": "qq:FriendMessage:alice", "cid": "first"},
+                {"user_id": "qq:FriendMessage:bob", "cid": "second"},
+            ]
+        }
+    )
+
+    assert export.file_obj.read().decode("utf-8") == (
+        '{"cid": "second", "user_id": "qq:FriendMessage:bob", '
+        '"platform_id": "qq", "title": "Bob chat", "persona_id": null, '
+        '"created_at": "2026-09-10T00:00:00+00:00", '
+        '"updated_at": "2026-09-10T00:00:00+00:00", '
+        '"content": [{"role": "user", "content": "hello"}]}'
+    )
+    assert get_conversation.await_count == 2

@@ -255,13 +255,23 @@ class ConversationService:
             if not user_id or not cid:
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
                 continue
-            conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id, conversation_id=cid
-            )
-            if not conversation:
-                failed_items.append(f"user_id:{user_id}, cid:{cid} - 对话不存在")
-                continue
-            resolved_conversations.append(conversation)
+            try:
+                conversation = await self.conv_mgr.get_conversation(
+                    unified_msg_origin=user_id, conversation_id=cid
+                )
+                if not conversation:
+                    failed_items.append(f"user_id:{user_id}, cid:{cid} - 对话不存在")
+                    continue
+                resolved_conversations.append(conversation)
+            except Exception as exc:
+                error = safe_error("", exc)
+                failed_items.append(f"user_id:{user_id}, cid:{cid} - {error}")
+                logger.error(
+                    "读取导出对话失败: user_id=%s, cid=%s, error=%s",
+                    user_id,
+                    cid,
+                    error,
+                )
         webchat_titles = await self._get_webchat_titles(resolved_conversations)
 
         for conversation in resolved_conversations:

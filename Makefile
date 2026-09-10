@@ -94,7 +94,7 @@ doctor:
 	@$(PYTHON) scripts/doctor.py --strict
 
 bootstrap: doctor
-	uv sync --group dev --locked
+	bash scripts/uv_sync_ci.sh --group dev --locked
 	npm ci
 	cd $(DASHBOARD_DIR) && $(PNPM) install --frozen-lockfile
 
@@ -103,7 +103,7 @@ build: build-all
 build-all: build-backend build-docs
 
 build-backend:
-	uv sync --locked
+	bash scripts/uv_sync_ci.sh --locked
 
 sync-webui-dist:
 	uv run python scripts/sync_dashboard_dist.py
@@ -196,7 +196,7 @@ quality-all: $(QUALITY_TARGETS)
 	@echo "==> focused quality checks passed"
 
 quality-sync:
-	uv sync --group dev --locked
+	bash scripts/uv_sync_ci.sh --group dev --locked
 
 quality-pyright: quality-sync
 	uv run pyright --project pyrightconfig.quality.json

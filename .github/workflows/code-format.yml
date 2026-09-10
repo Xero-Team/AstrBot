@@ -25,7 +25,7 @@ jobs:
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
-        run: uv sync --group dev --locked
+        run: bash scripts/uv_sync_ci.sh --group dev --locked
       - name: ruff format + check
         run: make check-py
 
@@ -40,7 +40,7 @@ jobs:
       - name: Install uv
         run: python -m pip install uv
       - name: Install Python dependencies
-        run: uv sync --group dev --locked
+        run: bash scripts/uv_sync_ci.sh --group dev --locked
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '26.5.0'
@@ -72,7 +72,7 @@ jobs:
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
-        run: uv sync --group dev --locked
+        run: bash scripts/uv_sync_ci.sh --group dev --locked
       - name: Install root toolchain
         run: npm ci
       - name: Check json/css/html

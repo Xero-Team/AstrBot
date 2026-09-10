@@ -81,6 +81,10 @@ def test_default_config_omits_group_active_reply():
     assert "active_reply" not in DEFAULT_CONFIG["provider_ltm_settings"]
 
 
+def test_btw_conversation_entry_defaults_off():
+    assert DEFAULT_CONFIG["btw"]["enabled"] is False
+
+
 def test_platform_templates_prioritize_current_adapters_without_public_defaults():
     """Platform templates keep their intended order and loopback listeners."""
     templates = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][

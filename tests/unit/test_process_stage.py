@@ -2,6 +2,7 @@ import importlib
 import sys
 import types
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -149,7 +150,28 @@ def _stage(
     )
     stage.star_request_sub_stage = FakeSubStage(star_responses or [])
     stage.agent_sub_stage = FakeSubStage(agent_responses or [])
+    stage.conversation_loop = None
     return stage
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_process_stage_initializes_only_one_agent_with_opt_in_conversation(
+    monkeypatch, enabled
+):
+    executor = FakeSubStage([])
+    executor.initialize = AsyncMock()
+    star = SimpleNamespace(initialize=AsyncMock())
+    monkeypatch.setattr(process_stage_module, "AgentRequestSubStage", lambda: executor)
+    monkeypatch.setattr(process_stage_module, "StarRequestSubStage", lambda: star)
+    stage = process_stage_module.ProcessStage()
+    ctx = SimpleNamespace(astrbot_config={"btw": {"enabled": enabled}})
+
+    await stage.initialize(ctx)
+
+    executor.initialize.assert_awaited_once_with(ctx)
+    assert stage.agent_sub_stage is executor
+    assert (stage.conversation_loop is not None) is enabled
 
 
 @pytest.mark.asyncio

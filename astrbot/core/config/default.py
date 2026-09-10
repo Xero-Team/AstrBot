@@ -188,6 +188,7 @@ DEFAULT_CONFIG = {
         ),
         "agents": [],
     },
+    "btw": {"enabled": False},
     "provider_stt_settings": {
         "enable": False,
         "provider_id": "",
@@ -4681,6 +4682,18 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
+        },
+    },
+}
+
+CONFIG_METADATA_3["btw"] = {
+    "description": "BTW 双循环",
+    "type": "object",
+    "items": {
+        "btw.enabled": {
+            "description": "启用 BTW 双循环",
+            "type": "bool",
+            "hint": "实验功能，默认关闭。开启后，普通 AI 请求通过对话循环进入现有 Agent。",
         },
     },
 }

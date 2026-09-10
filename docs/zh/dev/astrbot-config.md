@@ -201,6 +201,12 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置；不要把 `provider_ltm_settings` 当作长期记忆开关。群聊近期消息注入见 [群聊上下文感知](../use/group-chat-context)。
 
+## BTW 对话入口
+
+`btw.enabled` 默认为 `false`。开启后，普通且已通过准入的 AI 请求经对话循环进入现有 Agent 执行器，不绕过消息准入、会话 AI 开关或插件请求处理。关闭 BTW 时，流水线直接使用当前 Agent 请求路径，并保留其能力。
+
+自动分类器候选将分别评估。开启此入口不会选定自动路由方案。
+
 ## WebUI 与认证
 
 `dashboard` 的关键默认值：

@@ -2070,6 +2070,31 @@ async def test_telegram_streaming_draft_bad_request_falls_back_to_plain_text():
 
 
 @pytest.mark.asyncio
+async def test_telegram_streaming_draft_non_content_bad_request_does_not_retry_plain_text():
+    event_type = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_message_draft.side_effect = BadRequest("Message thread not found")
+    event = event_type("msg", MagicMock(), MagicMock(), "session", client)
+    event._send_final_segment = AsyncMock()
+
+    async def generator():
+        yield MessageChain([Comp.Plain("hello")])
+        await asyncio.sleep(0)
+
+    await event._send_streaming_draft("123", None, {"chat_id": "123"}, generator())
+
+    draft_text_calls = [
+        item
+        for item in client.send_message_draft.await_args_list
+        if item.kwargs.get("text") == "hello"
+    ]
+    assert len(draft_text_calls) == 1
+    assert draft_text_calls[0].kwargs["parse_mode"] == "MarkdownV2"
+    assert all("parse_mode" in item.kwargs for item in draft_text_calls)
+    event._send_final_segment.assert_awaited_once_with("hello", {"chat_id": "123"})
+
+
+@pytest.mark.asyncio
 async def test_telegram_streaming_draft_retry_after_does_not_retry_or_block_final_send():
     event_type = _load_telegram_platform_event()
     client = MockTelegramBuilder.create_bot()

@@ -31,6 +31,12 @@ from astrbot.core.utils.error_redaction import safe_error
 DraftSendOutcome = Literal["sent", "bad_request", "failed", "skipped"]
 
 
+def _is_draft_content_bad_request(error: BadRequest) -> bool:
+    """Return whether a draft request can succeed after removing Markdown."""
+    message = str(error).casefold()
+    return "parse entities" in message or "message is too long" in message
+
+
 def format_telegram_topic_target(
     chat_id: str | int,
     message_thread_id: str | int | None,
@@ -555,7 +561,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             return "failed"
         except BadRequest as e:
             logger.warning(f"[Telegram] sendMessageDraft 请求无效: {safe_error('', e)}")
-            return "bad_request" if parse_mode else "failed"
+            if parse_mode and _is_draft_content_bad_request(e):
+                return "bad_request"
+            return "failed"
         except Exception as e:
             logger.warning(f"[Telegram] sendMessageDraft 失败: {safe_error('', e)}")
             return "failed"

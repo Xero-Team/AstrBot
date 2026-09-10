@@ -45,6 +45,12 @@ Plugin load, unload, reload, enable, and disable operations immediately request 
 
 Text and media captions preserve emoji, whitespace, and other users' mentions. Mentions of this bot become mention components and are removed from the plain text, including repeated mentions. Invalid entity ranges are ignored without deleting text. Mentions alone do not enable group LLM replies; the configured group access, reply-to-bot, and continuation rules still apply.
 
+## Media Albums
+
+Telegram media albums are collected independently of the native command menu. Disabling command registration or periodic menu refresh does not disable album delivery. AstrBot waits briefly after each album item to collect the rest of the album, but always starts processing at the configured maximum collection deadline even if more items continue to arrive.
+
+To keep the adapter responsive, an instance accepts at most 128 collecting or processing albums at once and at most 10 distinct items in each album. New albums or extra items over those limits are discarded. Processing is limited to 60 seconds; incomplete albums are also discarded when the Telegram adapter restarts or stops. These are internal safety limits, not Dashboard settings.
+
 ## Streaming Output
 
 The Telegram platform supports streaming output. Enable the "Streaming Output" switch in "AI Configuration" -> "Other Settings".

@@ -188,30 +188,6 @@ DEFAULT_CONFIG = {
         ),
         "agents": [],
     },
-    "btw": {
-        # Experimental prototype: off by default.  Enabling ``enabled`` also
-        # requires enabling the work loop; high-risk tool actions stay denied
-        # from IM per the upstream rules (no elevation path).
-        "enabled": False,
-        "classifier": {
-            "enabled": False,
-        },
-        "conversation_loop": {
-            "provider_id": "",
-        },
-        "work_loop": {
-            "enabled": False,
-            "provider_id": "",
-            "computer_use_runtime": "inherit",
-            "max_concurrent": 2,
-        },
-        "work_session": {
-            "max_age_seconds": 3600,
-        },
-        "plugin_routes": [],
-        "mcp_routes": [],
-        "skill_routes": [],
-    },
     "provider_stt_settings": {
         "enable": False,
         "provider_id": "",
@@ -4655,85 +4631,7 @@ CONFIG_METADATA_3 = {
             },
         },
     },
-    "btw": {
-        "description": "BTW 双循环",
-        "type": "object",
-        "items": {
-            "btw.enabled": {
-                "description": "启用 BTW 双循环",
-                "type": "bool",
-                "hint": "实验性原型，默认关闭。开启后由对话循环统一接收消息，并将显式工作请求转入工作循环；高风险工具动作仍然按上游规则拒绝，IM 不提权。",
-            },
-            "btw.classifier.enabled": {
-                "description": "启用任务分类",
-                "type": "bool",
-                "hint": "可选的启发式规则，默认关闭。开启后按内置规则把疑似工作请求转入工作循环；/work 指令不依赖此开关。",
-                "condition": {"btw.enabled": True},
-            },
-            "btw.conversation_loop.provider_id": {
-                "description": "对话循环模型",
-                "type": "string",
-                "_special": "select_provider",
-                "hint": "留空时使用当前会话的默认对话模型。对话循环不会获得本地、沙盒或文件工具。",
-                "condition": {"btw.enabled": True},
-            },
-            "btw.work_loop.enabled": {
-                "description": "启用工作循环",
-                "type": "bool",
-                "hint": "关闭后，所有请求都由对话循环处理。",
-                "condition": {"btw.enabled": True},
-            },
-            "btw.work_loop.provider_id": {
-                "description": "工作循环模型",
-                "type": "string",
-                "_special": "select_provider",
-                "hint": "留空时使用当前会话的默认对话模型。配置后会优先于会话模型选择。",
-                "condition": {"btw.work_loop.enabled": True},
-            },
-            "btw.work_loop.computer_use_runtime": {
-                "description": "工作循环电脑权限",
-                "type": "string",
-                "options": ["inherit", "none", "local", "sandbox"],
-                "hint": "inherit 使用现有电脑使用配置；local 和 sandbox 只会暴露给工作循环。",
-                "condition": {"btw.work_loop.enabled": True},
-            },
-            "btw.work_loop.max_concurrent": {
-                "description": "工作循环最大并发数",
-                "type": "int",
-                "hint": "同一配置文件中可同时执行的工作任务数量。",
-                "condition": {"btw.work_loop.enabled": True},
-            },
-            "btw.work_session.max_age_seconds": {
-                "description": "工作会话保留时长",
-                "type": "int",
-                "hint": "已完成、失败或取消的工作任务保留多少秒以供状态查询。",
-                "condition": {"btw.enabled": True},
-            },
-            "btw.plugin_routes": {
-                "description": "插件工具循环分配",
-                "type": "list",
-                "hint": "插件 LLM 工具默认仅在工作循环可用；可为每个已启用插件显式改为对话循环或两者。",
-                "_special": "select_plugin_loop_routes",
-                "condition": {"btw.enabled": True},
-            },
-            "btw.mcp_routes": {
-                "description": "MCP 服务器循环分配",
-                "type": "list",
-                "hint": "MCP 工具默认仅在工作循环可用；可为每个已启用服务器显式改为对话循环或两者。",
-                "_special": "select_mcp_loop_routes",
-                "condition": {"btw.enabled": True},
-            },
-            "btw.skill_routes": {
-                "description": "Skills 循环分配",
-                "type": "list",
-                "hint": "Skill 默认注入两个循环；可为每个已启用 Skill 显式限制到单一循环。",
-                "_special": "select_skill_loop_routes",
-                "condition": {"btw.enabled": True},
-            },
-        },
-    },
 }
-
 
 CONFIG_METADATA_3_SYSTEM = {
     "system_group": {

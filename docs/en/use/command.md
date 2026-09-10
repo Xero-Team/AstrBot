@@ -82,8 +82,6 @@ The user ID from `/session info` can be granted current-session `session_admin` 
 ### Running Tasks
 
 - `/task stop`: Stop running Agent or third-party Agent Runner tasks in the current session without deleting history.
-- `/work <task>`: Submit the remaining free text to the BTW work loop. It does not require the `/chat` prefix or the task classifier. Requires `session.read`, with `btw.enabled` and `btw.work_loop.enabled` on the profile. The command identity is `builtin_commands:work`.
-- `/work` or `/work status`: Show the newest work-task status for this session. `status` is a status query only when it is the entire remainder (case-insensitive); `/work status refactor` is submitted as a task. Requires `session.read`. Status lives in runtime memory and is cleared on restart.
 
 ### Providers and Models
 

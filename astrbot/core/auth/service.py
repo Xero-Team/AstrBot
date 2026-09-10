@@ -1,5 +1,7 @@
 """Runtime-owned authorization, audit, and Dashboard step-up service."""
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import secrets
@@ -1480,62 +1482,7 @@ class AuthorizationService:
             )
         step_up_id: str | None = None
         if _requires_step_up(action, resource, context):
-            if context.source == "dashboard":
-                step_up_id = await self._consume_step_up(
-                    subject, action, resource, context
-                )
-                if step_up_id is None:
-                    return Decision(
-                        False,
-                        subject,
-                        action,
-                        resource,
-                        role,
-                        "step_up_required",
-                        requires_step_up=True,
-                        audit_id=audit_id,
-                    )
-            elif context.source == "webchat":
-                if (
-                    subject.kind != "dashboard-account"
-                    or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
-                    or not context.authenticated
-                    or context.origin_session_resource_id is None
-                ):
-                    return Decision(
-                        False,
-                        subject,
-                        action,
-                        resource,
-                        role,
-                        "high_risk_dashboard_only",
-                        audit_id=audit_id,
-                        matched_relations=tuple(
-                            item.relation.value for item in matched
-                        ),
-                        relation_sources=tuple(item.source for item in matched),
-                    )
-                step_up_id = _webchat_step_up_cached(context, action)
-                if step_up_id is None:
-                    step_up_id = await self._consume_step_up(
-                        subject, action, resource, context
-                    )
-                if step_up_id is None:
-                    return Decision(
-                        False,
-                        subject,
-                        action,
-                        resource,
-                        role,
-                        "step_up_required",
-                        requires_step_up=True,
-                        audit_id=audit_id,
-                        matched_relations=tuple(
-                            item.relation.value for item in matched
-                        ),
-                        relation_sources=tuple(item.source for item in matched),
-                    )
-            else:
+            if context.source not in {"dashboard", "webchat"}:
                 return Decision(
                     False,
                     subject,
@@ -1543,6 +1490,41 @@ class AuthorizationService:
                     resource,
                     role,
                     "high_risk_dashboard_only",
+                    audit_id=audit_id,
+                    matched_relations=tuple(item.relation.value for item in matched),
+                    relation_sources=tuple(item.source for item in matched),
+                )
+            if context.source == "webchat" and (
+                subject.kind != "dashboard-account"
+                or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                or not context.authenticated
+                or context.origin_session_resource_id is None
+            ):
+                return Decision(
+                    False,
+                    subject,
+                    action,
+                    resource,
+                    role,
+                    "high_risk_dashboard_only",
+                    audit_id=audit_id,
+                    matched_relations=tuple(item.relation.value for item in matched),
+                    relation_sources=tuple(item.source for item in matched),
+                )
+            step_up_id = _webchat_step_up_cached(context, action)
+            if step_up_id is None:
+                step_up_id = await self._consume_step_up(
+                    subject, action, resource, context
+                )
+            if step_up_id is None:
+                return Decision(
+                    False,
+                    subject,
+                    action,
+                    resource,
+                    role,
+                    "step_up_required",
+                    requires_step_up=True,
                     audit_id=audit_id,
                     matched_relations=tuple(item.relation.value for item in matched),
                     relation_sources=tuple(item.source for item in matched),

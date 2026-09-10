@@ -147,14 +147,6 @@
     "provider.models.current": "Current model: {model}",
     "provider.models.empty_current": "(empty)",
     "provider.models.hint": "Use /model set <name-or-index> to switch models. Model names can be resolved across configured providers.",
-    "provider.models.invalid_index": "Invalid model index.",
-    "work.disabled": "The BTW work loop is not enabled.",
-    "work.status.none": "No BTW work task has run in this session.",
-    "work.status.body": "{body}",
-    "work.status.pending": "Queued: {task}",
-    "work.status.running": "Running: {task}",
-    "work.status.completed": "Completed: {task}",
-    "work.status.failed": "Failed: {task}",
-    "work.status.cancelled": "Cancelled: {task}"
+    "provider.models.invalid_index": "Invalid model index."
   }
 }

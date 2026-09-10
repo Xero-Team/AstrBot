@@ -22,10 +22,4 @@ repos:
     rev: v3.21.2
     hooks:
       - id: pyupgrade
-        # --py314-plus would strip `from __future__ import annotations`
-        # (pyupgrade removes it when min_version >= 3.14), but the runtime
-        # still evaluates protocol stub annotations eagerly
-        # (tests/unit/test_protocol_function_coverage.py via get_type_hints),
-        # so the import must stay. --py313-plus upgrades everything up to
-        # 3.13 syntax without treating PEP 563 as redundant.
-        args: [--py313-plus]
+        args: [--py314-plus]

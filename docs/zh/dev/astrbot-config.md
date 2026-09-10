@@ -37,7 +37,6 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `agent_runner`                                    | 当前配置档的 Agent 执行器类型及其内联配置。                                                                                                                        |
 | `provider_settings`                               | 当前配置档的 AI 开关、检索、流式输出、Computer Use 等共用行为。                                                                                                    |
 | `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                                                                                              |
-| `btw`                                             | 对话循环入口、规则任务分类、工作循环，以及插件、MCP、Skill 的循环分配。                                                                                            |
 | `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                                                                                             |
 | `provider_ltm_settings`                           | [群聊上下文感知](../use/group-chat-context)（内存群聊上下文、图片转述、持久化群消息历史）。JSON 键仍为历史名称；不是 Alkaid 长期记忆开关。群聊随机主动回复已移除。 |
 | `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                                                                                                                 |
@@ -46,12 +45,13 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                                                                                           |
 | `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=prefix`、`group=prefix`、`prefixes=["/"]`。                                                                     |
 | `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                                                                                        |
+| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                                                                                      |
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
 
 ## 入站路由
 
-`command_prefixes` 和 `llm_access` 都读取事件实际选中的配置档。`command_prefixes` 只负责指令头，不会与 LLM 前缀自动拼接。`llm_access.prefixes` 的每一项都是用户实际输入的完整字符串，按词边界和最长匹配处理。非空 LLM 前缀会在同一配置档占用其第一个指令根；如果与已启用指令冲突，Dashboard 会拒绝保存。
+用户向步骤见 [群聊何时会理我](../use/group-wake)。`command_prefixes` 和 `llm_access` 都读取事件实际选中的配置档。`command_prefixes` 只负责指令头，不会与 LLM 前缀自动拼接。`llm_access.prefixes` 的每一项都是用户实际输入的完整字符串，按词边界和最长匹配处理。非空 LLM 前缀会在同一配置档占用其第一个指令根；如果与已启用指令冲突，Dashboard 会拒绝保存。
 
 | 键                                   | 可选值                    | 说明                                                                                             |
 | ------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -188,30 +188,6 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 `image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制请求准备卡口 `prepare_provider_request` 中的图片处理，主智能体聊天路径、SDK `llm_generate` 与 `tool_loop_agent` 共用该卡口。送给模型的图片在此处转为 JPEG，最长边只缩小、从不放大；动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。关闭压缩时仍会转 JPEG，但不缩放。主智能体只把适配器引用物化为本地路径，不在组装附件时预编码 JPEG。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
 
-## BTW 双循环原型
-
-`btw` 为当前的双循环原型提供统一入口。所有消息先进入对话循环；启用规则分类后，包含代码、文件、命令、搜索、调研或 Claude Code、Codex、OpenCode、HAPI 等 coding-agent 意图的请求会转入工作循环。`/work <任务>` 是内置指令，不依赖分类器，会把后面的自由文本提交给工作循环；`/work` 与 `/work status` 查询最近一次任务状态。工作循环复用现有 Agent 与工具执行链；核心没有内置 Codex、CC 或其他专用执行器。源码构建的 Docker 镜像虽然预装了 `claude` 和 `codex` CLI，但它们只有通过工作循环的 Shell 工具或外部插件才能被调用。
-
-- `btw.enabled`：总开关。关闭后，所有请求仍通过对话循环使用既有 Agent 路径。
-- `btw.classifier.enabled`：启用内置的确定性分类规则；关闭后不会自动转入工作循环。
-- `btw.conversation_loop.provider_id`：对话循环模型。留空时使用会话默认模型；填写后会优先于会话模型选择。
-- `btw.work_loop.enabled`：启用工作循环；`max_concurrent` 限制同一配置档可同时执行的已分类工作任务数。
-- `btw.work_loop.provider_id`：工作循环模型。可与对话循环使用不同 Provider；留空时使用会话默认模型。
-- `btw.work_loop.computer_use_runtime`：工作循环的电脑权限。`inherit` 使用原有 `provider_settings.computer_use_runtime`，也可显式设为 `none`、`local` 或 `sandbox`。
-- 工作循环不会在 IM 内提权：即使工作循环运行，高风险 `tool.*` 动作在 IM 仍按上游规则拒绝。权限隔离通过配置档的 `computer_use_runtime` 控制；对话循环硬性禁用这些工具，工作循环的运行时选择（`none`、`local`、`sandbox`）是唯一控制面。
-- `btw.work_session.max_age_seconds`：终态工作会话保留时间，默认 `3600` 秒；到期后会在下一次会话操作时清理。
-- `btw.plugin_routes`：在 **配置文件** 页为每个已启用的非系统插件选择“仅对话循环”“仅工作循环”或“两者”。未保存条目默认“仅工作循环”；选择“两者”会保存为显式覆盖。
-- `btw.mcp_routes`：为每个已启用 MCP 服务器做相同的循环选择。未保存条目也默认“仅工作循环”，因此 `mcp__codex__codex` 等执行型 MCP 不会自动进入对话循环。
-- `btw.skill_routes`：为每个已启用 Skill 做相同的循环选择。普通 Skill 未保存时默认注入两个循环；工作区 Skill 仍只会注入工作循环。
-
-对话循环会强制禁用本地电脑、沙盒、浏览器和文件工具；这些能力只可能由工作循环获得。插件分配过滤插件注册给 LLM 的工具，MCP 分配过滤每个 MCP 服务器提供的全部工具，Skill 分配过滤注入的 Skill 提示。既有的子代理 handoff 也会应用相同的工具分配，且无法在对话循环重新获得电脑工具。Claude Code、Self Code、HAPI、Codex app-server、OpenCode 等外部插件注册的 LLM 工具因此默认只在工作循环可用。
-
-插件的 Pipeline/Star 处理器和 `/hapi`、`/codexdev`、`/vibe`、`/oc` 等显式命令仍按插件既有优先级运行，不属于 LLM 工具路由。要让这类插件命令也采用后台工作会话，需要插件侧或后续的命令执行协议显式支持；不要把“插件工具仅工作循环”理解为整个插件都被迁移。
-
-工作循环会先回复“工作任务已开始处理”，再由运行时后台任务执行；其结果从结果装饰阶段开始重放，包含回复内容安全检查、TTS/T2I 装饰和平台发送；入站阶段（唤醒、限流、入站内容安全）不会重新执行。后台工作使用与普通对话不同的会话锁，因此不会阻塞同一会话后续的聊天。工作会话是运行时内存状态，通过 `/work` 或 `/work status` 查询最近一次任务状态；重启或重建运行时后该状态不会保留。指令身份是 `builtin_commands:work`。
-
-这些设置属于配置档。多个配置档时，应分别检查其 BTW 开关、并发数和插件工具分配。
-
 ## 子代理、语音与知识库
 
 - `subagent_orchestrator.main_enable`：启用 handoff。
@@ -257,7 +233,7 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 - Provider / Platform 使用三态 `proxy_mode`：`inherit` 跟随全局配置，`direct` 明确直连并忽略环境变量代理，`custom` 只使用本项 `proxy_url`。空字符串不再同时表示继承和直连。
 - GitHub 镜像默认不提供。插件 `download_url` 和镜像前缀必须是公开 HTTPS origin，私网和非 HTTPS 会被拒绝。
 - `platform_settings.segmented_reply` 仍是默认关闭的体验分段。Telegram / Discord / 企业微信的平台硬限制分段由发送层负责，二者不要混用。
-- `log_level`、`log_file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log_level` 会同步到终端输出，不只写文件。
+- `log_level`、`log_file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log_level` 会同步到终端输出，不只写文件。文件日志走同一脱敏出口：已识别的密钥字段、Bearer、URL 和绝对路径会在写入前替换。Cookie、私聊和自定义 secret 不保证被剥离；分享前仍需人工检查。
 - `trace_enable`：Trace 采集总开关；`trace_log_*` 控制独立 Trace 文件。
 - `temp_dir_max_size`：`data/temp` 上限（MiB），默认 `1024`；后台定期清理旧文件。
 - `timezone`：IANA 时区名称，默认 `Asia/Shanghai`。

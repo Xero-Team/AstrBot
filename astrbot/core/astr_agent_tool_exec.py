@@ -11,7 +11,6 @@ from dataclasses import replace
 import mcp
 
 from astrbot import logger
-from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
@@ -347,87 +346,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             }
         return {}
 
-    @staticmethod
-    def _route_is_available_in_loop(
-        routes: object,
-        *,
-        route_key: str,
-        route_id: str,
-        loop_mode: str,
-        default_loop: str = "both",
-    ) -> bool:
-        """Return whether a BTW route permits one nested handoff capability."""
-        return route_is_available_in_loop(
-            routes,
-            route_key=route_key,
-            route_id=route_id,
-            loop_mode=loop_mode,
-            default_loop=default_loop,
-        )
-
-    @classmethod
-    def _filter_handoff_toolset_for_btw(
-        cls,
-        toolset: ToolSet,
-        *,
-        ctx,
-        cfg: dict,
-        event,
-    ) -> ToolSet:
-        """Apply BTW routes to tools exposed inside an existing handoff."""
-        btw = cfg.get("btw", {})
-        btw = btw if isinstance(btw, dict) else {}
-        if not btw.get("enabled", False):
-            # BTW disabled: the Agent path is master-identical, keep the
-            # handoff toolset as built.
-            return toolset
-        get_extra = getattr(event, "get_extra", None)
-        loop_mode = get_extra("btw_loop") if callable(get_extra) else None
-        if not isinstance(loop_mode, str) or loop_mode not in {
-            "conversation",
-            "work",
-        }:
-            return toolset
-        assert isinstance(loop_mode, str)
-
-        plugins = getattr(getattr(ctx, "catalogs", None), "plugins", None)
-        filtered = ToolSet()
-        for tool in toolset.tools:
-            raw_tool = getattr(tool, "_wrapped", tool)
-            if loop_mode == "conversation" and type(raw_tool).__module__.startswith(
-                "astrbot.core.tools.computer_tools"
-            ):
-                continue
-            if isinstance(raw_tool, MCPTool) and not cls._route_is_available_in_loop(
-                btw.get("mcp_routes", []),
-                route_key="server_name",
-                route_id=raw_tool.mcp_server_name,
-                loop_mode=loop_mode,
-                default_loop="work",
-            ):
-                continue
-            module_path = getattr(raw_tool, "handler_module_path", None)
-            plugin = (
-                plugins.get_by_module(module_path)
-                if plugins is not None and module_path
-                else None
-            )
-            plugin_id = (
-                getattr(plugin, "root_dir_name", None)
-                or getattr(plugin, "name", None)
-                or ""
-            )
-            if plugin is not None and not cls._route_is_available_in_loop(
-                btw.get("plugin_routes", []),
-                route_key="plugin_id",
-                route_id=plugin_id,
-                loop_mode=loop_mode,
-                default_loop="work",
-            ):
-                continue
-            filtered.add_tool(tool)
-        return filtered
-
     @classmethod
     def _build_handoff_toolset(
         cls,
@@ -437,15 +355,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = run_context.context.context
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
-        btw = cfg.get("btw", {})
-        btw = btw if isinstance(btw, dict) else {}
-        btw_enabled = bool(btw.get("enabled", False))
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "none"))
-        get_extra = getattr(event, "get_extra", None)
-        loop_mode = get_extra("btw_loop") if callable(get_extra) else None
-        if btw_enabled and loop_mode == "conversation":
-            runtime = "none"
 
         # An explicitly empty handoff tool list needs no registry lookup.  In
         # particular, this keeps the handoff execution path independent from
@@ -476,12 +387,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
-            toolset = cls._filter_handoff_toolset_for_btw(
-                toolset,
-                ctx=ctx,
-                cfg=cfg,
-                event=event,
-            )
             return None if toolset.empty() else toolset
 
         toolset = ToolSet()
@@ -496,12 +401,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(runtime_tool)
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
-        toolset = cls._filter_handoff_toolset_for_btw(
-            toolset,
-            ctx=ctx,
-            cfg=cfg,
-            event=event,
-        )
         return None if toolset.empty() else toolset
 
     @classmethod

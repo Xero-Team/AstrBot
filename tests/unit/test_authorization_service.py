@@ -1625,68 +1625,6 @@ async def test_high_risk_allow_fails_closed_when_audit_queue_is_full(authorizati
 
 
 @pytest.mark.asyncio
-async def test_im_subjects_cannot_bypass_step_up_for_high_risk_tools(authorization):
-    """IM operators are always denied high-risk tool actions as dashboard-only.
-
-    IM has no step-up path: high-risk ``tool.*`` actions stay Dashboard-only
-    regardless of any work-loop metadata an event may carry.
-    """
-    subject = Subject.im(
-        platform_instance="napcat", bot_account_id="bot", sender_id="42"
-    )
-    await authorization.grant_binding(
-        actor=Subject.system("test"),
-        subject_id=subject.id,
-        role=Role.INSTANCE_OPERATOR,
-        scope_type="instance",
-        scope_id="default",
-        config_id="default",
-        enforce_actor=False,
-    )
-    shell_resource = Resource.named(
-        "tool", "astrbot_execute_shell", config_id="default"
-    )
-    # Like every real IM event (see waking_check/stage.py), the auth context
-    # is bound to its inbound session, so the upstream ``origin_session``
-    # required-context gate is satisfied before the step-up branch.
-    session_resource = Resource.session("default", "napcat:FriendMessage:napcat!bot!42")
-
-    def _btw_context(**metadata) -> AuthContext:
-        return AuthContext(
-            subject=subject,
-            source="im",
-            config_id="default",
-            authenticated=subject.authenticated,
-            origin_session_resource_id=session_resource.id,
-            metadata=metadata,
-        )
-
-    # Plain IM operator context.
-    denied = await authorization.authorize(
-        subject,
-        "tool.local_exec",
-        shell_resource,
-        _btw_context(),
-    )
-    assert not denied.allowed
-    assert denied.reason == "high_risk_dashboard_only"
-
-    # Stale work-loop elevation metadata (from a previous release) must not
-    # lift the deny.
-    with_metadata = await authorization.authorize(
-        subject,
-        "tool.local_exec",
-        shell_resource,
-        _btw_context(
-            btw_work_elevation=True,
-            btw_elevated_actions=("tool.local_exec",),
-        ),
-    )
-    assert not with_metadata.allowed
-    assert with_metadata.reason == "high_risk_dashboard_only"
-
-
-@pytest.mark.asyncio
 async def test_binding_mutations_write_audit_records(authorization):
     owner = Subject.im(platform_instance="napcat", bot_account_id="bot", sender_id="42")
     target = Subject.im(

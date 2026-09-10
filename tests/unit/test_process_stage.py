@@ -148,11 +148,7 @@ def _stage(
         astrbot_config={"provider_settings": {"enable": provider_enabled}}
     )
     stage.star_request_sub_stage = FakeSubStage(star_responses or [])
-    agent_request = FakeSubStage(agent_responses or [])
-    stage._agent_request = agent_request
-    stage.conversation_loop = None
-    # Keep the alias while these tests describe the previous request-path name.
-    stage.agent_sub_stage = agent_request
+    stage.agent_sub_stage = FakeSubStage(agent_responses or [])
     return stage
 
 
@@ -213,24 +209,6 @@ async def test_process_stage_plain_plugin_response_does_not_trigger_agent():
     assert yielded == [None]
     assert stage.star_request_sub_stage.calls == [(event,)]
     assert stage.agent_sub_stage.calls == []
-
-
-@pytest.mark.asyncio
-async def test_process_stage_command_handler_can_continue_to_agent_when_llm_requested():
-    stage = _stage(star_responses=[None], agent_responses=["agent-step"])
-    event = FakeEvent(
-        extras={
-            "activated_handlers": [SimpleNamespace(name="work")],
-            "should_run_llm": True,
-            "btw_force_work": True,
-        }
-    )
-
-    yielded = [item async for item in stage.process(event)]
-
-    assert yielded == [None, None]
-    assert stage.star_request_sub_stage.calls == [(event,)]
-    assert stage.agent_sub_stage.calls == [(event,)]
 
 
 @pytest.mark.asyncio

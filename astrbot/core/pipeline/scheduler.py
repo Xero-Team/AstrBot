@@ -8,22 +8,13 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .bootstrap import builtin_stage_classes
 from .context import PipelineContext
-from .result_decorate.stage import ResultDecorateStage
 from .stage import Stage
 
 
 class _EmptyCompletionEvent(Protocol):
     """An adapter event that accepts an empty completion signal."""
 
-    def send(self, message: MessageChain | None) -> Awaitable[object]:
-        """Protocol stub: only adapters whose send accepts None match.
-
-        The body raises so the statement is effectful (CodeQL
-        py/ineffectual-statement); the unreachable ``...`` keeps the stub
-        form for the type checker.
-        """
-        raise NotImplementedError
-        ...  # unreachable stub marker for the type checker
+    def send(self, message: MessageChain | None) -> Awaitable[object]: ...
 
 
 class PipelineScheduler:
@@ -42,48 +33,6 @@ class PipelineScheduler:
             stage_instance = stage_cls()  # 创建实例
             await stage_instance.initialize(self.ctx)
             self.stages.append(stage_instance)
-        for stage in self.stages:
-            configure_detached_work = getattr(stage, "configure_detached_work", None)
-            if callable(configure_detached_work):
-                configure_detached_work(
-                    background_tasks=self.ctx.execution_context.background_tasks,
-                    result_dispatcher=self.deliver_detached_result,
-                    event_finalizer=self.finalize_detached_event,
-                )
-
-    async def deliver_detached_result(self, event: AstrMessageEvent) -> None:
-        """Run the configured decoration and response stages for detached work.
-
-        Replays from the first result-decorate stage onward — the decorate
-        stage's reply content-safety check, TTS/T2I decoration, and the send
-        stage.  Inbound stages (waking, rate limit, inbound content-safety)
-        already ran for the originating message and are not re-run.
-        """
-        result_stage_index = next(
-            (
-                index
-                for index, stage in enumerate(self.stages)
-                if isinstance(stage, ResultDecorateStage)
-            ),
-            None,
-        )
-        if result_stage_index is None:
-            raise RuntimeError("ResultDecorateStage is not configured")
-        for stage in self.stages[result_stage_index:]:
-            coroutine = stage.process(event)
-            if isinstance(coroutine, AsyncGenerator):
-                async for _ in coroutine:
-                    pass
-            else:
-                _ = await coroutine
-            if event.is_stopped():
-                return
-
-    async def finalize_detached_event(self, event: AstrMessageEvent) -> None:
-        """Release an event retained while its detached work is running."""
-        event.set_extra("btw_detached_work_finished", True)
-        event.cleanup_temporary_local_files()
-        self.ctx.execution_context.active_event_registry.unregister(event)
 
     async def _process_stages(self, event: AstrMessageEvent, from_stage=0) -> None:
         """依次执行各个阶段
@@ -163,8 +112,5 @@ class PipelineScheduler:
             else:
                 logger.debug("pipeline execution completed.")
         finally:
-            if event.get_extra("btw_detached_work", False):
-                logger.debug("deferred event cleanup until BTW work finishes")
-            else:
-                event.cleanup_temporary_local_files()
-                self.ctx.execution_context.active_event_registry.unregister(event)
+            event.cleanup_temporary_local_files()
+            self.ctx.execution_context.active_event_registry.unregister(event)

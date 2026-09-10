@@ -13,18 +13,6 @@ if TYPE_CHECKING:
     from astrbot.core.utils.error_redaction import safe_error
 
 _EXPORTS = {
-    "btw_work_latest_status": (
-        "astrbot.core.agent.btw.runtime_registry",
-        "latest_status",
-    ),
-    "btw_work_manager_for": (
-        "astrbot.core.agent.btw.runtime_registry",
-        "manager_for",
-    ),
-    "btw_work_loop_enabled": (
-        "astrbot.core.agent.btw.task_classifier",
-        "is_work_loop_enabled",
-    ),
     "AuthContext": ("astrbot.core.auth", "AuthContext"),
     "Decision": ("astrbot.core.auth", "Decision"),
     "Resource": ("astrbot.core.auth", "Resource"),

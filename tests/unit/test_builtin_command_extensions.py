@@ -20,7 +20,6 @@ from astrbot.core.command import (
     CommandEngine,
     CommandError,
     CommandErrorCode,
-    CommandResolutionKind,
     build_command_catalog,
 )
 from astrbot.core.command.schema import compile_command_schema
@@ -163,7 +162,6 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "provider_set_stt",
         "provider_set_tts",
         "task_stop",
-        "work",
         "variable_set",
         "variable_unset",
         "flow_enable",
@@ -985,7 +983,6 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
         "bot_disable": "session.manage",
         "bot_leave": "session.manage",
         "task_stop": "session.manage",
-        "work": "session.read",
         "conversation_create": "session.manage",
         "conversation_stats": "session.read",
         "conversation_history": "session.read",
@@ -1034,20 +1031,6 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
     with pytest.raises(CommandError) as flow_legacy:
         engine.resolve("flow on")
     assert flow_legacy.value.diagnostic.code is CommandErrorCode.UNKNOWN_SUBCOMMAND
-
-    work_task = engine.resolve("work 帮我重构这个文件")
-    assert work_task.resolution.kind is CommandResolutionKind.MATCHED
-    assert work_task.resolution.command_path == ("work",)
-    work_entry = work_task.resolution.entries[0]
-    assert dict(engine.bind(work_entry, work_task).values) == {
-        "task": "帮我重构这个文件"
-    }
-
-    work_status = engine.resolve("work status")
-    assert work_status.resolution.kind is CommandResolutionKind.MATCHED
-    assert work_status.resolution.command_path == ("work",)
-    status_entry = work_status.resolution.entries[0]
-    assert dict(engine.bind(status_entry, work_status).values) == {"task": "status"}
 
 
 class DummyProvider:
@@ -1137,164 +1120,3 @@ async def test_provider_model_commands_list_and_switch_by_index():
     await command.set_model(switch_event, "2")
     assert provider.model == "model-b"
     assert "Switched model." in _plain_text(switch_event.result)
-
-
-@pytest.mark.asyncio
-async def test_work_status_reports_none_and_latest(monkeypatch):
-    from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
-    from astrbot.core.agent.btw import (
-        WorkSessionManager,
-        WorkSessionStatus,
-        runtime_registry,
-    )
-
-    context = SimpleNamespace(
-        i18n=FakeI18n(),
-        config=SimpleNamespace(
-            get=lambda umo=None: {
-                "btw": {"enabled": True, "work_loop": {"enabled": True}}
-            }
-        ),
-    )
-    command = WorkCommands(context)
-
-    monkeypatch.setattr(runtime_registry, "_managers", {})
-    event = DummyEvent(message_str="work status")
-    await command.status(event)
-    assert _plain_text(event.result) == "No BTW work task has run in this session."
-
-    sessions = WorkSessionManager()
-    session = await sessions.create("napcat:FriendMessage:42", "refactor the module")
-    await sessions.update_status(session.id, WorkSessionStatus.RUNNING)
-    monkeypatch.setattr(runtime_registry, "_managers", {"": sessions})
-    latest_event = DummyEvent(message_str="work status")
-    await command.status(latest_event)
-    text = _plain_text(latest_event.result)
-    assert "Running" in text and "refactor the module" in text
-    assert latest_event.result.is_stopped()
-
-
-@pytest.mark.asyncio
-async def test_work_handle_submits_free_text_and_rejects_when_disabled():
-    from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
-
-    enabled = WorkCommands(
-        SimpleNamespace(
-            i18n=FakeI18n(),
-            config=SimpleNamespace(
-                get=lambda umo=None: {
-                    "btw": {"enabled": True, "work_loop": {"enabled": True}}
-                }
-            ),
-        )
-    )
-    event = DummyEvent(message_str="work 帮我重构这个文件")
-    await enabled.handle(event, "帮我重构这个文件")
-    assert event.message_str == "帮我重构这个文件"
-    assert event.get_extra("should_run_llm") is True
-    assert event.get_extra("btw_force_work") is True
-    assert event.get_extra("btw_loop") == "work"
-    assert event.result is None
-    assert event.is_stopped() is False
-
-    status_event = DummyEvent(message_str="work status")
-    await enabled.handle(status_event, "status")
-    assert (
-        _plain_text(status_event.result) == "No BTW work task has run in this session."
-    )
-
-    upper_status = DummyEvent(message_str="work STATUS")
-    await enabled.handle(upper_status, "STATUS")
-    assert (
-        _plain_text(upper_status.result) == "No BTW work task has run in this session."
-    )
-
-    status_task = DummyEvent(message_str="work status 重构")
-    await enabled.handle(status_task, "status 重构")
-    assert status_task.message_str == "status 重构"
-    assert status_task.get_extra("btw_force_work") is True
-    assert status_task.result is None
-
-    disabled = WorkCommands(
-        SimpleNamespace(
-            i18n=FakeI18n(),
-            config=SimpleNamespace(
-                get=lambda umo=None: {
-                    "btw": {"enabled": True, "work_loop": {"enabled": False}}
-                }
-            ),
-        )
-    )
-    blocked = DummyEvent(message_str="work 写一段 python")
-    await disabled.handle(blocked, "写一段 python")
-    assert _plain_text(blocked.result) == "The BTW work loop is not enabled."
-    assert blocked.get_extra("btw_force_work") is None
-
-
-@pytest.mark.asyncio
-async def test_work_handle_rejects_invalid_or_master_disabled_btw_config():
-    from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
-
-    cases = (
-        {"btw": {"enabled": False, "work_loop": {"enabled": True}}},
-        {"btw": "yes"},
-        None,
-    )
-    for config in cases:
-        command = WorkCommands(
-            SimpleNamespace(
-                i18n=FakeI18n(),
-                config=SimpleNamespace(get=lambda umo=None, value=config: value),
-            )
-        )
-        event = DummyEvent(message_str="work 写一段 python")
-        await command.handle(event, "写一段 python")
-        assert _plain_text(event.result) == "The BTW work loop is not enabled."
-        assert event.get_extra("btw_force_work") is None
-
-
-@pytest.mark.asyncio
-async def test_work_submit_continues_into_conversation_work_loop():
-    from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
-    from astrbot.core.agent.conversation_loop import ConversationLoop
-
-    class FakeAgentRequest:
-        def __init__(self) -> None:
-            self.initialize = AsyncMock()
-            self.process_calls = []
-
-        async def process(self, event):
-            self.process_calls.append(event)
-            yield "first"
-
-    command = WorkCommands(
-        SimpleNamespace(
-            i18n=FakeI18n(),
-            config=SimpleNamespace(
-                get=lambda umo=None: {
-                    "btw": {"enabled": True, "work_loop": {"enabled": True}}
-                }
-            ),
-        )
-    )
-    event = DummyEvent(message_str="work 帮我写一段python代码获取当前系统磁盘占用情况")
-    await command.handle(event, "帮我写一段python代码获取当前系统磁盘占用情况")
-
-    loop = ConversationLoop(FakeAgentRequest())
-    await loop.initialize(
-        SimpleNamespace(
-            astrbot_config={
-                "btw": {
-                    "enabled": True,
-                    "classifier": {"enabled": False},
-                    "work_loop": {"enabled": True, "max_concurrent": 2},
-                }
-            }
-        )
-    )
-    output = [item async for item in loop.process(event)]
-
-    assert event.message_str == "帮我写一段python代码获取当前系统磁盘占用情况"
-    assert event.get_extra("btw_force_work") is True
-    assert event.get_extra("btw_loop") == "work"
-    assert output == ["first"]

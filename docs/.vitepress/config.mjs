@@ -182,6 +182,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '项目架构', link: '/architecture' },
+              { text: 'BTW 双循环设计（提案）', link: '/btw-dual-loop' },
               { text: '源码开发', link: '/development' },
               { text: 'Linux 开发环境', link: '/linux' },
               {
@@ -443,6 +444,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Architecture', link: '/architecture' },
+              {
+                text: 'BTW Dual-Loop Design (Proposal)',
+                link: '/btw-dual-loop',
+              },
               { text: 'Source Development', link: '/development' },
               { text: 'Linux Development', link: '/linux' },
               {

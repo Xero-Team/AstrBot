@@ -17,6 +17,7 @@ PROVIDER_MODULES = {
     "opencode_go_responses": "astrbot.core.provider.sources.opencode_go_responses_source",
     "mirarouter_chat_completion": "astrbot.core.provider.sources.mirarouter_source",
     "ssycloud_chat_completion": "astrbot.core.provider.sources.ssycloud_source",
+    "ikuncode_chat_completion": "astrbot.core.provider.sources.ikuncode_source",
     "anthropic_chat_completion": "astrbot.core.provider.sources.anthropic_source",
     "kimi_code_chat_completion": "astrbot.core.provider.sources.kimi_code_source",
     "googlegenai_chat_completion": "astrbot.core.provider.sources.gemini_source",

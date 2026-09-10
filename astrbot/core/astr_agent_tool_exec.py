@@ -32,6 +32,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.tool_catalog import tool_is_available_in_loop
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -301,6 +302,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             }
         return {}
 
+    @staticmethod
+    def _filter_handoff_tools_for_loop(toolset: ToolSet, *, cfg, ctx, event) -> ToolSet:
+        """Keep handoff tools within the originating loop's assignments."""
+        btw_config = cfg.get("btw", {})
+        if not isinstance(btw_config, dict) or not btw_config.get("enabled", False):
+            return toolset
+        plugins = getattr(getattr(ctx, "catalogs", None), "plugins", None)
+        loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        return ToolSet(
+            [
+                tool
+                for tool in toolset.tools
+                if tool_is_available_in_loop(
+                    tool, btw_config=btw_config, loop_mode=loop_mode, plugins=plugins
+                )
+            ]
+        )
+
     @classmethod
     def _filter_handoff_computer_tools(
         cls, toolset: ToolSet, *, cfg: dict, runtime: str
@@ -372,6 +391,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             toolset = cls._filter_handoff_computer_tools(
                 toolset, cfg=cfg, runtime=runtime
             )
+            toolset = cls._filter_handoff_tools_for_loop(
+                toolset, cfg=cfg, ctx=ctx, event=event
+            )
             return None if toolset.empty() else toolset
 
         toolset = ToolSet()
@@ -387,6 +409,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
         toolset = cls._filter_handoff_computer_tools(toolset, cfg=cfg, runtime=runtime)
+        toolset = cls._filter_handoff_tools_for_loop(
+            toolset, cfg=cfg, ctx=ctx, event=event
+        )
         return None if toolset.empty() else toolset
 
     @classmethod

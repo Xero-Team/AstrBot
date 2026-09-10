@@ -4,6 +4,8 @@
     "desc": "AstrBot built-in session, conversation, provider, persona, plugin, and bot commands."
   },
   "commands": {
+    "work.disabled": "The BTW work loop is not enabled.",
+    "work.usage": "Usage: /work <task>",
     "help.header": "AstrBot v{version} (WebUI: {dashboard})",
     "help.empty": "No enabled built-in commands.",
     "help.tip": "Tip: use `/help --image` to render the visual help card.",

@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
+from astrbot.core.agent.btw import runtime_registry
 from astrbot.core.agent.conversation_loop import ConversationLoop
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -29,6 +30,10 @@ class ProcessStage(Stage):
         # initialize star request sub stage
         self.star_request_sub_stage = StarRequestSubStage()
         await self.star_request_sub_stage.initialize(ctx)
+        if self.conversation_loop is not None:
+            runtime_registry.register(
+                ctx.astrbot_config_id, self.conversation_loop.work_sessions
+            )
 
     def configure_detached_work(
         self,
@@ -48,7 +53,13 @@ class ProcessStage(Stage):
     async def close(self) -> None:
         """Reclaim work before this profile's scheduler is replaced."""
         if self.conversation_loop is not None:
-            await self.conversation_loop.close()
+            try:
+                await self.conversation_loop.close()
+            finally:
+                runtime_registry.unregister(
+                    self.ctx.astrbot_config_id,
+                    self.conversation_loop.work_sessions,
+                )
 
     async def process(
         self,

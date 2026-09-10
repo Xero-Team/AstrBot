@@ -8,7 +8,17 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import httpx
 import pytest
-from telegram import Chat, Message, Update, User
+from telegram import (
+    Audio,
+    Chat,
+    Document,
+    Message,
+    MessageEntity,
+    PhotoSize,
+    Update,
+    User,
+    Video,
+)
 from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
@@ -2397,3 +2407,128 @@ async def test_telegram_get_group_does_not_use_topic_name_for_other_group():
 
     assert group.group_id == "-100999"
     assert group.group_name == "Other"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media", [None, "audio", "photo", "document", "video"])
+@pytest.mark.parametrize(
+    ("text", "ranges", "expected", "names"),
+    [
+        ("😀 @test_bot hello", [(2, 9)], "😀  hello", ["test_bot"]),
+        (
+            "@test_bot hello @test_bot!",
+            [(0, 9), (16, 9)],
+            " hello !",
+            ["test_bot", "test_bot"],
+        ),
+        (
+            "😀@other@test_bot🚀@TEST_BOT",
+            [(1, 6), (7, 9), (17, 9)],
+            "😀@other🚀",
+            ["other", "test_bot", "TEST_BOT"],
+        ),
+        ("@test_bot@test_bot", [(0, 9), (9, 9)], "", ["test_bot", "test_bot"]),
+        (
+            "@test_bot x @other",
+            [(12, 6), (0, 9), (0, 9)],
+            " x @other",
+            ["other", "test_bot", "test_bot"],
+        ),
+        ("😀 untouched\n text 🚀", [], "😀 untouched\n text 🚀", []),
+    ],
+)
+async def test_telegram_real_entities_preserve_text(
+    media, text, ranges, expected, names
+):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    entities = [
+        MessageEntity.adjust_message_entities_to_utf_16(
+            text, [MessageEntity("mention", offset, length)]
+        )[0]
+        for offset, length in ranges
+    ]
+    content = {"text": text, "entities": entities}
+    if media:
+        attachments = {
+            "audio": Audio("file", "unique", 1),
+            "photo": [PhotoSize("file", "unique", 1, 1)],
+            "document": Document("file", "unique"),
+            "video": Video("file", "unique", 1, 1, 1),
+        }
+        content = {
+            "caption": text,
+            "caption_entities": entities,
+            media: attachments[media],
+        }
+    message = Message(
+        message_id=1,
+        date=datetime.now(),
+        chat=Chat(-10001, "group"),
+        from_user=User(42, "Alice", False),
+        **content,
+    )
+    parser = message.parse_caption_entity if media else message.parse_entity
+    assert [parser(entity)[1:] for entity in entities] == names
+
+    context = _build_context()
+    result = await adapter.convert_message(Update(1, message=message), context)
+
+    assert result is not None
+    assert result.message_str == expected
+    assert [
+        part.target for part in result.message if isinstance(part, Comp.Mention)
+    ] == [
+        str(context.bot.id) if name.lower() == context.bot.username.lower() else name
+        for name in names
+    ]
+    assert (
+        "".join(part.text for part in result.message if isinstance(part, Comp.Plain))
+        == expected
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("caption", [False, True])
+@pytest.mark.parametrize(
+    ("offset", "length"),
+    [
+        (-1, 9),
+        (99, 9),
+        (3, 99),
+        (3, 0),
+        (3, -1),
+        (1, 11),
+        (0, 1),
+        (4, 8),
+        (0, 12),
+        (13, 5),
+    ],
+)
+async def test_telegram_malformed_entities_leave_original_text(caption, offset, length):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 @test_bot hello"
+    entities = [MessageEntity("mention", offset, length), MessageEntity("bold", 3, 9)]
+    content = {"text": text, "entities": entities}
+    if caption:
+        content = {
+            "caption": text,
+            "caption_entities": entities,
+            "photo": [PhotoSize("file", "unique", 1, 1)],
+        }
+    message = Message(
+        message_id=1,
+        date=datetime.now(),
+        chat=Chat(-10001, "group"),
+        from_user=User(42, "Alice", False),
+        **content,
+    )
+
+    result = await adapter.convert_message(Update(1, message=message), _build_context())
+
+    assert result is not None
+    assert result.message_str == text
+    assert not any(isinstance(part, Comp.Mention) for part in result.message)

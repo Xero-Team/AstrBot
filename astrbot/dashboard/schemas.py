@@ -423,13 +423,23 @@ class KnowledgeBaseRequest(OpenModel):
     emoji: str | None = None
     embedding_provider_id: str | None = None
     rerank_provider_id: str | None = None
-    chunk_size: int | None = None
-    chunk_overlap: int | None = None
+    chunk_size: int | None = Field(default=None, ge=1, le=8192)
+    chunk_overlap: int | None = Field(default=None, ge=0, le=8191)
     top_k_dense: int | None = None
     top_k_sparse: int | None = None
     top_m_final: int | None = None
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    @model_validator(mode="after")
+    def validate_chunking(self):
+        if (
+            self.chunk_size is not None
+            and self.chunk_overlap is not None
+            and self.chunk_overlap >= self.chunk_size
+        ):
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        return self
 
     def canonical_payload(self) -> dict[str, Any]:
         """Return the service-facing knowledge base payload.
@@ -465,19 +475,29 @@ class KnowledgeBaseCreateRequest(KnowledgeBaseRequest):
 
 class KnowledgeBaseImportRequest(OpenModel):
     documents: list[dict[str, Any]] | None = None
-    batch_size: int | None = None
-    tasks_limit: int | None = None
-    max_retries: int | None = None
+    batch_size: int | None = Field(default=None, ge=1, le=128)
+    tasks_limit: int | None = Field(default=None, ge=1, le=8)
+    max_retries: int | None = Field(default=None, ge=0, le=10)
 
 
 class KnowledgeBaseUrlImportRequest(OpenModel):
     url: str | None = None
     urls: list[str] | None = None
-    chunk_size: int | None = None
-    chunk_overlap: int | None = None
-    batch_size: int | None = None
-    tasks_limit: int | None = None
-    max_retries: int | None = None
+    chunk_size: int | None = Field(default=None, ge=1, le=8192)
+    chunk_overlap: int | None = Field(default=None, ge=0, le=8191)
+    batch_size: int | None = Field(default=None, ge=1, le=128)
+    tasks_limit: int | None = Field(default=None, ge=1, le=8)
+    max_retries: int | None = Field(default=None, ge=0, le=10)
+
+    @model_validator(mode="after")
+    def validate_chunking(self):
+        if (
+            self.chunk_size is not None
+            and self.chunk_overlap is not None
+            and self.chunk_overlap >= self.chunk_size
+        ):
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        return self
 
 
 class KnowledgeBaseRetrieveRequest(OpenModel):

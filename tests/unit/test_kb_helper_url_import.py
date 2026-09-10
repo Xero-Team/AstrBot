@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base._kb_helper_url_import import (
     build_url_document_name,
     canonical_url,
@@ -107,6 +108,35 @@ async def test_upload_from_url_rejects_empty_cleaned_chunks(
             )
 
     helper.upload_document.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_upload_from_url_rejects_oversized_text_before_processing(
+    stub_provider_manager_module,
+) -> None:
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.prov_mgr = MagicMock()
+    helper.prov_mgr.acm = MagicMock()
+    helper.prov_mgr.acm.default_conf = {
+        "provider_settings": {"websearch_tavily_key": ["test-key"]}
+    }
+    helper._clean_and_rechunk_content = AsyncMock()
+    helper.upload_document = AsyncMock()
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.extract_url_content",
+            new=AsyncMock(return_value="oversized"),
+        ),
+        patch("astrbot.core.knowledge_base.kb_helper.KB_SOURCE_MAX_BYTES", 4),
+    ):
+        with pytest.raises(KnowledgeBaseUploadError, match="128 MB size limit"):
+            await helper.upload_from_url("https://example.com/article")
+
+    helper._clean_and_rechunk_content.assert_not_awaited()
+    helper.upload_document.assert_not_awaited()
 
 
 def test_build_url_document_name_adds_suffix_when_missing() -> None:

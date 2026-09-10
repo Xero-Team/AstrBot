@@ -283,8 +283,10 @@ import type {
   ImportBackupData,
   ImportBackupResponses,
   ImportKnowledgeDocumentFromUrlData,
+  ImportKnowledgeDocumentFromUrlErrors,
   ImportKnowledgeDocumentFromUrlResponses,
   ImportKnowledgeDocumentsData,
+  ImportKnowledgeDocumentsErrors,
   ImportKnowledgeDocumentsResponses,
   InitBackupUploadData,
   InitBackupUploadResponses,
@@ -617,6 +619,7 @@ import type {
   UploadFileData,
   UploadFileResponses,
   UploadKnowledgeDocumentData,
+  UploadKnowledgeDocumentErrors,
   UploadKnowledgeDocumentResponses,
   UploadOpenApiFileData,
   UploadOpenApiFileResponses,
@@ -4673,10 +4676,14 @@ export const listKnowledgeDocuments = <ThrowOnError extends boolean = false>(
  */
 export const uploadKnowledgeDocument = <ThrowOnError extends boolean = false>(
   options: Options<UploadKnowledgeDocumentData, ThrowOnError>,
-): RequestResult<UploadKnowledgeDocumentResponses, unknown, ThrowOnError> =>
+): RequestResult<
+  UploadKnowledgeDocumentResponses,
+  UploadKnowledgeDocumentErrors,
+  ThrowOnError
+> =>
   (options.client ?? client).post<
     UploadKnowledgeDocumentResponses,
-    unknown,
+    UploadKnowledgeDocumentErrors,
     ThrowOnError
   >({
     ...formDataBodySerializer,
@@ -4695,10 +4702,14 @@ export const uploadKnowledgeDocument = <ThrowOnError extends boolean = false>(
  */
 export const importKnowledgeDocuments = <ThrowOnError extends boolean = false>(
   options: Options<ImportKnowledgeDocumentsData, ThrowOnError>,
-): RequestResult<ImportKnowledgeDocumentsResponses, unknown, ThrowOnError> =>
+): RequestResult<
+  ImportKnowledgeDocumentsResponses,
+  ImportKnowledgeDocumentsErrors,
+  ThrowOnError
+> =>
   (options.client ?? client).post<
     ImportKnowledgeDocumentsResponses,
-    unknown,
+    ImportKnowledgeDocumentsErrors,
     ThrowOnError
   >({
     responseType: 'json',
@@ -4720,12 +4731,12 @@ export const importKnowledgeDocumentFromUrl = <
   options: Options<ImportKnowledgeDocumentFromUrlData, ThrowOnError>,
 ): RequestResult<
   ImportKnowledgeDocumentFromUrlResponses,
-  unknown,
+  ImportKnowledgeDocumentFromUrlErrors,
   ThrowOnError
 > =>
   (options.client ?? client).post<
     ImportKnowledgeDocumentFromUrlResponses,
-    unknown,
+    ImportKnowledgeDocumentFromUrlErrors,
     ThrowOnError
   >({
     responseType: 'json',

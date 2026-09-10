@@ -755,20 +755,64 @@ async def test_upload_route_collects_starlette_multipart_files(
 
 
 @pytest.mark.asyncio
-async def test_upload_route_accepts_more_than_starlette_default_file_limit(
+async def test_upload_route_rejects_capacity_before_parsing_request(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    knowledge_base_route_service._active_jobs = 2
+    parse_form = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.dashboard.api.knowledge_bases._parse_bounded_multipart_form",
+        parse_form,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents",
+        files={"file": ("document.md", b"content", "text/markdown")},
+    )
+
+    assert response.status_code == 503
+    parse_form.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_import_route_rejects_capacity_before_parsing_request(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    knowledge_base_route_service._active_jobs = 2
+    parse_json = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.dashboard.api.knowledge_bases._parse_bounded_json",
+        parse_json,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents/import",
+        json={"documents": [{"file_name": "document.md", "chunks": ["content"]}]},
+    )
+
+    assert response.status_code == 503
+    parse_json.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upload_route_rejects_more_than_knowledge_base_file_limit(
     asgi_client: httpx.AsyncClient,
     knowledge_base_route_service: KnowledgeBaseService,
 ):
     knowledge_base_route_service.upload_document = AsyncMock(
         return_value={
-            "task_id": "task-1001",
-            "file_count": 1001,
+            "task_id": "unexpected",
+            "file_count": 101,
             "message": "ok",
         }
     )
     files = [
         (f"file{index}", (f"doc-{index}.md", b"# title\n", "text/markdown"))
-        for index in range(1001)
+        for index in range(101)
     ]
 
     response = await asgi_client.post(
@@ -777,11 +821,23 @@ async def test_upload_route_accepts_more_than_starlette_default_file_limit(
         files=files,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     payload = response.json()
-    assert payload["status"] == "ok"
-    uploaded = knowledge_base_route_service.upload_document.await_args.kwargs
-    assert len(uploaded["files"]) == 1001
+    assert payload["status"] == "error"
+    knowledge_base_route_service.upload_document.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_import_route_rejects_document_without_chunks(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents/import",
+        json={"documents": [{"file_name": "empty.txt", "chunks": []}]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["status"] == "error"
 
 
 @pytest.mark.asyncio

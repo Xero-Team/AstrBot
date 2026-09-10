@@ -684,17 +684,46 @@ export type KnowledgeBaseCreateRequest = KnowledgeBaseRequest & {
 };
 
 export type KnowledgeDocumentUploadRequest = {
+  /**
+   * A document file. Repeat this field, or use file-prefixed field names, for a batch of at most 100 files.
+   */
   file: Blob | File;
+  chunk_size?: number;
+  /**
+   * Must be smaller than chunk_size.
+   */
+  chunk_overlap?: number;
+  batch_size?: number;
+  tasks_limit?: number;
+  max_retries?: number;
 };
 
 export type KnowledgeDocumentImportRequest = {
-  paths: Array<string>;
-  parser?: string;
+  documents: Array<{
+    file_name: string;
+    file_type?: string;
+    chunks: Array<string>;
+    [key: string]: unknown;
+  }>;
+  batch_size?: number;
+  tasks_limit?: number;
+  max_retries?: number;
+  [key: string]: unknown;
 };
 
 export type KnowledgeDocumentUrlImportRequest = {
   url: string;
-  parser?: string;
+  chunk_size?: number;
+  /**
+   * Must be smaller than chunk_size.
+   */
+  chunk_overlap?: number;
+  batch_size?: number;
+  tasks_limit?: number;
+  max_retries?: number;
+  enable_cleaning?: boolean;
+  cleaning_provider_id?: string;
+  [key: string]: unknown;
 };
 
 export type KnowledgeDocument = {
@@ -5166,6 +5195,20 @@ export type UploadKnowledgeDocumentData = {
   url: '/api/v1/knowledge-bases/{kb_id}/documents';
 };
 
+export type UploadKnowledgeDocumentErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  422: ErrorEnvelope;
+  /**
+   * Standard AstrBot error response
+   */
+  503: ErrorEnvelope;
+};
+
+export type UploadKnowledgeDocumentError =
+  UploadKnowledgeDocumentErrors[keyof UploadKnowledgeDocumentErrors];
+
 export type UploadKnowledgeDocumentResponses = {
   /**
    * Standard AstrBot success response
@@ -5185,6 +5228,20 @@ export type ImportKnowledgeDocumentsData = {
   url: '/api/v1/knowledge-bases/{kb_id}/documents/import';
 };
 
+export type ImportKnowledgeDocumentsErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  422: ErrorEnvelope;
+  /**
+   * Standard AstrBot error response
+   */
+  503: ErrorEnvelope;
+};
+
+export type ImportKnowledgeDocumentsError =
+  ImportKnowledgeDocumentsErrors[keyof ImportKnowledgeDocumentsErrors];
+
 export type ImportKnowledgeDocumentsResponses = {
   /**
    * Standard AstrBot success response
@@ -5203,6 +5260,20 @@ export type ImportKnowledgeDocumentFromUrlData = {
   query?: never;
   url: '/api/v1/knowledge-bases/{kb_id}/documents/import-url';
 };
+
+export type ImportKnowledgeDocumentFromUrlErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  422: ErrorEnvelope;
+  /**
+   * Standard AstrBot error response
+   */
+  503: ErrorEnvelope;
+};
+
+export type ImportKnowledgeDocumentFromUrlError =
+  ImportKnowledgeDocumentFromUrlErrors[keyof ImportKnowledgeDocumentFromUrlErrors];
 
 export type ImportKnowledgeDocumentFromUrlResponses = {
   /**

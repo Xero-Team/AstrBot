@@ -1,9 +1,11 @@
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from starlette.datastructures import UploadFile
-from starlette.formparsers import MultiPartException
+from starlette.formparsers import MultiPartException, MultiPartParser
 
 from astrbot import logger
 from astrbot.core.auth.models import Resource
@@ -17,6 +19,9 @@ from astrbot.dashboard.schemas import (
     KnowledgeBaseUrlImportRequest,
 )
 from astrbot.dashboard.services.knowledge_base_service import (
+    KB_UPLOAD_MAX_BYTES,
+    KB_UPLOAD_MAX_FILES,
+    KB_UPLOAD_MAX_PART_SIZE,
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
 )
@@ -24,9 +29,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
 from .auth import AuthContext, object_resource, require_resource_action, require_scope
 from .error_handling import internal_error_response
 
-KB_UPLOAD_MAX_FILES = 20_000
-KB_UPLOAD_MAX_FIELDS = 20_000
-KB_UPLOAD_MAX_PART_SIZE = 128 * 1024 * 1024
+KB_UPLOAD_MAX_FIELDS = 100
 
 router = APIRouter(tags=["Knowledge Bases"])
 
@@ -86,6 +89,57 @@ async def _run(operation, *, prefix: str):
         return payload
     except Exception as exc:
         return internal_error_response(logger, prefix, exc)
+
+
+async def _parse_bounded_multipart_form(request: Request):
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > KB_UPLOAD_MAX_BYTES:
+                raise KnowledgeBaseServiceError(
+                    "Upload exceeds the 512 MB request limit.", status_code=422
+                )
+        except ValueError as exc:
+            raise KnowledgeBaseServiceError(
+                "Invalid Content-Length", status_code=422
+            ) from exc
+
+    received_bytes = 0
+
+    async def bounded_stream():
+        nonlocal received_bytes
+        async for chunk in request.stream():
+            received_bytes += len(chunk)
+            if received_bytes > KB_UPLOAD_MAX_BYTES:
+                raise MultiPartException("Upload exceeds the 512 MB request limit.")
+            yield chunk
+
+    parser = MultiPartParser(
+        request.headers,
+        bounded_stream(),
+        max_files=KB_UPLOAD_MAX_FILES,
+        max_fields=KB_UPLOAD_MAX_FIELDS,
+        max_part_size=KB_UPLOAD_MAX_PART_SIZE,
+    )
+    try:
+        return await parser.parse()
+    except MultiPartException as exc:
+        raise KnowledgeBaseServiceError("上传表单无效", status_code=422) from exc
+
+
+async def _parse_bounded_json(request: Request, *, max_bytes: int) -> Any:
+    received = bytearray()
+    async for chunk in request.stream():
+        if len(received) + len(chunk) > max_bytes:
+            raise KnowledgeBaseServiceError(
+                "Knowledge base import exceeds the 512 MB request limit.",
+                status_code=422,
+            )
+        received.extend(chunk)
+    try:
+        return json.loads(received)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise KnowledgeBaseServiceError("Invalid JSON body", status_code=422) from exc
 
 
 @router.get("/knowledge-bases")
@@ -198,31 +252,36 @@ async def upload_knowledge_base_document(
     service: KnowledgeBaseService = Depends(get_service),
 ):
     async def _operation():
+        lease = await service.acquire_ingestion_slot()
+        lease_handed_off = False
         try:
-            form = await request.form(
-                max_files=KB_UPLOAD_MAX_FILES,
-                max_fields=KB_UPLOAD_MAX_FIELDS,
-                max_part_size=KB_UPLOAD_MAX_PART_SIZE,
-            )
-        except MultiPartException as exc:
-            raise KnowledgeBaseServiceError("上传表单无效") from exc
-        form_data = {
-            key: value
-            for key, value in form.multi_items()
-            if not isinstance(value, UploadFile)
-        }
-        form_data["kb_id"] = kb_id
-        files = [
-            value
-            for key, value in form.multi_items()
-            if isinstance(value, UploadFile)
-            and (key == "file" or key.startswith("file") or key == "files[]")
-        ]
-        return await service.upload_document(
-            content_type=request.headers.get("content-type"),
-            form_data=form_data,
-            files=files,
-        )
+            form = await _parse_bounded_multipart_form(request)
+            try:
+                form_data = {
+                    key: value
+                    for key, value in form.multi_items()
+                    if not isinstance(value, UploadFile)
+                }
+                form_data["kb_id"] = kb_id
+                files = [
+                    value
+                    for key, value in form.multi_items()
+                    if isinstance(value, UploadFile)
+                    and (key == "file" or key.startswith("file") or key == "files[]")
+                ]
+                result = await service.upload_document(
+                    content_type=request.headers.get("content-type"),
+                    form_data=form_data,
+                    files=files,
+                    lease=lease,
+                )
+                lease_handed_off = True
+                return result
+            finally:
+                await form.close()
+        finally:
+            if not lease_handed_off:
+                await lease.release()
 
     return await _run(_operation, prefix="上传文档失败")
 
@@ -230,15 +289,32 @@ async def upload_knowledge_base_document(
 @router.post("/knowledge-bases/{kb_id}/documents/import")
 async def import_knowledge_base_documents(
     kb_id: str,
-    payload: KnowledgeBaseImportRequest,
+    request: Request,
     _auth: AuthContext = Depends(require_kb_scope),
     service: KnowledgeBaseService = Depends(get_service),
 ):
-    body = payload.model_dump(exclude_none=True)
-    return await _run(
-        lambda: service.import_documents({**body, "kb_id": kb_id}),
-        prefix="导入文档失败",
-    )
+    async def _operation():
+        lease = await service.acquire_ingestion_slot()
+        lease_handed_off = False
+        try:
+            raw = await _parse_bounded_json(request, max_bytes=KB_UPLOAD_MAX_BYTES)
+            try:
+                payload = KnowledgeBaseImportRequest.model_validate(raw)
+            except ValidationError as exc:
+                raise KnowledgeBaseServiceError(
+                    "Invalid knowledge base import request", status_code=422
+                ) from exc
+            body = payload.model_dump(exclude_none=True)
+            result = await service.import_documents(
+                {**body, "kb_id": kb_id}, lease=lease
+            )
+            lease_handed_off = True
+            return result
+        finally:
+            if not lease_handed_off:
+                await lease.release()
+
+    return await _run(_operation, prefix="导入文档失败")
 
 
 @router.post("/knowledge-bases/{kb_id}/documents/import-url")

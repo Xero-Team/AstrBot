@@ -35,6 +35,7 @@ async def extract_url_content(
     url: str,
     tavily_keys: list[str],
     progress_callback: Any = None,
+    max_response_bytes: int | None = None,
 ) -> str:
     """Extract text content from a URL with progress reporting.
 
@@ -55,7 +56,11 @@ async def extract_url_content(
         await progress_callback("extracting", 0, 100)
 
     try:
-        text_content = await extract_text_from_url(url, tavily_keys)
+        text_content = await extract_text_from_url(
+            url,
+            tavily_keys,
+            max_response_bytes=max_response_bytes,
+        )
     except Exception as exc:
         logger.error("Failed to extract content from URL: %s", safe_error("", exc))
         raise OSError("Failed to extract content from URL") from exc

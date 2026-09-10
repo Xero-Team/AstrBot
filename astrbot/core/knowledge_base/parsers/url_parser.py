@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import aiohttp
 
@@ -27,7 +28,12 @@ class URLExtractor:
             self.tavily_key_index = (self.tavily_key_index + 1) % len(self.tavily_keys)
             return key
 
-    async def extract_text_from_url(self, url: str) -> str:
+    async def extract_text_from_url(
+        self,
+        url: str,
+        *,
+        max_response_bytes: int | None = None,
+    ) -> str:
         """
         使用 Tavily API 从 URL 提取主要文本内容。
         这是 web_searcher 插件中 tavily_extract_web_page 方法的简化版本，
@@ -80,7 +86,15 @@ class URLExtractor:
                             f"Tavily web extraction failed: {reason}, status: {response.status}"
                         )
 
-                    data = await response.json()
+                    response_bytes = bytearray()
+                    async for chunk in response.content.iter_chunked(1024 * 1024):
+                        if (
+                            max_response_bytes is not None
+                            and len(response_bytes) + len(chunk) > max_response_bytes
+                        ):
+                            raise OSError("Tavily extraction response is too large")
+                        response_bytes.extend(chunk)
+                    data = json.loads(response_bytes)
                     results = data.get("results", [])
 
                     if not results:
@@ -96,7 +110,12 @@ class URLExtractor:
 
 
 # 为了向后兼容，提供一个简单的函数接口
-async def extract_text_from_url(url: str, tavily_keys: list[str]) -> str:
+async def extract_text_from_url(
+    url: str,
+    tavily_keys: list[str],
+    *,
+    max_response_bytes: int | None = None,
+) -> str:
     """
     简单的函数接口，用于从 URL 提取文本内容
 
@@ -108,4 +127,7 @@ async def extract_text_from_url(url: str, tavily_keys: list[str]) -> str:
         提取的文本内容
     """
     extractor = URLExtractor(tavily_keys)
-    return await extractor.extract_text_from_url(url)
+    return await extractor.extract_text_from_url(
+        url,
+        max_response_bytes=max_response_bytes,
+    )

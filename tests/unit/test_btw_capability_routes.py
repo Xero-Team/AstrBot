@@ -2,10 +2,13 @@
 
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from mcp.types import Tool, ToolAnnotations
 
 from astrbot.core.agent.llm_types import ProviderRequest
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
@@ -125,4 +128,102 @@ def test_plugin_routes_survive_profile_save(tmp_path):
     assert (
         json.loads(path.read_text(encoding="utf-8-sig"))["btw"]["plugin_routes"]
         == routes
+    )
+
+
+@pytest.mark.parametrize(
+    ("enabled", "loop", "routes", "allowed"),
+    [
+        (True, None, [], False),
+        (True, "work", [], True),
+        (False, "conversation", [], True),
+        (True, "conversation", [{"server_name": "workspace", "loop": "both"}], True),
+        (True, "work", [{"server_name": "workspace", "loop": "conversation"}], False),
+        (
+            True,
+            "conversation",
+            [{"server_name": "workspace", "loop": "invalid"}],
+            False,
+        ),
+        (True, "conversation", {"workspace": "both"}, False),
+    ],
+)
+@pytest.mark.parametrize("explicit", [False, True])
+def test_mcp_server_assignment_matches_main_and_handoff(
+    plugin_context, enabled, loop, routes, allowed, explicit
+):
+    manager = plugin_context.get_llm_tool_manager()
+    manager.func_list = [
+        MCPTool(
+            Tool(
+                name=name,
+                inputSchema={"type": "object", "properties": {}},
+                annotations=ToolAnnotations(readOnlyHint=True),
+            ),
+            AsyncMock(),
+            "workspace",
+        )
+        for name in ("list", "search")
+    ]
+    cfg = {"btw": {"enabled": enabled, "mcp_routes": routes}}
+    plugin_context.get_config = lambda **_kwargs: cfg
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:test",
+        get_extra=lambda key, default=None: loop if key == "btw_loop" else default,
+        plugins_name=None,
+        platform_meta=SimpleNamespace(support_proactive_message=False),
+        get_message_type=lambda: None,
+    )
+    req = ProviderRequest(prompt="hello")
+    _assemble_request_tool_catalog(
+        event,
+        req,
+        plugin_context,
+        MainAgentBuildConfig(tool_call_timeout=60, add_cron_tools=False),
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=plugin_context)
+    )
+    handoff = FunctionToolExecutor._build_handoff_toolset(
+        run_context, tools=manager.func_list if explicit else None
+    )
+    expected = {tool.name for tool in manager.func_list} if allowed else set()
+    assert req.func_tool is not None
+    assert set(req.func_tool.names()) == expected
+    assert (set(handoff.names()) if handoff is not None else set()) == expected
+
+
+def test_mcp_both_assignment_preserves_surface_authorization():
+    tool = MCPTool(
+        Tool(name="write", inputSchema={"type": "object", "properties": {}}),
+        AsyncMock(),
+        "workspace",
+    )
+    catalog = assemble_tool_catalog(
+        ToolCatalogInputs(
+            snapshot=SkillSnapshot(skills=(), runtime="none"),
+            persona_tools=None,
+            surface="im",
+            computer_use_runtime="none",
+            plugin_names=None,
+            registered_tools={tool.name: tool},
+            btw_config={
+                "enabled": True,
+                "mcp_routes": [{"server_name": "workspace", "loop": "both"}],
+            },
+        )
+    )
+    assert catalog.empty()
+
+
+def test_mcp_routes_survive_profile_save(tmp_path):
+    path = tmp_path / "profile.json"
+    routes = [{"server_name": "workspace", "loop": "both"}]
+    path.write_text(json.dumps({"btw": {"mcp_routes": routes}}), encoding="utf-8")
+    config = AstrBotConfig(
+        config_path=str(path), default_config={"btw": {"mcp_routes": []}}
+    )
+    config.save_config()
+    assert (
+        json.loads(path.read_text(encoding="utf-8-sig"))["btw"]["mcp_routes"] == routes
     )

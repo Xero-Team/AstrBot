@@ -1215,6 +1215,10 @@
         "plugin_routes": {
           "description": "Plugin tool loop assignments",
           "hint": "Plugin LLM tools default to the work loop; explicitly assign an enabled plugin to the conversation loop or both when needed."
+        },
+        "mcp_routes": {
+          "description": "MCP server loop assignments",
+          "hint": "MCP tools default to the work loop; explicitly assign an enabled server to the conversation loop or both when needed."
         }
       }
     }

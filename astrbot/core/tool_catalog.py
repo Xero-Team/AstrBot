@@ -436,6 +436,14 @@ def tool_is_available_in_loop(
     if not btw_config or not btw_config.get("enabled", False):
         return True
     raw_tool = getattr(tool, "_wrapped", tool)
+    if isinstance(raw_tool, MCPTool):
+        return route_is_available_in_loop(
+            btw_config.get("mcp_routes"),
+            route_key="server_name",
+            route_id=raw_tool.mcp_server_name,
+            loop_mode=loop_mode,
+            default_loop="work",
+        )
     module_path = getattr(raw_tool, "handler_module_path", None)
     plugin = plugins.get_by_module(module_path) if plugins and module_path else None
     if plugin is None or getattr(plugin, "reserved", False):

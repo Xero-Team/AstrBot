@@ -199,6 +199,7 @@ DEFAULT_CONFIG = {
         },
         "work_session": {"max_age_seconds": 3600},
         "plugin_routes": [],
+        "mcp_routes": [],
     },
     "provider_stt_settings": {
         "enable": False,
@@ -4750,6 +4751,13 @@ CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
             "type": "list",
             "hint": "插件 LLM 工具默认仅在工作循环可用；可显式分配给对话循环或两者。插件指令不受此设置影响。",
             "_special": "select_plugin_loop_routes",
+            "condition": {"btw.enabled": True},
+        },
+        "btw.mcp_routes": {
+            "description": "MCP 服务器循环分配",
+            "type": "list",
+            "hint": "MCP 工具默认仅在工作循环可用；可按服务器显式分配给对话循环或两者。",
+            "_special": "select_mcp_loop_routes",
             "condition": {"btw.enabled": True},
         },
     },

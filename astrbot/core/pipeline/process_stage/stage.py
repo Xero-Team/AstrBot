@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+from astrbot.core.agent.conversation_loop import ConversationLoop
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import StarHandlerMetadata
@@ -15,9 +16,14 @@ class ProcessStage(Stage):
         self.ctx = ctx
         self.config = ctx.astrbot_config
 
-        # initialize agent sub stage
         self.agent_sub_stage = AgentRequestSubStage()
-        await self.agent_sub_stage.initialize(ctx)
+        btw = self.config.get("btw", {})
+        if isinstance(btw, dict) and btw.get("enabled", False):
+            self.conversation_loop = ConversationLoop(self.agent_sub_stage)
+            await self.conversation_loop.initialize(ctx)
+        else:
+            self.conversation_loop = None
+            await self.agent_sub_stage.initialize(ctx)
 
         # initialize star request sub stage
         self.star_request_sub_stage = StarRequestSubStage()
@@ -64,5 +70,11 @@ class ProcessStage(Stage):
             if (
                 event.get_result() and not event.is_stopped()
             ) or not event.get_result():
-                async for _ in self.agent_sub_stage.process(event):
+                async for _ in self._dispatch_agent(event):
                     yield
+
+    def _dispatch_agent(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
+        """Use the conversation entry only when the profile enables BTW."""
+        if self.conversation_loop is not None:
+            return self.conversation_loop.process(event)
+        return self.agent_sub_stage.process(event)

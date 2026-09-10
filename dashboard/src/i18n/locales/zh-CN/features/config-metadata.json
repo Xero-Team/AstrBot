@@ -1168,6 +1168,15 @@
         "description": "可用插件",
         "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用,则此处的选择不会生效。"
       }
+    },
+    "btw": {
+      "description": "BTW 双循环",
+      "btw": {
+        "enabled": {
+          "description": "启用 BTW 双循环",
+          "hint": "实验功能，默认关闭。普通且已通过准入的 AI 请求经对话入口使用现有 Agent。"
+        }
+      }
     }
   },
   "ext_group": {

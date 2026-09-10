@@ -1174,6 +1174,15 @@
         "description": "Available Plugins",
         "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
       }
+    },
+    "btw": {
+      "description": "BTW dual loops",
+      "btw": {
+        "enabled": {
+          "description": "Enable BTW dual loops",
+          "hint": "Experimental and disabled by default. Ordinary admitted AI requests use the conversation entry over the existing Agent."
+        }
+      }
     }
   },
   "ext_group": {

@@ -199,6 +199,12 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 
 Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disable configuration. Do not treat `provider_ltm_settings` as its switch. For recent group-message injection, see [Group Chat Context Awareness](../use/group-chat-context).
 
+## BTW conversation entry
+
+`btw.enabled` defaults to `false`. Enabling it sends ordinary admitted AI requests through the conversation loop and the existing Agent executor. It does not bypass message admission, session AI switches, or plugin request handling. With BTW disabled, the pipeline directly uses the current Agent request path and retains its capabilities.
+
+Automatic classifier candidates are evaluated separately. Enabling this entry does not select an automatic routing strategy.
+
 ## WebUI and authentication
 
 Important `dashboard` defaults:

@@ -190,6 +190,7 @@ DEFAULT_CONFIG = {
     },
     "btw": {
         "enabled": False,
+        "classifier": {"enabled": False},
         "conversation_loop": {"provider_id": ""},
         "work_loop": {
             "enabled": False,
@@ -4719,6 +4720,12 @@ CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
             "description": "启用工作循环",
             "type": "bool",
             "hint": "默认关闭；允许显式工作请求使用工作执行器。",
+            "condition": {"btw.enabled": True},
+        },
+        "btw.classifier.enabled": {
+            "description": "启用任务分类",
+            "type": "bool",
+            "hint": "可选的启发式规则，默认关闭。开启后按内置规则把疑似工作请求转入工作循环；/work 指令不依赖此开关。",
             "condition": {"btw.enabled": True},
         },
         "btw.work_loop.provider_id": {

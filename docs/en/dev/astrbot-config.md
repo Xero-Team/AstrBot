@@ -235,6 +235,8 @@ Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disab
 
 Automatic classifier candidates are evaluated separately. Enabling this entry does not select an automatic routing strategy.
 
+On the rule-classifier experiment branch, `btw.classifier.enabled` additionally enables keyword-based work admission and defaults to `false`. It requires BTW and the work loop to be enabled; explicit `/work` admission is independent. See the [rule experiment](./btw-rule-classifier-experiment) for matching behavior and evaluation limits.
+
 The work executor additionally requires `btw.work_loop.enabled`, also `false` by default. It reuses the Agent executor and records pending, running, completed, failed, and cancelled task states. `btw.work_loop.max_concurrent` limits active execution (default `2`); it does not impose a waiting-queue length limit. `btw.work_session.max_age_seconds` retains terminal states for `3600` seconds by default; active tasks do not expire, and expired terminal records are removed during the next session operation. Runtime-owned background services perform task execution and cleanup when attached by the scheduler.
 
 Detached work acknowledges receipt before execution and returns results through the current response-decoration and delivery stages, including reply content checks. Inbound stages are not rerun. WebChat keeps the original request identifier open through the final result; acknowledgement does not end the request. Temporary event files remain available to the worker and are released on completion, failure, or cancellation. Replacing or removing a profile cancels its owned work; runtime shutdown also reclaims it.

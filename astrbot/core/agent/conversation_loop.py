@@ -4,7 +4,8 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from astrbot.core.agent.btw.types import is_work_loop_enabled
+from astrbot.core.agent.btw.task_classifier import TaskClassifier
+from astrbot.core.agent.btw.types import TaskType, is_work_loop_enabled
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -17,17 +18,19 @@ if TYPE_CHECKING:
 
 
 class ConversationLoop:
-    """Own conversation admission without choosing an automatic classifier."""
+    """Own conversation admission with an opt-in rule classifier experiment."""
 
     def __init__(self, agent_request: AgentRequestSubStage) -> None:
         self.agent_request = agent_request
         self._btw_enabled = False
+        self.classifier: TaskClassifier | None = None
         self.work_sessions = WorkSessionManager()
         self.work_loop: WorkLoop | None = None
 
     async def initialize(self, ctx: PipelineContext) -> None:
         """Initialize the shared Agent executor for this profile."""
         self.astrbot_config = ctx.astrbot_config
+        self.classifier = TaskClassifier(self.astrbot_config)
         btw = self.astrbot_config.get("btw", {})
         self._btw_enabled = isinstance(btw, dict) and bool(btw.get("enabled", False))
         await self.agent_request.initialize(ctx)
@@ -67,9 +70,14 @@ class ConversationLoop:
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         """Process one admitted conversation using the current Agent path."""
+        classified_work = False
+        if self._btw_enabled and not event.get_extra("btw_force_work"):
+            if self.classifier is None:
+                raise RuntimeError("ConversationLoop is not initialized")
+            classified_work = await self.classifier.classify(event) is TaskType.WORK
         if (
             self._btw_enabled
-            and event.get_extra("btw_force_work")
+            and (event.get_extra("btw_force_work") or classified_work)
             and is_work_loop_enabled(self.astrbot_config)
         ):
             if self.work_loop is None:

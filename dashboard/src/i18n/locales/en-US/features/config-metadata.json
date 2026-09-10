@@ -1178,6 +1178,12 @@
     "btw": {
       "description": "BTW dual loops",
       "btw": {
+        "classifier": {
+          "enabled": {
+            "description": "Enable task classification",
+            "hint": "Optional keyword rules, disabled by default. Route likely work requests to the work loop when enabled; /work commands do not depend on this switch."
+          }
+        },
         "enabled": {
           "description": "Enable BTW dual loops",
           "hint": "Experimental and disabled by default. Ordinary admitted AI requests use the conversation entry over the existing Agent."

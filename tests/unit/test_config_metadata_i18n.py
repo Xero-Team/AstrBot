@@ -1,7 +1,5 @@
 """Ensure Dashboard config-metadata i18n keys cover runtime metadata."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
@@ -169,6 +167,28 @@ def test_work_loop_controls_survive_dashboard_metadata_conversion() -> None:
         for locale in LOCALES:
             assert _load_locale(locale)[items[field]["description"]]
             assert _load_locale(locale)[items[field]["hint"]]
+
+
+def test_rule_classifier_control_survives_dashboard_metadata_conversion() -> None:
+    converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+    assert "btw" not in converted
+    control = converted["plugin_group"]["metadata"]["btw"]["items"][
+        "btw.classifier.enabled"
+    ]
+    assert DEFAULT_CONFIG["btw"]["classifier"]["enabled"] is False
+    assert control["type"] == "bool"
+    assert control["condition"] == {"btw.enabled": True}
+    assert control["description"] == (
+        "plugin_group.btw.btw.classifier.enabled.description"
+    )
+    assert control["hint"] == "plugin_group.btw.btw.classifier.enabled.hint"
+    for locale, description in {
+        "zh-CN": "启用任务分类",
+        "en-US": "Enable task classification",
+    }.items():
+        catalog = _load_locale(locale)
+        assert catalog[control["description"]] == description
+        assert "/work" in catalog[control["hint"]]
 
 
 def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:

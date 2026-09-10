@@ -44,7 +44,6 @@ _KB_INITIALIZATION_ERROR = "Knowledge base initialization failed"
 _DOC_NAME_MAX_LENGTH = 255
 _TASK_RETENTION = timedelta(days=7)
 _MAX_TERMINAL_TASKS = 1000
-_INTERRUPTED_TASK_ERROR = "Knowledge base task interrupted"
 _TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "interrupted"})
 
 

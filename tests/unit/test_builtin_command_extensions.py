@@ -15,6 +15,7 @@ from astrbot.builtin_stars.builtin_commands.commands.help import HelpCommand
 from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaCommands
 from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
+from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
 from astrbot.builtin_stars.builtin_commands.main import Main
 from astrbot.core.command import (
     CommandEngine,
@@ -121,6 +122,115 @@ def _plain_text(result) -> str:
     return result.chain[0].text
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("work", ""),
+        ("work status", "status"),
+        ("work STATUS", "STATUS"),
+        ("work refactor this module", "refactor this module"),
+        ("work status refactor", "status refactor"),
+        ('work "inspect the file"', "inspect the file"),
+    ],
+)
+def test_work_command_binds_the_complete_task(text, expected):
+    from astrbot.builtin_stars.builtin_commands import main as builtin_commands_main
+
+    declarations = collect_plugin_module_declarations(builtin_commands_main)
+    handlers = materialize_handler_declarations(list(declarations.handlers))
+    engine = CommandEngine(build_command_catalog(handlers))
+    result = engine.resolve(text)
+    assert result.resolution.command_path == ("work",)
+    assert dict(engine.bind(result.resolution.entries[0], result).values) == {
+        "task": expected
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [
+        None,
+        {},
+        {"btw": "yes"},
+        {"btw": {"enabled": False, "work_loop": {"enabled": True}}},
+        {"btw": {"enabled": True, "work_loop": {"enabled": False}}},
+    ],
+)
+async def test_work_submit_requires_both_loop_switches(config):
+    command = WorkCommands(
+        SimpleNamespace(config=SimpleNamespace(get=lambda **_: config), i18n=FakeI18n())
+    )
+    event = DummyEvent(message_str="work inspect the file")
+    await command.handle(event, "inspect the file")
+    assert _plain_text(event.result) == "The BTW work loop is not enabled."
+    assert event.is_stopped()
+    assert event.get_extra("btw_force_work") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("task", ["", "status", " STATUS "])
+async def test_work_empty_and_status_remainders_show_usage(task):
+    command = WorkCommands(SimpleNamespace(i18n=FakeI18n()))
+    event = DummyEvent(message_str="work " + task)
+    await command.handle(event, task)
+    assert _plain_text(event.result) == "Usage: /work <task>"
+    assert event.is_stopped()
+    assert event.get_extra("btw_force_work") is None
+
+
+@pytest.mark.asyncio
+async def test_work_submission_continues_through_process_into_work_loop():
+    from astrbot.core.agent.conversation_loop import ConversationLoop
+    from astrbot.core.pipeline.process_stage.stage import ProcessStage
+
+    profile = {
+        "provider_settings": {"enable": True},
+        "btw": {"enabled": True, "work_loop": {"enabled": True}},
+    }
+    command = WorkCommands(
+        SimpleNamespace(
+            config=SimpleNamespace(get=lambda **_: profile), i18n=FakeI18n()
+        )
+    )
+
+    class Agent:
+        async def initialize(self, ctx):
+            pass
+
+        async def process(self, event):
+            received.append((event.message_str, event.get_extra("btw_loop")))
+            yield
+
+    class Handler:
+        async def process(self, event):
+            await command.handle(event, "status inspect the file")
+            yield
+
+    received = []
+    agent = Agent()
+    loop = ConversationLoop(agent)
+    await loop.initialize(SimpleNamespace(astrbot_config=profile))
+    stage = ProcessStage()
+    stage.ctx = SimpleNamespace(astrbot_config=profile)
+    stage.agent_sub_stage = agent
+    stage.conversation_loop = loop
+    stage.star_request_sub_stage = Handler()
+    event = DummyEvent(message_str="work status inspect the file")
+    event._has_send_oper = False
+    event.get_result = lambda: event.result
+    event.set_extra("activated_handlers", [object()])
+
+    _ = [part async for part in stage.process(event)]
+
+    assert received == [("status inspect the file", "work")]
+    assert event.get_extra("should_run_command") is False
+    assert event.get_extra("btw_force_work") is True
+    assert not event.is_stopped()
+    assert event.result is None
+    await loop.close()
+
+
 def test_all_builtin_extension_commands_use_native_command_schemas():
     expected_handlers = {
         "admin_list",
@@ -162,6 +272,7 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "provider_set_stt",
         "provider_set_tts",
         "task_stop",
+        "work",
         "variable_set",
         "variable_unset",
         "flow_enable",
@@ -983,6 +1094,7 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
         "bot_disable": "session.manage",
         "bot_leave": "session.manage",
         "task_stop": "session.manage",
+        "work": "session.read",
         "conversation_create": "session.manage",
         "conversation_stats": "session.read",
         "conversation_history": "session.read",

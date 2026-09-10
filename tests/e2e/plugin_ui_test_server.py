@@ -79,6 +79,7 @@ def reset_knowledge_base_state() -> None:
         KNOWLEDGE_BASE_STATE.update(
             {
                 "knowledge_base": None,
+                "knowledge_base_name": None,
                 "document": None,
                 "tasks": {},
             }
@@ -414,9 +415,11 @@ class SpikeHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _knowledge_base() -> dict[str, object]:
+        knowledge_base_name = KNOWLEDGE_BASE_STATE["knowledge_base_name"]
+        assert isinstance(knowledge_base_name, str)
         return {
             "kb_id": KNOWLEDGE_BASE_ID,
-            "kb_name": "E2E Operator Guide",
+            "kb_name": knowledge_base_name,
             "description": "Deterministic Dashboard browser fixture",
             "emoji": "📚",
             "doc_count": 1 if KNOWLEDGE_BASE_STATE["document"] else 0,
@@ -938,8 +941,22 @@ class SpikeHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "ok", "message": None, "data": {}})
             return
         if path == "/api/v1/knowledge-bases":
-            self._read_json()
+            payload = self._read_json()
+            if (
+                payload.get("kb_name") != "E2E Operator Guide"
+                or payload.get("embedding_provider_id") != "embedding-e2e"
+            ):
+                self._send_json(
+                    {
+                        "status": "error",
+                        "message": "Invalid knowledge base create payload",
+                        "data": None,
+                    },
+                    status=HTTPStatus.UNPROCESSABLE_ENTITY,
+                )
+                return
             with KNOWLEDGE_BASE_LOCK:
+                KNOWLEDGE_BASE_STATE["knowledge_base_name"] = payload["kb_name"]
                 KNOWLEDGE_BASE_STATE["knowledge_base"] = self._knowledge_base()
             self._send_json(
                 {
@@ -947,7 +964,7 @@ class SpikeHandler(BaseHTTPRequestHandler):
                     "message": "Knowledge base created successfully",
                     "data": {
                         "kb_id": KNOWLEDGE_BASE_ID,
-                        "kb_name": "E2E Operator Guide",
+                        "kb_name": payload["kb_name"],
                     },
                 }
             )

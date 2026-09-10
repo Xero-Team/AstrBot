@@ -1190,12 +1190,22 @@
           "max_concurrent": {
             "description": "Concurrent work execution",
             "hint": "Active execution limit, default 2. This is not a waiting-queue length limit."
+          },
+          "provider_id": {
+            "description": "Work loop model",
+            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
           }
         },
         "work_session": {
           "max_age_seconds": {
             "description": "Terminal work retention (seconds)",
             "hint": "Keep completed, failed or cancelled records for 3600 seconds by default."
+          }
+        },
+        "conversation_loop": {
+          "provider_id": {
+            "description": "Conversation loop model",
+            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
           }
         }
       }

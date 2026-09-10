@@ -189,6 +189,12 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 `image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制请求准备卡口 `prepare_provider_request` 中的图片处理，主智能体聊天路径、SDK `llm_generate` 与 `tool_loop_agent` 共用该卡口。送给模型的图片在此处转为 JPEG，最长边只缩小、从不放大；动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。关闭压缩时仍会转 JPEG，但不缩放。主智能体只把适配器引用物化为本地路径，不在组装附件时预编码 JPEG。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
 
+## BTW 模型选择
+
+本地 Agent 配置启用 `btw.enabled` 后，`btw.conversation_loop.provider_id` 与 `btw.work_loop.provider_id` 分别选择两个循环的对话模型。已配置的循环模型优先于事件或会话的模型选择；留空则沿用当前选择，包括配置档默认模型。没有显式工作循环标记的消息使用对话循环模型。关闭 BTW 后不应用这两个覆盖项。
+
+所选提供商仍须是已配置的对话模型。不存在或类型不适用的循环提供商沿用现有模型选择错误路径，不会静默改用另一个循环的模型。已有模型回退和重试设置继续作用于所选主模型。
+
 ## 子代理、语音与知识库
 
 - `subagent_orchestrator.main_enable`：启用 handoff。

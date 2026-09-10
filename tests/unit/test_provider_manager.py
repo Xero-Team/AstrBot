@@ -459,6 +459,16 @@ def test_dynamic_import_provider_registers_both_openai_protocols():
     )
 
 
+def test_dynamic_import_provider_registers_ikuncode_type():
+    manager = _build_manager()
+
+    manager.dynamic_import_provider("ikuncode_chat_completion")
+
+    registration = manager.catalog.get("ikuncode_chat_completion")
+    assert registration is not None
+    assert registration.cls_type.__name__ == "ProviderIkunCode"
+
+
 def test_dynamic_import_provider_registers_opencode_go_types():
     manager = _build_manager()
 

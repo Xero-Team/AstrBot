@@ -198,5 +198,14 @@
       "confirm": "confirm",
       "cancel": "cancel"
     }
+  },
+  "pluginLoopSelector": {
+    "hint": "Plugin LLM tools default to Work only. You can explicitly allow Conversation only or both loops; plugin commands are outside this tool route.",
+    "plugin": "Plugin",
+    "loop": "Available loop",
+    "conversation": "Conversation only",
+    "work": "Work only",
+    "both": "Conversation and Work",
+    "empty": "There are no enabled non-system plugins."
   }
 }

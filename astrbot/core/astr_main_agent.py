@@ -1226,6 +1226,7 @@ def _assemble_request_tool_catalog(
     cfg = plugin_context.get_config(umo=event.unified_msg_origin)
     provider_settings = cfg.get("provider_settings", {})
     ltm_settings = cfg.get("provider_ltm_settings", {})
+    btw_config = cfg.get("btw", {})
     memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
     tool_manager = plugin_context.get_llm_tool_manager()
     registered_tools = _registered_tools_table(tool_manager)
@@ -1270,6 +1271,8 @@ def _assemble_request_tool_catalog(
         sandbox_capabilities=sandbox_capabilities,
         elevated_instance_tool_actions=elevated_instance_tool_actions,
         plugins=plugin_context.catalogs.plugins,
+        btw_config=btw_config if isinstance(btw_config, dict) else None,
+        loop_mode="work" if event.get_extra("btw_loop") == "work" else "conversation",
     )
     existing = req.func_tool
     if existing is not None:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 from astrbot import logger
+from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
@@ -141,6 +142,8 @@ class ToolCatalogInputs:
     elevated_instance_tool_actions: frozenset[str] = frozenset()
     allow_computer_tools: bool = True
     plugins: PluginLookup | None = None
+    btw_config: Mapping[str, object] | None = None
+    loop_mode: str = "conversation"
 
 
 def assemble_tool_catalog(inputs: ToolCatalogInputs) -> ToolSet:
@@ -422,12 +425,44 @@ def _apply_plugin_filter(
     return kept
 
 
+def tool_is_available_in_loop(
+    tool: FunctionTool,
+    *,
+    btw_config: Mapping[str, object] | None,
+    loop_mode: str,
+    plugins: PluginLookup | None,
+) -> bool:
+    """Apply the same BTW capability assignment in the catalog and handoffs."""
+    if not btw_config or not btw_config.get("enabled", False):
+        return True
+    raw_tool = getattr(tool, "_wrapped", tool)
+    module_path = getattr(raw_tool, "handler_module_path", None)
+    plugin = plugins.get_by_module(module_path) if plugins and module_path else None
+    if plugin is None or getattr(plugin, "reserved", False):
+        return True
+    plugin_id = getattr(plugin, "root_dir_name", None) or getattr(plugin, "name", "")
+    return route_is_available_in_loop(
+        btw_config.get("plugin_routes"),
+        route_key="plugin_id",
+        route_id=plugin_id,
+        loop_mode=loop_mode,
+        default_loop="work",
+    )
+
+
 def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]:
     visible: set[str] = set()
     computer_names = _on_demand_computer_tools(inputs)
     for name in names:
         tool = inputs.registered_tools.get(name)
         if tool is None or not getattr(tool, "active", True):
+            continue
+        if not tool_is_available_in_loop(
+            tool,
+            btw_config=inputs.btw_config,
+            loop_mode=inputs.loop_mode,
+            plugins=inputs.plugins,
+        ):
             continue
         actions = tool_required_actions(tool)
         if not inputs.allow_computer_tools and (

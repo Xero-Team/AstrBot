@@ -198,6 +198,7 @@ DEFAULT_CONFIG = {
             "max_concurrent": 2,
         },
         "work_session": {"max_age_seconds": 3600},
+        "plugin_routes": [],
     },
     "provider_stt_settings": {
         "enable": False,
@@ -4742,6 +4743,13 @@ CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
             "description": "终态工作会话保留秒数",
             "type": "int",
             "hint": "已完成、失败或取消的工作会话保留时间，默认 3600 秒。",
+            "condition": {"btw.enabled": True},
+        },
+        "btw.plugin_routes": {
+            "description": "插件工具循环分配",
+            "type": "list",
+            "hint": "插件 LLM 工具默认仅在工作循环可用；可显式分配给对话循环或两者。插件指令不受此设置影响。",
+            "_special": "select_plugin_loop_routes",
             "condition": {"btw.enabled": True},
         },
     },

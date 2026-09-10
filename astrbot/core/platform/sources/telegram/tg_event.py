@@ -25,6 +25,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import DeliveryAttempt, PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 
 
@@ -85,12 +86,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     def _split_message(cls, text: str) -> list[str]:
-        from astrbot.core.platform.message_limits import (
-            TELEGRAM_TEXT_LIMIT,
-            split_platform_text,
-        )
-
-        return list(split_platform_text(text, TELEGRAM_TEXT_LIMIT).parts)
+        """Split raw Telegram text without changing or truncating it."""
+        return [
+            text[offset : offset + cls.MAX_MESSAGE_LENGTH]
+            for offset in range(0, len(text), cls.MAX_MESSAGE_LENGTH)
+        ]
 
     @classmethod
     async def _send_text_chunks(
@@ -628,17 +628,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
             )
         else:
             logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
-            await self._send_streaming_edit(
+            return await self._send_streaming_edit(
                 user_name, message_thread_id, payload, generator
             )
 
-        # 内联父类 send_streaming 的副作用（避免传入已消费的 generator）
-        self._schedule_metric(
-            name=f"metric:telegram-stream:{self.platform_meta.name}",
-            msg_event_tick=1,
-            adapter_name=self.platform_meta.name,
-        )
-        self._has_send_oper = True
         return await super().send_streaming(generator, use_fallback)
 
     async def _send_streaming_draft(
@@ -750,11 +743,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_thread_id: str | None,
         payload: dict[str, Any],
         generator,
-    ) -> None:
+    ) -> PlatformSendResult:
         """使用 send_message + edit_message_text 进行流式推送（群聊 fallback）。"""
         delta = ""
         current_content = ""
         message_id = None
+        attempts: list[DeliveryAttempt] = []
+        delivery_failed = False
         last_edit_time = 0  # 上次编辑消息的时间
         throttle_interval = 0.6  # 编辑消息的间隔时间 (秒)
         last_chat_action_time = 0  # 上次发送 chat action 的时间
@@ -768,84 +763,142 @@ class TelegramPlatformEvent(AstrMessageEvent):
             nonlocal delta
             delta += t
 
-        async for chain in generator:
-            if not isinstance(chain, MessageChain):
-                continue
-
-            if chain.type == "break":
-                # 分割符
-                if message_id:
-                    try:
-                        await self._client.edit_message_text(
-                            text=delta,
-                            chat_id=payload["chat_id"],
-                            message_id=message_id,
-                        )
-                    except Exception as e:
-                        logger.warning(f"编辑消息失败(streaming-break): {e!s}")
-                message_id = None
-                delta = ""
-                continue
-
-            await self._process_chain_items(
-                chain, payload, user_name, message_thread_id, _append_text
-            )
-
-            # 编辑或发送消息
-            if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
-                current_time = asyncio.get_running_loop().time()
-                time_since_last_edit = current_time - last_edit_time
-
-                if time_since_last_edit >= throttle_interval:
-                    current_time = asyncio.get_running_loop().time()
-                    if current_time - last_chat_action_time >= chat_action_interval:
-                        await self._ensure_typing(user_name, message_thread_id)
-                        last_chat_action_time = current_time
-                    try:
-                        await self._client.edit_message_text(
-                            text=delta,
-                            chat_id=payload["chat_id"],
-                            message_id=message_id,
-                        )
-                        current_content = delta
-                    except Exception as e:
-                        logger.warning(f"编辑消息失败(streaming): {e!s}")
-                    last_edit_time = asyncio.get_running_loop().time()
-            else:
-                current_time = asyncio.get_running_loop().time()
-                if current_time - last_chat_action_time >= chat_action_interval:
-                    await self._ensure_typing(user_name, message_thread_id)
-                    last_chat_action_time = current_time
-                msg = None
-                try:
-                    msg = await self._client.send_message(
-                        text=delta, **cast(Any, payload)
+        async def update_message(text: str, *, final: bool) -> bool:
+            """Send or update the active segment and retain its accepted text."""
+            nonlocal current_content, message_id
+            try:
+                if message_id is None:
+                    message = await self._client.send_message(
+                        text=text, **cast(Any, payload)
                     )
-                    current_content = delta
-                except Exception as e:
-                    logger.warning(f"发送消息失败(streaming): {e!s}")
-                if msg is not None:
-                    message_id = msg.message_id
-                    last_edit_time = asyncio.get_running_loop().time()
-
-        try:
-            if delta and current_content != delta:
-                try:
-                    markdown_text = telegramify_markdown.markdownify(
-                        delta,
+                    message_id = message.message_id
+                elif current_content != text:
+                    await self._client.edit_message_text(
+                        text=text,
+                        chat_id=payload["chat_id"],
+                        message_id=message_id,
                     )
+                current_content = text
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "Telegram streaming submission failed: %s", safe_error("", exc)
+                )
+                if current_content:
+                    attempts.append(
+                        DeliveryAttempt(
+                            status="accepted",
+                            message_count=1,
+                            message_ids=(str(message_id),),
+                            semantic_text=current_content,
+                        )
+                    )
+                attempts.append(
+                    DeliveryAttempt(
+                        status="failed",
+                        semantic_text=text[len(current_content) :],
+                        error_summary="telegram streaming submission failed",
+                    )
+                )
+                return False
+
+            if final:
+                attempts.append(
+                    DeliveryAttempt(
+                        status="accepted",
+                        message_count=1,
+                        message_ids=(str(message_id),),
+                        semantic_text=text,
+                    )
+                )
+            return True
+
+        async def finalize_segment() -> bool:
+            """Persist the active raw segment before opening another message."""
+            nonlocal current_content, delta, message_id
+            if not delta:
+                return True
+            if not await update_message(delta, final=True):
+                return False
+            try:
+                markdown_text = telegramify_markdown.markdownify(delta)
+                if (
+                    markdown_text != delta
+                    and len(markdown_text) <= self.MAX_MESSAGE_LENGTH
+                ):
                     await self._client.edit_message_text(
                         text=markdown_text,
                         chat_id=payload["chat_id"],
                         message_id=message_id,
                         parse_mode="MarkdownV2",
                     )
-                except Exception as e:
-                    logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
-                    await self._client.edit_message_text(
-                        text=delta,
-                        chat_id=payload["chat_id"],
-                        message_id=message_id,
-                    )
-        except Exception as e:
-            logger.warning(f"编辑消息失败(streaming): {e!s}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "Telegram streaming Markdown finalization failed: %s",
+                    safe_error("", exc),
+                )
+            current_content = ""
+            delta = ""
+            message_id = None
+            return True
+
+        async for chain in generator:
+            if not isinstance(chain, MessageChain):
+                continue
+
+            if chain.type == "break":
+                if not await finalize_segment():
+                    delivery_failed = True
+                    break
+                continue
+
+            for component in chain.chain:
+                if isinstance(component, Reply):
+                    payload["reply_to_message_id"] = str(component.id)
+
+            await self._process_chain_items(
+                chain, payload, user_name, message_thread_id, _append_text
+            )
+
+            while len(delta) >= self.MAX_MESSAGE_LENGTH:
+                overflow = delta[self.MAX_MESSAGE_LENGTH :]
+                delta = delta[: self.MAX_MESSAGE_LENGTH]
+                if not await finalize_segment():
+                    if overflow:
+                        attempts.append(
+                            DeliveryAttempt(
+                                status="skipped",
+                                semantic_text=overflow,
+                                error_summary="telegram stream stopped after submission failure",
+                            )
+                        )
+                    delivery_failed = True
+                    break
+                delta = overflow
+            if not delivery_failed and delta:
+                current_time = asyncio.get_running_loop().time()
+                time_since_last_edit = current_time - last_edit_time
+                if message_id is None or time_since_last_edit >= throttle_interval:
+                    current_time = asyncio.get_running_loop().time()
+                    if current_time - last_chat_action_time >= chat_action_interval:
+                        await self._ensure_typing(user_name, message_thread_id)
+                        last_chat_action_time = current_time
+                    if not await update_message(delta, final=False):
+                        delivery_failed = True
+                        break
+                    last_edit_time = asyncio.get_running_loop().time()
+
+            if delivery_failed:
+                break
+
+        if delta and not delivery_failed:
+            await finalize_segment()
+        await self._record_streaming_send()
+        return PlatformSendResult.from_delivery_attempts(
+            attempts,
+            platform_id=self.get_platform_id(),
+            target=self.route_identity.target_id,
+        )

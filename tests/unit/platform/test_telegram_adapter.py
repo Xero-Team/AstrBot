@@ -19,6 +19,7 @@ from telegram import (
     User,
     Video,
 )
+from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 from telegram.request import HTTPXRequest
 
 import astrbot.api.message_components as Comp
@@ -1725,11 +1726,194 @@ async def test_telegram_streaming_edit_break_resets_message_id_and_sends_new_mes
         "text": "second",
         "chat_id": "123",
     }
-    client.edit_message_text.assert_any_await(
-        text="first",
-        chat_id="123",
-        message_id=100,
+    assert client.edit_message_text.await_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "chunks",
+    [
+        ("A" * 4000, "B" * 200),
+        ("A" * 4200,),
+    ],
+)
+async def test_telegram_streaming_edit_splits_oversized_group_response(chunks):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    visible: dict[int, str] = {}
+
+    async def send_message(*, text, **_kwargs):
+        if len(text) > TelegramPlatformEvent.MAX_MESSAGE_LENGTH:
+            raise ValueError("message too long")
+        message_id = len(visible) + 1
+        visible[message_id] = text
+        return SimpleNamespace(message_id=message_id)
+
+    async def edit_message_text(*, text, message_id, **_kwargs):
+        if len(text) > TelegramPlatformEvent.MAX_MESSAGE_LENGTH:
+            raise ValueError("message too long")
+        visible[message_id] = text
+
+    client.send_message.side_effect = send_message
+    client.edit_message_text.side_effect = edit_message_text
+    event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
+    event._ensure_typing = AsyncMock()
+
+    async def generator():
+        for chunk in chunks:
+            yield MessageChain([Comp.Plain(chunk)])
+
+    result = await event._send_streaming_edit(
+        "123", None, {"chat_id": "123"}, generator()
     )
+
+    assert "".join(visible.values()) == "".join(chunks)
+    assert all(
+        len(text) <= TelegramPlatformEvent.MAX_MESSAGE_LENGTH
+        for text in visible.values()
+    )
+    assert result.status == "accepted"
+    assert result.message_count == 2
+
+
+@pytest.mark.asyncio
+async def test_telegram_streaming_edit_reports_failed_suffix_without_new_segment():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.side_effect = [SimpleNamespace(message_id=100)]
+    client.edit_message_text.side_effect = RuntimeError("transport rejected")
+    event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
+    event._ensure_typing = AsyncMock()
+
+    async def generator():
+        yield MessageChain([Comp.Plain("A" * 4000)])
+        yield MessageChain([Comp.Plain("B" * 200)])
+        yield MessageChain([Comp.Plain("C" * 10)])
+
+    result = await event._send_streaming_edit(
+        "123", None, {"chat_id": "123"}, generator()
+    )
+
+    assert result.status == "partial"
+    assert result.message_count == 1
+    assert result.delivery_attempts[0].semantic_text == "A" * 4000
+    assert result.delivery_attempts[1].semantic_text == "B" * 96
+    assert result.delivery_attempts[2].status == "skipped"
+    assert result.delivery_attempts[2].semantic_text == "B" * 104
+    assert "".join(a.semantic_text for a in result.delivery_attempts) == (
+        "A" * 4000 + "B" * 200
+    )
+    client.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_telegram_streaming_edit_reports_initial_send_failure():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.side_effect = RuntimeError("transport rejected")
+    event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
+    event._ensure_typing = AsyncMock()
+
+    async def generator():
+        yield MessageChain([Comp.Plain("undelivered")])
+
+    result = await event._send_streaming_edit(
+        "123", None, {"chat_id": "123"}, generator()
+    )
+
+    assert result.status == "failed"
+    assert result.delivery_attempts[0].semantic_text == "undelivered"
+
+
+@pytest.mark.asyncio
+async def test_telegram_streaming_edit_retains_prefix_on_intermediate_failure():
+    event_type = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.return_value = SimpleNamespace(message_id=100)
+    client.edit_message_text.side_effect = TimedOut()
+    event = event_type("msg", MagicMock(), MagicMock(), "session", client)
+    event._ensure_typing = AsyncMock()
+    event._record_streaming_send = AsyncMock()
+    clock = SimpleNamespace(time=lambda: next(ticks))
+    ticks = iter([10, 10, 10, 11, 11])
+
+    async def generator():
+        yield MessageChain([Comp.Plain("hello")])
+        yield MessageChain([Comp.Plain(" world")])
+
+    with patch(
+        "astrbot.core.platform.sources.telegram.tg_event.asyncio.get_running_loop",
+        return_value=clock,
+    ):
+        result = await event._send_streaming_edit(
+            "123", None, {"chat_id": "123"}, generator()
+        )
+
+    assert result.status == "partial"
+    assert result.message_count == 1
+    assert result.message_ids == ("100",)
+    assert [(a.status, a.semantic_text) for a in result.delivery_attempts] == [
+        ("accepted", "hello"),
+        ("failed", " world"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [TimedOut(), NetworkError("offline"), RetryAfter(1), ValueError("conversion")],
+)
+async def test_telegram_streaming_edit_continues_after_markdown_failure(error):
+    event_type = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.side_effect = [
+        SimpleNamespace(message_id=100),
+        SimpleNamespace(message_id=101),
+    ]
+    client.edit_message_text.side_effect = error
+    event = event_type("msg", MagicMock(), MagicMock(), "session", client)
+    event._ensure_typing = AsyncMock()
+    module = "astrbot.core.platform.sources.telegram.tg_event"
+
+    async def generator():
+        yield MessageChain([Comp.Plain("!" * 4096 + "tail")])
+
+    with (
+        patch(module + ".BadRequest", BadRequest),
+        patch(module + ".telegramify_markdown.markdownify", return_value="formatted"),
+    ):
+        result = await event._send_streaming_edit(
+            "123", None, {"chat_id": "123"}, generator()
+        )
+
+    assert result.status == "accepted"
+    assert result.message_count == 2
+    assert "".join(a.semantic_text for a in result.delivery_attempts) == (
+        "!" * 4096 + "tail"
+    )
+    assert client.edit_message_text.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_telegram_streaming_edit_propagates_markdown_cancellation():
+    event_type = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.return_value = SimpleNamespace(message_id=100)
+    client.edit_message_text.side_effect = asyncio.CancelledError()
+    event = event_type("msg", MagicMock(), MagicMock(), "session", client)
+    event._ensure_typing = AsyncMock()
+
+    async def generator():
+        yield MessageChain([Comp.Plain("hello!")])
+
+    with (
+        patch(
+            "astrbot.core.platform.sources.telegram.tg_event.telegramify_markdown.markdownify",
+            return_value="formatted",
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await event._send_streaming_edit("123", None, {"chat_id": "123"}, generator())
 
 
 @pytest.mark.asyncio

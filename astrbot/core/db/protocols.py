@@ -57,10 +57,10 @@ class KnowledgeBaseTaskStore(Protocol):
     async def create_knowledge_base_task(
         self, *, task_id: str, operation_kind: str, kb_id: str
     ) -> KnowledgeBaseTask:
-        raise NotImplementedError
+        return T.cast("KnowledgeBaseTask", None)
 
     async def get_knowledge_base_task(self, task_id: str) -> KnowledgeBaseTask | None:
-        raise NotImplementedError
+        return None
 
     async def update_knowledge_base_task(
         self,
@@ -71,15 +71,15 @@ class KnowledgeBaseTaskStore(Protocol):
         result: dict | None = None,
         error: str | None = None,
     ) -> KnowledgeBaseTask | None:
-        raise NotImplementedError
+        return None
 
     async def interrupt_active_knowledge_base_tasks(self) -> int:
-        raise NotImplementedError
+        return 0
 
     async def prune_knowledge_base_tasks(
         self, *, older_than: datetime.datetime, max_records: int
     ) -> int:
-        raise NotImplementedError
+        return 0
 
 
 @runtime_checkable

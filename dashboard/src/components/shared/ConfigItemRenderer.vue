@@ -76,6 +76,13 @@
         @update:model-value="emitUpdate"
       />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_skill_loop_routes'">
+      <CapabilityLoopSelector
+        kind="skill"
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
     </template>

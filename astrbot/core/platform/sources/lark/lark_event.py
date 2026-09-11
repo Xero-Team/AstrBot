@@ -277,6 +277,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     "[Lark] Proactive messages require receive_id and receive_id_type"
                 )
 
+            message_uuid = str(uuid.uuid4())
             request = (
                 CreateMessageRequest.builder()
                 .receive_id_type(receive_id_type)
@@ -285,7 +286,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .receive_id(receive_id)
                     .content(content)
                     .msg_type(msg_type)
-                    .uuid(str(uuid.uuid4()))
+                    .uuid(message_uuid)
                     .build()
                 )
                 .build()
@@ -310,7 +311,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         .receive_id(fallback_chat_id)
                         .content(content)
                         .msg_type(msg_type)
-                        .uuid(request.request_body.uuid)
+                        .uuid(message_uuid)
                         .build()
                     )
                     .build()

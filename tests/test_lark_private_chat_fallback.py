@@ -9,7 +9,6 @@ from astrbot.api.event import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform import Platform
-from astrbot.core.platform.sources.lark import lark_adapter
 from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
 from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
 

@@ -183,14 +183,14 @@
               rounded="md"
               @click="$emit('toggleReasoning')"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon icon="mdi-brain" size="small"></v-icon>
               </template>
               <v-list-item-title>
                 {{
                   enableReasoning
-                    ? tm("reasoning.enabled")
-                    : tm("reasoning.disabled")
+                    ? tm('reasoning.enabled')
+                    : tm('reasoning.disabled')
                 }}
               </v-list-item-title>
             </v-list-item>

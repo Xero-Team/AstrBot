@@ -1259,7 +1259,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                     chain = resolved_response.result_chain
                     if not chain and resolved_response.completion_text:
-                        chain = MessageChain().message(resolved_response.completion_text)
+                        chain = MessageChain().message(
+                            resolved_response.completion_text
+                        )
                     if chain:
                         yield AgentResponse(
                             type="streaming_delta",

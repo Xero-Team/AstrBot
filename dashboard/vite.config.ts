@@ -93,10 +93,13 @@ export default defineConfig(({ command }) => ({
       name: 'katex-woff2-only',
       enforce: 'pre',
       transform(source, id) {
-        if (!/\/katex\/dist\/katex(?:\.min)?\.css$/.test(id.split('?')[0])) return;
+        if (!/\/katex\/dist\/katex(?:\.min)?\.css$/.test(id.split('?')[0]))
+          return;
         // Keep one font format per face instead of shipping three identical glyph sets.
         return source.replace(/src:[^;}]+/g, (declaration) => {
-          const woff2 = declaration.match(/url\([^)]*\.woff2\)\s*format\(["']woff2["']\)/);
+          const woff2 = declaration.match(
+            /url\([^)]*\.woff2\)\s*format\(["']woff2["']\)/,
+          );
           return woff2 ? `src:${woff2[0]}` : declaration;
         });
       },

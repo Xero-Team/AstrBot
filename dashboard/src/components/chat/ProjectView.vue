@@ -106,15 +106,19 @@
           :title="tm('workspace.empty')"
         />
       </v-list>
+      <!-- eslint-disable vue/no-v-html -- highlightedContent is sanitized by DOMPurify. -->
       <div
-        v-if="workspacePreview && !workspacePreview.binary && highlightedContent"
+        v-if="
+          workspacePreview && !workspacePreview.binary && highlightedContent
+        "
         class="workspace-preview"
         v-html="highlightedContent"
       ></div>
+      <!-- eslint-enable vue/no-v-html -->
       <pre
         v-else-if="workspacePreview && !workspacePreview.binary"
         class="workspace-preview"
-      >{{ workspacePreview.content }}</pre>
+        >{{ workspacePreview.content }}</pre>
       <div v-else-if="workspacePreview?.binary" class="workspace-binary">
         {{
           tm('workspace.binaryFile', {

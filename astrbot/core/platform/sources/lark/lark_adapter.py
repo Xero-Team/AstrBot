@@ -26,6 +26,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import MediaResolver
@@ -659,7 +660,7 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> PlatformSendResult | None:
         fallback_chat_id = None
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"

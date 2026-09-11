@@ -8,6 +8,8 @@ import math
 import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
+from functools import partial
 from typing import Any
 
 from telegram.error import RetryAfter
@@ -105,7 +107,7 @@ class TelegramDeliveryLimiter:
     async def call(
         self,
         chat_id: str,
-        operation: Callable[[], Awaitable[Any]],
+        operation: Callable[[], Any],
         *,
         retryable: bool,
         coalesce_key: str | None = None,
@@ -148,8 +150,8 @@ class TelegramDeliveryLimiter:
                 elapsed = self._clock() - started
                 remaining = self.retry_budget - elapsed
                 raw_delay = error.retry_after
-                if hasattr(raw_delay, "total_seconds"):
-                    delay = max(0.0, float(raw_delay.total_seconds()))
+                if isinstance(raw_delay, timedelta):
+                    delay = max(0.0, raw_delay.total_seconds())
                 else:
                     delay = max(0.0, float(raw_delay))
                 if remaining <= 0 or not math.isfinite(delay) or delay > remaining:
@@ -219,7 +221,7 @@ class LimitedTelegramClient:
                 self._limiter.supersede(coalesce_key)
             return await self._limiter.call(
                 chat_key,
-                lambda: method(*args, **kwargs),
+                partial(method, *args, **kwargs),
                 retryable=name in self._RETRYABLE,
                 coalesce_key=coalesce_key,
             )

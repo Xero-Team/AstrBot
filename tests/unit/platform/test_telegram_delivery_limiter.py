@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 
 import pytest
 from telegram.error import RetryAfter
@@ -71,6 +72,31 @@ async def test_limiter_retries_retry_after_within_budget():
 
 
 @pytest.mark.asyncio
+async def test_limiter_retries_timedelta_retry_after():
+    clock = FakeClock()
+    limiter = TelegramDeliveryLimiter(
+        global_interval=0.0,
+        chat_interval=0.0,
+        max_retries=1,
+        retry_budget=5.0,
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+    attempts = 0
+
+    async def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RetryAfter(timedelta(seconds=2))
+        return "ok"
+
+    assert await limiter.call("chat", operation, retryable=True) == "ok"
+    assert attempts == 2
+    assert clock.now == 2
+
+
+@pytest.mark.asyncio
 async def test_limiter_does_not_retry_ambiguous_send():
     clock = FakeClock()
     limiter = TelegramDeliveryLimiter(
@@ -106,12 +132,12 @@ async def test_limiter_wait_is_cancellation_aware():
         chat_interval=0.0,
         sleep=sleep,
     )
-    await limiter.call("chat", lambda: _noop(), retryable=False)
+    await limiter.call("chat", _noop, retryable=False)
     task = asyncio.create_task(limiter.call("chat", _noop, retryable=False))
     await started.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.gather(task)
 
 
 async def _noop() -> None:

@@ -31,6 +31,7 @@ from astrbot.core.utils.error_redaction import safe_error
 from .rate_limit import COALESCED, LimitedTelegramClient, TelegramDeliveryLimiter
 
 DraftSendOutcome = Literal["sent", "bad_request", "failed", "skipped"]
+TelegramClient = ExtBot | LimitedTelegramClient
 
 
 def _is_draft_content_bad_request(error: BadRequest) -> bool:
@@ -134,7 +135,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         limiter: TelegramDeliveryLimiter | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self._client = (
+        self._client: TelegramClient = (
             LimitedTelegramClient(client, limiter) if limiter is not None else client
         )
 
@@ -149,7 +150,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     @classmethod
     async def _send_text_chunks(
         cls,
-        client: ExtBot,
+        client: TelegramClient,
         text: str,
         payload: dict[str, Any],
     ) -> None:
@@ -173,7 +174,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     @classmethod
     async def _send_chat_action(
         cls,
-        client: ExtBot,
+        client: TelegramClient,
         chat_id: str,
         action: ChatAction | str,
         message_thread_id: str | None = None,
@@ -201,7 +202,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     @classmethod
     async def _send_media_with_action(
         cls,
-        client: ExtBot,
+        client: TelegramClient,
         upload_action: ChatAction | str,
         send_coro,
         *,
@@ -235,7 +236,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     @classmethod
     async def _send_voice_with_fallback(
         cls,
-        client: ExtBot,
+        client: TelegramClient,
         path: str,
         payload: dict[str, Any],
         *,
@@ -322,7 +323,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     @classmethod
     async def send_with_client(
         cls,
-        client: ExtBot,
+        client: TelegramClient,
         message: MessageChain,
         user_name: str,
         limiter: TelegramDeliveryLimiter | None = None,

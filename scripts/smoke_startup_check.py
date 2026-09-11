@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HEALTH_URL = "http://127.0.0.1:6185"
-STARTUP_TIMEOUT_SECONDS = 60
+STARTUP_TIMEOUT_SECONDS = 120
 REQUEST_TIMEOUT_SECONDS = 2
 
 

@@ -335,7 +335,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         if limiter is not None:
             client = LimitedTelegramClient(client, limiter)
-        image_path = None
         has_reply = False
         reply_message_id = None
         mention_prefix: list[str] = []

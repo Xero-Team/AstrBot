@@ -3,7 +3,6 @@ import math
 import re
 import uuid
 from collections import OrderedDict
-from collections.abc import Sequence
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from typing import cast, override

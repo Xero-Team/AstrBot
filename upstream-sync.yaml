@@ -5,17 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 5935430b1d33699a5eab028c73787c936f58f0a6
-  synced_at_utc: 2026-09-09T21:25:41Z
+  commit: 8b5f38885e381176f4bdc7fffd245336337a0e3c
+  synced_at_utc: 2026-09-11T18:44:54Z
   sync_method: adapt
-  source_pr: '9992,9987,10007,10003,9990,9983,9979,9993'
+  source_pr: '10020,10021,10018,10023,10034,10036,10037,10025,10015'
   note: >-
-    Reviewed 6494ac22e536d38ef6e07014d27b808d8c114bd2..5935430b1d33699a5eab028c73787c936f58f0a6
-    (8 commits): adapted #9987, #10007, #10003, #9990, #9983, and #9979;
-    skipped #9992 and #9993 for current fork architecture. Adaptations retain
-    the local agent runtime, exclude sponsor/provider UI changes, redact Cron
-    failures, scope WebChat title lookup to webchat, and document AnySearch
-    without global-zone or static vertical-contract claims. Focused pytest and
-    Vitest checks passed; make check was rerun after formatting (output capture
-    reached the data/document stages), with remaining broader quality, full
-    Dashboard, and docs builds recorded separately in the integration PR.
+    Reviewed 5935430b1d33699a5eab028c73787c936f58f0a6..8b5f38885e381176f4bdc7fffd245336337a0e3c
+    (9 commits): adapted #10020, #10018, #10023, #10034, #10037, #10025, and
+    #10015; skipped #10021 because its ChatUI architecture is incompatible
+    with this fork and #10036 because this fork does not publish PyPI
+    packages. Adaptations preserve runtime-injected preferences, WebChat
+    protocol boundaries, DOMPurify output sanitization, current agent event
+    ordering, and the extracted knowledge-base cleaning module. Focused pytest
+    checks and Dashboard vue-tsc passed.

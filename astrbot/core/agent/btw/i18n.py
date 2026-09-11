@@ -14,6 +14,7 @@ LOCALES: dict[str, dict[str, str]] = {
         "btw.work.status.completed": "工作任务已完成。",
         "btw.work.status.failed": "工作任务执行失败。",
         "btw.work.status.cancelled": "工作任务已取消。",
+        "btw.work.status.unconfirmed": "工作任务已结束，但结果投递未确认。",
     },
     "en-US": {
         "btw.work.started": "🔧 Work task started.",
@@ -22,6 +23,9 @@ LOCALES: dict[str, dict[str, str]] = {
         "btw.work.status.completed": "The work task is completed.",
         "btw.work.status.failed": "The work task failed.",
         "btw.work.status.cancelled": "The work task was cancelled.",
+        "btw.work.status.unconfirmed": (
+            "The work task ended, but its result delivery is unconfirmed."
+        ),
     },
 }
 

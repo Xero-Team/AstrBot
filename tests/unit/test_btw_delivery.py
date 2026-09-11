@@ -1,5 +1,6 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -8,9 +9,11 @@ from astrbot.core.agent.btw.types import WorkSessionStatus
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 from astrbot.core.webchat.emitter import emit_webchat_response
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
@@ -302,3 +305,185 @@ async def test_interrupted_acknowledgement_leaves_no_queued_work(tmp_path):
     assert session.status is WorkSessionStatus.CANCELLED
     assert not work._tasks
     assert event.cleaned == 1
+
+
+class ReceiptWorkEvent:
+    """A work event whose platform answers every send with a real result."""
+
+    requires_empty_completion = False
+
+    def __init__(self, run, send_results):
+        self.message_id = run.request_id
+        self.unified_msg_origin = "webchat:FriendMessage:shared"
+        self.message_str = "run work"
+        self.resource = SimpleNamespace(config_id=PROFILE_ID)
+        self.extras = {}
+        self.result = None
+        self.cleaned = 0
+        self.trace = []
+        self.plugins_name = []
+        self.send_streaming = AsyncMock()
+        self.stop_typing = AsyncMock()
+        self._send_results = iter(send_results)
+
+    def get_extra(self, key, default=None):
+        return self.extras.get(key, default)
+
+    def set_extra(self, key, value):
+        self.extras[key] = value
+
+    def get_result(self):
+        return self.result
+
+    def set_result(self, result):
+        self.result = result
+
+    def clear_result(self):
+        self.result = None
+
+    def is_stopped(self):
+        return False
+
+    def cleanup_temporary_local_files(self):
+        self.cleaned += 1
+
+    def get_platform_id(self):
+        return "test"
+
+    def get_platform_name(self):
+        return "test"
+
+    def get_sender_name(self):
+        return "tester"
+
+    def get_sender_id(self):
+        return "user"
+
+    def _outline_chain(self, _chain):
+        return "test"
+
+    async def send(self, _chain):
+        """Answer with the next scripted platform result."""
+        result = next(self._send_results)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+
+class WorkResultExecutor:
+    """One work run that publishes a result and finishes."""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def process(self, event):
+        self.started.set()
+        await self.release.wait()
+        event.set_result(MessageEventResult().message("work result"))
+        yield
+
+
+class ReceiptRespondStage(RespondStage):
+    """The real respond stage bound to an isolated test runtime."""
+
+    async def initialize(self, ctx):
+        self.ctx = ctx
+        self.config = {"provider_settings": {}}
+        self.platform_settings = {"path_mapping": []}
+        self.enable_seg = False
+
+
+def _accepted() -> PlatformSendResult:
+    return PlatformSendResult(
+        platform_id="test",
+        success=True,
+        target="target",
+        message_count=1,
+        message_id="accepted-1",
+    )
+
+
+def _rejected() -> PlatformSendResult:
+    return PlatformSendResult(
+        platform_id="test",
+        success=False,
+        target="target",
+        message_count=1,
+        error_message="adapter rejected the final result",
+    )
+
+
+async def setup_receipt_work(executor, send_results):
+    """Wire a real scheduler and respond stage around one work submission."""
+    sessions = WorkSessionManager()
+    work = WorkLoop(executor, sessions)
+    ctx = SimpleNamespace(
+        astrbot_config={},
+        file_token_service=MagicMock(),
+        handlers=SimpleNamespace(get_handlers_by_event_type=lambda *_a, **_k: []),
+        plugins=SimpleNamespace(),
+        execution_context=SimpleNamespace(
+            active_event_registry=ActiveEventRegistry(),
+            background_tasks=set(),
+            persist_accepted_group_response=AsyncMock(),
+        ),
+    )
+    scheduler = PipelineScheduler(ctx)
+    scheduler.stage_classes = [
+        lambda: SubmitStage(work),
+        DecorateStage,
+        ReceiptRespondStage,
+    ]
+    await scheduler.initialize()
+    run = WebChatRunCoordinator(WebChatQueueManager()).create_run(
+        session_id="shared", username="test", request_id="first"
+    )
+    return scheduler, work, ReceiptWorkEvent(run, send_results)
+
+
+async def _run_receipt_work(scheduler, work, executor, event):
+    await scheduler.execute(event)
+    await asyncio.wait_for(executor.started.wait(), timeout=1)
+    executor.release.set()
+    task = next(task for task, (owner, _) in work._tasks.items() if owner is event)
+    await asyncio.wait_for(task, timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_rejected_result_delivery_marks_the_work_failed():
+    """The platform refused the final result after accepting the ack."""
+    executor = WorkResultExecutor()
+    scheduler, work, event = await setup_receipt_work(
+        executor, [_accepted(), _rejected()]
+    )
+    try:
+        await _run_receipt_work(scheduler, work, executor, event)
+    finally:
+        await scheduler.close()
+
+    receipt = event.get_extra("delivery_receipt")
+    assert receipt.status == "failed"
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+    assert session.error == "Work result was not delivered."
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_result_delivery_is_not_reported_as_completed():
+    """A send that raised proves neither delivery nor its absence."""
+    executor = WorkResultExecutor()
+    scheduler, work, event = await setup_receipt_work(
+        executor, [_accepted(), OSError("delivery unavailable")]
+    )
+    try:
+        await _run_receipt_work(scheduler, work, executor, event)
+    finally:
+        await scheduler.close()
+
+    receipt = event.get_extra("delivery_receipt")
+    assert receipt.status == "unknown"
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.UNCONFIRMED

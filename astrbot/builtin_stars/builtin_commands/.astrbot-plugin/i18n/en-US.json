@@ -11,6 +11,7 @@
     "work.status.completed": "Completed: {task}",
     "work.status.failed": "Failed: {task}",
     "work.status.cancelled": "Cancelled: {task}",
+    "work.status.unconfirmed": "Delivery unconfirmed: {task}",
     "help.header": "AstrBot v{version} (WebUI: {dashboard})",
     "help.empty": "No enabled built-in commands.",
     "help.tip": "Tip: use `/help --image` to render the visual help card.",

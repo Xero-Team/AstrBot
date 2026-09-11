@@ -29,6 +29,25 @@ async def test_(self, event: AstrMessageEvent):
 只有在确实需要构造一条新的平台入站事件时，才使用
 `self.context.messages.create_event(...)`。
 
+## Telegram 交互
+
+内联键盘和规范化回调通过事件绑定的 Telegram facade 访问，不会暴露
+python-telegram-bot client：
+
+```python
+client = self.context.telegram.for_event(event)
+if client is not None:
+    receipt = await client.messages.send_interactive(
+        text="继续吗？",
+        buttons=[[{"text": "是", "value": "confirm"}]],
+    )
+```
+
+使用 `@filter.telegram_callback("confirm")` 注册回调处理器，并通过
+`self.context.telegram.event(event)` 读取不可变的 `TelegramCallbackEvent`。
+回调只能使用一次并会自动过期，同时校验所属机器人、聊天、原始消息以及可选
+的操作者策略。
+
 ## 调用 QQ 协议端 API
 
 插件侧不要再直接依赖 `event.bot`、`event.client` 或平台 SDK client。

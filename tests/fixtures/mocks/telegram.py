@@ -134,6 +134,8 @@ class MockTelegramBuilder:
         bot.set_message_reaction = AsyncMock()
         bot.edit_message_text = AsyncMock()
         bot.send_message_draft = AsyncMock()
+        bot.answer_callback_query = AsyncMock()
+        bot.get_chat_member = AsyncMock()
         return bot
 
     @staticmethod

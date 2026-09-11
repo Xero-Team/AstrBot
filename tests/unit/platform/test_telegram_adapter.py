@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import ssl
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -29,6 +30,11 @@ from astrbot.api.event import MessageChain
 from astrbot.core.command import CommandCatalog, CommandCatalogRegistration
 from astrbot.core.pipeline.turn_router import LlmAccess, TurnRouteInput, route_turn
 from astrbot.core.platform import Group
+from astrbot.core.platform.contracts.onebot import OneBotActionValidationError
+from astrbot.core.platform.contracts.telegram import (
+    TELEGRAM_CAPABILITY_NAME,
+    TelegramCallbackEvent,
+)
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command import CommandFilter
@@ -2338,6 +2344,35 @@ async def test_telegram_final_segment_splits_long_markdown_messages():
 
 
 @pytest.mark.asyncio
+async def test_telegram_send_returns_message_ids_and_keeps_base_send_bookkeeping():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.platform_metadata import PlatformMetadata
+
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "99"
+    message.sender = MessageMember("42", "tester")
+    message.message = []
+    message.message_str = "hello"
+    client = MockTelegramBuilder.create_bot()
+    client.send_message.return_value = SimpleNamespace(message_id=101)
+    event = TelegramPlatformEvent(
+        "hello",
+        message,
+        PlatformMetadata(name="telegram", description="test", id="telegram-test"),
+        "99",
+        client,
+    )
+
+    result = await event.send(MessageChain([Comp.Plain("hello")]))
+
+    assert result.message_ids == ("101",)
+    assert result.platform_id == "telegram-test"
+    assert event._has_send_oper is True
+
+
+@pytest.mark.asyncio
 async def test_telegram_final_segment_splits_long_plaintext_when_markdown_fails():
     TelegramPlatformEvent = _load_telegram_platform_event()
     client = MagicMock()
@@ -3576,6 +3611,20 @@ def _real_contract_update(
     if field in {"business_message", "edited_business_message"}:
         message["business_connection_id"] = connection_id
     message.update(message_fields)
+    if field == "callback_query":
+        return Update.de_json(
+            {
+                "update_id": update_id,
+                "callback_query": {
+                    "id": "callback-1",
+                    "from": user,
+                    "chat_instance": "instance",
+                    "data": "ab1_token",
+                    "message": message,
+                },
+            },
+            bot=None,
+        )
     return Update.de_json({"update_id": update_id, field: message}, bot=None)
 
 
@@ -3769,8 +3818,11 @@ def test_telegram_update_handler_and_matrix_cover_ptb_types():
     supported = adapter_type.run.__globals__["TELEGRAM_ALLOWED_UPDATES"]
     ignored = _ignored_telegram_updates()
     assert set(supported) | set(ignored) == set(Update.ALL_TYPES)
-    for field in supported:
+    message_supported = adapter_type.__init__.__globals__["TELEGRAM_MESSAGE_UPDATES"]
+    for field in message_supported:
         assert handler.check_update(_real_contract_update(field))
+    callback_handler = adapter.application.add_handler.call_args_list[0].args[0]
+    assert callback_handler.check_update(_real_contract_update("callback_query"))
     for update in ignored.values():
         assert not handler.check_update(update)
 
@@ -3792,7 +3844,12 @@ async def test_telegram_polling_allowed_updates_are_explicit():
     await asyncio.wait_for(adapter.run(), timeout=1)
 
     adapter.application.updater.start_polling.assert_awaited_once_with(
-        allowed_updates=("message", "channel_post", "business_message"),
+        allowed_updates=(
+            "message",
+            "channel_post",
+            "business_message",
+            "callback_query",
+        ),
         error_callback=adapter._on_polling_error,
     )
 
@@ -3816,6 +3873,163 @@ async def test_telegram_update_duplicate_and_edit_replays_do_not_dispatch_twice(
             _real_contract_update(update_id=update_id), _build_context()
         )
     assert list(adapter._seen_update_ids) == [3, 4]
+
+
+def _interaction_adapter():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.client = MockTelegramBuilder.create_bot()
+    adapter.client.id = 12345678
+    adapter.client.send_message.return_value = SimpleNamespace(message_id=44)
+    return adapter
+
+
+def _callback_update(token: str, *, update_id: int = 10, user_id: int = 99):
+    message = SimpleNamespace(
+        message_id=44,
+        chat=SimpleNamespace(id=99, type="private"),
+        message_thread_id=None,
+        is_topic_message=False,
+        business_connection_id=None,
+    )
+    query = SimpleNamespace(
+        id=f"query-{update_id}",
+        data=token,
+        message=message,
+        from_user=SimpleNamespace(id=user_id, username="alice", full_name="Alice"),
+    )
+    return SimpleNamespace(update_id=update_id, callback_query=query)
+
+
+@pytest.mark.asyncio
+async def test_telegram_interactive_send_binds_tokens_and_callback_is_one_shot():
+    adapter = _interaction_adapter()
+    receipt = await adapter.invoke_capability(
+        TELEGRAM_CAPABILITY_NAME,
+        "send_interactive",
+        target="99",
+        text="Continue?",
+        buttons=[[{"text": "Yes", "value": "confirm"}]],
+        allowed_user_ids=[99],
+    )
+
+    assert receipt.success
+    assert receipt.message_ids == ("44",)
+    token = next(iter(adapter._callback_bindings))
+    await adapter.callback_query_handler(_callback_update(token), _build_context())
+    event = await adapter._event_queue.get()
+    callback = event.get_extra("telegram_callback")
+    assert isinstance(callback, TelegramCallbackEvent)
+    assert callback.data == "confirm"
+    assert callback.message_id == "44"
+    assert not adapter._callback_bindings
+
+    await adapter.callback_query_handler(
+        _callback_update(token, update_id=11), _build_context()
+    )
+    assert adapter.client.answer_callback_query.await_count == 2
+    assert adapter._event_queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_telegram_callback_rejects_unauthorized_actor_and_expired_token():
+    adapter = _interaction_adapter()
+    await adapter.invoke_capability(
+        TELEGRAM_CAPABILITY_NAME,
+        "send_interactive",
+        target="99",
+        text="Continue?",
+        buttons=[[{"text": "Yes", "value": "confirm"}]],
+        allowed_user_ids=[99],
+        ttl_seconds=1,
+    )
+    token = next(iter(adapter._callback_bindings))
+    await adapter.callback_query_handler(
+        _callback_update(token, user_id=100), _build_context()
+    )
+    assert adapter._event_queue.empty()
+    assert not adapter._callback_bindings
+
+    adapter = _interaction_adapter()
+    await adapter.invoke_capability(
+        TELEGRAM_CAPABILITY_NAME,
+        "send_interactive",
+        target="99",
+        text="Continue?",
+        buttons=[[{"text": "Yes", "value": "confirm"}]],
+    )
+    token = next(iter(adapter._callback_bindings))
+    adapter._callback_bindings[token] = replace(
+        adapter._callback_bindings[token], expires_at=0
+    )
+    await adapter.callback_query_handler(_callback_update(token), _build_context())
+    assert adapter._event_queue.empty()
+    assert not adapter._callback_bindings
+
+
+@pytest.mark.asyncio
+async def test_telegram_interactive_send_failure_removes_callback_bindings():
+    adapter = _interaction_adapter()
+    adapter.client.send_message.side_effect = RuntimeError("network")
+    receipt = await adapter.invoke_capability(
+        TELEGRAM_CAPABILITY_NAME,
+        "send_interactive",
+        target="99",
+        text="Continue?",
+        buttons=[[{"text": "Yes", "value": "confirm"}]],
+    )
+    assert not receipt.success
+    assert not adapter._callback_bindings
+
+
+@pytest.mark.asyncio
+async def test_telegram_callback_pruning_handles_mixed_ttl_order():
+    adapter = _interaction_adapter()
+    await adapter.invoke_capability(
+        TELEGRAM_CAPABILITY_NAME,
+        "send_interactive",
+        target="99",
+        text="Long-lived",
+        buttons=[[{"text": "One", "value": "one"}]],
+        ttl_seconds=3600,
+    )
+    long_token = next(iter(adapter._callback_bindings))
+    await adapter.invoke_capability(
+        TELEGRAM_CAPABILITY_NAME,
+        "send_interactive",
+        target="99",
+        text="Short-lived",
+        buttons=[[{"text": "Two", "value": "two"}]],
+        ttl_seconds=1,
+    )
+    short_token = next(
+        token for token in adapter._callback_bindings if token != long_token
+    )
+    adapter._callback_bindings[short_token] = replace(
+        adapter._callback_bindings[short_token], expires_at=0
+    )
+
+    adapter._prune_callback_bindings()
+
+    assert list(adapter._callback_bindings) == [long_token]
+
+
+@pytest.mark.asyncio
+async def test_telegram_interactive_input_rejects_invalid_ids_and_large_button_sets():
+    adapter = _interaction_adapter()
+    with pytest.raises(OneBotActionValidationError):
+        adapter._normalize_allowed_users([None])
+    with pytest.raises(OneBotActionValidationError):
+        adapter._normalize_allowed_roles(["owner"])
+    with pytest.raises(OneBotActionValidationError):
+        await adapter.invoke_capability(
+            TELEGRAM_CAPABILITY_NAME,
+            "send_interactive",
+            target="99",
+            text="Too many",
+            buttons=[[{"text": "x", "value": str(index)} for index in range(2049)]],
+        )
 
 
 @pytest.mark.asyncio

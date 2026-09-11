@@ -13,6 +13,7 @@ from astrbot.core.command import (
 from astrbot.core.message.components import Mention, MentionAll, Plain, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.contracts.telegram import TelegramCallbackEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
@@ -23,6 +24,7 @@ from astrbot.core.star.filter.event_message_type import (
     EventMessageTypeFilter,
 )
 from astrbot.core.star.filter.permission import ActionPermissionFilter
+from astrbot.core.star.filter.telegram_callback import TelegramCallbackFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 
@@ -565,6 +567,54 @@ async def test_event_message_type_all_still_activates_when_llm_dropped(monkeypat
     assert event.get_extra("should_run_llm") is False
     assert event.get_extra("activated_handlers") == [handler]
     assert event.stopped is False
+
+
+@pytest.mark.asyncio
+async def test_telegram_callback_only_activates_callback_handlers(monkeypatch):
+    stage = await make_stage()
+    callback_handler = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_callback",
+        "on_callback",
+        "test.plugin",
+        lambda *_args: None,
+        [TelegramCallbackFilter("confirm")],
+    )
+    ambient_handler = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_all",
+        "on_all",
+        "test.plugin",
+        lambda *_args: None,
+        [EventMessageTypeFilter(EventMessageType.ALL)],
+    )
+    install_handlers(stage, monkeypatch, [callback_handler, ambient_handler])
+    event = FakeEvent(
+        [Plain("ignored")],
+        private=True,
+        platform="telegram",
+        extras={
+            "telegram_callback": TelegramCallbackEvent(
+                callback_id="query-1",
+                data="confirm",
+                user_id="user",
+                bot_id="bot",
+                chat_id="user",
+                message_id="message-1",
+                session_id="user",
+            )
+        },
+    )
+
+    await stage.process(event)
+
+    assert event.get_extra("should_run_command") is False
+    assert event.get_extra("should_run_llm") is False
+    assert event.get_extra("activated_handlers") == [callback_handler]
+    assert event.get_extra("wake_reasons") == {
+        "telegram_callback",
+        "plugin_handler",
+    }
 
 
 @pytest.mark.asyncio

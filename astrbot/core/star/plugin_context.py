@@ -24,6 +24,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.onebot_capability import OneBotCapability
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.platform.telegram_capability import TelegramCapability
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import (
     EmbeddingProvider,
@@ -1382,6 +1383,7 @@ class PluginContext:
         "knowledge",
         "platform_actions",
         "onebot",
+        "telegram",
         "dashboard_extensions",
         "runtime_info",
         "rendering",
@@ -1406,6 +1408,7 @@ class PluginContext:
         knowledge: KnowledgeCapability,
         platform_actions: PlatformActionsCapability,
         onebot: OneBotCapability,
+        telegram: TelegramCapability,
         dashboard_extensions: DashboardExtensionAccess,
         runtime_info: RuntimeInfoCapability,
         rendering: RenderingCapability,
@@ -1426,6 +1429,7 @@ class PluginContext:
         self.knowledge = knowledge
         self.platform_actions = platform_actions
         self.onebot = onebot
+        self.telegram = telegram
         self.dashboard_extensions = dashboard_extensions
         self.runtime_info = runtime_info
         self.rendering = rendering
@@ -1463,6 +1467,7 @@ class PluginContext:
             knowledge=KnowledgeCapability(execution.kb_manager),
             platform_actions=PlatformActionsCapability(execution),
             onebot=OneBotCapability(execution),
+            telegram=TelegramCapability(execution),
             dashboard_extensions=execution.dashboard_extensions,
             runtime_info=RuntimeInfoCapability(
                 catalogs,
@@ -1502,6 +1507,7 @@ class PluginContext:
             knowledge=self.knowledge,
             platform_actions=self.platform_actions,
             onebot=self.onebot,
+            telegram=self.telegram,
             dashboard_extensions=self.dashboard_extensions,
             runtime_info=self.runtime_info,
             rendering=self.rendering,
@@ -1541,6 +1547,7 @@ __all__ = [
     "PersonaCapability",
     "PlatformActionsCapability",
     "OneBotCapability",
+    "TelegramCapability",
     "PluginCommandInfo",
     "PluginContext",
     "PluginInfo",

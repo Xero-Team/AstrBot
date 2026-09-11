@@ -13,18 +13,53 @@
 
 Proactive message push: Supported.
 
+## Interactive Buttons
+
+Plugins can send Telegram inline keyboards through `self.context.telegram`.
+Each button has a short logical value; AstrBot keeps the transport token
+private and accepts a callback only once, before its bounded TTL expires. The
+callback is bound to the originating bot, target chat/topic, and message, with
+optional user-ID or Telegram-role restrictions. Invalid, expired, replayed, or
+unauthorized callbacks are acknowledged safely and never enter the pipeline.
+Successful sends return a delivery receipt with `message_ids`.
+
+```python
+from astrbot.api.event import AstrMessageEvent, filter
+
+
+@filter.telegram_callback("confirm")
+async def confirm(self, event: AstrMessageEvent):
+    callback = self.context.telegram.event(event)
+    if callback is not None:
+        self.log.info("confirmed by %s", callback.user_id)
+
+
+async def ask(self, event: AstrMessageEvent):
+    client = self.context.telegram.for_event(event)
+    if client is not None:
+        await client.messages.send_interactive(
+            text="Continue?",
+            buttons=[[{"text": "Yes", "value": "confirm"}]],
+        )
+```
+
+The sending event's actor is the default allowed user. Pass `allowed_user_ids`
+or `allowed_roles` to change that policy. Button values and labels are limited
+to Telegram's 64-byte interaction limits.
+
 ## Update Ingestion
 
-Whenever polling starts or its client is rebuilt, AstrBot explicitly subscribes to `message`, `channel_post`, and `business_message`. It does not inherit a subscription left on Telegram's servers.
+Whenever polling starts or its client is rebuilt, AstrBot explicitly subscribes to `message`, `channel_post`, `business_message`, and `callback_query`. It does not inherit a subscription left on Telegram's servers.
 
-| Telegram Update field                                              | Handling                                                                                                                                                                                                          |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `message`                                                          | Ingest private, group, and topic messages using the content types above and the existing album handling.                                                                                                          |
-| `channel_post`                                                     | Ingest as a group message, preserving the channel and topic route. Use `sender_chat` as the sender instead of an anonymous sender's compatibility user. Group access rules still decide whether to run the LLM.   |
-| `business_message`                                                 | Ingest incoming customer messages in private chats with a `business_connection_id`. Ignore account-owner sends, outgoing bot messages marked with `sender_business_bot`, and incomplete routes.                   |
-| `edited_message`, `edited_channel_post`, `edited_business_message` | Do not subscribe, create a new message event, or change stored context. Send a new message to run a command or agent again.                                                                                       |
-| `guest_message`                                                    | Not ingested. Guest Bot messages require the dedicated `answerGuestQuery` / `InlineQueryResult` reply protocol and cannot be answered through ordinary chat sends.                                                |
-| Other updates                                                      | Not subscribed to or converted into chat messages. This includes button callbacks, member changes, reactions, polls, payments, Business connection changes and deletion notices, boosts, and managed bot updates. |
+| Telegram Update field                                              | Handling                                                                                                                                                                                                        |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`                                                          | Ingest private, group, and topic messages using the content types above and the existing album handling.                                                                                                        |
+| `channel_post`                                                     | Ingest as a group message, preserving the channel and topic route. Use `sender_chat` as the sender instead of an anonymous sender's compatibility user. Group access rules still decide whether to run the LLM. |
+| `business_message`                                                 | Ingest incoming customer messages in private chats with a `business_connection_id`. Ignore account-owner sends, outgoing bot messages marked with `sender_business_bot`, and incomplete routes.                 |
+| `callback_query`                                                   | Validate AstrBot's one-shot interaction token, acknowledge the query promptly, and deliver an authenticated normalized callback event to matching plugin handlers.                                              |
+| `edited_message`, `edited_channel_post`, `edited_business_message` | Do not subscribe, create a new message event, or change stored context. Send a new message to run a command or agent again.                                                                                     |
+| `guest_message`                                                    | Not ingested. Guest Bot messages require the dedicated `answerGuestQuery` / `InlineQueryResult` reply protocol and cannot be answered through ordinary chat sends.                                              |
+| Other updates                                                      | Not subscribed to or converted into chat messages. This includes member changes, reactions, polls, payments, Business connection changes and deletion notices, boosts, and managed bot updates.                 |
 
 The handler accepts only the three supported message variants even if unacknowledged updates from an older subscription still arrive. Each adapter retains the latest 4096 admitted Update IDs, so repeated delivery does not execute a command or agent again while its ID remains cached. The cache survives polling-client rebuilds but is not persisted across process restarts. Edited updates are always ignored.
 

@@ -199,6 +199,14 @@ With BTW enabled, the conversation loop runs with Computer Use set to `none`, in
 
 `btw.work_loop.computer_use_runtime` accepts `inherit` (default), `none`, `local`, or `sandbox`. `inherit` uses `provider_settings.computer_use_runtime`. The effective runtime applies to the work request and its handoffs; `none` excludes computer tools even when they were explicitly declared. Disabling BTW preserves the existing Computer Use configuration. These settings select capabilities; they do not grant roles or bypass authorization, WebChat step-up, path restrictions, or sandbox checks.
 
+## BTW loop conversation history and work hand-off
+
+With BTW enabled, the two loops keep separate conversation histories. The conversation loop uses the session's current conversation; the work loop owns a second conversation under the same session, created on its first task, and both appear in the session's conversation list and the Dashboard. Because the histories are independent, a delayed work reply never overwrites a chat turn, and the reverse holds too.
+
+The work loop never reads its own history: every work task starts from an empty history. The conversation loop hands the task over explicitly by calling the `submit_work_task` tool with a self-contained task prompt. The tool returns immediately, the task runs in the background, and its result is still delivered to the user through the result-decoration and send stages. The tool is offered only when BTW and the work loop are enabled and the current run is the conversation loop; the work loop never receives it. The prompt must carry every needed detail, because the work loop cannot see the chat.
+
+The conversation loop can read the work loop's history: its request context carries the work loop's most recent complete turns as provider-only context that is never written into either history, so the chat can refer to what the work loop produced. Hand-off reduces turns to their text roles, so tool calls and their results never cross the loop boundary. Disabling BTW leaves a run reading only its own conversation's history, creating no work conversation and injecting nothing.
+
 ## BTW plugin tool assignments
 
 When BTW is enabled in a configuration profile, **Config → BTW dual loops → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.

@@ -34,6 +34,10 @@ class ProcessStage(Stage):
             runtime_registry.register(
                 ctx.astrbot_config_id, self.conversation_loop.work_sessions
             )
+            if self.conversation_loop.work_loop is not None:
+                runtime_registry.register_work_loop(
+                    ctx.astrbot_config_id, self.conversation_loop.work_loop
+                )
 
     def configure_detached_work(
         self,
@@ -60,6 +64,11 @@ class ProcessStage(Stage):
                     self.ctx.astrbot_config_id,
                     self.conversation_loop.work_sessions,
                 )
+                if self.conversation_loop.work_loop is not None:
+                    runtime_registry.unregister_work_loop(
+                        self.ctx.astrbot_config_id,
+                        self.conversation_loop.work_loop,
+                    )
 
     async def process(
         self,

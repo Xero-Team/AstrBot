@@ -1354,6 +1354,7 @@ def _assemble_request_tool_catalog(
         authenticated=authenticated,
         subject_kind=subject_kind,
     )
+    loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
     catalog_inputs = ToolCatalogInputs(
         snapshot=snapshot,
         persona_tools=persona_tools,
@@ -1378,7 +1379,9 @@ def _assemble_request_tool_catalog(
         elevated_instance_tool_actions=elevated_instance_tool_actions,
         plugins=plugin_context.catalogs.plugins,
         btw_config=btw_config if isinstance(btw_config, dict) else None,
-        loop_mode="work" if event.get_extra("btw_loop") == "work" else "conversation",
+        loop_mode=loop_mode,
+        # Only the conversation loop submits work; the work loop runs it.
+        work_loop_submission=loop_mode == "conversation" and is_work_loop_enabled(cfg),
     )
     existing = req.func_tool
     if existing is not None:

@@ -7,6 +7,9 @@ if TYPE_CHECKING:
     from astrbot.core.agent.btw.runtime_registry import (
         latest_status as btw_work_latest_status,
     )
+    from astrbot.core.agent.btw.submission import (
+        submit_work_task as btw_submit_work_task,
+    )
     from astrbot.core.agent.btw.types import (
         is_work_loop_enabled as btw_work_loop_enabled,
     )
@@ -26,6 +29,10 @@ _EXPORTS = {
     "btw_work_loop_enabled": (
         "astrbot.core.agent.btw.types",
         "is_work_loop_enabled",
+    ),
+    "btw_submit_work_task": (
+        "astrbot.core.agent.btw.submission",
+        "submit_work_task",
     ),
     "AuthContext": ("astrbot.core.auth", "AuthContext"),
     "Decision": ("astrbot.core.auth", "Decision"),
@@ -92,6 +99,7 @@ __all__ = [
     "Subject",
     "ToolSet",
     "agent",
+    "btw_submit_work_task",
     "btw_work_loop_enabled",
     "btw_work_latest_status",
     "llm_tool",

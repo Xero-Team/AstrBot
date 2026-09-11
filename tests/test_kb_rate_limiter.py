@@ -23,7 +23,7 @@ async def test_concurrent_waiters_keep_the_configured_interval(event_loop_stall)
     if event_loop_stall:
         await asyncio.sleep(0.05)
         # Simulate a blocked event loop while several callers are waiting.
-        time.sleep(event_loop_stall)
+        time.sleep(event_loop_stall)  # noqa: ASYNC251 - intentionally blocks loop
     await asyncio.gather(*tasks)
 
     times.sort()

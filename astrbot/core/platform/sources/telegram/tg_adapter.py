@@ -61,6 +61,7 @@ def _telegram_member_status(raw_message: object) -> str | None:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    _TELEGRAM_COMMAND_LIMIT = 100
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
     _MEDIA_GROUP_MAX_ACTIVE = 128
     _MEDIA_GROUP_MAX_ITEMS = 10
@@ -282,6 +283,7 @@ class TelegramPlatformAdapter(Platform):
             seconds=self.config.get("telegram_command_register_interval", 300),
             id="telegram_command_register",
             misfire_grace_time=60,
+            kwargs={"reconcile": True},
         )
         self.scheduler.start()
 
@@ -395,17 +397,18 @@ class TelegramPlatformAdapter(Platform):
         except RuntimeError:
             return
 
-    async def register_commands(self) -> None:
+    async def register_commands(self, *, reconcile: bool = False) -> None:
         """收集所有注册的指令并注册到 Telegram"""
         async with self._command_refresh_lock:
             try:
                 commands = self.collect_commands()
                 snapshot = tuple((cmd.command, cmd.description) for cmd in commands)
-                if snapshot == self._last_command_snapshot:
+                if not reconcile and snapshot == self._last_command_snapshot:
                     return
-                await self.client.delete_my_commands()
                 if commands:
                     await self.client.set_my_commands(commands)
+                else:
+                    await self.client.delete_my_commands()
                 self._last_command_snapshot = snapshot
 
             except asyncio.CancelledError:
@@ -424,7 +427,7 @@ class TelegramPlatformAdapter(Platform):
 
     def collect_commands(self) -> list[BotCommand]:
         """从注册的处理器中收集所有指令"""
-        command_dict = {}
+        command_dict: dict[str, tuple[str, bool]] = {}
         skip_commands = {"start"}
 
         for handler_md in self.get_handler_registry().get_handlers_by_event_type(
@@ -444,16 +447,42 @@ class TelegramPlatformAdapter(Platform):
                     skip_commands,
                 )
                 if cmd_info_list:
+                    if isinstance(event_filter, CommandFilter):
+                        primary_names = {event_filter.command_name}
+                    elif isinstance(event_filter, CommandGroupFilter):
+                        primary_names = {event_filter.group_name}
+                    else:
+                        primary_names = set()
                     for cmd_name, description in cmd_info_list:
+                        is_alias = cmd_name not in primary_names
                         if cmd_name in command_dict:
                             logger.warning(
                                 f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                                f"'{command_dict[cmd_name]}'"
+                                f"'{command_dict[cmd_name][0]}'"
                             )
-                        command_dict.setdefault(cmd_name, description)
+                            if not is_alias and command_dict[cmd_name][1]:
+                                command_dict[cmd_name] = (
+                                    command_dict[cmd_name][0],
+                                    False,
+                                )
+                        else:
+                            command_dict[cmd_name] = (description, is_alias)
 
-        commands_a = sorted(command_dict.keys())
-        return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
+        commands_a = sorted(
+            command_dict,
+            key=lambda command: (command_dict[command][1], command),
+        )
+        omitted_count = max(0, len(commands_a) - self._TELEGRAM_COMMAND_LIMIT)
+        if omitted_count:
+            logger.warning(
+                "Telegram command menu limit reached; omitted %d commands "
+                "after the first %d sorted entries (first omitted: %s).",
+                omitted_count,
+                self._TELEGRAM_COMMAND_LIMIT,
+                commands_a[self._TELEGRAM_COMMAND_LIMIT],
+            )
+            commands_a = commands_a[: self._TELEGRAM_COMMAND_LIMIT]
+        return [BotCommand(cmd, command_dict[cmd][0]) for cmd in commands_a]
 
     @staticmethod
     def _extract_command_info(
@@ -473,7 +502,7 @@ class TelegramPlatformAdapter(Platform):
             # 收集主命令名和所有别名
             cmd_names = [event_filter.command_name]
             if event_filter.alias:
-                cmd_names.extend(event_filter.alias)
+                cmd_names.extend(sorted(event_filter.alias))
         elif isinstance(event_filter, CommandGroupFilter):
             if event_filter.parent_group:
                 return None

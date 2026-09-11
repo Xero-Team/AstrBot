@@ -37,9 +37,9 @@ Please ensure your network environment can access Telegram. You may need to conf
 
 ## Native Command Menu
 
-When Telegram command registration is enabled, AstrBot synchronizes every enabled built-in and extension-plugin root command, root group, and root alias to Telegram's native command menu; entries that violate Telegram's naming constraints are skipped. Telegram menus do not support subcommands or named parameters, so selecting a group such as `/persona`, `/provider`, or `/plugin` still leaves its subcommand and arguments to Orbit Command Syntax.
+When Telegram command registration is enabled, AstrBot synchronizes enabled built-in and extension-plugin root commands, root groups, and root aliases to Telegram's native command menu; entries that violate Telegram's naming constraints are skipped. Telegram accepts at most 100 menu entries, so AstrBot prioritizes primary commands before aliases and sorts each group by name, then logs how many local entries were omitted. Telegram menus do not support subcommands or named parameters, so selecting a group such as `/persona`, `/provider`, or `/plugin` still leaves its subcommand and arguments to Orbit Command Syntax.
 
-Plugin load, unload, reload, enable, and disable operations immediately request a menu refresh, as do command enablement, rename, and alias changes from Dashboard. The periodic refresh remains as recovery for network failures or external state changes. When no commands are eligible, AstrBot clears stale commands from the Telegram menu.
+Plugin load, unload, reload, enable, and disable operations immediately request a menu refresh, as do command enablement, rename, and alias changes from Dashboard. Non-empty replacements are written directly so a failed request does not clear the existing menu; an empty command set clears stale commands. The periodic refresh always reconciles the selected menu, including after network failures or external changes to the Telegram menu.
 
 ## Mentions
 

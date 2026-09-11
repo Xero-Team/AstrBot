@@ -1678,6 +1678,72 @@ async def test_telegram_media_group_entry_merges_media_without_later_reply_chain
         if isinstance(component, Comp.Plain)
     ]
     assert plain_texts == ["first caption", "second caption"]
+    assert merged_message.message_str == "first caption\nsecond caption"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("item_texts", "expected"),
+    [
+        (["first caption", ""], "first caption"),
+        (["", "later caption"], "later caption"),
+        (
+            ["first caption", "second caption", "third caption"],
+            "first caption\nsecond caption\nthird caption",
+        ),
+        (["", ""], ""),
+    ],
+)
+async def test_telegram_media_group_entry_merges_non_empty_item_texts(
+    item_texts, expected
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.handle_msg = AsyncMock()
+
+    updates = []
+    for index, caption in enumerate(item_texts):
+        if index % 2:
+            document = create_mock_file(
+                f"https://api.telegram.org/file/test/document-{index}.txt"
+            )
+            document.file_name = f"document-{index}.txt"
+            media = {"document": document}
+        else:
+            media = {
+                "photo": [
+                    create_mock_file(
+                        f"https://api.telegram.org/file/test/photo-{index}.jpg"
+                    )
+                ]
+            }
+        updates.append(
+            create_mock_update(
+                message_text=None,
+                chat_type="group",
+                chat_id=-20001,
+                message_id=index + 1,
+                media_group_id="album-text",
+                caption=caption,
+                **media,
+            )
+        )
+
+    entry = {"items": [(update, _build_context()) for update in updates]}
+
+    await adapter._process_media_group_entry("album-text", entry)
+
+    merged_message = adapter.handle_msg.await_args.args[0]
+    assert merged_message.message_str == expected
+    assert [
+        component.text
+        for component in merged_message.message
+        if isinstance(component, Comp.Plain)
+    ] == [text for text in item_texts if text]
 
 
 @pytest.mark.asyncio
@@ -1713,6 +1779,7 @@ async def test_telegram_media_group_entry_skips_later_items_that_convert_to_none
     adapter.handle_msg = AsyncMock()
     first_abm = SimpleNamespace(
         message=[Comp.Plain("first"), Comp.Image(file="photo.jpg", url="photo.jpg")],
+        message_str="first",
         message_id="m1",
         session_id="session-1",
     )
@@ -1754,6 +1821,7 @@ async def test_telegram_media_group_entry_swallows_exceptions_from_later_items()
     adapter.handle_msg = AsyncMock()
     first_abm = SimpleNamespace(
         message=[Comp.Plain("first")],
+        message_str="first",
         message_id="m1",
         session_id="session-1",
     )

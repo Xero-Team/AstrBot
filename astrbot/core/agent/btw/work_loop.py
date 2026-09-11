@@ -12,7 +12,12 @@ from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from . import i18n as work_i18n
-from .types import WorkSession, WorkSessionStatus
+from .types import (
+    THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
+    WORK_FAILED_EXTRA,
+    WorkSession,
+    WorkSessionStatus,
+)
 from .work_sessions import WorkSessionManager
 
 
@@ -231,6 +236,7 @@ class WorkLoop:
         session_id: str,
     ) -> AsyncGenerator[None]:
         """Run one already-created work session and update its lifecycle."""
+        produced = False
         try:
             async with self._semaphore:
                 await self.sessions.update_status(
@@ -238,6 +244,7 @@ class WorkLoop:
                     WorkSessionStatus.RUNNING,
                 )
                 async for progress in self.executor.process(event):
+                    produced = True
                     yield progress
         except asyncio.CancelledError:
             await self.sessions.update_status(
@@ -253,13 +260,19 @@ class WorkLoop:
             )
             raise
         else:
-            failed = bool(event.get_extra("btw_work_failed"))
+            failed = bool(event.get_extra(WORK_FAILED_EXTRA)) or bool(
+                event.get_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY)
+            )
             # An admitted stop request and a run that reported its own abort are
             # both cancellations.  ``run_agent`` clears ``agent_stop_requested``
             # when it reports the abort, so the stop flag alone misses that case.
             cancelled = bool(event.get_extra("agent_stop_requested")) or bool(
                 event.get_extra("agent_user_aborted")
             )
+            # An executor that produced nothing never reached an Agent: a run
+            # the session turned away is the reported case.  The generator
+            # ending only proves the task ran when something actually ran.
+            failed = failed or (not produced and not cancelled)
             await self.sessions.update_status(
                 session_id,
                 WorkSessionStatus.FAILED

@@ -18,6 +18,27 @@ def is_work_loop_enabled(config: object) -> bool:
     return isinstance(work, Mapping) and bool(work.get("enabled", False))
 
 
+# How a run tells the work loop that it did not succeed.  The writers are the
+# agent stages and the Agent runner; the work loop is the only reader.  They
+# live here so a writer and its reader cannot drift apart: a run that fails
+# without setting one of these is reported as completed.
+WORK_FAILED_EXTRA = "btw_work_failed"
+THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
+
+
+def mark_work_run_failed(event) -> None:
+    """Record that a run failed, for work runs only.
+
+    Chat runs keep their own error path, so the marker is written only when the
+    event belongs to the work loop.
+
+    Args:
+        event: The event whose run ended in an error.
+    """
+    if event.get_extra("btw_loop") == "work":
+        event.set_extra(WORK_FAILED_EXTRA, True)
+
+
 class TaskType(StrEnum):
     """The execution loop selected for a user request."""
 

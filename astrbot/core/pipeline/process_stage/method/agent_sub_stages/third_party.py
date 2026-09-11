@@ -35,6 +35,7 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.llm_types import LLMResponse
     from astrbot.core.agent.runners.base import BaseAgentRunner
+from astrbot.core.agent.btw.types import THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY
 from astrbot.core.agent.llm_types import (
     ProviderRequest,
 )
@@ -47,7 +48,6 @@ from astrbot.core.utils.task_utils import create_tracked_task
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
 
-THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 RUNNER_NO_RESULT_FALLBACK_MESSAGE = DEFAULT_AGENT_ERROR_MESSAGE
 RUNNER_NO_FINAL_RESPONSE_LOG = (

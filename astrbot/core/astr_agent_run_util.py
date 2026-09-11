@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
+from astrbot.core.agent.btw.types import mark_work_run_failed
 from astrbot.core.agent.llm_types import LLMResponse
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
@@ -334,6 +335,11 @@ async def run_agent(
                         astr_event.set_extra("agent_user_aborted", True)
                         astr_event.set_extra("agent_stop_requested", False)
                         return
+                    if resp.type == "err":
+                        # The run turns this into a user-facing error result and
+                        # ends normally, so the work loop cannot tell it apart
+                        # from a task that produced an answer.
+                        mark_work_run_failed(astr_event)
                     if _should_stop_agent(astr_event):
                         continue
 
@@ -367,6 +373,9 @@ async def run_agent(
             "Agent execution failed: %s",
             safe_error("", e),
         )
+        # The exception is reported to the user as an error result, so the run
+        # still ends by draining this generator normally.
+        mark_work_run_failed(astr_event)
         err_msg = get_agent_error_message(astr_event)
 
         error_llm_response = LLMResponse(

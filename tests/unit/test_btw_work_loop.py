@@ -166,7 +166,7 @@ async def test_cancelled_work_retains_cancelled_state_and_propagates():
     await asyncio.wait_for(executor.started.wait(), timeout=1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        _cancelled_result = await task
     session = await sessions.get_for_origin(event.unified_msg_origin)
     assert session.status is WorkSessionStatus.CANCELLED
 

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import copy
 import datetime
+import importlib
 import os
 import platform
 import re
@@ -8,7 +11,7 @@ import zoneinfo
 from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from astrbot import logger
 from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
@@ -44,7 +47,6 @@ from astrbot.core.conversation_mgr import (
 )
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.db.protocols import PlatformSessionStore
-from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.json_card import coalesce_prompt_with_json_cards
 from astrbot.core.persona_error_reply import (
@@ -65,7 +67,6 @@ from astrbot.core.skills.skill_manager import (
     SkillManager,
     build_skills_prompt,
 )
-from astrbot.core.star.star import PluginRegistry
 from astrbot.core.tool_catalog import (
     ToolCatalogInputs,
     assemble_tool_catalog,
@@ -77,9 +78,6 @@ from astrbot.core.tools.computer_tools import (
     normalize_umo_for_workspace,
 )
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
-from astrbot.core.tools.knowledge_base_tools import (
-    retrieve_knowledge_base,
-)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
@@ -103,6 +101,18 @@ from astrbot.core.utils.string_utils import (
     normalize_and_dedupe_strings,
 )
 from astrbot.core.utils.task_utils import create_tracked_task
+
+if TYPE_CHECKING:
+    from astrbot.core.execution_context import CoreExecutionContext
+    from astrbot.core.star.star import PluginRegistry
+
+
+async def retrieve_knowledge_base(*args: Any, **kwargs: Any) -> str | None:
+    """Load the knowledge-base helper lazily to keep agent imports acyclic."""
+    module = importlib.import_module("astrbot.core.tools.knowledge_base_tools")
+    retrieve = getattr(module, "retrieve_knowledge_base")
+    return await retrieve(*args, **kwargs)
+
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
 WEEKDAY_NAMES = (

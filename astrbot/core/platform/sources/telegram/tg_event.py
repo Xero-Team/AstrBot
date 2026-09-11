@@ -136,7 +136,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-        client: ExtBot,
+        client: TelegramClient,
         limiter: TelegramDeliveryLimiter | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
@@ -437,7 +437,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     @classmethod
     async def _send_image_run(
         cls,
-        client: ExtBot,
+        client: TelegramClient,
         images: list[Image],
         payload: dict[str, Any],
         *,

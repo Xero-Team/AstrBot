@@ -102,7 +102,10 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path, monkeypatch):
         # may show Thread.join and macOS selectors.select instead of this
         # module.
         assert dumped.wait(timeout=1.0)
-        await asyncio.sleep(0.05)
+        for _ in range(200):
+            if "Event loop stalled for" in log_path.read_text(encoding="utf-8"):
+                break
+            await asyncio.sleep(0.005)
 
         log_content = log_path.read_text(encoding="utf-8")
         assert "Event loop stalled for" in log_content

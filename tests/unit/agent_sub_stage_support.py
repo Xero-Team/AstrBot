@@ -22,14 +22,21 @@ from astrbot.core.utils import task_utils
 
 
 class FakeEvent:
-    def __init__(self, *, extras: dict | None = None):
+    def __init__(self, *, extras: dict | None = None, stopped: bool = False):
         self.unified_msg_origin = "webchat:FriendMessage:test-session"
         self._extras = extras or {}
         self.result_history: list[MessageEventResult] = []
         self.temporary_local_files: list[str] = []
+        self._stopped = stopped
 
     def get_extra(self, key: str):
         return self._extras.get(key)
+
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+    def stop_event(self) -> None:
+        self._stopped = True
 
     def set_extra(self, key: str, value) -> None:
         self._extras[key] = value
@@ -131,6 +138,25 @@ class FakeThirdPartyRunner:
 
     def done(self) -> bool:
         return self._done
+
+
+class ThirdPartyResponseExecutor:
+    """Drive the real third-party response handler as a work-loop executor."""
+
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    async def process(self, event):
+        stage = third_party.ThirdPartyAgentSubStage.__new__(
+            third_party.ThirdPartyAgentSubStage
+        )
+        async for _ in stage._handle_non_streaming_response(
+            runner=self.runner,
+            event=event,
+            stream_to_general=False,
+            custom_error_message=None,
+        ):
+            yield
 
 
 class FakeInternalRunner:

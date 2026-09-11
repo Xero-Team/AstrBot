@@ -248,6 +248,14 @@ class WorkLoop:
         produced = False
         try:
             async with self._semaphore:
+                if event.is_stopped():
+                    # The request was stopped while this run waited its turn, so
+                    # it never starts work the user already withdrew.
+                    await self.sessions.update_status(
+                        session_id,
+                        WorkSessionStatus.CANCELLED,
+                    )
+                    return
                 await self.sessions.update_status(
                     session_id,
                     WorkSessionStatus.RUNNING,
@@ -272,11 +280,15 @@ class WorkLoop:
             failed = bool(event.get_extra(WORK_FAILED_EXTRA)) or bool(
                 event.get_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY)
             )
-            # An admitted stop request and a run that reported its own abort are
-            # both cancellations.  ``run_agent`` clears ``agent_stop_requested``
-            # when it reports the abort, so the stop flag alone misses that case.
-            cancelled = bool(event.get_extra("agent_stop_requested")) or bool(
-                event.get_extra("agent_user_aborted")
+            # A stopped event, an admitted stop request, and a run that reported
+            # its own abort are all cancellations.  ``run_agent`` clears
+            # ``agent_stop_requested`` when it reports the abort, and a
+            # third-party stop only sets the event's own flag, so neither signal
+            # alone covers every way a work run is cancelled.
+            cancelled = (
+                event.is_stopped()
+                or bool(event.get_extra("agent_stop_requested"))
+                or bool(event.get_extra("agent_user_aborted"))
             )
             # An executor that produced nothing never reached an Agent: a run
             # the session turned away is the reported case.  The generator
@@ -301,6 +313,15 @@ class WorkLoop:
         try:
             async with aclosing(self._execute(event, session_id)) as execution:
                 async for _ in execution:
+                    if event.is_stopped():
+                        # Closing the execution releases the executor and the
+                        # runner behind it.  This ends the local run and its
+                        # waiting only: whether the remote service stopped its
+                        # own task is not something this side can claim.
+                        await self.sessions.update_status(
+                            session_id, WorkSessionStatus.CANCELLED
+                        )
+                        return
                     await self._result_dispatcher(event)
             await self._record_delivery_outcome(event, session_id)
         except asyncio.CancelledError:

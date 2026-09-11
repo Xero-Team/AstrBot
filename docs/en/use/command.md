@@ -83,7 +83,7 @@ The user ID from `/session info` can be granted current-session `session_admin` 
 
 - `/work <task>`: Submit the remaining text to the BTW work loop without a `/chat` prefix or automatic classification. Requires `session.read`, with `btw.enabled` and `btw.work_loop.enabled` enabled on the current profile. The command identity is `builtin_commands:work`. Command quoting rules still apply.
 - `/work` or `/work status`: Show the latest task's text and status for the current profile and session: queued, running, completed, failed, cancelled, or delivery unconfirmed. `delivery unconfirmed` means the task itself finished but the platform never confirmed accepting its result. `status` queries only when it is the entire remainder, ignoring case; `/work status refactor` submits a task. Requires `session.read`. State is kept in memory, cleared on restart or profile reload/removal, and terminal tasks expire after `btw.work_session.max_age_seconds` (default 3600).
-- `/task stop`: Stop running Agent or third-party Agent Runner tasks in the current session without deleting history.
+- `/task stop`: Request that running Agent or third-party Agent Runner tasks in the current session stop, without deleting history. The local run stops consuming the runner and is recorded as cancelled. This ends the local wait only; a task already accepted by a third-party service is not revoked remotely.
 
 ### Providers and Models
 

@@ -61,13 +61,21 @@ async def run_third_party_agent(
     max_step: int = 30,
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> AsyncGenerator[tuple[MessageChain, bool]]:
     """
     运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
+
+    ``should_stop`` is polled as the stream is consumed, so a request that was
+    stopped stops draining this runner instead of waiting for it to finish.  It
+    ends the local wait only; whether the remote service stops its own task is
+    not something this side can observe.
     """
     try:
         async for resp in runner.step_until_done(max_step=max_step):  # type: ignore[misc]
+            if should_stop is not None and should_stop():
+                return
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
@@ -241,6 +249,7 @@ class ThirdPartyAgentSubStage:
                     max_step=max_step,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
+                    should_stop=event.is_stopped,
                 ):
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
@@ -257,6 +266,11 @@ class ThirdPartyAgentSubStage:
             .set_async_stream(_stream_runner_chain()),
         )
         yield
+
+        if event.is_stopped():
+            # A stopped request did not fail.  Report nothing instead of the
+            # fallback error an unfinished runner would otherwise produce.
+            return
 
         if runner.done():
             final_chain, is_runner_error = aggregator.finalize(
@@ -285,11 +299,17 @@ class ThirdPartyAgentSubStage:
             max_step=max_step,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
+            should_stop=event.is_stopped,
         ):
             aggregator.add_chunk(chain, is_error)
             if is_error:
                 event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
             yield
+
+        if event.is_stopped():
+            # A stopped request did not fail.  Report nothing instead of the
+            # fallback error an unfinished runner would otherwise produce.
+            return
 
         final_chain, is_runner_error = aggregator.finalize(runner.get_final_llm_resp())
         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)

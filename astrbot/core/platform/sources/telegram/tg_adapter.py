@@ -1021,6 +1021,8 @@ class TelegramPlatformAdapter(Platform):
                 )
                 return
 
+            album_text = [abm.message_str] if abm.message_str else []
+
             # Add additional media from remaining updates by reusing convert_message
             for update, context in updates_and_contexts[1:]:
                 # Convert the message but skip reply chains (get_reply=False)
@@ -1030,10 +1032,13 @@ class TelegramPlatformAdapter(Platform):
 
                 # Merge only the message components (keep base session/meta from first)
                 abm.message.extend(extra.message)
+                if extra.message_str:
+                    album_text.append(extra.message_str)
                 logger.debug(
                     f"Added {len(extra.message)} components to media group {media_group_id}"
                 )
 
+            abm.message_str = "\n".join(album_text)
             # Process the merged message
             await self.handle_msg(abm)
         except Exception:

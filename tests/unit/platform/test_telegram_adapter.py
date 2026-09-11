@@ -1678,6 +1678,53 @@ async def test_telegram_media_group_entry_merges_media_without_later_reply_chain
         if isinstance(component, Comp.Plain)
     ]
     assert plain_texts == ["first caption", "second caption"]
+    assert merged_message.message_str == "first caption\nsecond caption"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("item_texts", "expected"),
+    [
+        (["first caption", ""], "first caption"),
+        (["", "later caption"], "later caption"),
+        (
+            ["first caption", "second caption", "third caption"],
+            "first caption\nsecond caption\nthird caption",
+        ),
+        (["", ""], ""),
+    ],
+)
+async def test_telegram_media_group_entry_merges_non_empty_item_texts(
+    item_texts, expected
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.handle_msg = AsyncMock()
+    converted = [
+        SimpleNamespace(
+            message=[Comp.Plain(text)] if text else [Comp.Image(file=f"image-{i}.jpg")],
+            message_str=text,
+            message_id=str(i),
+            session_id="session-1",
+        )
+        for i, text in enumerate(item_texts)
+    ]
+    adapter.convert_message = AsyncMock(side_effect=converted)
+    entry = {
+        "items": [
+            (create_mock_update(media_group_id="album-text"), _build_context())
+            for _ in item_texts
+        ]
+    }
+
+    await adapter._process_media_group_entry("album-text", entry)
+
+    merged_message = adapter.handle_msg.await_args.args[0]
+    assert merged_message.message_str == expected
 
 
 @pytest.mark.asyncio
@@ -1713,6 +1760,7 @@ async def test_telegram_media_group_entry_skips_later_items_that_convert_to_none
     adapter.handle_msg = AsyncMock()
     first_abm = SimpleNamespace(
         message=[Comp.Plain("first"), Comp.Image(file="photo.jpg", url="photo.jpg")],
+        message_str="first",
         message_id="m1",
         session_id="session-1",
     )
@@ -1754,6 +1802,7 @@ async def test_telegram_media_group_entry_swallows_exceptions_from_later_items()
     adapter.handle_msg = AsyncMock()
     first_abm = SimpleNamespace(
         message=[Comp.Plain("first")],
+        message_str="first",
         message_id="m1",
         session_id="session-1",
     )

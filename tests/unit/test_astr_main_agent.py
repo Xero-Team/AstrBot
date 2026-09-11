@@ -14,6 +14,7 @@ from astrbot.core.agent.message import Message, TextPart, dump_messages_with_che
 from astrbot.core.agent.request_preparation import prepare_provider_request
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
+from astrbot.core.conversation_mgr import DIALOGUE_LOOP_SCOPE, WORK_LOOP_SCOPE
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import Face, Image, Json, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -750,7 +751,7 @@ class TestGetSessionConv:
 
         assert result == mock_conversation
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
-            mock_event.unified_msg_origin
+            mock_event.unified_msg_origin, DIALOGUE_LOOP_SCOPE
         )
         conv_mgr.get_conversation.assert_called_once_with(
             mock_event.unified_msg_origin, "existing-conv-id"
@@ -773,7 +774,31 @@ class TestGetSessionConv:
 
         assert result == mock_conversation
         conv_mgr.new_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin, mock_event.get_platform_id()
+            mock_event.unified_msg_origin,
+            mock_event.get_platform_id(),
+            scope=DIALOGUE_LOOP_SCOPE,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_session_conv_work_scope_owns_its_own_conversation(
+        self, mock_event, mock_context, mock_conversation
+    ):
+        """A work run resolves the work loop's conversation, not the chat's."""
+        module = ama
+        conv_mgr = mock_context.conversation_manager
+        conv_mgr.get_curr_conversation_id = AsyncMock(return_value="work-conv-id")
+        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+
+        result = await module._get_session_conv(
+            mock_event, mock_context, WORK_LOOP_SCOPE
+        )
+
+        assert result == mock_conversation
+        conv_mgr.get_curr_conversation_id.assert_called_once_with(
+            mock_event.unified_msg_origin, WORK_LOOP_SCOPE
+        )
+        conv_mgr.get_conversation.assert_called_once_with(
+            mock_event.unified_msg_origin, "work-conv-id"
         )
 
     @pytest.mark.asyncio
@@ -807,6 +832,239 @@ class TestGetSessionConv:
 
         with pytest.raises(RuntimeError, match="无法创建新的对话。"):
             await module._get_session_conv(mock_event, mock_context)
+
+
+def _loop_conversation(*, cid: str, history: list[dict]) -> MagicMock:
+    conversation = MagicMock(spec=Conversation)
+    conversation.cid = cid
+    conversation.persona_id = None
+    conversation.history = json.dumps(history)
+    return conversation
+
+
+def _loop_context_manager(
+    *,
+    dialogue: MagicMock | None,
+    work: MagicMock | None,
+) -> MagicMock:
+    """A conversation manager that resolves each loop's own conversation."""
+
+    async def get_curr_conversation_id(_umo, scope=DIALOGUE_LOOP_SCOPE):
+        if scope == WORK_LOOP_SCOPE:
+            return work.cid if work is not None else None
+        return dialogue.cid if dialogue is not None else None
+
+    async def get_conversation(_umo, cid):
+        for conversation in (dialogue, work):
+            if conversation is not None and conversation.cid == cid:
+                return conversation
+        return None
+
+    manager = MagicMock()
+    manager.get_curr_conversation_id = AsyncMock(side_effect=get_curr_conversation_id)
+    manager.get_conversation = AsyncMock(side_effect=get_conversation)
+    manager.new_conversation = AsyncMock()
+    return manager
+
+
+class TestPrepareLoopContexts:
+    """Tests for the BTW dual-loop hand-off context."""
+
+    @pytest.mark.asyncio
+    async def test_dual_loop_disabled_keeps_the_conversation_history(
+        self, mock_event, mock_context
+    ):
+        """With BTW off nothing changes: the run reads its own history."""
+        history = [{"role": "user", "content": "hello"}]
+        conversation = _loop_conversation(cid="conv-1", history=history)
+        mock_context.conversation_manager = _loop_context_manager(
+            dialogue=conversation,
+            work=None,
+        )
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            conversation,
+            is_work_run=False,
+            dual_loop_enabled=False,
+        )
+
+        assert contexts == history
+        mock_context.conversation_manager.get_curr_conversation_id.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_work_run_starts_from_no_history(self, mock_event, mock_context):
+        """The work loop never reads a history; the tool supplies its task."""
+        work = _loop_conversation(
+            cid="conv-work",
+            history=[
+                {"role": "user", "content": "an earlier task"},
+                {"role": "assistant", "content": "an earlier answer"},
+            ],
+        )
+        dialogue = _loop_conversation(cid="conv-chat", history=[])
+        mock_context.conversation_manager = _loop_context_manager(
+            dialogue=dialogue,
+            work=work,
+        )
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            work,
+            is_work_run=True,
+            dual_loop_enabled=True,
+        )
+
+        assert contexts == []
+        mock_context.conversation_manager.get_curr_conversation_id.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_chat_keeps_its_history_and_receives_the_work_turns(
+        self, mock_event, mock_context
+    ):
+        """The dialogue loop adds what the work loop produced, provider-only."""
+        own = [{"role": "user", "content": "hi"}]
+        dialogue = _loop_conversation(cid="conv-chat", history=own)
+        work = _loop_conversation(
+            cid="conv-work",
+            history=[
+                {"role": "user", "content": "the task"},
+                {"role": "assistant", "content": "done"},
+            ],
+        )
+        mock_context.conversation_manager = _loop_context_manager(
+            dialogue=dialogue,
+            work=work,
+        )
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            dialogue,
+            is_work_run=False,
+            dual_loop_enabled=True,
+        )
+
+        assert contexts == [
+            *own,
+            {"role": "user", "content": "the task", "_no_save": True},
+            {"role": "assistant", "content": "done", "_no_save": True},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_chat_without_a_work_conversation_only_reads_its_own(
+        self, mock_event, mock_context
+    ):
+        """A session that never ran work keeps a single, untouched history."""
+        own = [{"role": "user", "content": "hi"}]
+        dialogue = _loop_conversation(cid="conv-chat", history=own)
+        mock_context.conversation_manager = _loop_context_manager(
+            dialogue=dialogue,
+            work=None,
+        )
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            dialogue,
+            is_work_run=False,
+            dual_loop_enabled=True,
+        )
+
+        assert contexts == own
+        mock_context.conversation_manager.new_conversation.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_handoff_survives_a_conversation_deleted_between_calls(
+        self, mock_event, mock_context
+    ):
+        """A conversation removed mid-flight is skipped, not raised on."""
+        own = [{"role": "user", "content": "hi"}]
+        dialogue = _loop_conversation(cid="conv-chat", history=own)
+        manager = _loop_context_manager(dialogue=dialogue, work=None)
+
+        async def get_curr_conversation_id(_umo, scope=DIALOGUE_LOOP_SCOPE):
+            return "conv-gone" if scope == WORK_LOOP_SCOPE else "conv-chat"
+
+        manager.get_curr_conversation_id = AsyncMock(
+            side_effect=get_curr_conversation_id
+        )
+        manager.get_conversation = AsyncMock(return_value=None)
+        mock_context.conversation_manager = manager
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            dialogue,
+            is_work_run=False,
+            dual_loop_enabled=True,
+        )
+
+        assert contexts == own
+
+    @pytest.mark.asyncio
+    async def test_handoff_drops_tools_and_unanswered_turns(
+        self, mock_event, mock_context
+    ):
+        """Only whole text turns cross the loop boundary, newest last."""
+        own: list[dict] = []
+        dialogue = _loop_conversation(cid="conv-chat", history=own)
+        work = _loop_conversation(
+            cid="conv-work",
+            history=[
+                {"role": "user", "content": "old"},
+                {"role": "assistant", "content": "", "tool_calls": [{"id": "call-1"}]},
+                {"role": "tool", "content": "result"},
+                {"role": "assistant", "content": "old answer"},
+                {"role": "user", "content": "newest"},
+            ],
+        )
+        mock_context.conversation_manager = _loop_context_manager(
+            dialogue=dialogue,
+            work=work,
+        )
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            dialogue,
+            is_work_run=False,
+            dual_loop_enabled=True,
+        )
+
+        assert contexts == [
+            {"role": "user", "content": "old", "_no_save": True},
+            {"role": "assistant", "content": "old answer", "_no_save": True},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_handoff_is_bounded_to_recent_turns(self, mock_event, mock_context):
+        """A long history hands over only its most recent whole turns."""
+        own: list[dict] = []
+        dialogue = _loop_conversation(cid="conv-chat", history=own)
+        history: list[dict] = []
+        for index in range(ama._LOOP_HANDOFF_TURNS + 3):
+            history.append({"role": "user", "content": f"q{index}"})
+            history.append({"role": "assistant", "content": f"a{index}"})
+        work = _loop_conversation(cid="conv-work", history=history)
+        mock_context.conversation_manager = _loop_context_manager(
+            dialogue=dialogue,
+            work=work,
+        )
+
+        contexts = await ama._prepare_loop_contexts(
+            mock_event,
+            mock_context,
+            dialogue,
+            is_work_run=False,
+            dual_loop_enabled=True,
+        )
+
+        assert len(contexts) == 2 * ama._LOOP_HANDOFF_TURNS
+        assert contexts[0]["content"] == "q3"
+        assert contexts[-1]["content"] == f"a{ama._LOOP_HANDOFF_TURNS + 2}"
 
 
 class TestApplyKb:

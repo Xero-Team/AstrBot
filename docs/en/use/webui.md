@@ -101,9 +101,11 @@ ChatUI supports these common workflows:
 - Select the config profile, model provider, and model on the chat page; if Provider session separation is enabled, you can also choose a model for the current session only.
 - Send text, images, files, and voice input; uploaded attachments show previews and use file signature checks to help identify file types.
 - View model thinking, tool-call status, knowledge-base or web-search references, and per-message token and latency statistics.
+- Reasoning is shown by default. Use the composer menu to override reasoning display for the current request, a regeneration, or a thread.
 - Copy or regenerate existing replies, including regenerating with another model.
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes. On touch or other coarse-pointer devices, the nested Transport and Language menus open on click instead of hover.
+- Browse the current project workspace from ChatUI. Text previews use Shiki syntax highlighting and follow the active light or dark theme; binary files show metadata only.
 
 ### High-risk tools in ChatUI
 

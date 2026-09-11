@@ -115,6 +115,8 @@ Enter `im:resource:upload,im:resource` again to enable image upload permissions.
 
 Enable `contact:contact.base:readonly` and `contact:user.base:readonly` so private-message senders can be shown by their display names.
 
+For private-message delivery, AstrBot remembers the chat ID from the inbound conversation. If Lark rejects a private open-ID send, the message is retried to that chat ID; a successful first delivery is not sent twice.
+
 If you want to use the bot in group chats, additionally enable `im:message.group_at_msg:readonly` and `im:message.group_msg`.
 
 > [!TIP]

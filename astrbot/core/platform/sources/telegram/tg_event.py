@@ -28,6 +28,8 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import DeliveryAttempt, PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 
+from .rate_limit import COALESCED, LimitedTelegramClient, TelegramDeliveryLimiter
+
 DraftSendOutcome = Literal["sent", "bad_request", "failed", "skipped"]
 
 
@@ -129,9 +131,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: ExtBot,
+        limiter: TelegramDeliveryLimiter | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self._client = client
+        self._client = (
+            LimitedTelegramClient(client, limiter) if limiter is not None else client
+        )
 
     @classmethod
     def _split_message(cls, text: str) -> list[str]:
@@ -320,7 +325,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         message: MessageChain,
         user_name: str,
+        limiter: TelegramDeliveryLimiter | None = None,
     ) -> None:
+        if limiter is not None:
+            client = LimitedTelegramClient(client, limiter)
         image_path = None
 
         has_reply = False
@@ -589,12 +597,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
             logger.debug(
                 f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}"
             )
-            await self._client.send_message_draft(
+            result = await self._client.send_message_draft(
                 chat_id=int(chat_id),
                 draft_id=draft_id,
                 text=text,
                 **kwargs,
             )
+            if result is COALESCED:
+                return "skipped"
             return "sent"
         except asyncio.CancelledError:
             raise
@@ -859,11 +869,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     )
                     message_id = message.message_id
                 elif current_content != text:
-                    await self._client.edit_message_text(
+                    result = await self._client.edit_message_text(
                         text=text,
                         message_id=message_id,
                         **edit_payload,
                     )
+                    if result is COALESCED:
+                        return True
                 current_content = text
             except asyncio.CancelledError:
                 raise

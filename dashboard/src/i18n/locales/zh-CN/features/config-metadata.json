@@ -815,6 +815,22 @@
         "description": "Telegram 轮询重启延迟",
         "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
       },
+      "telegram_delivery_global_interval": {
+        "description": "Telegram 全局发送间隔",
+        "hint": "所有聊天共享的最小发送间隔，单位为秒，默认 0.04 秒。"
+      },
+      "telegram_delivery_chat_interval": {
+        "description": "Telegram 单聊天发送间隔",
+        "hint": "同一聊天的最小发送间隔，单位为秒，默认 0.6 秒。"
+      },
+      "telegram_delivery_max_retries": {
+        "description": "Telegram 限流最大重试次数",
+        "hint": "幂等的草稿、编辑和状态请求遇到 RetryAfter 时的最大重试次数，默认 2 次。普通发送和媒体不会自动重试。"
+      },
+      "telegram_delivery_retry_budget": {
+        "description": "Telegram 限流重试预算",
+        "hint": "幂等请求处理 RetryAfter 的最长总等待时间，单位为秒，默认 10 秒。"
+      },
       "telegram_file_base_url": {
         "description": "Telegram 文件 API 基础 URL",
         "hint": "Telegram 文件下载地址前缀，例如 https://api.telegram.org/file/bot。"

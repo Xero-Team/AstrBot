@@ -84,6 +84,8 @@ In ordinary Bot private chats, AstrBot uses the `sendMessageDraft` API (added in
 
 In group chats, since the `sendMessageDraft` API only supports private chats, AstrBot automatically falls back to the traditional `send_message` + `edit_message_text` approach. Responses longer than Telegram's 4096-character text limit are finalized and sent as ordered messages. If a segment submission fails, AstrBot stops sending and records the accepted prefix, failed fragment, and any remaining buffered text in the delivery receipt. Buffered text is not automatically retried. If the optional Markdown formatting step fails, the accepted plain-text segment remains available and streaming continues.
 
+All Telegram outbound requests share an adapter-owned limiter. `telegram_delivery_global_interval` sets the bot-wide interval and `telegram_delivery_chat_interval` sets the per-chat interval. Drafts, edits, typing actions, and reactions honor `RetryAfter` within `telegram_delivery_retry_budget`, retrying at most `telegram_delivery_max_retries` times. Ordinary messages and media are never retried automatically because a timeout can leave a duplicate message. Superseded draft and streaming preview work is coalesced, and limiter waits remain cancellation-aware.
+
 ## Topic Sessions and Routing
 
 When Telegram private-chat topics are enabled, each topic in the same private chat uses an independent AstrBot session. A regular private chat still uses its chat ID; a topic session uses `<chat_id>#<message_thread_id>` as its internal route identity, so replies, proactive messages, typing status, and streaming output return to the originating topic. Proactive sends also preserve the topic when given the complete stored target for that session.

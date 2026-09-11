@@ -1704,27 +1704,46 @@ async def test_telegram_media_group_entry_merges_non_empty_item_texts(
         asyncio.Queue(),
     )
     adapter.handle_msg = AsyncMock()
-    converted = [
-        SimpleNamespace(
-            message=[Comp.Plain(text)] if text else [Comp.Image(file=f"image-{i}.jpg")],
-            message_str=text,
-            message_id=str(i),
-            session_id="session-1",
+
+    updates = []
+    for index, caption in enumerate(item_texts):
+        if index % 2:
+            document = create_mock_file(
+                f"https://api.telegram.org/file/test/document-{index}.txt"
+            )
+            document.file_name = f"document-{index}.txt"
+            media = {"document": document}
+        else:
+            media = {
+                "photo": [
+                    create_mock_file(
+                        f"https://api.telegram.org/file/test/photo-{index}.jpg"
+                    )
+                ]
+            }
+        updates.append(
+            create_mock_update(
+                message_text=None,
+                chat_type="group",
+                chat_id=-20001,
+                message_id=index + 1,
+                media_group_id="album-text",
+                caption=caption,
+                **media,
+            )
         )
-        for i, text in enumerate(item_texts)
-    ]
-    adapter.convert_message = AsyncMock(side_effect=converted)
-    entry = {
-        "items": [
-            (create_mock_update(media_group_id="album-text"), _build_context())
-            for _ in item_texts
-        ]
-    }
+
+    entry = {"items": [(update, _build_context()) for update in updates]}
 
     await adapter._process_media_group_entry("album-text", entry)
 
     merged_message = adapter.handle_msg.await_args.args[0]
     assert merged_message.message_str == expected
+    assert [
+        component.text
+        for component in merged_message.message
+        if isinstance(component, Comp.Plain)
+    ] == [text for text in item_texts if text]
 
 
 @pytest.mark.asyncio

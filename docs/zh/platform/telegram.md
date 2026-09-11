@@ -84,6 +84,8 @@ Telegram 平台支持流式输出。需要在「AI 配置」->「其他配置」
 
 在群聊中，由于 `sendMessageDraft` API 仅支持私聊，AstrBot 会自动回退到传统的 `send_message` + `edit_message_text` 方案。超过 Telegram 单条 4096 字符限制的回答会按顺序完成并发送为多条消息。若分段提交失败，AstrBot 会停止发送，并在投递回执中记录已接受的前缀、提交失败的片段以及缓冲区中尚未发送的文本，不会自动重试这些文本。若可选的 Markdown 格式化步骤失败，已接受的纯文本分段会保留，流式发送继续进行。
 
+所有 Telegram 出站请求由适配器共享的限流器调度：`telegram_delivery_global_interval` 控制机器人全局间隔，`telegram_delivery_chat_interval` 控制单聊天间隔。草稿、编辑、输入状态和反应遇到 `RetryAfter` 时，会在 `telegram_delivery_retry_budget` 内最多重试 `telegram_delivery_max_retries` 次；普通消息和媒体发送不会自动重试，以避免网络超时造成重复消息。草稿和过期的流式预览会合并，限流等待可被取消。
+
 ## 主题会话与路由
 
 启用 Telegram 私聊主题后，同一私聊中的每个主题都会使用独立的 AstrBot 会话。普通私聊仍使用 chat ID；主题会话使用 `<chat_id>#<message_thread_id>` 作为内部路由标识，因此回复、主动消息、输入状态和流式输出都会回到原主题。向主动消息接口提供从该会话保存的完整目标时，也会保留主题路由。

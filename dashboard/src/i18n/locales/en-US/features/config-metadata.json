@@ -821,6 +821,22 @@
         "description": "Telegram Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
       },
+      "telegram_delivery_global_interval": {
+        "description": "Telegram Global Delivery Interval",
+        "hint": "Minimum interval shared by all chats, in seconds. Defaults to 0.04s."
+      },
+      "telegram_delivery_chat_interval": {
+        "description": "Telegram Per Chat Delivery Interval",
+        "hint": "Minimum interval between deliveries to the same chat, in seconds. Defaults to 0.6s."
+      },
+      "telegram_delivery_max_retries": {
+        "description": "Telegram Rate Limit Retries",
+        "hint": "Maximum retries for idempotent draft, edit, and status requests after RetryAfter. Ordinary sends and media are never retried. Defaults to 2."
+      },
+      "telegram_delivery_retry_budget": {
+        "description": "Telegram Rate Limit Retry Budget",
+        "hint": "Maximum total wait for RetryAfter recovery on idempotent requests, in seconds. Defaults to 10s."
+      },
       "telegram_file_base_url": {
         "description": "Telegram File API Base URL",
         "hint": "Telegram file download endpoint prefix, for example https://api.telegram.org/file/bot."

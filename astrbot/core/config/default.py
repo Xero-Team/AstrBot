@@ -461,6 +461,10 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                         "telegram_polling_restart_delay": 5.0,
+                        "telegram_delivery_global_interval": 0.04,
+                        "telegram_delivery_chat_interval": 0.6,
+                        "telegram_delivery_max_retries": 2,
+                        "telegram_delivery_retry_budget": 10.0,
                     },
                     "Discord": {
                         "id": "discord",
@@ -838,6 +842,26 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 轮询重启延迟",
                         "type": "float",
                         "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                    },
+                    "telegram_delivery_global_interval": {
+                        "description": "Telegram 全局发送间隔",
+                        "type": "float",
+                        "hint": "所有聊天共享的最小发送间隔，单位为秒，默认 0.04 秒。",
+                    },
+                    "telegram_delivery_chat_interval": {
+                        "description": "Telegram 单聊天发送间隔",
+                        "type": "float",
+                        "hint": "同一聊天的最小发送间隔，单位为秒，默认 0.6 秒。",
+                    },
+                    "telegram_delivery_max_retries": {
+                        "description": "Telegram 限流最大重试次数",
+                        "type": "int",
+                        "hint": "幂等的草稿、编辑和状态请求遇到 RetryAfter 时的最大重试次数，默认 2 次。普通发送和媒体不会自动重试。",
+                    },
+                    "telegram_delivery_retry_budget": {
+                        "description": "Telegram 限流重试预算",
+                        "type": "float",
+                        "hint": "幂等请求处理 RetryAfter 的最长总等待时间，单位为秒，默认 10 秒。",
                     },
                     "id": {
                         "description": "机器人名称",

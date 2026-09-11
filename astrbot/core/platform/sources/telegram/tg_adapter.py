@@ -39,6 +39,7 @@ from astrbot.core.utils.proxy_route import (
 )
 from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
 
+from .rate_limit import TelegramDeliveryLimiter
 from .tg_event import (
     TelegramPlatformEvent,
     format_telegram_target,
@@ -126,6 +127,7 @@ class TelegramPlatformAdapter(Platform):
         )
         self._last_command_snapshot: tuple[tuple[str, str], ...] | None = None
         self._command_refresh_lock = asyncio.Lock()
+        self._delivery_limiter = TelegramDeliveryLimiter.from_config(self.config)
 
         self.scheduler = AsyncIOScheduler()
         self.scheduler.add_listener(
@@ -326,6 +328,7 @@ class TelegramPlatformAdapter(Platform):
             self.client,
             message_chain,
             from_username,
+            getattr(self, "_delivery_limiter", None),
         )
         return await super().send_by_session(session, message_chain)
 
@@ -580,9 +583,15 @@ class TelegramPlatformAdapter(Platform):
             payload["message_thread_id"] = api_thread_id
         if business_connection_id:
             payload["business_connection_id"] = business_connection_id
-        await context.bot.send_message(
-            **payload,
-        )
+        limiter = getattr(self, "_delivery_limiter", None)
+        if limiter is None:
+            await context.bot.send_message(**payload)
+        else:
+            await limiter.call(
+                str(api_chat_id),
+                lambda: context.bot.send_message(**payload),
+                retryable=False,
+            )
 
     async def message_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -1143,6 +1152,7 @@ class TelegramPlatformAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
+            limiter=getattr(self, "_delivery_limiter", None),
         )
         if not event.is_private_chat():
             status = _telegram_member_status(getattr(message, "raw_message", None))

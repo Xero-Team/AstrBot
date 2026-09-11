@@ -6,7 +6,7 @@ from typing import Any, Literal, cast
 from urllib.parse import quote, unquote, urlsplit
 
 import telegramify_markdown
-from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram import InputMediaPhoto, ReactionTypeCustomEmoji, ReactionTypeEmoji
 from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import ExtBot
@@ -89,6 +89,11 @@ def _is_gif(path: str) -> bool:
             return f.read(6) in (b"GIF87a", b"GIF89a")
     except OSError:
         return False
+
+
+def _escape_markdown_v2_text(text: str) -> str:
+    """Escape user-controlled labels embedded in a MarkdownV2 link."""
+    return re.sub(r"([_\*\[\]()~`>#+\-=|{}.!])", r"\\\1", text)
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -331,21 +336,28 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if limiter is not None:
             client = LimitedTelegramClient(client, limiter)
         image_path = None
-
         has_reply = False
         reply_message_id = None
-        at_user_id = None
-        mention_all = False
+        mention_prefix: list[str] = []
         for i in message.chain:
             if isinstance(i, Reply):
                 has_reply = True
                 reply_message_id = i.id
             elif isinstance(i, Mention):
-                at_user_id = i.name or str(i.target)
+                target = str(i.target)
+                name = i.name or target
+                if target.isdigit():
+                    mention_prefix.append(
+                        f"[{_escape_markdown_v2_text(name)}](tg://user?id={target})"
+                    )
+                else:
+                    mention_prefix.append(f"@{name.lstrip('@')}")
             elif isinstance(i, MentionAll):
-                mention_all = True
+                logger.warning(
+                    "Telegram has no Bot API token for notifying every group member; "
+                    "ignoring MentionAll"
+                )
 
-        at_flag = False
         user_name, message_thread_id, business_connection_id = (
             resolve_telegram_api_target(user_name)
         )
@@ -356,7 +368,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
             client, user_name, action, message_thread_id, business_connection_id
         )
 
-        for i in message.chain:
+        mention_prefix_text = " ".join(mention_prefix)
+        index = 0
+        while index < len(message.chain):
+            i = message.chain[index]
             payload = {
                 "chat_id": user_name,
             }
@@ -368,22 +383,34 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["business_connection_id"] = business_connection_id
 
             if isinstance(i, Plain):
-                if at_user_id and not at_flag:
-                    i.text = f"@{at_user_id} {i.text}"
-                    at_flag = True
-                elif mention_all and not at_flag:
-                    i.text = f"@all {i.text}"
-                    at_flag = True
-                await cls._send_text_chunks(client, i.text, payload)
+                text = (
+                    f"{mention_prefix_text} {i.text}" if mention_prefix_text else i.text
+                )
+                await cls._send_text_chunks(client, text, payload)
+                mention_prefix_text = ""
             elif isinstance(i, Image):
-                image_path = await i.convert_to_file_path()
-                if _is_gif(image_path):
-                    send_coro = client.send_animation
-                    media_kwarg = {"animation": image_path}
-                else:
-                    send_coro = client.send_photo
-                    media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, payload))
+                run: list[Image] = []
+                while index < len(message.chain) and isinstance(
+                    message.chain[index], Image
+                ):
+                    run.append(cast(Image, message.chain[index]))
+                    index += 1
+                caption = None
+                if len(run) >= 2 and index < len(message.chain):
+                    following = message.chain[index]
+                    if isinstance(following, Plain) and following.text:
+                        caption = following.text
+                        index += 1
+                if mention_prefix_text:
+                    if caption:
+                        caption = f"{mention_prefix_text} {caption}"
+                    elif len(run) < 2:
+                        await cls._send_text_chunks(
+                            client, mention_prefix_text, payload
+                        )
+                    mention_prefix_text = ""
+                await cls._send_image_run(client, run, payload, caption=caption)
+                continue
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
@@ -406,6 +433,66 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     caption=getattr(i, "text", None) or None,
                     **cast(Any, payload),
                 )
+            index += 1
+
+    @classmethod
+    async def _send_image_run(
+        cls,
+        client: ExtBot,
+        images: list[Image],
+        payload: dict[str, Any],
+        *,
+        caption: str | None = None,
+    ) -> None:
+        """Send compatible image runs as bounded albums with ordered fallback."""
+        resolved = [(image, await image.convert_to_file_path()) for image in images]
+        compatible = len(resolved) >= 2 and all(
+            image.sub_type != "animation" and not _is_gif(path)
+            for image, path in resolved
+        )
+        if compatible:
+            sent = 0
+            for start in range(0, len(resolved), 10):
+                chunk = resolved[start : start + 10]
+                if len(chunk) < 2:
+                    break
+                media = [
+                    InputMediaPhoto(
+                        media=path,
+                        caption=caption if start == 0 and offset == 0 else None,
+                    )
+                    for offset, (_image, path) in enumerate(chunk)
+                ]
+                try:
+                    await client.send_media_group(
+                        media=media,
+                        **cast(Any, payload),
+                    )
+                    sent += len(chunk)
+                    continue
+                except Exception as exc:
+                    logger.warning(
+                        "Telegram media group failed; falling back to ordered photos: %s",
+                        safe_error("", exc),
+                    )
+                    break
+            else:
+                return
+            resolved = resolved[sent:]
+            if sent:
+                caption = None
+        for index, (image, path) in enumerate(resolved):
+            item_caption = caption if index == 0 else None
+            if image.sub_type == "animation" or _is_gif(path):
+                send_payload = dict(payload)
+                if item_caption is not None:
+                    send_payload["caption"] = item_caption
+                await client.send_animation(animation=path, **cast(Any, send_payload))
+            else:
+                send_payload = dict(payload)
+                if item_caption is not None:
+                    send_payload["caption"] = item_caption
+                await client.send_photo(photo=path, **cast(Any, send_payload))
 
     async def send(self, message: MessageChain):
         await self.send_with_client(
@@ -635,7 +722,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 on_text(i.text)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
-                if _is_gif(image_path):
+                if i.sub_type == "animation" or _is_gif(image_path):
                     action = ChatAction.UPLOAD_VIDEO
                     send_coro = self._client.send_animation
                     media_kwarg = {"animation": image_path}

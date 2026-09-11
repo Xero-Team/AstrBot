@@ -164,6 +164,7 @@ def create_mock_update(
     audio: MagicMock | None = None,
     sticker: MagicMock | None = None,
     video_note: MagicMock | None = None,
+    animation: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
     quote: MagicMock | None = None,
     caption: str | None = None,
@@ -230,6 +231,7 @@ def create_mock_update(
     message.audio = audio
     message.sticker = sticker
     message.video_note = video_note
+    message.animation = animation
     message.reply_to_message = reply_to_message
     message.quote = quote
     message.caption = caption

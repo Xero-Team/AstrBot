@@ -4,8 +4,9 @@ import re
 import uuid
 from collections import OrderedDict
 from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
-from typing import override
+from typing import cast, override
 
 import httpx
 from apscheduler.events import EVENT_JOB_ERROR
@@ -643,7 +644,7 @@ class TelegramPlatformAdapter(Platform):
         mentions: list[Comp.Mention] = []
         removals: set[tuple[int, int]] = set()
         for entity in entities or ():
-            if entity.type != "mention":
+            if entity.type not in {"mention", "text_mention"}:
                 continue
             if (
                 type(entity.offset) is not int
@@ -656,11 +657,22 @@ class TelegramPlatformAdapter(Platform):
             if start is None or end is None:
                 continue
             value = text[start:end]
-            if re.fullmatch(r"@[A-Za-z0-9_]+", value) is None:
-                continue
-            name = value[1:]
-            is_self_mention = name.lower() == bot_username.lower()
-            target = str(bot_id) if is_self_mention else name
+            if entity.type == "mention":
+                if re.fullmatch(r"@[A-Za-z0-9_]+", value) is None:
+                    continue
+                name = value[1:]
+                target = name
+                is_self_mention = name.lower() == bot_username.lower()
+            else:
+                user = getattr(entity, "user", None)
+                user_id = getattr(user, "id", None)
+                if type(user_id) is not int:
+                    continue
+                name = value
+                target = str(user_id)
+                is_self_mention = user_id == bot_id
+            if is_self_mention:
+                target = str(bot_id)
             mentions.append(Comp.Mention(target=target, name=name))
             if is_self_mention:
                 removals.add((start, end))
@@ -673,6 +685,32 @@ class TelegramPlatformAdapter(Platform):
             cursor = max(cursor, end)
         parts.append(text[cursor:])
         return "".join(parts), mentions
+
+    @staticmethod
+    def _telegram_media_metadata(
+        media,
+    ) -> dict[str, str | int | float | None] | None:
+        """Copy stable Telegram media metadata without forcing a download."""
+        metadata: dict[str, str | int | float | None] = {}
+        for name in (
+            "file_id",
+            "file_unique_id",
+            "mime_type",
+            "duration",
+            "file_size",
+            "width",
+            "height",
+        ):
+            value = getattr(media, name, None)
+            total_seconds = getattr(value, "total_seconds", None)
+            if name == "duration" and callable(total_seconds):
+                value = int(cast(Callable[[], float], total_seconds)())
+            if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+                metadata[name] = value
+        file_name = getattr(media, "file_name", None)
+        if isinstance(file_name, str) and file_name:
+            metadata["file_name"] = file_name
+        return metadata or None
 
     def _apply_telegram_caption(
         self,
@@ -730,25 +768,38 @@ class TelegramPlatformAdapter(Platform):
             return True
 
         if telegram_message.voice:
-            record = Comp.Record(file="")
+            voice = telegram_message.voice
+            record = Comp.Record(file="", metadata=self._telegram_media_metadata(voice))
             record.set_source_resolver(
-                lambda voice=telegram_message.voice: (
-                    self._resolve_telegram_attachment_file_path(voice)
-                )
-            )
-            message.message.append(record)
-        elif telegram_message.audio:
-            record = Comp.Record(file="")
-            record.set_source_resolver(
-                lambda audio=telegram_message.audio: (
-                    self._resolve_telegram_attachment_file_path(audio)
-                )
+                lambda voice=voice: self._resolve_telegram_attachment_file_path(voice)
             )
             message.message.append(record)
             self._apply_telegram_caption(message, telegram_message, context)
+        elif telegram_message.audio:
+            audio = telegram_message.audio
+            record = Comp.Record(file="", metadata=self._telegram_media_metadata(audio))
+            record.set_source_resolver(
+                lambda audio=audio: self._resolve_telegram_attachment_file_path(audio)
+            )
+            message.message.append(record)
+            self._apply_telegram_caption(message, telegram_message, context)
+        elif telegram_message.animation:
+            animation = telegram_message.animation
+            image = Comp.Image(
+                file="",
+                _type="animation",
+                metadata=self._telegram_media_metadata(animation),
+            )
+            image.set_source_resolver(
+                lambda animation=animation: self._resolve_telegram_attachment_file_path(
+                    animation
+                )
+            )
+            message.message.append(image)
+            self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.photo:
             photo = telegram_message.photo[-1]
-            image = Comp.Image(file="")
+            image = Comp.Image(file="", metadata=self._telegram_media_metadata(photo))
             image.set_source_resolver(
                 lambda photo=photo: self._resolve_telegram_attachment_file_path(photo)
             )
@@ -774,18 +825,36 @@ class TelegramPlatformAdapter(Platform):
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
         elif telegram_message.document:
-            file_name = telegram_message.document.file_name or uuid.uuid4().hex
-            file_component = Comp.File(name=file_name)
-            file_component.set_url_resolver(
-                lambda document=telegram_message.document, file_name=file_name: (
-                    self._resolve_telegram_document_url(document, file_name)
+            document = telegram_message.document
+            file_name = document.file_name or uuid.uuid4().hex
+            if str(
+                getattr(document, "mime_type", "")
+            ).lower() == "image/gif" or file_name.lower().endswith(".gif"):
+                image = Comp.Image(
+                    file="",
+                    _type="animation",
+                    metadata=self._telegram_media_metadata(document),
                 )
-            )
-            message.message.append(file_component)
+                image.set_source_resolver(
+                    lambda document=document: (
+                        self._resolve_telegram_attachment_file_path(document)
+                    )
+                )
+                message.message.append(image)
+            else:
+                file_component = Comp.File(name=file_name)
+                file_component.set_url_resolver(
+                    lambda document=document, file_name=file_name: (
+                        self._resolve_telegram_document_url(document, file_name)
+                    )
+                )
+                message.message.append(file_component)
             self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.video:
             file_name = telegram_message.video.file_name or uuid.uuid4().hex
-            video = Comp.Video(file="")
+            video = Comp.Video(
+                file="", metadata=self._telegram_media_metadata(telegram_message.video)
+            )
             video.set_source_resolver(
                 lambda video=telegram_message.video: (
                     self._resolve_telegram_attachment_file_path(video)

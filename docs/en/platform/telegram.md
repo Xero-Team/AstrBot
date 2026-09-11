@@ -2,13 +2,14 @@
 
 ## Supported Message Types
 
-| Message Type | Receive Support | Send Support | Notes |
-| ------------ | --------------- | ------------ | ----- |
-| Text         | Yes             | Yes          |       |
-| Image        | Yes             | Yes          |       |
-| Voice        | Yes             | Yes          |       |
-| Video        | Yes             | Yes          |       |
-| File         | Yes             | Yes          |       |
+| Message Type | Receive Support | Send Support | Notes                                     |
+| ------------ | --------------- | ------------ | ----------------------------------------- |
+| Text         | Yes             | Yes          |                                           |
+| Image        | Yes             | Yes          |                                           |
+| Animation    | Yes             | Yes          | GIF/animation media is sent individually. |
+| Voice        | Yes             | Yes          |                                           |
+| Video        | Yes             | Yes          |                                           |
+| File         | Yes             | Yes          |                                           |
 
 Proactive message push: Supported.
 
@@ -64,13 +65,15 @@ Plugin load, unload, reload, enable, and disable operations immediately request 
 
 ## Mentions
 
-Text and media captions preserve emoji, whitespace, and other users' mentions. Mentions of this bot become mention components and are removed from the plain text, including repeated mentions. Invalid entity ranges are ignored without deleting text. Mentions alone do not enable group LLM replies; the configured group access, reply-to-bot, and continuation rules still apply.
+Text and media captions preserve emoji, whitespace, and other users' mentions. Mentions of this bot become mention components and are removed from the plain text, including repeated mentions. Invalid entity ranges are ignored without deleting text. Mentions alone do not enable group LLM replies; the configured group access, reply-to-bot, and continuation rules still apply. Telegram `text_mention` entities retain numeric user IDs and UTF-16 offsets. Voice and animation captions and media metadata are preserved. Outbound numeric mentions use `tg://user?id=` links; Telegram has no Bot API token that notifies every group member, so `MentionAll` is ignored for delivery.
 
 ## Media Albums
 
 Telegram media albums are collected independently of the native command menu. Disabling command registration or periodic menu refresh does not disable album delivery. AstrBot waits briefly after each album item to collect the rest of the album, but always starts processing at the configured maximum collection deadline even if more items continue to arrive.
 
 To keep the adapter responsive, an instance accepts at most 128 collecting or processing albums at once and at most 10 distinct items in each album. New albums or extra items over those limits are discarded. Processing is limited to 60 seconds; incomplete albums are also discarded when the Telegram adapter restarts or stops. These are internal safety limits, not Dashboard settings.
+
+When sending 2–10 compatible images, AstrBot uses one ordered media group and places a caption on its first item. GIFs, animations, mixed chains, and failed media-group requests fall back to ordered individual sends. Location, contact, poll, dice, paid-media, and live-photo objects remain unsupported until a platform-neutral consumer contract exists.
 
 ## Streaming Output
 

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import httpx
 import pytest
 from telegram import (
+    Animation,
     Audio,
     Chat,
     Document,
@@ -18,6 +19,7 @@ from telegram import (
     Update,
     User,
     Video,
+    Voice,
 )
 from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 from telegram.request import HTTPXRequest
@@ -484,6 +486,90 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     voice.get_file.assert_awaited_once()
     media_resolver.to_path.assert_awaited_once_with(target_format="wav")
     assert result.message[0].url == "https://api.telegram.org/file/test/voice.oga"
+
+
+@pytest.mark.asyncio
+async def test_telegram_voice_caption_and_metadata_are_preserved():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    voice = Voice(
+        file_id="voice-id",
+        file_unique_id="voice-unique",
+        duration=7,
+        mime_type="audio/ogg",
+        file_size=1234,
+    )
+    update = create_mock_update(message_text=None, voice=voice, caption="listen")
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    record = result.message[0]
+    assert isinstance(record, Comp.Record)
+    assert record.metadata == {
+        "file_id": "voice-id",
+        "file_unique_id": "voice-unique",
+        "mime_type": "audio/ogg",
+        "duration": 7,
+        "file_size": 1234,
+    }
+    assert result.message_str == "listen"
+    assert isinstance(result.message[1], Comp.Plain)
+
+
+@pytest.mark.asyncio
+async def test_telegram_animation_is_distinct_and_lazy():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    animation = Animation(
+        file_id="animation-id",
+        file_unique_id="animation-unique",
+        width=320,
+        height=240,
+        duration=3,
+        file_name="clip.gif",
+        mime_type="image/gif",
+        file_size=88,
+    )
+    update = create_mock_update(message_text=None, animation=animation, caption="clip")
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    image = result.message[0]
+    assert isinstance(image, Comp.Image)
+    assert image.sub_type == "animation"
+    assert image.metadata["file_id"] == "animation-id"
+    assert image.metadata["file_name"] == "clip.gif"
+    assert image.file == ""
+
+
+@pytest.mark.asyncio
+async def test_telegram_text_mention_preserves_numeric_identity():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    text = "😀 Alice"
+    entity = MessageEntity(
+        type="text_mention",
+        offset=3,
+        length=5,
+        user=User(2468, "Alice", False),
+    )
+    update = create_mock_update(message_text=text, entities=[entity])
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    mention = next(part for part in result.message if isinstance(part, Comp.Mention))
+    assert mention.target == "2468"
+    assert mention.name == "Alice"
+    assert result.message_str == text
 
 
 @pytest.mark.asyncio
@@ -2111,10 +2197,61 @@ async def test_telegram_send_with_client_prefixes_mention_all():
     )
 
     client.send_message.assert_awaited_once_with(
-        text="@all hello there",
-        parse_mode="MarkdownV2",
-        chat_id="123",
+        text="hello there", parse_mode="MarkdownV2", chat_id="123"
     )
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_with_client_preserves_multiple_numeric_mentions():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        MessageChain(
+            [
+                Comp.Mention(target="11", name="Alice"),
+                Comp.Mention(target="22", name="Bob"),
+                Comp.Plain("hello"),
+            ]
+        ),
+        "123",
+    )
+
+    assert client.send_message.await_args.kwargs["text"] == (
+        "[Alice](tg://user?id=11) [Bob](tg://user?id=22) hello"
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_with_client_batches_compatible_images():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    first = Comp.Image(file="first.jpg")
+    second = Comp.Image(file="second.jpg")
+
+    with patch.object(
+        type(first),
+        "convert_to_file_path",
+        AsyncMock(side_effect=["first.jpg", "second.jpg"]),
+    ):
+        await TelegramPlatformEvent.send_with_client(
+            client,
+            MessageChain([first, second, Comp.Plain("caption")]),
+            "123",
+        )
+
+    client.send_media_group.assert_awaited_once()
+    media = client.send_media_group.await_args.kwargs["media"]
+    assert len(media) == 2
+    tg_event_module = _load_telegram_module(
+        "astrbot.core.platform.sources.telegram.tg_event"
+    )
+    assert (
+        tg_event_module.InputMediaPhoto.call_args_list[0].kwargs["caption"] == "caption"
+    )
+    assert tg_event_module.InputMediaPhoto.call_args_list[1].kwargs["caption"] is None
+    client.send_photo.assert_not_awaited()
 
 
 @pytest.mark.asyncio

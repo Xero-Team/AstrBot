@@ -125,6 +125,7 @@ class MockTelegramBuilder:
         bot.base_url = "https://api.telegram.org/bottest_token_123/"
         bot.send_message = AsyncMock()
         bot.send_photo = AsyncMock()
+        bot.send_media_group = AsyncMock()
         bot.send_document = AsyncMock()
         bot.send_voice = AsyncMock()
         bot.send_chat_action = AsyncMock()

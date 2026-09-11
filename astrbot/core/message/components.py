@@ -233,6 +233,7 @@ class Record(DeferredMediaSourceComponent):
     text: str | None = None
     # 额外
     path: str | None = None
+    metadata: dict[str, str | int | float | None] | None = None
 
     @staticmethod
     def fromFileSystem(path, **_):
@@ -369,6 +370,7 @@ class Video(DeferredMediaSourceComponent):
     cover: str | None = ""
     # 额外
     path: str | None = ""
+    metadata: dict[str, str | int | float | None] | None = None
 
     @staticmethod
     def fromFileSystem(path, **_):
@@ -461,11 +463,14 @@ class Video(DeferredMediaSourceComponent):
             payload_file = await self._register_runtime_file(url_or_path)
         else:
             payload_file = url_or_path
+        data: dict[str, object] = {
+            "file": payload_file,
+        }
+        if self.metadata:
+            data["metadata"] = self.metadata
         return {
             "type": "video",
-            "data": {
-                "file": payload_file,
-            },
+            "data": data,
         }
 
 
@@ -635,6 +640,7 @@ class Image(DeferredMediaSourceComponent):
     url: str | None = ""
     # 额外
     path: str | None = ""
+    metadata: dict[str, str | int | float | None] | None = None
 
     @staticmethod
     def fromURL(url: str, **_):

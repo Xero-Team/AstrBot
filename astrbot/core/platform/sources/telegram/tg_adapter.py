@@ -427,7 +427,7 @@ class TelegramPlatformAdapter(Platform):
 
     def collect_commands(self) -> list[BotCommand]:
         """从注册的处理器中收集所有指令"""
-        command_dict = {}
+        command_dict: dict[str, tuple[str, bool]] = {}
         skip_commands = {"start"}
 
         for handler_md in self.get_handler_registry().get_handlers_by_event_type(
@@ -447,15 +447,31 @@ class TelegramPlatformAdapter(Platform):
                     skip_commands,
                 )
                 if cmd_info_list:
+                    if isinstance(event_filter, CommandFilter):
+                        primary_names = {event_filter.command_name}
+                    elif isinstance(event_filter, CommandGroupFilter):
+                        primary_names = {event_filter.group_name}
+                    else:
+                        primary_names = set()
                     for cmd_name, description in cmd_info_list:
+                        is_alias = cmd_name not in primary_names
                         if cmd_name in command_dict:
                             logger.warning(
                                 f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                                f"'{command_dict[cmd_name]}'"
+                                f"'{command_dict[cmd_name][0]}'"
                             )
-                        command_dict.setdefault(cmd_name, description)
+                            if not is_alias and command_dict[cmd_name][1]:
+                                command_dict[cmd_name] = (
+                                    command_dict[cmd_name][0],
+                                    False,
+                                )
+                        else:
+                            command_dict[cmd_name] = (description, is_alias)
 
-        commands_a = sorted(command_dict)
+        commands_a = sorted(
+            command_dict,
+            key=lambda command: (command_dict[command][1], command),
+        )
         omitted_count = max(0, len(commands_a) - self._TELEGRAM_COMMAND_LIMIT)
         if omitted_count:
             logger.warning(
@@ -466,7 +482,7 @@ class TelegramPlatformAdapter(Platform):
                 commands_a[self._TELEGRAM_COMMAND_LIMIT],
             )
             commands_a = commands_a[: self._TELEGRAM_COMMAND_LIMIT]
-        return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
+        return [BotCommand(cmd, command_dict[cmd][0]) for cmd in commands_a]
 
     @staticmethod
     def _extract_command_info(
@@ -486,7 +502,7 @@ class TelegramPlatformAdapter(Platform):
             # 收集主命令名和所有别名
             cmd_names = [event_filter.command_name]
             if event_filter.alias:
-                cmd_names.extend(event_filter.alias)
+                cmd_names.extend(sorted(event_filter.alias))
         elif isinstance(event_filter, CommandGroupFilter):
             if event_filter.parent_group:
                 return None

@@ -1251,7 +1251,7 @@ async def test_telegram_convert_message_returns_none_without_sender():
 
 
 @pytest.mark.asyncio
-async def test_telegram_register_commands_updates_commands_only_when_hash_changes():
+async def test_telegram_register_commands_updates_commands_only_when_snapshot_changes():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -1495,9 +1495,9 @@ def test_telegram_collect_commands_filters_duplicates_invalid_and_inactive_handl
 
     assert [(cmd.command, cmd.description) for cmd in commands] == [
         ("ask", "Primary ask command"),
+        ("tools", "Duplicate ask command should l..."),
         ("ask_alias", "Primary ask command"),
         ("toolbox", "Duplicate ask command should l..."),
-        ("tools", "Duplicate ask command should l..."),
     ]
 
 
@@ -1539,6 +1539,59 @@ def test_telegram_collect_commands_caps_menu_at_100_entries():
     assert len(commands) == 100
     assert commands[0].command == "cmd_000"
     assert commands[-1].command == "cmd_099"
+
+
+def test_telegram_collect_commands_prioritizes_primary_commands_over_aliases():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    handlers, plugins = _bind_runtime_registries(adapter)
+    plugins.publish(
+        StarMetadata(
+            name="Many commands",
+            module_path="plugin.many",
+            activated=True,
+        )
+    )
+
+    async def handler(event):
+        return None
+
+    for index in range(100):
+        handlers.append(
+            StarHandlerMetadata(
+                event_type=EventType.AdapterMessageEvent,
+                handler_full_name=f"plugin.many_handler_{index}",
+                handler_name=f"handler_{index}",
+                handler_module_path="plugin.many",
+                handler=handler,
+                event_filters=[CommandFilter(f"cmd_{index:03d}")],
+                desc=f"Command {index}",
+                enabled=True,
+            )
+        )
+    handlers.append(
+        StarHandlerMetadata(
+            event_type=EventType.AdapterMessageEvent,
+            handler_full_name="plugin.many_handler_primary",
+            handler_name="handler_primary",
+            handler_module_path="plugin.many",
+            handler=handler,
+            event_filters=[CommandFilter("aaa_primary", alias={"aaa_alias"})],
+            desc="Primary command",
+            enabled=True,
+        )
+    )
+
+    commands = adapter.collect_commands()
+    command_names = {command.command for command in commands}
+
+    assert len(commands) == 100
+    assert "aaa_primary" in command_names
+    assert "aaa_alias" not in command_names
 
 
 def test_telegram_extract_command_info_skips_nested_groups_and_long_descriptions():

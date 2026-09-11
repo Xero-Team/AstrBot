@@ -2,6 +2,7 @@ import asyncio
 import math
 import re
 import uuid
+from collections import OrderedDict
 from collections.abc import Sequence
 from contextlib import suppress
 from typing import override
@@ -9,7 +10,7 @@ from typing import override
 import httpx
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from telegram import BotCommand, MessageEntity, Update
+from telegram import BotCommand, Message, MessageEntity, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, filters
@@ -40,9 +41,30 @@ from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
 
 from .tg_event import (
     TelegramPlatformEvent,
-    format_telegram_topic_target,
+    format_telegram_target,
     resolve_telegram_api_target,
 )
+
+TELEGRAM_ALLOWED_UPDATES = ("message", "channel_post", "business_message")
+
+
+def _telegram_message(update: Update) -> Message | None:
+    """Select only updates with a supported AstrBot message/reply contract."""
+    for field in TELEGRAM_ALLOWED_UPDATES:
+        message = getattr(update, field, None)
+        if message is not None:
+            if field == "business_message" and (
+                not message.business_connection_id
+                or message.chat.type != ChatType.PRIVATE
+                or message.sender_business_bot is not None
+                or message.from_user is None
+                or message.from_user.id != message.chat.id
+            ):
+                # Business ingestion is for incoming customer messages, not
+                # account-owner sends or bot-generated outgoing echoes.
+                return None
+            return message
+    return None
 
 
 def _telegram_member_status(raw_message: object) -> str | None:
@@ -65,6 +87,7 @@ class TelegramPlatformAdapter(Platform):
     _MEDIA_GROUP_MAX_ACTIVE = 128
     _MEDIA_GROUP_MAX_ITEMS = 10
     _MEDIA_GROUP_PROCESS_TIMEOUT = 60.0
+    _UPDATE_REPLAY_CACHE_SIZE = 4096
 
     def __init__(
         self,
@@ -140,6 +163,7 @@ class TelegramPlatformAdapter(Platform):
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
         self._application_started = False
+        self._seen_update_ids: OrderedDict[int, None] = OrderedDict()
         self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
 
@@ -213,7 +237,11 @@ class TelegramPlatformAdapter(Platform):
             .build()
         )
         message_handler = TelegramMessageHandler(
-            filters=filters.ALL,
+            filters=(
+                filters.UpdateType.MESSAGE
+                | filters.UpdateType.CHANNEL_POST
+                | filters.UpdateType.BUSINESS_MESSAGE
+            ),
             callback=self.message_handler,
         )
         self.application.add_handler(message_handler)
@@ -324,7 +352,10 @@ class TelegramPlatformAdapter(Platform):
                     await asyncio.sleep(self._polling_restart_delay)
                     continue
                 logger.info("Starting Telegram polling...")
-                await updater.start_polling(error_callback=self._on_polling_error)
+                await updater.start_polling(
+                    allowed_updates=TELEGRAM_ALLOWED_UPDATES,
+                    error_callback=self._on_polling_error,
+                )
                 logger.info("Telegram Platform Adapter is running.")
                 while updater.running and not self._terminating:  # noqa: ASYNC110
                     if self._polling_recovery_requested.is_set():
@@ -498,19 +529,16 @@ class TelegramPlatformAdapter(Platform):
         return result if result else None
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not update.effective_chat:
-            logger.warning(
-                "Received a start command without an effective chat, skipping /start reply.",
-            )
+        message = _telegram_message(update)
+        if message is None:
             return
-        message = update.effective_message
         message_thread_id = (
-            message.message_thread_id
-            if message is not None and message.is_topic_message is True
-            else None
+            message.message_thread_id if message.is_topic_message is True else None
         )
-        chat_id, api_thread_id = resolve_telegram_api_target(
-            format_telegram_topic_target(update.effective_chat.id, message_thread_id)
+        chat_id, api_thread_id, business_connection_id = resolve_telegram_api_target(
+            format_telegram_target(
+                message.chat.id, message_thread_id, message.business_connection_id
+            )
         )
         api_chat_id: str | int = chat_id
         if chat_id.lstrip("-").isdigit():
@@ -521,6 +549,8 @@ class TelegramPlatformAdapter(Platform):
         }
         if api_thread_id is not None:
             payload["message_thread_id"] = api_thread_id
+        if business_connection_id:
+            payload["business_connection_id"] = business_connection_id
         await context.bot.send_message(
             **payload,
         )
@@ -528,10 +558,18 @@ class TelegramPlatformAdapter(Platform):
     async def message_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        logger.debug(f"Telegram message: {update.message}")
+        telegram_message = _telegram_message(update)
+        if telegram_message is None:
+            return
+        if update.update_id in self._seen_update_ids:
+            return
+        self._seen_update_ids[update.update_id] = None
+        if len(self._seen_update_ids) > self._UPDATE_REPLAY_CACHE_SIZE:
+            self._seen_update_ids.popitem(last=False)
+        logger.debug("Telegram message update: %s", update.update_id)
 
-        # Handle media group messages
-        if update.message and update.message.media_group_id:
+        # Handle media group messages.
+        if telegram_message.media_group_id:
             await self.handle_media_group_message(update, context)
             return
 
@@ -623,7 +661,7 @@ class TelegramPlatformAdapter(Platform):
         message: AstrBotMessage,
     ) -> bool:
         """Populate text or media components; return False for /start."""
-        telegram_message = update.message
+        telegram_message = _telegram_message(update)
         if telegram_message is None:
             return True
 
@@ -740,27 +778,29 @@ class TelegramPlatformAdapter(Platform):
         @param context: Telegram 的 Context 对象。
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
-        if not update.message:
-            logger.warning("Received an update without a message.")
+        telegram_message = _telegram_message(update)
+        if telegram_message is None:
             return None
 
         message = AstrBotMessage()
-        chat_id = str(update.message.chat.id)
+        chat_id = str(telegram_message.chat.id)
         raw_thread_id = (
-            update.message.message_thread_id
-            if update.message.is_topic_message is True
+            telegram_message.message_thread_id
+            if telegram_message.is_topic_message is True
             else None
         )
         message.session_id = chat_id
 
         # 获得是群聊还是私聊
-        if update.message.chat.type == ChatType.PRIVATE:
+        if telegram_message.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
-            message.session_id = format_telegram_topic_target(chat_id, raw_thread_id)
+            message.session_id = format_telegram_target(
+                chat_id, raw_thread_id, telegram_message.business_connection_id
+            )
         else:
             message.type = MessageType.GROUP_MESSAGE
             group_id = chat_id
-            is_forum = getattr(update.message.chat, "is_forum", False) is True
+            is_forum = getattr(telegram_message.chat, "is_forum", False) is True
             thread_id = (
                 raw_thread_id
                 if raw_thread_id and not (is_forum and raw_thread_id == 1)
@@ -771,16 +811,16 @@ class TelegramPlatformAdapter(Platform):
                 group_id += "#" + str(thread_id)
                 message.session_id = group_id
 
-            chat_title = getattr(update.message.chat, "title", None)
+            chat_title = getattr(telegram_message.chat, "title", None)
             group_name = chat_title if isinstance(chat_title, str) else None
             topic_name = None
-            topic_created = getattr(update.message, "forum_topic_created", None)
-            topic_edited = getattr(update.message, "forum_topic_edited", None)
+            topic_created = getattr(telegram_message, "forum_topic_created", None)
+            topic_edited = getattr(telegram_message, "forum_topic_edited", None)
             discovered_topic_name = getattr(topic_created, "name", None)
             if not isinstance(discovered_topic_name, str):
                 discovered_topic_name = getattr(topic_edited, "name", None)
             if not isinstance(discovered_topic_name, str):
-                reply_message = update.message.reply_to_message
+                reply_message = telegram_message.reply_to_message
                 reply_topic_created = getattr(
                     reply_message, "forum_topic_created", None
                 )
@@ -816,15 +856,21 @@ class TelegramPlatformAdapter(Platform):
                 group_name=group_name,
             )
             setattr(message, "_telegram_topic_name", topic_name)
-        message.message_id = str(update.message.message_id)
-        _from_user = update.message.from_user
-        if not _from_user:
-            logger.warning("[Telegram] Received a message without a from_user.")
+        message.message_id = str(telegram_message.message_id)
+        sender_chat = telegram_message.sender_chat
+        from_user = telegram_message.from_user
+        if sender_chat is not None:
+            message.sender = MessageMember(
+                str(sender_chat.id),
+                sender_chat.title or sender_chat.username or "Unknown",
+            )
+        elif from_user is not None:
+            message.sender = MessageMember(
+                str(from_user.id), from_user.username or from_user.full_name
+            )
+        else:
+            logger.warning("[Telegram] Received a message without a sender.")
             return None
-        message.sender = MessageMember(
-            str(_from_user.id),
-            _from_user.username or "Unknown",
-        )
         message.self_id = str(context.bot.id)
         message.raw_message = update
         message.message_str = ""
@@ -832,22 +878,22 @@ class TelegramPlatformAdapter(Platform):
 
         if (
             get_reply
-            and update.message.reply_to_message
+            and telegram_message.reply_to_message
             and not (
-                update.message.is_topic_message
-                and update.message.message_thread_id
-                == update.message.reply_to_message.message_id
+                telegram_message.is_topic_message
+                and telegram_message.message_thread_id
+                == telegram_message.reply_to_message.message_id
             )
         ):
             # 获取回复消息
             reply_update = Update(
                 update_id=1,
-                message=update.message.reply_to_message,
+                message=telegram_message.reply_to_message,
             )
             reply_abm = await self.convert_message(reply_update, context, False)
 
             if reply_abm:
-                quote_text = getattr(update.message.quote, "text", None)
+                quote_text = getattr(telegram_message.quote, "text", None)
                 reply_chain = reply_abm.message
                 reply_message_str = reply_abm.message_str
                 if isinstance(quote_text, str) and quote_text:
@@ -895,15 +941,22 @@ class TelegramPlatformAdapter(Platform):
         media items before sending to the pipeline. Uses debounce mechanism with
         a hard cap (max_wait) to prevent indefinite delay.
         """
-        if not update.message:
+        telegram_message = _telegram_message(update)
+        if telegram_message is None:
             return
 
-        media_group_id = update.message.media_group_id
+        media_group_id = telegram_message.media_group_id
         if not media_group_id:
             return
 
-        chat_id = getattr(getattr(update, "effective_chat", None), "id", None)
-        cache_key = f"{chat_id}:{media_group_id}"
+        target = format_telegram_target(
+            telegram_message.chat.id,
+            telegram_message.message_thread_id
+            if telegram_message.is_topic_message is True
+            else None,
+            telegram_message.business_connection_id,
+        )
+        cache_key = f"{target}:{media_group_id}"
         if not self._accept_media_groups:
             return
 
@@ -933,7 +986,7 @@ class TelegramPlatformAdapter(Platform):
         if entry["processing"]:
             return
 
-        message_id = getattr(update.message, "message_id", None)
+        message_id = telegram_message.message_id
         message_ids: set[int | None] = entry["message_ids"]
         if message_id in message_ids:
             return

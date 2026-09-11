@@ -12,6 +12,27 @@
 
 主动消息推送：支持。
 
+## 更新接入范围
+
+每次启动或重建轮询客户端时，AstrBot 都显式订阅 `message`、`channel_post` 和 `business_message`，不继承 Telegram 服务端残留的订阅选择。
+
+| Telegram Update 字段                                               | 处理方式                                                                                                                                     |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`                                                          | 接入私聊、群组及主题消息，复用上表的内容类型和相册处理。                                                                                     |
+| `channel_post`                                                     | 作为群组消息接入，保留频道及主题路由。以 `sender_chat` 作为发送者，避免把匿名发送的兼容用户当成真实用户。是否触发 LLM 仍由群聊访问规则决定。 |
+| `business_message`                                                 | 接入带有 `business_connection_id` 的客户入站私聊；忽略账户所有者发出的消息、`sender_business_bot` 标记的机器人外发消息及不完整的路由。       |
+| `edited_message`、`edited_channel_post`、`edited_business_message` | 不订阅、不触发新消息事件，也不修改已保存的上下文。需要重新执行时请发送新消息。                                                               |
+| `guest_message`                                                    | 不接入。Guest Bot 消息需要专用的 `answerGuestQuery` / `InlineQueryResult` 回复协议，不能通过普通聊天发送接口回复。                           |
+| 其他更新                                                           | 不订阅、不转换为聊天消息，包括按钮回调、成员变更、反应、投票、支付、Business 连接变更及删除通知、boost 和 managed bot 更新。                 |
+
+即使旧订阅中尚未确认的更新在切换后到达，处理器也只接收上述三类消息。每个适配器保留最近 4096 个已接纳的 Update ID，重复投递不会在缓存有效期内再次执行指令或 agent；缓存随轮询客户端重建保留，但不跨进程重启持久化。编辑更新始终忽略。
+
+### Business 会话与回复
+
+Business 聊天与相同 chat ID 的普通 Bot 聊天相互独立。AstrBot 使用 `business:<经过百分号编码的连接 ID>:<chat_id>` 作为 Business 路由，有主题时追加 `#<message_thread_id>`。请保存完整会话目标用于主动发送；连接、聊天和主题信息都会恢复，相册也按该路由隔离。
+
+文本、媒体、输入状态和流式编辑均携带原始 `business_connection_id`。Business 私聊使用发送后编辑的流式方式，因为 `sendMessageDraft` 不支持 Business 连接；同样不执行不支持连接身份的消息反应操作。回复和主动发送仍受 Telegram 的连接权限及最近 24 小时入站消息要求约束。
+
 ## 1. 创建 Telegram Bot
 
 首先，打开 Telegram，搜索 `BotFather`，点击 `Start`，然后发送 `/newbot`，按照提示输入你的机器人名字和用户名。
@@ -57,7 +78,7 @@ Telegram 平台支持流式输出。需要在「AI 配置」->「其他配置」
 
 ### 私聊流式输出
 
-在私聊中，AstrBot 使用 Telegram Bot API v9.3 新增的 `sendMessageDraft` API 实现流式输出。这种方式会在私聊界面展示一个「正在输入」的草稿预览动画，体验更接近「打字机」效果，且避免了传统方案的消息闪烁、推送通知干扰和 API 编辑频率限制等问题。
+在普通 Bot 私聊中，AstrBot 使用 Telegram Bot API v9.3 新增的 `sendMessageDraft` API 实现流式输出。这种方式会在私聊界面展示一个「正在输入」的草稿预览动画，体验更接近「打字机」效果，且避免了传统方案的消息闪烁、推送通知干扰和 API 编辑频率限制等问题。
 
 ### 群聊流式输出
 

@@ -12,6 +12,27 @@
 
 Proactive message push: Supported.
 
+## Update Ingestion
+
+Whenever polling starts or its client is rebuilt, AstrBot explicitly subscribes to `message`, `channel_post`, and `business_message`. It does not inherit a subscription left on Telegram's servers.
+
+| Telegram Update field                                              | Handling                                                                                                                                                                                                          |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`                                                          | Ingest private, group, and topic messages using the content types above and the existing album handling.                                                                                                          |
+| `channel_post`                                                     | Ingest as a group message, preserving the channel and topic route. Use `sender_chat` as the sender instead of an anonymous sender's compatibility user. Group access rules still decide whether to run the LLM.   |
+| `business_message`                                                 | Ingest incoming customer messages in private chats with a `business_connection_id`. Ignore account-owner sends, outgoing bot messages marked with `sender_business_bot`, and incomplete routes.                   |
+| `edited_message`, `edited_channel_post`, `edited_business_message` | Do not subscribe, create a new message event, or change stored context. Send a new message to run a command or agent again.                                                                                       |
+| `guest_message`                                                    | Not ingested. Guest Bot messages require the dedicated `answerGuestQuery` / `InlineQueryResult` reply protocol and cannot be answered through ordinary chat sends.                                                |
+| Other updates                                                      | Not subscribed to or converted into chat messages. This includes button callbacks, member changes, reactions, polls, payments, Business connection changes and deletion notices, boosts, and managed bot updates. |
+
+The handler accepts only the three supported message variants even if unacknowledged updates from an older subscription still arrive. Each adapter retains the latest 4096 admitted Update IDs, so repeated delivery does not execute a command or agent again while its ID remains cached. The cache survives polling-client rebuilds but is not persisted across process restarts. Edited updates are always ignored.
+
+### Business Sessions and Replies
+
+A Business chat is independent of an ordinary Bot chat with the same chat ID. AstrBot uses `business:<percent-encoded connection ID>:<chat_id>` as its Business route, appending `#<message_thread_id>` for topics. Save the complete session target for proactive sends: the connection, chat, and topic are restored, and albums are isolated by that route too.
+
+Text, media, typing status, and streaming edits carry the original `business_connection_id`. Business private chats stream by sending and editing messages because `sendMessageDraft` cannot address a Business connection. Message reactions are likewise skipped because their API cannot carry that identity. Replies and proactive sends remain subject to Telegram's connection permissions and requirement for an incoming message within the last 24 hours.
+
 ## 1. Create a Telegram Bot
 
 First, open Telegram and search for `BotFather`. Click `Start`, then send `/newbot` and follow the prompts to enter your bot's name and username.
@@ -57,7 +78,7 @@ The Telegram platform supports streaming output. Enable the "Streaming Output" s
 
 ### Private Chat Streaming
 
-In private chats, AstrBot uses the `sendMessageDraft` API (added in Telegram Bot API v9.3) for streaming output. This displays a "typing" draft preview animation in the chat interface, creating a more natural "typewriter" effect. It avoids issues with the traditional approach such as message flickering, push notification interference, and API edit frequency limits.
+In ordinary Bot private chats, AstrBot uses the `sendMessageDraft` API (added in Telegram Bot API v9.3) for streaming output. This displays a "typing" draft preview animation in the chat interface, creating a more natural "typewriter" effect. It avoids issues with the traditional approach such as message flickering, push notification interference, and API edit frequency limits.
 
 ### Group Chat Streaming
 

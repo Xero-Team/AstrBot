@@ -24,6 +24,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import ActionPermissionFilter
+from astrbot.core.star.filter.telegram_callback import TelegramCallbackFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star_handler import (
     EventType,
@@ -180,6 +181,34 @@ class WakingCheckStage(Stage):
         if not manager_flush:
             strip_inbound_flush_flags(extras)
         await self._resolve_reply_senders(event)
+        if event.get_extra("telegram_callback") is not None:
+            # Callback updates are already authenticated by the Telegram
+            # adapter. They are plugin surfaces, never implicit LLM turns.
+            event.message_str = ""
+            event.set_extra("should_run_command", False)
+            event.set_extra("should_run_llm", False)
+            event.set_extra("route_kind", "passthrough")
+            event.set_extra("wake_reasons", {"telegram_callback"})
+            (
+                activated_handlers,
+                handlers_parsed_params,
+                permission_denied,
+            ) = await self._collect_activated_handlers(
+                event,
+                required_filter_type=TelegramCallbackFilter,
+            )
+            if permission_denied:
+                return
+            activated_handlers = await self.session_plugins.filter_handlers_by_session(
+                event,
+                activated_handlers,
+            )
+            event.set_extra("activated_handlers", activated_handlers)
+            event.set_extra("handlers_parsed_params", handlers_parsed_params)
+            if activated_handlers:
+                event.is_wake = True
+                event.get_extra("wake_reasons").add("plugin_handler")
+            return
         manager = getattr(
             getattr(self.ctx, "execution_context", None),
             "turn_window_manager",
@@ -548,7 +577,10 @@ class WakingCheckStage(Stage):
         return False
 
     async def _collect_activated_handlers(
-        self, event: AstrMessageEvent
+        self,
+        event: AstrMessageEvent,
+        *,
+        required_filter_type: type | None = None,
     ) -> tuple[list, dict, bool]:
         activated_handlers = []
         handlers_parsed_params = {}
@@ -563,6 +595,15 @@ class WakingCheckStage(Stage):
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
         )
+        if required_filter_type is not None:
+            handlers = [
+                handler
+                for handler in handlers
+                if any(
+                    isinstance(filter_ref, required_filter_type)
+                    for filter_ref in handler.event_filters
+                )
+            ]
         engine = self._command_engine()
         group_handlers = {
             id(filter_ref): (filter_ref, handler)

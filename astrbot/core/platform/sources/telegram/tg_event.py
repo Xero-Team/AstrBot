@@ -136,7 +136,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-        client: TelegramClient,
+        client: ExtBot,
         limiter: TelegramDeliveryLimiter | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
@@ -158,14 +158,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: TelegramClient,
         text: str,
         payload: dict[str, Any],
-    ) -> None:
+    ) -> list[str]:
         """按 Telegram 限制切分文本后逐段发送。"""
+        message_ids: list[str] = []
         for chunk in cls._split_message(text):
             try:
                 markdown_text = telegramify_markdown.markdownify(
                     chunk,
                 )
-                await client.send_message(
+                result = await client.send_message(
                     text=markdown_text,
                     parse_mode="MarkdownV2",
                     **cast(Any, payload),
@@ -174,7 +175,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 logger.warning(
                     f"Failed to convert message to Markdown，using normal text: {e!s}"
                 )
-                await client.send_message(text=chunk, **cast(Any, payload))
+                result = await client.send_message(text=chunk, **cast(Any, payload))
+            message_id = getattr(result, "message_id", None)
+            if message_id is not None:
+                message_ids.append(str(message_id))
+        return message_ids
 
     @classmethod
     async def _send_chat_action(
@@ -184,7 +189,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         action: ChatAction | str,
         message_thread_id: str | None = None,
         business_connection_id: str | None = None,
-    ) -> None:
+    ) -> Any:
         """Send a chat action in the originating Telegram namespace."""
         try:
             payload: dict[str, Any] = {"chat_id": chat_id, "action": action}
@@ -229,7 +234,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
-        await send_coro(**send_payload)
+        result = await send_coro(**send_payload)
         await cls._send_chat_action(
             client,
             user_name,
@@ -237,6 +242,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             effective_thread_id,
             payload.get("business_connection_id"),
         )
+        return result
 
     @classmethod
     async def _send_voice_with_fallback(
@@ -249,7 +255,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         user_name: str = "",
         message_thread_id: str | None = None,
         use_media_action: bool = False,
-    ) -> None:
+    ) -> Any:
         """Send a voice message, falling back to a document if the user's
         privacy settings forbid voice messages (``BadRequest`` with
         ``Voice_messages_forbidden``).
@@ -262,7 +268,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 media_payload = dict(payload)
                 if message_thread_id and "message_thread_id" not in media_payload:
                     media_payload["message_thread_id"] = message_thread_id
-                await cls._send_media_with_action(
+                return await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_VOICE,
                     client.send_voice,
@@ -271,7 +277,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, media_payload),
                 )
             else:
-                await client.send_voice(voice=path, **cast(Any, payload))
+                return await client.send_voice(voice=path, **cast(Any, payload))
         except BadRequest as e:
             # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
             # distinguish the voice-privacy case via the API error message.
@@ -285,7 +291,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 media_payload = dict(payload)
                 if message_thread_id and "message_thread_id" not in media_payload:
                     media_payload["message_thread_id"] = message_thread_id
-                await cls._send_media_with_action(
+                return await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_DOCUMENT,
                     client.send_document,
@@ -295,7 +301,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, media_payload),
                 )
             else:
-                await client.send_document(
+                return await client.send_document(
                     document=path,
                     caption=caption,
                     **cast(Any, payload),
@@ -332,26 +338,29 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message: MessageChain,
         user_name: str,
         limiter: TelegramDeliveryLimiter | None = None,
-    ) -> None:
+        *,
+        platform_id: str = "",
+    ) -> PlatformSendResult:
         if limiter is not None:
             client = LimitedTelegramClient(client, limiter)
+        route_target = user_name
         has_reply = False
         reply_message_id = None
         mention_prefix: list[str] = []
-        for i in message.chain:
-            if isinstance(i, Reply):
+        for component in message.chain:
+            if isinstance(component, Reply):
                 has_reply = True
-                reply_message_id = i.id
-            elif isinstance(i, Mention):
-                target = str(i.target)
-                name = i.name or target
+                reply_message_id = component.id
+            elif isinstance(component, Mention):
+                target = str(component.target)
+                name = component.name or target
                 if target.isdigit():
                     mention_prefix.append(
                         f"[{_escape_markdown_v2_text(name)}](tg://user?id={target})"
                     )
                 else:
                     mention_prefix.append(f"@{name.lstrip('@')}")
-            elif isinstance(i, MentionAll):
+            elif isinstance(component, MentionAll):
                 logger.warning(
                     "Telegram has no Bot API token for notifying every group member; "
                     "ignoring MentionAll"
@@ -360,20 +369,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
         user_name, message_thread_id, business_connection_id = (
             resolve_telegram_api_target(user_name)
         )
-
-        # 根据消息链确定合适的 chat action 并发送
-        action = cls._get_chat_action_for_chain(message.chain)
         await cls._send_chat_action(
-            client, user_name, action, message_thread_id, business_connection_id
+            client,
+            user_name,
+            cls._get_chat_action_for_chain(message.chain),
+            message_thread_id,
+            business_connection_id,
         )
 
+        message_ids: list[str] = []
+        message_count = 0
         mention_prefix_text = " ".join(mention_prefix)
         index = 0
         while index < len(message.chain):
-            i = message.chain[index]
-            payload = {
-                "chat_id": user_name,
-            }
+            component = message.chain[index]
+            payload: dict[str, Any] = {"chat_id": user_name}
             if has_reply:
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
@@ -381,13 +391,17 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if business_connection_id:
                 payload["business_connection_id"] = business_connection_id
 
-            if isinstance(i, Plain):
+            if isinstance(component, Plain):
                 text = (
-                    f"{mention_prefix_text} {i.text}" if mention_prefix_text else i.text
+                    f"{mention_prefix_text} {component.text}"
+                    if mention_prefix_text
+                    else component.text
                 )
-                await cls._send_text_chunks(client, text, payload)
+                ids = await cls._send_text_chunks(client, text, payload)
+                message_ids.extend(ids)
+                message_count += len(ids) or len(cls._split_message(text))
                 mention_prefix_text = ""
-            elif isinstance(i, Image):
+            elif isinstance(component, Image):
                 run: list[Image] = []
                 while index < len(message.chain) and isinstance(
                     message.chain[index], Image
@@ -404,35 +418,56 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     if caption:
                         caption = f"{mention_prefix_text} {caption}"
                     elif len(run) < 2:
-                        await cls._send_text_chunks(
+                        ids = await cls._send_text_chunks(
                             client, mention_prefix_text, payload
                         )
+                        message_ids.extend(ids)
+                        message_count += len(ids) or 1
                     mention_prefix_text = ""
-                await cls._send_image_run(client, run, payload, caption=caption)
+                ids = await cls._send_image_run(client, run, payload, caption=caption)
+                message_ids.extend(ids)
+                message_count += len(ids) or len(run)
                 continue
-            elif isinstance(i, File):
-                path = await i.get_file()
-                name = i.name or os.path.basename(path)
-                await client.send_document(
+            elif isinstance(component, File):
+                path = await component.get_file()
+                name = component.name or os.path.basename(path)
+                result = await client.send_document(
                     document=path, filename=name, **cast(Any, payload)
                 )
-            elif isinstance(i, Record):
-                path = await i.convert_to_file_path()
-                await cls._send_voice_with_fallback(
+                message_count += 1
+                if (message_id := getattr(result, "message_id", None)) is not None:
+                    message_ids.append(str(message_id))
+            elif isinstance(component, Record):
+                path = await component.convert_to_file_path()
+                result = await cls._send_voice_with_fallback(
                     client,
                     path,
                     payload,
-                    caption=i.text or None,
+                    caption=component.text or None,
                     use_media_action=False,
                 )
-            elif isinstance(i, Video):
-                path = await i.convert_to_file_path()
-                await client.send_video(
+                message_count += 1
+                if (message_id := getattr(result, "message_id", None)) is not None:
+                    message_ids.append(str(message_id))
+            elif isinstance(component, Video):
+                path = await component.convert_to_file_path()
+                result = await client.send_video(
                     video=path,
-                    caption=getattr(i, "text", None) or None,
+                    caption=getattr(component, "text", None) or None,
                     **cast(Any, payload),
                 )
+                message_count += 1
+                if (message_id := getattr(result, "message_id", None)) is not None:
+                    message_ids.append(str(message_id))
             index += 1
+
+        return PlatformSendResult(
+            platform_id=platform_id,
+            success=True,
+            target=route_target,
+            message_count=message_count,
+            message_ids=tuple(message_ids),
+        )
 
     @classmethod
     async def _send_image_run(
@@ -442,9 +477,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
         payload: dict[str, Any],
         *,
         caption: str | None = None,
-    ) -> None:
+    ) -> list[str]:
         """Send compatible image runs as bounded albums with ordered fallback."""
         resolved = [(image, await image.convert_to_file_path()) for image in images]
+        message_ids: list[str] = []
         compatible = len(resolved) >= 2 and all(
             image.sub_type != "animation" and not _is_gif(path)
             for image, path in resolved
@@ -463,11 +499,17 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     for offset, (_image, path) in enumerate(chunk)
                 ]
                 try:
-                    await client.send_media_group(
+                    result = await client.send_media_group(
                         media=media,
                         **cast(Any, payload),
                     )
                     sent += len(chunk)
+                    if isinstance(result, list):
+                        message_ids.extend(
+                            str(item.message_id)
+                            for item in result
+                            if getattr(item, "message_id", None) is not None
+                        )
                     continue
                 except Exception as exc:
                     logger.warning(
@@ -476,30 +518,36 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     )
                     break
             else:
-                return
+                return message_ids
             resolved = resolved[sent:]
             if sent:
                 caption = None
-        for index, (image, path) in enumerate(resolved):
-            item_caption = caption if index == 0 else None
+        for item_index, (image, path) in enumerate(resolved):
+            item_caption = caption if item_index == 0 else None
+            send_payload = dict(payload)
+            if item_caption is not None:
+                send_payload["caption"] = item_caption
             if image.sub_type == "animation" or _is_gif(path):
-                send_payload = dict(payload)
-                if item_caption is not None:
-                    send_payload["caption"] = item_caption
-                await client.send_animation(animation=path, **cast(Any, send_payload))
+                result = await client.send_animation(
+                    animation=path, **cast(Any, send_payload)
+                )
             else:
-                send_payload = dict(payload)
-                if item_caption is not None:
-                    send_payload["caption"] = item_caption
-                await client.send_photo(photo=path, **cast(Any, send_payload))
+                result = await client.send_photo(photo=path, **cast(Any, send_payload))
+            if (message_id := getattr(result, "message_id", None)) is not None:
+                message_ids.append(str(message_id))
+        return message_ids
 
     async def send(self, message: MessageChain):
-        await self.send_with_client(
+        result = await self.send_with_client(
             self._client,
             message,
             self.route_identity.target_id,
+            platform_id=self.get_platform_id(),
         )
-        return await super().send(message)
+        # Preserve AstrMessageEvent's metrics and outbound-state bookkeeping
+        # while returning the platform's concrete message IDs.
+        await super().send(message)
+        return result
 
     async def get_group(
         self, group_id: str | None = None, **kwargs: Any

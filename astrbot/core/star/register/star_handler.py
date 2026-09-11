@@ -23,6 +23,7 @@ from ..filter.platform_adapter_type import (
     PlatformAdapterTypeFilter,
 )
 from ..filter.regex import RegexFilter
+from ..filter.telegram_callback import TelegramCallbackFilter
 from ..star_handler import EventType, HandlerDeclaration
 
 _HANDLER_DECLARATION_ATTR = "__astrbot_handler_declaration__"
@@ -308,6 +309,21 @@ def register_regex(regex: str | re.Pattern, **kwargs):
             **kwargs,
         )
         handler_md.event_filters.append(RegexFilter(regex))
+        return awaitable
+
+    return decorator
+
+
+def register_telegram_callback(value: str | None = None, **kwargs):
+    """Register a handler for a Telegram inline-button callback value."""
+
+    def decorator(awaitable):
+        handler_md = get_handler_declaration(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
+        handler_md.event_filters.append(TelegramCallbackFilter(value))
         return awaitable
 
     return decorator

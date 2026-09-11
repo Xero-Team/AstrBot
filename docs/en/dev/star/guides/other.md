@@ -28,6 +28,26 @@ Plugins no longer expose a `Platform` instance or `platform_manager`. Prefer the
 
 Use `self.context.messages.create_event(...)` only when you truly need to construct a new inbound platform event.
 
+## Telegram interactions
+
+Use the event-bound Telegram facade for inline keyboards and normalized
+callbacks. It never exposes a python-telegram-bot client:
+
+```python
+client = self.context.telegram.for_event(event)
+if client is not None:
+    receipt = await client.messages.send_interactive(
+        text="Continue?",
+        buttons=[[{"text": "Yes", "value": "confirm"}]],
+    )
+```
+
+Register callback handlers with `@filter.telegram_callback("confirm")` and read
+the immutable `TelegramCallbackEvent` from
+`self.context.telegram.event(event)`. Callbacks are one-shot, expire
+automatically, and are checked against their originating bot, chat, message,
+and optional actor policy.
+
 ## Call QQ protocol APIs
 
 Do not depend on `event.bot`, `event.client`, or a platform SDK client from plugin code.

@@ -13,18 +13,51 @@
 
 主动消息推送：支持。
 
+## 交互按钮
+
+插件可以通过 `self.context.telegram` 发送 Telegram 内联键盘。每个按钮只携带
+简短的业务值；AstrBot 会隐藏传输 token，并保证回调在有限 TTL 内只能成功使用
+一次。回调绑定到原始机器人、目标聊天/主题和消息，也可以限制用户 ID 或
+Telegram 角色。无效、过期、重放或越权的回调会被安全应答，不会进入 pipeline。
+成功发送会返回包含 `message_ids` 的投递回执。
+
+```python
+from astrbot.api.event import AstrMessageEvent, filter
+
+
+@filter.telegram_callback("confirm")
+async def confirm(self, event: AstrMessageEvent):
+    callback = self.context.telegram.event(event)
+    if callback is not None:
+        self.log.info("confirmed by %s", callback.user_id)
+
+
+async def ask(self, event: AstrMessageEvent):
+    client = self.context.telegram.for_event(event)
+    if client is not None:
+        await client.messages.send_interactive(
+            text="继续吗？",
+            buttons=[[{"text": "是", "value": "confirm"}]],
+        )
+```
+
+发送事件的发起者默认是允许操作的用户。如需其他策略，请传入
+`allowed_user_ids` 或 `allowed_roles`。按钮值和文字均受 Telegram 的 64 字节
+交互限制。
+
 ## 更新接入范围
 
-每次启动或重建轮询客户端时，AstrBot 都显式订阅 `message`、`channel_post` 和 `business_message`，不继承 Telegram 服务端残留的订阅选择。
+每次启动或重建轮询客户端时，AstrBot 都显式订阅 `message`、`channel_post`、`business_message` 和 `callback_query`，不继承 Telegram 服务端残留的订阅选择。
 
 | Telegram Update 字段                                               | 处理方式                                                                                                                                     |
 | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `message`                                                          | 接入私聊、群组及主题消息，复用上表的内容类型和相册处理。                                                                                     |
 | `channel_post`                                                     | 作为群组消息接入，保留频道及主题路由。以 `sender_chat` 作为发送者，避免把匿名发送的兼容用户当成真实用户。是否触发 LLM 仍由群聊访问规则决定。 |
 | `business_message`                                                 | 接入带有 `business_connection_id` 的客户入站私聊；忽略账户所有者发出的消息、`sender_business_bot` 标记的机器人外发消息及不完整的路由。       |
+| `callback_query`                                                   | 校验 AstrBot 的一次性交互 token，及时应答回调，并将经过身份认证的规范化回调事件交给匹配的插件处理器。                                        |
 | `edited_message`、`edited_channel_post`、`edited_business_message` | 不订阅、不触发新消息事件，也不修改已保存的上下文。需要重新执行时请发送新消息。                                                               |
 | `guest_message`                                                    | 不接入。Guest Bot 消息需要专用的 `answerGuestQuery` / `InlineQueryResult` 回复协议，不能通过普通聊天发送接口回复。                           |
-| 其他更新                                                           | 不订阅、不转换为聊天消息，包括按钮回调、成员变更、反应、投票、支付、Business 连接变更及删除通知、boost 和 managed bot 更新。                 |
+| 其他更新                                                           | 不订阅、不转换为聊天消息，包括成员变更、反应、投票、支付、Business 连接变更及删除通知、boost 和 managed bot 更新。                           |
 
 即使旧订阅中尚未确认的更新在切换后到达，处理器也只接收上述三类消息。每个适配器保留最近 4096 个已接纳的 Update ID，重复投递不会在缓存有效期内再次执行指令或 agent；缓存随轮询客户端重建保留，但不跨进程重启持久化。编辑更新始终忽略。
 

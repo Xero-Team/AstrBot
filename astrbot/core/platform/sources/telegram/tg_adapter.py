@@ -1,19 +1,29 @@
 import asyncio
 import math
 import re
+import secrets
+import time
 import uuid
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from typing import cast, override
+from dataclasses import dataclass, replace
+from typing import Any, ClassVar, cast, override
 
 import httpx
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from telegram import BotCommand, Message, MessageEntity, Update
+from telegram import (
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    MessageEntity,
+    Update,
+)
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
-from telegram.ext import ApplicationBuilder, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, ContextTypes, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 from telegram.request import HTTPXRequest
 
@@ -29,6 +39,16 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.contracts.onebot import OneBotActionValidationError
+from astrbot.core.platform.contracts.telegram import (
+    TELEGRAM_CALLBACK_DATA_LIMIT,
+    TELEGRAM_CALLBACK_PREFIX,
+    TELEGRAM_CAPABILITIES,
+    TELEGRAM_CAPABILITY_NAME,
+    TelegramButton,
+    TelegramCallbackEvent,
+    TelegramDeliveryReceipt,
+)
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -46,12 +66,32 @@ from .tg_event import (
     resolve_telegram_api_target,
 )
 
-TELEGRAM_ALLOWED_UPDATES = ("message", "channel_post", "business_message")
+TELEGRAM_ALLOWED_UPDATES = (
+    "message",
+    "channel_post",
+    "business_message",
+    "callback_query",
+)
+TELEGRAM_MESSAGE_UPDATES = TELEGRAM_ALLOWED_UPDATES[:3]
+
+
+@dataclass(frozen=True, slots=True)
+class _TelegramCallbackBinding:
+    value: str
+    target: str
+    chat_id: str
+    message_thread_id: str | None
+    business_connection_id: str | None
+    bot_id: str
+    message_id: int | None
+    allowed_user_ids: frozenset[str]
+    allowed_roles: frozenset[str]
+    expires_at: float
 
 
 def _telegram_message(update: Update) -> Message | None:
     """Select only updates with a supported AstrBot message/reply contract."""
-    for field in TELEGRAM_ALLOWED_UPDATES:
+    for field in TELEGRAM_MESSAGE_UPDATES:
         message = getattr(update, field, None)
         if message is not None:
             if field == "business_message" and (
@@ -84,12 +124,16 @@ def _telegram_member_status(raw_message: object) -> str | None:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    PLATFORM_CAPABILITIES: ClassVar = TELEGRAM_CAPABILITIES
     _TELEGRAM_COMMAND_LIMIT = 100
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
     _MEDIA_GROUP_MAX_ACTIVE = 128
     _MEDIA_GROUP_MAX_ITEMS = 10
     _MEDIA_GROUP_PROCESS_TIMEOUT = 60.0
     _UPDATE_REPLAY_CACHE_SIZE = 4096
+    _CALLBACK_BINDING_MAX_SIZE = 2048
+    _CALLBACK_DEFAULT_TTL = 300.0
+    _CALLBACK_MAX_TTL = 3600.0
 
     def __init__(
         self,
@@ -167,6 +211,9 @@ class TelegramPlatformAdapter(Platform):
         self._polling_failure_window = 60.0
         self._application_started = False
         self._seen_update_ids: OrderedDict[int, None] = OrderedDict()
+        self._callback_bindings: OrderedDict[str, _TelegramCallbackBinding] = (
+            OrderedDict()
+        )
         self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
 
@@ -239,6 +286,8 @@ class TelegramPlatformAdapter(Platform):
             .base_file_url(self.file_base_url)
             .build()
         )
+        callback_handler = CallbackQueryHandler(self.callback_query_handler)
+        self.application.add_handler(callback_handler)
         message_handler = TelegramMessageHandler(
             filters=(
                 filters.UpdateType.MESSAGE
@@ -324,13 +373,445 @@ class TelegramPlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         from_username = session.session_id
-        await TelegramPlatformEvent.send_with_client(
+        return await TelegramPlatformEvent.send_with_client(
             self.client,
             message_chain,
             from_username,
             getattr(self, "_delivery_limiter", None),
+            platform_id=self.meta().id,
         )
-        return await super().send_by_session(session, message_chain)
+
+    @override
+    async def invoke_capability(
+        self,
+        capability_name: str,
+        action_name: str,
+        **kwargs: Any,
+    ) -> object:
+        if capability_name != TELEGRAM_CAPABILITY_NAME:
+            raise OneBotActionValidationError(
+                "Unsupported Telegram capability",
+                action=action_name,
+            )
+        descriptor = TELEGRAM_CAPABILITIES[0]
+        action = descriptor.action(action_name)
+        if action is None:
+            raise OneBotActionValidationError(
+                "Telegram action is not registered",
+                action=action_name,
+            )
+        try:
+            validated_kwargs = action.input_model.validate(kwargs)
+        except OneBotActionValidationError as exc:
+            raise OneBotActionValidationError(exc.message, action=action_name) from exc
+        if action_name == "send_interactive":
+            return await self._send_interactive(**validated_kwargs)
+        return await self._answer_callback(**validated_kwargs)
+
+    @staticmethod
+    def _normalize_buttons(value: object) -> list[list[TelegramButton]]:
+        if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+            raise OneBotActionValidationError(
+                "Telegram buttons must be a sequence of rows",
+                action="send_interactive",
+            )
+        rows: list[list[TelegramButton]] = []
+        for row in value:
+            if not isinstance(row, Sequence) or isinstance(row, str | bytes):
+                raise OneBotActionValidationError(
+                    "Telegram button rows must be sequences",
+                    action="send_interactive",
+                )
+            normalized_row: list[TelegramButton] = []
+            for item in row:
+                if isinstance(item, TelegramButton):
+                    button = item
+                elif isinstance(item, Mapping):
+                    try:
+                        button = TelegramButton(item["text"], item["value"])
+                    except (KeyError, TypeError, ValueError) as exc:
+                        raise OneBotActionValidationError(
+                            "Telegram buttons require text and value",
+                            action="send_interactive",
+                        ) from exc
+                else:
+                    raise OneBotActionValidationError(
+                        "Telegram buttons require text and value",
+                        action="send_interactive",
+                    )
+                normalized_row.append(button)
+            if not normalized_row:
+                raise OneBotActionValidationError(
+                    "Telegram button rows must not be empty",
+                    action="send_interactive",
+                )
+            rows.append(normalized_row)
+        if not rows:
+            raise OneBotActionValidationError(
+                "Telegram buttons must not be empty",
+                action="send_interactive",
+            )
+        return rows
+
+    @classmethod
+    def _normalize_ttl(cls, value: object) -> float:
+        if value is None:
+            return cls._CALLBACK_DEFAULT_TTL
+        if isinstance(value, bool):
+            raise OneBotActionValidationError(
+                "Telegram callback TTL must be numeric",
+                action="send_interactive",
+            )
+        try:
+            ttl = float(str(value))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise OneBotActionValidationError(
+                "Telegram callback TTL must be numeric",
+                action="send_interactive",
+            ) from exc
+        if not 1 <= ttl <= cls._CALLBACK_MAX_TTL:
+            raise OneBotActionValidationError(
+                f"Telegram callback TTL must be between 1 and {cls._CALLBACK_MAX_TTL:.0f} seconds",
+                action="send_interactive",
+            )
+        return ttl
+
+    @staticmethod
+    def _normalize_allowed_users(value: object) -> frozenset[str]:
+        if value is None:
+            return frozenset()
+        if isinstance(value, str | bytes) or not isinstance(value, Sequence):
+            raise OneBotActionValidationError(
+                "Telegram allowed_user_ids must be a sequence",
+                action="send_interactive",
+            )
+        users: set[str] = set()
+        for item in value:
+            if isinstance(item, bool) or not isinstance(item, (str, int)):
+                raise OneBotActionValidationError(
+                    "Telegram allowed_user_ids must contain string or integer IDs",
+                    action="send_interactive",
+                )
+            normalized = str(item).strip()
+            if not normalized:
+                raise OneBotActionValidationError(
+                    "Telegram allowed_user_ids must contain non-empty IDs",
+                    action="send_interactive",
+                )
+            users.add(normalized)
+        return frozenset(users)
+
+    @staticmethod
+    def _normalize_allowed_roles(value: object) -> frozenset[str]:
+        if value is None:
+            return frozenset()
+        if isinstance(value, str | bytes) or not isinstance(value, Sequence):
+            raise OneBotActionValidationError(
+                "Telegram allowed_roles must be a sequence",
+                action="send_interactive",
+            )
+        roles: set[str] = set()
+        for item in value:
+            if not isinstance(item, str):
+                raise OneBotActionValidationError(
+                    "Telegram allowed_roles must contain text roles",
+                    action="send_interactive",
+                )
+            normalized = item.strip().lower()
+            if not normalized or normalized not in {
+                "creator",
+                "administrator",
+                "member",
+            }:
+                raise OneBotActionValidationError(
+                    "Telegram allowed_roles contains an unsupported role",
+                    action="send_interactive",
+                )
+            roles.add(normalized)
+        return frozenset(roles)
+
+    def _prune_callback_bindings(self) -> None:
+        now = time.monotonic()
+        expired = [
+            token
+            for token, binding in self._callback_bindings.items()
+            if binding.expires_at <= now
+        ]
+        for token in expired:
+            self._callback_bindings.pop(token, None)
+
+    def _new_callback_token(self) -> str:
+        self._prune_callback_bindings()
+        while True:
+            token = TELEGRAM_CALLBACK_PREFIX + secrets.token_urlsafe(24)
+            if token not in self._callback_bindings:
+                return token
+
+    async def _send_interactive(
+        self,
+        *,
+        target: str,
+        text: str,
+        buttons: object,
+        allowed_user_ids: object = None,
+        allowed_roles: object = None,
+        ttl_seconds: object = None,
+    ) -> TelegramDeliveryReceipt:
+        rows = self._normalize_buttons(buttons)
+        users = self._normalize_allowed_users(allowed_user_ids)
+        roles = self._normalize_allowed_roles(allowed_roles)
+        ttl = self._normalize_ttl(ttl_seconds)
+        route_target = str(target)
+        try:
+            chat_id, message_thread_id, business_connection_id = (
+                resolve_telegram_api_target(route_target)
+            )
+        except (TypeError, ValueError) as exc:
+            raise OneBotActionValidationError(
+                "Telegram target is invalid",
+                action="send_interactive",
+            ) from exc
+        api_chat_id: str | int = (
+            int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+        )
+        button_count = sum(len(row) for row in rows)
+        if button_count > self._CALLBACK_BINDING_MAX_SIZE:
+            raise OneBotActionValidationError(
+                "Telegram interactive message has too many buttons",
+                action="send_interactive",
+            )
+        tokens: list[str] = []
+        now = time.monotonic()
+        keyboard: list[list[InlineKeyboardButton]] = []
+        for row in rows:
+            keyboard_row: list[InlineKeyboardButton] = []
+            for button in row:
+                token = self._new_callback_token()
+                if len(token.encode("utf-8")) > TELEGRAM_CALLBACK_DATA_LIMIT:
+                    raise OneBotActionValidationError(
+                        "Telegram callback token exceeds the Bot API limit",
+                        action="send_interactive",
+                    )
+                self._callback_bindings[token] = _TelegramCallbackBinding(
+                    value=button.value,
+                    target=route_target,
+                    chat_id=chat_id,
+                    message_thread_id=message_thread_id,
+                    business_connection_id=business_connection_id,
+                    bot_id=str(self.client.id),
+                    message_id=None,
+                    allowed_user_ids=users,
+                    allowed_roles=roles,
+                    expires_at=now + ttl,
+                )
+                tokens.append(token)
+                keyboard_row.append(
+                    InlineKeyboardButton(text=button.text, callback_data=token)
+                )
+            keyboard.append(keyboard_row)
+        while len(self._callback_bindings) > self._CALLBACK_BINDING_MAX_SIZE:
+            self._callback_bindings.popitem(last=False)
+
+        payload: dict[str, Any] = {
+            "chat_id": api_chat_id,
+            "text": text,
+            "reply_markup": InlineKeyboardMarkup(keyboard),
+        }
+        if message_thread_id is not None:
+            payload["message_thread_id"] = message_thread_id
+        if business_connection_id:
+            payload["business_connection_id"] = business_connection_id
+        try:
+            result = await self.client.send_message(**payload)
+        except asyncio.CancelledError:
+            for token in tokens:
+                self._callback_bindings.pop(token, None)
+            raise
+        except Exception:
+            for token in tokens:
+                self._callback_bindings.pop(token, None)
+            logger.warning("[Telegram] Interactive message submission failed")
+            return TelegramDeliveryReceipt(
+                status="failed",
+                platform_id=self.meta().id,
+                target=route_target,
+            )
+        raw_message_id = getattr(result, "message_id", None)
+        if raw_message_id is None:
+            for token in tokens:
+                self._callback_bindings.pop(token, None)
+            logger.warning("[Telegram] Interactive send returned no message ID")
+            return TelegramDeliveryReceipt(
+                status="failed",
+                platform_id=self.meta().id,
+                target=route_target,
+            )
+        try:
+            message_id = int(raw_message_id)
+        except TypeError, ValueError, OverflowError:
+            for token in tokens:
+                self._callback_bindings.pop(token, None)
+            logger.warning("[Telegram] Interactive send returned an invalid message ID")
+            return TelegramDeliveryReceipt(
+                status="failed",
+                platform_id=self.meta().id,
+                target=route_target,
+            )
+        for token in tokens:
+            binding = self._callback_bindings.get(token)
+            if binding is not None:
+                self._callback_bindings[token] = replace(
+                    binding,
+                    message_id=int(message_id),
+                )
+        return TelegramDeliveryReceipt(
+            status="accepted",
+            platform_id=self.meta().id,
+            target=route_target,
+            message_ids=(str(message_id),),
+        )
+
+    async def _answer_callback(
+        self,
+        *,
+        callback_id: str,
+        text: str | None = None,
+    ) -> bool:
+        payload: dict[str, Any] = {"callback_query_id": callback_id}
+        if text:
+            payload["text"] = text
+        try:
+            await self.client.answer_callback_query(**payload)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return False
+        return True
+
+    async def _ack_callback(self, query: object, *, text: str | None = None) -> None:
+        callback_id = getattr(query, "id", None)
+        if callback_id is None:
+            return
+        await self._answer_callback(callback_id=str(callback_id), text=text)
+
+    async def callback_query_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        query = getattr(update, "callback_query", None)
+        if query is None:
+            return
+        if update.update_id in self._seen_update_ids:
+            await self._ack_callback(query, text="This action is no longer available.")
+            return
+        self._seen_update_ids[update.update_id] = None
+        if len(self._seen_update_ids) > self._UPDATE_REPLAY_CACHE_SIZE:
+            self._seen_update_ids.popitem(last=False)
+
+        data = getattr(query, "data", None)
+        token = str(data) if isinstance(data, str) else ""
+        self._prune_callback_bindings()
+        binding = self._callback_bindings.pop(token, None)
+        if binding is None or not token.startswith(TELEGRAM_CALLBACK_PREFIX):
+            await self._ack_callback(query, text="This action is no longer available.")
+            return
+        # Acknowledge before role lookup or event processing to stop Telegram's
+        # client-side spinner even when downstream work is slow.
+        await self._ack_callback(query)
+
+        message = getattr(query, "message", None)
+        actor = getattr(query, "from_user", None)
+        chat = getattr(message, "chat", None)
+        actor_id = str(getattr(actor, "id", ""))
+        bot_id = str(getattr(context.bot, "id", self.client.id))
+        message_id = getattr(message, "message_id", None)
+        if (
+            binding.bot_id != bot_id
+            or message is None
+            or chat is None
+            or actor is None
+            or message_id is None
+            or (binding.allowed_user_ids and actor_id not in binding.allowed_user_ids)
+        ):
+            return
+
+        raw_thread_id = (
+            getattr(message, "message_thread_id", None)
+            if getattr(message, "is_topic_message", False) is True
+            else None
+        )
+        callback_target = format_telegram_target(
+            chat.id,
+            raw_thread_id,
+            getattr(message, "business_connection_id", None),
+        )
+        if binding.target != callback_target or binding.message_id != message_id:
+            return
+
+        role = "member"
+        if binding.allowed_roles:
+            if getattr(chat, "type", None) == ChatType.PRIVATE:
+                role = "member"
+            else:
+                try:
+                    member = await self.client.get_chat_member(
+                        chat_id=chat.id,
+                        user_id=getattr(actor, "id"),
+                    )
+                    role = str(
+                        getattr(getattr(member, "status", None), "value", "member")
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    return
+            if role not in binding.allowed_roles:
+                return
+
+        abm = AstrBotMessage()
+        is_private = getattr(chat, "type", None) == ChatType.PRIVATE
+        abm.type = (
+            MessageType.FRIEND_MESSAGE if is_private else MessageType.GROUP_MESSAGE
+        )
+        abm.session_id = callback_target
+        abm.message_id = str(message_id)
+        abm.self_id = bot_id
+        abm.sender = MessageMember(
+            actor_id,
+            getattr(actor, "username", None) or getattr(actor, "full_name", None),
+        )
+        abm.message = []
+        abm.message_str = ""
+        if not is_private:
+            group_id = str(chat.id)
+            if raw_thread_id and not (
+                getattr(chat, "is_forum", False) is True and raw_thread_id == 1
+            ):
+                group_id += f"#{raw_thread_id}"
+            abm.group = Group(
+                group_id=group_id, group_name=getattr(chat, "title", None)
+            )
+        abm.raw_message = update
+        event = self.create_event(abm)
+        callback = TelegramCallbackEvent(
+            callback_id=str(getattr(query, "id", "")),
+            data=binding.value,
+            user_id=actor_id,
+            bot_id=bot_id,
+            chat_id=str(chat.id),
+            message_id=str(message_id),
+            session_id=callback_target,
+            message_thread_id=(
+                str(raw_thread_id) if raw_thread_id is not None else None
+            ),
+            business_connection_id=getattr(message, "business_connection_id", None),
+            actor_role=role,
+        )
+        event.set_extra("telegram_callback", callback)
+        event.set_extra("explicit_surface", True)
+        event.set_platform_member_role(role, source="callback")
+        self.commit_event(event)
 
     @override
     def meta(self) -> PlatformMetadata:

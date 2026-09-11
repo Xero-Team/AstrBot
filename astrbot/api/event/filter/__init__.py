@@ -9,6 +9,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
 )
+from astrbot.core.star.filter.telegram_callback import TelegramCallbackFilter
 from astrbot.core.star.register import register_after_message_sent as after_message_sent
 from astrbot.core.star.register import register_command as command
 from astrbot.core.star.register import register_command_group as command_group
@@ -42,6 +43,7 @@ from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
 )
 from astrbot.core.star.register import register_regex as regex
+from astrbot.core.star.register import register_telegram_callback as telegram_callback
 
 __all__ = [
     "CustomFilter",
@@ -73,6 +75,8 @@ __all__ = [
     "permission",
     "platform_adapter_type",
     "regex",
+    "telegram_callback",
+    "TelegramCallbackFilter",
     "on_using_llm_tool",
     "on_llm_tool_respond",
 ]

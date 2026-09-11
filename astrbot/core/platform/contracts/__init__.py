@@ -31,6 +31,19 @@ from .onebot import (
     PlatformCapabilityDescriptor,
     get_capability_descriptor,
 )
+from .telegram import (
+    TELEGRAM_BUTTON_TEXT_LIMIT,
+    TELEGRAM_CALLBACK_DATA_LIMIT,
+    TELEGRAM_CALLBACK_PREFIX,
+    TELEGRAM_CAPABILITIES,
+    TELEGRAM_CAPABILITY_NAME,
+    TELEGRAM_CAPABILITY_VERSION,
+    TELEGRAM_INTERACTION_CAPABILITY,
+    TELEGRAM_PROTOCOL,
+    TelegramButton,
+    TelegramCallbackEvent,
+    TelegramDeliveryReceipt,
+)
 
 __all__ = [
     "JsonValue",
@@ -62,4 +75,15 @@ __all__ = [
     "PlatformActionDescriptor",
     "PlatformCapabilityDescriptor",
     "get_capability_descriptor",
+    "TELEGRAM_CALLBACK_DATA_LIMIT",
+    "TELEGRAM_CALLBACK_PREFIX",
+    "TELEGRAM_BUTTON_TEXT_LIMIT",
+    "TELEGRAM_CAPABILITIES",
+    "TELEGRAM_CAPABILITY_NAME",
+    "TELEGRAM_CAPABILITY_VERSION",
+    "TELEGRAM_INTERACTION_CAPABILITY",
+    "TELEGRAM_PROTOCOL",
+    "TelegramButton",
+    "TelegramCallbackEvent",
+    "TelegramDeliveryReceipt",
 ]

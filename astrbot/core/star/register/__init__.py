@@ -23,6 +23,7 @@ from .star_handler import (
     register_permission,
     register_platform_adapter_type,
     register_regex,
+    register_telegram_callback,
 )
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "register_permission",
     "register_platform_adapter_type",
     "register_regex",
+    "register_telegram_callback",
     "register_on_using_llm_tool",
     "register_on_llm_tool_respond",
 ]

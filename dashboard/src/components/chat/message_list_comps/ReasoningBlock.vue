@@ -1,33 +1,40 @@
 <template>
   <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
-    <button
-      class="reasoning-header"
-      :class="{ 'reasoning-header--trigger': openInSidebar }"
-      type="button"
-      @click="handlePrimaryAction"
-    >
-      <span class="reasoning-title">
-        <ThinkingIndicator v-if="isStreaming && !hasNonReasoningContent">
+    <div class="reasoning-header-row">
+      <button
+        class="reasoning-header"
+        type="button"
+        :disabled="sidebarActive"
+        :aria-expanded="showInlineContent"
+        :aria-label="
+          sidebarActive ? tm('reasoning.sidebarActive') : reasoningTitle
+        "
+        :title="sidebarActive ? tm('reasoning.sidebarActive') : undefined"
+        @click="toggleExpanded"
+      >
+        <span class="reasoning-title">
           {{ reasoningTitle }}
-        </ThinkingIndicator>
-        <template v-else>{{ reasoningTitle }}</template>
-      </span>
-      <ChevronRight
-        :size="20"
-        :stroke-width="1.75"
-        aria-hidden="true"
-        class="reasoning-icon"
-        :class="{
-          'rotate-90': !openInSidebar && isExpanded,
-          'reasoning-icon--thinking': isStreaming && !hasNonReasoningContent,
-        }"
+        </span>
+        <v-icon
+          size="22"
+          class="reasoning-icon"
+          :class="{ 'rotate-90': showInlineContent }"
+        >
+          mdi-chevron-right
+        </v-icon>
+      </button>
+      <v-btn
+        v-if="showSidebarAction"
+        class="reasoning-sidebar-btn"
+        icon="mdi-open-in-new"
+        size="x-small"
+        variant="text"
+        :aria-label="tm('reasoning.openInSidebar')"
+        @click.stop="openSidebar"
       />
-    </button>
+    </div>
 
-    <div
-      v-if="!openInSidebar && isExpanded"
-      class="reasoning-content animate-fade-in"
-    >
+    <div v-if="showInlineContent" class="reasoning-content animate-fade-in">
       <ReasoningTimeline
         :parts="renderParts"
         :reasoning="reasoning"
@@ -49,16 +56,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { ChevronRight } from "@lucide/vue";
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
-  type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
-import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+} from '@/composables/useMessages';
+import type { MessagePart } from '@/domain/chat';
+import { useModuleI18n } from '@/i18n/composables';
+import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 
 const props = defineProps<{
   parts?: MessagePart[];
@@ -67,16 +72,17 @@ const props = defineProps<{
   initialExpanded?: boolean;
   isStreaming?: boolean;
   hasNonReasoningContent?: boolean;
-  openInSidebar?: boolean;
+  showSidebarAction?: boolean;
+  sidebarActive?: boolean;
 }>();
 
 const emit = defineEmits<{
   open: [];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const isExpanded = ref(Boolean(props.initialExpanded));
-const previewText = ref("");
+const previewText = ref('');
 const previewKey = ref(0);
 let previewTimer: ReturnType<typeof setInterval> | null = null;
 let previewStartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -84,15 +90,19 @@ let previewStartTimer: ReturnType<typeof setTimeout> | null = null;
 const renderParts = computed<MessagePart[]>(() => {
   if (props.parts?.length) return props.parts;
   if (props.reasoning) {
-    return [{ type: "think", think: props.reasoning }];
+    return [{ type: 'think', think: props.reasoning }];
   }
   return [];
 });
 
-const openInSidebar = computed(() => Boolean(props.openInSidebar));
+const showSidebarAction = computed(() => Boolean(props.showSidebarAction));
+const sidebarActive = computed(() => Boolean(props.sidebarActive));
+const showInlineContent = computed(
+  () => isExpanded.value && !sidebarActive.value,
+);
 
 const activityCounts = computed(() =>
-  reasoningActivityCounts(renderParts.value, props.reasoning || ""),
+  reasoningActivityCounts(renderParts.value, props.reasoning || ''),
 );
 
 const reasoningTitle = computed(() =>
@@ -101,31 +111,32 @@ const reasoningTitle = computed(() =>
 
 const thinkingText = computed(() =>
   renderParts.value
-    .filter((part) => part.type === "think")
-    .map((part) => String(part.think || ""))
-    .join(""),
+    .filter((part) => part.type === 'think')
+    .map((part) => String(part.think || ''))
+    .join(''),
 );
 
 const showStreamingPreview = computed(
   () =>
     props.isStreaming &&
-    (openInSidebar.value || !isExpanded.value) &&
+    !showInlineContent.value &&
     !props.hasNonReasoningContent &&
     previewText.value,
 );
 
 const previewTransitionName = computed(() =>
   props.hasNonReasoningContent
-    ? "reasoning-preview-collapse"
-    : "reasoning-preview-fade",
+    ? 'reasoning-preview-collapse'
+    : 'reasoning-preview-fade',
 );
 
-function handlePrimaryAction() {
-  if (openInSidebar.value) {
-    emit("open");
-    return;
-  }
+function toggleExpanded() {
   isExpanded.value = !isExpanded.value;
+}
+
+function openSidebar() {
+  isExpanded.value = false;
+  emit('open');
 }
 
 function latestReasoningPreview() {
@@ -133,7 +144,7 @@ function latestReasoningPreview() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  return lines.slice(-3).join("\n");
+  return lines.slice(-3).join('\n');
 }
 
 function updatePreviewLine() {
@@ -165,7 +176,7 @@ function startPreviewTimer() {
 function syncPreviewTimer() {
   if (
     props.isStreaming &&
-    (openInSidebar.value || !isExpanded.value) &&
+    !showInlineContent.value &&
     !props.hasNonReasoningContent
   ) {
     if (!previewTimer && !previewStartTimer) {
@@ -173,7 +184,7 @@ function syncPreviewTimer() {
         previewStartTimer = null;
         if (
           props.isStreaming &&
-          (openInSidebar.value || !isExpanded.value) &&
+          !showInlineContent.value &&
           !props.hasNonReasoningContent
         ) {
           startPreviewTimer();
@@ -186,9 +197,15 @@ function syncPreviewTimer() {
   stopPreviewStartTimer();
   stopPreviewTimer();
   if (!props.isStreaming) {
-    previewText.value = "";
+    previewText.value = '';
   }
 }
+
+watch(sidebarActive, (active) => {
+  if (active) {
+    isExpanded.value = false;
+  }
+});
 
 watch(
   () => [
@@ -196,7 +213,7 @@ watch(
     isExpanded.value,
     props.hasNonReasoningContent,
     thinkingText.value,
-    openInSidebar.value,
+    sidebarActive.value,
   ],
   syncPreviewTimer,
   {
@@ -219,8 +236,15 @@ onBeforeUnmount(() => {
   line-height: inherit;
 }
 
+.reasoning-header-row {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+}
+
 .reasoning-header {
-  width: fit-content;
+  min-width: 0;
   max-width: 100%;
   border: 0;
   padding: 0;
@@ -228,24 +252,24 @@ onBeforeUnmount(() => {
   color: inherit;
   cursor: pointer;
   user-select: none;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font: inherit;
-  font-size: 1rem;
-  line-height: 1.7;
   text-align: left;
-}
-
-@media (min-width: 761px) {
-  .reasoning-header {
-    font-size: 0.9375rem;
-    line-height: 1.75;
-  }
 }
 
 .reasoning-header:hover {
   color: rgba(var(--v-theme-on-surface), 0.88);
+}
+
+.reasoning-header:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.reasoning-header:disabled:hover {
+  color: inherit;
 }
 
 .reasoning-icon {
@@ -255,27 +279,21 @@ onBeforeUnmount(() => {
   align-self: center;
 }
 
-.reasoning-icon--thinking {
-  color: rgba(var(--v-theme-on-surface), 0.45);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reasoning-icon--thinking {
-    color: rgba(var(--v-theme-on-surface), 0.6);
-  }
-}
-
-@media (forced-colors: active) {
-  .reasoning-icon--thinking {
-    color: CanvasText;
-  }
-}
-
 .reasoning-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reasoning-sidebar-btn {
+  flex: 0 0 auto;
+  color: inherit;
+  opacity: 0.72;
+}
+
+.reasoning-sidebar-btn:hover {
+  opacity: 1;
 }
 
 .reasoning-content {

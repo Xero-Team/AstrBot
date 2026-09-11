@@ -1,8 +1,8 @@
 <template>
-  <transition name="chat-panel">
-    <aside v-if="modelValue && thread" class="thread-panel chat-side-panel">
+  <transition name="slide-left">
+    <aside v-if="modelValue && thread" class="thread-panel">
       <div class="thread-panel-header">
-        <div class="thread-panel-title">{{ tm("thread.title") }}</div>
+        <div class="thread-panel-title">{{ tm('thread.title') }}</div>
         <div class="thread-panel-actions">
           <v-btn
             icon="mdi-delete-outline"
@@ -14,7 +14,13 @@
             :disabled="sending || deleting"
             @click="emit('delete', thread)"
           />
-          <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
+          <v-btn
+            icon="mdi-close"
+            size="small"
+            variant="text"
+            :aria-label="tm('commandSuggestion.close')"
+            @click="close"
+          />
         </div>
       </div>
 
@@ -27,6 +33,7 @@
           :messages="messages"
           :is-dark="isDark"
           :is-streaming="sending"
+          :is-touch-device="isTouchDevice"
           variant="thread"
         />
       </div>
@@ -47,7 +54,7 @@
           :disabled="!draft.trim()"
           type="submit"
         >
-          {{ tm("input.send") }}
+          {{ tm('input.send') }}
         </v-btn>
       </form>
     </aside>
@@ -55,44 +62,55 @@
 </template>
 
 <script setup lang="ts">
-import "@/components/chat/chatPanelTransition.css";
-import { nextTick, ref, watch } from "vue";
-import { chatApi } from "@/api/v1";
-import { fetchWithAuth } from "@/api/http";
+import { computed, nextTick, ref, watch } from 'vue';
+import { chatApi } from '@/api/v1';
+import { fetchWithAuth } from '@/api/http';
 import {
+  appendCompletePlainSuffix,
   appendPlain,
   appendReasoningPart,
-  buildChatRequestFlags,
   extractReasoningText,
   finishToolCall,
-  hasPlainText,
   markMessageStarted,
   normalizeMessageParts,
   parseJsonSafe,
   payloadText,
   upsertToolCall,
-  type ChatRecord,
-  type MessagePart,
-  type ChatThread,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+} from '@/composables/useMessages';
+import type {
+  ChatRecord,
+  ChatThread,
+  HistoryRecord,
+  MessagePart,
+  StreamPayload,
+} from '@/domain/chat';
+import { useModuleI18n } from '@/i18n/composables';
+import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 
 const props = defineProps<{
   modelValue: boolean;
   thread: ChatThread | null;
   isDark: boolean;
+  isTouchDevice?: boolean;
   deleting?: boolean;
+  webChatStepUpTokens?: Record<string, string> | null;
 }>();
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
+  'update:modelValue': [value: boolean];
   delete: [thread: ChatThread];
+  'consume-step-up': [];
 }>();
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
+const isTouchDevice = computed(
+  () =>
+    props.isTouchDevice ??
+    (typeof window !== 'undefined' &&
+      window.matchMedia('(pointer: coarse)').matches),
+);
 const messages = ref<ChatRecord[]>([]);
-const draft = ref("");
+const draft = ref('');
 const sending = ref(false);
 const messagesEl = ref<HTMLElement | null>(null);
 
@@ -100,7 +118,7 @@ watch(
   () => props.thread?.thread_id,
   (threadId) => {
     if (threadId) {
-      loadThread(threadId);
+      void loadThread(threadId);
     } else {
       messages.value = [];
     }
@@ -109,17 +127,19 @@ watch(
 );
 
 function close() {
-  emit("update:modelValue", false);
+  emit('update:modelValue', false);
 }
 
 async function loadThread(threadId: string) {
   try {
     const response = await chatApi.getThread(threadId);
     const history = response.data?.data?.history || [];
-    messages.value = history.map(normalizeRecord);
+    messages.value = history.map((record) =>
+      normalizeRecord(record as HistoryRecord),
+    );
     scrollToBottom();
   } catch (error) {
-    console.error("Failed to load thread:", error);
+    console.error('Failed to load thread:', error);
     messages.value = [];
   }
 }
@@ -127,23 +147,23 @@ async function loadThread(threadId: string) {
 async function send() {
   if (!props.thread || sending.value || !draft.value.trim()) return;
   const text = draft.value.trim();
-  draft.value = "";
+  draft.value = '';
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const userRecord: ChatRecord = {
     id: `local-thread-user-${messageId}`,
     created_at: new Date().toISOString(),
     content: {
-      type: "user",
-      message: [{ type: "plain", text }],
+      type: 'user',
+      message: [{ type: 'plain', text }],
     },
   };
   const botRecord: ChatRecord = {
     id: `local-thread-bot-${messageId}`,
     created_at: new Date().toISOString(),
     content: {
-      type: "bot",
+      type: 'bot',
       message: [],
-      reasoning: "",
+      reasoning: '',
       isLoading: true,
     },
   };
@@ -154,17 +174,19 @@ async function send() {
 
   const abort = new AbortController();
   sending.value = true;
+  const stepUpTokens = props.webChatStepUpTokens || undefined;
   try {
     const response = await fetchWithAuth(
       chatApi.sendThreadMessageUrl(props.thread.thread_id),
       {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: [{ type: "plain", text }],
-          flags: buildChatRequestFlags(),
+          message: [{ type: 'plain', text }],
+          enable_streaming: true,
+          _webchat_step_up_tokens: stepUpTokens,
         }),
         signal: abort.signal,
       },
@@ -172,6 +194,7 @@ async function send() {
     if (!response.ok || !response.body) {
       throw new Error(`Thread request failed: ${response.status}`);
     }
+    emit('consume-step-up');
     await readSseStream(response.body, (payload) => {
       processPayload(threadBotRecord, threadUserRecord, payload);
       scrollToBottom();
@@ -181,28 +204,28 @@ async function send() {
       threadBotRecord,
       `\n\n${String((error as Error)?.message || error)}`,
     );
-    console.error("Failed to send thread message:", error);
+    console.error('Failed to send thread message:', error);
   } finally {
     sending.value = false;
   }
 }
 
-function normalizeRecord(record: any): ChatRecord {
+function normalizeRecord(record: HistoryRecord): ChatRecord {
   const content = record.content || {};
   const normalizedMessage = normalizeMessageParts(
     content.message || [],
-    content.reasoning || "",
+    content.reasoning || '',
   );
   return {
     ...record,
     content: {
-      type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
+      type: content.type || (record.sender_id === 'bot' ? 'bot' : 'user'),
       message: normalizedMessage,
       reasoning: extractReasoningText(
         normalizedMessage,
-        content.reasoning || "",
+        content.reasoning || '',
       ),
-      agentStats: content.agentStats || content.agent_stats,
+      agentStats: content.agentStats || content.agent_stats || null,
       refs: content.refs,
     },
   };
@@ -210,28 +233,28 @@ function normalizeRecord(record: any): ChatRecord {
 
 async function readSseStream(
   stream: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
+  onPayload: (payload: StreamPayload) => void,
 ) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  let buffer = '';
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() || "";
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
     for (const chunk of chunks) {
       const data = chunk
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
         .map((line) => line.slice(5).trimStart())
-        .join("\n");
+        .join('\n');
       if (!data) continue;
       try {
         onPayload(JSON.parse(data));
       } catch (error) {
-        console.error("Failed to parse thread SSE payload:", error, data);
+        console.error('Failed to parse thread SSE payload:', error, data);
       }
     }
   }
@@ -240,86 +263,98 @@ async function readSseStream(
 function processPayload(
   botRecord: ChatRecord,
   userRecord: ChatRecord,
-  payload: any,
+  payload: StreamPayload,
 ) {
   const normalized =
-    payload?.ct === "chat"
+    payload?.ct === 'chat'
       ? { ...payload, type: payload.type || payload.t }
       : payload;
   const type = normalized?.type || normalized?.t;
   const chainType = normalized?.chain_type;
-  const data = normalized?.data ?? "";
+  const data = normalized?.data ?? '';
 
-  if (type === "session_id" || type === "session_bound") return;
+  if (type === 'session_id' || type === 'session_bound') return;
 
-  if (type === "user_message_saved") {
-    userRecord.id = data?.id || userRecord.id;
-    userRecord.created_at = data?.created_at || userRecord.created_at;
+  if (type === 'user_message_saved') {
+    const messageData =
+      data && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null;
+    userRecord.id =
+      (messageData?.id as string | number | undefined) || userRecord.id;
+    userRecord.created_at =
+      (typeof messageData?.created_at === 'string'
+        ? messageData.created_at
+        : userRecord.created_at) || userRecord.created_at;
     userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+      (typeof messageData?.llm_checkpoint_id === 'string'
+        ? messageData.llm_checkpoint_id
+        : userRecord.llm_checkpoint_id) || userRecord.llm_checkpoint_id;
     return;
   }
 
-  if (type === "message_saved") {
+  if (type === 'message_saved') {
     markMessageStarted(botRecord);
-    botRecord.id = data?.id || botRecord.id;
-    botRecord.created_at = data?.created_at || botRecord.created_at;
+    const messageData =
+      data && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null;
+    botRecord.id =
+      (messageData?.id as string | number | undefined) || botRecord.id;
+    botRecord.created_at =
+      (typeof messageData?.created_at === 'string'
+        ? messageData.created_at
+        : botRecord.created_at) || botRecord.created_at;
     botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
-    if (data?.refs) {
-      botRecord.content.refs = data.refs;
+      (typeof messageData?.llm_checkpoint_id === 'string'
+        ? messageData.llm_checkpoint_id
+        : botRecord.llm_checkpoint_id) || botRecord.llm_checkpoint_id;
+    if (messageData?.refs && typeof messageData.refs === 'object') {
+      botRecord.content.refs =
+        messageData.refs as ChatRecord['content']['refs'];
     }
     return;
   }
 
-  if (type === "agent_stats" || chainType === "agent_stats") {
+  if (type === 'agent_stats' || chainType === 'agent_stats') {
     markMessageStarted(botRecord);
-    botRecord.content.agentStats = data;
+    botRecord.content.agentStats =
+      data && typeof data === 'object' ? { ...data } : { value: data };
     return;
   }
 
-  if (type === "error") {
+  if (type === 'error') {
     markMessageStarted(botRecord);
     appendPlain(botRecord, `\n\n${String(data)}`);
     return;
   }
 
-  if (type === "complete" || type === "break") {
+  if (type === 'complete' || type === 'break') {
     markMessageStarted(botRecord);
-    const finalText = payloadText(data);
-    const existingText = botRecord.content.message
-      .filter((part) => part.type === "plain")
-      .map((part) => part.text || "")
-      .join("");
-    const missingText = finalText.slice(existingText.length);
-    if (
-      type === "complete" &&
-      missingText &&
-      finalText.startsWith(existingText)
-    ) {
-      appendPlain(botRecord, missingText);
-    } else if (finalText && !hasPlainText(botRecord)) {
-      appendPlain(botRecord, finalText, false);
-    }
+    appendCompletePlainSuffix(
+      botRecord,
+      payloadText(data),
+      type === 'complete',
+    );
     return;
   }
 
-  if (type === "end") {
+  if (type === 'end') {
     markMessageStarted(botRecord);
     return;
   }
 
-  if (type === "plain") {
+  if (type === 'plain') {
     markMessageStarted(botRecord);
-    if (chainType === "reasoning") {
+    if (chainType === 'reasoning') {
       appendReasoningPart(botRecord, payloadText(data));
       return;
     }
-    if (chainType === "tool_call") {
+    if (chainType === 'tool_call') {
       upsertToolCall(botRecord, parseJsonSafe(data));
       return;
     }
-    if (chainType === "tool_call_result") {
+    if (chainType === 'tool_call_result') {
       finishToolCall(botRecord, parseJsonSafe(data));
       return;
     }
@@ -327,14 +362,17 @@ function processPayload(
     return;
   }
 
-  if (["image", "record", "file", "video"].includes(type)) {
+  if (
+    typeof type === 'string' &&
+    ['image', 'record', 'file', 'video'].includes(type)
+  ) {
     markMessageStarted(botRecord);
     const rawFilename = String(data)
-      .replace("[IMAGE]", "")
-      .replace("[RECORD]", "")
-      .replace("[FILE]", "")
-      .replace("[VIDEO]", "");
-    const separatorIndex = rawFilename.indexOf("|");
+      .replace('[IMAGE]', '')
+      .replace('[RECORD]', '')
+      .replace('[FILE]', '')
+      .replace('[VIDEO]', '');
+    const separatorIndex = rawFilename.indexOf('|');
     const storedFilename =
       separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
     const displayFilename =
@@ -346,12 +384,15 @@ function processPayload(
     if (storedFilename && storedFilename !== filename) {
       mediaPart.stored_filename = storedFilename;
     }
-    botRecord.content.message.push(mediaPart);
+    const content = botRecord.content.message;
+    if (filename) {
+      content.push(mediaPart);
+    }
   }
 }
 
 function scrollToBottom() {
-  nextTick(() => {
+  void nextTick(() => {
     if (messagesEl.value) {
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
     }
@@ -361,8 +402,7 @@ function scrollToBottom() {
 
 <style scoped>
 .thread-panel {
-  --chat-side-panel-width: 380px;
-  width: var(--chat-side-panel-width);
+  width: 380px;
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   border-left: 1px solid
@@ -372,6 +412,17 @@ function scrollToBottom() {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+}
+
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-left-enter-from,
+.slide-left-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 
 .thread-panel-header {

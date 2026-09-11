@@ -10,197 +10,293 @@
       :class="{ collapsed: isSidebarCollapsed }"
       :permanent="lgAndUp"
       :temporary="!lgAndUp"
-      :rail="lgAndUp && customizer.chatSidebarCollapsed"
+      :rail="lgAndUp && sidebarCollapsed"
       :width="280"
-      :rail-width="56"
+      :rail-width="68"
       location="left"
       floating
     >
       <div class="sidebar-top">
-        <div
-          class="chat-sidebar-brand"
-          :class="{ collapsed: isSidebarCollapsed }"
-        >
-          <div
-            v-if="!isSidebarCollapsed"
-            class="chat-sidebar-brand-title Outfit"
-          >
-            <ChatUILogo class="chat-sidebar-brand-logo" />
-            <span class="chat-sidebar-brand-copy">
-              <span class="chat-sidebar-brand-name">AstrBot</span>
-              <span class="chat-sidebar-brand-mode">ChatUI</span>
-            </span>
-          </div>
-          <button
-            v-if="isSidebarCollapsed"
-            class="chat-sidebar-brand-toggle chat-sidebar-rail-btn"
-            type="button"
-            aria-label="Toggle sidebar"
-            @click.stop="toggleChatSidebar"
-          >
-            <span class="chat-sidebar-rail-icon-stack">
-              <ChatUILogo
-                class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed"
-              />
-              <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
-            </span>
-          </button>
+        <div v-if="lgAndUp" class="brand-row">
           <v-btn
-            v-else
-            class="chat-sidebar-brand-toggle"
             icon
-            rounded="sm"
+            size="small"
             variant="text"
-            @click.stop="toggleChatSidebar"
+            class="sidebar-toggle"
+            @click="sidebarCollapsed = !sidebarCollapsed"
           >
-            <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
+            <v-icon
+              size="20"
+              class="sidebar-action-icon"
+              :class="{ 'chevron-collapsed': isSidebarCollapsed }"
+            >
+              mdi-chevron-left
+            </v-icon>
           </v-btn>
         </div>
 
-        <button
-          v-if="isSidebarCollapsed"
-          class="new-chat-btn sidebar-provider-btn icon-only chat-sidebar-rail-btn"
-          :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
-          type="button"
-          :title="tm('actions.providerConfig')"
-          @click="openProviderWorkspace"
-        >
-          <Box :size="18" class="sidebar-action-icon" />
-        </button>
         <v-btn
-          v-else
           class="new-chat-btn sidebar-provider-btn"
-          :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
+          :class="{
+            'icon-only': isSidebarCollapsed,
+            'sidebar-workspace-btn--active': isProviderWorkspace,
+          }"
           variant="text"
+          :icon="isSidebarCollapsed"
           @click="openProviderWorkspace"
         >
-          <Box :size="18" class="sidebar-action-icon mr-2" />
-          <span>{{ tm("actions.providerConfig") }}</span>
-        </v-btn>
-
-        <button
-          v-if="isSidebarCollapsed"
-          class="new-chat-btn icon-only chat-sidebar-rail-btn"
-          type="button"
-          :title="tm('actions.newChat')"
-          @click="startNewChat"
-        >
-          <SquarePen :size="18" class="sidebar-action-icon" />
-        </button>
-        <v-btn v-else class="new-chat-btn" variant="text" @click="startNewChat">
-          <SquarePen :size="18" class="sidebar-action-icon mr-2" />
-          <span>{{ tm("actions.newChat") }}</span>
-        </v-btn>
-      </div>
-
-      <div v-if="!isSidebarCollapsed" class="sidebar-content">
-        <ProjectList
-          :projects="projects"
-          :project-sessions="projectSessionsById"
-          :loading-project-ids="loadingProjectSessionIds"
-          :selected-project-id="selectedProjectId"
-          :active-session-id="currSessionId"
-          :is-session-running="isSessionRunning"
-          @create-project="openCreateProjectDialog"
-          @edit-project="openEditProjectDialog"
-          @delete-project="handleDeleteProject"
-          @toggle-project="handleProjectToggle"
-          @select-project="selectProject"
-          @select-session="selectProjectSession"
-          @edit-session-title="editProjectSessionTitle"
-          @delete-session="deleteProjectSession"
-        />
-
-        <section class="sidebar-section session-list">
-          <div class="sidebar-section-header">
-            <span>{{ tm("conversation.title") }}</span>
-          </div>
-          <div
-            v-for="session in sessions"
-            :key="session.session_id"
-            class="session-item"
-            :class="{
-              active:
-                !isProviderWorkspace && currSessionId === session.session_id,
-              running: isSessionRunning(session.session_id),
-            }"
-            role="button"
-            tabindex="0"
-            @click="selectSession(session.session_id)"
-            @keydown.enter="selectSession(session.session_id)"
-            @keydown.space.prevent="selectSession(session.session_id)"
+          <v-icon
+            size="20"
+            class="sidebar-action-icon"
+            :class="{ 'mr-2': !isSidebarCollapsed }"
+            >mdi-creation</v-icon
           >
-            <span class="session-title">{{ sessionTitle(session) }}</span>
-            <div class="session-actions" @click.stop>
-              <v-btn
-                icon
-                size="x-small"
-                variant="text"
-                class="session-action-btn"
-                :title="tm('conversation.editDisplayName')"
-                @click="editSidebarSessionTitle(session)"
-              >
-                <Pencil :size="15" />
-              </v-btn>
-              <v-btn
-                icon
-                size="x-small"
-                variant="text"
-                class="session-action-btn"
-                :title="tm('actions.deleteChat')"
-                @click="deleteSidebarSession(session)"
-              >
-                <Trash2 :size="15" />
-              </v-btn>
-            </div>
-            <v-progress-circular
-              v-if="isSessionRunning(session.session_id)"
-              class="session-progress"
-              indeterminate
-              size="16"
-              width="2"
-            />
-          </div>
-        </section>
-      </div>
+          <span v-if="!isSidebarCollapsed">{{
+            tm('actions.providerConfig')
+          }}</span>
+        </v-btn>
 
-      <div class="sidebar-footer">
         <v-btn
-          class="settings-btn"
+          class="new-chat-btn"
           :class="{ 'icon-only': isSidebarCollapsed }"
           variant="text"
           :icon="isSidebarCollapsed"
-          :aria-label="t('core.common.settings')"
-          @click="settingsOpen = true"
+          @click="startNewChat"
         >
-          <Settings
-            :size="20"
-            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-          />
-          <span v-if="!isSidebarCollapsed">{{
-            t("core.common.settings")
-          }}</span>
+          <v-icon
+            size="20"
+            class="sidebar-action-icon"
+            :class="{ 'mr-2': !isSidebarCollapsed }"
+            >mdi-square-edit-outline</v-icon
+          >
+          <span v-if="!isSidebarCollapsed">{{ tm('actions.newChat') }}</span>
         </v-btn>
+
+        <ProjectList
+          v-if="!isSidebarCollapsed"
+          :projects="projects"
+          :selected-project-id="selectedProjectId"
+          @create-project="openCreateProjectDialog"
+          @edit-project="openEditProjectDialog"
+          @delete-project="handleDeleteProject"
+          @select-project="selectProject"
+        />
+      </div>
+
+      <div v-if="!isSidebarCollapsed" class="session-list">
+        <div
+          v-for="session in sessions"
+          :key="session.session_id"
+          class="session-item"
+          :class="{
+            active:
+              !isProviderWorkspace && currSessionId === session.session_id,
+          }"
+          role="button"
+          tabindex="0"
+          @click="selectSession(session.session_id)"
+          @keydown.enter="selectSession(session.session_id)"
+          @keydown.space.prevent="selectSession(session.session_id)"
+        >
+          <span v-if="!isSidebarCollapsed" class="session-title">{{
+            sessionTitle(session)
+          }}</span>
+          <div class="session-actions" @click.stop>
+            <v-btn
+              icon="mdi-pencil-outline"
+              size="x-small"
+              variant="text"
+              class="session-action-btn"
+              :title="tm('conversation.editDisplayName')"
+              @click="editSidebarSessionTitle(session)"
+            />
+            <v-btn
+              icon="mdi-delete-outline"
+              size="x-small"
+              variant="text"
+              class="session-action-btn"
+              :title="tm('actions.deleteChat')"
+              @click="deleteSidebarSession(session)"
+            />
+          </div>
+          <v-progress-circular
+            v-if="isSessionRunning(session.session_id)"
+            class="session-progress"
+            indeterminate
+            size="16"
+            width="2"
+          />
+        </div>
+
+        <div
+          v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
+          class="empty-sessions"
+        >
+          {{ tm('conversation.noHistory') }}
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <StyledMenu
+          location="top start"
+          offset="10"
+          :close-on-content-click="false"
+        >
+          <template #activator="{ props: menuProps }">
+            <v-btn
+              v-bind="menuProps"
+              class="settings-btn"
+              :class="{ 'icon-only': isSidebarCollapsed }"
+              variant="text"
+              :icon="isSidebarCollapsed"
+            >
+              <v-icon
+                size="20"
+                class="sidebar-action-icon"
+                :class="{ 'mr-2': !isSidebarCollapsed }"
+                >mdi-cog-outline</v-icon
+              >
+              <span v-if="!isSidebarCollapsed">{{
+                t('core.common.settings')
+              }}</span>
+            </v-btn>
+          </template>
+
+          <div class="settings-menu-content">
+            <v-menu
+              location="end"
+              offset="8"
+              :open-on-hover="!isTouchDevice"
+              :open-on-click="isTouchDevice"
+              :close-on-content-click="true"
+            >
+              <template #activator="{ props: transportMenuProps }">
+                <v-list-item
+                  v-bind="transportMenuProps"
+                  class="styled-menu-item"
+                  rounded="md"
+                >
+                  <template #prepend>
+                    <v-icon size="18">mdi-connection</v-icon>
+                  </template>
+                  <v-list-item-title>{{
+                    tm('transport.title')
+                  }}</v-list-item-title>
+                  <template #append>
+                    <span class="settings-menu-value">{{
+                      currentTransportLabel
+                    }}</span>
+                    <v-icon size="18">mdi-chevron-right</v-icon>
+                  </template>
+                </v-list-item>
+              </template>
+
+              <v-card class="styled-menu-card" elevation="4" rounded="md">
+                <v-list density="compact" class="styled-menu-list pa-1">
+                  <v-list-item
+                    v-for="item in transportOptions"
+                    :key="item.value"
+                    class="styled-menu-item"
+                    :class="{
+                      'styled-menu-item-active': transportMode === item.value,
+                    }"
+                    rounded="md"
+                    @click="transportMode = item.value"
+                  >
+                    <v-list-item-title>{{
+                      tm(item.labelKey)
+                    }}</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="transportMode === item.value" size="18">
+                        mdi-check
+                      </v-icon>
+                    </template>
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
+
+            <v-menu
+              location="end"
+              offset="8"
+              :open-on-hover="!isTouchDevice"
+              :open-on-click="isTouchDevice"
+              :close-on-content-click="true"
+            >
+              <template #activator="{ props: languageMenuProps }">
+                <v-list-item
+                  v-bind="languageMenuProps"
+                  class="styled-menu-item"
+                  rounded="md"
+                >
+                  <template #prepend>
+                    <v-icon size="18">mdi-translate</v-icon>
+                  </template>
+                  <v-list-item-title>{{
+                    t('core.common.language')
+                  }}</v-list-item-title>
+                  <template #append>
+                    <span class="settings-menu-value">{{
+                      currentLanguage?.label || locale
+                    }}</span>
+                    <v-icon size="18">mdi-chevron-right</v-icon>
+                  </template>
+                </v-list-item>
+              </template>
+
+              <v-card class="styled-menu-card" elevation="4" rounded="md">
+                <v-list density="compact" class="styled-menu-list pa-1">
+                  <v-list-item
+                    v-for="lang in languageOptions"
+                    :key="lang.value"
+                    class="styled-menu-item"
+                    :class="{
+                      'styled-menu-item-active': locale === lang.value,
+                    }"
+                    rounded="md"
+                    @click="switchLanguage(lang.value as Locale)"
+                  >
+                    <template #prepend>
+                      <span class="language-flag">{{ lang.flag }}</span>
+                    </template>
+                    <v-list-item-title>{{ lang.label }}</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="locale === lang.value" size="18">
+                        mdi-check
+                      </v-icon>
+                    </template>
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
+
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
+              @click="toggleTheme"
+            >
+              <template #prepend>
+                <v-icon size="18">{{
+                  isDark ? 'mdi-white-balance-sunny' : 'mdi-weather-night'
+                }}</v-icon>
+              </template>
+              <v-list-item-title>{{
+                isDark ? tm('modes.lightMode') : tm('modes.darkMode')
+              }}</v-list-item-title>
+            </v-list-item>
+          </div>
+        </StyledMenu>
       </div>
     </v-navigation-drawer>
-
-    <ChatSettingsDialog
-      v-model="settingsOpen"
-      v-model:enable-streaming="enableStreaming"
-      v-model:enable-reasoning="enableReasoning"
-      v-model:send-shortcut="sendShortcut"
-      v-model:transport-mode="transportMode"
-    />
 
     <main
       class="chat-main"
       :class="{
-        'empty-chat': isEmptyChat,
-        'has-side-panel':
-          threadPanelOpen ||
-          reasoningPanelOpen ||
-          refsSidebarOpen ||
-          chatHeader.workspaceFilesOpen,
+        'empty-chat':
+          !isProviderWorkspace &&
+          !selectedProject &&
+          !loadingMessages &&
+          !activeMessages.length,
       }"
       v-on="dragEvents"
     >
@@ -211,7 +307,7 @@
         >
           <div class="chat-drop-overlay-content">
             <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-            <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+            <span class="chat-drop-text">{{ tm('input.dropToUpload') }}</span>
           </div>
         </div>
       </transition>
@@ -238,19 +334,23 @@
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
+            :enable-streaming="enableStreaming"
+            :enable-reasoning="enableReasoning"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
             :token-usage="tokenUsageIndicator"
+            :web-chat-tools-enabled="webChatToolsEnabled"
             :session-id="currSessionId || null"
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
-            :show-provider-selector="false"
             :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
+            @toggle-streaming="toggleStreaming"
+            @toggle-reasoning="enableReasoning = !enableReasoning"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -259,37 +359,34 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
+            @config-changed="handleChatConfigChange"
+            @toggle-web-chat-tools="toggleWebChatTools"
           />
         </section>
       </ProjectView>
 
-      <div
-        v-else
-        class="conversation-stack"
-        :class="{ 'is-empty': isEmptyChat }"
-      >
+      <template v-else>
         <section
           ref="messagesContainer"
           class="messages-panel"
-          tabindex="0"
           @scroll="handleMessagesScroll"
-          @wheel.passive="handleMessagesInteraction"
-          @touchstart.passive="handleMessagesInteraction"
-          @touchmove.passive="handleMessagesInteraction"
-          @pointerdown="handleMessagesInteraction"
-          @keydown="handleMessagesInteraction"
         >
           <div v-if="loadingMessages" class="center-state">
             <v-progress-circular indeterminate size="32" width="3" />
           </div>
 
+          <div v-else-if="sessionProject" class="session-project-breadcrumb">
+            <span>{{ sessionProject.title }}</span>
+            <v-icon size="16">mdi-chevron-right</v-icon>
+            <span>{{ currentSessionTitle }}</span>
+          </div>
+
           <div v-else-if="!activeMessages.length" class="welcome-state">
-            <div class="welcome-title">{{ tm("welcome.title") }}</div>
+            <div class="welcome-title">{{ tm('welcome.title') }}</div>
           </div>
 
           <div
             v-if="!loadingMessages && activeMessages.length"
-            ref="messagesContent"
             class="messages-list-shell"
           >
             <ChatMessageList
@@ -304,6 +401,17 @@
               "
               enable-regenerate
               enable-thread-selection
+              :is-touch-device="isTouchDevice"
+              :sidebar-reasoning-message-id="
+                reasoningPanelOpen
+                  ? (activeReasoningTarget?.message.id ?? null)
+                  : null
+              "
+              :sidebar-reasoning-block-index="
+                reasoningPanelOpen
+                  ? (activeReasoningTarget?.blockIndex ?? null)
+                  : null
+              "
               :manage-refs-sidebar="false"
               :editing-message-id="editingMessage?.id || null"
               :saving-edit="savingMessageEdit"
@@ -320,28 +428,15 @@
           </div>
         </section>
 
-        <section ref="composerShell" class="composer-shell">
+        <section class="composer-shell">
           <button
-            v-if="isAwayFromBottom && !shouldStickToBottom"
-            class="scroll-to-bottom"
+            v-if="showScrollToBottom"
+            class="scroll-to-bottom-btn"
             type="button"
-            :aria-label="tm('actions.scrollToBottom')"
-            :title="tm('actions.scrollToBottom')"
-            @click="scrollToBottom(true)"
+            :aria-label="tm('input.scrollToBottom')"
+            @click="scrollToBottom"
           >
-            <span
-              v-if="currSessionId && isSessionRunning(currSessionId)"
-              class="scroll-running-dots"
-              aria-hidden="true"
-            >
-              <span v-for="dot in 3" :key="dot" />
-            </span>
-            <ArrowDown
-              v-else
-              :size="20"
-              :stroke-width="1.75"
-              aria-hidden="true"
-            />
+            <v-icon size="20">mdi-chevron-down</v-icon>
           </button>
           <ChatInput
             ref="inputRef"
@@ -350,21 +445,22 @@
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
+            :enable-streaming="enableStreaming"
+            :enable-reasoning="enableReasoning"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
             :token-usage="tokenUsageIndicator"
+            :web-chat-tools-enabled="webChatToolsEnabled"
             :session-id="currSessionId || null"
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
-            :show-provider-selector="false"
-            :placeholder="
-              activeProject ? tm('input.projectPlaceholder') : undefined
-            "
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
+            @toggle-streaming="toggleStreaming"
+            @toggle-reasoning="enableReasoning = !enableReasoning"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -373,9 +469,11 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
+            @config-changed="handleChatConfigChange"
+            @toggle-web-chat-tools="toggleWebChatTools"
           />
         </section>
-      </div>
+      </template>
     </main>
 
     <div
@@ -391,21 +489,19 @@
         type="button"
         @click="createThreadFromSelection"
       >
-        {{ tm("thread.askInThread") }}
+        {{ tm('thread.askInThread') }}
       </button>
     </div>
 
     <ProjectDialog
       v-model="projectDialogOpen"
       :project="editingProject"
-      :error-message="projectDialogError"
-      :saving="savingProject"
       @save="saveProject"
     />
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-          {{ tm("conversation.editDisplayName") }}
+        <v-card-title class="text-h6">
+          {{ tm('conversation.editDisplayName') }}
         </v-card-title>
         <v-card-text>
           <v-text-field
@@ -421,15 +517,14 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="sessionTitleDialogOpen = false">
-            {{ t("core.common.cancel") }}
+            {{ t('core.common.cancel') }}
           </v-btn>
           <v-btn
             color="primary"
-            variant="tonal"
             :loading="savingSessionTitle"
             @click="saveSessionTitleDialog"
           >
-            {{ t("core.common.save") }}
+            {{ t('core.common.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -438,8 +533,11 @@
       v-model="threadPanelOpen"
       :thread="activeThread"
       :is-dark="isDark"
+      :is-touch-device="isTouchDevice"
       :deleting="deletingThread"
+      :web-chat-step-up-tokens="webChatStepUpTokens"
       @delete="deleteThread"
+      @consume-step-up="webChatStepUpTokens = null"
     />
     <ReasoningSidebar
       v-model="reasoningPanelOpen"
@@ -447,11 +545,13 @@
       :is-dark="isDark"
     />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
-    <WorkspaceFilesPanel
-      :model-value="chatHeader.workspaceFilesOpen"
-      :project-id="activeProject?.project_id || ''"
-      :project-title="activeProject?.title || ''"
-      @update:model-value="chatHeader.SET_WORKSPACE_FILES_OPEN"
+    <DashboardStepUpDialog
+      :model-value="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpError"
+      @update:model-value="(value) => !value && cancelWebChatTools()"
+      @confirm="submitStepUp"
+      @cancel="cancelWebChatTools"
     />
   </div>
 </template>
@@ -466,59 +566,52 @@ import {
   reactive,
   ref,
   watch,
-} from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useDisplay } from "vuetify";
-import { isAxiosError } from "axios";
-import {
-  ArrowDown,
-  Box,
-  PanelLeft,
-  Pencil,
-  Settings,
-  SquarePen,
-  Trash2,
-} from "@lucide/vue";
-import { chatApi, providerApi } from "@/api/v1";
-import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
+} from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useDisplay } from 'vuetify';
+import { isAxiosError } from 'axios';
+import { chatApi, providerApi } from '@/api/v1';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
 import ProjectDialog, {
   type ProjectFormData,
-} from "@/components/chat/ProjectDialog.vue";
-import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
-import ProjectView from "@/components/chat/ProjectView.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
-import ChatUILogo from "@/components/chat/ChatUILogo.vue";
-import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
-import ThreadPanel from "@/components/chat/ThreadPanel.vue";
-import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+} from '@/components/chat/ProjectDialog.vue';
+import ProjectList, { type Project } from '@/components/chat/ProjectList.vue';
+import ProjectView from '@/components/chat/ProjectView.vue';
+import ChatInput from '@/components/chat/ChatInput.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import ChatMessageList from '@/components/chat/ChatMessageList.vue';
+import type { RegenerateModelSelection } from '@/components/chat/RegenerateMenu.vue';
+import ReasoningSidebar from '@/components/chat/ReasoningSidebar.vue';
+import ThreadPanel from '@/components/chat/ThreadPanel.vue';
+import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
+import { useSessions, type Session } from '@/composables/useSessions';
 import {
   messageBlocks as buildMessageBlocks,
   useMessages,
-  type ChatRecord,
-  type ChatThread,
-  type MessagePart,
   type TransportMode,
-} from "@/composables/useMessages";
-import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
-import { useProjects } from "@/composables/useProjects";
-import { useDragUpload } from "@/composables/useDragUpload";
-import { useChatHeaderStore } from "@/stores/chatHeader";
-import { useCustomizerStore } from "@/stores/customizer";
-import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+} from '@/composables/useMessages';
+import type { ChatRecord, ChatThread, MessagePart } from '@/domain/chat';
+import { useMediaHandling } from '@/composables/useMediaHandling';
+import { useRecording } from '@/composables/useRecording';
+import { useProjects } from '@/composables/useProjects';
+import { useDragUpload } from '@/composables/useDragUpload';
+import { useCustomizerStore } from '@/stores/customizer';
+import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
+import {
+  useI18n,
+  useLanguageSwitcher,
+  useModuleI18n,
+} from '@/i18n/composables';
+import type { Locale } from '@/i18n/types';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 import {
   contextLimit,
   formatTokenCount,
   type ProviderModelMetadata,
   type ProviderMetadataSource,
-} from "@/utils/providerMetadata";
-import { useToast } from "@/utils/toast";
+} from '@/utils/providerMetadata';
+import { useToast } from '@/utils/toast';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const props = withDefaults(
   defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
@@ -531,12 +624,15 @@ const props = withDefaults(
 const route = useRoute();
 const router = useRouter();
 const { lgAndUp } = useDisplay();
-const chatHeader = useChatHeaderStore();
 const customizer = useCustomizerStore();
 const { t } = useI18n();
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
+const webChatStepUpTokens = ref<Record<string, string> | null>(null);
+const webChatToolsEnabled = computed(() => webChatStepUpTokens.value !== null);
+const { languageOptions, currentLanguage, switchLanguage, locale } =
+  useLanguageSwitcher();
 const {
   sessions,
   currSessionId,
@@ -572,48 +668,34 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-const { isDragging, dragEvents } = useDragUpload((files) => {
-  if (isProviderWorkspace.value) return;
-  handleFilesSelected(files);
-});
+type WorkspaceView = 'chat' | 'providers';
 
-type WorkspaceView = "chat" | "providers";
-
+const sidebarCollapsed = ref(false);
 interface TokenProviderConfig extends ProviderMetadataSource {
   id: string;
   enable?: boolean;
 }
 
-const activeWorkspace = ref<WorkspaceView>("chat");
+const activeWorkspace = ref<WorkspaceView>('chat');
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
-const projectDialogError = ref("");
-const savingProject = ref(false);
 const sessionTitleDialogOpen = ref(false);
-const sessionTitleDraft = ref("");
-const editingSessionTitleId = ref("");
+const sessionTitleDraft = ref('');
+const editingSessionTitleId = ref('');
 const refreshProjectSessionsAfterTitleSave = ref(false);
 const savingSessionTitle = ref(false);
-const messageEditDraft = ref("");
+const messageEditDraft = ref('');
 const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
-const projectSessionsById = ref<Record<string, Session[]>>({});
-const loadingProjectSessionIds = ref<string[]>([]);
 const loadingSessions = ref(false);
-const draft = ref("");
+const draft = ref('');
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
-const selectedTokenProviderId = ref("");
+const selectedTokenProviderId = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
-const messagesContent = ref<HTMLElement | null>(null);
-const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
-const isAwayFromBottom = ref(false);
-let lastMessagesScrollTop = 0;
-let touchScrollY = 0;
-let scrollIntent = 0;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -624,7 +706,7 @@ const activeReasoningTarget = ref<{
 } | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const threadSelection = reactive<{
   visible: boolean;
   left: number;
@@ -636,13 +718,11 @@ const threadSelection = reactive<{
   left: 0,
   top: 0,
   message: null,
-  selectedText: "",
+  selectedText: '',
 });
-const settingsOpen = ref(false);
 const enableStreaming = ref(true);
 const enableReasoning = ref(true);
-const sendShortcut = ref<"enter" | "shift_enter">("enter");
-let chatResizeObserver: ResizeObserver | null = null;
+const sendShortcut = ref<'enter' | 'shift_enter'>('enter');
 const {
   isRecording,
   startRecording: startRecorder,
@@ -657,27 +737,22 @@ const chatSidebarDrawer = computed({
   },
 });
 const isSidebarCollapsed = computed(() =>
-  lgAndUp.value ? customizer.chatSidebarCollapsed : !customizer.chatSidebarOpen,
+  lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
 );
 const isProviderWorkspace = computed(
-  () => activeWorkspace.value === "providers",
+  () => activeWorkspace.value === 'providers',
 );
-
-function toggleChatSidebar() {
-  if (lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
-    return;
-  }
-  customizer.TOGGLE_CHAT_SIDEBAR();
-}
-
+const { isDragging, dragEvents } = useDragUpload((files) => {
+  if (isProviderWorkspace.value) return;
+  void handleFilesSelected(files);
+});
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
   const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
+    activeReasoningTarget.value.message.content || { type: 'bot', message: [] },
   );
   const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
+  return block?.kind === 'thinking' ? block.parts : [];
 });
 
 watch(reasoningPanelOpen, (open) => {
@@ -704,25 +779,124 @@ const {
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
+  webchatStepUpTokens: webChatStepUpTokens,
   onSessionsChanged: getSessions,
   onStreamUpdate: (sessionId) => {
     if (sessionId === currSessionId.value && shouldStickToBottom.value) {
       scrollToBottom();
     }
   },
+  onMcpInputRequest: (payload, respond) => {
+    const server = String(payload.server_name || 'MCP server');
+    const message = String(
+      payload.message || 'This MCP server requests input.',
+    );
+    if (payload.mode === 'url') {
+      const url = String(payload.url || '');
+      if (
+        window.confirm(
+          tm('interaction.openUrl', {
+            server,
+            message,
+            url: String(payload.url_display || url),
+          }),
+        )
+      ) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        respond({ action: 'accept' });
+      } else {
+        respond({ action: 'cancel' });
+      }
+      return;
+    }
+    const schema = payload.schema as {
+      properties?: Record<string, { type?: string; title?: string }>;
+      required?: string[];
+    };
+    if (!schema?.properties) {
+      respond({ action: 'cancel' });
+      return;
+    }
+    if (!window.confirm(tm('interaction.formAccept', { server, message }))) {
+      respond({ action: 'decline' });
+      return;
+    }
+    const content: Record<string, unknown> = {};
+    for (const [name, definition] of Object.entries(schema.properties)) {
+      const value = window.prompt(
+        tm('interaction.fieldPrompt', { field: definition.title || name }),
+        '',
+      );
+      if (value === null) {
+        respond({ action: 'cancel' });
+        return;
+      }
+      if (definition.type === 'integer')
+        content[name] = Number.parseInt(value, 10);
+      else if (definition.type === 'number') content[name] = Number(value);
+      else if (definition.type === 'boolean')
+        content[name] = value.toLowerCase() === 'true';
+      else content[name] = value;
+    }
+    if ((schema.required || []).some((name) => content[name] === '')) {
+      window.alert(tm('interaction.invalidForm'));
+      respond({ action: 'cancel' });
+      return;
+    }
+    respond({ action: 'accept', content });
+  },
 });
 
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpError,
+  webChatExpiresAt: webChatStepUpExpiresAt,
+  requestWebChatStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
+
+watch(webChatStepUpExpiresAt, (expiresAt) => {
+  if (expiresAt === null) webChatStepUpTokens.value = null;
+});
+
+watch(currSessionId, (sessionId, previousSessionId) => {
+  if (!previousSessionId || sessionId === previousSessionId) return;
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+});
+
+const activeConfigId = ref<string | null>(null);
+
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
+    ? 'websocket'
+    : 'sse',
+);
+
+const pointerMediaQuery = window.matchMedia('(pointer: coarse)');
+const isTouchDevice = ref<boolean>(pointerMediaQuery.matches);
+const handlePointerChange = (event: MediaQueryListEvent) => {
+  isTouchDevice.value = event.matches;
+};
+pointerMediaQuery.addEventListener('change', handlePointerChange);
+const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
+  { value: 'sse', labelKey: 'transport.sse' },
+  { value: 'websocket', labelKey: 'transport.websocket' },
+];
+const currentTransportLabel = computed(() =>
+  tm(
+    transportOptions.find((item) => item.value === transportMode.value)
+      ?.labelKey || 'transport.sse',
+  ),
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
+  localStorage.setItem('chat.transportMode', mode);
 });
 
-const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
+const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
 const canSend = computed(
   () =>
     Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
@@ -735,16 +909,13 @@ const currentSession = computed(
     projectSessions.value.find(
       (session) => session.session_id === currSessionId.value,
     ) ||
-    Object.values(projectSessionsById.value)
-      .flat()
-      .find((session) => session.session_id === currSessionId.value) ||
     null,
 );
 const sessionProject = computed(() =>
   currSessionId.value ? sessionProjects[currSessionId.value] : null,
 );
 const currentSessionTitle = computed(() =>
-  currentSession.value ? sessionTitle(currentSession.value) : "",
+  currentSession.value ? sessionTitle(currentSession.value) : '',
 );
 const selectedProject = computed(
   () =>
@@ -752,35 +923,12 @@ const selectedProject = computed(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
 );
-const activeProject = computed(() => {
-  if (isProviderWorkspace.value) return null;
-  if (selectedProject.value) return selectedProject.value;
-  const projectId = sessionProject.value?.project_id;
-  return (
-    projects.value.find((project) => project.project_id === projectId) || null
-  );
-});
-const isEmptyChat = computed(
-  () =>
-    !isProviderWorkspace.value &&
-    !selectedProject.value &&
-    !loadingMessages.value &&
-    !activeMessages.value.length,
-);
-const chatHeaderTitle = computed(
-  () => currentSessionTitle.value || selectedProject.value?.title || "",
-);
-const chatHeaderSubtitle = computed(() =>
-  currentSessionTitle.value
-    ? sessionProject.value?.title || selectedProject.value?.title || ""
-    : "",
-);
 const chatInputReplyTarget = computed(() =>
-  replyTarget.value?.id == null
+  replyTarget.value?.id === null || replyTarget.value?.id === undefined
     ? null
     : {
         messageId: replyTarget.value.id,
-        selectedText: replyPreview(replyTarget.value.id, ""),
+        selectedText: replyPreview(replyTarget.value.id, ''),
       },
 );
 const currentTokenProvider = computed(() => {
@@ -799,7 +947,10 @@ const latestContextTokens = computed(() => {
     if (isUserMessage(message)) continue;
     const stats = message.content?.agentStats;
     if (!stats) continue;
-    if (stats.current_context_tokens != null) {
+    if (
+      stats.current_context_tokens !== undefined &&
+      stats.current_context_tokens !== null
+    ) {
       return readTokenCount(stats.current_context_tokens);
     }
     const usage = stats.token_usage;
@@ -825,7 +976,7 @@ const tokenUsageIndicator = computed(() => {
     used,
     limit,
     percent: Math.min(100, Math.max(0, percent)),
-    tooltip: tm("tokenUsage.tooltip", {
+    tooltip: tm('tokenUsage.tooltip', {
       used: formatTokenCount(used),
       limit: formatTokenCount(limit),
       percent: formatUsagePercent(percent),
@@ -839,75 +990,25 @@ function getSelectedProviderSelection() {
     selectedTokenProviderId.value = inputSelection.providerId;
     return inputSelection;
   }
-  if (typeof window === "undefined") {
-    return { providerId: "", modelName: "" };
+  if (typeof window === 'undefined') {
+    return { providerId: '', modelName: '' };
   }
   syncSelectedTokenProvider();
   return {
-    providerId: localStorage.getItem("selectedProvider") || "",
-    modelName: localStorage.getItem("selectedProviderModel") || "",
+    providerId: localStorage.getItem('selectedProvider') || '',
+    modelName: localStorage.getItem('selectedProviderModel') || '',
   };
 }
 
-provide("isDark", isDark);
-
-watch(
-  [chatHeaderTitle, chatHeaderSubtitle, activeProject],
-  ([title, subtitle, project]) => {
-    chatHeader.SET_CONTEXT({
-      title,
-      subtitle,
-      projectId: project?.project_id,
-    });
-  },
-  { immediate: true },
-);
-
-watch(
-  () => chatHeader.workspaceFilesOpen,
-  (open) => {
-    if (!open) return;
-    threadSelection.visible = false;
-    threadPanelOpen.value = false;
-    activeThread.value = null;
-    reasoningPanelOpen.value = false;
-    activeReasoningTarget.value = null;
-    refsSidebarOpen.value = false;
-    selectedRefs.value = null;
-  },
-);
+provide('isDark', isDark);
 
 onMounted(async () => {
-  if (typeof ResizeObserver !== "undefined") {
-    chatResizeObserver = new ResizeObserver((entries) => {
-      const container = messagesContainer.value;
-      if (!container) return;
-      for (const entry of entries) {
-        if (entry.target === composerShell.value) {
-          const height = Math.ceil(entry.target.getBoundingClientRect().height);
-          container.style.setProperty("--chat-composer-height", `${height}px`);
-        }
-      }
-      isAwayFromBottom.value =
-        container.scrollHeight - container.scrollTop - container.clientHeight >
-        2;
-      if (shouldStickToBottom.value) scrollToBottom();
-    });
-    for (const element of [
-      composerShell.value,
-      messagesContent.value,
-      messagesContainer.value,
-    ]) {
-      if (element) chatResizeObserver.observe(element);
-    }
-  }
-
   loadingSessions.value = true;
   try {
     await Promise.all([getSessions(), getProjects(), loadTokenProviders()]);
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
+    if (routeSessionId === 'models') {
+      activeWorkspace.value = 'providers';
     } else if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
@@ -917,31 +1018,16 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  chatResizeObserver?.disconnect();
-  chatHeader.CLEAR_CONTEXT();
+  pointerMediaQuery.removeEventListener('change', handlePointerChange);
   cleanupMediaCache();
 });
-
-watch(
-  [composerShell, messagesContent, messagesContainer],
-  (elements, previousElements) => {
-    if (!chatResizeObserver) return;
-    for (const element of previousElements) {
-      if (element) chatResizeObserver.unobserve(element);
-    }
-    for (const element of elements) {
-      if (element) chatResizeObserver.observe(element);
-    }
-  },
-  { flush: "post" },
-);
 
 watch(
   () => route.params.conversationId,
   async () => {
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
+    if (routeSessionId === 'models') {
+      activeWorkspace.value = 'providers';
       return;
     }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
@@ -950,7 +1036,7 @@ watch(
       await selectSession(routeSessionId, false);
     } else if (!routeSessionId && currSessionId.value) {
       showChatWorkspace();
-      currSessionId.value = "";
+      currSessionId.value = '';
     }
   },
 );
@@ -963,11 +1049,11 @@ watch(activeMessages, () => {
 
 function getRouteSessionId() {
   const raw = route.params.conversationId;
-  return Array.isArray(raw) ? raw[0] : raw || "";
+  return Array.isArray(raw) ? raw[0] : raw || '';
 }
 
 function basePath() {
-  return props.chatboxMode ? "/chatbox" : "/chat";
+  return props.chatboxMode ? '/chatbox' : '/chat';
 }
 
 function closeMobileSidebar() {
@@ -983,17 +1069,16 @@ function closeSecondaryPanels() {
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
+  selectedRefs.value = undefined;
 }
 
 function showChatWorkspace() {
-  activeWorkspace.value = "chat";
+  activeWorkspace.value = 'chat';
 }
 
 async function openProviderWorkspace() {
   closeSecondaryPanels();
-  activeWorkspace.value = "providers";
+  activeWorkspace.value = 'providers';
   const targetPath = `${basePath()}/models`;
   if (route.path !== targetPath) {
     await router.push(targetPath);
@@ -1002,28 +1087,30 @@ async function openProviderWorkspace() {
 }
 
 function sessionTitle(session: Session) {
-  return session.display_name?.trim() || tm("conversation.newConversation");
+  return session.display_name?.trim() || tm('conversation.newConversation');
 }
 
 function syncSelectedTokenProvider() {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   selectedTokenProviderId.value =
-    localStorage.getItem("selectedProvider") || "";
+    localStorage.getItem('selectedProvider') || '';
 }
 
 async function loadTokenProviders() {
   syncSelectedTokenProvider();
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      tokenModelMetadata.value = ((response.data as any).model_metadata ||
-        {}) as Record<string, ProviderModelMetadata>;
+    const response = await providerApi.listByProviderType('chat_completion');
+    if (response.data.status === 'ok') {
+      tokenModelMetadata.value = (response.data.model_metadata || {}) as Record<
+        string,
+        ProviderModelMetadata
+      >;
       tokenProviderConfigs.value = (
         (response.data.data || []) as unknown as TokenProviderConfig[]
       ).filter((provider) => provider.enable !== false);
     }
   } catch (error) {
-    console.error("Failed to load provider context metadata:", error);
+    console.error('Failed to load provider context metadata:', error);
   }
 }
 
@@ -1033,7 +1120,7 @@ function readTokenCount(value: unknown) {
 }
 
 function formatUsagePercent(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (!Number.isFinite(value) || value <= 0) return '0';
   if (value >= 10) return String(Math.round(value));
   if (value >= 1) return String(Math.round(value * 10) / 10);
   return String(Math.round(value * 100) / 100);
@@ -1050,20 +1137,18 @@ async function startNewChat() {
 
 function openCreateProjectDialog() {
   editingProject.value = null;
-  projectDialogError.value = "";
   projectDialogOpen.value = true;
 }
 
 function openEditProjectDialog(project: Project) {
   editingProject.value = project;
-  projectDialogError.value = "";
   projectDialogOpen.value = true;
 }
 
 async function selectProject(projectId: string) {
   showChatWorkspace();
   selectedProjectId.value = projectId;
-  currSessionId.value = "";
+  currSessionId.value = '';
   replyTarget.value = null;
   await router.push(basePath());
   await loadProjectSessions(projectId);
@@ -1073,43 +1158,13 @@ async function selectProject(projectId: string) {
 async function loadProjectSessions(projectId = selectedProjectId.value) {
   if (!projectId) {
     projectSessions.value = [];
-    return [];
+    return;
   }
-  const sessions = await getProjectSessions(projectId);
-  projectSessionsById.value = {
-    ...projectSessionsById.value,
-    [projectId]: sessions,
-  };
-  if (projectId === selectedProjectId.value) {
-    projectSessions.value = sessions;
-  }
-  return sessions;
-}
-
-async function handleProjectToggle(projectId: string, expanded: boolean) {
-  if (!expanded || projectSessionsById.value[projectId]) return;
-  if (loadingProjectSessionIds.value.includes(projectId)) return;
-  loadingProjectSessionIds.value = [
-    ...loadingProjectSessionIds.value,
-    projectId,
-  ];
-  try {
-    await loadProjectSessions(projectId);
-  } finally {
-    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-      (item) => item !== projectId,
-    );
-  }
+  projectSessions.value = await getProjectSessions(projectId);
 }
 
 async function handleDeleteProject(projectId: string) {
   await deleteProjectById(projectId);
-  const nextSessionsById = { ...projectSessionsById.value };
-  delete nextSessionsById[projectId];
-  projectSessionsById.value = nextSessionsById;
-  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-    (item) => item !== projectId,
-  );
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
@@ -1144,14 +1199,6 @@ async function saveSessionTitleDialog() {
     if (projectSession) {
       projectSession.display_name = displayName;
     }
-    Object.values(projectSessionsById.value).forEach((projectSessionList) => {
-      const cachedProjectSession = projectSessionList.find(
-        (session) => session.session_id === sessionId,
-      );
-      if (cachedProjectSession) {
-        cachedProjectSession.display_name = displayName;
-      }
-    });
     if (refreshProjectSessionsAfterTitleSave.value) {
       await loadProjectSessions();
     }
@@ -1162,12 +1209,12 @@ async function saveSessionTitleDialog() {
 }
 
 function editSidebarSessionTitle(session: Session) {
-  openSessionTitleDialog(session.session_id, session.display_name || "");
+  openSessionTitleDialog(session.session_id, session.display_name || '');
 }
 
 async function deleteSidebarSession(session: Session) {
   const title = sessionTitle(session);
-  const message = tm("conversation.confirmDelete", { name: title });
+  const message = tm('conversation.confirmDelete', { name: title });
   if (!(await askForConfirmation(message, confirmDialog))) return;
 
   const wasCurrent = currSessionId.value === session.session_id;
@@ -1187,56 +1234,24 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
   openSessionTitleDialog(sessionId, title, true);
 }
 
-async function deleteProjectSession(
-  sessionId: string,
-  projectId = selectedProjectId.value,
-) {
+async function deleteProjectSession(sessionId: string) {
   await deleteSession(sessionId);
-  if (projectId) {
-    await loadProjectSessions(projectId);
-  } else {
-    await loadProjectSessions();
-  }
+  await loadProjectSessions();
 }
 
 async function saveProject(formData: ProjectFormData, projectId?: string) {
-  savingProject.value = true;
-  projectDialogError.value = "";
-  try {
-    if (projectId) {
-      await updateProject(
-        projectId,
-        formData.title,
-        formData.emoji,
-        formData.description,
-        formData.workspace_type,
-        formData.workspace_path,
-      );
-    } else {
-      await createProject(
-        formData.title,
-        formData.emoji,
-        formData.description,
-        formData.workspace_type,
-        formData.workspace_path,
-      );
-    }
-    projectDialogOpen.value = false;
-    editingProject.value = null;
-  } catch (error) {
-    projectDialogError.value =
-      error instanceof Error ? error.message : "Failed to save project";
-  } finally {
-    savingProject.value = false;
+  if (projectId) {
+    await updateProject(
+      projectId,
+      formData.title,
+      formData.emoji,
+      formData.description,
+    );
+    return;
   }
-}
 
-watch(projectDialogOpen, (open) => {
-  if (!open) {
-    projectDialogError.value = "";
-    savingProject.value = false;
-  }
-});
+  await createProject(formData.title, formData.emoji, formData.description);
+}
 
 async function selectSession(sessionId: string, pushRoute = true) {
   showChatWorkspace();
@@ -1249,7 +1264,7 @@ async function selectSession(sessionId: string, pushRoute = true) {
   if (!loadedSessions[sessionId]) {
     await loadSessionMessages(sessionId);
   }
-  scrollToBottom(true);
+  scrollToBottom();
   closeMobileSidebar();
   await focusChatInput();
 }
@@ -1276,7 +1291,8 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
-      // 关联项目后再刷新，否则新会话会短暂出现在"对话"列表
+      // Refresh only after the project association completes. Otherwise the
+      // newly created project session briefly appears in the ordinary list.
       await getSessions();
     }
 
@@ -1291,10 +1307,10 @@ async function sendCurrentMessage() {
     });
     updateTitleFromText(sessionId, text);
 
-    draft.value = "";
+    draft.value = '';
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
-    scrollToBottom(true);
+    scrollToBottom();
 
     sendMessageStream({
       sessionId,
@@ -1303,30 +1319,59 @@ async function sendCurrentMessage() {
       transport: transportMode.value,
       enableStreaming: enableStreaming.value,
       enableReasoning: enableReasoning.value,
-      selectedProvider: selection?.providerId || "",
-      selectedModel: selection?.modelName || "",
+      selectedProvider: selection?.providerId || '',
+      selectedModel: selection?.modelName || '',
       userRecord,
       botRecord,
     });
   } catch (error) {
-    console.error("Failed to send message:", error);
+    console.error('Failed to send message:', error);
   } finally {
     sending.value = false;
     await focusChatInput();
   }
 }
 
+async function toggleWebChatTools() {
+  if (webChatToolsEnabled.value) {
+    cancelWebChatTools();
+    return;
+  }
+  const sessionId = currSessionId.value || (await newSession());
+  const tokens = await requestWebChatStepUp(sessionId);
+  if (tokens) webChatStepUpTokens.value = tokens;
+}
+
+function cancelWebChatTools() {
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+}
+
+function handleChatConfigChange(payload: {
+  configId: string;
+  agentRunnerType: string;
+}) {
+  const configId = payload.configId || 'default';
+  const previousConfigId = activeConfigId.value;
+  activeConfigId.value = configId;
+  if (!previousConfigId || previousConfigId === configId) return;
+  // A proof is bound to the config route as well as the WebChat session.
+  // Clear it immediately when the user changes the selected profile instead
+  // of relying on a later authorization failure.
+  cancelWebChatTools();
+}
+
 function buildOutgoingParts(text: string): MessagePart[] {
   const parts: MessagePart[] = [];
-  if (replyTarget.value?.id != null) {
+  if (replyTarget.value?.id !== null && replyTarget.value?.id !== undefined) {
     parts.push({
-      type: "reply",
+      type: 'reply',
       message_id: replyTarget.value.id,
-      selected_text: "",
+      selected_text: '',
     });
   }
   if (text) {
-    parts.push({ type: "plain", text });
+    parts.push({ type: 'plain', text });
   }
   stagedFiles.value.forEach((file) => {
     parts.push({
@@ -1341,28 +1386,8 @@ function buildOutgoingParts(text: string): MessagePart[] {
 
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
-  const projectSession = projectSessions.value.find(
-    (item) => item.session_id === sessionId,
-  );
-  const cachedProjectSessions = Object.values(projectSessionsById.value)
-    .flat()
-    .filter((item) => item.session_id === sessionId);
-  if (
-    (!session && !projectSession && !cachedProjectSessions.length) ||
-    session?.display_name ||
-    projectSession?.display_name ||
-    cachedProjectSessions.some((item) => item.display_name) ||
-    !text
-  ) {
-    return;
-  }
+  if (!session || session.display_name || !text) return;
   updateSessionTitle(sessionId, text.slice(0, 40));
-  if (projectSession) {
-    projectSession.display_name = text.slice(0, 40);
-  }
-  cachedProjectSessions.forEach((item) => {
-    item.display_name = text.slice(0, 40);
-  });
 }
 
 function replyPreview(messageId?: string | number, fallback?: string) {
@@ -1370,15 +1395,15 @@ function replyPreview(messageId?: string | number, fallback?: string) {
   const found = activeMessages.value.find(
     (message) => String(message.id) === String(messageId),
   );
-  const text = found ? plainTextFromMessage(found) : "";
-  return text ? truncate(text, 80) : tm("reply.replyTo");
+  const text = found ? plainTextFromMessage(found) : '';
+  return text ? truncate(text, 80) : tm('reply.replyTo');
 }
 
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
-    .filter((part) => part.type === "plain" && part.text)
+    .filter((part) => part.type === 'plain' && part.text)
     .map((part) => part.text)
-    .join("\n");
+    .join('\n');
 }
 
 function truncate(value: string, max: number) {
@@ -1391,20 +1416,21 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  shouldStickToBottom.value = false;
-  const rows = messagesContainer.value?.querySelectorAll(".message-row");
-  rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const rows = messagesContainer.value?.querySelectorAll('.message-row');
+  rows?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function openMessageEdit(message: ChatRecord) {
   messageEditDraft.value = plainTextFromMessage(message);
   editingMessage.value = message;
-  nextTick(() => scrollToMessage(message.id));
+  void nextTick(() => {
+    scrollToMessage(message.id);
+  });
 }
 
 function cancelMessageEdit() {
   editingMessage.value = null;
-  messageEditDraft.value = "";
+  messageEditDraft.value = '';
 }
 
 async function saveMessageEdit() {
@@ -1426,10 +1452,10 @@ async function saveMessageEdit() {
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
         enableReasoning: enableReasoning.value,
-        selectedProvider: selection?.providerId || "",
-        selectedModel: selection?.modelName || "",
+        selectedProvider: selection?.providerId || '',
+        selectedModel: selection?.modelName || '',
       });
-      scrollToBottom(true);
+      scrollToBottom();
     } else if (result.needsRegenerate) {
       const index = activeMessages.value.findIndex(
         (message) => String(message.id) === String(target.id),
@@ -1442,7 +1468,7 @@ async function saveMessageEdit() {
       }
     }
   } catch (error) {
-    console.error("Failed to edit message:", error);
+    console.error('Failed to edit message:', error);
   } finally {
     savingMessageEdit.value = false;
   }
@@ -1453,24 +1479,29 @@ async function handleRegenerateMessage(
   selection?: RegenerateModelSelection,
 ) {
   if (!currSessionId.value || isUserMessage(message)) return;
+  const resolvedSelection = selection ?? getSelectedProviderSelection();
   message.threads = [];
-  const effectiveSelection = selection ?? getSelectedProviderSelection();
   await regenerateMessage(
     currSessionId.value,
     message,
-    effectiveSelection?.providerId || "",
-    effectiveSelection?.modelName || "",
+    resolvedSelection?.providerId || '',
+    resolvedSelection?.modelName || '',
     enableStreaming.value,
     enableReasoning.value,
   );
 }
 
 function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
-  if (message.id == null || String(message.id).startsWith("local-")) return;
+  if (
+    message.id === null ||
+    message.id === undefined ||
+    String(message.id).startsWith('local-')
+  )
+    return;
   const container = event.currentTarget as HTMLElement | null;
   window.setTimeout(() => {
     const selection = window.getSelection();
-    const selectedText = selection?.toString().trim() || "";
+    const selectedText = selection?.toString().trim() || '';
     if (!selection || !selectedText) {
       threadSelection.visible = false;
       return;
@@ -1506,13 +1537,13 @@ async function createThreadFromSelection() {
       parent_message_id: message.id,
       selected_text: threadSelection.selectedText,
     });
-    if (response.data?.status !== "ok") {
-      toast.error(response.data?.message || tm("thread.createFailed"));
+    if (response.data?.status !== 'ok') {
+      toast.error(response.data?.message || tm('thread.createFailed'));
       return;
     }
     const thread = response.data?.data as ChatThread | undefined;
     if (!thread) {
-      toast.error(tm("thread.createFailed"));
+      toast.error(tm('thread.createFailed'));
       return;
     }
     message.threads = message.threads || [];
@@ -1525,16 +1556,15 @@ async function createThreadFromSelection() {
     toast.error(
       isAxiosError(error)
         ? error.response?.data?.message || error.message
-        : tm("thread.createFailed"),
+        : tm('thread.createFailed'),
     );
-    console.error("Failed to create thread:", error);
+    console.error('Failed to create thread:', error);
   } finally {
     threadSelection.visible = false;
   }
 }
 
 function openThreadPanel(thread: ChatThread) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
@@ -1543,13 +1573,14 @@ function openThreadPanel(thread: ChatThread) {
 }
 
 function openRefsSidebar(refs: unknown) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === 'object'
+      ? (refs as Record<string, unknown>)
+      : undefined;
   refsSidebarOpen.value = true;
 }
 
@@ -1557,18 +1588,17 @@ function openReasoningPanel(payload: {
   message: ChatRecord;
   blockIndex: number;
 }) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
   refsSidebarOpen.value = false;
-  selectedRefs.value = null;
+  selectedRefs.value = undefined;
   activeReasoningTarget.value = payload;
   reasoningPanelOpen.value = true;
 }
 
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
-  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog)))
+  if (!(await askForConfirmation(tm('thread.confirmDelete'), confirmDialog)))
     return;
   deletingThread.value = true;
   try {
@@ -1579,7 +1609,7 @@ async function deleteThread(thread: ChatThread) {
       activeThread.value = null;
     }
   } catch (error) {
-    console.error("Failed to delete thread:", error);
+    console.error('Failed to delete thread:', error);
   } finally {
     deletingThread.value = false;
   }
@@ -1594,10 +1624,10 @@ function removeThreadFromMessages(threadId: string) {
   }
 }
 
-async function handleFilesSelected(files: FileList | File[]) {
+async function handleFilesSelected(files: FileList) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
-    if (file.type.startsWith("image/")) {
+    if (file.type.startsWith('image/')) {
       await processAndUploadImage(file);
     } else {
       await processAndUploadFile(file);
@@ -1605,12 +1635,16 @@ async function handleFilesSelected(files: FileList | File[]) {
   }
 }
 
+function toggleStreaming() {
+  enableStreaming.value = !enableStreaming.value;
+}
+
 async function startRecording() {
   try {
     await startRecorder();
   } catch (error) {
-    console.error("Failed to start recording:", error);
-    toast.error(tm("voice.error"));
+    console.error('Failed to start recording:', error);
+    toast.error(tm('voice.error'));
   }
 }
 
@@ -1619,89 +1653,36 @@ async function stopRecording() {
     const audioFile = await stopRecorder();
     const uploaded = await processAndUploadFile(audioFile);
     if (!uploaded) {
-      toast.error(tm("voice.error"));
+      toast.error(tm('voice.error'));
     }
   } catch (error) {
-    console.error("Failed to stop recording:", error);
-    toast.error(tm("voice.error"));
+    console.error('Failed to stop recording:', error);
+    toast.error(tm('voice.error'));
   }
 }
 
-function handleMessagesInteraction(
-  event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent,
-) {
-  if (event instanceof WheelEvent) {
-    if (event.ctrlKey || event.deltaY === 0) return;
-    scrollIntent = Math.sign(event.deltaY);
-  } else if (event.type === "touchstart" || event.type === "touchmove") {
-    const touch = (event as TouchEvent).touches[0];
-    if (!touch) return;
-    if (event.type === "touchstart") {
-      touchScrollY = touch.clientY;
-      return;
-    }
-    scrollIntent = Math.sign(touchScrollY - touch.clientY);
-    touchScrollY = touch.clientY;
-  } else if (event instanceof KeyboardEvent) {
-    const target = event.target as HTMLElement;
-    if (
-      target.closest("input, textarea, select, [contenteditable], button, a")
-    ) {
-      return;
-    }
-    if (
-      ["ArrowUp", "PageUp", "Home"].includes(event.key) ||
-      (event.key === " " && event.shiftKey)
-    ) {
-      scrollIntent = -1;
-    } else if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) {
-      scrollIntent = 1;
-    } else {
-      return;
-    }
-  } else {
-    if (event.target !== messagesContainer.value) return;
-    scrollIntent = 0;
-    shouldStickToBottom.value = false;
-  }
-  if (scrollIntent < 0) shouldStickToBottom.value = false;
-}
+const showScrollToBottom = computed(
+  () =>
+    !shouldStickToBottom.value &&
+    activeMessages.value.length > 0 &&
+    !loadingMessages.value,
+);
 
 function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
   if (!container) return;
-  const maxScrollTop = Math.max(
-    0,
-    container.scrollHeight - container.clientHeight,
-  );
-  const scrollTop = Math.max(0, container.scrollTop);
-  const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
-  isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
-  if (scrollTop < previousTop) {
-    shouldStickToBottom.value = false;
-  } else if (
-    scrollTop > previousTop &&
-    !isAwayFromBottom.value &&
-    scrollIntent >= 0
-  ) {
-    shouldStickToBottom.value = true;
-  }
-  lastMessagesScrollTop = scrollTop;
+  const distance =
+    container.scrollHeight - container.scrollTop - container.clientHeight;
+  shouldStickToBottom.value = distance < 80;
 }
 
-function scrollToBottom(resumeFollowing = false) {
-  if (resumeFollowing) {
-    shouldStickToBottom.value = true;
-    scrollIntent = 0;
-  }
-  nextTick(() => {
+function scrollToBottom() {
+  void nextTick(() => {
     const container = messagesContainer.value;
-    // Recheck after rendering so queued stream updates cannot override user intent.
-    if (!container || !shouldStickToBottom.value) return;
+    if (!container) return;
     container.scrollTop = container.scrollHeight;
-    lastMessagesScrollTop = Math.max(0, container.scrollTop);
-    isAwayFromBottom.value = false;
+    shouldStickToBottom.value = true;
   });
 }
 
@@ -1717,64 +1698,46 @@ async function stopCurrentSession() {
   try {
     await stopSession(currSessionId.value);
   } catch (error) {
-    console.error("Failed to stop session:", error);
+    console.error('Failed to stop session:', error);
   }
+}
+
+function toggleTheme() {
+  customizer.SET_THEME_MODE(isDark.value ? 'light' : 'dark');
 }
 </script>
 
 <style scoped>
 .chat-ui {
-  --chat-panel-top-offset: 50px;
   --chat-sidebar-bg: rgb(var(--v-theme-surface));
-  --chat-session-active-bg: #efefef;
-  --chat-page-bg: #fdfcfc;
-  --chat-border: #f2f2f2;
-  --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
-  --chat-section-label: rgba(var(--v-theme-on-surface), 0.48);
-  --chat-content-width: 76%;
-  --chat-content-max-width: 760px;
+  --chat-session-active-bg: rgb(var(--v-theme-surface-variant));
+  --chat-page-bg: rgb(var(--v-theme-background));
+  --chat-border: rgb(var(--v-theme-outline-variant));
+  --chat-muted: rgb(var(--v-theme-on-surface-variant));
   display: flex;
+  flex: 1 1 0%;
+  width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--chat-page-bg);
   color: rgb(var(--v-theme-on-surface));
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    "Open Sans",
-    "Helvetica Neue",
-    sans-serif;
+  font-family: var(--astrbot-font-ui);
 }
 
-.chat-ui.is-dark {
-  --chat-sidebar-bg: #242424;
-  --chat-session-active-bg: rgba(255, 255, 255, 0.08);
-  --chat-page-bg: rgb(var(--v-theme-background));
-  --chat-border: rgba(255, 255, 255, 0.1);
-  --chat-section-label: rgba(255, 255, 255, 0.5);
-}
-
-.chat-ui.is-dark .chat-sidebar {
-  border-right-color: rgba(255, 255, 255, 0.06);
+:global(.dashboard-appearance-active .chat-ui) {
+  --chat-page-bg: transparent;
+  --chat-sidebar-bg: var(--dashboard-wallpaper-surface);
 }
 
 .chat-sidebar {
-  top: 0 !important;
-  height: 100vh !important;
+  height: 100%;
   background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
 }
 
 .chat-sidebar.collapsed {
-  background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  background: transparent;
 }
 
 .chat-sidebar :deep(.v-navigation-drawer__content) {
@@ -1784,206 +1747,70 @@ async function stopCurrentSession() {
 }
 
 .sidebar-top {
-  padding: 0 16px 2px;
+  padding: 12px;
 }
 
-.chat-sidebar.collapsed .sidebar-top {
-  width: 56px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0 0 2px;
-}
-
-.chat-sidebar-brand {
-  min-height: 50px;
+.brand-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 10px 2px;
 }
 
-.chat-sidebar-brand.collapsed {
-  width: 36px;
-  justify-content: center;
-  padding: 0 0 2px;
+.brand-row {
+  justify-content: flex-start;
+  min-height: 36px;
+  margin-bottom: 8px;
 }
 
-.chat-sidebar-brand-title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: rgb(var(--v-theme-on-surface));
-  line-height: 1.05;
-}
-
-.chat-sidebar-brand-logo {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-  display: block;
-}
-
-.chat-sidebar-brand-title .chat-sidebar-brand-logo {
-  transform: translateX(-2px);
-}
-
-.chat-sidebar-brand-copy {
-  min-width: 0;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.chat-sidebar-brand-name {
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.chat-sidebar-brand-mode {
-  color: var(--chat-muted);
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.chat-sidebar-brand-toggle {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  color: var(--chat-muted);
-}
-
-.chat-sidebar-rail-btn {
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: rgb(var(--v-theme-on-surface));
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-
-.chat-sidebar-brand-toggle:hover {
-  background: var(--chat-session-active-bg);
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.chat-sidebar-rail-icon-stack {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-}
-
-.chat-sidebar-rail-icon-stack > * {
-  grid-area: 1 / 1;
-}
-
-.chat-sidebar-brand-logo--collapsed {
-  width: 20px;
-  height: 20px;
-  transition:
-    opacity 0.14s ease,
-    visibility 0.14s ease;
-  opacity: 1;
-  visibility: visible;
-}
-
-.chat-sidebar-rail-icon-stack .sidebar-panel-toggle-icon {
-  transition:
-    opacity 0.14s ease,
-    visibility 0.14s ease;
-  opacity: 0;
-  visibility: hidden;
-}
-
-.chat-sidebar-brand-toggle:hover .chat-sidebar-brand-logo--collapsed,
-.chat-sidebar-brand-toggle:focus-visible .chat-sidebar-brand-logo--collapsed {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.chat-sidebar-brand-toggle:hover .sidebar-panel-toggle-icon,
-.chat-sidebar-brand-toggle:focus-visible .sidebar-panel-toggle-icon {
-  opacity: 1;
-  visibility: visible;
-}
-
-.sidebar-panel-toggle-icon {
-  flex: 0 0 auto;
-}
-
+.sidebar-toggle,
 .new-chat-btn,
 .settings-btn {
-  color: rgb(var(--v-theme-on-surface));
+  color: var(--chat-muted);
   border-radius: 8px;
 }
 
 .sidebar-action-icon {
   color: currentcolor;
-  flex: 0 0 auto;
-  stroke-width: 2;
 }
 
-.new-chat-btn:not(.icon-only) .sidebar-action-icon {
-  margin-right: 12px !important;
+.sidebar-toggle {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
 }
 
 .new-chat-btn,
 .settings-btn {
   width: 100%;
-  min-height: 36px;
-  height: 36px;
   justify-content: flex-start;
   border-radius: 8px;
   text-transform: none;
-  letter-spacing: 0;
-  font-size: 14px;
   font-weight: 500;
 }
 
 .sidebar-provider-btn {
-  margin-bottom: 2px;
+  margin-bottom: 8px;
 }
 
 .new-chat-btn:not(.icon-only),
 .settings-btn:not(.icon-only) {
-  padding-inline: 10px;
+  padding-inline: 12px;
 }
 
 .new-chat-btn.icon-only,
 .settings-btn.icon-only {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  margin-inline: auto;
-  padding: 0 !important;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   justify-content: center;
 }
 
-.chat-sidebar.collapsed .new-chat-btn.icon-only :deep(.v-btn__content),
-.chat-sidebar.collapsed .settings-btn.icon-only :deep(.v-btn__content) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.new-chat-btn :deep(.v-btn__content),
-.settings-btn :deep(.v-btn__content) {
-  min-width: 0;
-  font-size: 14px;
-  line-height: 20px;
-}
-
+.chat-sidebar.collapsed .brand-row,
 .chat-sidebar.collapsed .sidebar-footer {
   display: flex;
   justify-content: center;
 }
 
+.sidebar-toggle:hover,
 .new-chat-btn:hover,
 .settings-btn:hover {
   background: var(--chat-session-active-bg);
@@ -1994,47 +1821,31 @@ async function stopCurrentSession() {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.sidebar-content {
+.chevron-collapsed {
+  transform: rotate(180deg);
+}
+
+.session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 2px 16px 12px;
+  padding: 4px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.sidebar-section {
-  flex: 0 0 auto;
-}
-
-.sidebar-section-header {
-  min-height: 24px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px 4px;
-  color: var(--chat-section-label);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.session-list {
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .session-item {
   width: 100%;
-  min-height: 30px;
+  min-height: 38px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: inherit;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 10px;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-right: 68px;
   position: relative;
   box-sizing: border-box;
   cursor: pointer;
@@ -2044,15 +1855,6 @@ async function stopCurrentSession() {
 .session-item:hover,
 .session-item.active {
   background: var(--chat-session-active-bg);
-}
-
-.session-item.running {
-  padding-right: 27px;
-}
-
-.session-item:hover,
-.session-item:focus-within {
-  padding-right: 56px;
 }
 
 .session-title {
@@ -2067,13 +1869,11 @@ async function stopCurrentSession() {
 
 .session-progress {
   position: absolute;
-  right: 4px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   flex-shrink: 0;
-  transition:
-    opacity 0.14s ease,
-    visibility 0.14s ease;
+  transition: right 0.16s ease;
 }
 
 .session-actions {
@@ -2084,7 +1884,7 @@ async function stopCurrentSession() {
   opacity: 0;
   pointer-events: none;
   position: absolute;
-  right: 0;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   visibility: hidden;
@@ -2099,8 +1899,7 @@ async function stopCurrentSession() {
 
 .session-item:hover .session-progress,
 .session-item:focus-within .session-progress {
-  opacity: 0;
-  visibility: hidden;
+  right: 62px;
 }
 
 .session-action-btn {
@@ -2111,26 +1910,89 @@ async function stopCurrentSession() {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.sidebar-footer {
-  margin-top: auto;
-  padding: 10px 16px 14px;
+.empty-sessions {
+  padding: 12px;
+  color: var(--chat-muted);
+  font-size: 13px;
 }
 
-.chat-sidebar.collapsed .sidebar-footer {
-  width: 56px;
-  box-sizing: border-box;
-  padding-inline: 10px;
+.sidebar-footer {
+  margin-top: auto;
+  padding: 10px 12px 14px;
+}
+
+.settings-menu-content {
+  min-width: 230px;
+  padding: 6px;
+}
+
+.settings-menu-value {
+  color: var(--chat-muted);
+  font-size: 12px;
+  margin-right: 4px;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.language-flag {
+  display: inline-block;
+  width: 20px;
+  margin-right: 8px;
 }
 
 .chat-main {
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
+  min-height: 0;
   height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
-  box-sizing: border-box;
-  padding-top: 50px;
+  overflow: hidden;
+  align-self: stretch;
+}
+
+.chat-drop-overlay {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  color: rgb(var(--v-theme-primary));
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
+}
+
+.chat-main.empty-chat {
+  justify-content: center;
 }
 
 .provider-workspace-shell {
@@ -2144,82 +2006,18 @@ async function stopCurrentSession() {
   min-height: 0;
 }
 
-.conversation-stack {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-/* 全区域拖拽上传遮罩 */
-.chat-drop-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 100;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(var(--v-theme-primary), 0.12);
-  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
-  border-radius: 16px;
-}
-
-.chat-drop-overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-drop-text {
-  font-size: 16px;
-  font-weight: 500;
-  color: rgb(var(--v-theme-primary));
-}
-
-.drop-fade-enter-active,
-.drop-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.drop-fade-enter-from,
-.drop-fade-leave-to {
-  opacity: 0;
-}
-
-.conversation-stack.is-empty {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 28px;
-}
-
 .messages-panel {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-anchor: none;
-  padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
-  scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
+  padding: 24px max(24px, calc((100% - 980px) / 2)) 18px;
 }
 
-.conversation-stack.is-empty .messages-panel {
-  flex: none;
+.empty-chat .messages-panel {
+  flex: 0 0 auto;
   min-height: auto;
   overflow: visible;
-  padding: 0;
-  scroll-padding-bottom: 0;
-}
-
-.messages-list-shell {
-  width: var(--chat-content-width);
-  max-width: var(--chat-content-max-width);
-  margin: 0 auto;
+  padding: 0 max(24px, calc((100% - 980px) / 2)) 20px;
 }
 
 .center-state,
@@ -2232,12 +2030,11 @@ async function stopCurrentSession() {
   text-align: center;
 }
 
-.conversation-stack.is-empty .welcome-state {
+.empty-chat .welcome-state {
   height: auto;
 }
 
 .welcome-title {
-  font-family: "Outfit", "Noto Sans", sans-serif;
   font-size: 28px;
   font-weight: 800;
 }
@@ -2246,6 +2043,24 @@ async function stopCurrentSession() {
   margin-top: 8px;
   color: var(--chat-muted);
   font-size: 16px;
+}
+
+.session-project-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(760px, 82%);
+  margin-bottom: 18px;
+  color: var(--chat-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.session-project-breadcrumb span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread-selection-action {
@@ -2269,113 +2084,61 @@ async function stopCurrentSession() {
 
 .composer-shell {
   position: relative;
-  z-index: 3;
-  isolation: isolate;
-  background: transparent;
+  z-index: 1;
+  background: var(--chat-page-bg);
   padding: 0 0 18px;
 }
 
-.scroll-to-bottom {
+.scroll-to-bottom-btn {
   position: absolute;
-  top: -48px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 2;
-  width: 36px;
-  height: 36px;
-  display: flex;
+  left: 50%;
+  top: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
   border-radius: 50%;
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 2px 4px rgb(24 33 43 / 10%);
+  transform: translate(-50%, -50%);
   cursor: pointer;
-  pointer-events: auto;
 }
 
-.scroll-to-bottom:hover {
+.scroll-to-bottom-btn:hover {
   background: rgb(var(--v-theme-surface-variant));
 }
 
-.scroll-running-dots {
-  display: flex;
-  gap: 3px;
-}
-
-.scroll-running-dots span {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: scroll-dot-pulse 1.2s ease-in-out infinite;
-}
-
-.scroll-running-dots span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.scroll-running-dots span:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes scroll-dot-pulse {
-  0%,
-  80%,
-  100% {
-    opacity: 0.3;
-  }
-  40% {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .scroll-running-dots span {
-    animation: none;
-  }
-}
-
-.conversation-stack:not(.is-empty) .composer-shell {
+.composer-shell::before {
+  content: '';
   position: absolute;
-  right: 0;
-  bottom: 0;
+  z-index: -1;
   left: 0;
+  right: 0;
+  top: -36px;
+  height: 36px;
   pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--v-theme-background), 0),
+    var(--chat-page-bg)
+  );
 }
 
-.conversation-stack:not(.is-empty) .composer-shell::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  top: 32px;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  pointer-events: none;
-  background: var(--chat-page-bg);
-}
-
-.composer-shell :deep(.input-area),
-.project-composer-shell :deep(.input-area) {
-  padding-top: 0;
-  padding-inline: 0;
+.composer-shell :deep(.input-area) {
   border-top: 0;
 }
 
-.conversation-stack:not(.is-empty) .composer-shell :deep(.input-area) {
-  position: relative;
-  z-index: 1;
-  pointer-events: none;
-  background: transparent;
-}
-
-.conversation-stack:not(.is-empty) .composer-shell :deep(.input-container) {
-  pointer-events: auto;
-}
-
-.conversation-stack.is-empty .composer-shell {
+.empty-chat .composer-shell {
   padding-bottom: 0;
+}
+
+.empty-chat .composer-shell::before {
+  display: none;
 }
 
 kbd {
@@ -2385,8 +2148,16 @@ kbd {
   font: inherit;
 }
 
+:deep(.hr-node) {
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  opacity: 0.5;
+  border-top-width: 0.3px;
+}
+
 :deep(.paragraph-node) {
   margin: 0.5rem 0;
+  line-height: 1.7;
 }
 
 :deep(.list-node) {
@@ -2394,45 +2165,9 @@ kbd {
   margin-bottom: 0.5rem;
 }
 
-@media (min-width: 761px) {
-  .chat-main.has-side-panel {
-    --chat-content-width: calc(100% - 40px);
-  }
-
-  .messages-list-shell,
-  .composer-shell :deep(.input-container) {
-    transition:
-      width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-      max-width 320ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .messages-list-shell,
-  .composer-shell :deep(.input-container) {
-    transition: none;
-  }
-}
-
 @media (max-width: 760px) {
-  .chat-sidebar {
-    top: 50px !important;
-    height: calc(100vh - 50px) !important;
-  }
-
   .messages-panel {
-    padding: 18px 0 calc(var(--chat-composer-height, 72px) + 20px);
-    scroll-padding-bottom: calc(var(--chat-composer-height, 72px) + 20px);
-  }
-
-  .conversation-stack.is-empty .messages-panel {
-    padding: 0;
-    scroll-padding-bottom: 0;
-  }
-
-  .messages-list-shell {
-    width: calc(100% - 20px);
-    max-width: 100%;
+    padding: 18px 14px;
   }
 
   .composer-shell,

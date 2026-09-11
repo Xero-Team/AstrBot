@@ -2,7 +2,7 @@
   <div
     ref="messageListRoot"
     class="message-list-root"
-    :class="{ 'is-dark': isDark }"
+    :class="{ 'is-dark': isDark, 'is-touch': isTouchDevice }"
   >
     <div v-if="isLoadingMessages" class="center-state">
       <v-progress-circular indeterminate size="32" width="3" />
@@ -16,7 +16,13 @@
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
       >
         <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" size="48">
-          <span class="bot-avatar-symbol" aria-hidden="true">✦</span>
+          <v-progress-circular
+            v-if="isMessageStreaming(msgIndex)"
+            indeterminate
+            size="22"
+            width="2"
+          />
+          <span v-else class="bot-avatar-symbol" aria-hidden="true">✦</span>
         </v-avatar>
 
         <div class="message-stack">
@@ -24,7 +30,11 @@
             class="message-bubble"
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
           >
-            <MessageContentTransition :loading="messageContent(msg).isLoading">
+            <div v-if="messageContent(msg).isLoading" class="loading-message">
+              <span>{{ tm('message.loading') }}</span>
+            </div>
+
+            <template v-else>
               <template
                 v-for="(block, blockIndex) in renderBlocks(msg)"
                 :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
@@ -61,7 +71,7 @@
                       v-else-if="part.type === 'plain' && isUserMessage(msg)"
                       class="plain-content"
                     >
-                      {{ part.text || "" }}
+                      {{ part.text || '' }}
                     </div>
 
                     <MarkdownMessagePart
@@ -151,7 +161,7 @@
                         >
                           <template #label>
                             <v-icon size="16">mdi-code-json</v-icon>
-                            <span>{{ tool.name || "python" }}</span>
+                            <span>{{ tool.name || 'python' }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
                             </span>
@@ -179,66 +189,73 @@
                   </template>
                 </template>
               </template>
-            </MessageContentTransition>
+            </template>
           </div>
 
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
-            <span v-if="msg.created_at">{{ formatTime(msg.created_at) }}</span>
-            <v-btn
-              v-if="!isUserMessage(msg)"
-              icon="mdi-content-copy"
-              size="x-small"
-              variant="text"
-              @click="copyMessage(msg)"
-            />
-            <v-menu v-if="messageContent(msg).agentStats" location="bottom">
-              <template #activator="{ props: statsProps }">
-                <v-btn
-                  v-bind="statsProps"
-                  icon="mdi-information-outline"
-                  size="x-small"
-                  variant="text"
-                />
-              </template>
-              <v-card class="stats-card" elevation="4">
-                <div
-                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
-                  class="stats-row"
-                >
-                  <span>{{ tm("stats.cachedTokens") }}</span>
-                  <strong>{{
-                    cachedInputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm("stats.inputTokens") }}</span>
-                  <strong>{{
-                    inputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm("stats.outputTokens") }}</span>
-                  <strong>{{
-                    outputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div
-                  v-if="agentTtft(messageContent(msg).agentStats)"
-                  class="stats-row"
-                >
-                  <span>{{ tm("stats.ttft") }}</span>
-                  <strong>{{
-                    agentTtft(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm("stats.duration") }}</span>
-                  <strong>{{
-                    agentDuration(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-              </v-card>
-            </v-menu>
+            <span v-if="msg.created_at" class="message-time">{{
+              formatTime(msg.created_at)
+            }}</span>
+            <div class="message-meta-actions">
+              <v-btn
+                v-if="plainTextFromMessage(msg)"
+                class="message-copy-btn"
+                icon="mdi-content-copy"
+                size="x-small"
+                variant="text"
+                :aria-label="tm('actions.copy')"
+                @click="copyMessage(msg)"
+              />
+              <v-menu v-if="messageContent(msg).agentStats" location="bottom">
+                <template #activator="{ props: statsProps }">
+                  <v-btn
+                    v-bind="statsProps"
+                    icon="mdi-information-outline"
+                    size="x-small"
+                    variant="text"
+                    :aria-label="t('core.common.info')"
+                  />
+                </template>
+                <v-card class="stats-card" elevation="4">
+                  <div
+                    v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                    class="stats-row"
+                  >
+                    <span>{{ tm('stats.cachedTokens') }}</span>
+                    <strong>{{
+                      cachedInputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.inputTokens') }}</span>
+                    <strong>{{
+                      inputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.outputTokens') }}</span>
+                    <strong>{{
+                      outputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div
+                    v-if="agentTtft(messageContent(msg).agentStats)"
+                    class="stats-row"
+                  >
+                    <span>{{ tm('stats.ttft') }}</span>
+                    <strong>{{
+                      agentTtft(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.duration') }}</span>
+                    <strong>{{
+                      agentDuration(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                </v-card>
+              </v-menu>
+            </div>
             <div v-if="messageRefs(msg).length" class="message-meta-refs">
               <ActionRef
                 :refs="resolvedMessageRefs(msg)"
@@ -269,37 +286,38 @@
 </template>
 
 <script setup lang="ts">
-import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
-import { computed, nextTick, reactive, ref } from "vue";
-import axios from "axios";
-import {
-  CHAT_MARKDOWN_CUSTOM_TAGS,
-  registerChatMarkdownComponents,
-} from "@/components/chat/chatMarkdownComponents";
-import { fileApi } from "@/api/v1";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import { computed, nextTick, reactive, ref } from 'vue';
+import axios from 'axios';
+import { fileApi } from '@/api/v1';
+import { setCustomComponents } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
+import MarkdownMessagePart from '@/components/chat/message_list_comps/MarkdownMessagePart.vue';
+import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
+import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
+import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
+import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
+import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
+import ActionRef from '@/components/chat/message_list_comps/ActionRef.vue';
+import ThemeAwareMarkdownCodeBlock from '@/components/shared/ThemeAwareMarkdownCodeBlock.vue';
 import {
   attachmentName,
   attachmentPresentation,
-} from "@/components/chat/attachmentPresentation";
+} from '@/components/chat/attachmentPresentation';
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
-} from "@/composables/useMessages";
+} from '@/composables/useMessages';
 import type {
   ChatContent,
+  ChatRefItem,
   ChatRecord,
+  MessageDisplayBlock,
   MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
+} from '@/domain/chat';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { copyToClipboard } from '@/utils/clipboard';
+import { useToast } from '@/utils/toast';
 
 const props = withDefaults(
   defineProps<{
@@ -315,24 +333,32 @@ const props = withDefaults(
   },
 );
 
-registerChatMarkdownComponents();
+setCustomComponents('chat-message', {
+  ref: RefNode,
+  code_block: ThemeAwareMarkdownCodeBlock,
+});
 
-const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
+const { t } = useI18n();
+const { tm } = useModuleI18n('features/chat');
+const toast = useToast();
+const isTouchDevice =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(pointer: coarse)').matches;
+const customMarkdownTags = ['ref'];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
-const imagePreview = reactive({ visible: false, url: "" });
+const imagePreview = reactive({ visible: false, url: '' });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 
 const messages = computed(() => props.messages || []);
 
 function isUserMessage(message: ChatRecord) {
-  return messageContent(message).type === "user";
+  return messageContent(message).type === 'user';
 }
 
 function messageContent(message: ChatRecord): ChatContent {
-  return message.content || { type: "bot", message: [] };
+  return message.content || { type: 'bot', message: [] };
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
@@ -343,14 +369,10 @@ function isMessageStreaming(messageIndex: number) {
   return props.isStreaming && messageIndex === messages.value.length - 1;
 }
 
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === "content");
-}
-
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
   if (isUserMessage(message)) {
     const parts = messageParts(message);
-    return parts.length ? [{ kind: "content", parts }] : [];
+    return parts.length ? [{ kind: 'content', parts }] : [];
   }
   return buildMessageBlocks(messageContent(message));
 }
@@ -358,7 +380,7 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
   return renderBlocks(message)
     .slice(blockIndex + 1)
-    .some((block) => block.kind === "content");
+    .some((block) => block.kind === 'content');
 }
 
 function partUrl(part: MessagePart) {
@@ -371,11 +393,11 @@ function partUrl(part: MessagePart) {
   if (lookupFilename) {
     return fileApi.byNameUrl(lookupFilename);
   }
-  return "";
+  return '';
 }
 
 function formatJson(value: unknown) {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     const parsed = parseJsonSafe(value);
     if (parsed !== value) return JSON.stringify(parsed, null, 2);
     return value;
@@ -383,7 +405,7 @@ function formatJson(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    return String(value ?? "");
+    return String(value ?? '');
   }
 }
 
@@ -392,15 +414,15 @@ function replyPreview(messageId?: string | number, fallback?: string) {
   const found = messages.value.find(
     (message) => String(message.id) === String(messageId),
   );
-  const text = found ? plainTextFromMessage(found) : "";
-  return text ? truncate(text, 80) : tm("reply.replyTo");
+  const text = found ? plainTextFromMessage(found) : '';
+  return text ? truncate(text, 80) : tm('reply.replyTo');
 }
 
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
-    .filter((part) => part.type === "plain" && part.text)
+    .filter((part) => part.type === 'plain' && part.text)
     .map((part) => part.text)
-    .join("\n");
+    .join('\n');
 }
 
 function truncate(value: string, max: number) {
@@ -413,9 +435,9 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
-  nextTick(() => {
-    const rows = messageListRoot.value?.querySelectorAll(".message-row");
-    rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  void nextTick(() => {
+    const rows = messageListRoot.value?.querySelectorAll('.message-row');
+    rows?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 }
 
@@ -432,13 +454,14 @@ function resolvedMessageRefs(message: ChatRecord) {
 }
 
 function normalizeRefs(refs: unknown) {
-  if (!refs) return { used: [] as Array<Record<string, unknown>> };
+  if (!refs) return { used: [] as ChatRefItem[] };
   const refsValue = refs as { used?: unknown };
-  const used = Array.isArray(refsValue.used)
-    ? refsValue.used
-    : Array.isArray(refs)
-    ? refs
-    : [];
+  let used: unknown[] = [];
+  if (Array.isArray(refsValue.used)) {
+    used = refsValue.used;
+  } else if (Array.isArray(refs)) {
+    used = refs;
+  }
 
   return {
     used: normalizeRefItems(used),
@@ -447,19 +470,22 @@ function normalizeRefs(refs: unknown) {
 
 function normalizeRefItems(items: unknown[]) {
   return items
-    .map((item: any) => ({
-      index: item?.index,
-      title: item?.title || item?.url || tm("refs.title"),
-      url: item?.url,
-      snippet: item?.snippet,
-      favicon: item?.favicon,
-    }))
+    .map((item) => {
+      const normalized = item as ChatRefItem;
+      return {
+        index: normalized?.index,
+        title: normalized?.title || normalized?.url || tm('refs.title'),
+        url: normalized?.url,
+        snippet: normalized?.snippet,
+        favicon: normalized?.favicon,
+      };
+    })
     .filter((item) => item.url);
 }
 
 function openRefsSidebar(refs: unknown) {
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === 'object' ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
@@ -470,24 +496,24 @@ function normalizeToolCall(tool: Record<string, unknown>) {
   );
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
+  if (normalized.result && typeof normalized.result === 'object') {
     normalized.result = JSON.stringify(normalized.result, null, 2);
   }
   return normalized;
 }
 
 function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
+  const name = String(tool.name || '').toLowerCase();
+  return name.includes('python') || name.includes('ipython');
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
+  if (tool.finished_ts) return tm('toolStatus.done');
+  return tm('toolStatus.running');
 }
 
 function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -497,20 +523,30 @@ function parseJsonSafe(value: unknown) {
 
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
-  if (!text) return;
-  await copyToClipboard(text, { container: messageListRoot.value });
+  if (!text) {
+    toast.error(t('core.common.copyFailed'));
+    return;
+  }
+  const copied = await copyToClipboard(text, {
+    container: messageListRoot.value,
+  });
+  if (copied) {
+    toast.success(t('core.common.copied'));
+    return;
+  }
+  toast.error(t('core.common.copyFailed'));
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.stored_filename || part.filename || "";
+  const key = part.attachment_id || part.stored_filename || part.filename || '';
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
-    const response = await axios.get(partUrl(part), { responseType: "blob" });
+    const response = await axios.get(partUrl(part), { responseType: 'blob' });
     const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement("a");
+    const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = part.filename || "file";
+    anchor.download = part.filename || 'file';
     anchor.click();
     URL.revokeObjectURL(url);
   } finally {
@@ -528,52 +564,60 @@ function openImage(url: string) {
 
 function closeImage() {
   imagePreview.visible = false;
-  imagePreview.url = "";
+  imagePreview.url = '';
 }
 
 function formatTime(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function inputTokens(stats: any) {
+function inputTokens(stats: Record<string, unknown> | null | undefined) {
   const usage = stats?.token_usage || {};
-  return usage.input_other || 0;
+  return Number((usage as Record<string, unknown>).input_other || 0);
 }
 
-function outputTokens(stats: any) {
-  return stats?.token_usage?.output || 0;
+function outputTokens(stats: Record<string, unknown> | null | undefined) {
+  return Number(
+    (stats?.token_usage as Record<string, unknown> | undefined)?.output || 0,
+  );
 }
 
-function cachedInputTokens(stats: any) {
-  return stats?.token_usage?.input_cached || 0;
+function cachedInputTokens(stats: Record<string, unknown> | null | undefined) {
+  return Number(
+    (stats?.token_usage as Record<string, unknown> | undefined)?.input_cached ||
+      0,
+  );
 }
 
-function agentDuration(stats: any) {
+function agentDuration(stats: Record<string, unknown> | null | undefined) {
   const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
+    'duration',
+    'total_duration',
   ]);
   if (directDuration !== null) return formatDuration(directDuration);
 
-  const startTime = readPositiveNumber(stats, ["start_time"]);
-  const endTime = readPositiveNumber(stats, ["end_time"]);
-  if (startTime === null || endTime === null || endTime < startTime) return "-";
+  const startTime = readPositiveNumber(stats, ['start_time']);
+  const endTime = readPositiveNumber(stats, ['end_time']);
+  if (startTime === null || endTime === null || endTime < startTime) return '-';
   return formatDuration(endTime - startTime);
 }
 
-function agentTtft(stats: any) {
+function agentTtft(stats: Record<string, unknown> | null | undefined) {
   const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
+    'time_to_first_token',
+    'ttft',
+    'first_token_latency',
   ]);
-  if (ttft === null) return "";
+  if (ttft === null) return '';
   return formatDuration(ttft);
 }
 
-function readPositiveNumber(source: any, keys: string[]) {
+function readPositiveNumber(
+  source: Record<string, unknown> | null | undefined,
+  keys: string[],
+) {
   for (const key of keys) {
     const value = Number(source?.[key]);
     if (Number.isFinite(value) && value > 0) return value;
@@ -592,7 +636,6 @@ function formatDuration(seconds: number) {
 
 <style scoped>
 .message-list-root {
-  container: chat-messages / inline-size;
   --chat-border: rgba(var(--v-border-color), 0.16);
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
   width: 100%;
@@ -631,12 +674,6 @@ function formatDuration(seconds: number) {
   max-width: min(760px, 82%);
 }
 
-.from-bot .message-stack {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: 760px;
-}
-
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 60%;
@@ -668,7 +705,7 @@ function formatDuration(seconds: number) {
 }
 
 .message-bubble.user {
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   padding: 12px 18px;
   font-size: 15px;
   border-radius: 1.5rem;
@@ -682,6 +719,14 @@ function formatDuration(seconds: number) {
 
 .plain-content {
   white-space: pre-wrap;
+}
+
+.loading-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--chat-muted);
 }
 
 .reply-quote {
@@ -702,14 +747,11 @@ function formatDuration(seconds: number) {
 
 .image-part {
   display: block;
-  width: fit-content;
-  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
-  text-align: left;
 }
 
 .image-part img {
@@ -821,6 +863,25 @@ function formatDuration(seconds: number) {
   font-size: 12px;
 }
 
+.message-time {
+  opacity: 0.72;
+}
+
+.message-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-row:hover .message-meta-actions,
+.message-row:focus-within .message-meta-actions,
+.is-touch .message-meta-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .message-meta-refs {
   display: flex;
   align-items: center;
@@ -864,16 +925,6 @@ function formatDuration(seconds: number) {
   max-height: 88vh;
   border-radius: 8px;
   object-fit: contain;
-}
-
-@container chat-messages (max-width: 600px) {
-  .message-row.from-bot .bot-avatar {
-    display: none;
-  }
-
-  .message-bubble.bot {
-    padding-inline: 0;
-  }
 }
 
 @media (max-width: 760px) {

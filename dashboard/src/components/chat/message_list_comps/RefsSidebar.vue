@@ -1,138 +1,172 @@
 <template>
-  <transition name="chat-panel">
-    <div v-if="isOpen" class="refs-sidebar chat-side-panel">
-      <div class="sidebar-header">
-        <h3 class="sidebar-title">{{ tm("refs.title") }}</h3>
-        <v-btn
-          icon="mdi-close"
-          size="small"
-          variant="text"
-          @click="close"
-        ></v-btn>
-      </div>
+  <div class="refs-sidebar-root">
+    <transition name="slide-left">
+      <div v-if="isOpen" class="refs-sidebar">
+        <div class="sidebar-header">
+          <h3 class="sidebar-title">{{ tm('refs.title') }}</h3>
+          <v-btn
+            icon="mdi-close"
+            size="small"
+            variant="text"
+            @click="close"
+          ></v-btn>
+        </div>
 
-      <div class="refs-list">
-        <div
-          v-for="(ref, index) in normalizedRefs"
-          :key="ref.index || index"
-          class="ref-item"
-          @click="openLink(ref.url)"
-        >
-          <div class="ref-item-icon">
-            <img
-              v-if="ref.favicon"
-              :src="ref.favicon"
-              class="ref-item-favicon"
-              @error="(e) => (e.target.style.display = 'none')"
-            />
-            <div v-else class="ref-item-initial">
-              {{ getRefInitial(ref.title) }}
+        <div class="refs-list">
+          <div
+            v-for="(ref, index) in normalizedRefs"
+            :key="String(ref.index ?? index)"
+            class="ref-item"
+            @click="openLink(ref.url)"
+          >
+            <div class="ref-item-icon">
+              <img
+                v-if="ref.favicon"
+                :src="ref.favicon"
+                class="ref-item-favicon"
+                @error="hideBrokenImage"
+              />
+              <div v-else class="ref-item-initial">
+                {{ getRefInitial(ref.title) }}
+              </div>
             </div>
-          </div>
-          <div class="ref-item-content">
-            <div class="ref-item-title">{{ ref.title }}</div>
-            <div class="ref-item-url">{{ formatUrl(ref.url) }}</div>
-            <div v-if="ref.snippet" class="ref-item-snippet">
-              {{ ref.snippet }}
+            <div class="ref-item-content">
+              <div class="ref-item-title">{{ ref.title }}</div>
+              <div class="ref-item-url">{{ formatUrl(ref.url) }}</div>
+              <div v-if="ref.snippet" class="ref-item-snippet">
+                {{ ref.snippet }}
+              </div>
             </div>
+            <v-icon size="small" class="ref-item-arrow">mdi-open-in-new</v-icon>
           </div>
-          <v-icon size="small" class="ref-item-arrow">mdi-open-in-new</v-icon>
         </div>
       </div>
-    </div>
-  </transition>
+    </transition>
+  </div>
 </template>
 
-<script>
-import "@/components/chat/chatPanelTransition.css";
-import { useModuleI18n } from "@/i18n/composables";
+<script setup lang="ts">
+import { useModuleI18n } from '@/i18n/composables';
+import { computed } from 'vue';
 
-export default {
-  name: "RefsSidebar",
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false,
-    },
-    refs: {
-      type: Object,
-      default: null,
-    },
+interface RefItem {
+  index?: unknown;
+  title?: unknown;
+  url?: unknown;
+  snippet?: unknown;
+  favicon?: unknown;
+  [key: string]: unknown;
+}
+
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean;
+    refs?: unknown;
+  }>(),
+  {
+    modelValue: false,
+    refs: undefined,
   },
-  emits: ["update:modelValue"],
-  setup() {
-    const { tm } = useModuleI18n("features/chat");
-    return { tm };
+);
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+}>();
+
+const { tm } = useModuleI18n('features/chat');
+
+const isOpen = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => {
+    emit('update:modelValue', value);
   },
-  computed: {
-    isOpen: {
-      get() {
-        return this.modelValue;
-      },
-      set(value) {
-        this.$emit("update:modelValue", value);
-      },
-    },
+});
 
-    normalizedRefs() {
-      const used = Array.isArray(this.refs?.used)
-        ? this.refs.used
-        : Array.isArray(this.refs)
-        ? this.refs
-        : [];
+const normalizedRefs = computed(() => {
+  let used: RefItem[] = [];
+  if (
+    props.refs &&
+    typeof props.refs === 'object' &&
+    !Array.isArray(props.refs) &&
+    Array.isArray((props.refs as { used?: unknown }).used)
+  ) {
+    used = (props.refs as { used: RefItem[] }).used;
+  } else if (Array.isArray(props.refs)) {
+    used = props.refs as RefItem[];
+  }
 
-      return used
-        .map((ref) => ({
-          index: ref?.index,
-          title: ref?.title || ref?.url || "Reference",
-          url: ref?.url,
-          snippet: ref?.snippet,
-          favicon: ref?.favicon,
-        }))
-        .filter((ref) => ref.url);
-    },
-  },
-  methods: {
-    close() {
-      this.isOpen = false;
-    },
+  return used
+    .map((ref) => ({
+      index: ref?.index,
+      title: String(ref?.title || ref?.url || 'Reference'),
+      url: typeof ref?.url === 'string' ? ref.url : undefined,
+      snippet: typeof ref?.snippet === 'string' ? ref.snippet : undefined,
+      favicon: typeof ref?.favicon === 'string' ? ref.favicon : undefined,
+    }))
+    .filter((ref) => Boolean(ref.url));
+});
 
-    getRefInitial(title) {
-      if (!title) return "?";
-      return title.charAt(0).toUpperCase();
-    },
+function close(): void {
+  isOpen.value = false;
+}
 
-    formatUrl(url) {
-      if (!url) return "";
-      try {
-        const urlObj = new URL(url);
-        return urlObj.hostname;
-      } catch {
-        return url;
-      }
-    },
+function getRefInitial(title?: unknown): string {
+  if (typeof title !== 'string' || !title) {
+    return '?';
+  }
+  return title.charAt(0).toUpperCase();
+}
 
-    openLink(url) {
-      if (url) {
-        window.open(url, "_blank");
-      }
-    },
-  },
-};
+function formatUrl(url?: string): string {
+  if (!url) {
+    return '';
+  }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+function openLink(url?: string): void {
+  if (url) {
+    window.open(url, '_blank');
+  }
+}
+
+function hideBrokenImage(event: Event): void {
+  const target = event.target;
+  if (target instanceof HTMLImageElement) {
+    target.style.display = 'none';
+  }
+}
 </script>
 
 <style scoped>
 .refs-sidebar {
-  --chat-side-panel-width: 360px;
-  width: var(--chat-side-panel-width);
-  height: calc(100% - var(--chat-panel-top-offset, 0px));
-  margin-top: var(--chat-panel-top-offset, 0px);
-  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
-  border-left: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.16));
+  width: 360px;
+  height: 100%;
+  background-color: rgb(var(--v-theme-surface));
+  border-left: 1px solid rgba(var(--v-border-color), 0.16);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   color: rgb(var(--v-theme-on-surface));
+}
+
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-left-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slide-left-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 
 .sidebar-header {
@@ -206,7 +240,7 @@ export default {
 .ref-item-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -217,7 +251,7 @@ export default {
 
 .ref-item-url {
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.7;
   margin-bottom: 6px;
   overflow: hidden;
@@ -227,7 +261,7 @@ export default {
 
 .ref-item-snippet {
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.8;
   line-height: 1.5;
   overflow: hidden;
@@ -240,24 +274,12 @@ export default {
 .ref-item-arrow {
   flex-shrink: 0;
   margin-top: 4px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.5;
   transition: opacity 0.2s ease;
 }
 
 .ref-item:hover .ref-item-arrow {
   opacity: 1;
-}
-
-@media (max-width: 760px) {
-  .refs-sidebar {
-    position: fixed;
-    inset: 0;
-    z-index: 1300;
-    width: 100vw;
-    height: 100dvh;
-    margin-top: 0;
-    border-left: 0;
-  }
 }
 </style>

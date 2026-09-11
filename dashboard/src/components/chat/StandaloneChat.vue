@@ -4,7 +4,7 @@
       <div v-if="isDragging" class="chat-drop-overlay">
         <div class="chat-drop-overlay-content">
           <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-          <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+          <span class="chat-drop-text">{{ tm('input.dropToUpload') }}</span>
         </div>
       </div>
     </transition>
@@ -14,7 +14,7 @@
       </div>
 
       <div v-else-if="!activeMessages.length" class="standalone-state">
-        <div class="welcome-title">{{ tm("welcome.title") }}</div>
+        <div class="welcome-title">{{ tm('welcome.title') }}</div>
       </div>
 
       <div v-else class="message-list">
@@ -29,9 +29,11 @@
               class="message-bubble"
               :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             >
-              <MessageContentTransition
-                :loading="messageContent(msg).isLoading"
-              >
+              <div v-if="messageContent(msg).isLoading" class="loading-message">
+                {{ tm('message.loading') }}
+              </div>
+
+              <template v-else>
                 <template
                   v-for="(block, blockIndex) in renderBlocks(msg)"
                   :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
@@ -56,7 +58,7 @@
                         v-if="part.type === 'plain' && isUserMessage(msg)"
                         class="plain-content"
                       >
-                        {{ part.text || "" }}
+                        {{ part.text || '' }}
                       </div>
 
                       <MarkdownMessagePart
@@ -131,7 +133,7 @@
                           >
                             <template #label>
                               <v-icon size="16">mdi-code-json</v-icon>
-                              <span>{{ tool.name || "python" }}</span>
+                              <span>{{ tool.name || 'python' }}</span>
                               <span class="tool-call-inline-status">
                                 {{ toolCallStatusText(tool) }}
                               </span>
@@ -159,7 +161,7 @@
                     </template>
                   </template>
                 </template>
-              </MessageContentTransition>
+              </template>
             </div>
           </div>
         </div>
@@ -174,30 +176,36 @@
         :staged-audio-url="stagedAudioUrl"
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
-        show-settings
+        :enable-streaming="enableStreaming"
+        :enable-reasoning="enableReasoning"
         :is-recording="false"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
-        :send-shortcut="sendShortcut"
+        :web-chat-tools-enabled="webChatToolsEnabled"
+        send-shortcut="enter"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
-        @open-settings="settingsOpen = true"
+        @toggle-streaming="enableStreaming = !enableStreaming"
+        @toggle-reasoning="enableReasoning = !enableReasoning"
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
         @paste-image="handlePaste"
         @file-select="handleFilesSelected"
+        @config-changed="handleChatConfigChange"
+        @toggle-web-chat-tools="toggleWebChatTools"
       />
     </section>
 
-    <ChatSettingsDialog
-      v-model="settingsOpen"
-      v-model:enable-streaming="enableStreaming"
-      v-model:enable-reasoning="enableReasoning"
-      v-model:send-shortcut="sendShortcut"
-      v-model:transport-mode="transportMode"
+    <DashboardStepUpDialog
+      :model-value="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpError"
+      @update:model-value="(value) => !value && cancelWebChatTools()"
+      @confirm="submitStepUp"
+      @cancel="cancelWebChatTools"
     />
 
     <v-overlay
@@ -212,7 +220,6 @@
 </template>
 
 <script setup lang="ts">
-import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import {
   computed,
   nextTick,
@@ -221,62 +228,68 @@ import {
   reactive,
   ref,
   watch,
-} from "vue";
-import { chatApi, configRouteApi, fileApi } from "@/api/v1";
-import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import { useDragUpload } from "@/composables/useDragUpload";
-import {
-  CHAT_MARKDOWN_CUSTOM_TAGS,
-  registerChatMarkdownComponents,
-} from "@/components/chat/chatMarkdownComponents";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+} from 'vue';
+import { chatApi, configRouteApi, fileApi } from '@/api/v1';
+import { setCustomComponents } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import ChatInput from '@/components/chat/ChatInput.vue';
+import { useDragUpload } from '@/composables/useDragUpload';
+import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
+import MarkdownMessagePart from '@/components/chat/message_list_comps/MarkdownMessagePart.vue';
+import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
+import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
+import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
+import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
+import ThemeAwareMarkdownCodeBlock from '@/components/shared/ThemeAwareMarkdownCodeBlock.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import {
   attachmentName,
   attachmentPresentation,
-} from "@/components/chat/attachmentPresentation";
-import { useMediaHandling } from "@/composables/useMediaHandling";
+} from '@/components/chat/attachmentPresentation';
+import { useMediaHandling } from '@/composables/useMediaHandling';
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
   useMessages,
-  type ChatRecord,
-  type MessagePart,
   type TransportMode,
-} from "@/composables/useMessages";
-import type { Session } from "@/composables/useSessions";
-import { useModuleI18n } from "@/i18n/composables";
-import { useCustomizerStore } from "@/stores/customizer";
-import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
+} from '@/composables/useMessages';
+import type {
+  ChatRecord,
+  MessageDisplayBlock,
+  MessagePart,
+} from '@/domain/chat';
+import type { Session } from '@/composables/useSessions';
+import { useModuleI18n } from '@/i18n/composables';
+import { useCustomizerStore } from '@/stores/customizer';
+import { buildWebchatUmoDetails } from '@/utils/chatConfigBinding';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const props = withDefaults(defineProps<{ configId?: string | null }>(), {
-  configId: "default",
+  configId: 'default',
 });
 
-registerChatMarkdownComponents();
+setCustomComponents('chat-message', {
+  ref: RefNode,
+  code_block: ThemeAwareMarkdownCodeBlock,
+});
 
-const { tm } = useModuleI18n("features/chat");
+const { tm } = useModuleI18n('features/chat');
 const customizer = useCustomizerStore();
-const currSessionId = ref("");
+const currSessionId = ref('');
 const currentSession = ref<Session | null>(null);
-const draft = ref("");
+const draft = ref('');
 const initializing = ref(false);
-const settingsOpen = ref(false);
-const sendShortcut = ref<"enter" | "shift_enter">("enter");
 const enableStreaming = ref(true);
 const enableReasoning = ref(true);
 const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
-const imagePreview = reactive({ visible: false, url: "" });
+const imagePreview = reactive({ visible: false, url: '' });
+const webChatStepUpTokens = ref<Record<string, string> | null>(null);
+const webChatToolsEnabled = computed(() => webChatStepUpTokens.value !== null);
 
-const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
+const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
+const customMarkdownTags = ['ref'];
 
 const {
   stagedFiles,
@@ -293,7 +306,9 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
+const { isDragging, dragEvents } = useDragUpload((files) => {
+  void handleFilesSelected(files);
+});
 
 const {
   sending,
@@ -307,6 +322,7 @@ const {
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
+  webchatStepUpTokens: webChatStepUpTokens,
   onStreamUpdate: () => {
     if (shouldStickToBottom.value) {
       scrollToBottom();
@@ -314,15 +330,44 @@ const {
   },
 });
 
-const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpError,
+  webChatExpiresAt: webChatStepUpExpiresAt,
+  requestWebChatStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
+
+watch(webChatStepUpExpiresAt, (expiresAt) => {
+  if (expiresAt === null) webChatStepUpTokens.value = null;
+});
+
+watch(currSessionId, (sessionId, previousSessionId) => {
+  if (!previousSessionId || sessionId === previousSessionId) return;
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+});
+
+const activeConfigId = ref<string | null>(null);
+
+watch(
+  () => props.configId,
+  (configId, previousConfigId) => {
+    const nextConfigId = configId || 'default';
+    if (nextConfigId === (previousConfigId || 'default')) return;
+    activeConfigId.value = nextConfigId;
+    cancelStepUp();
+    webChatStepUpTokens.value = null;
+  },
 );
 
-watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
-});
+const transportMode = computed<TransportMode>(() =>
+  (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
+    ? 'websocket'
+    : 'sse',
+);
 
 onMounted(async () => {
   await ensureSession();
@@ -349,8 +394,8 @@ async function ensureSession() {
 }
 
 async function bindConfigToSession(sessionId: string) {
-  const confId = props.configId || "default";
-  const umo = buildWebchatUmoDetails(sessionId, false).umo;
+  const confId = props.configId || 'default';
+  const umo = buildWebchatUmoDetails(sessionId).umo;
   await configRouteApi.upsert(umo, { config_id: confId });
 }
 
@@ -367,7 +412,7 @@ async function sendCurrentMessage() {
     parts,
   });
 
-  draft.value = "";
+  draft.value = '';
   clearStaged({ revokeUrls: false });
   scrollToBottom();
   await focusChatInput();
@@ -379,17 +424,43 @@ async function sendCurrentMessage() {
     transport: transportMode.value,
     enableStreaming: enableStreaming.value,
     enableReasoning: enableReasoning.value,
-    selectedProvider: selection?.providerId || "",
-    selectedModel: selection?.modelName || "",
+    selectedProvider: selection?.providerId || '',
+    selectedModel: selection?.modelName || '',
     userRecord,
     botRecord,
   });
 }
 
+async function toggleWebChatTools() {
+  if (webChatToolsEnabled.value) {
+    cancelWebChatTools();
+    return;
+  }
+  const sessionId = await ensureSession();
+  const tokens = await requestWebChatStepUp(sessionId);
+  if (tokens) webChatStepUpTokens.value = tokens;
+}
+
+function cancelWebChatTools() {
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+}
+
+function handleChatConfigChange(payload: {
+  configId: string;
+  agentRunnerType: string;
+}) {
+  const configId = payload.configId || 'default';
+  const previousConfigId = activeConfigId.value;
+  activeConfigId.value = configId;
+  if (!previousConfigId || configId === previousConfigId) return;
+  cancelWebChatTools();
+}
+
 function buildOutgoingParts(text: string): MessagePart[] {
   const parts: MessagePart[] = [];
   if (text) {
-    parts.push({ type: "plain", text });
+    parts.push({ type: 'plain', text });
   }
   stagedFiles.value.forEach((file) => {
     parts.push({
@@ -402,10 +473,6 @@ function buildOutgoingParts(text: string): MessagePart[] {
   return parts;
 }
 
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === "content");
-}
-
 function bubbleParts(message: ChatRecord) {
   return displayMessageParts(messageContent(message));
 }
@@ -413,7 +480,7 @@ function bubbleParts(message: ChatRecord) {
 function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
   if (isUserMessage(message)) {
     const parts = bubbleParts(message);
-    return parts.length ? [{ kind: "content", parts }] : [];
+    return parts.length ? [{ kind: 'content', parts }] : [];
   }
   return buildMessageBlocks(messageContent(message));
 }
@@ -421,7 +488,7 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
   return renderBlocks(message)
     .slice(blockIndex + 1)
-    .some((block) => block.kind === "content");
+    .some((block) => block.kind === 'content');
 }
 
 async function stopCurrentSession() {
@@ -429,10 +496,10 @@ async function stopCurrentSession() {
   await stopSession(currSessionId.value);
 }
 
-async function handleFilesSelected(files: FileList | File[]) {
+async function handleFilesSelected(files: FileList) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
-    if (file.type.startsWith("image/")) {
+    if (file.type.startsWith('image/')) {
       await processAndUploadImage(file);
     } else {
       await processAndUploadFile(file);
@@ -441,7 +508,7 @@ async function handleFilesSelected(files: FileList | File[]) {
 }
 
 function scrollToBottom() {
-  nextTick(() => {
+  void nextTick(() => {
     const container = messagesContainer.value;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
@@ -458,7 +525,7 @@ async function focusChatInput() {
 
 function messageRefs(message: ChatRecord) {
   const refs = messageContent(message).refs;
-  if (refs && typeof refs === "object" && Array.isArray(refs.used)) {
+  if (refs && typeof refs === 'object' && Array.isArray(refs.used)) {
     return refs as { used?: Array<Record<string, unknown>> };
   }
   return null;
@@ -470,7 +537,7 @@ function partUrl(part: MessagePart) {
   if (part.attachment_id) return fileApi.contentUrl(part.attachment_id);
   const lookupFilename = part.stored_filename || part.filename;
   if (lookupFilename) return fileApi.byNameUrl(lookupFilename);
-  return "";
+  return '';
 }
 
 function normalizeToolCall(tool: Record<string, unknown>) {
@@ -478,33 +545,33 @@ function normalizeToolCall(tool: Record<string, unknown>) {
   normalized.args = parseJsonSafe(normalized.args || normalized.arguments);
   normalized.result = parseJsonSafe(normalized.result);
   if (!normalized.ts) normalized.ts = Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
+  if (normalized.result && typeof normalized.result === 'object') {
     normalized.result = JSON.stringify(normalized.result, null, 2);
   }
   return normalized;
 }
 
 function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
+  const name = String(tool.name || '').toLowerCase();
+  return name.includes('python') || name.includes('ipython');
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
+  if (tool.finished_ts) return tm('toolStatus.done');
+  return tm('toolStatus.running');
 }
 
 function formatJson(value: unknown) {
-  if (typeof value === "string") return value;
+  if (typeof value === 'string') return value;
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    return String(value ?? "");
+    return String(value ?? '');
   }
 }
 
 function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -519,7 +586,7 @@ function openImage(url: string) {
 
 function closeImage() {
   imagePreview.visible = false;
-  imagePreview.url = "";
+  imagePreview.url = '';
 }
 </script>
 
@@ -534,21 +601,17 @@ function closeImage() {
   background: rgb(var(--v-theme-background));
 }
 
-/* 全区域拖拽上传遮罩 */
 .chat-drop-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   z-index: 100;
-  pointer-events: none;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(var(--v-theme-primary), 0.12);
+  pointer-events: none;
   border: 2px dashed rgba(var(--v-theme-primary), 0.45);
   border-radius: 16px;
+  background-color: rgba(var(--v-theme-primary), 0.12);
 }
 
 .chat-drop-overlay-content {
@@ -559,9 +622,9 @@ function closeImage() {
 }
 
 .chat-drop-text {
+  color: rgb(var(--v-theme-primary));
   font-size: 16px;
   font-weight: 500;
-  color: rgb(var(--v-theme-primary));
 }
 
 .drop-fade-enter-active,
@@ -590,7 +653,7 @@ function closeImage() {
 }
 
 .welcome-title {
-  font-family: "Outfit", "Noto Sans", sans-serif;
+  font-family: var(--astrbot-font-ui);
   font-size: 24px;
   font-weight: 700;
 }
@@ -614,12 +677,6 @@ function closeImage() {
   max-width: 88%;
 }
 
-.from-bot .message-stack {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: 760px;
-}
-
 .from-user .message-stack {
   max-width: 70%;
 }
@@ -633,8 +690,8 @@ function closeImage() {
 
 .message-bubble.user {
   padding: 12px 18px;
-  border-radius: 16px;
-  background: rgba(var(--v-theme-primary), 0.16);
+  border-radius: 1.5rem;
+  background: rgba(var(--v-theme-primary), 0.12);
 }
 
 .message-bubble.bot {
@@ -646,20 +703,18 @@ function closeImage() {
   white-space: pre-wrap;
 }
 
+.loading-message,
 .tool-call-inline-status {
   color: var(--standalone-muted);
 }
 
 .image-part {
   display: block;
-  width: fit-content;
-  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
-  text-align: left;
 }
 
 .image-part img {
@@ -757,6 +812,22 @@ function closeImage() {
   z-index: 1;
   padding-bottom: 10px;
   background: rgb(var(--v-theme-background));
+}
+
+.standalone-composer::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  top: -32px;
+  height: 32px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--v-theme-background), 0),
+    rgb(var(--v-theme-background))
+  );
 }
 
 .standalone-composer :deep(.input-area) {

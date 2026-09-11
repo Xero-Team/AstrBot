@@ -1638,6 +1638,7 @@ async def test_telegram_message_handler_routes_media_groups_and_regular_messages
     await adapter.message_handler(media_group_update, context)
 
     regular_update = create_mock_update(media_group_id=None)
+    regular_update.update_id = 2
     await adapter.message_handler(regular_update, context)
 
     adapter.handle_media_group_message.assert_awaited_once_with(
@@ -3411,3 +3412,447 @@ async def test_telegram_malformed_entities_leave_original_text(caption, offset, 
     assert result is not None
     assert result.message_str == text
     assert not any(isinstance(part, Comp.Mention) for part in result.message)
+
+
+def _real_contract_update(
+    field: str = "message",
+    *,
+    update_id: int = 1,
+    connection_id: str = "connection:a",
+    **message_fields,
+) -> Update:
+    user = {"id": 99, "first_name": "Customer", "is_bot": False}
+    chat = {"id": 99, "type": "private"}
+    message = {
+        "message_id": update_id,
+        "date": 1_700_000_000,
+        "chat": chat,
+        "from": user,
+        "text": "hello",
+        "message_thread_id": 42,
+        "is_topic_message": True,
+    }
+    if field in {"channel_post", "edited_channel_post"}:
+        message["chat"] = {"id": -10099, "type": "channel", "title": "News"}
+        message["sender_chat"] = message["chat"]
+        message.pop("from")
+    if field in {"business_message", "edited_business_message"}:
+        message["business_connection_id"] = connection_id
+    message.update(message_fields)
+    return Update.de_json({"update_id": update_id, field: message}, bot=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "target", "sender", "message_type"),
+    [
+        ("message", "99#42", "99", MessageType.FRIEND_MESSAGE),
+        ("channel_post", "-10099#42", "-10099", MessageType.GROUP_MESSAGE),
+        (
+            "business_message",
+            "business:connection%3Aa:99#42",
+            "99",
+            MessageType.FRIEND_MESSAGE,
+        ),
+    ],
+)
+async def test_telegram_update_supported_variants(field, target, sender, message_type):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    update = _real_contract_update(field)
+
+    message = await adapter.convert_message(update, _build_context())
+
+    assert message is not None
+    assert message.type == message_type
+    assert message.session_id == target
+    assert message.sender.user_id == sender
+    assert message.message_str == "hello"
+    assert message.raw_message is update
+    assert adapter.create_event(message).route_identity.target_id == target
+
+
+def _ignored_telegram_updates() -> dict[str, Update]:
+    user = {"id": 99, "first_name": "Alice", "is_bot": False}
+    chat = {"id": 99, "type": "private"}
+    member = {"status": "member", "user": user}
+    member_change = {
+        "chat": chat,
+        "from": user,
+        "date": 1,
+        "old_chat_member": member,
+        "new_chat_member": member,
+    }
+    boost_source = {"source": "premium", "user": user}
+    payloads = {
+        "inline_query": {"id": "q", "from": user, "query": "q", "offset": ""},
+        "chosen_inline_result": {"result_id": "r", "from": user, "query": "q"},
+        "callback_query": {
+            "id": "q",
+            "from": user,
+            "chat_instance": "c",
+            "message": _real_contract_update().message.to_dict(),
+        },
+        "shipping_query": {
+            "id": "q",
+            "from": user,
+            "invoice_payload": "p",
+            "shipping_address": dict.fromkeys(
+                [
+                    "country_code",
+                    "state",
+                    "city",
+                    "street_line1",
+                    "street_line2",
+                    "post_code",
+                ],
+                "x",
+            ),
+        },
+        "pre_checkout_query": {
+            "id": "q",
+            "from": user,
+            "currency": "USD",
+            "total_amount": 1,
+            "invoice_payload": "p",
+        },
+        "poll": {
+            "id": "p",
+            "question": "q",
+            "options": [],
+            "total_voter_count": 0,
+            "is_closed": False,
+            "is_anonymous": True,
+            "type": "regular",
+            "allows_multiple_answers": False,
+            "allows_revoting": False,
+            "members_only": False,
+        },
+        "poll_answer": {
+            "poll_id": "p",
+            "option_ids": [],
+            "option_persistent_ids": [],
+            "user": user,
+        },
+        "my_chat_member": member_change,
+        "chat_member": member_change,
+        "chat_join_request": {
+            "chat": chat,
+            "from": user,
+            "user_chat_id": 99,
+            "date": 1,
+        },
+        "chat_boost": {
+            "chat": chat,
+            "boost": {
+                "boost_id": "b",
+                "add_date": 1,
+                "expiration_date": 2,
+                "source": boost_source,
+            },
+        },
+        "removed_chat_boost": {
+            "chat": chat,
+            "boost_id": "b",
+            "remove_date": 1,
+            "source": boost_source,
+        },
+        "message_reaction": {
+            "chat": chat,
+            "message_id": 1,
+            "date": 1,
+            "old_reaction": [],
+            "new_reaction": [],
+            "user": user,
+        },
+        "message_reaction_count": {
+            "chat": chat,
+            "message_id": 1,
+            "date": 1,
+            "reactions": [],
+        },
+        "business_connection": {
+            "id": "b",
+            "user": user,
+            "user_chat_id": 99,
+            "date": 1,
+            "is_enabled": True,
+        },
+        "deleted_business_messages": {
+            "business_connection_id": "b",
+            "chat": chat,
+            "message_ids": [1],
+        },
+        "purchased_paid_media": {"from": user, "paid_media_payload": "p"},
+        "managed_bot": {"user": user, "bot": {**user, "is_bot": True}},
+    }
+    updates = {
+        field: Update.de_json({"update_id": 1, field: payload}, bot=None)
+        for field, payload in payloads.items()
+    }
+    for field in (
+        "edited_message",
+        "edited_channel_post",
+        "edited_business_message",
+        "guest_message",
+    ):
+        updates[field] = _real_contract_update(
+            field, guest_query_id="guest-query" if field == "guest_message" else None
+        )
+    return updates
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", sorted(_ignored_telegram_updates()))
+async def test_telegram_update_ignored_variants(field):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.handle_msg = AsyncMock()
+    update = _ignored_telegram_updates()[field]
+
+    assert await adapter.convert_message(update, _build_context()) is None
+    await adapter.message_handler(update, _build_context())
+
+    adapter.handle_msg.assert_not_awaited()
+    assert not adapter._media_group_tasks
+
+
+def test_telegram_update_handler_and_matrix_cover_ptb_types():
+    from telegram.ext import MessageHandler, filters
+
+    adapter_type = _load_telegram_adapter()
+    with patch.dict(
+        adapter_type.__init__.__globals__,
+        {"filters": filters, "TelegramMessageHandler": MessageHandler},
+    ):
+        adapter = adapter_type(make_platform_config("telegram"), {}, asyncio.Queue())
+    handler = adapter.application.add_handler.call_args.args[0]
+    supported = adapter_type.run.__globals__["TELEGRAM_ALLOWED_UPDATES"]
+    ignored = _ignored_telegram_updates()
+    assert set(supported) | set(ignored) == set(Update.ALL_TYPES)
+    for field in supported:
+        assert handler.check_update(_real_contract_update(field))
+    for update in ignored.values():
+        assert not handler.check_update(update)
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_allowed_updates_are_explicit():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram", telegram_command_register=False),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.application = MockTelegramBuilder.create_application()
+    adapter.client = adapter.application.bot
+
+    async def stop_after_start(**kwargs):
+        adapter._terminating = True
+
+    adapter.application.updater.start_polling = AsyncMock(side_effect=stop_after_start)
+    await asyncio.wait_for(adapter.run(), timeout=1)
+
+    adapter.application.updater.start_polling.assert_awaited_once_with(
+        allowed_updates=("message", "channel_post", "business_message"),
+        error_callback=adapter._on_polling_error,
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_update_duplicate_and_edit_replays_do_not_dispatch_twice():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.handle_msg = AsyncMock()
+    update = _real_contract_update()
+    await adapter.message_handler(update, _build_context())
+    await adapter.message_handler(update, _build_context())
+    await adapter.message_handler(
+        _real_contract_update("edited_message", update_id=2), _build_context()
+    )
+    assert adapter.handle_msg.await_count == 1
+    adapter._UPDATE_REPLAY_CACHE_SIZE = 2
+    for update_id in (3, 4):
+        await adapter.message_handler(
+            _real_contract_update(update_id=update_id), _build_context()
+        )
+    assert list(adapter._seen_update_ids) == [3, 4]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"sender_business_bot": {"id": 12, "first_name": "Bot", "is_bot": True}},
+        {"from": {"id": 100, "first_name": "Owner", "is_bot": False}},
+        {"from": None},
+        {"business_connection_id": None},
+        {"chat": {"id": 99, "type": "group"}},
+    ],
+)
+async def test_telegram_business_update_rejects_outgoing_or_unroutable_messages(fields):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.handle_msg = AsyncMock()
+    update = _real_contract_update("business_message", **fields)
+    await adapter.message_handler(update, _build_context())
+    adapter.handle_msg.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_update_sender_chat_takes_precedence_over_fake_user():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    update = _real_contract_update(
+        "message",
+        chat={"id": -10099, "type": "supergroup", "title": "Group"},
+        sender_chat={"id": -10099, "type": "supergroup", "title": "Group"},
+    )
+    message = await adapter.convert_message(update, _build_context())
+    assert message is not None
+    assert message.sender.user_id == "-10099"
+    assert message.sender.nickname == "Group"
+
+
+@pytest.mark.asyncio
+async def test_telegram_business_reply_proactive_typing_and_start_keep_namespace(
+    tmp_path,
+):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.client = MockTelegramBuilder.create_bot()
+    update = _real_contract_update("business_message")
+    message = await adapter.convert_message(update, _build_context())
+    assert message is not None
+    event = adapter.create_event(message)
+    ordinary = await adapter.convert_message(_real_contract_update(), _build_context())
+    assert ordinary is not None
+    assert event.unified_msg_origin != adapter.create_event(ordinary).unified_msg_origin
+    path = tmp_path / "report.txt"
+    path.write_text("report")
+    await event.send(
+        MessageChain(
+            [Comp.Plain("reply"), Comp.File(file=str(path), name="report.txt")]
+        )
+    )
+    await adapter.send_by_session(
+        MessageSession.from_str(event.unified_msg_origin),
+        MessageChain([Comp.Plain("proactive")]),
+    )
+    await event.send_typing()
+    for method in (
+        adapter.client.send_message,
+        adapter.client.send_document,
+        adapter.client.send_chat_action,
+    ):
+        for api_call in method.await_args_list:
+            assert api_call.kwargs["chat_id"] == "99"
+            assert api_call.kwargs["message_thread_id"] == "42"
+            assert api_call.kwargs["business_connection_id"] == "connection:a"
+    context = _build_context()
+    context.bot.send_message = AsyncMock()
+    await adapter.start(update, context)
+    assert (
+        context.bot.send_message.await_args.kwargs["business_connection_id"]
+        == "connection:a"
+    )
+    await event.react("👍")
+    adapter.client.set_message_reaction.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_business_streaming_preserves_identity_on_media_and_edits(
+    tmp_path,
+):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.client = MockTelegramBuilder.create_bot()
+    adapter.client.send_message.return_value = SimpleNamespace(message_id=100)
+    message = await adapter.convert_message(
+        _real_contract_update("business_message"), _build_context()
+    )
+    assert message is not None
+    path = tmp_path / "report.txt"
+    path.write_text("report")
+
+    async def generator():
+        yield MessageChain([Comp.Plain("first")])
+        yield MessageChain(
+            [Comp.Plain(" second"), Comp.File(file=str(path), name="report.txt")]
+        )
+
+    event = adapter.create_event(message)
+    with patch.dict(
+        event.send_streaming.__globals__,
+        {"telegramify_markdown": SimpleNamespace(markdownify=lambda text: text + "!")},
+    ):
+        await event.send_streaming(generator())
+    adapter.client.send_message_draft.assert_not_awaited()
+    assert adapter.client.edit_message_text.await_count == 2
+    for method in (
+        adapter.client.send_message,
+        adapter.client.send_document,
+        adapter.client.send_chat_action,
+        adapter.client.edit_message_text,
+    ):
+        for api_call in method.await_args_list:
+            assert api_call.kwargs["chat_id"] == "99"
+            assert api_call.kwargs["business_connection_id"] == "connection:a"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["message", "channel_post", "business_message"])
+async def test_telegram_update_albums_use_supported_message_fields(field):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.media_group_timeout = 0.01
+    adapter.handle_msg = AsyncMock()
+    context = _build_context()
+    for update_id in (1, 1, 2):
+        update = _real_contract_update(
+            field,
+            update_id=update_id,
+            text=None,
+            caption="caption" if update_id == 1 else None,
+            media_group_id="album",
+            photo=[
+                {
+                    "file_id": str(update_id),
+                    "file_unique_id": str(update_id),
+                    "width": 1,
+                    "height": 1,
+                }
+            ],
+        )
+        await adapter.message_handler(update, context)
+    await asyncio.gather(*adapter._media_group_tasks.values())
+    adapter.handle_msg.assert_awaited_once()
+    message = adapter.handle_msg.await_args.args[0]
+    assert message.message_str == "caption"
+    assert sum(isinstance(item, Comp.Image) for item in message.message) == 2
+
+
+@pytest.mark.asyncio
+async def test_telegram_business_albums_separate_connections():
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    for update_id, connection_id in enumerate(("one", "two"), 1):
+        await adapter.message_handler(
+            _real_contract_update(
+                "business_message",
+                update_id=update_id,
+                connection_id=connection_id,
+                media_group_id="same",
+            ),
+            _build_context(),
+        )
+    assert len(adapter._media_group_tasks) == 2
+    await adapter._cleanup_media_groups()

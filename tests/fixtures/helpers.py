@@ -210,6 +210,9 @@ def create_mock_update(
     message.chat.type = chat_type
     message.message_thread_id = message_thread_id
     message.is_topic_message = is_topic_message
+    message.sender_chat = None
+    message.business_connection_id = None
+    message.sender_business_bot = None
 
     # Create user mock
     from_user = MagicMock()
@@ -234,6 +237,8 @@ def create_mock_update(
     message.caption_entities = caption_entities
 
     update.message = message
+    update.channel_post = None
+    update.business_message = None
     update.effective_chat = message.chat
 
     return update

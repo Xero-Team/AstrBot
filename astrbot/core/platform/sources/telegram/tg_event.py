@@ -3,7 +3,7 @@ import os
 import re
 from collections.abc import Callable
 from typing import Any, Literal, cast
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
@@ -37,27 +37,45 @@ def _is_draft_content_bad_request(error: BadRequest) -> bool:
     return "parse entities" in message or "message is too long" in message
 
 
-def format_telegram_topic_target(
+def format_telegram_target(
     chat_id: str | int,
     message_thread_id: str | int | None,
+    business_connection_id: str | None = None,
 ) -> str:
-    """Format a Telegram chat and optional topic as an AstrBot route target."""
+    """Keep chat, topic and Business namespace in a durable AstrBot target."""
     target = str(chat_id)
+    if business_connection_id:
+        target = f"business:{quote(business_connection_id, safe='')}:{target}"
     if message_thread_id is not None:
         target = f"{target}#{message_thread_id}"
     return target
 
 
-def resolve_telegram_api_target(target_id: str) -> tuple[str, str | None]:
-    """Split an AstrBot target into Bot API chat and topic parameters.
+def resolve_telegram_api_target(
+    target_id: str,
+) -> tuple[str, str | None, str | None]:
+    """Resolve the Bot API chat, topic and Business connection parameters.
 
     Telegram's General topic has logical thread ID ``1`` but must be addressed
     by the parent chat without an explicit ``message_thread_id`` parameter.
+
+    Returns:
+        Chat ID, optional API thread ID, and optional Business connection ID.
+
+    Raises:
+        ValueError: The Business target lacks a connection or chat ID.
     """
+    business_connection_id = None
+    if target_id.startswith("business:"):
+        _, encoded_connection_id, target_id = target_id.split(":", 2)
+        business_connection_id = unquote(encoded_connection_id)
+        if not business_connection_id or not target_id:
+            raise ValueError("Invalid Telegram Business target")
     chat_id, separator, message_thread_id = target_id.partition("#")
-    if not separator:
-        return target_id, None
-    return chat_id, None if message_thread_id == "1" else message_thread_id
+    api_thread_id = (
+        message_thread_id if separator and message_thread_id != "1" else None
+    )
+    return chat_id, api_thread_id, business_connection_id
 
 
 def _is_gif(path: str) -> bool:
@@ -154,12 +172,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
         chat_id: str,
         action: ChatAction | str,
         message_thread_id: str | None = None,
+        business_connection_id: str | None = None,
     ) -> None:
-        """发送聊天状态动作"""
+        """Send a chat action in the originating Telegram namespace."""
         try:
             payload: dict[str, Any] = {"chat_id": chat_id, "action": action}
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if business_connection_id:
+                payload["business_connection_id"] = business_connection_id
             await client.send_chat_action(**payload)
         except Exception as e:
             logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
@@ -188,14 +209,22 @@ class TelegramPlatformEvent(AstrMessageEvent):
             str | None, payload.get("message_thread_id")
         )
         await cls._send_chat_action(
-            client, user_name, upload_action, effective_thread_id
+            client,
+            user_name,
+            upload_action,
+            effective_thread_id,
+            payload.get("business_connection_id"),
         )
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
         await send_coro(**send_payload)
         await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, effective_thread_id
+            client,
+            user_name,
+            ChatAction.TYPING,
+            effective_thread_id,
+            payload.get("business_connection_id"),
         )
 
     @classmethod
@@ -267,12 +296,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_thread_id: str | None = None,
     ) -> None:
         """确保显示 typing 状态"""
+        _, _, business_connection_id = resolve_telegram_api_target(
+            self.route_identity.target_id
+        )
         await self._send_chat_action(
-            self._client, user_name, ChatAction.TYPING, message_thread_id
+            self._client,
+            user_name,
+            ChatAction.TYPING,
+            message_thread_id,
+            business_connection_id,
         )
 
     async def send_typing(self) -> None:
-        user_name, message_thread_id = resolve_telegram_api_target(
+        user_name, message_thread_id, _ = resolve_telegram_api_target(
             self.route_identity.target_id
         )
 
@@ -301,11 +337,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 mention_all = True
 
         at_flag = False
-        user_name, message_thread_id = resolve_telegram_api_target(user_name)
+        user_name, message_thread_id, business_connection_id = (
+            resolve_telegram_api_target(user_name)
+        )
 
         # 根据消息链确定合适的 chat action 并发送
         action = cls._get_chat_action_for_chain(message.chain)
-        await cls._send_chat_action(client, user_name, action, message_thread_id)
+        await cls._send_chat_action(
+            client, user_name, action, message_thread_id, business_connection_id
+        )
 
         for i in message.chain:
             payload = {
@@ -315,6 +355,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if business_connection_id:
+                payload["business_connection_id"] = business_connection_id
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
@@ -390,7 +432,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if current_group and current_group.group_id == requested_group_id
             else None
         )
-        chat_id = requested_group_id.split("#", 1)[0]
+        chat_id, _, _ = resolve_telegram_api_target(requested_group_id)
         api_chat_id: str | int = (
             int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
         )
@@ -488,12 +530,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         - 取消本机器人的反应：传入 None 或空字符串
         """
         try:
-            # 解析 chat_id（去掉超级群的 "#<thread_id>" 片段）
-            if self.get_message_type() == MessageType.GROUP_MESSAGE:
-                chat_id = (self.message_obj.group_id or "").split("#")[0]
-            else:
-                chat_id = self.get_sender_id()
-
+            chat_id, _, business_connection_id = resolve_telegram_api_target(
+                self.route_identity.target_id
+            )
+            if business_connection_id:
+                logger.debug("Telegram Business reactions are unsupported")
+                return
             message_id = int(self.message_obj.message_id)
 
             # 组装 reaction 参数（必须是 ReactionType 的列表）
@@ -639,25 +681,30 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await self._send_text_chunks(self._client, delta, payload)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        user_name, message_thread_id = resolve_telegram_api_target(
-            self.route_identity.target_id
+        user_name, message_thread_id, business_connection_id = (
+            resolve_telegram_api_target(self.route_identity.target_id)
         )
         payload = {
             "chat_id": user_name,
         }
         if message_thread_id:
             payload["message_thread_id"] = message_thread_id
+        if business_connection_id:
+            payload["business_connection_id"] = business_connection_id
 
-        # sendMessageDraft 仅支持私聊（显式检查 FRIEND_MESSAGE）
-        is_private = self.get_message_type() == MessageType.FRIEND_MESSAGE
+        # Drafts cannot address a Business connection.
+        use_draft = (
+            self.get_message_type() == MessageType.FRIEND_MESSAGE
+            and business_connection_id is None
+        )
 
-        if is_private:
+        if use_draft:
             logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
             await self._send_streaming_draft(
                 user_name, message_thread_id, payload, generator
             )
         else:
-            logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
+            logger.info("[Telegram] Streaming through send/edit messages")
             return await self._send_streaming_edit(
                 user_name, message_thread_id, payload, generator
             )
@@ -780,7 +827,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
         payload: dict[str, Any],
         generator,
     ) -> PlatformSendResult:
-        """使用 send_message + edit_message_text 进行流式推送（群聊 fallback）。"""
+        """Stream with sends and edits for group or Business chats."""
+        edit_payload = {"chat_id": payload["chat_id"]}
+        if "business_connection_id" in payload:
+            edit_payload["business_connection_id"] = payload["business_connection_id"]
         delta = ""
         current_content = ""
         message_id = None
@@ -811,8 +861,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 elif current_content != text:
                     await self._client.edit_message_text(
                         text=text,
-                        chat_id=payload["chat_id"],
                         message_id=message_id,
+                        **edit_payload,
                     )
                 current_content = text
             except asyncio.CancelledError:
@@ -865,9 +915,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 ):
                     await self._client.edit_message_text(
                         text=markdown_text,
-                        chat_id=payload["chat_id"],
                         message_id=message_id,
                         parse_mode="MarkdownV2",
+                        **edit_payload,
                     )
             except asyncio.CancelledError:
                 raise

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent.btw import runtime_registry
+from astrbot.core.agent.btw.runtime_registry import config_id_of
 from astrbot.core.agent.btw.submission import (
-    config_id_of,
     submit_work_task,
     work_event_for,
 )

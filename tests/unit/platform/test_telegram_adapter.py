@@ -1266,7 +1266,7 @@ async def test_telegram_register_commands_updates_commands_only_when_hash_change
     await adapter.register_commands()
     await adapter.register_commands()
 
-    adapter.client.delete_my_commands.assert_awaited_once()
+    adapter.client.delete_my_commands.assert_not_called()
     adapter.client.set_my_commands.assert_awaited_once_with([command])
     assert adapter._last_command_snapshot == (("ask", "Ask something"),)
 
@@ -1289,6 +1289,84 @@ async def test_telegram_register_commands_clears_stale_menu_when_no_commands():
     adapter.client.delete_my_commands.assert_awaited_once()
     adapter.client.set_my_commands.assert_not_awaited()
     assert adapter._last_command_snapshot == ()
+
+
+@pytest.mark.asyncio
+async def test_telegram_register_commands_retries_after_rejected_write():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    command = SimpleNamespace(command="ask", description="Ask something")
+    adapter.collect_commands = MagicMock(return_value=[command])
+    adapter.client.set_my_commands = AsyncMock(side_effect=RuntimeError("rejected"))
+
+    await adapter.register_commands()
+
+    assert adapter._last_command_snapshot is None
+    adapter.client.set_my_commands.side_effect = None
+    await adapter.register_commands()
+
+    adapter.client.delete_my_commands.assert_not_called()
+    assert adapter.client.set_my_commands.await_count == 2
+    assert adapter._last_command_snapshot == (("ask", "Ask something"),)
+
+
+@pytest.mark.asyncio
+async def test_telegram_register_commands_retries_after_timeout():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    command = SimpleNamespace(command="ask", description="Ask something")
+    adapter.collect_commands = MagicMock(return_value=[command])
+    adapter.client.set_my_commands = AsyncMock(side_effect=TimedOut())
+
+    await adapter.register_commands()
+
+    assert adapter._last_command_snapshot is None
+    adapter.client.set_my_commands.side_effect = None
+    await adapter.register_commands()
+
+    assert adapter.client.set_my_commands.await_count == 2
+    assert adapter._last_command_snapshot == (("ask", "Ask something"),)
+
+
+@pytest.mark.asyncio
+async def test_telegram_periodic_command_refresh_reconciles_unchanged_snapshot():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    command = SimpleNamespace(command="ask", description="Ask something")
+    adapter.collect_commands = MagicMock(return_value=[command])
+    adapter.client.set_my_commands = AsyncMock()
+
+    await adapter.register_commands()
+    await adapter.register_commands(reconcile=True)
+
+    adapter.client.delete_my_commands.assert_not_called()
+    assert adapter.client.set_my_commands.await_count == 2
+
+
+def test_telegram_command_scheduler_requests_reconciliation():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.scheduler.running = False
+
+    adapter._start_command_scheduler()
+
+    assert adapter.scheduler.add_job.call_args.kwargs["kwargs"] == {"reconcile": True}
 
 
 @pytest.mark.asyncio
@@ -1421,6 +1499,46 @@ def test_telegram_collect_commands_filters_duplicates_invalid_and_inactive_handl
         ("toolbox", "Duplicate ask command should l..."),
         ("tools", "Duplicate ask command should l..."),
     ]
+
+
+def test_telegram_collect_commands_caps_menu_at_100_entries():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    handlers, plugins = _bind_runtime_registries(adapter)
+    plugins.publish(
+        StarMetadata(
+            name="Many commands",
+            module_path="plugin.many",
+            activated=True,
+        )
+    )
+
+    async def handler(event):
+        return None
+
+    for index in range(101):
+        handlers.append(
+            StarHandlerMetadata(
+                event_type=EventType.AdapterMessageEvent,
+                handler_full_name=f"plugin.many_handler_{index}",
+                handler_name=f"handler_{index}",
+                handler_module_path="plugin.many",
+                handler=handler,
+                event_filters=[CommandFilter(f"cmd_{index:03d}")],
+                desc=f"Command {index}",
+                enabled=True,
+            )
+        )
+
+    commands = adapter.collect_commands()
+
+    assert len(commands) == 100
+    assert commands[0].command == "cmd_000"
+    assert commands[-1].command == "cmd_099"
 
 
 def test_telegram_extract_command_info_skips_nested_groups_and_long_descriptions():

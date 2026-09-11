@@ -61,6 +61,7 @@ def _telegram_member_status(raw_message: object) -> str | None:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    _TELEGRAM_COMMAND_LIMIT = 100
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
     _MEDIA_GROUP_MAX_ACTIVE = 128
     _MEDIA_GROUP_MAX_ITEMS = 10
@@ -282,6 +283,7 @@ class TelegramPlatformAdapter(Platform):
             seconds=self.config.get("telegram_command_register_interval", 300),
             id="telegram_command_register",
             misfire_grace_time=60,
+            kwargs={"reconcile": True},
         )
         self.scheduler.start()
 
@@ -395,17 +397,18 @@ class TelegramPlatformAdapter(Platform):
         except RuntimeError:
             return
 
-    async def register_commands(self) -> None:
+    async def register_commands(self, *, reconcile: bool = False) -> None:
         """收集所有注册的指令并注册到 Telegram"""
         async with self._command_refresh_lock:
             try:
                 commands = self.collect_commands()
                 snapshot = tuple((cmd.command, cmd.description) for cmd in commands)
-                if snapshot == self._last_command_snapshot:
+                if not reconcile and snapshot == self._last_command_snapshot:
                     return
-                await self.client.delete_my_commands()
                 if commands:
                     await self.client.set_my_commands(commands)
+                else:
+                    await self.client.delete_my_commands()
                 self._last_command_snapshot = snapshot
 
             except asyncio.CancelledError:
@@ -452,7 +455,17 @@ class TelegramPlatformAdapter(Platform):
                             )
                         command_dict.setdefault(cmd_name, description)
 
-        commands_a = sorted(command_dict.keys())
+        commands_a = sorted(command_dict)
+        omitted_count = max(0, len(commands_a) - self._TELEGRAM_COMMAND_LIMIT)
+        if omitted_count:
+            logger.warning(
+                "Telegram command menu limit reached; omitted %d commands "
+                "after the first %d sorted entries (first omitted: %s).",
+                omitted_count,
+                self._TELEGRAM_COMMAND_LIMIT,
+                commands_a[self._TELEGRAM_COMMAND_LIMIT],
+            )
+            commands_a = commands_a[: self._TELEGRAM_COMMAND_LIMIT]
         return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
 
     @staticmethod

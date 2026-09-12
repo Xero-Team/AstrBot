@@ -839,9 +839,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         )
                         yield mcp.types.CallToolResult(content=[text_content])
                 else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                    # Tools may send a direct message and return ``None``.  If
+                    # they did not produce a direct result either, still emit a
+                    # deterministic tool result so the model loop cannot stall
+                    # on an empty assistant turn.
+                    direct_result_sent = False
                     if res := run_context.context.event.get_result():
                         if res.chain:
                             try:
@@ -851,12 +853,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                         type="tool_direct_result",
                                     )
                                 )
+                                direct_result_sent = True
                             except Exception as e:
                                 logger.error(
                                     f"Tool 直接发送消息失败: {e}",
                                     exc_info=True,
                                 )
-                    yield None
+                    if not direct_result_sent:
+                        yield mcp.types.CallToolResult(
+                            content=[
+                                mcp.types.TextContent(
+                                    type="text", text="工具没有返回内容"
+                                )
+                            ]
+                        )
             except TimeoutError:
                 raise Exception(
                     f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",

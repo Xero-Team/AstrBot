@@ -1400,6 +1400,43 @@ async def test_im_instance_operator_uses_instance_tools_without_step_up(authoriz
 
 
 @pytest.mark.asyncio
+async def test_im_member_can_use_web_search_tool(authorization):
+    subject = Subject.im(
+        platform_instance="telegram", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "telegram:GroupMessage:room-1")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.MEMBER,
+        scope_type="session",
+        scope_id=current.id,
+        config_id="default",
+        enforce_actor=False,
+    )
+    decision = await authorization.authorize(
+        subject,
+        "tool.web_search",
+        Resource.named("tool", "web_search_anysearch", config_id="default"),
+        _session_context(subject, current),
+    )
+    assert decision.allowed
+
+
+@pytest.mark.asyncio
+async def test_im_guest_cannot_use_web_search_tool(authorization):
+    subject = Subject.plugin("web-search-test")
+    current = Resource.session("default", "telegram:GroupMessage:room-2")
+    decision = await authorization.authorize(
+        subject,
+        "tool.web_search",
+        Resource.named("tool", "web_search_anysearch", config_id="default"),
+        _session_context(subject, current),
+    )
+    assert not decision.allowed
+
+
+@pytest.mark.asyncio
 async def test_im_member_cannot_use_instance_tools(authorization):
     subject = Subject.im(
         platform_instance="weixin", bot_account_id="bot", sender_id="99"

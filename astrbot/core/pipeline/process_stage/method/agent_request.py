@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
+from astrbot.core.agent.btw.types import mark_work_run_failed
 from astrbot.core.config.agent_runner import normalize_agent_runner_for_load
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
@@ -33,12 +34,17 @@ class AgentRequestSubStage(Stage):
             logger.debug(
                 "This pipeline does not enable AI capability, skip processing."
             )
+            # A work run that is turned away here never reaches an Agent, so the
+            # generator ends without running anything.  Record that as a failure
+            # rather than letting it read as a completed task.
+            mark_work_run_failed(event)
             return
 
         if not await self.session_services.should_process_llm_request(event):
             logger.debug(
                 f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing."
             )
+            mark_work_run_failed(event)
             return
 
         async for resp in self.agent_sub_stage.process(event):

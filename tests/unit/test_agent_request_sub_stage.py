@@ -125,12 +125,20 @@ class FakeEvent:
         self,
         unified_msg_origin: str = "umo-1",
         platform_name: str = "test",
+        extras: dict | None = None,
     ) -> None:
         self.unified_msg_origin = unified_msg_origin
         self.platform_name = platform_name
+        self.extras = extras or {}
 
     def get_platform_name(self) -> str:
         return self.platform_name
+
+    def get_extra(self, key: str):
+        return self.extras.get(key)
+
+    def set_extra(self, key: str, value) -> None:
+        self.extras[key] = value
 
 
 async def _yield_items(*items):
@@ -215,11 +223,14 @@ async def test_process_returns_early_when_provider_is_disabled(monkeypatch):
         should_process,
     )
 
-    outputs = [item async for item in stage.process(FakeEvent())]
+    event = FakeEvent(extras={"btw_loop": "work"})
+    outputs = [item async for item in stage.process(event)]
 
     assert outputs == []
     should_process.assert_not_awaited()
     assert stage.agent_sub_stage.process_calls == []
+    # A work run turned away here never reached an Agent.
+    assert event.get_extra("btw_work_failed") is True
 
 
 @pytest.mark.asyncio
@@ -235,11 +246,33 @@ async def test_process_returns_early_when_session_llm_is_disabled(monkeypatch):
         should_process,
     )
 
-    outputs = [item async for item in stage.process(FakeEvent("umo-disabled"))]
+    event = FakeEvent("umo-disabled", extras={"btw_loop": "work"})
+    outputs = [item async for item in stage.process(event)]
 
     assert outputs == []
     should_process.assert_awaited_once()
     assert stage.agent_sub_stage.process_calls == []
+    assert event.get_extra("btw_work_failed") is True
+
+
+@pytest.mark.asyncio
+async def test_process_leaves_a_refused_chat_run_unmarked(monkeypatch):
+    """Only the work loop reads the failure marker; chat runs keep their path."""
+    stage = agent_request.AgentRequestSubStage()
+    ctx = _ctx()
+    await stage.initialize(ctx)
+
+    monkeypatch.setattr(
+        agent_request.SessionServiceManager,
+        "should_process_llm_request",
+        AsyncMock(return_value=False),
+    )
+    event = FakeEvent("umo-disabled")
+
+    outputs = [item async for item in stage.process(event)]
+
+    assert outputs == []
+    assert event.get_extra("btw_work_failed") is None
 
 
 @pytest.mark.asyncio

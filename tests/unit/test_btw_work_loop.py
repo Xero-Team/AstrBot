@@ -9,6 +9,10 @@ from astrbot.core.agent.btw.types import WorkSessionStatus, is_work_loop_enabled
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
 from astrbot.core.astr_agent_run_util import run_agent
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.pipeline.process_stage.method import agent_request
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
+from tests.unit.agent_sub_stage_support import FakeThirdPartyRunner
 from tests.unit.test_astr_agent_run_util import FakeEvent as RunnerEvent
 from tests.unit.test_astr_agent_run_util import FakeRunner
 
@@ -78,6 +82,45 @@ class RunAgentExecutor:
     async def process(self, event):
         del event
         async for _ in run_agent(self.runner):
+            yield
+
+
+class ThirdPartyExecutor:
+    """The real third-party response handler as the work loop's executor."""
+
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    async def process(self, event):
+        stage = third_party.ThirdPartyAgentSubStage.__new__(
+            third_party.ThirdPartyAgentSubStage
+        )
+        async for _ in stage._handle_non_streaming_response(
+            runner=self.runner,
+            event=event,
+            stream_to_general=False,
+            custom_error_message=None,
+        ):
+            yield
+
+
+class AdmissionSkipExecutor:
+    """The real Agent request stage for a run the session turns away."""
+
+    def __init__(self, stage) -> None:
+        self.stage = stage
+
+    async def process(self, event):
+        async for progress in self.stage.process(event):
+            yield progress
+
+
+class SilentExecutor:
+    """An executor that ends without running anything or reporting a result."""
+
+    async def process(self, event):
+        del event
+        if False:  # noqa: SIM223 -- unreachable yield keeps this a generator
             yield
 
 
@@ -283,3 +326,91 @@ async def test_work_loop_records_user_abort_as_cancelled():
     session = await sessions.get_for_origin(event.unified_msg_origin)
     assert session is not None
     assert session.status is WorkSessionStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_work_loop_records_agent_error_response_as_failed():
+    """A local ``err`` response ends the generator normally but is a failure."""
+    event = WorkEvent()
+    runner = FakeRunner(
+        [SimpleNamespace(type="err", data={"chain": MessageChain().message("boom")})],
+        event=event,
+    )
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(RunAgentExecutor(runner), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_work_loop_records_runner_exception_as_failed():
+    """run_agent converts a raising runner into a result, not into a re-raise."""
+    event = WorkEvent()
+    runner = FakeRunner(RuntimeError("provider exploded"), event=event, streaming=True)
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(RunAgentExecutor(runner), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_work_loop_records_third_party_runner_error_as_failed():
+    """A third-party runner failure is reported through its own marker."""
+    event = WorkEvent()
+    runner = FakeThirdPartyRunner(
+        step_exception=RuntimeError("service unavailable"),
+        final_resp=None,
+    )
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(ThirdPartyExecutor(runner), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+
+    assert event.get_extra(third_party.THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY) is True
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_work_loop_records_a_run_the_session_refused_as_failed():
+    """Session admission can decline a work run before any Agent is built."""
+    event = WorkEvent()
+    stage = agent_request.AgentRequestSubStage.__new__(
+        agent_request.AgentRequestSubStage
+    )
+    stage.ctx = SimpleNamespace(astrbot_config={"provider_settings": {"enable": True}})
+    stage.session_services = SimpleNamespace(
+        should_process_llm_request=AsyncMock(return_value=False)
+    )
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(AdmissionSkipExecutor(stage), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+
+    assert event.get_extra("btw_loop") == "work"
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_work_loop_does_not_report_a_silent_run_as_completed():
+    """An executor that ran nothing is not evidence the task succeeded."""
+    event = FakeEvent("执行命令")
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(SilentExecutor(), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED

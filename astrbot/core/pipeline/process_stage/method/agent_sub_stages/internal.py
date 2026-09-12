@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import replace
 
 from astrbot import logger
+from astrbot.core.agent.btw.types import WORK_FAILED_EXTRA
 from astrbot.core.agent.follow_up import FollowUpCapture
 from astrbot.core.agent.llm_types import (
     LLMResponse,
@@ -426,7 +427,7 @@ class InternalAgentSubStage:
                     )
                     if build_result is None:
                         if is_detached_work:
-                            event.set_extra("btw_work_failed", True)
+                            event.set_extra(WORK_FAILED_EXTRA, True)
                         return
 
                     agent_runner = build_result.agent_runner
@@ -575,7 +576,7 @@ class InternalAgentSubStage:
 
         except Exception as e:
             if is_detached_work:
-                event.set_extra("btw_work_failed", True)
+                event.set_extra(WORK_FAILED_EXTRA, True)
             logger.error(
                 "Error occurred while processing agent: %s",
                 safe_error("", e),

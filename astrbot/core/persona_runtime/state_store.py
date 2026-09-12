@@ -60,6 +60,5 @@ class PersonaRuntimeStateStore:
             consecutive_idle_count=consecutive_idle_count,
             cooldown_until=cooldown_until,
             last_interaction_at=now,
-            last_proactive_at=existing.last_proactive_at,
             extra_state=extra_state,
         )

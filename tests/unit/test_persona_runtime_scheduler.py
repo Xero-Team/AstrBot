@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -32,27 +31,3 @@ def test_injector_adds_transient_runtime_context():
     assert req.extra_user_content_parts
     assert req.extra_user_content_parts[0].is_temp is True
     assert "persona_runtime_context" in req.extra_user_content_parts[0].text
-
-
-@pytest.mark.asyncio
-async def test_process_turn_reraises_cancelled_error(temp_db):
-    manager = PersonaRuntimeManager(temp_db)
-    await temp_db.initialize()
-
-    async def boom(**_kwargs):
-        raise asyncio.CancelledError
-
-    manager.jargon_learner.learn = boom  # type: ignore[method-assign]
-    event = SimpleNamespace(
-        unified_msg_origin="webchat:FriendMessage:cancel",
-        message_str="hello `term` `term`",
-        message_obj=SimpleNamespace(sender=SimpleNamespace(user_id="u1")),
-    )
-
-    with pytest.raises(asyncio.CancelledError):
-        await manager.process_turn(
-            event=event,
-            persona_id="persona-a",
-            conversation_id="cid-1",
-            assistant_text="ack",
-        )

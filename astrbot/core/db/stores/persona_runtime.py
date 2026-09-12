@@ -38,7 +38,6 @@ class PersonaRuntimeStoreMixin(DatabaseStoreMixin):
         consecutive_idle_count: int = 0,
         cooldown_until: datetime | None = None,
         last_interaction_at: datetime | None = None,
-        last_proactive_at: datetime | None = None,
         extra_state: dict | None = None,
     ) -> PersonaSessionState:
         async with store_session(self) as session:
@@ -60,7 +59,6 @@ class PersonaRuntimeStoreMixin(DatabaseStoreMixin):
                         consecutive_idle_count=consecutive_idle_count,
                         cooldown_until=cooldown_until,
                         last_interaction_at=last_interaction_at,
-                        last_proactive_at=last_proactive_at,
                         extra_state=extra_state or {},
                     )
                     session.add(state)
@@ -70,7 +68,6 @@ class PersonaRuntimeStoreMixin(DatabaseStoreMixin):
                     state.consecutive_idle_count = consecutive_idle_count
                     state.cooldown_until = cooldown_until
                     state.last_interaction_at = last_interaction_at
-                    state.last_proactive_at = last_proactive_at
                     state.extra_state = extra_state or {}
                     state.updated_at = datetime.now(UTC)
                 await session.flush()

@@ -133,7 +133,6 @@ class PersonaRuntimeStore(Protocol):
         consecutive_idle_count: int = 0,
         cooldown_until: datetime.datetime | None = None,
         last_interaction_at: datetime.datetime | None = None,
-        last_proactive_at: datetime.datetime | None = None,
         extra_state: dict | None = None,
     ) -> PersonaSessionState: ...
 

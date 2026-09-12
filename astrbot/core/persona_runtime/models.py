@@ -24,7 +24,6 @@ class PersonaRuntimeContext:
     consecutive_idle_count: int
     cooldown_until: datetime | None
     last_interaction_at: datetime | None
-    last_proactive_at: datetime | None
     extra_state: dict = field(default_factory=dict)
 
 

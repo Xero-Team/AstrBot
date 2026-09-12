@@ -1,12 +1,9 @@
-import hashlib
-
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.db.protocols import PersonaRuntimeStore
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .injector import PersonaRuntimeInjector
-from .learners import BehaviorLearner, ExpressionLearner, JargonLearner
 from .models import PersonaRuntimeSignal
 from .signals import event_mentions_bot
 from .state_store import PersonaRuntimeStateStore
@@ -17,9 +14,6 @@ class PersonaRuntimeManager:
         self.db = db
         self.state_store = PersonaRuntimeStateStore(db)
         self.injector = PersonaRuntimeInjector()
-        self.expression_learner = ExpressionLearner(db)
-        self.jargon_learner = JargonLearner(db)
-        self.behavior_learner = BehaviorLearner(db)
 
     async def initialize(self) -> None:
         return
@@ -91,27 +85,3 @@ class PersonaRuntimeManager:
             mentioned=event_mentions_bot(event),
         )
         await self.state_store.apply_signal(signal)
-        digest = hashlib.sha256(
-            f"{event.unified_msg_origin}\n{event.message_str or ''}\n{assistant_text}".encode()
-        ).hexdigest()[:24]
-        source_message_id = f"{conversation_id or event.unified_msg_origin}:{digest}"
-        scope = f"isolated:{event.unified_msg_origin}"
-        await self.expression_learner.learn(
-            persona_id=persona_id,
-            scope=scope,
-            user_text=event.message_str or "",
-            assistant_text=assistant_text,
-            source_message_id=source_message_id,
-        )
-        await self.jargon_learner.learn(
-            persona_id=persona_id,
-            scope=scope,
-            user_text=event.message_str or "",
-            source_message_id=source_message_id,
-        )
-        await self.behavior_learner.learn(
-            persona_id=persona_id,
-            scope=scope,
-            user_text=event.message_str or "",
-            assistant_text=assistant_text,
-        )

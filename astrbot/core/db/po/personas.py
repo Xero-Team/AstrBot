@@ -92,7 +92,6 @@ class PersonaSessionState(TimestampMixin, SQLModel, table=True):
     consecutive_idle_count: int = Field(default=0, nullable=False)
     cooldown_until: datetime | None = Field(default=None)
     last_interaction_at: datetime | None = Field(default=None)
-    last_proactive_at: datetime | None = Field(default=None)
     extra_state: dict = Field(default_factory=dict, sa_type=JSON)
 
     __table_args__ = (

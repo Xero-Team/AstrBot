@@ -302,6 +302,7 @@ class WorkLoop:
             async with aclosing(self._execute(event, session_id)) as execution:
                 async for _ in execution:
                     await self._result_dispatcher(event)
+            await self._record_delivery_outcome(event, session_id)
         except asyncio.CancelledError:
             await self.sessions.update_status(session_id, WorkSessionStatus.CANCELLED)
             raise
@@ -314,3 +315,32 @@ class WorkLoop:
             logger.error("BTW work task failed: %s", safe_error("", exc))
         finally:
             await self._event_finalizer(event)
+
+    async def _record_delivery_outcome(
+        self, event: AstrMessageEvent, session_id: str
+    ) -> None:
+        """Fold the platform's answer about the result into the work status.
+
+        The response stage turns a refused or unconfirmed send into a delivery
+        receipt rather than raising, so a run whose result never reached the
+        user still ends here successfully.  Only a completed run is adjusted:
+        a failed or cancelled one already has the stronger answer.
+
+        Args:
+            event: The finished work event carrying the delivery receipt.
+            session_id: The work session that produced the result.
+        """
+        receipt_status = getattr(event.get_extra("delivery_receipt"), "status", None)
+        if receipt_status == "failed":
+            await self.sessions.update_status_if(
+                session_id,
+                WorkSessionStatus.COMPLETED,
+                WorkSessionStatus.FAILED,
+                error="Work result was not delivered.",
+            )
+        elif receipt_status == "unknown":
+            await self.sessions.update_status_if(
+                session_id,
+                WorkSessionStatus.COMPLETED,
+                WorkSessionStatus.UNCONFIRMED,
+            )

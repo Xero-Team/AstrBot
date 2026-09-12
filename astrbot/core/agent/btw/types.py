@@ -54,6 +54,10 @@ class WorkSessionStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    # The run produced a result, but the platform's acceptance of it is unknown,
+    # so neither the result nor its absence can be reported.  Kept apart from
+    # ``FAILED``: an unknown outcome does not prove the user missed nothing.
+    UNCONFIRMED = "unconfirmed"
 
 
 @dataclass(slots=True)

@@ -82,7 +82,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 ### 运行任务
 
 - `/work <任务内容>`：将后面的文本显式提交给 BTW 工作循环，不需要 `/chat` 前缀或自动分类。要求 `session.read`，并在当前配置中启用 `btw.enabled` 和 `btw.work_loop.enabled`。指令标识为 `builtin_commands:work`；仍遵循指令引号规则。
-- `/work` 或 `/work status`：查看当前配置与会话中最新任务的内容及状态：排队中、执行中、已完成、已失败或已取消。仅当参数全部为 `status` 时查询，忽略大小写；`/work status 重构` 会提交任务。要求 `session.read`。状态保存在内存中，重启或配置重载、移除后清空；终态任务按 `btw.work_session.max_age_seconds` 过期，默认 3600 秒。
+- `/work` 或 `/work status`：查看当前配置与会话中最新任务的内容及状态：排队中、执行中、已完成、已失败、已取消或投递未确认。`投递未确认` 表示任务本身已结束，但平台没有确认接收其结果。仅当参数全部为 `status` 时查询，忽略大小写；`/work status 重构` 会提交任务。要求 `session.read`。状态保存在内存中，重启或配置重载、移除后清空；终态任务按 `btw.work_session.max_age_seconds` 过期，默认 3600 秒。
 - `/task stop`：停止当前会话中正在运行的 Agent 或第三方 Agent Runner 任务，不删除历史。
 
 ### Provider 与模型

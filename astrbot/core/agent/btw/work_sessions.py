@@ -90,6 +90,38 @@ class WorkSessionManager:
                 session.update_status(status, error=error)
             return session
 
+    async def update_status_if(
+        self,
+        session_id: str,
+        expected: WorkSessionStatus,
+        status: WorkSessionStatus,
+        *,
+        error: str | None = None,
+    ) -> bool:
+        """Transition one session only while it still holds the expected status.
+
+        More than one owner can report the same run's outcome -- the executor,
+        the scheduler that ends its event, and the delivery that follows it --
+        so a report that must not overwrite a stronger one names the state it
+        replaces.
+
+        Args:
+            session_id: The work-session identifier.
+            expected: The status the session must still hold.
+            status: The new lifecycle status.
+            error: A safe failure message, when applicable.
+
+        Returns:
+            Whether this call performed the transition.
+        """
+        async with self._lock:
+            self._cleanup_expired_locked()
+            session = self._by_id.get(session_id)
+            if session is None or session.status is not expected:
+                return False
+            session.update_status(status, error=error)
+            return True
+
     async def cancel_if_pending(self, session_id: str) -> bool:
         """Cancel one session that has not started running yet.
 
@@ -104,13 +136,11 @@ class WorkSessionManager:
             Whether this call cancelled the session.  A session that is missing,
             already running, or already terminal reports ``False``.
         """
-        async with self._lock:
-            self._cleanup_expired_locked()
-            session = self._by_id.get(session_id)
-            if session is None or session.status is not WorkSessionStatus.PENDING:
-                return False
-            session.update_status(WorkSessionStatus.CANCELLED)
-            return True
+        return await self.update_status_if(
+            session_id,
+            WorkSessionStatus.PENDING,
+            WorkSessionStatus.CANCELLED,
+        )
 
     def _cleanup_expired_locked(self) -> None:
         """Remove old terminal sessions while the manager lock is held."""

@@ -1702,8 +1702,10 @@ class AuthorizationService:
                 if binding.scope_type == "instance" and binding.config_id:
                     if resource.config_id != binding.config_id:
                         continue
-                    if subject.kind == "im" and resource.umo and context.metadata.get(
-                        "target_session_operation"
+                    if (
+                        subject.kind == "im"
+                        and resource.umo
+                        and context.metadata.get("target_session_operation")
                     ):
                         subject_platform = subject.id.split(":", 3)[1]
                         target_platform = resource.umo.split(":", 1)[0]

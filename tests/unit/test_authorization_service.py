@@ -694,7 +694,9 @@ async def test_instance_operator_can_manage_cross_platform_target_session(
     )
     assert decision.allowed
     assert decision.effective_role is Role.INSTANCE_OPERATOR
-    cross_platform = await AuthorizationCapability(authorization).authorize_target_session(
+    cross_platform = await AuthorizationCapability(
+        authorization
+    ).authorize_target_session(
         event, action=action, umo="telegram:GroupMessage:458362321"
     )
     assert not cross_platform.allowed

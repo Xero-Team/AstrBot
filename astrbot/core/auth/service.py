@@ -1420,7 +1420,16 @@ class AuthorizationService:
             # Only explicit bridge operations may address another session.
             # Their policies require an instance operator; origin roles never
             # become target roles because relation collection scopes each fact.
-            and action not in {"session.watch", "session.send"}
+            and action
+            not in {
+                # Explicit target-session commands and bridge operations are
+                # evaluated against the target's instance/session binding.
+                "session.read_target",
+                "session.manage_target",
+                "session.block",
+                "session.watch",
+                "session.send",
+            }
         ):
             return Decision(
                 False,
@@ -1693,6 +1702,13 @@ class AuthorizationService:
                 if binding.scope_type == "instance" and binding.config_id:
                     if resource.config_id != binding.config_id:
                         continue
+                    if subject.kind == "im" and resource.umo and context.metadata.get(
+                        "target_session_operation"
+                    ):
+                        subject_platform = subject.id.split(":", 3)[1]
+                        target_platform = resource.umo.split(":", 1)[0]
+                        if subject_platform != target_platform:
+                            continue
                     facts.append(
                         (binding_role, "binding", Resource.instance(binding.config_id))
                     )

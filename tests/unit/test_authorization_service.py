@@ -665,6 +665,42 @@ async def test_target_session_authorization_does_not_inherit_origin_owner(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "action", ["session.read_target", "session.manage_target", "session.block"]
+)
+async def test_instance_operator_can_manage_cross_platform_target_session(
+    authorization, action
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="3013138453", sender_id="3656185279"
+    )
+    origin = Resource.session("default", "napcat:GroupMessage:origin")
+    target = Resource.session("default", "napcat:GroupMessage:458362321")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    event = SimpleNamespace(
+        subject=subject,
+        auth_context=_session_context(subject, origin),
+    )
+    decision = await AuthorizationCapability(authorization).authorize_target_session(
+        event, action=action, umo=target.umo or ""
+    )
+    assert decision.allowed
+    assert decision.effective_role is Role.INSTANCE_OPERATOR
+    cross_platform = await AuthorizationCapability(authorization).authorize_target_session(
+        event, action=action, umo="telegram:GroupMessage:458362321"
+    )
+    assert not cross_platform.allowed
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["session.watch", "session.send"])
 async def test_bridge_actions_require_instance_binding_and_stay_config_scoped(
     authorization, action

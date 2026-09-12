@@ -1089,6 +1089,7 @@ class AuthorizationCapability:
             platform_role_source="none",
             platform_role_expires_at=None,
         )
+        target_context.metadata["target_session_operation"] = True
         return await self._authorization.authorize(
             event.subject,
             action,

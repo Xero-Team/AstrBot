@@ -1,11 +1,7 @@
 from datetime import UTC, datetime
-from types import SimpleNamespace
-
-import pytest
 
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.db.po import PersonaSessionState
-from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.persona_runtime.injector import PersonaRuntimeInjector
 
 

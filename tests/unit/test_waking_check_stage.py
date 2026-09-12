@@ -82,7 +82,9 @@ class FakeEvent:
         self.stopped = False
         self.sent = []
         default_type = "FriendMessage" if private else "GroupMessage"
-        self.unified_msg_origin = unified_msg_origin or f"{platform}:{default_type}:{group_id}"
+        self.unified_msg_origin = (
+            unified_msg_origin or f"{platform}:{default_type}:{group_id}"
+        )
 
     def get_extra(self, key=None, default=None):
         if key is None:

@@ -62,7 +62,6 @@ async def test_persona_runtime_state_migration_updates_frequency_and_cooldown(te
     assert state.extra_state["last_mention_at"]
 
 
-
 @pytest.mark.asyncio
 async def test_memory_writeback_profile_and_operation_log_use_real_sqlite(temp_db):
     await temp_db.initialize()

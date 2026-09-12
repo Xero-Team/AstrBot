@@ -2,7 +2,11 @@ import json
 
 import pytest
 
-from astrbot.core.conversation_mgr import ConversationManager, load_sanitized_history
+from astrbot.core.conversation_mgr import (
+    WORK_LOOP_SCOPE,
+    ConversationManager,
+    load_sanitized_history,
+)
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -77,5 +81,62 @@ async def test_delete_current_conversation_loads_persisted_selection(temp_db, tm
 
         assert await manager.get_conversation(umo, cid) is None
         assert await preferences.session_get(umo, "sel_conv_id", None) is None
+    finally:
+        await preferences.terminate()
+
+
+@pytest.mark.asyncio
+async def test_work_loop_scope_keeps_a_separate_conversation_per_session(
+    temp_db, tmp_path
+):
+    """The work loop writes its own conversation next to the session's chat."""
+    await temp_db.initialize()
+    preferences = SharedPreferences(temp_db, tmp_path / "preferences.json")
+    await preferences.initialize()
+    manager = ConversationManager(temp_db, preferences)
+    try:
+        umo = "webchat:FriendMessage:alice"
+        chat_cid = await manager.new_conversation(umo, title="Alice chat")
+        work_cid = await manager.new_conversation(
+            umo,
+            title="Work",
+            scope=WORK_LOOP_SCOPE,
+        )
+
+        assert work_cid != chat_cid
+        # The work loop does not take over the session's current chat.
+        assert await manager.get_curr_conversation_id(umo) == chat_cid
+        assert await manager.get_curr_conversation_id(umo, WORK_LOOP_SCOPE) == work_cid
+
+        await manager.update_conversation(
+            umo, chat_cid, history=[{"role": "user", "content": "chat turn"}]
+        )
+        await manager.update_conversation(
+            umo, work_cid, history=[{"role": "user", "content": "work turn"}]
+        )
+
+        chat = await manager.get_conversation(umo, chat_cid)
+        work = await manager.get_conversation(umo, work_cid)
+        assert load_sanitized_history(chat.history) == [
+            {"role": "user", "content": "chat turn"}
+        ]
+        assert load_sanitized_history(work.history) == [
+            {"role": "user", "content": "work turn"}
+        ]
+
+        # Both conversations belong to the one session.
+        listed = {
+            conversation.cid for conversation in await manager.get_conversations(umo)
+        }
+        assert listed == {chat_cid, work_cid}
+
+        # The selection survives a restart: a fresh cache reads it back.
+        manager.session_conversations.clear()
+        assert await manager.get_curr_conversation_id(umo, WORK_LOOP_SCOPE) == work_cid
+        assert await manager.get_curr_conversation_id(umo) == chat_cid
+
+        await manager.delete_conversations_by_user_id(umo)
+        assert await manager.get_curr_conversation_id(umo, WORK_LOOP_SCOPE) is None
+        assert await manager.get_curr_conversation_id(umo) is None
     finally:
         await preferences.terminate()

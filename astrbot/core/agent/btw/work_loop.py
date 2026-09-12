@@ -12,7 +12,7 @@ from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from . import i18n as work_i18n
-from .types import WorkSessionStatus
+from .types import WorkSession, WorkSessionStatus
 from .work_sessions import WorkSessionManager
 
 
@@ -135,14 +135,66 @@ class WorkLoop:
         # The first yield returns only after the normal response stages deliver
         # the acknowledgement.  Marking it here prevents the scheduler from
         # releasing event-owned temporary files before the worker needs them.
+        # Losing this race to a concurrent close() only skips the work.
+        self._schedule_detached(event, session.id)
+
+    async def schedule(self, event: AstrMessageEvent) -> WorkSession:
+        """Run one work task detached, without delivering its result here.
+
+        This is how the work loop acts as a tool for the conversation loop: the
+        caller has already put the complete task in ``event.message_str``, the
+        work run executes in the background, and its result is delivered
+        through the normal response stages when it finishes.
+
+        Args:
+            event: The prepared work event carrying the task to run.
+
+        Returns:
+            The created work session.
+
+        Raises:
+            RuntimeError: The loop is closed or has no runtime services
+                attached, so it cannot run work in the background.
+        """
+        if not self._detached_ready():
+            raise RuntimeError("Work loop cannot run detached work")
+        session = await self.sessions.create(
+            event.unified_msg_origin, event.message_str
+        )
+        self._prepare_event(event, session.id)
+        if not self._schedule_detached(event, session.id):
+            await self.sessions.update_status(session.id, WorkSessionStatus.CANCELLED)
+            raise RuntimeError("Work loop cannot run detached work")
+        return session
+
+    def _detached_ready(self) -> bool:
+        """Return whether this loop owns the services detached work needs."""
+        return (
+            not self._closed
+            and self._background_tasks is not None
+            and self._result_dispatcher is not None
+            and self._event_finalizer is not None
+        )
+
+    def _schedule_detached(self, event: AstrMessageEvent, session_id: str) -> bool:
+        """Hand one prepared work event to the runtime's background registry.
+
+        Returns:
+            Whether the work run was registered; ``False`` when the loop has no
+            services to run it, which happens only while shutting down.
+        """
+        if not self._detached_ready():
+            return False
+        assert self._background_tasks is not None
         event.set_extra("btw_detached_work", True)
         task = create_tracked_task(
             self._background_tasks,
-            self._run_detached(event, session.id),
-            name=f"btw_work:{session.id}",
+            self._run_detached(event, session_id),
+            name=f"btw_work:{session_id}",
         )
-        self._tasks[task] = (event, session.id)
+        self._tasks[task] = (event, session_id)
         task.add_done_callback(lambda done: self._tasks.pop(done, None))
+        return True
 
     async def close(self) -> None:
         """Cancel and finalize this profile's work, including unstarted tasks."""

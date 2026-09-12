@@ -166,7 +166,7 @@ async def test_cancelled_work_retains_cancelled_state_and_propagates():
     await asyncio.wait_for(executor.started.wait(), timeout=1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        _cancelled_result = await task
     session = await sessions.get_for_origin(event.unified_msg_origin)
     assert session.status is WorkSessionStatus.CANCELLED
 
@@ -177,3 +177,61 @@ async def test_retention_does_not_expire_active_work():
     session = await sessions.create("origin", "still running")
     session.updated_at = datetime.now(UTC) - timedelta(seconds=120)
     assert await sessions.get_by_id(session.id) is session
+
+
+@pytest.mark.asyncio
+async def test_schedule_runs_work_detached_without_an_acknowledgement():
+    """The tool path schedules the task and leaves the reply to its caller."""
+    executor = BlockingExecutor()
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(executor, sessions)
+    background_tasks: set[asyncio.Task] = set()
+    result_dispatcher = AsyncMock()
+    event_finalizer = AsyncMock()
+    work_loop.configure_detached_execution(
+        background_tasks=background_tasks,
+        result_dispatcher=result_dispatcher,
+        event_finalizer=event_finalizer,
+    )
+    event = FakeEvent("the complete task")
+
+    session = await work_loop.schedule(event)
+
+    assert session.request == "the complete task"
+    assert event.result is None
+    assert event.get_extra("btw_loop") == "work"
+    assert event.get_extra("btw_agent_lock_key") == "umo-1:work"
+    assert event.get_extra("btw_detached_work") is True
+    assert len(background_tasks) == 1
+    await asyncio.wait_for(executor.started.wait(), timeout=1)
+    assert session.status is WorkSessionStatus.RUNNING
+
+    executor.release.set()
+    [task] = background_tasks
+    await asyncio.wait_for(task, timeout=1)
+
+    assert session.status is WorkSessionStatus.COMPLETED
+    result_dispatcher.assert_awaited_once_with(event)
+    event_finalizer.assert_awaited_once_with(event)
+
+
+@pytest.mark.asyncio
+async def test_schedule_requires_detached_execution_services():
+    work_loop = WorkLoop(BlockingExecutor(), WorkSessionManager())
+
+    with pytest.raises(RuntimeError):
+        await work_loop.schedule(FakeEvent("the complete task"))
+
+
+@pytest.mark.asyncio
+async def test_schedule_refuses_after_the_loop_closed():
+    work_loop = WorkLoop(BlockingExecutor(), WorkSessionManager())
+    work_loop.configure_detached_execution(
+        background_tasks=set(),
+        result_dispatcher=AsyncMock(),
+        event_finalizer=AsyncMock(),
+    )
+    await work_loop.close()
+
+    with pytest.raises(RuntimeError):
+        await work_loop.schedule(FakeEvent("the complete task"))

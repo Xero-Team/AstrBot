@@ -219,7 +219,8 @@ async def test_work_delivery_failure_marks_failed_and_finishes_the_request(tmp_p
     work._result_dispatcher = fail_delivery
     task = next(iter(work._tasks))
     executor.release[event.message_id].set()
-    await task
+    task_result = await task
+    assert task_result is None
     session = await work.sessions.get_for_origin(event.unified_msg_origin)
     assert session.status is WorkSessionStatus.FAILED
     assert session.error == "Work task failed."

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
@@ -144,6 +142,7 @@ class ToolCatalogInputs:
     plugins: PluginLookup | None = None
     btw_config: Mapping[str, object] | None = None
     loop_mode: str = "conversation"
+    work_loop_submission: bool = False
 
 
 def assemble_tool_catalog(inputs: ToolCatalogInputs) -> ToolSet:
@@ -319,6 +318,8 @@ def _platform_baseline(inputs: ToolCatalogInputs) -> set[str]:
         names.add("astr_kb_search")
     if inputs.add_cron_tools:
         names.add("future_task")
+    if inputs.work_loop_submission:
+        names.add("submit_work_task")
     return names
 
 

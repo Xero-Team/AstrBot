@@ -44,7 +44,7 @@ class BotCommands:
                 action=action,
                 umo=target,
             )
-        except (PermissionError, ValueError):
+        except PermissionError, ValueError:
             await reply_i18n(self.context, event, "bot.target.denied")
             return None
         if not decision.allowed:
@@ -52,13 +52,9 @@ class BotCommands:
             return None
         return target
 
-    async def status(
-        self, event: AstrMessageEvent, target: str = ""
-    ) -> None:
+    async def status(self, event: AstrMessageEvent, target: str = "") -> None:
         """Show bot switches for the current or an explicitly selected session."""
-        umo = await self._resolve_target(
-            event, target, action="session.read_target"
-        )
+        umo = await self._resolve_target(event, target, action="session.read_target")
         if umo is None:
             return
         settings = await self._service_config(umo)
@@ -87,9 +83,7 @@ class BotCommands:
         self, event: AstrMessageEvent, enabled: bool, target: str = ""
     ) -> None:
         """Enable or disable the current or an explicitly selected session."""
-        umo = await self._resolve_target(
-            event, target, action="session.manage_target"
-        )
+        umo = await self._resolve_target(event, target, action="session.manage_target")
         if umo is None:
             return
         settings = await self._service_config(umo)
@@ -100,7 +94,7 @@ class BotCommands:
                     action="session.block",
                     umo=umo,
                 )
-            except (PermissionError, ValueError):
+            except PermissionError, ValueError:
                 await reply_i18n(self.context, event, "bot.target.denied")
                 return
             if not decision.allowed:

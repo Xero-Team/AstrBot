@@ -66,6 +66,7 @@ class WhitelistCheckStage(Stage):
             or event.subject is None
             or event.resource is None
             or event.auth_context is None
+            or event.resource.config_id is None
         ):
             return False
         return (

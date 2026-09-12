@@ -106,8 +106,17 @@
           :title="tm('workspace.empty')"
         />
       </v-list>
+      <!-- eslint-disable vue/no-v-html -- highlightedContent is sanitized by DOMPurify. -->
+      <div
+        v-if="
+          workspacePreview && !workspacePreview.binary && highlightedContent
+        "
+        class="workspace-preview"
+        v-html="highlightedContent"
+      ></div>
+      <!-- eslint-enable vue/no-v-html -->
       <pre
-        v-if="workspacePreview && !workspacePreview.binary"
+        v-else-if="workspacePreview && !workspacePreview.binary"
         class="workspace-preview"
         >{{ workspacePreview.content }}</pre>
       <div v-else-if="workspacePreview?.binary" class="workspace-binary">
@@ -122,7 +131,10 @@
 </template>
 
 <script setup lang="ts">
+import DOMPurify from 'dompurify';
 import { onMounted, ref, watch } from 'vue';
+import { useTheme } from 'vuetify';
+import { getShikiHighlighter, renderShikiCode } from '@/utils/shiki';
 import { useModuleI18n } from '@/i18n/composables';
 import { chatApi } from '@/api/v1/chat';
 import type { Project } from '@/components/chat/ProjectList.vue';
@@ -164,6 +176,32 @@ const workspacePreview = ref<{
   size: number;
   binary: boolean;
 } | null>(null);
+const highlightedContent = ref('');
+const theme = useTheme();
+
+async function updateHighlightedContent() {
+  highlightedContent.value = '';
+  const content = workspacePreview.value?.content;
+  const path = workspacePath.value;
+  if (!content || !path || workspacePreview.value?.binary) return;
+  try {
+    const highlighter = await getShikiHighlighter();
+    const name = path.split('/').pop()?.toLowerCase() || '';
+    const language = name.startsWith('dockerfile.')
+      ? 'dockerfile'
+      : name.split('.').pop();
+    highlightedContent.value = DOMPurify.sanitize(
+      renderShikiCode(
+        highlighter,
+        content,
+        language,
+        theme.global.current.value.dark ? 'dark' : 'light',
+      ),
+    );
+  } catch (error) {
+    console.warn('Failed to highlight workspace file', error);
+  }
+}
 
 async function loadWorkspace() {
   if (!props.project?.project_id) return;
@@ -179,6 +217,7 @@ async function loadWorkspace() {
 async function openWorkspaceEntry(entry: WorkspaceEntry) {
   if (!props.project?.project_id) return;
   workspacePreview.value = null;
+  highlightedContent.value = '';
   if (entry.type === 'directory') {
     workspacePath.value = entry.path;
     await loadWorkspace();
@@ -191,6 +230,7 @@ async function openWorkspaceEntry(entry: WorkspaceEntry) {
     );
     if (response.data.status === 'ok') {
       workspacePreview.value = response.data.data || null;
+      await updateHighlightedContent();
     }
   }
 }
@@ -206,10 +246,16 @@ watch(
   () => {
     workspacePath.value = '';
     workspacePreview.value = null;
+    highlightedContent.value = '';
     void loadWorkspace();
   },
 );
 onMounted(() => void loadWorkspace());
+
+watch(
+  () => theme.global.current.value.dark,
+  () => void updateHighlightedContent(),
+);
 
 const confirmDialog = useConfirmDialog();
 

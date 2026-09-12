@@ -282,6 +282,10 @@ class WebChatAdapter(Platform):
                     message_event.set_extra(
                         "enable_streaming", payload.get("enable_streaming")
                     )
+                if "enable_reasoning" in payload:
+                    message_event.set_extra(
+                        "enable_reasoning", payload.get("enable_reasoning")
+                    )
                 message_event.set_extra(
                     "llm_checkpoint_id", payload.get("llm_checkpoint_id")
                 )

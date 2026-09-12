@@ -304,6 +304,7 @@ class ChatMessageRegenerateRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    enable_reasoning: bool | None = None
     webchat_step_up_tokens: dict[str, str] | None = Field(
         default=None,
         alias="_webchat_step_up_tokens",
@@ -323,6 +324,7 @@ class ChatThreadMessageRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    enable_reasoning: bool | None = None
     webchat_step_up_tokens: dict[str, str] | None = Field(
         default=None,
         alias="_webchat_step_up_tokens",
@@ -403,6 +405,7 @@ class OpenApiChatRequest(OpenModel):
     config_name: str | None = None
     platform_id: str | None = None
     enable_streaming: bool | None = None
+    enable_reasoning: bool | None = None
     webchat_step_up_tokens: dict[str, str] | None = Field(
         default=None,
         alias="_webchat_step_up_tokens",

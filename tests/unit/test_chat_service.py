@@ -561,6 +561,7 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
             "selected_provider": None,
             "selected_model": None,
             "enable_streaming": True,
+            "enable_reasoning": True,
             "message_id": "mid-1",
             "llm_checkpoint_id": "mid-1",
             "thread_selected_text": None,
@@ -1251,6 +1252,7 @@ async def test_prepare_regenerate_message_payload_rewrites_latest_turn():
         "enable_streaming": False,
         "selected_provider": "provider-1",
         "selected_model": "model-1",
+        "enable_reasoning": True,
         "_skip_user_history": True,
         "_llm_checkpoint_id": update_kwargs["llm_checkpoint_id"],
     }
@@ -1627,6 +1629,7 @@ async def test_prepare_thread_chat_payload_returns_selected_text_and_overrides()
         "enable_streaming": False,
         "selected_provider": "provider-1",
         "selected_model": "model-1",
+        "enable_reasoning": True,
         "_platform_history_id": "webchat_thread",
         "_thread_selected_text": "quoted context",
         "_webchat_step_up_tokens": {"tool.local_exec": "opaque-proof"},

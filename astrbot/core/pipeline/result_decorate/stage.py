@@ -329,7 +329,11 @@ class ResultDecorateStage(Stage):
 
     def _add_reasoning(self, event, result) -> None:
         reasoning = event.get_extra("_llm_reasoning_content")
-        if not self.show_reasoning or not reasoning:
+        show_reasoning = self.show_reasoning
+        enable_reasoning = event.get_extra("enable_reasoning")
+        if enable_reasoning is not None:
+            show_reasoning = bool(enable_reasoning)
+        if not show_reasoning or not reasoning:
             return
         if event.get_platform_name() == "lark":
             result.chain.insert(

@@ -4,7 +4,7 @@
       <div>
         <span
           v-if="!modelValue || Object.keys(modelValue).length === 0"
-          class="selector-empty-label"
+          class="object-editor-empty-label"
         >
           {{ t('core.common.objectEditor.noItems') }}
         </span>
@@ -22,7 +22,7 @@
             v-if="Object.keys(modelValue).length > maxDisplayItems"
             size="x-small"
             label
-            color="secondary"
+            class="text-medium-emphasis"
           >
             +{{ Object.keys(modelValue).length - maxDisplayItems }}
           </v-chip>
@@ -36,7 +36,7 @@
     <!-- Key-Value Management Dialog -->
     <v-dialog v-model="dialog" max-width="600px" scrollable>
       <v-card class="app-dialog object-editor-dialog__card">
-        <v-card-title class="app-dialog__title">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ resolveDialogTitle }}
         </v-card-title>
 
@@ -81,18 +81,28 @@
                     "
                     class="d-flex align-center gap-2 flex-grow-1"
                   >
-                    <v-slider
-                      v-if="pair.slider"
-                      :model-value="Number(pair.value) || 0"
-                      :min="pair.slider.min"
-                      :max="pair.slider.max"
-                      :step="pair.slider.step"
-                      color="primary"
-                      density="compact"
-                      hide-details
-                      class="flex-grow-1"
-                      @update:model-value="pair.value = $event"
-                    ></v-slider>
+                    <template v-if="pair.slider">
+                      <span class="object-editor-slider-min">
+                        {{ pair.slider.min }}
+                      </span>
+
+                      <v-slider
+                        :model-value="Number(pair.value) || 0"
+                        @update:model-value="pair.value = $event"
+                        :min="pair.slider.min"
+                        :max="pair.slider.max"
+                        :step="pair.slider.step"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                        class="flex-grow-1"
+                      ></v-slider>
+
+                      <span class="object-editor-slider-max">
+                        {{ pair.slider.max }}
+                      </span>
+                    </template>
+
                     <v-text-field
                       v-model.number="pair.value"
                       type="number"
@@ -102,9 +112,7 @@
                       :placeholder="
                         t('core.common.objectEditor.placeholders.numberValue')
                       "
-                      :class="{
-                        'selector-number-input--with-slider': pair.slider,
-                      }"
+                      :class="{ 'object-editor-number-input': pair.slider }"
                     ></v-text-field>
                   </div>
                   <v-switch
@@ -123,8 +131,8 @@
                     :placeholder="
                       t('core.common.objectEditor.placeholders.jsonValue')
                     "
-                    :error-messages="pair.jsonError"
                     @blur="validateJSON(pair)"
+                    :error-messages="pair.jsonError"
                   ></v-text-field>
                 </v-col>
                 <v-col cols="1" class="pl-2">
@@ -145,7 +153,7 @@
           <!-- Template schema fields -->
           <div v-if="hasTemplateSchema" class="mt-4">
             <v-divider class="mb-3"></v-divider>
-            <div class="text-caption text-medium-emphasis mb-2">
+            <div class="text-caption text-grey mb-2">
               {{ t('core.common.objectEditor.presets') }}
             </div>
             <div
@@ -164,7 +172,7 @@
                     }}</span>
                     <span
                       v-if="template.hint"
-                      class="object-editor__hint text-caption text-medium-emphasis"
+                      class="text-caption text-grey object-editor-hint"
                       >{{
                         resolveTemplateText(templateKey, 'hint', template.hint)
                       }}</span
@@ -175,14 +183,14 @@
                   <v-text-field
                     v-if="template.type === 'string'"
                     :model-value="getTemplateValue(templateKey)"
+                    @update:model-value="
+                      updateTemplateValue(templateKey, $event)
+                    "
                     density="compact"
                     variant="outlined"
                     hide-details
                     :placeholder="
                       t('core.common.objectEditor.placeholders.stringValue')
-                    "
-                    @update:model-value="
-                      updateTemplateValue(templateKey, $event)
                     "
                   ></v-text-field>
                   <div
@@ -193,22 +201,37 @@
                     "
                     class="d-flex align-center ga-4 flex-grow-1"
                   >
-                    <v-slider
-                      v-if="template.slider"
-                      :model-value="Number(getTemplateValue(templateKey)) || 0"
-                      :min="template.slider.min"
-                      :max="template.slider.max"
-                      :step="template.slider.step"
-                      color="primary"
-                      density="compact"
-                      hide-details
-                      class="flex-grow-1"
+                    <template v-if="template.slider">
+                      <span class="object-editor-slider-min">
+                        {{ template.slider.min }}
+                      </span>
+
+                      <v-slider
+                        :model-value="
+                          Number(getTemplateValue(templateKey)) || 0
+                        "
+                        @update:model-value="
+                          updateTemplateValue(templateKey, $event)
+                        "
+                        :min="template.slider.min"
+                        :max="template.slider.max"
+                        :step="template.slider.step"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                        class="flex-grow-1"
+                      ></v-slider>
+
+                      <span class="object-editor-slider-max">
+                        {{ template.slider.max }}
+                      </span>
+                    </template>
+
+                    <v-text-field
+                      :model-value="getTemplateValue(templateKey)"
                       @update:model-value="
                         updateTemplateValue(templateKey, $event)
                       "
-                    ></v-slider>
-                    <v-text-field
-                      :model-value="getTemplateValue(templateKey)"
                       type="number"
                       density="compact"
                       variant="outlined"
@@ -216,12 +239,7 @@
                       :placeholder="
                         t('core.common.objectEditor.placeholders.numberValue')
                       "
-                      :class="{
-                        'selector-number-input--with-slider': template.slider,
-                      }"
-                      @update:model-value="
-                        updateTemplateValue(templateKey, $event)
-                      "
+                      :class="{ 'object-editor-number-input': template.slider }"
                     ></v-text-field>
                   </div>
                   <v-switch
@@ -229,12 +247,12 @@
                       template.type === 'boolean' || template.type === 'bool'
                     "
                     :model-value="getTemplateValue(templateKey)"
-                    density="compact"
-                    hide-details
-                    color="primary"
                     @update:model-value="
                       updateTemplateValue(templateKey, $event)
                     "
+                    density="compact"
+                    hide-details
+                    color="primary"
                   ></v-switch>
                 </v-col>
                 <v-col cols="1" class="pl-2">
@@ -257,8 +275,10 @@
             v-if="localKeyValuePairs.length === 0 && !hasTemplateSchema"
             class="text-center py-8"
           >
-            <v-icon size="64" color="secondary">mdi-code-json</v-icon>
-            <p class="text-medium-emphasis mt-4">
+            <v-icon size="64" class="text-medium-emphasis"
+              >mdi-code-json</v-icon
+            >
+            <p class="text-grey mt-4">
               {{ t('core.common.objectEditor.noParams') }}
             </p>
           </div>
@@ -282,21 +302,21 @@
               density="compact"
               variant="outlined"
               hide-details
-              class="selector-number-input--with-slider"
+              class="object-editor-type-select"
             ></v-select>
-            <v-btn variant="tonal" color="primary" @click="addKeyValuePair">
+            <v-btn @click="addKeyValuePair" variant="tonal" color="primary">
               <v-icon>mdi-plus</v-icon>
               {{ t('core.common.add') }}
             </v-btn>
           </div>
         </v-card-text>
 
-        <v-card-actions class="pa-4 object-editor-dialog__actions">
+        <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="cancelDialog">{{
             t('core.common.cancel')
           }}</v-btn>
-          <v-btn color="primary" @click="confirmDialog">{{
+          <v-btn color="primary" variant="tonal" @click="confirmDialog">{{
             t('core.common.confirm')
           }}</v-btn>
         </v-card-actions>
@@ -391,7 +411,7 @@ const nonTemplatePairs = computed(() => {
 // 监听 modelValue 变化，主要用于初始化
 watch(
   () => props.modelValue,
-  (_newValue) => {
+  () => {
     // This watch is primarily for initialization or external changes
     // The dialog-based editing handles internal updates
   },
@@ -501,7 +521,7 @@ function validateJSON(pair) {
   try {
     JSON.parse(pair.value);
     pair.jsonError = '';
-  } catch (_error) {
+  } catch {
     pair.jsonError = t('core.common.objectEditor.invalidJson');
   }
 }
@@ -547,9 +567,9 @@ function isTemplateKeyAdded(templateKey) {
 }
 
 function getTemplateValue(templateKey) {
-  for (const item of localKeyValuePairs.value) {
-    if (item.key === templateKey) {
-      return item.value;
+  for (const pair of localKeyValuePairs.value) {
+    if (pair.key === templateKey) {
+      return pair.value;
     }
   }
   const template = templateSchema.value[templateKey];
@@ -676,10 +696,6 @@ function resolveTemplateText(templateKey, attr, fallback) {
 </script>
 
 <style scoped>
-.object-editor {
-  width: 100%;
-}
-
 .key-value-pair {
   width: 100%;
 }
@@ -692,21 +708,37 @@ function resolveTemplateText(templateKey, attr, fallback) {
   opacity: 0.8;
 }
 
-.object-editor-dialog__card {
-  display: flex;
-  flex-direction: column;
-  max-height: min(88dvh, 760px);
+.object-editor-empty-label {
+  color: rgb(var(--v-theme-primaryText));
 }
 
 .object-editor-dialog__content {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: min(60dvh, 520px);
+  max-height: 400px;
   overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
-.object-editor-dialog__actions {
-  flex-shrink: 0;
+.object-editor-slider-min,
+.object-editor-slider-max {
+  min-width: 5px;
+}
+
+.object-editor-slider-min {
+  text-align: right;
+}
+
+.object-editor-slider-max {
+  text-align: left;
+}
+
+.object-editor-hint {
+  font-size: 0.7rem;
+}
+
+.object-editor-type-select {
+  max-width: 120px;
+}
+
+.object-editor-number-input {
+  max-width: 120px;
 }
 </style>

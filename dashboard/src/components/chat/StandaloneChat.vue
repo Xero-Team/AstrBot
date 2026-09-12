@@ -177,6 +177,7 @@
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
         :enable-streaming="enableStreaming"
+        :enable-reasoning="enableReasoning"
         :is-recording="false"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
@@ -187,6 +188,7 @@
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
         @toggle-streaming="enableStreaming = !enableStreaming"
+        @toggle-reasoning="enableReasoning = !enableReasoning"
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
@@ -278,6 +280,7 @@ const currentSession = ref<Session | null>(null);
 const draft = ref('');
 const initializing = ref(false);
 const enableStreaming = ref(true);
+const enableReasoning = ref(true);
 const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
@@ -420,6 +423,7 @@ async function sendCurrentMessage() {
     parts,
     transport: transportMode.value,
     enableStreaming: enableStreaming.value,
+    enableReasoning: enableReasoning.value,
     selectedProvider: selection?.providerId || '',
     selectedModel: selection?.modelName || '',
     userRecord,

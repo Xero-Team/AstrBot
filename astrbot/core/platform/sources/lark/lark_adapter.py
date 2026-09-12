@@ -26,6 +26,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import MediaResolver
@@ -659,7 +660,8 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ):
+    ) -> PlatformSendResult | None:
+        fallback_chat_id = None
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
             receive_id = session.session_id
@@ -668,6 +670,16 @@ class LarkPlatformAdapter(Platform):
         else:
             id_type = "open_id"
             receive_id = session.session_id
+            try:
+                if self.preferences is not None:
+                    fallback_chat_id = await self.preferences.get_async(
+                        "lark",
+                        f"{self.meta().id}:{self.appid}",
+                        f"private_chat:{receive_id}",
+                        None,
+                    )
+            except Exception as exc:
+                logger.warning("[Lark] Failed to load private chat route: %s", exc)
 
         # 复用 LarkMessageEvent 中的通用发送逻辑
         await LarkMessageEvent.send_message_chain(
@@ -675,6 +687,7 @@ class LarkPlatformAdapter(Platform):
             self.lark_api,
             receive_id=receive_id,
             receive_id_type=id_type,
+            fallback_chat_id=fallback_chat_id,
         )
 
         return await super().send_by_session(session, message_chain)
@@ -836,6 +849,17 @@ class LarkPlatformAdapter(Platform):
             abm.session_id = abm.group_id
         else:
             abm.session_id = abm.sender.user_id
+            if message.chat_type == "p2p" and message.chat_id:
+                try:
+                    if self.preferences is not None:
+                        await self.preferences.put_async(
+                            "lark",
+                            f"{self.meta().id}:{self.appid}",
+                            f"private_chat:{sender_open_id}",
+                            message.chat_id,
+                        )
+                except Exception as exc:
+                    logger.warning("[Lark] Failed to save private chat route: %s", exc)
 
         await self.handle_msg(abm)
 

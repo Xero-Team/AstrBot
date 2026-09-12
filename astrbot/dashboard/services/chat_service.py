@@ -1031,6 +1031,7 @@ class ChatService:
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
+        enable_reasoning = post_data.get("enable_reasoning", True)
         platform_history_id = post_data.get("_platform_history_id") or "webchat"
         thread_selected_text = post_data.get("_thread_selected_text")
         thread_parent_session_id: str | None = None
@@ -1098,6 +1099,7 @@ class ChatService:
                 "selected_provider": selected_provider,
                 "selected_model": selected_model,
                 "enable_streaming": enable_streaming,
+                "enable_reasoning": enable_reasoning,
                 "llm_checkpoint_id": llm_checkpoint_id,
                 "thread_selected_text": thread_selected_text,
             }
@@ -1516,6 +1518,7 @@ class ChatService:
             "session_id": thread.thread_id,
             "message": data.get("message", []),
             "enable_streaming": data.get("enable_streaming", True),
+            "enable_reasoning": data.get("enable_reasoning", True),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_platform_history_id": "webchat_thread",
@@ -1765,6 +1768,7 @@ class ChatService:
             "session_id": session_id,
             "message": source_user_record.content.get("message", []),
             "enable_streaming": data.get("enable_streaming", True),
+            "enable_reasoning": data.get("enable_reasoning", True),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_skip_user_history": True,

@@ -458,6 +458,8 @@ describe('Chat view smoke', () => {
       expect.objectContaining({ id: 'msg-1' }),
       'current-provider',
       'current-model',
+      true,
+      true,
     );
   });
 

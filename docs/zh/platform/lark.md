@@ -115,6 +115,8 @@
 
 开通 `contact:contact.base:readonly` 和 `contact:user.base:readonly`，用于读取私聊发送者的显示名。
 
+发送飞书私聊时，AstrBot 会记住入站私聊对应的 chat ID。如果飞书拒绝使用私聊 open ID 发送，消息会自动回退到该 chat ID；首次发送成功时不会重复投递。
+
 如果需要在群聊里使用，请额外开通 `im:message.group_at_msg:readonly` 和 `im:message.group_msg` 权限。
 
 > [!TIP]

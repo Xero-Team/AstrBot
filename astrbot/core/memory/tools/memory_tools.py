@@ -63,7 +63,7 @@ class SearchMemoryTool(FunctionTool[AstrAgentContext]):
         return "\n".join(_format_fact(fact) for fact in facts)
 
 
-@builtin_tool
+@builtin_tool(required_actions=("tool.memory_read",))
 @dataclass
 class GetPersonProfileTool(FunctionTool[AstrAgentContext]):
     name: str = "get_person_profile"

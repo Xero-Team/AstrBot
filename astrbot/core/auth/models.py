@@ -82,6 +82,8 @@ ACTIONS = frozenset(
         "tool.mcp_write",
         "tool.computer_use",
         "tool.web_search",
+        "tool.session_history",
+        "tool.memory_read",
         "skill.read",
         "dashboard.account.manage",
         "filesystem.read",

@@ -63,6 +63,17 @@ def test_get_full_tool_set_returns_original_tools():
 
 def test_unclaimed_plugin_tools_have_no_implicit_authorization_action():
     assert FunctionToolExecutor._required_actions(_tool()) == ()
+    assert FunctionToolExecutor._required_actions(_tool("get_unclaimed_tool")) == ()
+
+
+def test_history_and_memory_tools_use_tool_scoped_actions():
+    manager = FunctionToolManager()
+    assert FunctionToolExecutor._required_actions(
+        manager.get_builtin_tool("get_group_message_history")
+    ) == ("tool.session_history",)
+    assert FunctionToolExecutor._required_actions(
+        manager.get_builtin_tool("get_person_profile")
+    ) == ("tool.memory_read",)
 
 
 def test_builtin_web_search_tools_require_web_search_action():

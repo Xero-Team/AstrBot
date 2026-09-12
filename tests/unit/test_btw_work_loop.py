@@ -12,7 +12,10 @@ from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.process_stage.method import agent_request
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
-from tests.unit.agent_sub_stage_support import FakeThirdPartyRunner
+from tests.unit.agent_sub_stage_support import (
+    FakeThirdPartyRunner,
+    ThirdPartyResponseExecutor,
+)
 from tests.unit.test_astr_agent_run_util import FakeEvent as RunnerEvent
 from tests.unit.test_astr_agent_run_util import FakeRunner
 
@@ -23,6 +26,7 @@ class FakeEvent:
         self.message_str = message
         self.extras = {}
         self.result = None
+        self._stopped = False
 
     def set_extra(self, key, value) -> None:
         self.extras[key] = value
@@ -32,6 +36,12 @@ class FakeEvent:
 
     def set_result(self, value) -> None:
         self.result = value
+
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+    def stop_event(self) -> None:
+        self._stopped = True
 
 
 class FailingExecutor:
@@ -82,25 +92,6 @@ class RunAgentExecutor:
     async def process(self, event):
         del event
         async for _ in run_agent(self.runner):
-            yield
-
-
-class ThirdPartyExecutor:
-    """The real third-party response handler as the work loop's executor."""
-
-    def __init__(self, runner) -> None:
-        self.runner = runner
-
-    async def process(self, event):
-        stage = third_party.ThirdPartyAgentSubStage.__new__(
-            third_party.ThirdPartyAgentSubStage
-        )
-        async for _ in stage._handle_non_streaming_response(
-            runner=self.runner,
-            event=event,
-            stream_to_general=False,
-            custom_error_message=None,
-        ):
             yield
 
 
@@ -370,7 +361,7 @@ async def test_work_loop_records_third_party_runner_error_as_failed():
         final_resp=None,
     )
     sessions = WorkSessionManager()
-    work_loop = WorkLoop(ThirdPartyExecutor(runner), sessions)
+    work_loop = WorkLoop(ThirdPartyResponseExecutor(runner), sessions)
 
     _ = [item async for item in work_loop.process(event)]
 

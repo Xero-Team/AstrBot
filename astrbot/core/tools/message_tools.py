@@ -353,7 +353,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
 @builtin_tool(
     config={"provider_ltm_settings.group_message_history_enable": True},
-    required_actions=("session.read",),
+    required_actions=("tool.session_history",),
 )
 @dataclass
 class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):

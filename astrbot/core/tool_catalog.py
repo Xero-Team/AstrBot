@@ -262,8 +262,6 @@ def tool_required_actions(tool: FunctionTool) -> tuple[str, ...]:
         return ("extension.manage",)
     if name in {"send_message_to_user", "send_poke_to_user"}:
         return ("agent.manage",)
-    if "history" in name or name.startswith("get_"):
-        return ("session.read",)
     declared = getattr(tool, "required_actions", ())
     if (
         isinstance(declared, tuple)

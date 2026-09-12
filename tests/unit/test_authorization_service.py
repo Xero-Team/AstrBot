@@ -1963,6 +1963,21 @@ def test_action_registry_covers_frozen_actions():
     assert "tool" in skill_read.resource_types
 
 
+def test_session_originated_provider_and_extension_actions_accept_session_resources():
+    from astrbot.core.auth.registry import policy_for
+
+    for action in ("provider.read", "provider.use", "extension.read"):
+        policy = policy_for(action)
+        assert policy is not None
+        assert "session" in policy.resource_types
+
+    for action in ("provider.manage", "extension.manage", "extension.plugin_install"):
+        policy = policy_for(action)
+        assert policy is not None
+        assert "session" not in policy.resource_types
+        assert "instance" in policy.resource_types
+
+
 def test_mcp_dashboard_collection_routes_are_valid_resources():
     from astrbot.core.auth.registry import policy_for
 

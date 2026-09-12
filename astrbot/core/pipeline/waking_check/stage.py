@@ -10,6 +10,7 @@ from astrbot.core.auth.models import (
     Resource,
     Subject,
 )
+from astrbot.core.auth.registry import policy_for
 from astrbot.core.command import (
     CommandEngine,
     CommandError,
@@ -914,14 +915,28 @@ class WakingCheckStage(Stage):
             or event.auth_context is None
         ):
             return False
+        resource = self._permission_resource(event.resource, filter_ref.action)
         return (
             await authorization.authorize(
                 event.subject,
                 filter_ref.action,
-                event.resource,
+                resource,
                 event.auth_context,
             )
         ).allowed
+
+    @staticmethod
+    def _permission_resource(resource: Resource, action: str) -> Resource:
+        policy = policy_for(action)
+        if (
+            resource.type == "session"
+            and policy is not None
+            and "session" not in policy.resource_types
+            and "instance" in policy.resource_types
+            and resource.config_id is not None
+        ):
+            return Resource.instance(resource.config_id)
+        return resource
 
     async def _send_permission_denied(
         self,

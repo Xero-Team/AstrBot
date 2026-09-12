@@ -1,4 +1,5 @@
 from astrbot import logger
+from astrbot.core.auth.models import Resource
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 
@@ -71,7 +72,7 @@ class WhitelistCheckStage(Stage):
             await self.ctx.authorization.authorize(
                 event.subject,
                 "provider.manage",
-                event.resource,
+                Resource.instance(event.resource.config_id),
                 event.auth_context,
             )
         ).allowed

@@ -273,6 +273,25 @@ async def test_attach_authorization_uses_real_friend_message_type():
     assert waking._auth_message_type(event) == "FriendMessage"
 
 
+def test_permission_resource_uses_instance_for_instance_actions():
+    session = Resource.session("default", "napcat:FriendMessage:user-1")
+
+    assert (
+        waking.WakingCheckStage._permission_resource(session, "provider.read")
+        == session
+    )
+    assert (
+        waking.WakingCheckStage._permission_resource(session, "extension.read")
+        == session
+    )
+    assert waking.WakingCheckStage._permission_resource(
+        session, "extension.manage"
+    ) == Resource.instance("default")
+    assert waking.WakingCheckStage._permission_resource(
+        session, "extension.plugin_install"
+    ) == Resource.instance("default")
+
+
 @pytest.mark.asyncio
 async def test_im_attach_authorization_stashes_elevated_instance_tool_actions():
     stage = await make_stage()

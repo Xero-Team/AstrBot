@@ -65,6 +65,25 @@ def test_unclaimed_plugin_tools_have_no_implicit_authorization_action():
     assert FunctionToolExecutor._required_actions(_tool()) == ()
 
 
+def test_builtin_web_search_tools_require_session_read_only():
+    manager = FunctionToolManager()
+
+    for name in (
+        "web_search_baidu",
+        "web_search_tavily",
+        "tavily_extract_web_page",
+        "web_search_bocha",
+        "web_search_brave",
+        "web_search_exa",
+        "web_search_firecrawl",
+        "firecrawl_extract_web_page",
+        "exa_get_contents",
+        "web_search_anysearch",
+    ):
+        tool = manager.get_builtin_tool(name)
+        assert FunctionToolExecutor._required_actions(tool) == ("session.read",)
+
+
 def test_mcp_read_only_hint_uses_read_permission_for_sdk2_annotations():
     assert FunctionToolExecutor._required_actions(_mcp_tool(read_only_hint=True)) == (
         "tool.mcp_read",

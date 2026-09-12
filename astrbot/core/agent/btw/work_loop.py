@@ -254,7 +254,12 @@ class WorkLoop:
             raise
         else:
             failed = bool(event.get_extra("btw_work_failed"))
-            cancelled = bool(event.get_extra("agent_stop_requested"))
+            # An admitted stop request and a run that reported its own abort are
+            # both cancellations.  ``run_agent`` clears ``agent_stop_requested``
+            # when it reports the abort, so the stop flag alone misses that case.
+            cancelled = bool(event.get_extra("agent_stop_requested")) or bool(
+                event.get_extra("agent_user_aborted")
+            )
             await self.sessions.update_status(
                 session_id,
                 WorkSessionStatus.FAILED

@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,6 +8,9 @@ import pytest
 from astrbot.core.agent.btw.types import WorkSessionStatus, is_work_loop_enabled
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
+from astrbot.core.astr_agent_run_util import run_agent
+from tests.unit.test_astr_agent_run_util import FakeEvent as RunnerEvent
+from tests.unit.test_astr_agent_run_util import FakeRunner
 
 
 class FakeEvent:
@@ -50,6 +54,31 @@ class BlockingExecutor:
         self.started.set()
         await self.release.wait()
         yield "done"
+
+
+class WorkEvent(RunnerEvent):
+    """The event surface a real agent run needs inside a work loop."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unified_msg_origin = "umo-1"
+        self.message_str = "执行命令"
+
+
+class RunAgentExecutor:
+    """The real ``run_agent`` used as the work loop's executor.
+
+    Only the model runner behind it is a test double, so the terminal status
+    is decided by the same control flow production uses.
+    """
+
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    async def process(self, event):
+        del event
+        async for _ in run_agent(self.runner):
+            yield
 
 
 @pytest.mark.asyncio
@@ -235,3 +264,22 @@ async def test_schedule_refuses_after_the_loop_closed():
 
     with pytest.raises(RuntimeError):
         await work_loop.schedule(FakeEvent("the complete task"))
+
+
+@pytest.mark.asyncio
+async def test_work_loop_records_user_abort_as_cancelled():
+    """Aborting a real run_agent through the executor must not read as success."""
+    event = WorkEvent()
+    runner = FakeRunner([SimpleNamespace(type="aborted", data={})], event=event)
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(RunAgentExecutor(runner), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+
+    # The real run_agent clears the stop flag when it reports the abort, so the
+    # loop cannot rely on that flag to tell a cancellation from a completion.
+    assert event.get_extra("agent_user_aborted") is True
+    assert event.get_extra("agent_stop_requested") is False
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.CANCELLED

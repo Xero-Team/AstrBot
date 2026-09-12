@@ -65,7 +65,7 @@ def test_unclaimed_plugin_tools_have_no_implicit_authorization_action():
     assert FunctionToolExecutor._required_actions(_tool()) == ()
 
 
-def test_builtin_web_search_tools_require_session_read_only():
+def test_builtin_web_search_tools_require_web_search_action():
     manager = FunctionToolManager()
 
     for name in (
@@ -81,7 +81,7 @@ def test_builtin_web_search_tools_require_session_read_only():
         "web_search_anysearch",
     ):
         tool = manager.get_builtin_tool(name)
-        assert FunctionToolExecutor._required_actions(tool) == ("session.read",)
+        assert FunctionToolExecutor._required_actions(tool) == ("tool.web_search",)
 
 
 def test_mcp_read_only_hint_uses_read_permission_for_sdk2_annotations():

@@ -184,6 +184,51 @@ async def test_slack_parse_slack_blocks_flushes_plain_segments_and_plain_only_te
 
 
 @pytest.mark.asyncio
+async def test_slack_portable_text_does_not_activate_native_mentions():
+    blocks, _ = await SlackMessageEvent._parse_slack_blocks(
+        MessageChain([Plain("<!channel> *literal*")]).use_markdown(False), AsyncMock()
+    )
+    assert blocks == [
+        {
+            "type": "section",
+            "text": {"type": "plain_text", "text": "<!channel> *literal*"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_slack_plain_text_blocks_are_limited_to_the_block_kit_limit():
+    blocks, text = await SlackMessageEvent._parse_slack_blocks(
+        MessageChain([Plain("x" * 3001)]).use_markdown(False),
+        AsyncMock(),
+    )
+
+    assert text == ""
+    assert [block["text"]["type"] for block in blocks] == [
+        "plain_text",
+        "plain_text",
+    ]
+    assert [len(block["text"]["text"]) for block in blocks] == [3000, 1]
+
+
+@pytest.mark.asyncio
+async def test_slack_plain_text_file_failure_does_not_introduce_mrkdwn():
+    web_client = AsyncMock()
+    web_client.files_upload_v2.return_value = {"ok": False, "error": "upload failed"}
+
+    block = await SlackMessageEvent._from_segment_to_slack_block(
+        File(name="report.pdf", url="https://example.com/report.pdf"),
+        web_client,
+        "plain_text",
+    )
+
+    assert block == {
+        "type": "section",
+        "text": {"type": "plain_text", "text": "文件上传失败"},
+    }
+
+
+@pytest.mark.asyncio
 async def test_slack_send_falls_back_to_plain_text_when_block_send_fails():
     event = _build_event(group_id="C1")
     event.web_client.chat_postMessage = AsyncMock(

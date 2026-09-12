@@ -640,6 +640,28 @@ async def test_slack_send_by_session_uses_dm_session_id_directly():
 
 
 @pytest.mark.asyncio
+async def test_slack_send_by_session_reports_api_rejection():
+    adapter = _build_adapter()
+    adapter.web_client.chat_postMessage = AsyncMock(return_value={"ok": False})
+
+    with patch(
+        "astrbot.core.platform.sources.slack.slack_adapter.SlackMessageEvent._parse_slack_blocks",
+        AsyncMock(return_value=([], "hello")),
+    ):
+        result = await adapter.send_by_session(
+            SimpleNamespace(
+                message_type=MessageType.FRIEND_MESSAGE,
+                session_id="U123",
+            ),
+            MessageChain().message("hello"),
+        )
+
+    assert result is not None
+    assert not result.success
+    assert result.status == "failed"
+
+
+@pytest.mark.asyncio
 async def test_slack_convert_message_uses_group_fallback_when_conversation_lookup_fails():
     adapter = _build_adapter()
     adapter.bot_self_id = "B1"

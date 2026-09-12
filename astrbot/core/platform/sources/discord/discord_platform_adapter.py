@@ -21,6 +21,7 @@ from astrbot.core.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
@@ -82,7 +83,14 @@ class DiscordPlatformAdapter(Platform):
             logger.error(
                 "[Discord] Client is not ready (self.client.user is None); message send skipped"
             )
-            return
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                message_count=len(message_chain.chain),
+                error_message="Discord client is not ready",
+                status="unknown",
+            )
 
         # 创建一个 message_obj 以便在 event 中使用
         message_obj = AstrBotMessage()
@@ -122,8 +130,9 @@ class DiscordPlatformAdapter(Platform):
         message_obj.message = message_chain.chain
 
         temp_event = self.create_event(message_obj)
-        await temp_event.send(message_chain)
-        return await super().send_by_session(session, message_chain)
+        result = await temp_event.send(message_chain)
+        fallback = await super().send_by_session(session, message_chain)
+        return result if isinstance(result, PlatformSendResult) else fallback
 
     @override
     def meta(self) -> PlatformMetadata:

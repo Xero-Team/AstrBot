@@ -23,6 +23,7 @@ async def test_(self, event: AstrMessageEvent):
 插件不再暴露 `Platform` 实例或 `platform_manager`。常规平台 IO 请优先使用：
 
 - `self.context.messages.send(...)`
+- `self.context.bridges.watch(...)` / `send(...)`（跨会话，见 [消息发送](./send-message#跨会话监听与发送)）
 - `self.context.platform_actions.invoke(...)`
 - `self.context.platform_actions.invoke_for_event(...)`
 

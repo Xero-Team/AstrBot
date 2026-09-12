@@ -2174,6 +2174,49 @@ async def test_telegram_send_with_client_prefixes_at_and_reuses_reply_and_thread
 
 
 @pytest.mark.asyncio
+async def test_telegram_send_with_client_does_not_mutate_plain_component_when_prefixing():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    plain = Comp.Plain("body")
+    message = MessageChain([Comp.Mention(target="42", name="alice"), plain])
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123")
+
+    assert plain.text == "body"
+    assert client.send_message.await_args.kwargs["text"] == (
+        "[alice](tg://user?id=42) body"
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_with_client_includes_voice_message_id_in_result():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    client.send_voice.return_value = SimpleNamespace(message_id=77)
+    record = Comp.Record(file="voice.wav")
+
+    with patch.object(
+        type(record), "convert_to_file_path", AsyncMock(return_value="voice.wav")
+    ):
+        result = await TelegramPlatformEvent.send_with_client(
+            client, MessageChain([record]), "123"
+        )
+
+    assert result.message_ids == ("77",)
+
+
+@pytest.mark.asyncio
+async def test_telegram_portable_text_is_not_interpreted_as_native_markdown():
+    event_type = _load_telegram_platform_event()
+    client = MockTelegramBuilder.create_bot()
+    text = "[literal](tg://user?id=42) *text*"
+    await event_type.send_with_client(
+        client, MessageChain([Comp.Plain(text)]).use_markdown(False), "123"
+    )
+    client.send_message.assert_awaited_once_with(text=text, chat_id="123")
+
+
+@pytest.mark.asyncio
 async def test_telegram_send_with_client_prefixes_mention_target_when_name_missing():
     TelegramPlatformEvent = _load_telegram_platform_event()
     client = MockTelegramBuilder.create_bot()

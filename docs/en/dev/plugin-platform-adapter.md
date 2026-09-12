@@ -218,6 +218,40 @@ make napcat-check
 
 `make napcat-check` regenerates models and runs focused tests. Handwritten connection, event, and outbound-protocol code still needs ordinary unit tests.
 
+## Cross-platform message delivery
+
+Cross-session watches capture inbound semantics in `MessageEnvelope`. Its `content` is the only ordered sequence. `source_route` retains the transport route, while `source_umo` retains the inbound session identity. The source adapter resolves private file IDs and deferred media; the target owns uploads and protocol encoding. Forwarded transcripts are expanded with author labels and their original media order.
+
+Adapters return immutable `MessageDeliveryCapabilities` from `message_capabilities(session)`. Plugin adapters can import these types from `astrbot.api.platform` and override the method. Describe the current sender, account mode, and target session instead of copying a platform protocol's theoretical capabilities. Native JSON snapshots must match both namespace and content kind. Delivery across Bot instances defaults to fallback; matching platform names alone does not make private payloads reusable.
+
+The following conservative inventory was checked against this checkout's senders under `astrbot/core/platform/sources/` on 2026-09-11. It does not claim live-account testing on every platform:
+
+| Adapter directory         | Deliverable media                         | Main restriction or handling                                                                                   |
+| ------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `aiocqhttp`               | Image, audio, video, file                 | OneBot segments; preserve content order and mapped quotes                                                      |
+| `napcat`                  | Image, audio, video, file                 | OneBot/NapCat segments; native content declared by kind                                                        |
+| `telegram`                | Image, audio, video, file                 | Bridge sends parts in order; 4096 text limit; never reuse another Bot's file_id                                |
+| `discord`                 | Image, audio, file                        | 2000 text limit; cross-session forwarding disables mention notifications; video is delivered as a generic file |
+| `kook`                    | Image, audio, video, file                 | Separate component sends; quotes and JSON cards                                                                |
+| `lark`                    | Image, audio, video, file                 | Lark sender handles cards and uploads; bridge quotes use summaries                                             |
+| `line`                    | Image, audio, video, file                 | At most 5 parts per request and 5000 text characters; public HTTPS `callback_api_base`                         |
+| `mattermost`              | Image, audio, video, file                 | Upload media first; quotes use root_id                                                                         |
+| `misskey`                 | Image, audio, video, file                 | Media depends on the upload setting; instance-specific text limit; quote summaries                             |
+| `satori`                  | Image, audio, video, file                 | Acceptance also depends on the Satori backend and connected platform                                           |
+| `slack`                   | Image, file                               | Blocks/uploads; bridge text uses plain_text; quote summaries                                                   |
+| `dingtalk`                | Image, audio, video, file                 | Media-specific uploads and templates; quote summaries                                                          |
+| `qqofficial`              | Image, audio, video, file                 | Runtime name qq_official; checks cached IDs and proactive mode; channel media conservatively limited to images |
+| `qqofficial_webhook`      | Image, audio, video, file                 | Runtime name qq_official_webhook; shares official sending logic and session restrictions                       |
+| `webchat`                 | Image, audio, video, file                 | Delivered through the WebChat queue; bridge quote summaries                                                    |
+| `wecom`                   | Image, audio, video, file                 | Application mode needs agent_id; customer-service mode cannot send proactively                                 |
+| `wecom_ai_bot`            | Image, audio, video, file                 | Proactive sending needs a push Webhook; video uploads as a file                                                |
+| `weixin_oc`               | Image, audio, video, file                 | Depends on the account connection and platform session context                                                 |
+| `weixin_official_account` | Inbound images and audio can be projected | Current send_by_session rejects proactive delivery; usable as a watch source                                   |
+
+These descriptors apply to cross-session delivery. Existing Stars' `MessageChain` sends still use adapter encoders. The planner splits content in order and enforces text and part limits. Delivery holds independent media copies; asynchronous media fetches use reusable file tokens whose copies are released on expiry. Receipts describe platform acceptance. Native quote mappings require returned message IDs; absent IDs must fall back to summaries.
+
+Observer tasks belong to adapters, are attached to replacement instances on hot reload, and are cancelled on shutdown. Each adapter admits at most 128 pending observation tasks; overload skips forwarding while preserving the ordinary inbound queue. Watches do not replay history, persist across restarts, or forward the Bot's own inbound echoes.
+
 ## Verification checklist
 
 - direct-message, group, and thread `session_id` values route replies correctly;

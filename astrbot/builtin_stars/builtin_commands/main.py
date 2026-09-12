@@ -96,6 +96,39 @@ class Main(star.Star):
         """Show or set the display name for the current session"""
         await self.session_c.name(event, alias)
 
+    @filter.permission("session.watch")
+    @session.command("watch")
+    async def session_watch(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Forward messages from another session to this session."""
+        await self.session_c.watch(event, spec)
+
+    @filter.permission("session.read")
+    @session.command("unwatch")
+    async def session_unwatch(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Stop forwarding messages from another session."""
+        await self.session_c.unwatch(event, spec)
+
+    @filter.permission("session.read")
+    @session.command("watches")
+    async def session_watches(self, event: AstrMessageEvent) -> None:
+        """List active cross-session watches."""
+        await self.session_c.watches(event)
+
+    @filter.permission("session.send")
+    @filter.command("send")
+    async def send_to_session(
+        self,
+        event: AstrMessageEvent,
+        target_umo: str,
+        content: GreedyStr = GreedyStr(""),
+    ) -> None:
+        """Send text and attachments through the target session's bot account."""
+        await self.session_c.send(event, target_umo, content)
+
     @filter.command_group("conversation")
     def conversation(self) -> None:
         """Manage conversations"""

@@ -2,6 +2,7 @@ import asyncio
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast, override
 from urllib.parse import unquote
@@ -25,7 +26,9 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.message_protocol import MessageDeliveryCapabilities
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -293,6 +296,14 @@ class WecomPlatformAdapter(Platform):
         await asyncio.to_thread(file_path.write_bytes, content)
         return str(file_path)
 
+    def message_capabilities(
+        self, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        return replace(
+            super().message_capabilities(session),
+            proactive=not hasattr(self.client, "kf_message") and bool(self.agent_id),
+        )
+
     @override
     async def send_by_session(
         self,
@@ -318,8 +329,9 @@ class WecomPlatformAdapter(Platform):
         message_obj.raw_message = {"_proactive_send": True}
 
         event = self.create_event(message_obj)
-        await event.send(message_chain)
-        return await super().send_by_session(session, message_chain)
+        result = await event.send(message_chain)
+        fallback = await super().send_by_session(session, message_chain)
+        return result if isinstance(result, PlatformSendResult) else fallback
 
     @override
     def meta(self) -> PlatformMetadata:

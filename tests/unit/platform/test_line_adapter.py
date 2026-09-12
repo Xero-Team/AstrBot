@@ -358,6 +358,25 @@ async def test_line_send_by_session_skips_push_for_empty_built_messages(monkeypa
     super_send.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_line_send_by_session_reports_push_rejection(monkeypatch):
+    adapter = _adapter()
+    adapter.line_api.push_message = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.line.line_event.LineMessageEvent.build_line_messages",
+        AsyncMock(return_value=[{"type": "text", "text": "hello"}]),
+    )
+
+    result = await adapter.send_by_session(
+        SimpleNamespace(session_id="user-1", message_type=MessageType.FRIEND_MESSAGE),
+        MessageChain([Plain("hello")]),
+    )
+
+    assert result is not None
+    assert not result.success
+    assert result.status == "failed"
+
+
 def test_line_meta_returns_configured_platform_metadata():
     adapter = _adapter()
 

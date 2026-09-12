@@ -3,7 +3,7 @@ import base64
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -24,6 +24,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
@@ -106,6 +107,7 @@ class SlackAdapter(Platform):
             web_client=self.web_client,
         )
 
+        await super().send_by_session(session, message_chain)
         try:
             if session.message_type == MessageType.GROUP_MESSAGE:
                 # 发送到频道
@@ -114,22 +116,50 @@ class SlackAdapter(Platform):
                     if "_" in session.session_id
                     else session.session_id
                 )
-                await self.web_client.chat_postMessage(
+                response = await self.web_client.chat_postMessage(
                     channel=channel_id,
                     text=text,
                     blocks=blocks if blocks else None,
                 )
             else:
                 # 发送私信
-                await self.web_client.chat_postMessage(
+                response = await self.web_client.chat_postMessage(
                     channel=session.session_id,
                     text=text,
                     blocks=blocks if blocks else None,
                 )
         except Exception as e:
             logger.error(f"Slack 发送消息失败: {e}")
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                message_count=len(message_chain.chain),
+                error_message="Slack message submission failed",
+                status="unknown",
+            )
 
-        return await super().send_by_session(session, message_chain)
+        if isinstance(response, Mapping) and response.get("ok") is False:
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                message_count=len(message_chain.chain),
+                error_message="Slack rejected the message",
+                status="failed",
+            )
+        message_id = (
+            str(response.get("ts"))
+            if isinstance(response, Mapping) and response.get("ts")
+            else None
+        )
+        return PlatformSendResult(
+            platform_id=self.meta().id,
+            success=True,
+            target=session.session_id,
+            message_count=len(message_chain.chain),
+            message_id=message_id,
+        )
 
     async def convert_message(self, event: dict) -> AstrBotMessage:
         logger.debug(f"[slack] RawMessage {event}")

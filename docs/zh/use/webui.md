@@ -138,6 +138,8 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 侧栏 **更多功能 → 授权管理** 打开 `/authorization`。Dashboard 账户、IM 会话 owner 和 `/admin grant` 不是同一套身份；群聊授权、二次验证（step-up）和角色表见 [授权管理](./authorization)。
 
+跨会话监听和 `/send` 目前没有 Dashboard 管理面。绑定 `instance_operator` 后，只能在 IM 或 WebChat 里用 [内置指令](./command#跨会话监听与发送) 创建、查看和停止监听。指令管理页可以启用或禁用这些指令，但不会列出活跃监听。
+
 开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ## 可视化配置

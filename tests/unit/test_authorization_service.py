@@ -665,6 +665,39 @@ async def test_target_session_authorization_does_not_inherit_origin_owner(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["session.watch", "session.send"])
+async def test_bridge_actions_require_instance_binding_and_stay_config_scoped(
+    authorization, action
+):
+    subject = Subject.im(
+        platform_instance="source", bot_account_id="bot", sender_id="42"
+    )
+    origin = Resource.session("default", "source:GroupMessage:room")
+    target = Resource.session("default", "target:GroupMessage:room")
+    context = _session_context(
+        subject, origin, platform_member_role="owner", platform_role_source="adapter"
+    )
+    assert not (await authorization.authorize(subject, action, target, context)).allowed
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    assert (await authorization.authorize(subject, action, target, context)).allowed
+    assert not (
+        await authorization.authorize(subject, "session.manage", target, context)
+    ).allowed
+    other = Resource.session("another", "target:GroupMessage:room")
+    denied = await authorization.authorize(subject, action, other, context)
+    assert not denied.allowed
+    assert denied.reason == "cross_config_resource"
+
+
+@pytest.mark.asyncio
 async def test_dashboard_cross_session_assign_requires_step_up(authorization):
     subject = Subject.dashboard_session("session-1")
     target = Resource.session("default", "napcat:GroupMessage:room-b")

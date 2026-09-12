@@ -560,6 +560,16 @@ class AstrBotCoreLifecycle:
             self.services.computer_runtime.terminate,
         )
         self._register_cleanup("platform manager", self.platform_manager.terminate)
+        # Observe normalized ingress before pipeline processing so runtime-owned
+        # bridges can project an immutable snapshot from the first event.
+        assert self.execution_context is not None
+        self._register_cleanup(
+            "session bridge",
+            self.execution_context.session_bridge_manager.terminate,
+        )
+        self.platform_manager.add_envelope_observer(
+            self.execution_context.session_bridge_manager.observe
+        )
         await self.platform_manager.initialize()
 
         # 初始化关闭控制面板的事件

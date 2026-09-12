@@ -854,6 +854,7 @@ async def plugin_manager_pm(tmp_path, monkeypatch):
                 self.dashboard_extension_registry,
             )
             self._platform_manager = MagicMock()
+            self.session_bridge_manager = MagicMock()
             self._platform_manager.refresh_registered_commands = AsyncMock()
 
         def get_all_stars(self):

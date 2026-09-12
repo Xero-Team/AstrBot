@@ -25,6 +25,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -113,9 +114,23 @@ class LinePlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         messages = await LineMessageEvent.build_line_messages(message_chain)
-        if messages:
-            await self.line_api.push_message(session.session_id, messages)
-        return await super().send_by_session(session, message_chain)
+        await super().send_by_session(session, message_chain)
+        if not messages:
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                status="skipped",
+            )
+        accepted = await self.line_api.push_message(session.session_id, messages)
+        return PlatformSendResult(
+            platform_id=self.meta().id,
+            success=accepted,
+            target=session.session_id,
+            message_count=len(messages),
+            error_message=None if accepted else "LINE rejected the push message",
+            status="accepted" if accepted else "failed",
+        )
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(

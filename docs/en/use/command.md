@@ -65,6 +65,23 @@ After the waking stage finalizes `is_wake`, the automatic name is written to sto
 
 The user ID from `/session info` can be granted current-session `session_admin` with `/admin grant`. That is not a global operator. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
 
+### Cross-session watches and sending
+
+- `/session watch [listener|this] <target> [seconds]`: Forward subsequent incoming messages from the target into the listener session; requires `session.watch`. Omit the listener or write `this` for the current session. Duration is 60–864000 seconds (up to 10 days), default 43200 seconds (12 hours). When it expires, the listener session receives an end notice.
+- `/session watches`: List watches you created with the current session as the listener, and their remaining time.
+- `/session unwatch [listener|this] <target>`: Stop a matching watch that you own. Omit the listener or write `this` for the current session.
+- `/send <UMO> [content]`: Send text and attachments from the same message through the target Bot account; requires `session.send`. An attachment-only body is allowed. This does not register a `reply` command.
+
+Watching and sending require the current identity to hold `instance_operator` permission in the configuration shared by both sessions. Group admin or private-session ownership does not grant this access. Forwarded content is visible to everyone in the receiving session. Watches forward new incoming messages only, without reading history. They are held in memory, disappear when they expire or the process restarts, and are limited to 16 per actor. Authorization is checked again for each forwarded message, so revocation stops the watch. Running `/session watch` again on the same pair resets the duration.
+
+Text and media retain their message-chain order; targets without mixed-content delivery receive separate messages. Cross-platform mentions become text. Quotes use accepted-message ID mappings when available and otherwise become a quote summary. Unavailable attachments and unsupported native content leave text placeholders. Platform cards, private syntax, and mini apps cannot be guaranteed to reproduce on another platform.
+
+`send` arguments still follow the Orbit syntax above. Its body is taken from the original message chain after removing the command header, preserving original text and attachment positions. Results distinguish platform acceptance, partial acceptance, rejection, and unknown status. Acceptance does not imply a read receipt. Check the target session before retrying partial or unknown submissions.
+
+Targets such as LINE that require public media URLs need a reachable HTTPS `callback_api_base`. Forwarded media uses expiring file-token copies; private file IDs from the source Bot are not passed to another platform. The WeChat Official Account adapter currently cannot receive proactive sends. Other adapters may depend on account mode, a push Webhook, target-session state, or server permissions.
+
+This stage has no Dashboard management surface. Create, list, and stop watches, and send across sessions, only through the IM commands above. The command-management page can enable or disable those commands, but it cannot list or operate watches. The same commands work in WebChat like any other IM session.
+
 ### Conversations
 
 - `/conversation create`: Create and switch to a new conversation.

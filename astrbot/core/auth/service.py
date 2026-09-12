@@ -1417,6 +1417,10 @@ class AuthorizationService:
             context.origin_session_resource_id is not None
             and resource.type == "session"
             and resource.id != context.origin_session_resource_id
+            # Only explicit bridge operations may address another session.
+            # Their policies require an instance operator; origin roles never
+            # become target roles because relation collection scopes each fact.
+            and action not in {"session.watch", "session.send"}
         ):
             return Decision(
                 False,

@@ -158,24 +158,29 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: TelegramClient,
         text: str,
         payload: dict[str, Any],
+        *,
+        use_markdown: bool = True,
     ) -> list[str]:
         """按 Telegram 限制切分文本后逐段发送。"""
         message_ids: list[str] = []
         for chunk in cls._split_message(text):
-            try:
-                markdown_text = telegramify_markdown.markdownify(
-                    chunk,
-                )
-                result = await client.send_message(
-                    text=markdown_text,
-                    parse_mode="MarkdownV2",
-                    **cast(Any, payload),
-                )
-            except (ValueError, BadRequest) as e:
-                logger.warning(
-                    f"Failed to convert message to Markdown，using normal text: {e!s}"
-                )
+            if not use_markdown:
                 result = await client.send_message(text=chunk, **cast(Any, payload))
+            else:
+                try:
+                    markdown_text = telegramify_markdown.markdownify(
+                        chunk,
+                    )
+                    result = await client.send_message(
+                        text=markdown_text,
+                        parse_mode="MarkdownV2",
+                        **cast(Any, payload),
+                    )
+                except (ValueError, BadRequest) as e:
+                    logger.warning(
+                        f"Failed to convert message to Markdown，using normal text: {e!s}"
+                    )
+                    result = await client.send_message(text=chunk, **cast(Any, payload))
             message_id = getattr(result, "message_id", None)
             if message_id is not None:
                 message_ids.append(str(message_id))
@@ -347,6 +352,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         has_reply = False
         reply_message_id = None
         mention_prefix: list[str] = []
+        use_markdown = message.use_markdown_ is not False
         for component in message.chain:
             if isinstance(component, Reply):
                 has_reply = True
@@ -354,7 +360,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(component, Mention):
                 target = str(component.target)
                 name = component.name or target
-                if target.isdigit():
+                if use_markdown and target.isdigit():
                     mention_prefix.append(
                         f"[{_escape_markdown_v2_text(name)}](tg://user?id={target})"
                     )
@@ -397,7 +403,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     if mention_prefix_text
                     else component.text
                 )
-                ids = await cls._send_text_chunks(client, text, payload)
+                ids = await cls._send_text_chunks(
+                    client, text, payload, use_markdown=use_markdown
+                )
                 message_ids.extend(ids)
                 message_count += len(ids) or len(cls._split_message(text))
                 mention_prefix_text = ""
@@ -419,7 +427,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         caption = f"{mention_prefix_text} {caption}"
                     elif len(run) < 2:
                         ids = await cls._send_text_chunks(
-                            client, mention_prefix_text, payload
+                            client,
+                            mention_prefix_text,
+                            payload,
+                            use_markdown=use_markdown,
                         )
                         message_ids.extend(ids)
                         message_count += len(ids) or 1

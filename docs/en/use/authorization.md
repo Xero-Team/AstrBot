@@ -50,6 +50,12 @@ Group `/conversation reset` and similar management commands need `session_admin`
 
 Profiles can bind separately to platforms, groups, or DMs. Editing `default` may not change the current session. See [Configuration profiles](./config-profiles).
 
+## Cross-session watches and sending
+
+`session.watch` and `session.send` are separate cross-session permissions requiring `instance_operator` or a higher role. Both sessions must belong to the same configuration. A group admin or private-session owner in the source session cannot use that status to watch another session. Existing cross-session restrictions on `session.manage` and `session.assign` remain in effect.
+
+`/session watch` creates an expiring watch from the trusted event identity; command arguments cannot choose an actor. Authorization is checked again before submission. Stopping a watch or revoking access prevents subsequent queued submissions. Forwarded content is visible to everyone in the receiving session. This stage has no Dashboard management surface; see [Built-in commands](./command#cross-session-watches-and-sending).
+
 ## Step-up
 
 These actions prompt for the current password or TOTP. The proof is single-use for that operation, never placed in a URL, and never reused:

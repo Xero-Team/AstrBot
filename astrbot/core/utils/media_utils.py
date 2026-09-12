@@ -490,7 +490,7 @@ async def _materialize_media_ref(
         cleanup_paths.append(target_path)
         try:
             await download_file(media_ref, str(target_path))
-        except Exception:
+        except BaseException:
             _cleanup_paths(cleanup_paths)
             raise
         mime_type = _guess_mime_type(target_path)

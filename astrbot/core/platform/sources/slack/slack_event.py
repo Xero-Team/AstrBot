@@ -17,6 +17,11 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
+from astrbot.core.platform.message_limits import (
+    MessageLimitUnit,
+    PlatformTextLimit,
+    split_platform_text,
+)
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 
@@ -37,10 +42,14 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _from_segment_to_slack_block(
         segment: BaseMessageComponent,
         web_client: AsyncWebClient,
+        text_type: str = "mrkdwn",
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
         if isinstance(segment, Plain):
-            return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
+            return {
+                "type": "section",
+                "text": {"type": text_type, "text": segment.text},
+            }
         if isinstance(segment, Image):
             # upload file
             url = segment.url or segment.file
@@ -59,7 +68,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": "图片上传失败"},
+                    "text": {"type": text_type, "text": "图片上传失败"},
                 }
             image_url = cast(list, response["files"])[0]["url_private"]
             logger.debug(f"Slack file upload response: {response}")
@@ -81,14 +90,18 @@ class SlackMessageEvent(AstrMessageEvent):
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": "文件上传失败"},
+                    "text": {"type": text_type, "text": "文件上传失败"},
                 }
             file_url = cast(list, response["files"])[0]["permalink"]
             return {
                 "type": "section",
                 "text": {
-                    "type": "mrkdwn",
-                    "text": f"文件: <{file_url}|{segment.name or '文件'}>",
+                    "type": text_type,
+                    "text": (
+                        f"文件: {file_url}"
+                        if text_type == "plain_text"
+                        else f"文件: <{file_url}|{segment.name or '文件'}>"
+                    ),
                 },
             }
 
@@ -100,6 +113,20 @@ class SlackMessageEvent(AstrMessageEvent):
         """解析成 Slack 块格式"""
         blocks = []
         text_content = ""
+        text_type = "plain_text" if message_chain.use_markdown_ is False else "mrkdwn"
+        block_limit = PlatformTextLimit(
+            max_length=3000,
+            unit=MessageLimitUnit.CHARS,
+            supports_markdown=text_type == "mrkdwn",
+            supports_structured_components=True,
+            allows_consecutive_messages=True,
+        )
+
+        def append_text_blocks(text: str) -> None:
+            for chunk in split_platform_text(text, block_limit).parts:
+                blocks.append(
+                    {"type": "section", "text": {"type": text_type, "text": chunk}},
+                )
 
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
@@ -107,27 +134,21 @@ class SlackMessageEvent(AstrMessageEvent):
             else:
                 # 如果有文本内容，先添加文本块
                 if text_content.strip():
-                    blocks.append(
-                        {
-                            "type": "section",
-                            "text": {"type": "mrkdwn", "text": text_content},
-                        },
-                    )
+                    append_text_blocks(text_content)
                     text_content = ""
 
                 # 添加其他类型的块
                 block = await SlackMessageEvent._from_segment_to_slack_block(
                     segment,
                     web_client,
+                    text_type,
                 )
                 if block:
                     blocks.append(block)
 
         # 如果最后还有文本内容
         if text_content.strip():
-            blocks.append(
-                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
-            )
+            append_text_blocks(text_content)
 
         return blocks, "" if blocks else text_content
 

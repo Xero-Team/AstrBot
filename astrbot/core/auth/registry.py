@@ -175,6 +175,17 @@ def _resource_types_for(action: str) -> frozenset[str]:
             {"session", "dashboard-api", "webchat", "webchat-user", "conversation"}
         )
     if action.startswith("provider."):
+        if action in {"provider.read", "provider.use"}:
+            return frozenset(
+                {
+                    "session",
+                    "provider",
+                    "provider-model",
+                    "provider-source",
+                    "instance",
+                    "dashboard-api",
+                }
+            )
         return frozenset(
             {
                 "provider",
@@ -200,7 +211,9 @@ def _resource_types_for(action: str) -> frozenset[str]:
     if action.startswith("skill."):
         return frozenset({"tool", "skill", "session"})
     if action.startswith("extension."):
-        return frozenset({"plugin", "skill", "dashboard-api"})
+        if action == "extension.read":
+            return frozenset({"session", "plugin", "skill", "dashboard-api"})
+        return frozenset({"instance", "plugin", "skill", "dashboard-api"})
     if action.startswith("data."):
         return frozenset(
             {

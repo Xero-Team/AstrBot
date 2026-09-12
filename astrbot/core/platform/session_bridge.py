@@ -74,6 +74,7 @@ class SessionBridgeManager:
         file_token_service: FileTokenService | None = None,
         get_callback_base: Callable[[str], str] | None = None,
         get_locale: Callable[[str], Awaitable[str]] | None = None,
+        get_platform_family: Callable[[str], str] | None = None,
         default_ttl_seconds: int = DEFAULT_WATCH_TTL_SECONDS,
         max_watches_per_subject: int = 16,
     ) -> None:
@@ -84,6 +85,7 @@ class SessionBridgeManager:
         self._file_token_service = file_token_service
         self._get_callback_base = get_callback_base
         self._get_locale = get_locale
+        self._get_platform_family = get_platform_family
         self._default_ttl_seconds = min(
             MAX_WATCH_TTL_SECONDS, max(MIN_WATCH_TTL_SECONDS, default_ttl_seconds)
         )
@@ -281,7 +283,7 @@ class SessionBridgeManager:
                             ContentKind.TEXT,
                             render_source_header(
                                 envelope,
-                                watch.source_umo.split(":", 1)[0],
+                                self._platform_family(watch.source_umo),
                                 locale,
                             ),
                         ),
@@ -307,6 +309,11 @@ class SessionBridgeManager:
             except Exception:
                 # Transport exceptions may contain credentials or private URLs.
                 logger.warning("Session bridge delivery failed")
+
+    def _platform_family(self, umo: str) -> str:
+        if self._get_platform_family is None:
+            return umo.split(":", 1)[0]
+        return self._get_platform_family(umo)
 
     async def _locale_for(self, umo: str) -> str:
         if self._get_locale is None:
@@ -536,6 +543,8 @@ class SessionBridgeManager:
             tasks = list(self._expiry_tasks.values())
             self._expiry_tasks.clear()
             self._watches.clear()
+            self._forwarded.clear()
+            self._message_ids.clear()
         for task in tasks:
             task.cancel()
         if tasks:

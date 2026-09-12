@@ -166,12 +166,15 @@ class SessionCommands:
         """Stop a watch owned by the current actor."""
         try:
             source_umo, target_umo = parse_unwatch_spec(spec, event.unified_msg_origin)
+            removed = await self.context.bridges.unwatch(
+                event, target_umo, source_umo=source_umo
+            )
         except ValueError:
             await reply_i18n(self.context, event, "session.unwatch.usage")
             return
-        removed = await self.context.bridges.unwatch(
-            event, target_umo, source_umo=source_umo
-        )
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
         await reply_i18n(
             self.context,
             event,
@@ -180,7 +183,11 @@ class SessionCommands:
 
     async def watches(self, event: AstrMessageEvent) -> None:
         """List this actor's active watches in the current session."""
-        items = await self.context.bridges.list(event)
+        try:
+            items = await self.context.bridges.list(event)
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
         await reply_i18n(
             self.context,
             event,

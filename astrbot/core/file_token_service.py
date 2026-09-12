@@ -75,6 +75,7 @@ class FileTokenService:
         ttl_seconds: float | None,
         *,
         owned_path: str | None = None,
+        published: bool = False,
     ) -> str:
         async with self.lock:
             await self._cleanup_expired_tokens()
@@ -91,6 +92,8 @@ class FileTokenService:
                 self._owned_artifacts[owned_path] = (
                     self._owned_artifacts.get(owned_path, 0) + 1
                 )
+            if published:
+                self._published_tokens.add(file_token)
             return file_token
 
     async def register_file(
@@ -152,9 +155,9 @@ class FileTokenService:
             except asyncio.CancelledError:
                 await task
                 raise
-            token = await self._register(snapshot, None, owned_path=snapshot)
-            self._published_tokens.add(token)
-            return token
+            return await self._register(
+                snapshot, None, owned_path=snapshot, published=True
+            )
         except BaseException:
             Path(snapshot).unlink(missing_ok=True)
             raise

@@ -329,6 +329,43 @@ async def test_session_bridge_header_follows_target_locale() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_bridge_header_uses_adapter_family_not_instance_id() -> None:
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain.get_plain_text())
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager = SessionBridgeManager(
+        send,
+        lambda _platform: MessageDeliveryCapabilities(),
+        authorization=SimpleNamespace(
+            authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
+        ),
+        get_config_id=lambda _: "default",
+        get_platform_family=lambda umo: {
+            "tg-main:FriendMessage:source": "telegram",
+        }.get(umo, umo.split(":", 1)[0]),
+    )
+    source = "tg-main:FriendMessage:source"
+    target = "napcat:GroupMessage:room"
+    await manager.watch(_event(source), target)
+    await manager.observe(
+        MessageEnvelope(
+            source_route=PlatformRouteIdentity(
+                "napcat", MessageType.GROUP_MESSAGE, "room"
+            ),
+            source_message_id="7",
+            sender=SenderSnapshot("1", "Alice", "napcat"),
+            content=(PortablePart(ContentKind.TEXT, "hello"),),
+        )
+    )
+
+    assert sent == ["来自 Alice（napcat）\nhello"]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
 async def test_watch_checks_both_resources_and_revocation_stops_delivery():
     manager, authorization, send = _manager()
     event = _event()
@@ -364,6 +401,12 @@ async def test_watch_rejects_missing_identity_and_denied_target():
     with pytest.raises(PermissionError):
         await manager.watch(_event(), "target:GroupMessage:room")
     assert await manager.list_watches(_event()) == ()
+    event = _event()
+    event.subject = None
+    with pytest.raises(PermissionError):
+        await manager.unwatch(event, "target:GroupMessage:room")
+    with pytest.raises(PermissionError):
+        await manager.list_watches(event)
     await manager.terminate()
 
 
@@ -719,7 +762,8 @@ async def test_unwatch_cancels_a_queued_delivery():
         )
         await checked.wait()
         assert await manager.unwatch(event, "target:GroupMessage:room")
-    await task
+    task_result = await task
+    assert task_result is None
     send.assert_not_awaited()
     await manager.terminate()
 
@@ -966,3 +1010,48 @@ async def test_watch_expiry_notice_follows_locale(monkeypatch):
         await asyncio.gather(*pending)
     assert sent == ["The watch on target:GroupMessage:room has ended."]
     await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_terminate_clears_watches_and_message_maps():
+    manager, _, _ = _manager()
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room")
+    await manager.observe(
+        MessageEnvelope(
+            PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
+            source_message_id="original",
+            content=(PortablePart(ContentKind.TEXT, "hello"),),
+        )
+    )
+    assert manager._watches
+    assert manager._message_ids
+    await manager.terminate()
+    assert manager._watches == {}
+    assert manager._forwarded == {}
+    assert manager._message_ids == {}
+
+
+@pytest.mark.asyncio
+async def test_session_commands_report_denied_without_actor():
+    from astrbot.builtin_stars.builtin_commands.commands.session import SessionCommands
+
+    replies: list[str] = []
+
+    async def translate(_event, key, **_kwargs):
+        replies.append(key)
+        return key
+
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(
+            unwatch=AsyncMock(side_effect=PermissionError("denied")),
+            list=AsyncMock(side_effect=PermissionError("denied")),
+        ),
+        i18n=SimpleNamespace(t=translate),
+    )
+    event = _event()
+    event.set_result = lambda _result: None
+    commands = SessionCommands(context)
+    await commands.unwatch(event, "target:GroupMessage:room")
+    await commands.watches(event)
+    assert replies == ["session.bridge.denied", "session.bridge.denied"]

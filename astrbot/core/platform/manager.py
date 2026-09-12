@@ -651,6 +651,13 @@ class PlatformManager:
             return MessageDeliveryCapabilities(proactive=False, available=False)
         return inst.message_capabilities(session)
 
+    def get_adapter_name(self, platform_id: str) -> str:
+        """Return the adapter family name for one loaded instance id."""
+        inst = self._find_inst_by_id(platform_id)
+        if inst is None:
+            return platform_id
+        return inst.meta().name
+
     async def refresh_registered_commands(self) -> None:
         """Refresh native commands on every loaded platform adapter."""
 

@@ -139,11 +139,13 @@ def _resolve_tool_handler_module_path(
 
 
 class PlatformManagerProtocol(Protocol):
-    def loaded_platforms(self) -> tuple[object, ...]: ...
+    def loaded_platforms(self) -> tuple[object, ...]:
+        raise NotImplementedError
 
     def add_envelope_observer(
         self, observer: Callable[[MessageEnvelope], Awaitable[None]]
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
     def create_event(
         self,
@@ -151,14 +153,16 @@ class PlatformManagerProtocol(Protocol):
         event_message: object,
         *,
         is_wake: bool = True,
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
     async def invoke_action(
         self,
         platform_id: str,
         action_name: str,
         **kwargs,
-    ) -> dict[str, object]: ...
+    ) -> dict[str, object]:
+        raise NotImplementedError
 
     async def invoke_capability(
         self,
@@ -166,21 +170,29 @@ class PlatformManagerProtocol(Protocol):
         capability_name: str,
         action_name: str,
         **kwargs,
-    ) -> object: ...
+    ) -> object:
+        raise NotImplementedError
 
-    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]: ...
+    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]:
+        raise NotImplementedError
 
     def get_message_delivery_capabilities(
         self, platform_id: str, session: MessageSession | None = None
-    ) -> MessageDeliveryCapabilities: ...
+    ) -> MessageDeliveryCapabilities:
+        raise NotImplementedError
 
-    async def refresh_registered_commands(self) -> None: ...
+    def get_adapter_name(self, platform_id: str) -> str:
+        raise NotImplementedError
+
+    async def refresh_registered_commands(self) -> None:
+        raise NotImplementedError
 
     async def send_to_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> PlatformSendResult: ...
+    ) -> PlatformSendResult:
+        raise NotImplementedError
 
 
 class CoreExecutionContext:
@@ -228,9 +240,7 @@ class CoreExecutionContext:
         """平台适配器管理器"""
         self.session_bridge_manager = SessionBridgeManager(
             self.send_message,
-            lambda umo: self._platform_manager.get_message_delivery_capabilities(
-                MessageSession.from_str(umo).platform_id, MessageSession.from_str(umo)
-            ),
+            self._message_delivery_capabilities,
             authorization=authorization,
             get_config_id=lambda umo: self.astrbot_config_mgr.get_conf_info(umo)["id"],
             file_token_service=file_token_service,
@@ -238,6 +248,7 @@ class CoreExecutionContext:
                 self.get_config(umo).get("callback_api_base", "") or ""
             ),
             get_locale=self._session_locale,
+            get_platform_family=self._adapter_family,
         )
         """Runtime-owned expiring cross-session watch state."""
         self.conversation_manager = conversation_manager
@@ -691,6 +702,17 @@ class CoreExecutionContext:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def _message_delivery_capabilities(self, umo: str) -> MessageDeliveryCapabilities:
+        session = MessageSession.from_str(umo)
+        return self._platform_manager.get_message_delivery_capabilities(
+            session.platform_id, session
+        )
+
+    def _adapter_family(self, umo: str) -> str:
+        return self._platform_manager.get_adapter_name(
+            MessageSession.from_str(umo).platform_id
+        )
 
     async def _session_locale(self, umo: str) -> str:
         stored = await self.preferences.session_get(umo, "locale", None)

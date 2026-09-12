@@ -25,8 +25,13 @@ from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
+from astrbot.core.platform.message_protocol import (
+    MessageDeliveryCapabilities,
+    MessageEnvelope,
+)
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import DeliveryReceipt, PlatformSendResult
+from astrbot.core.platform.session_bridge import SessionBridgeManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
@@ -134,6 +139,12 @@ def _resolve_tool_handler_module_path(
 
 
 class PlatformManagerProtocol(Protocol):
+    def loaded_platforms(self) -> tuple[object, ...]: ...
+
+    def add_envelope_observer(
+        self, observer: Callable[[MessageEnvelope], Awaitable[None]]
+    ) -> None: ...
+
     def create_event(
         self,
         platform: str,
@@ -158,6 +169,10 @@ class PlatformManagerProtocol(Protocol):
     ) -> object: ...
 
     def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]: ...
+
+    def get_message_delivery_capabilities(
+        self, platform_id: str, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities: ...
 
     async def refresh_registered_commands(self) -> None: ...
 
@@ -211,6 +226,20 @@ class CoreExecutionContext:
         """模型提供商管理器"""
         self._platform_manager = platform_manager
         """平台适配器管理器"""
+        self.session_bridge_manager = SessionBridgeManager(
+            self.send_message,
+            lambda umo: self._platform_manager.get_message_delivery_capabilities(
+                MessageSession.from_str(umo).platform_id, MessageSession.from_str(umo)
+            ),
+            authorization=authorization,
+            get_config_id=lambda umo: self.astrbot_config_mgr.get_conf_info(umo)["id"],
+            file_token_service=file_token_service,
+            get_callback_base=lambda umo: str(
+                self.get_config(umo).get("callback_api_base", "") or ""
+            ),
+            get_locale=self._session_locale,
+        )
+        """Runtime-owned expiring cross-session watch state."""
         self.conversation_manager = conversation_manager
         """会话管理器"""
         self.message_history_manager = message_history_manager
@@ -662,6 +691,12 @@ class CoreExecutionContext:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    async def _session_locale(self, umo: str) -> str:
+        stored = await self.preferences.session_get(umo, "locale", None)
+        if stored:
+            return str(stored)
+        return "zh-CN"
 
     async def send_message(
         self,

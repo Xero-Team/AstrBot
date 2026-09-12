@@ -81,6 +81,8 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "session.read": _SESSION_AND_ABOVE,
     "session.manage": _SESSION_ADMIN_AND_ABOVE,
     "session.assign": _SESSION_OWNER_AND_ABOVE,
+    "session.watch": _INSTANCE_AND_ABOVE,
+    "session.send": _INSTANCE_AND_ABOVE,
     "provider.read": _SESSION_AND_ABOVE,
     "provider.use": _SESSION_AND_ABOVE,
     "platform.read": _SESSION_AND_ABOVE,

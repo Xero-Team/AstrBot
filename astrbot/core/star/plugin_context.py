@@ -23,7 +23,8 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.onebot_capability import OneBotCapability
-from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.platform.send_result import DeliveryReceipt, PlatformSendResult
+from astrbot.core.platform.session_bridge import SessionBridgeManager, SessionWatch
 from astrbot.core.platform.telegram_capability import TelegramCapability
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import (
@@ -159,6 +160,46 @@ class MessageCapability:
     async def dispatch_waiter(self, event: AstrMessageEvent) -> bool:
         """Dispatch an inbound event to matching interactive waits."""
         return await self._execution.session_waiter_registry.dispatch(event)
+
+
+class SessionBridgeCapability:
+    """Manage expiring cross-session watches through a narrow SDK facade."""
+
+    __slots__ = ("_manager",)
+
+    def __init__(self, manager: SessionBridgeManager) -> None:
+        self._manager = manager
+
+    async def watch(
+        self,
+        event: AstrMessageEvent,
+        target_umo: str,
+        *,
+        source_umo: str | None = None,
+        ttl_seconds: int | None = None,
+    ) -> SessionWatch:
+        """Authorize and create a watch owned by the event's trusted actor."""
+        return await self._manager.watch(
+            event, target_umo, source_umo=source_umo, ttl_seconds=ttl_seconds
+        )
+
+    async def unwatch(
+        self,
+        event: AstrMessageEvent,
+        target_umo: str,
+        *,
+        source_umo: str | None = None,
+    ) -> bool:
+        """Remove one watch owned by the event's trusted actor."""
+        return await self._manager.unwatch(event, target_umo, source_umo=source_umo)
+
+    async def list(self, event: AstrMessageEvent) -> tuple[SessionWatch, ...]:
+        """List active watches owned by the event's trusted actor."""
+        return await self._manager.list_watches(event)
+
+    async def send(self, event: AstrMessageEvent, target_umo: str) -> DeliveryReceipt:
+        """Authorize and send the command body, attachments, and quote."""
+        return await self._manager.send(event, target_umo)
 
 
 class ModelCapability:
@@ -1389,6 +1430,7 @@ class PluginContext:
         "rendering",
         "files",
         "sessions",
+        "bridges",
         "authz",
         "i18n",
     )
@@ -1414,6 +1456,7 @@ class PluginContext:
         rendering: RenderingCapability,
         files: FileCapability,
         sessions: SessionCapability,
+        bridges: SessionBridgeCapability,
         authz: AuthorizationCapability,
         i18n: I18nCapability,
     ) -> None:
@@ -1435,6 +1478,7 @@ class PluginContext:
         self.rendering = rendering
         self.files = files
         self.sessions = sessions
+        self.bridges = bridges
         self.authz = authz
         self.i18n = i18n
 
@@ -1477,6 +1521,7 @@ class PluginContext:
             rendering=RenderingCapability(execution.html_renderer),
             files=FileCapability(execution.file_token_service),
             sessions=SessionCapability(execution.database),
+            bridges=SessionBridgeCapability(execution.session_bridge_manager),
             authz=AuthorizationCapability(getattr(execution, "authorization", None)),
             i18n=I18nCapability(catalogs, execution.preferences),
         )
@@ -1513,6 +1558,7 @@ class PluginContext:
             rendering=self.rendering,
             files=self.files,
             sessions=self.sessions,
+            bridges=self.bridges,
             authz=self.authz.for_plugin(
                 plugin_id,
                 declared_actions,
@@ -1543,6 +1589,7 @@ __all__ = [
     "I18nCapability",
     "KnowledgeCapability",
     "MessageCapability",
+    "SessionBridgeCapability",
     "ModelCapability",
     "PersonaCapability",
     "PlatformActionsCapability",

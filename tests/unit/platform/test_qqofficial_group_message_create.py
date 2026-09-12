@@ -279,7 +279,7 @@ async def test_ws_group_send_by_session_without_cached_msg_id_omits_msg_id():
     )
     adapter._session_scene["group-1"] = "group"
 
-    await adapter.send_by_session(
+    result = await adapter.send_by_session(
         MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
         MessageChain(chain=[Plain("proactive hello")]),
     )
@@ -293,6 +293,51 @@ async def test_ws_group_send_by_session_without_cached_msg_id_omits_msg_id():
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
     assert adapter._session_last_message_id["group-1"] == "sent-1"
+    assert result.message_ids == ("sent-1",)
+    assert result.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_aggregates_split_message_receipts(monkeypatch):
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(side_effect=[{"id": "sent-1"}, {"id": "sent-2"}]),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+    root = MessageChain(chain=[Plain("first"), Plain("second")])
+    split = [
+        MessageChain(chain=[Plain("first")]),
+        MessageChain(chain=[Plain("second")]),
+    ]
+
+    def split_by_media(message_chain):
+        return split if message_chain is root else [message_chain]
+
+    monkeypatch.setattr(
+        QQOfficialMessageEvent,
+        "_split_message_chain_by_media",
+        staticmethod(split_by_media),
+    )
+
+    result = await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        root,
+    )
+
+    assert adapter.client.api.post_group_message.await_count == 2
+    assert result.status == "accepted"
+    assert result.message_ids == ("sent-1", "sent-2")
 
 
 @pytest.mark.asyncio
@@ -507,13 +552,15 @@ async def test_ws_channel_send_by_session_without_cached_msg_id_skips_send():
     )
     adapter._session_scene["channel-1"] = "channel"
 
-    await adapter.send_by_session(
+    result = await adapter.send_by_session(
         MessageSession("qq_official", MessageType.GROUP_MESSAGE, "channel-1"),
         MessageChain(chain=[Plain("channel proactive hello")]),
     )
 
     adapter.client.api.post_group_message.assert_not_called()
     adapter.client.api.post_message.assert_not_called()
+    assert not result.success
+    assert result.status == "failed"
 
 
 @pytest.mark.asyncio

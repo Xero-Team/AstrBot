@@ -290,6 +290,8 @@ guest:<id>
 | `session.read`                                    | member 及以上（当前会话）                                                                        | 否                 |
 | `session.manage`                                  | session_admin 及以上                                                                             | 否                 |
 | `session.assign`                                  | session_owner 及以上                                                                             | 跨会话时需更高角色 |
+| `session.watch`                                   | instance_operator 及以上；两会话须同一配置                                                       | 否                 |
+| `session.send`                                    | instance_operator 及以上；两会话须同一配置                                                       | 否                 |
 | `provider.use` / `provider.read`                  | member 及以上                                                                                    | 否；凭据永不返回   |
 | `provider.manage`                                 | instance_operator 及以上                                                                         | 否                 |
 | `provider.credentials.write`                      | instance_operator 及以上                                                                         | 是                 |

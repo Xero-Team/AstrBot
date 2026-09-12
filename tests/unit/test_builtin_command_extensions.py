@@ -1033,7 +1033,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
 
     expected_groups = {
         "bot": {"disable", "enable", "leave", "status"},
-        "session": {"info", "name"},
+        "session": {"info", "name", "watch", "unwatch", "watches"},
         "conversation": {
             "create",
             "create-for",

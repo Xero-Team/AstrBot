@@ -3,7 +3,7 @@ import asyncio
 import logging
 import uuid
 from asyncio import Queue, QueueFull
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -16,6 +16,9 @@ from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_t
 from .astr_message_event import AstrMessageEvent
 from .astrbot_message import AstrBotMessage
 from .contracts.onebot import PlatformCapabilityDescriptor
+from .message_capabilities import get_message_capabilities
+from .message_projection import envelope_from_event
+from .message_protocol import MessageDeliveryCapabilities, MessageEnvelope
 from .message_session import MessageSession
 from .platform_metadata import PlatformMetadata
 from .route_identity import PlatformRouteIdentity
@@ -65,6 +68,9 @@ class Platform(abc.ABC):
     """Base platform adapter and its explicitly declared capabilities."""
 
     PLATFORM_CAPABILITIES: ClassVar[tuple[PlatformCapabilityDescriptor, ...]] = ()
+    MESSAGE_CAPABILITIES: ClassVar[MessageDeliveryCapabilities] = (
+        MessageDeliveryCapabilities()
+    )
 
     @classmethod
     def declared_supported_actions(cls) -> list[str]:
@@ -101,6 +107,10 @@ class Platform(abc.ABC):
         # instance. PlatformManager tears it down even if an adapter's own
         # terminate() implementation does not call super().
         self._background_tasks: set[asyncio.Task] = set()
+        self._envelope_tasks: set[asyncio.Task] = set()
+        self._envelope_observers: set[Callable[[MessageEnvelope], Awaitable[None]]] = (
+            set()
+        )
 
         # 平台运行状态
         self._status: PlatformStatus = PlatformStatus.PENDING
@@ -278,6 +288,20 @@ class Platform(abc.ABC):
         """Return platform-specific proactive actions supported by this adapter."""
         return type(self).declared_supported_actions()
 
+    def message_capabilities(
+        self, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        """Return the portable-message capabilities declared by this adapter.
+
+        Adapters may override this class value when capabilities depend on a
+        loaded account or protocol version.  The returned object is a snapshot
+        and must not be mutated by a delivery planner.
+        """
+        declared = type(self).MESSAGE_CAPABILITIES
+        if declared != MessageDeliveryCapabilities():
+            return declared
+        return get_message_capabilities(self.meta().name)
+
     def supports_action(self, action_name: str) -> bool:
         """Whether this adapter overrides a named proactive platform action."""
         return action_name in type(self).declared_supported_actions()
@@ -308,7 +332,43 @@ class Platform(abc.ABC):
                 event.unified_msg_origin,
             )
             return False
+        if self._envelope_observers:
+            if len(self._envelope_tasks) >= 128:
+                logger.warning("Envelope observer capacity reached; forwarding skipped")
+                return True
+            try:
+                envelope = envelope_from_event(event)
+            except Exception:
+                logger.warning("Failed to project event for envelope observers")
+            else:
+                for observer in tuple(self._envelope_observers):
+                    if len(self._envelope_tasks) >= 128:
+                        logger.warning(
+                            "Envelope observer capacity reached; forwarding skipped"
+                        )
+                        break
+                    task = create_tracked_task(
+                        self._background_tasks,
+                        observer(envelope),
+                        name=f"envelope-observer:{self.meta().id}",
+                    )
+                    self._envelope_tasks.add(task)
+                    task.add_done_callback(self._envelope_tasks.discard)
         return True
+
+    def add_envelope_observer(
+        self,
+        observer: Callable[[MessageEnvelope], Awaitable[None]],
+    ) -> None:
+        """Register an observer that receives portable ingress snapshots."""
+        self._envelope_observers.add(observer)
+
+    def remove_envelope_observer(
+        self,
+        observer: Callable[[MessageEnvelope], Awaitable[None]],
+    ) -> None:
+        """Remove a previously registered portable-message observer."""
+        self._envelope_observers.discard(observer)
 
     def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
         """Creates a message event for this platform.

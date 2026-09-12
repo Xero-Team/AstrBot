@@ -466,7 +466,7 @@ async def test_discord_send_by_session_returns_early_when_client_not_ready():
     adapter.client = SimpleNamespace(user=None)
     adapter.create_event = MagicMock()
 
-    await adapter.send_by_session(
+    result = await adapter.send_by_session(
         MessageSession(
             "discord", discord_platform_adapter.MessageType.FRIEND_MESSAGE, "123"
         ),
@@ -474,6 +474,9 @@ async def test_discord_send_by_session_returns_early_when_client_not_ready():
     )
 
     adapter.create_event.assert_not_called()
+    assert result is not None
+    assert not result.success
+    assert result.status == "unknown"
 
 
 @pytest.mark.asyncio

@@ -142,6 +142,8 @@ WebUI supports multiple Dashboard accounts. First startup creates a bootstrap `r
 
 **More → Authorization** opens `/authorization`. Dashboard accounts, IM session owners, and `/admin grant` are not the same identity. Group grants, step-up, and the role table are in [Authorization](./authorization).
 
+Cross-session watches and `/send` have no Dashboard management surface in this stage. After binding `instance_operator`, create, list, and stop watches only with the [built-in IM commands](./command#cross-session-watches-and-sending). The command-management page can enable or disable those commands, but it does not list active watches.
+
 The developer model is in [Architecture](/en/dev/architecture#unified-authorization).
 
 ## Visual Configuration

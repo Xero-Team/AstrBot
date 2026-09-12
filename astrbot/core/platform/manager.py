@@ -29,6 +29,7 @@ from .contracts.onebot import (
     get_capability_descriptor,
 )
 from .discovery import discover_platform_adapter
+from .message_protocol import MessageDeliveryCapabilities, MessageEnvelope
 from .message_session import MessageSession
 from .platform import Platform, PlatformStatus
 from .send_result import PlatformSendResult
@@ -74,6 +75,9 @@ class PlatformManager:
         self._platform_limit_settings: dict[str, int] = {}
         # Serialize all replacement and shutdown transitions.
         self._platform_lifecycle_lock = asyncio.Lock()
+        self._envelope_observers: set[Callable[[MessageEnvelope], Awaitable[None]]] = (
+            set()
+        )
 
         self.astrbot_config = config
         self.catalog = catalog
@@ -104,14 +108,17 @@ class PlatformManager:
                 Callable[[dict, dict, Queue, WebChatQueueManager], Platform],
                 adapter_cls,
             )
-            return webchat_adapter_factory(
+            adapter = webchat_adapter_factory(
                 platform_config,
                 self.settings,
                 self.event_queue,
                 self.webchat_queue_manager,
             )
-        adapter_factory = cast(Callable[[dict, dict, Queue], Platform], adapter_cls)
-        adapter = adapter_factory(platform_config, self.settings, self.event_queue)
+        else:
+            adapter_factory = cast(Callable[[dict, dict, Queue], Platform], adapter_cls)
+            adapter = adapter_factory(platform_config, self.settings, self.event_queue)
+        for observer in self._envelope_observers:
+            adapter.add_envelope_observer(observer)
         typing_signal = getattr(self, "typing_signal", None)
         if typing_signal is not None:
             adapter.typing_signal = typing_signal
@@ -454,6 +461,26 @@ class PlatformManager:
     def get_platform_count(self) -> int:
         return len(self._platform_insts)
 
+    def loaded_platforms(self) -> tuple[Platform, ...]:
+        """Return a read-only snapshot of currently loaded adapters."""
+        return tuple(self._platform_insts)
+
+    def add_envelope_observer(
+        self, observer: Callable[[MessageEnvelope], Awaitable[None]]
+    ) -> None:
+        """Attach a portable-message observer to current and future adapters."""
+        self._envelope_observers.add(observer)
+        for platform in self._platform_insts:
+            platform.add_envelope_observer(observer)
+
+    def remove_envelope_observer(
+        self, observer: Callable[[MessageEnvelope], Awaitable[None]]
+    ) -> None:
+        """Detach a portable-message observer from all adapters."""
+        self._envelope_observers.discard(observer)
+        for platform in self._platform_insts:
+            platform.remove_envelope_observer(observer)
+
     def _find_inst_by_id(self, platform_id: str) -> Platform | None:
         info = self._inst_map.get(platform_id)
         if info:
@@ -614,6 +641,15 @@ class PlatformManager:
         if inst is None:
             return ()
         return inst.capabilities()
+
+    def get_message_delivery_capabilities(
+        self, platform_id: str, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        """Return the portable-message capabilities of one loaded adapter."""
+        inst = self._find_inst_by_id(platform_id)
+        if inst is None:
+            return MessageDeliveryCapabilities(proactive=False, available=False)
+        return inst.message_capabilities(session)
 
     async def refresh_registered_commands(self) -> None:
         """Refresh native commands on every loaded platform adapter."""

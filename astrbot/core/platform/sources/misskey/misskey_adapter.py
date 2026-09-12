@@ -1,6 +1,7 @@
 import asyncio
 import random
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.message_protocol import MessageDeliveryCapabilities
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.platform.send_result import PlatformSendResult
 
@@ -569,6 +571,21 @@ class MisskeyPlatformAdapter(Platform):
                 return bool(self._bot_username and f"@{self._bot_username}" in text)
 
         return False
+
+    def message_capabilities(
+        self, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        declared = super().message_capabilities(session)
+        try:
+            max_message_length = max(2, int(self.max_message_length))
+        except TypeError, ValueError:
+            max_message_length = 3000
+        return replace(
+            declared,
+            media=declared.media if self.enable_file_upload else frozenset(),
+            max_text_length=max_message_length,
+            proactive=bool(self.api),
+        )
 
     async def send_by_session(
         self,

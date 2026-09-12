@@ -49,6 +49,8 @@ ACTIONS = frozenset(
         "session.read",
         "session.manage",
         "session.assign",
+        "session.watch",
+        "session.send",
         "provider.read",
         "provider.use",
         "platform.read",

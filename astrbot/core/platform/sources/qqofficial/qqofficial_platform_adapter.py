@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -35,6 +36,8 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.message_protocol import MessageDeliveryCapabilities
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
@@ -364,19 +367,35 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
+    def message_capabilities(
+        self, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        declared = super().message_capabilities(session)
+        if session is None or session.message_type == MessageType.FRIEND_MESSAGE:
+            return declared
+        target = session.session_id.rsplit("_", 1)[-1]
+        scene = self._session_scene.get(target)
+        active = bool(self._session_last_message_id.get(target)) or (
+            scene == "group" and getattr(self, "_allow_group_proactive_send", False)
+        )
+        return replace(
+            declared,
+            proactive=active,
+            media=declared.media if scene == "group" else frozenset({"image"}),
+        )
+
     async def send_by_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
     ):
-        await self._send_by_session_common(session, message_chain)
-        return await super().send_by_session(session, message_chain)
+        return await self._send_by_session_common(session, message_chain)
 
     async def _send_by_session_common(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> PlatformSendResult:
         if session.message_type == MessageType.GROUP_MESSAGE:
             session = MessageSession(
                 session.platform_name,
@@ -387,9 +406,20 @@ class QQOfficialPlatformAdapter(Platform):
             message_chain
         )
         if len(message_chains) > 1:
+            results = []
             for split_message_chain in message_chains:
-                await self._send_by_session_common(session, split_message_chain)
-            return
+                results.append(
+                    await self._send_by_session_common(session, split_message_chain)
+                )
+            return PlatformSendResult.from_delivery_attempts(
+                tuple(
+                    attempt
+                    for result in results
+                    for attempt in result.to_delivery_attempts()
+                ),
+                platform_id=self.meta().id,
+                target=session.session_id,
+            )
 
         (
             plain_text,
@@ -408,7 +438,12 @@ class QQOfficialPlatformAdapter(Platform):
             and not video_file_source
             and not file_source
         ):
-            return
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                status="skipped",
+            )
 
         # 主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
         msg_id = self._session_last_message_id.get(session.session_id)
@@ -427,7 +462,14 @@ class QQOfficialPlatformAdapter(Platform):
                 "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
                 session.session_id,
             )
-            return
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                message_count=len(message_chain.chain),
+                error_message="QQ session has no active message reference",
+                status="failed",
+            )
 
         use_md = getattr(message_chain, "use_markdown_", None)
         if use_md is False or (use_md is None and not self.use_markdown_default):
@@ -575,12 +617,27 @@ class QQOfficialPlatformAdapter(Platform):
                 "[QQOfficial] Unsupported message type for send_by_session: %s",
                 session.message_type,
             )
-            return
+            return PlatformSendResult(
+                platform_id=self.meta().id,
+                success=False,
+                target=session.session_id,
+                message_count=len(message_chain.chain),
+                error_message="Unsupported QQ session type",
+                status="failed",
+            )
 
         sent_message_id = self._extract_message_id(ret)
         if sent_message_id:
             self.remember_session_message_id(session.session_id, sent_message_id)
         await Platform.send_by_session(self, session, message_chain)
+        return PlatformSendResult(
+            platform_id=self.meta().id,
+            success=True,
+            target=session.session_id,
+            message_count=len(message_chain.chain),
+            message_id=sent_message_id,
+            status="accepted",
+        )
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
         if not session_id or not message_id:

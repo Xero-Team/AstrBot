@@ -113,6 +113,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         )
                 if not kwargs:
                     continue
+                if message.use_markdown_ is False:
+                    kwargs["allowed_mentions"] = discord.AllowedMentions.none()
                 if self.interaction_followup_webhook:
                     await self.interaction_followup_webhook.send(**kwargs)
                 else:
@@ -326,7 +328,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
         reference_message_id = None
         for i in message.chain:  # 遍历消息链
             if isinstance(i, Plain):  # 如果是文字类型的
-                content_parts.append(i.text)
+                content_parts.append(
+                    discord.utils.escape_markdown(i.text)
+                    if message.use_markdown_ is False
+                    else i.text
+                )
             elif isinstance(i, Reply):
                 reference_message_id = i.id
             elif isinstance(i, MentionAll):

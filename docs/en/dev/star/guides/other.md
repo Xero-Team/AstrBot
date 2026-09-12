@@ -23,6 +23,7 @@ async def test_(self, event: AstrMessageEvent):
 Plugins no longer expose a `Platform` instance or `platform_manager`. Prefer these for ordinary platform IO:
 
 - `self.context.messages.send(...)`
+- `self.context.bridges.watch(...)` / `send(...)` (cross-session; see [Send Messages](./send-message#cross-session-watches-and-sending))
 - `self.context.platform_actions.invoke(...)`
 - `self.context.platform_actions.invoke_for_event(...)`
 

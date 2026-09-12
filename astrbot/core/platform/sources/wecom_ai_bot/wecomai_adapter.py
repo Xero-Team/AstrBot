@@ -9,6 +9,7 @@ import hashlib
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 
 from astrbot import logger
@@ -22,6 +23,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.message_protocol import MessageDeliveryCapabilities
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -577,6 +579,13 @@ class WecomAIBotAdapter(Platform):
 
         logger.debug(f"WecomAIAdapter: {abm.message}")
         return abm
+
+    def message_capabilities(
+        self, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        return replace(
+            super().message_capabilities(session), proactive=bool(self.webhook_client)
+        )
 
     async def send_by_session(
         self,

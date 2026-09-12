@@ -58,6 +58,35 @@ information needed to locate a platform instance and conversation. Treat a
 stored value as user data; do not expose it in public logs or to untrusted
 clients.
 
+## Cross-session watches and sending
+
+To forward or deliver to **another** session, do not keep your own observers
+and do not bypass authorization with `messages.send()`. Use
+`PluginContext.bridges`:
+
+```python
+from astrbot.api.event import AstrMessageEvent, filter
+
+
+@filter.permission("session.watch")
+@filter.command("watch-room")
+async def watch_room(self, event: AstrMessageEvent, target_umo: str):
+    watch = await self.context.bridges.watch(event, target_umo)
+    yield event.plain_result(f"watching {watch.target_umo}")
+```
+
+- `watch(event, target_umo, *, source_umo=None, ttl_seconds=None)`: create an expiring watch owned by the event's trusted actor; returns `SessionWatch`. `source_umo` is the listening session that receives forwards and defaults to the current session. `ttl_seconds` is 60–864000, default 43200. When it expires, the listener session receives an end notice.
+- `unwatch(event, target_umo, *, source_umo=None)`: stop a matching watch this actor created.
+- `list(event)`: list this actor's active watches whose listener is the current session.
+- `send(event, target_umo)`: deliver the current message body and attachments after stripping the command header; returns `DeliveryReceipt`.
+
+These methods call `authorize()` again. They require `session.watch` or
+`session.send`, and both sessions must share a configuration. Watches stay in
+memory and disappear when they expire or the process restarts. Do not construct
+`SessionBridgeManager` yourself. Import `SessionWatch` and the duration
+constants from `astrbot.api.platform`. There is no Dashboard management
+surface, and plugins must not assume a matching HTTP API.
+
 ## Rich-Media Chains
 
 Build an ordered chain with the public message components:

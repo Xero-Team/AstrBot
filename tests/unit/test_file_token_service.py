@@ -26,6 +26,52 @@ class FakeEvent:
 
 
 @pytest.mark.asyncio
+async def test_published_snapshot_is_reusable_and_survives_source_cleanup(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    from astrbot.core.utils import astrbot_path
+
+    monkeypatch.setattr(
+        astrbot_path, "get_astrbot_temp_path", lambda: str(tmp_path / "tokens")
+    )
+    source = tmp_path / "image.png"
+    source.write_bytes(b"image")
+    service = FileTokenService()
+    token = await service.register_snapshot(str(source))
+    source.unlink()
+    path, owned = await service.claim_file(token)
+    assert not owned
+    assert Path(path).read_bytes() == b"image"
+    await service.release_token(token)
+    assert await service.claim_file(token) == (path, False)
+    await service.shutdown()
+    assert not Path(path).exists()
+
+
+@pytest.mark.asyncio
+async def test_expired_published_snapshot_cleans_copy_and_preserves_source(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    from astrbot.core.utils import astrbot_path
+
+    monkeypatch.setattr(
+        astrbot_path, "get_astrbot_temp_path", lambda: str(tmp_path / "tokens")
+    )
+    source = tmp_path / "file.txt"
+    source.write_text("data")
+    service = FileTokenService(default_timeout=-1)
+    token = await service.register_snapshot(str(source))
+    published = Path(service.staged_files[token][0])
+    assert await service.check_token_expired(token)
+    assert not published.exists()
+    assert source.read_text() == "data"
+
+
+@pytest.mark.asyncio
 async def test_owned_artifact_is_deleted_after_response_release(tmp_path):
     artifact = tmp_path / "audio.mp3"
     artifact.write_bytes(b"audio")

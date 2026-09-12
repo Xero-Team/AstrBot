@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import replace
 from typing import Any, cast
 
 import botpy
@@ -15,6 +16,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.message_protocol import MessageDeliveryCapabilities
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -138,17 +140,33 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self._session_scene: dict[str, str] = {}
         self._allow_group_proactive_send = True
 
+    def message_capabilities(
+        self, session: MessageSession | None = None
+    ) -> MessageDeliveryCapabilities:
+        declared = super().message_capabilities(session)
+        if session is None or session.message_type == MessageType.FRIEND_MESSAGE:
+            return declared
+        target = session.session_id.rsplit("_", 1)[-1]
+        scene = self._session_scene.get(target)
+        active = bool(self._session_last_message_id.get(target)) or (
+            scene == "group" and getattr(self, "_allow_group_proactive_send", False)
+        )
+        return replace(
+            declared,
+            proactive=active,
+            media=declared.media if scene == "group" else frozenset({"image"}),
+        )
+
     async def send_by_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
     ):
-        await QQOfficialPlatformAdapter._send_by_session_common(
+        return await QQOfficialPlatformAdapter._send_by_session_common(
             cast(Any, self),
             session,
             message_chain,
         )
-        return await super().send_by_session(session, message_chain)
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
         if not session_id or not message_id:

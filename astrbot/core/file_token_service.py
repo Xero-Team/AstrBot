@@ -2,9 +2,12 @@
 
 import asyncio
 import os
+import shutil
 import time
 import uuid
 from collections.abc import MutableMapping
+from pathlib import Path
+from tempfile import mkstemp
 from typing import Any
 
 
@@ -23,6 +26,7 @@ class FileTokenService:
         self._owned_tokens: dict[str, str] = {}
         self._claimed_owned_tokens: dict[str, str] = {}
         self._owned_artifacts: dict[str, int] = {}
+        self._published_tokens: set[str] = set()
         self.default_timeout = default_timeout
 
     @staticmethod
@@ -41,6 +45,7 @@ class FileTokenService:
         ]
         for token in expired:
             self.staged_files.pop(token, None)
+            self._published_tokens.discard(token)
             owned_path = self._owned_tokens.pop(token, None)
             if owned_path is not None:
                 self._release_owned_path(owned_path)
@@ -129,12 +134,43 @@ class FileTokenService:
             )
             return token
 
+    async def register_snapshot(self, file_path: str) -> str:
+        """Publish a reusable, expiring owned copy for platform media fetches."""
+        from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+        source = Path(self._local_path(file_path))
+        root = Path(get_astrbot_temp_path())
+        root.mkdir(parents=True, exist_ok=True)
+        descriptor, snapshot = mkstemp(
+            prefix="published-", suffix=source.suffix, dir=root
+        )
+        os.close(descriptor)
+        task = asyncio.create_task(asyncio.to_thread(shutil.copyfile, source, snapshot))
+        try:
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                await task
+                raise
+            token = await self._register(snapshot, None, owned_path=snapshot)
+            self._published_tokens.add(token)
+            return token
+        except BaseException:
+            Path(snapshot).unlink(missing_ok=True)
+            raise
+
     async def claim_file(self, file_token: str) -> tuple[str, bool]:
         """Consume a token and return its path plus its ownership status."""
         async with self.lock:
             await self._cleanup_expired_tokens()
             if file_token not in self.staged_files:
                 raise KeyError(f"无效或过期的文件 token: {file_token}")
+
+            if file_token in self._published_tokens:
+                file_path, _ = self.staged_files[file_token]
+                if not os.path.exists(file_path):
+                    raise FileNotFoundError("Published media is unavailable")
+                return file_path, False
 
             file_path, _ = self.staged_files.pop(file_token)
             owned_path = self._owned_tokens.pop(file_token, None)
@@ -168,6 +204,7 @@ class FileTokenService:
         async with self.lock:
             owned_paths = list(self._owned_artifacts)
             self.staged_files.clear()
+            self._published_tokens.clear()
             self._owned_tokens.clear()
             self._claimed_owned_tokens.clear()
             self._owned_artifacts.clear()

@@ -676,6 +676,7 @@ class TestAstrBotCoreLifecycleInitialize:
         platform_manager = SimpleNamespace(
             initialize=AsyncMock(side_effect=init_action("platform_initialize")),
             terminate=AsyncMock(side_effect=cleanup_action("platform")),
+            add_envelope_observer=MagicMock(),
         )
         knowledge_base_manager = SimpleNamespace(
             initialize=AsyncMock(),
@@ -686,6 +687,9 @@ class TestAstrBotCoreLifecycleInitialize:
             _register_tasks=[],
             background_tasks=set(),
             session_waiter_registry=SimpleNamespace(terminate=AsyncMock()),
+            session_bridge_manager=SimpleNamespace(
+                observe=AsyncMock(), terminate=AsyncMock()
+            ),
         )
         plugin_manager = SimpleNamespace(
             catalog=SimpleNamespace(

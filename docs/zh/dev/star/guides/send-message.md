@@ -51,6 +51,29 @@ async def remember_me(self, event: AstrMessageEvent):
 `unified_msg_origin` 是 AstrBot 的统一会话标识，包含定位平台实例和会话所需的信息。
 持久化它时应按用户数据处理，不要把它公开到日志或不受信任的客户端。
 
+## 跨会话监听与发送
+
+向**另一个**会话转发或投递时，不要自己保存观察者，也不要绕过授权去调用
+`messages.send()`。使用 `PluginContext.bridges`：
+
+```python
+from astrbot.api.event import AstrMessageEvent, filter
+
+
+@filter.permission("session.watch")
+@filter.command("watch-room")
+async def watch_room(self, event: AstrMessageEvent, target_umo: str):
+    watch = await self.context.bridges.watch(event, target_umo)
+    yield event.plain_result(f"watching {watch.target_umo}")
+```
+
+- `watch(event, target_umo, *, source_umo=None, ttl_seconds=None)`：用事件上的可信主体创建有期限监听，返回 `SessionWatch`。`source_umo` 是接收转发的监听会话，缺省为当前会话；`ttl_seconds` 范围 60–864000，缺省 43200。到期后会向监听会话发送结束通知。
+- `unwatch(event, target_umo, *, source_umo=None)`：停止当前主体创建的对应监听。
+- `list(event)`：列出当前主体以本会话为监听会话的有效监听。
+- `send(event, target_umo)`：把当前消息去掉指令头后的正文和附件投递到目标会话，返回 `DeliveryReceipt`。
+
+这些方法会再次调用 `authorize()`，要求 `session.watch` 或 `session.send`，且两个会话属于同一配置。监听保存在内存中，到期或重启后清空。不要自己构造 `SessionBridgeManager`。`SessionWatch` 和时长常量可从 `astrbot.api.platform` 导入。当前没有 Dashboard 管理面，插件也不应假设存在对应 HTTP API。
+
 ## 富媒体消息链
 
 使用公开的消息组件构建有序消息链：

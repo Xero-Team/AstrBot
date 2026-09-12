@@ -53,6 +53,44 @@ def work_loop_for(config_id: str) -> WorkLoop | None:
     return _work_loops.get(config_id)
 
 
+def config_id_of(event) -> str:
+    """Return the configuration profile that owns an event.
+
+    Args:
+        event: Any event carrying the auth resource of its profile.
+
+    Returns:
+        The profile's id, or an empty string when the event has none.
+    """
+    config_id = getattr(getattr(event, "resource", None), "config_id", "")
+    return config_id if isinstance(config_id, str) else ""
+
+
+async def cancel_pending_work(event) -> bool:
+    """Cancel work whose submission never reached its background run.
+
+    A work submission acknowledges the request before the work loop registers
+    the background run, and the generator that owns the queued session is
+    abandoned when the event stops in between.  The scheduler calls this as an
+    event finishes, so the queue entry cannot outlive its request.
+
+    Args:
+        event: The event that may still be waiting for a background hand-off.
+
+    Returns:
+        Whether a queued work session was cancelled.
+    """
+    if event.get_extra("btw_detached_work"):
+        return False
+    session_id = event.get_extra("btw_work_session_id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    manager = _managers.get(config_id_of(event))
+    if manager is None:
+        return False
+    return await manager.cancel_if_pending(session_id)
+
+
 async def latest_status(
     config_id: str, origin: str
 ) -> tuple[str, WorkSessionStatus] | None:

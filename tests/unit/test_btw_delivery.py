@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.agent.btw import runtime_registry
 from astrbot.core.agent.btw.types import WorkSessionStatus
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
@@ -15,6 +16,8 @@ from astrbot.core.webchat.emitter import emit_webchat_response
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 
+PROFILE_ID = "profile-1"
+
 
 class WorkEvent:
     requires_empty_completion = True
@@ -25,10 +28,12 @@ class WorkEvent:
         self.message_str = "run work"
         self.queues = queues
         self.attachments = attachments
+        self.resource = SimpleNamespace(config_id=PROFILE_ID)
         self.extras = {}
         self.result = None
         self.cleaned = 0
         self.trace = []
+        self._stopped = False
 
     def get_extra(self, key, default=None):
         return self.extras.get(key, default)
@@ -40,7 +45,10 @@ class WorkEvent:
         self.result = result
 
     def is_stopped(self):
-        return False
+        return self._stopped
+
+    def stop_event(self):
+        self._stopped = True
 
     def get_platform_id(self):
         return "webchat"
@@ -112,7 +120,20 @@ class SendStage(Stage):
         event.result = None
 
 
-async def setup_work(tmp_path):
+class StopAfterAcknowledgementStage(Stage):
+    """Stops the event once the acknowledgement has reached the platform."""
+
+    async def initialize(self, ctx):
+        pass
+
+    async def process(self, event):
+        if event.result is not None:
+            return
+        event.trace.append("stop")
+        event.stop_event()
+
+
+async def setup_work(tmp_path, *, stop_after_acknowledgement: bool = False):
     queues = WebChatQueueManager()
     coordinator = WebChatRunCoordinator(queues)
     executor = BlockingExecutor()
@@ -125,7 +146,10 @@ async def setup_work(tmp_path):
         )
     )
     scheduler = PipelineScheduler(ctx)
-    scheduler.stage_classes = [lambda: SubmitStage(work), DecorateStage, SendStage]
+    stage_classes = [lambda: SubmitStage(work), DecorateStage, SendStage]
+    if stop_after_acknowledgement:
+        stage_classes.append(StopAfterAcknowledgementStage)
+    scheduler.stage_classes = stage_classes
     await scheduler.initialize()
     events = []
     for request_id in ("first", "second"):
@@ -250,3 +274,31 @@ async def test_closed_work_rejects_submission_without_creating_a_session(tmp_pat
     await scheduler.execute(events[0])
     assert await work.sessions.get_for_origin(events[0].unified_msg_origin) is None
     assert not work._tasks
+
+
+@pytest.mark.asyncio
+async def test_interrupted_acknowledgement_leaves_no_queued_work(tmp_path):
+    """A stop between the acknowledgement and the hand-off must not strand work.
+
+    The scheduler drops the submission generator the moment a later stage stops
+    the event, so the acknowledgement is delivered while nothing owns the
+    background run yet.
+    """
+    scheduler, work, _, queues, events = await setup_work(
+        tmp_path, stop_after_acknowledgement=True
+    )
+    event = events[0]
+    runtime_registry.register(PROFILE_ID, work.sessions)
+    try:
+        await scheduler.execute(event)
+    finally:
+        runtime_registry.unregister(PROFILE_ID, work.sessions)
+        await scheduler.close()
+
+    assert event.get_extra("btw_detached_work") is None
+    assert queues.back_queues[event.message_id].get_nowait()["type"] == "plain"
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert not work._tasks
+    assert event.cleaned == 1

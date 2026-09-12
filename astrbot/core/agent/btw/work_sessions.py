@@ -90,6 +90,28 @@ class WorkSessionManager:
                 session.update_status(status, error=error)
             return session
 
+    async def cancel_if_pending(self, session_id: str) -> bool:
+        """Cancel one session that has not started running yet.
+
+        A work submission can be reclaimed from more than one place -- the
+        generator that owns it and the scheduler that ends its event -- so the
+        transition itself decides which caller performs it.
+
+        Args:
+            session_id: The work-session identifier.
+
+        Returns:
+            Whether this call cancelled the session.  A session that is missing,
+            already running, or already terminal reports ``False``.
+        """
+        async with self._lock:
+            self._cleanup_expired_locked()
+            session = self._by_id.get(session_id)
+            if session is None or session.status is not WorkSessionStatus.PENDING:
+                return False
+            session.update_status(WorkSessionStatus.CANCELLED)
+            return True
+
     def _cleanup_expired_locked(self) -> None:
         """Remove old terminal sessions while the manager lock is held."""
         cutoff = datetime.now(UTC) - timedelta(seconds=self._max_age_seconds)

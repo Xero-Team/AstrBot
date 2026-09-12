@@ -131,17 +131,26 @@ class WorkLoop:
                 )
             )
         )
-        yield
+        handed_off = False
+        try:
+            yield
 
-        if self._closed:
-            await self.sessions.update_status(session.id, WorkSessionStatus.CANCELLED)
-            return
+            if self._closed:
+                return
 
-        # The first yield returns only after the normal response stages deliver
-        # the acknowledgement.  Marking it here prevents the scheduler from
-        # releasing event-owned temporary files before the worker needs them.
-        # Losing this race to a concurrent close() only skips the work.
-        self._schedule_detached(event, session.id)
+            # The first yield returns only after the normal response stages
+            # deliver the acknowledgement.  Marking it here prevents the
+            # scheduler from releasing event-owned temporary files before the
+            # worker needs them.  Losing this race to a concurrent close() only
+            # skips the work.
+            handed_off = self._schedule_detached(event, session.id)
+        finally:
+            # Nothing owns the queued session until the background run is
+            # registered.  A generator closed first -- a later stage stops the
+            # event, or the request is cancelled -- would otherwise leave a
+            # queued task that expires only on reload.
+            if not handed_off:
+                await self.sessions.cancel_if_pending(session.id)
 
     async def schedule(self, event: AstrMessageEvent) -> WorkSession:
         """Run one work task detached, without delivering its result here.

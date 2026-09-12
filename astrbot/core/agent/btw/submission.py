@@ -17,23 +17,11 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.error_redaction import safe_error
 
 from . import runtime_registry
+from .runtime_registry import config_id_of
 from .types import WorkSession
 
 if TYPE_CHECKING:
     from astrbot.core.execution_context import CoreExecutionContext
-
-
-def config_id_of(event: AstrMessageEvent) -> str:
-    """Return the configuration profile that owns an event.
-
-    Args:
-        event: Any event carrying the auth resource of its profile.
-
-    Returns:
-        The profile's id, or an empty string when the event has none.
-    """
-    config_id = getattr(getattr(event, "resource", None), "config_id", "")
-    return config_id if isinstance(config_id, str) else ""
 
 
 async def submit_work_task(

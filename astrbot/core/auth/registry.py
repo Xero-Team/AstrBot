@@ -79,7 +79,10 @@ _ROOT_ONLY = frozenset({Role.ROOT})
 
 ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "session.read": _SESSION_AND_ABOVE,
+    "session.read_target": _INSTANCE_AND_ABOVE,
     "session.manage": _SESSION_ADMIN_AND_ABOVE,
+    "session.manage_target": _INSTANCE_AND_ABOVE,
+    "session.block": _INSTANCE_AND_ABOVE,
     "session.assign": _SESSION_OWNER_AND_ABOVE,
     "session.watch": _INSTANCE_AND_ABOVE,
     "session.send": _INSTANCE_AND_ABOVE,

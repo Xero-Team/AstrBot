@@ -52,21 +52,27 @@ class Main(star.Star):
 
     @filter.permission("session.read")
     @bot.command("status")
-    async def bot_status(self, event: AstrMessageEvent) -> None:
+    async def bot_status(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
         """Show version and session, LLM, and TTS switches"""
-        await self.bot_c.status(event)
+        await self.bot_c.status(event, target)
 
     @filter.permission("session.manage")
     @bot.command("enable")
-    async def bot_enable(self, event: AstrMessageEvent) -> None:
+    async def bot_enable(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
         """Enable the current session"""
-        await self.bot_c.set_enabled(event, True)
+        await self.bot_c.set_enabled(event, True, target)
 
     @filter.permission("session.manage")
     @bot.command("disable")
-    async def bot_disable(self, event: AstrMessageEvent) -> None:
+    async def bot_disable(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
         """Disable the current session"""
-        await self.bot_c.set_enabled(event, False)
+        await self.bot_c.set_enabled(event, False, target)
 
     @filter.permission("session.manage")
     @bot.command("leave")
@@ -117,6 +123,22 @@ class Main(star.Star):
     async def session_watches(self, event: AstrMessageEvent) -> None:
         """List active cross-session watches."""
         await self.session_c.watches(event)
+
+    @filter.permission("session.block")
+    @session.command("block")
+    async def session_block(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Block all functionality for a selected session."""
+        await self.bot_c.set_blocked(event, target, True)
+
+    @filter.permission("session.block")
+    @session.command("unblock")
+    async def session_unblock(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Unblock all functionality for a selected session."""
+        await self.bot_c.set_blocked(event, target, False)
 
     @filter.permission("session.send")
     @filter.command("send")

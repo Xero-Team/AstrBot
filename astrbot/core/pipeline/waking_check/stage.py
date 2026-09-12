@@ -25,6 +25,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.filter.telegram_callback import TelegramCallbackFilter
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star_handler import (
     EventType,
@@ -126,6 +127,7 @@ class WakingCheckStage(Stage):
         if ctx.preferences is None:
             raise RuntimeError("WakingCheckStage requires shared preferences")
         self.session_plugins = SessionPluginManager(ctx.preferences, ctx.plugins)
+        self.session_services = SessionServiceManager(ctx.preferences)
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
             "no_permission_reply",
             True,
@@ -252,6 +254,9 @@ class WakingCheckStage(Stage):
                 self._command_engine().resolve(route.message_str)
             except CommandError as exc:
                 logger.info("Command input rejected: %s", exc.diagnostic.code.value)
+                if await self._should_suppress_command_diagnostic(event):
+                    event.stop_event()
+                    return
                 await event.send(
                     MessageEventResult()
                     .message(
@@ -646,6 +651,9 @@ class WakingCheckStage(Stage):
             )
         except CommandError as exc:
             logger.info("Command input rejected: %s", exc.diagnostic.code.value)
+            if await self._should_suppress_command_diagnostic(event):
+                event.stop_event()
+                return activated_handlers, handlers_parsed_params, True
             await event.send(
                 MessageEventResult()
                 .message(render_diagnostic(exc.diagnostic, event.message_str, "zh-CN"))
@@ -773,6 +781,14 @@ class WakingCheckStage(Stage):
                 if bound_params is not None:
                     handlers_parsed_params[handler.handler_full_name] = bound_params
         return activated_handlers, handlers_parsed_params, False
+
+    async def _should_suppress_command_diagnostic(
+        self, event: AstrMessageEvent
+    ) -> bool:
+        """Do not expose command diagnostics from inactive sessions."""
+        return not await self.session_services.is_session_enabled(
+            event.unified_msg_origin
+        ) or await self.session_services.is_session_blocked(event.unified_msg_origin)
 
     @staticmethod
     def _groups_for_resolution(

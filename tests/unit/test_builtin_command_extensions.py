@@ -843,6 +843,7 @@ async def test_bot_commands_report_and_set_session_enabled():
     assert "Session: enabled" in status_text
     assert "LLM: disabled" in status_text
     assert "TTS: enabled" in status_text
+    assert "Fully blocked: no" in status_text
 
     disable_event = DummyEvent(message_str="bot disable")
     await command.set_enabled(disable_event, False)
@@ -1033,7 +1034,15 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
 
     expected_groups = {
         "bot": {"disable", "enable", "leave", "status"},
-        "session": {"info", "name", "watch", "unwatch", "watches"},
+            "session": {
+                "block",
+                "info",
+                "name",
+                "unblock",
+                "watch",
+                "unwatch",
+                "watches",
+            },
         "conversation": {
             "create",
             "create-for",

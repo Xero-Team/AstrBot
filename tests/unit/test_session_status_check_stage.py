@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.pipeline.session_status_check.stage import (
+    SESSION_BLOCKED_PASSTHROUGH_HANDLERS,
     SESSION_DISABLED_PASSTHROUGH_HANDLERS,
     SessionStatusCheckStage,
+    allows_blocked_session,
     allows_disabled_session,
 )
 from astrbot.core.star.command_ids import BUILTIN_COMMANDS_MODULE
@@ -59,6 +61,13 @@ def test_passthrough_handlers_use_stable_builtin_module_names():
     assert SESSION_DISABLED_PASSTHROUGH_HANDLERS == {
         f"{BUILTIN_COMMANDS_MODULE}_bot_status",
         f"{BUILTIN_COMMANDS_MODULE}_bot_enable",
+        f"{BUILTIN_COMMANDS_MODULE}_bot_disable",
+        f"{BUILTIN_COMMANDS_MODULE}_session_block",
+        f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
+    }
+    assert SESSION_BLOCKED_PASSTHROUGH_HANDLERS == {
+        f"{BUILTIN_COMMANDS_MODULE}_bot_status",
+        f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
     }
 
 
@@ -66,12 +75,35 @@ def test_allows_disabled_session_only_for_bot_status_and_enable():
     enable = SimpleNamespace(
         handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_bot_enable",
     )
+    unblock = SimpleNamespace(
+        handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
+    )
     disable = SimpleNamespace(
         handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_bot_disable",
     )
+    block = SimpleNamespace(
+        handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_session_block",
+    )
     assert allows_disabled_session(FakeEvent(handlers=[enable])) is True
-    assert allows_disabled_session(FakeEvent(handlers=[disable])) is False
+    assert allows_disabled_session(FakeEvent(handlers=[disable])) is True
+    assert allows_disabled_session(FakeEvent(handlers=[unblock])) is True
+    assert allows_disabled_session(FakeEvent(handlers=[block])) is True
     assert allows_disabled_session(FakeEvent()) is False
+
+
+def test_blocked_session_only_allows_status_and_unblock():
+    status = SimpleNamespace(
+        handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_bot_status",
+    )
+    enable = SimpleNamespace(
+        handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_bot_enable",
+    )
+    unblock = SimpleNamespace(
+        handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
+    )
+    assert allows_blocked_session(FakeEvent(handlers=[status])) is True
+    assert allows_blocked_session(FakeEvent(handlers=[unblock])) is True
+    assert allows_blocked_session(FakeEvent(handlers=[enable])) is False
 
 
 @pytest.mark.asyncio
@@ -117,6 +149,40 @@ async def test_disabled_session_allows_bot_enable():
     await stage.process(event)
     assert event.stopped is False
     stage.conv_mgr.new_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocked_session_allows_only_unblock_passthrough():
+    stage = await _make_stage(session_enabled=True)
+    stage.session_services.is_session_blocked = AsyncMock(return_value=True)
+    event = FakeEvent(
+        handlers=[
+            SimpleNamespace(
+                handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
+            )
+        ]
+    )
+    await stage.process(event)
+    assert event.stopped is False
+
+    blocked_event = FakeEvent()
+    await stage.process(blocked_event)
+    assert blocked_event.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_blocked_session_does_not_allow_bot_enable():
+    stage = await _make_stage(session_enabled=True)
+    stage.session_services.is_session_blocked = AsyncMock(return_value=True)
+    event = FakeEvent(
+        handlers=[
+            SimpleNamespace(
+                handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_bot_enable",
+            )
+        ]
+    )
+    await stage.process(event)
+    assert event.stopped is True
 
 
 @pytest.mark.asyncio

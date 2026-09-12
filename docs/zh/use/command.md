@@ -47,13 +47,13 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### 机器人状态
 
-- `/bot status`：显示版本，以及当前会话的整体开关、LLM 开关和 TTS 开关。需要 `session.read`。
-- `/bot enable`：启用当前会话。需要 `session.manage`。
-- `/bot disable`：停用当前会话。需要 `session.manage`。
+- `/bot status [this|UMO]`：显示目标会话的版本、整体开关、LLM 开关和 TTS 开关。省略参数或使用 `this` 表示当前会话；指定 UMO 时需要 `instance_operator` 及以上权限。
+- `/bot enable [this|UMO]`：启用目标会话。省略参数或使用 `this` 表示当前会话；指定 UMO 时需要 `instance_operator` 及以上权限。
+- `/bot disable [this|UMO]`：停用目标会话。省略参数或使用 `this` 表示当前会话；指定 UMO 时需要 `instance_operator` 及以上权限。
 - `/bot leave`：提示退群确认。需要 `session.manage`，且只能在群聊中使用。
 - `/bot leave --confirm` 或 `/bot leave -c`：确认后退出当前群。当前平台未声明 `leave_group` 时会拒绝。
 
-`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是当前 UMO（与 `/llm` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。裸 `/bot` 只显示子指令树。
+`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是目标 UMO（与 `/llm` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。`/bot status` 还会显示完全禁用状态。`/session block [this|UMO]` 和 `/session unblock [this|UMO]` 由 `instance_operator` 及以上权限使用，完全禁用目标会话的所有功能；完全禁用后只放行 `/bot status` 和 `/session unblock`。裸 `/bot` 只显示子指令树。
 
 ### 会话信息
 

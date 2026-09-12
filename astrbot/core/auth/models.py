@@ -47,7 +47,10 @@ ROLE_ORDER: dict[Role, int] = {
 ACTIONS = frozenset(
     {
         "session.read",
+        "session.read_target",
         "session.manage",
+        "session.manage_target",
+        "session.block",
         "session.assign",
         "session.watch",
         "session.send",

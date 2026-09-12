@@ -23,9 +23,46 @@ class BotCommands:
         )
         return dict(settings or {})
 
-    async def status(self, event: AstrMessageEvent) -> None:
-        """Show bot version and session, LLM, and TTS switches."""
-        settings = await self._service_config(event.unified_msg_origin)
+    async def _resolve_target(
+        self,
+        event: AstrMessageEvent,
+        target: str,
+        *,
+        action: str,
+    ) -> str | None:
+        target = target.strip()
+        if not target:
+            return event.unified_msg_origin
+        if len(target.split()) != 1:
+            await reply_i18n(self.context, event, "bot.target.usage")
+            return None
+        if target.lower() == "this":
+            return event.unified_msg_origin
+        try:
+            decision = await self.context.authz.authorize_target_session(
+                event,
+                action=action,
+                umo=target,
+            )
+        except (PermissionError, ValueError):
+            await reply_i18n(self.context, event, "bot.target.denied")
+            return None
+        if not decision.allowed:
+            await reply_i18n(self.context, event, "bot.target.denied")
+            return None
+        return target
+
+    async def status(
+        self, event: AstrMessageEvent, target: str = ""
+    ) -> None:
+        """Show bot switches for the current or an explicitly selected session."""
+        umo = await self._resolve_target(
+            event, target, action="session.read_target"
+        )
+        if umo is None:
+            return
+        settings = await self._service_config(umo)
+        blocked = self._is_blocked(settings)
         on_label = await self.context.i18n.t(event, "bot.status.on")
         off_label = await self.context.i18n.t(event, "bot.status.off")
 
@@ -40,12 +77,35 @@ class BotCommands:
             session=label("session_enabled"),
             llm=label("llm_enabled"),
             tts=label("tts_enabled"),
+            blocked=await self.context.i18n.t(
+                event,
+                "bot.status.blocked" if blocked else "bot.status.unblocked",
+            ),
         )
 
-    async def set_enabled(self, event: AstrMessageEvent, enabled: bool) -> None:
-        """Enable or disable the current session."""
-        umo = event.unified_msg_origin
+    async def set_enabled(
+        self, event: AstrMessageEvent, enabled: bool, target: str = ""
+    ) -> None:
+        """Enable or disable the current or an explicitly selected session."""
+        umo = await self._resolve_target(
+            event, target, action="session.manage_target"
+        )
+        if umo is None:
+            return
         settings = await self._service_config(umo)
+        if enabled and self._is_blocked(settings):
+            try:
+                decision = await self.context.authz.authorize_target_session(
+                    event,
+                    action="session.block",
+                    umo=umo,
+                )
+            except (PermissionError, ValueError):
+                await reply_i18n(self.context, event, "bot.target.denied")
+                return
+            if not decision.allowed:
+                await reply_i18n(self.context, event, "bot.target.denied")
+                return
         settings["session_enabled"] = enabled
         await self.context.preferences.session_put(
             umo,
@@ -56,6 +116,32 @@ class BotCommands:
             self.context,
             event,
             "bot.set.enabled" if enabled else "bot.set.disabled",
+            target=umo,
+        )
+
+    @staticmethod
+    def _is_blocked(settings: dict) -> bool:
+        blocked = settings.get("session_blocked")
+        return blocked if isinstance(blocked, bool) else False
+
+    async def set_blocked(
+        self, event: AstrMessageEvent, target: str, blocked: bool
+    ) -> None:
+        """Block or unblock all functionality for a selected session."""
+        umo = await self._resolve_target(event, target, action="session.block")
+        if umo is None:
+            return
+        settings = await self._service_config(umo)
+        settings["session_blocked"] = blocked
+        await self.context.preferences.session_put(
+            umo,
+            _SESSION_SERVICE_CONFIG,
+            settings,
+        )
+        await reply_i18n(
+            self.context,
+            event,
+            "bot.blocked" if blocked else "bot.unblocked",
         )
 
     async def leave(self, event: AstrMessageEvent, *, confirm: bool = False) -> None:

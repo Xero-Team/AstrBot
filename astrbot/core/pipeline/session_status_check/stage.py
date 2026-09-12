@@ -10,6 +10,15 @@ SESSION_DISABLED_PASSTHROUGH_HANDLERS = frozenset(
     {
         f"{BUILTIN_COMMANDS_MODULE}_bot_status",
         f"{BUILTIN_COMMANDS_MODULE}_bot_enable",
+        f"{BUILTIN_COMMANDS_MODULE}_bot_disable",
+        f"{BUILTIN_COMMANDS_MODULE}_session_block",
+        f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
+    }
+)
+SESSION_BLOCKED_PASSTHROUGH_HANDLERS = frozenset(
+    {
+        f"{BUILTIN_COMMANDS_MODULE}_bot_status",
+        f"{BUILTIN_COMMANDS_MODULE}_session_unblock",
     }
 )
 
@@ -20,6 +29,16 @@ def allows_disabled_session(event: AstrMessageEvent) -> bool:
     return any(
         getattr(handler, "handler_full_name", "")
         in SESSION_DISABLED_PASSTHROUGH_HANDLERS
+        for handler in handlers
+    )
+
+
+def allows_blocked_session(event: AstrMessageEvent) -> bool:
+    """Return whether an activated handler may run while the session is blocked."""
+    handlers = event.get_extra("activated_handlers") or ()
+    return any(
+        getattr(handler, "handler_full_name", "")
+        in SESSION_BLOCKED_PASSTHROUGH_HANDLERS
         for handler in handlers
     )
 
@@ -38,6 +57,11 @@ class SessionStatusCheckStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None:
+        if await self.session_services.is_session_blocked(event.unified_msg_origin):
+            if allows_blocked_session(event):
+                return
+            event.stop_event()
+            return
         if await self.session_services.is_session_enabled(event.unified_msg_origin):
             return
         if allows_disabled_session(event):

@@ -47,13 +47,13 @@ Enabled command paths, aliases, descendants, and non-empty LLM prefix roots shar
 
 ### Bot Presence
 
-- `/bot status`: Show the version plus the current session, LLM, and TTS switches. Requires `session.read`.
-- `/bot enable`: Enable the current session. Requires `session.manage`.
-- `/bot disable`: Disable the current session. Requires `session.manage`.
+- `/bot status [this|UMO]`: Show the version, session, LLM, and TTS switches for the target session. Omit the argument or use `this` for the current session; an explicit UMO requires `instance_operator` or above.
+- `/bot enable [this|UMO]`: Enable the target session. Omit the argument or use `this` for the current session; an explicit UMO requires `instance_operator` or above.
+- `/bot disable [this|UMO]`: Disable the target session. Omit the argument or use `this` for the current session; an explicit UMO requires `instance_operator` or above.
 - `/bot leave`: Prompt for leave confirmation. Requires `session.manage` and only works in group chats.
 - `/bot leave --confirm` or `/bot leave -c`: Leave the current group after confirmation. Rejected when the platform does not declare `leave_group`.
 
-Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the current UMO, same scope as `/llm`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. A bare `/bot` only shows the subcommand tree.
+Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the target UMO, same scope as `/llm`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. `/bot status` also reports the full-block state. `/session block [this|UMO]` and `/session unblock [this|UMO]` require `instance_operator` or above and fully block or restore all functionality for the target session; a fully blocked session only allows `/bot status` and `/session unblock`. A bare `/bot` only shows the subcommand tree.
 
 ### Session Information
 

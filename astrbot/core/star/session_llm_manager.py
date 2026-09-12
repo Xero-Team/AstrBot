@@ -176,3 +176,33 @@ class SessionServiceManager:
 
         # 如果没有配置，默认为启用（兼容性考虑）
         return True
+
+    async def is_session_blocked(self, session_id: str) -> bool:
+        """Check whether all functionality is blocked for a session."""
+        session_services = await self.preferences.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_service_config",
+            default={},
+        )
+        blocked = session_services.get("session_blocked")
+        return blocked if isinstance(blocked, bool) else False
+
+    async def set_session_blocked(self, session_id: str, blocked: bool) -> None:
+        """Block or unblock all functionality for a session."""
+        session_config = (
+            await self.preferences.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_service_config",
+                default={},
+            )
+            or {}
+        )
+        session_config["session_blocked"] = blocked
+        await self.preferences.put_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_service_config",
+            value=session_config,
+        )

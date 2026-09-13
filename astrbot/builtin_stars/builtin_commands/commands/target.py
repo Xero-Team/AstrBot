@@ -1,10 +1,11 @@
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n
 
 
 async def resolve_target_umo(
-    context,
+    context: star.PluginContext,
     event: AstrMessageEvent,
     target: str,
     *,

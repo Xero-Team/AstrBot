@@ -133,8 +133,12 @@ class SessionManagementService:
         blocked = config.get("session_blocked")
         return blocked if isinstance(blocked, bool) else False
 
-    async def _sync_display_alias(self, umo: str, config: dict) -> dict:
+    async def _sync_display_alias(self, umo: str, config: object) -> dict:
         """Move a Dashboard display name onto the UMO alias store."""
+        if not isinstance(config, dict):
+            raise SessionManagementServiceError(
+                "规则 session_service_config 需要对象类型的 rule_value"
+            )
         if "custom_name" not in config:
             return config
         stored = dict(config)

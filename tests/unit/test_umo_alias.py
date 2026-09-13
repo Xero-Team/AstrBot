@@ -46,6 +46,7 @@ def make_session_context(db) -> SimpleNamespace:
             set_alias=set_alias,
             auto_name=get_event_auto_name,
             normalize_name=normalize_umo_name,
+            parse=parse_umo,
         ),
         i18n=FakeI18n(),
         config=SimpleNamespace(
@@ -310,6 +311,42 @@ async def test_session_info_and_name_accept_target_umo(temp_db):
     alias = await temp_db.get_umo_alias("qq:GroupMessage:2000")
     assert alias is not None
     assert alias.user_alias == "New Ops"
+
+
+@pytest.mark.asyncio
+async def test_session_info_rejects_unauthorized_and_invalid_targets():
+    authz = SimpleNamespace(
+        authorize_target_session=AsyncMock(return_value=SimpleNamespace(allowed=False))
+    )
+    context = make_session_context(SimpleNamespace())
+    context.authz = authz
+    event = make_group_event()
+    commands = SessionCommands(context)
+
+    await commands.info(event, "qq:GroupMessage:2000")
+    denied = event.set_result.call_args.args[0].chain[0].text
+    assert "You cannot manage the target session" in denied
+    authz.authorize_target_session.assert_awaited_once()
+
+    authz.authorize_target_session.side_effect = PermissionError("denied")
+    await commands.info(event, "qq:GroupMessage:2000")
+    still_denied = event.set_result.call_args.args[0].chain[0].text
+    assert "You cannot manage the target session" in still_denied
+
+    await commands.info(event, "this extra")
+    usage = event.set_result.call_args.args[0].chain[0].text
+    assert "the target must be this or one UMO" in usage
+
+
+def test_session_capability_parses_umo():
+    from astrbot.core.star.plugin_context import SessionCapability
+
+    capability = SessionCapability(MagicMock())
+    assert capability.parse("qq:GroupMessage:1000") == {
+        "platform": "qq",
+        "message_type": "GroupMessage",
+        "session_id": "1000",
+    }
 
 
 def test_session_name_requires_session_manage_action():

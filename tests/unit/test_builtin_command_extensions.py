@@ -1217,6 +1217,14 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
     named_entry = named.resolution.entries[0]
     assert dict(engine.bind(named_entry, named).values)["clear"] is True
 
+    targeted = engine.resolve("session name --target qq:GroupMessage:2000 Ops Room")
+    targeted_entry = targeted.resolution.entries[0]
+    assert dict(engine.bind(targeted_entry, targeted).values) == {
+        "alias": "Ops Room",
+        "target": "qq:GroupMessage:2000",
+        "clear": False,
+    }
+
     bot_leave = engine.resolve("bot leave --confirm")
     assert bot_leave.resolution.command_path == ("bot", "leave")
     bot_entry = bot_leave.resolution.entries[0]

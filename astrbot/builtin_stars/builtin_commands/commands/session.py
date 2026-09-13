@@ -1,7 +1,6 @@
 from astrbot.api import Subject, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.platform import MAX_WATCH_TTL_SECONDS, MIN_WATCH_TTL_SECONDS
-from astrbot.core.umo_alias import parse_umo
 
 from .reply import reply_i18n
 from .target import resolve_target_umo
@@ -90,7 +89,7 @@ class SessionCommands:
         if umo is None:
             return
         if umo != event.unified_msg_origin:
-            parsed = parse_umo(umo)
+            parsed = self.context.sessions.parse(umo)
             saved = await self.context.sessions.alias(umo)
             empty = await self.context.i18n.t(event, "session.name.empty")
             await reply_i18n(

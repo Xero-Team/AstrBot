@@ -964,6 +964,12 @@ class SessionCapability:
 
         return normalize_umo_name(name)
 
+    def parse(self, umo: str) -> dict[str, str]:
+        """Split a UMO into platform, message type, and session id."""
+        from astrbot.core.umo_alias import parse_umo
+
+        return parse_umo(umo)
+
     async def set_alias(
         self,
         *,

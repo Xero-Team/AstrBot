@@ -400,6 +400,20 @@ async def test_service_config_custom_name_writes_umo_alias(
     assert cleared is not None
     assert cleared.user_alias is None
 
+    await service.update_session_rule(
+        {
+            "umo": umo,
+            "rule_key": "session_service_config",
+            "rule_value": {"session_enabled": False},
+        }
+    )
+    assert preferences.session_values[(umo, "session_service_config")] == {
+        "session_enabled": False,
+    }
+    unchanged = await temp_db.get_umo_alias(umo)
+    assert unchanged is not None
+    assert unchanged.user_alias is None
+
 
 @pytest.mark.asyncio
 async def test_batch_updates_validate_input_and_report_partial_failures(

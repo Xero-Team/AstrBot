@@ -2,6 +2,7 @@ from astrbot.api import logger, safe_error, star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n, send_i18n
+from .target import resolve_target_umo
 
 _SESSION_SERVICE_CONFIG = "session_service_config"
 
@@ -30,27 +31,12 @@ class BotCommands:
         *,
         action: str,
     ) -> str | None:
-        target = target.strip()
-        if not target:
-            return event.unified_msg_origin
-        if len(target.split()) != 1:
-            await reply_i18n(self.context, event, "bot.target.usage")
-            return None
-        if target.lower() == "this":
-            return event.unified_msg_origin
-        try:
-            decision = await self.context.authz.authorize_target_session(
-                event,
-                action=action,
-                umo=target,
-            )
-        except PermissionError, ValueError:
-            await reply_i18n(self.context, event, "bot.target.denied")
-            return None
-        if not decision.allowed:
-            await reply_i18n(self.context, event, "bot.target.denied")
-            return None
-        return target
+        return await resolve_target_umo(
+            self.context,
+            event,
+            target,
+            action=action,
+        )
 
     async def status(self, event: AstrMessageEvent, target: str = "") -> None:
         """Show bot switches for the current or an explicitly selected session."""

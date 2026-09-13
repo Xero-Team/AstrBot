@@ -7023,6 +7023,8 @@ components:
               type: boolean
             tts_enabled:
               type: boolean
+            session_blocked:
+              type: boolean
 
     SessionGroupRequest:
       type: object

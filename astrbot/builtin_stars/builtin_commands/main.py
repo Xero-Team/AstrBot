@@ -15,6 +15,7 @@ from .commands import (
     PluginCommands,
     ProviderCommands,
     SessionCommands,
+    TtsCommands,
     VariableCommands,
     WorkCommands,
 )
@@ -34,6 +35,7 @@ class Main(star.Star):
         self.plugin_c = PluginCommands(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.session_c = SessionCommands(self.context)
+        self.tts_c = TtsCommands(self.context)
         self.variable_c = VariableCommands(self.context)
         self.work_c = WorkCommands(self.context)
 
@@ -90,17 +92,23 @@ class Main(star.Star):
 
     @filter.permission("session.read")
     @session.command("info")
-    async def session_info(self, event: AstrMessageEvent) -> None:
-        """Show IDs and metadata for the current session"""
-        await self.session_c.info(event)
+    async def session_info(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Show IDs and metadata for the current or selected session"""
+        await self.session_c.info(event, target)
 
     @filter.permission("session.manage")
     @session.command("name")
     async def session_name(
-        self, event: AstrMessageEvent, alias: GreedyStr = GreedyStr("")
+        self,
+        event: AstrMessageEvent,
+        alias: GreedyStr = GreedyStr(""),
+        target: Annotated[str, option("--target", "-t")] = "",
+        clear: Annotated[bool, option("--clear", "-c")] = False,
     ) -> None:
-        """Show or set the display name for the current session"""
-        await self.session_c.name(event, alias)
+        """Show, set, or clear the display name for a session"""
+        await self.session_c.name(event, alias, target, clear=clear)
 
     @filter.permission("session.watch")
     @session.command("watch")
@@ -120,9 +128,11 @@ class Main(star.Star):
 
     @filter.permission("session.read")
     @session.command("watches")
-    async def session_watches(self, event: AstrMessageEvent) -> None:
+    async def session_watches(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
         """List active cross-session watches."""
-        await self.session_c.watches(event)
+        await self.session_c.watches(event, spec)
 
     @filter.permission("session.block")
     @session.command("block")
@@ -330,6 +340,28 @@ class Main(star.Star):
     async def llm_disable(self, event: AstrMessageEvent) -> None:
         """Disable LLM chat for the current session"""
         await self.chat_c.set_enabled(event, False)
+
+    @filter.command_group("tts")
+    def tts(self) -> None:
+        """Manage TTS for the current session"""
+
+    @filter.permission("session.manage")
+    @tts.command("status")
+    async def tts_status(self, event: AstrMessageEvent) -> None:
+        """Show whether TTS is enabled"""
+        await self.tts_c.status(event)
+
+    @filter.permission("session.manage")
+    @tts.command("enable")
+    async def tts_enable(self, event: AstrMessageEvent) -> None:
+        """Enable TTS for the current session"""
+        await self.tts_c.set_enabled(event, True)
+
+    @filter.permission("session.manage")
+    @tts.command("disable")
+    async def tts_disable(self, event: AstrMessageEvent) -> None:
+        """Disable TTS for the current session"""
+        await self.tts_c.set_enabled(event, False)
 
     @filter.command_group("flow")
     def flow(self) -> None:

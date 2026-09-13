@@ -77,7 +77,7 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 
 - `watch(event, target_umo, *, source_umo=None, ttl_seconds=None)`: create an expiring watch owned by the event's trusted actor; returns `SessionWatch`. `source_umo` is the listening session that receives forwards and defaults to the current session. `ttl_seconds` is 60–864000, default 43200. When it expires, the listener session receives an end notice.
 - `unwatch(event, target_umo, *, source_umo=None)`: stop a matching watch this actor created.
-- `list(event)`: list this actor's active watches whose listener is the current session.
+- `list(event, *, source_umo=None)`: list this actor's active watches. `source_umo` is the listening session and defaults to the current session.
 - `send(event, target_umo)`: deliver the current message body and attachments after stripping the command header; returns `DeliveryReceipt`.
 
 These methods call `authorize()` again. They require `session.watch` or

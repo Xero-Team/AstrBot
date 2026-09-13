@@ -6917,6 +6917,9 @@
               },
               "tts_enabled": {
                 "type": "boolean"
+              },
+              "session_blocked": {
+                "type": "boolean"
               }
             }
           }

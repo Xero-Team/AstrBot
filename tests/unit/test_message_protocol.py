@@ -419,6 +419,15 @@ async def test_watch_ownership_includes_both_source_and_actor():
     await manager.watch(second, target)
     assert not await manager.unwatch(_event(sender="other"), target)
     assert len(await manager.list_watches(first)) == 1
+    assert (
+        len(
+            await manager.list_watches(
+                first,
+                source_umo=second.unified_msg_origin,
+            )
+        )
+        == 1
+    )
     assert await manager.unwatch(first, target)
     assert len(await manager.list_watches(second)) == 1
     await manager.terminate()
@@ -881,6 +890,7 @@ def test_parse_watch_spec_accepts_this_omission_and_duration():
     from astrbot.builtin_stars.builtin_commands.commands.session import (
         parse_unwatch_spec,
         parse_watch_spec,
+        parse_watches_spec,
     )
 
     current = "here:FriendMessage:me"
@@ -909,6 +919,11 @@ def test_parse_watch_spec_accepts_this_omission_and_duration():
     assert parse_unwatch_spec("this there:GroupMessage:room", current) == (
         current,
         "there:GroupMessage:room",
+    )
+    assert parse_watches_spec("", current) == current
+    assert parse_watches_spec("this", current) == current
+    assert parse_watches_spec("other:FriendMessage:x", current) == (
+        "other:FriendMessage:x"
     )
 
 

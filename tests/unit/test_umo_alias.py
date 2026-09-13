@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -192,7 +192,8 @@ async def test_session_name_without_alias_shows_current_names(temp_db):
     assert result.use_t2i_ is False
     assert result.chain[0].text == "\n".join(
         [
-            "Usage: /session name <name>",
+            "Usage: /session name [--target UMO] <name>",
+            "Clear: /session name [--target UMO] --clear",
             "UMO: qq:GroupMessage:1000",
             "Auto name: Engineering Group",
             "Alias: Backend Room",
@@ -259,6 +260,56 @@ async def test_session_info_uses_attached_subject_id():
 
     result = event.set_result.call_args.args[0]
     assert f"Subject ID: {attached.id}" in result.chain[0].text
+
+
+@pytest.mark.asyncio
+async def test_session_name_clear_removes_user_alias(temp_db):
+    await temp_db.upsert_umo_alias(
+        umo="qq:GroupMessage:1000",
+        creator_sender_id="sender-1",
+        auto_name="Engineering Group",
+        user_alias="Backend Room",
+    )
+    context = make_session_context(temp_db)
+    event = make_group_event()
+
+    await SessionCommands(context).name(event, "", clear=True)
+
+    alias = await temp_db.get_umo_alias("qq:GroupMessage:1000")
+    assert alias is not None
+    assert alias.user_alias is None
+    result = event.set_result.call_args.args[0]
+    assert result.chain[0].text == ("UMO alias cleared.\nUMO: qq:GroupMessage:1000")
+
+
+@pytest.mark.asyncio
+async def test_session_info_and_name_accept_target_umo(temp_db):
+    await temp_db.upsert_umo_alias(
+        umo="qq:GroupMessage:2000",
+        creator_sender_id="sender-9",
+        auto_name="Ops Group",
+        user_alias="Ops Room",
+    )
+    authz = SimpleNamespace(
+        authorize_target_session=AsyncMock(return_value=SimpleNamespace(allowed=True))
+    )
+    context = make_session_context(temp_db)
+    context.authz = authz
+    event = make_group_event()
+    commands = SessionCommands(context)
+
+    await commands.info(event, "qq:GroupMessage:2000")
+    info_text = event.set_result.call_args.args[0].chain[0].text
+    assert "UMO: qq:GroupMessage:2000" in info_text
+    assert "Auto name: Ops Group" in info_text
+    assert "Alias: Ops Room" in info_text
+    assert "Session ID: 2000" in info_text
+    authz.authorize_target_session.assert_awaited()
+
+    await commands.name(event, "New Ops", "qq:GroupMessage:2000")
+    alias = await temp_db.get_umo_alias("qq:GroupMessage:2000")
+    assert alias is not None
+    assert alias.user_alias == "New Ops"
 
 
 def test_session_name_requires_session_manage_action():

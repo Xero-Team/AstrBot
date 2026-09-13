@@ -12,7 +12,12 @@ from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.star import PluginRegistry
-from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.umo_alias import (
+    build_umo_alias_map,
+    normalize_umo_name,
+    parse_umo,
+    serialize_umo_alias,
+)
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -122,6 +127,26 @@ class SessionManagementService:
     def _session_config_name(config: dict) -> str:
         custom_name = config.get("custom_name", "")
         return custom_name if isinstance(custom_name, str) else ""
+
+    @staticmethod
+    def _session_config_blocked(config: dict) -> bool:
+        blocked = config.get("session_blocked")
+        return blocked if isinstance(blocked, bool) else False
+
+    async def _sync_display_alias(self, umo: str, config: dict) -> dict:
+        """Move a Dashboard display name onto the UMO alias store."""
+        if "custom_name" not in config:
+            return config
+        stored = dict(config)
+        user_alias = normalize_umo_name(stored.pop("custom_name")) or None
+        existing = await self.db_helper.get_umo_alias(umo)
+        await self.db_helper.upsert_umo_alias(
+            umo=umo,
+            creator_sender_id=existing.creator_sender_id if existing else "",
+            auto_name=existing.auto_name if existing else None,
+            user_alias=user_alias,
+        )
+        return stored
 
     @staticmethod
     def _session_config_enabled(config: dict, key: str) -> bool:
@@ -361,6 +386,8 @@ class SessionManagementService:
 
         if rule_key == "session_plugin_config":
             rule_value = {umo: rule_value}
+        elif rule_key == "session_service_config":
+            rule_value = await self._sync_display_alias(umo, rule_value)
 
         provider_type = self._provider_type_from_rule_key(rule_key)
         if provider_type is not None:
@@ -505,12 +532,15 @@ class SessionManagementService:
             if not isinstance(svc_config, dict):
                 svc_config = {}
 
-            custom_name = self._session_config_name(svc_config)
+            custom_name = umo_info["user_alias"] or self._session_config_name(
+                svc_config
+            )
             session_enabled = self._session_config_enabled(
                 svc_config, "session_enabled"
             )
             llm_enabled = self._session_config_enabled(svc_config, "llm_enabled")
             tts_enabled = self._session_config_enabled(svc_config, "tts_enabled")
+            session_blocked = self._session_config_blocked(svc_config)
 
             if search:
                 search_lower = search.lower()
@@ -539,6 +569,7 @@ class SessionManagementService:
                     "session_enabled": session_enabled,
                     "llm_enabled": llm_enabled,
                     "tts_enabled": tts_enabled,
+                    "session_blocked": session_blocked,
                     "has_rules": umo in umo_rules,
                     "chat_provider": rules.get(chat_provider_key),
                     "tts_provider": rules.get(tts_provider_key),
@@ -576,8 +607,14 @@ class SessionManagementService:
         llm_enabled = payload.get("llm_enabled")
         tts_enabled = payload.get("tts_enabled")
         session_enabled = payload.get("session_enabled")
+        session_blocked = payload.get("session_blocked")
 
-        if llm_enabled is None and tts_enabled is None and session_enabled is None:
+        if (
+            llm_enabled is None
+            and tts_enabled is None
+            and session_enabled is None
+            and session_blocked is None
+        ):
             raise SessionManagementServiceError("至少需要指定一个要修改的状态")
 
         if scope and not umos:
@@ -604,6 +641,8 @@ class SessionManagementService:
                     session_config["tts_enabled"] = tts_enabled
                 if session_enabled is not None:
                     session_config["session_enabled"] = session_enabled
+                if session_blocked is not None:
+                    session_config["session_blocked"] = session_blocked
 
                 await self.preferences.session_put(
                     umo, "session_service_config", session_config
@@ -620,6 +659,8 @@ class SessionManagementService:
             status_changes.append(f"TTS={'启用' if tts_enabled else '禁用'}")
         if session_enabled is not None:
             status_changes.append(f"会话={'启用' if session_enabled else '禁用'}")
+        if session_blocked is not None:
+            status_changes.append(f"完全禁用={'是' if session_blocked else '否'}")
 
         return {
             "message": f"已更新 {success_count} 个会话 ({', '.join(status_changes)})",

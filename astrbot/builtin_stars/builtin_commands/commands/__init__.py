@@ -10,6 +10,7 @@ from .persona import PersonaCommands
 from .plugin import PluginCommands
 from .provider import ProviderCommands
 from .session import SessionCommands
+from .tts import TtsCommands
 from .variable import VariableCommands
 from .work import WorkCommands
 
@@ -24,6 +25,7 @@ __all__ = [
     "PluginCommands",
     "ProviderCommands",
     "SessionCommands",
+    "TtsCommands",
     "VariableCommands",
     "WorkCommands",
 ]

@@ -57,9 +57,10 @@ Both `enable` and `disable` are idempotent. They write the existing `session_ena
 
 ### Session Information
 
-- `/session info`: Show the UMO, user ID, authorization subject (`im:{platform}:{bot}:{sender}`), platform ID, message type, and session ID.
-- `/session name`: Show the current auto name and saved alias; requires `session.manage`.
-- `/session name <name>`: Set the current UMO display alias; requires `session.manage`. `GreedyStr` allows spaces.
+- `/session info [this|UMO]`: Show the UMO, user ID, authorization subject (`im:{platform}:{bot}:{sender}`), platform ID, message type, and session ID. Omit the argument or use `this` for the current session; an explicit UMO requires `instance_operator` or above and shows that session's auto name and alias.
+- `/session name [--target UMO]`: Show the auto name and saved alias; requires `session.manage`. `--target` requires `instance_operator` or above.
+- `/session name [--target UMO] <name>`: Set the display alias; requires `session.manage`. `GreedyStr` allows spaces.
+- `/session name [--target UMO] --clear`: Clear the display alias.
 
 After the waking stage finalizes `is_wake`, the automatic name is written to storage. A manual alias takes priority; automatic upserts do not overwrite `user_alias`.
 
@@ -68,7 +69,7 @@ The user ID from `/session info` can be granted current-session `session_admin` 
 ### Cross-session watches and sending
 
 - `/session watch [listener|this] <target> [seconds]`: Forward subsequent incoming messages from the target into the listener session; requires `session.watch`. Omit the listener or write `this` for the current session. Duration is 60–864000 seconds (up to 10 days), default 43200 seconds (12 hours). When it expires, the listener session receives an end notice.
-- `/session watches`: List watches you created with the current session as the listener, and their remaining time.
+- `/session watches [listener|this]`: List watches you created and their remaining time. Omit the argument or write `this` for the current session as the listener.
 - `/session unwatch [listener|this] <target>`: Stop a matching watch that you own. Omit the listener or write `this` for the current session.
 - `/send <UMO> [content]`: Send text and attachments from the same message through the target Bot account; requires `session.send`. An attachment-only body is allowed. This does not register a `reply` command.
 
@@ -125,6 +126,14 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 - `/llm disable`: Disable LLM chat for the current session.
 
 These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode.
+
+### TTS state
+
+- `/tts status`: Show whether TTS is enabled for the current session.
+- `/tts enable`: Enable TTS for the current session.
+- `/tts disable`: Disable TTS for the current session.
+
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/bot status` shows the session, LLM, and TTS switches together.
 
 ### Session streaming
 

@@ -15,6 +15,7 @@ from astrbot.builtin_stars.builtin_commands.commands.help import HelpCommand
 from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaCommands
 from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
+from astrbot.builtin_stars.builtin_commands.commands.tts import TtsCommands
 from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
 from astrbot.builtin_stars.builtin_commands.main import Main
 from astrbot.core.command import (
@@ -257,6 +258,15 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "model_set",
         "session_name",
         "session_info",
+        "session_watch",
+        "session_unwatch",
+        "session_watches",
+        "session_block",
+        "session_unblock",
+        "send_to_session",
+        "tts_disable",
+        "tts_enable",
+        "tts_status",
         "persona_list",
         "persona_set",
         "persona_status",
@@ -805,6 +815,51 @@ async def test_chat_commands_report_and_set_session_service_status():
     assert "enabled" in _plain_text(enable_event.result)
 
 
+@pytest.mark.asyncio
+async def test_tts_commands_report_and_set_session_service_status():
+    calls: list[tuple[str, dict[str, bool]]] = []
+    settings = {"tts_enabled": True}
+
+    async def session_get(
+        umo: str, key: str, default: dict[str, bool]
+    ) -> dict[str, bool]:
+        assert umo == "napcat:FriendMessage:42"
+        assert key == "session_service_config"
+        assert default == {}
+        return dict(settings)
+
+    async def session_put(umo: str, key: str, value: dict[str, bool]) -> None:
+        assert umo == "napcat:FriendMessage:42"
+        assert key == "session_service_config"
+        calls.append((umo, dict(value)))
+        settings.update(value)
+
+    command = TtsCommands(
+        SimpleNamespace(
+            preferences=SimpleNamespace(
+                session_get=session_get,
+                session_put=session_put,
+            ),
+            i18n=FakeI18n(),
+        )
+    )
+    status_event = DummyEvent(message_str="tts status")
+    await command.status(status_event)
+    assert "enabled" in _plain_text(status_event.result)
+
+    disable_event = DummyEvent(message_str="tts disable")
+    await command.set_enabled(disable_event, False)
+    enable_event = DummyEvent(message_str="tts enable")
+    await command.set_enabled(enable_event, True)
+
+    assert calls == [
+        ("napcat:FriendMessage:42", {"tts_enabled": False}),
+        ("napcat:FriendMessage:42", {"tts_enabled": True}),
+    ]
+    assert "disabled" in _plain_text(disable_event.result)
+    assert "enabled" in _plain_text(enable_event.result)
+
+
 def test_bot_flag_enabled_defaults_missing_and_invalid_values():
     assert _flag_enabled({}, "session_enabled") is True
     assert _flag_enabled({"session_enabled": False}, "session_enabled") is False
@@ -1058,6 +1113,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
         "model": {"list", "set"},
         "variable": {"set", "unset"},
         "llm": {"disable", "enable", "status"},
+        "tts": {"disable", "enable", "status"},
         "flow": {"disable", "enable", "status", "unset"},
         "admin": {"grant", "list", "revoke"},
         "persona": {"list", "set", "show", "status", "unset"},
@@ -1071,12 +1127,16 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
     history_param = compile_command_schema(Main.conversation_history).params[0]
     list_param = compile_command_schema(Main.conversation_list).params[0]
     leave_param = compile_command_schema(Main.bot_leave).params[0]
+    name_params = compile_command_schema(Main.session_name).params
     assert history_param.option.names == ("--page", "-p")
     assert list_param.option.names == ("--page", "-p")
     assert history_param.default == 1
     assert list_param.default == 1
     assert leave_param.option.names == ("--confirm", "-c")
     assert leave_param.default is False
+    assert [param.name for param in name_params] == ["alias", "target", "clear"]
+    assert name_params[1].option.names == ("--target", "-t")
+    assert name_params[2].option.names == ("--clear", "-c")
 
 
 def test_non_public_builtin_commands_declare_the_planned_actions():
@@ -1098,6 +1158,15 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
 
     assert {
         "session_info": "session.read",
+        "session_watch": "session.watch",
+        "session_unwatch": "session.read",
+        "session_watches": "session.read",
+        "session_block": "session.block",
+        "session_unblock": "session.block",
+        "send_to_session": "session.send",
+        "tts_status": "session.manage",
+        "tts_enable": "session.manage",
+        "tts_disable": "session.manage",
         "bot_status": "session.read",
         "bot_enable": "session.manage",
         "bot_disable": "session.manage",
@@ -1139,6 +1208,14 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
 
     flow = engine.resolve("flow enable")
     assert flow.resolution.command_path == ("flow", "enable")
+
+    tts = engine.resolve("tts enable")
+    assert tts.resolution.command_path == ("tts", "enable")
+
+    named = engine.resolve("session name --clear")
+    assert named.resolution.command_path == ("session", "name")
+    named_entry = named.resolution.entries[0]
+    assert dict(engine.bind(named_entry, named).values)["clear"] is True
 
     bot_leave = engine.resolve("bot leave --confirm")
     assert bot_leave.resolution.command_path == ("bot", "leave")

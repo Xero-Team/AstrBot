@@ -25,10 +25,11 @@ Each rule binds to one UMO and may include several overlays:
 - Whether to process messages for this session. Off is equivalent to blacklisting the UMO.
 - Whether LLM is enabled. Off skips AI; commands may still run.
 - Whether TTS is enabled.
+- Whether all functionality is fully blocked (`session_blocked`). A fully blocked session only allows `/bot status` and `/session unblock`.
 - Forced persona. Outranks conversation choice and the profile default. See [Personas](./persona#which-persona-is-selected).
-- Display name (`custom_name`).
+- Display alias. This is the same `user_alias` written by `/session name`, not a separate `custom_name` field.
 
-`/bot enable`, `/bot disable`, `/llm enable`, and `/llm disable` write this same service rule. `/bot status` shows the session, LLM, and TTS switches. Those commands need `session.manage`. See [Built-in commands](./command).
+`/bot enable`, `/bot disable`, `/llm enable`, `/llm disable`, `/tts enable`, `/tts disable`, `/session block`, and `/session unblock` write this same service rule. `/bot status` shows the session, LLM, TTS, and full-block switches. Those commands need `session.manage` or `session.block`. See [Built-in commands](./command).
 
 ### Plugin rules (`session_plugin_config`)
 

@@ -1,8 +1,10 @@
 from astrbot.api import Subject, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.platform import MAX_WATCH_TTL_SECONDS, MIN_WATCH_TTL_SECONDS
+from astrbot.core.umo_alias import parse_umo
 
 from .reply import reply_i18n
+from .target import resolve_target_umo
 
 
 def _resolve_listener(token: str, current_umo: str) -> str:
@@ -37,6 +39,16 @@ def parse_unwatch_spec(spec: str, current_umo: str) -> tuple[str, str]:
     return _resolve_listener(parts[0], current_umo), parts[1]
 
 
+def parse_watches_spec(spec: str, current_umo: str) -> str:
+    """Parse `/session watches [listener|this]`."""
+    parts = spec.split()
+    if not parts:
+        return current_umo
+    if len(parts) > 1:
+        raise ValueError("Invalid watch arguments")
+    return _resolve_listener(parts[0], current_umo)
+
+
 def _authorization_subject_id(event: AstrMessageEvent) -> str:
     """Return the authorization subject id for Dashboard binding import."""
     attached = getattr(event, "subject", None)
@@ -59,9 +71,47 @@ class SessionCommands:
     def __init__(self, context: star.PluginContext) -> None:
         self.context = context
 
-    async def info(self, event: AstrMessageEvent) -> None:
-        """Show identifiers and metadata for the current session."""
-        umo = event.unified_msg_origin
+    async def _auto_name(self, event: AstrMessageEvent, umo: str) -> str:
+        if umo == event.unified_msg_origin:
+            return self.context.sessions.auto_name(event)
+        saved = await self.context.sessions.alias(umo)
+        return self.context.sessions.normalize_name(
+            saved.auto_name if saved else "",
+        )
+
+    async def info(self, event: AstrMessageEvent, target: str = "") -> None:
+        """Show identifiers and metadata for the current or selected session."""
+        umo = await resolve_target_umo(
+            self.context,
+            event,
+            target,
+            action="session.read_target",
+        )
+        if umo is None:
+            return
+        if umo != event.unified_msg_origin:
+            parsed = parse_umo(umo)
+            saved = await self.context.sessions.alias(umo)
+            empty = await self.context.i18n.t(event, "session.name.empty")
+            await reply_i18n(
+                self.context,
+                event,
+                "session.info.target",
+                umo=umo,
+                auto_name=self.context.sessions.normalize_name(
+                    saved.auto_name if saved else "",
+                )
+                or empty,
+                alias=self.context.sessions.normalize_name(
+                    saved.user_alias if saved else "",
+                )
+                or empty,
+                platform_id=parsed["platform"],
+                message_type=parsed["message_type"],
+                session_id=parsed["session_id"],
+            )
+            return
+
         group_id = event.get_group_id()
         unique_session = bool(
             self.context.config.get()["platform_settings"]["unique_session"]
@@ -86,12 +136,43 @@ class SessionCommands:
             group_note=group_note,
         )
 
-    async def name(self, event: AstrMessageEvent, alias: str) -> None:
-        """Show or set the display name for the current session."""
-        umo = event.unified_msg_origin
-        auto_name = self.context.sessions.auto_name(event)
+    async def name(
+        self,
+        event: AstrMessageEvent,
+        alias: str,
+        target: str = "",
+        *,
+        clear: bool = False,
+    ) -> None:
+        """Show, set, or clear the display name for a session."""
         alias = self.context.sessions.normalize_name(alias)
+        if clear and alias:
+            await reply_i18n(self.context, event, "session.name.usage")
+            return
+        umo = await resolve_target_umo(
+            self.context,
+            event,
+            target,
+            action="session.manage_target",
+        )
+        if umo is None:
+            return
+        auto_name = await self._auto_name(event, umo)
         empty = await self.context.i18n.t(event, "session.name.empty")
+        if clear:
+            await self.context.sessions.set_alias(
+                umo=umo,
+                creator_sender_id=str(event.get_sender_id() or ""),
+                auto_name=auto_name,
+                user_alias=None,
+            )
+            await reply_i18n(
+                self.context,
+                event,
+                "session.name.cleared",
+                umo=umo,
+            )
+            return
         if not alias:
             saved_alias = await self.context.sessions.alias(umo)
             user_alias = self.context.sessions.normalize_name(
@@ -181,10 +262,14 @@ class SessionCommands:
             "session.unwatch.ok" if removed else "session.unwatch.missing",
         )
 
-    async def watches(self, event: AstrMessageEvent) -> None:
-        """List this actor's active watches in the current session."""
+    async def watches(self, event: AstrMessageEvent, spec: str = "") -> None:
+        """List this actor's active watches for a listener session."""
         try:
-            items = await self.context.bridges.list(event)
+            source_umo = parse_watches_spec(spec, event.unified_msg_origin)
+            items = await self.context.bridges.list(event, source_umo=source_umo)
+        except ValueError:
+            await reply_i18n(self.context, event, "session.watches.usage")
+            return
         except PermissionError:
             await reply_i18n(self.context, event, "session.bridge.denied")
             return
@@ -192,8 +277,10 @@ class SessionCommands:
             self.context,
             event,
             "session.watches.body" if items else "session.watches.empty",
+            source=source_umo,
             watches="\n".join(
-                f"{item.target_umo} ({item.remaining_seconds}s)" for item in items
+                f"{item.source_umo} -> {item.target_umo} ({item.remaining_seconds}s)"
+                for item in items
             ),
         )
 

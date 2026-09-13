@@ -703,6 +703,14 @@
                     hide-details
                   />
                 </v-col>
+                <v-col cols="12">
+                  <v-checkbox
+                    v-model="serviceConfig.session_blocked"
+                    :label="tm('ruleEditor.serviceConfig.sessionBlocked')"
+                    color="error"
+                    hide-details
+                  />
+                </v-col>
                 <v-col cols="12" class="mt-2">
                   <v-text-field
                     v-model="serviceConfig.custom_name"
@@ -1123,6 +1131,7 @@ interface SessionServiceConfig {
   session_enabled?: boolean;
   llm_enabled?: boolean;
   tts_enabled?: boolean;
+  session_blocked?: boolean;
   custom_name?: string;
   persona_id?: string | null;
   [key: string]: unknown;
@@ -1230,7 +1239,7 @@ const serviceConfig = reactive<
   Required<
     Pick<
       SessionServiceConfig,
-      'session_enabled' | 'llm_enabled' | 'tts_enabled'
+      'session_enabled' | 'llm_enabled' | 'tts_enabled' | 'session_blocked'
     >
   > & {
     custom_name: string;
@@ -1240,6 +1249,7 @@ const serviceConfig = reactive<
   session_enabled: true,
   llm_enabled: true,
   tts_enabled: true,
+  session_blocked: false,
   custom_name: '',
   persona_id: null,
 });
@@ -1584,6 +1594,7 @@ function normalizeSessionServiceConfig(raw: unknown): SessionServiceConfig {
     session_enabled: normalizeBoolean(source.session_enabled, true),
     llm_enabled: normalizeBoolean(source.llm_enabled, true),
     tts_enabled: normalizeBoolean(source.tts_enabled, true),
+    session_blocked: normalizeBoolean(source.session_blocked, false),
     custom_name: normalizeString(source.custom_name) || undefined,
     persona_id: normalizeString(source.persona_id) || null,
   };
@@ -1855,6 +1866,17 @@ function buildBatchTargetPayload(
   return payload;
 }
 
+function sessionAliasName(
+  item: UmoDisplayInfo | SessionRuleItem | null | undefined,
+): string {
+  if (!item) {
+    return '';
+  }
+  return (
+    item.user_alias || item.rules?.session_service_config?.custom_name || ''
+  );
+}
+
 function getUmoDisplayText(value: unknown): string {
   const item =
     typeof value === 'string'
@@ -1865,8 +1887,7 @@ function getUmoDisplayText(value: unknown): string {
   }
 
   const umo = item.umo || normalizeUmoValue(value);
-  const aliasName =
-    item.user_alias || item.rules?.session_service_config?.custom_name || '';
+  const aliasName = sessionAliasName(item);
   const autoName = item.auto_name || '';
 
   let displayName = '';
@@ -1893,8 +1914,7 @@ function getUmoSelectionText(value: unknown): string {
   }
 
   const umo = item.umo || normalizeUmoValue(value);
-  const aliasName =
-    item.user_alias || item.rules?.session_service_config?.custom_name || '';
+  const aliasName = sessionAliasName(item);
   const autoName = item.auto_name || '';
 
   if (aliasName && autoName && aliasName !== autoName) {
@@ -2058,7 +2078,8 @@ function openRuleEditor(item: SessionRuleItem) {
   serviceConfig.session_enabled = svcConfig.session_enabled !== false;
   serviceConfig.llm_enabled = svcConfig.llm_enabled !== false;
   serviceConfig.tts_enabled = svcConfig.tts_enabled !== false;
-  serviceConfig.custom_name = svcConfig.custom_name || '';
+  serviceConfig.session_blocked = svcConfig.session_blocked === true;
+  serviceConfig.custom_name = sessionAliasName(item);
   serviceConfig.persona_id = svcConfig.persona_id || null;
 
   providerConfig.chat_completion =
@@ -2097,10 +2118,9 @@ async function saveServiceConfig() {
       session_enabled: serviceConfig.session_enabled,
       llm_enabled: serviceConfig.llm_enabled,
       tts_enabled: serviceConfig.tts_enabled,
+      session_blocked: serviceConfig.session_blocked,
+      custom_name: serviceConfig.custom_name,
     };
-    if (serviceConfig.custom_name) {
-      config.custom_name = serviceConfig.custom_name;
-    }
     if (serviceConfig.persona_id !== null) {
       config.persona_id = serviceConfig.persona_id;
     }
@@ -2116,9 +2136,12 @@ async function saveServiceConfig() {
       return;
     }
 
-    editingRules.value.session_service_config = config;
+    const stored = { ...config };
+    delete stored.custom_name;
+    editingRules.value.session_service_config = stored;
     const item = ensureRuleItem(selectedUmo.value.umo);
-    item.rules = { ...item.rules, session_service_config: config };
+    item.user_alias = serviceConfig.custom_name;
+    item.rules = { ...item.rules, session_service_config: stored };
     showSuccess(tm('messages.saveSuccess'));
   } catch {
     showError(tm('messages.saveError'));
@@ -2386,8 +2409,7 @@ function showError(message: string) {
 
 function openQuickEditName(item: SessionRuleItem) {
   quickEditNameTarget.value = item;
-  quickEditNameValue.value =
-    item.rules?.session_service_config?.custom_name || '';
+  quickEditNameValue.value = sessionAliasName(item);
   quickEditNameDialog.value = true;
 }
 
@@ -2405,13 +2427,9 @@ async function saveQuickEditName() {
       session_enabled: existingConfig.session_enabled !== false,
       llm_enabled: existingConfig.llm_enabled !== false,
       tts_enabled: existingConfig.tts_enabled !== false,
+      session_blocked: existingConfig.session_blocked === true,
+      custom_name: quickEditNameValue.value,
     };
-
-    if (quickEditNameValue.value) {
-      config.custom_name = quickEditNameValue.value;
-    } else {
-      delete config.custom_name;
-    }
 
     const response = await sessionApi.upsertRule({
       umo: quickEditNameTarget.value.umo,
@@ -2424,8 +2442,11 @@ async function saveQuickEditName() {
       return;
     }
 
+    const stored = { ...config };
+    delete stored.custom_name;
     const item = ensureRuleItem(quickEditNameTarget.value.umo);
-    item.rules.session_service_config = config;
+    item.user_alias = quickEditNameValue.value;
+    item.rules.session_service_config = stored;
     quickEditNameDialog.value = false;
     quickEditNameTarget.value = null;
     quickEditNameValue.value = '';

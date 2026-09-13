@@ -119,8 +119,16 @@ jobs:
         run: |
           docker compose -f compose.yml config --quiet
           docker compose -f compose-with-napcat.yml config --quiet
-          docker compose --dry-run -f compose.yml build astrbot
-          docker build --check --file Dockerfile .
+          for attempt in 1 2 3; do
+            if docker compose --dry-run -f compose.yml build astrbot && \
+              docker build --check --file Dockerfile .; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+          exit 1
 
   powershell:
     name: PowerShell (PSScriptAnalyzer)

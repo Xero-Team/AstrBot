@@ -134,6 +134,20 @@ class Main(star.Star):
         """List active cross-session watches."""
         await self.session_c.watches(event, spec)
 
+    @filter.permission("session.watch")
+    @session.command("connect")
+    async def session_connect(
+        self, event: AstrMessageEvent, target: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Link the current session to another session without expiry."""
+        await self.session_c.connect(event, target)
+
+    @filter.permission("session.read")
+    @session.command("disconnect")
+    async def session_disconnect(self, event: AstrMessageEvent) -> None:
+        """Drop the unbounded session link for the current session."""
+        await self.session_c.disconnect(event)
+
     @filter.permission("session.block")
     @session.command("block")
     async def session_block(
@@ -155,11 +169,10 @@ class Main(star.Star):
     async def send_to_session(
         self,
         event: AstrMessageEvent,
-        target_umo: str,
-        content: GreedyStr = GreedyStr(""),
+        spec: GreedyStr = GreedyStr(""),
     ) -> None:
-        """Send text and attachments through the target session's bot account."""
-        await self.session_c.send(event, target_umo, content)
+        """Send text and attachments through a target or the connected session."""
+        await self.session_c.send(event, spec)
 
     @filter.command_group("conversation")
     def conversation(self) -> None:

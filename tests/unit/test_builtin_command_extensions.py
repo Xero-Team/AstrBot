@@ -261,6 +261,8 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "session_watch",
         "session_unwatch",
         "session_watches",
+        "session_connect",
+        "session_disconnect",
         "session_block",
         "session_unblock",
         "send_to_session",
@@ -1097,6 +1099,8 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
             "watch",
             "unwatch",
             "watches",
+            "connect",
+            "disconnect",
         },
         "conversation": {
             "create",
@@ -1161,6 +1165,8 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
         "session_watch": "session.watch",
         "session_unwatch": "session.read",
         "session_watches": "session.read",
+        "session_connect": "session.watch",
+        "session_disconnect": "session.read",
         "session_block": "session.block",
         "session_unblock": "session.block",
         "send_to_session": "session.send",
@@ -1224,6 +1230,18 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
         "target": "qq:GroupMessage:2000",
         "clear": False,
     }
+
+    connected = engine.resolve("session connect target:GroupMessage:room")
+    assert connected.resolution.command_path == ("session", "connect")
+    connected_entry = connected.resolution.entries[0]
+    assert dict(engine.bind(connected_entry, connected).values) == {
+        "target": "target:GroupMessage:room"
+    }
+
+    linked_send = engine.resolve("send hello")
+    assert linked_send.resolution.command_path == ("send",)
+    send_entry = linked_send.resolution.entries[0]
+    assert dict(engine.bind(send_entry, linked_send).values) == {"spec": "hello"}
 
     bot_leave = engine.resolve("bot leave --confirm")
     assert bot_leave.resolution.command_path == ("bot", "leave")

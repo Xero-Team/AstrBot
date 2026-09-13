@@ -233,12 +233,16 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
 
 
 def envelope_from_send_event(
-    event: AstrMessageEvent, target_umo: str
+    event: AstrMessageEvent,
+    target_umo: str,
+    *,
+    target_in_header: bool = True,
 ) -> MessageEnvelope:
     """Remove only the command header, preserving the body and attachment order.
 
-    Command text may span multiple Plain components. The bound target must match
-    the header; a mismatch fails closed rather than forwarding command text.
+    Command text may span multiple Plain components. When the bound target is in
+    the header it must match; a mismatch fails closed rather than forwarding
+    command text. Linked `/send` without a UMO strips only the command token.
     """
     envelope = envelope_from_event(event)
     text = "".join(
@@ -246,9 +250,14 @@ def envelope_from_send_event(
         for part in envelope.content
         if isinstance(part, PortablePart) and part.kind == ContentKind.TEXT
     )
-    match = re.match(r"""^\s*\S+\s+("[^"]+"|'[^']+'|\S+)[ \t]*""", text)
-    if match is None or match.group(1).strip("\"'") != target_umo:
-        raise ValueError("Cannot locate the send command header")
+    if target_in_header:
+        match = re.match(r"""^\s*\S+\s+("[^"]+"|'[^']+'|\S+)[ \t]*""", text)
+        if match is None or match.group(1).strip("\"'") != target_umo:
+            raise ValueError("Cannot locate the send command header")
+    else:
+        match = re.match(r"""^\s*\S+[ \t]*""", text)
+        if match is None:
+            raise ValueError("Cannot locate the send command header")
     remaining = match.end()
     content: list[PortablePart | NativeContent] = []
     for part in envelope.content:

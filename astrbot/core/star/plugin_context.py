@@ -202,9 +202,29 @@ class SessionBridgeCapability:
         """List active watches owned by the event's trusted actor."""
         return await self._manager.list_watches(event, source_umo=source_umo)
 
-    async def send(self, event: AstrMessageEvent, target_umo: str) -> DeliveryReceipt:
+    async def connect(self, event: AstrMessageEvent, target_umo: str) -> SessionWatch:
+        """Authorize and create an unbounded link from the current session."""
+        return await self._manager.connect(event, target_umo)
+
+    async def disconnect(self, event: AstrMessageEvent) -> bool:
+        """Remove the unbounded link owned by the event's trusted actor."""
+        return await self._manager.disconnect(event)
+
+    async def connection(self, event: AstrMessageEvent) -> SessionWatch | None:
+        """Return the unbounded link for the current actor in this session."""
+        return await self._manager.connection(event)
+
+    async def send(
+        self,
+        event: AstrMessageEvent,
+        target_umo: str,
+        *,
+        target_in_header: bool = True,
+    ) -> DeliveryReceipt:
         """Authorize and send the command body, attachments, and quote."""
-        return await self._manager.send(event, target_umo)
+        return await self._manager.send(
+            event, target_umo, target_in_header=target_in_header
+        )
 
 
 class ModelCapability:

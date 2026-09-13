@@ -40,15 +40,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class SessionWatch:
-    """One expiring watch owned by a trusted authorization subject."""
+    """One watch or unbounded link owned by a trusted authorization subject."""
 
     source_umo: str
     target_umo: str
     subject_id: str
-    expires_at: float
+    expires_at: float | None
 
     @property
     def remaining_seconds(self) -> int:
+        if self.expires_at is None:
+            return 0
         return max(0, int(self.expires_at - monotonic()))
 
 
@@ -91,6 +93,7 @@ class SessionBridgeManager:
         )
         self._max_watches_per_subject = max(1, max_watches_per_subject)
         self._watches: dict[tuple[str, str, str], _WatchGrant] = {}
+        self._links: dict[tuple[str, str], _WatchGrant] = {}
         self._expiry_tasks: dict[tuple[str, str, str], asyncio.Task] = {}
         self._forwarded: OrderedDict[tuple[str, str, str], None] = OrderedDict()
         self._message_ids: OrderedDict[tuple[str, str, str], str] = OrderedDict()
@@ -208,7 +211,56 @@ class SessionBridgeManager:
         await self._notify_expired_watches(expired)
         return items
 
-    async def send(self, event: AstrMessageEvent, target_umo: str) -> DeliveryReceipt:
+    async def connect(
+        self,
+        event: AstrMessageEvent,
+        target_umo: str,
+    ) -> SessionWatch:
+        """Create an unbounded 1:1 link from the current session to the target."""
+        listener = event.unified_msg_origin.strip()
+        target = target_umo.strip()
+        if listener == target:
+            raise ValueError("Source and target sessions must differ")
+        subject, context = self._actor(event)
+        await self._authorize(subject, context, listener, "session.watch")
+        await self._authorize(subject, context, target, "session.watch")
+        if not self._get_capabilities(target).available:
+            raise ValueError("Target adapter is unavailable")
+        if not self._get_capabilities(listener).proactive:
+            raise ValueError("Source adapter cannot receive forwarded messages")
+        key = (subject.id, listener)
+        async with self._lock:
+            owned_count = sum(item[0] == subject.id for item in self._links)
+            if key not in self._links and owned_count >= self._max_watches_per_subject:
+                raise ValueError("Watch limit exceeded")
+            if key not in self._links and len(self._links) >= 1024:
+                raise ValueError("Runtime watch limit exceeded")
+            watch = SessionWatch(listener, target, subject.id, None)
+            self._links[key] = _WatchGrant(watch, subject, context)
+        return watch
+
+    async def disconnect(self, event: AstrMessageEvent) -> bool:
+        """Remove the unbounded link owned by the current actor in this session."""
+        subject, _ = self._actor(event)
+        key = (subject.id, event.unified_msg_origin.strip())
+        async with self._lock:
+            return self._links.pop(key, None) is not None
+
+    async def connection(self, event: AstrMessageEvent) -> SessionWatch | None:
+        """Return the unbounded link for the current actor in this session."""
+        subject, _ = self._actor(event)
+        key = (subject.id, event.unified_msg_origin.strip())
+        async with self._lock:
+            grant = self._links.get(key)
+        return grant.watch if grant is not None else None
+
+    async def send(
+        self,
+        event: AstrMessageEvent,
+        target_umo: str,
+        *,
+        target_in_header: bool = True,
+    ) -> DeliveryReceipt:
         """Send the command's ordered rich content under target authorization."""
         subject, context = self._actor(event)
         await self._authorize(
@@ -217,7 +269,9 @@ class SessionBridgeManager:
         await self._authorize(subject, context, target_umo, "session.send")
         if not self._get_capabilities(target_umo).proactive:
             raise ValueError("Target adapter does not support proactive delivery")
-        envelope = envelope_from_send_event(event, target_umo)
+        envelope = envelope_from_send_event(
+            event, target_umo, target_in_header=target_in_header
+        )
         if not envelope.content:
             raise ValueError("A message or attachment is required")
 
@@ -234,10 +288,24 @@ class SessionBridgeManager:
             locale=await self._locale_for(target_umo),
         )
 
+    def _store_for(self, watch: SessionWatch) -> dict:
+        return self._links if watch.expires_at is None else self._watches
+
+    def _store_key(self, watch: SessionWatch) -> tuple[str, ...]:
+        if watch.expires_at is None:
+            return (watch.subject_id, watch.source_umo)
+        return (watch.subject_id, watch.source_umo, watch.target_umo)
+
+    def _grant_active(self, key: tuple, grant: _WatchGrant, now: float) -> bool:
+        watch = grant.watch
+        if self._store_for(watch).get(key) is not grant:
+            return False
+        return watch.expires_at is None or watch.expires_at > now
+
     async def _check_watch(self, grant: _WatchGrant) -> None:
         watch = grant.watch
-        key = (watch.subject_id, watch.source_umo, watch.target_umo)
-        if self._watches.get(key) is not grant or watch.expires_at <= monotonic():
+        key = self._store_key(watch)
+        if not self._grant_active(key, grant, monotonic()):
             raise PermissionError("Watch is no longer active")
         await self._authorize(
             grant.subject, grant.context, watch.source_umo, "session.watch"
@@ -257,6 +325,10 @@ class SessionBridgeManager:
                 (key, grant)
                 for key, grant in self._watches.items()
                 if grant.watch.target_umo == origin
+            ) + tuple(
+                (key, grant)
+                for key, grant in self._links.items()
+                if grant.watch.target_umo == origin
             )
         await self._notify_expired_watches(expired)
         for key, grant in watches:
@@ -269,10 +341,7 @@ class SessionBridgeManager:
                     grant.subject, grant.context, watch.target_umo, "session.watch"
                 )
                 async with self._lock:
-                    if (
-                        self._watches.get(key) is not grant
-                        or watch.expires_at <= monotonic()
-                    ):
+                    if not self._grant_active(key, grant, monotonic()):
                         continue
                     dedup = (watch.source_umo, origin, envelope.source_message_id or "")
                     if envelope.source_message_id:
@@ -308,8 +377,9 @@ class SessionBridgeManager:
                     )
             except PermissionError:
                 async with self._lock:
-                    if self._watches.get(key) is grant:
-                        self._watches.pop(key)
+                    store = self._store_for(grant.watch)
+                    if store.get(key) is grant:
+                        store.pop(key)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -486,7 +556,7 @@ class SessionBridgeManager:
     def _purge(self, now: float) -> tuple[_WatchGrant, ...]:
         expired: list[_WatchGrant] = []
         for key, grant in tuple(self._watches.items()):
-            if grant.watch.expires_at <= now:
+            if grant.watch.expires_at is not None and grant.watch.expires_at <= now:
                 self._watches.pop(key)
                 expired.append(grant)
         return tuple(expired)
@@ -518,7 +588,10 @@ class SessionBridgeManager:
     async def _expire_watch(
         self, key: tuple[str, str, str], grant: _WatchGrant
     ) -> None:
-        delay = max(0.0, grant.watch.expires_at - monotonic())
+        expires_at = grant.watch.expires_at
+        if expires_at is None:
+            return
+        delay = max(0.0, expires_at - monotonic())
         await asyncio.sleep(delay)
         async with self._lock:
             if self._watches.get(key) is not grant:
@@ -549,6 +622,7 @@ class SessionBridgeManager:
             tasks = list(self._expiry_tasks.values())
             self._expiry_tasks.clear()
             self._watches.clear()
+            self._links.clear()
             self._forwarded.clear()
             self._message_ids.clear()
         for task in tasks:

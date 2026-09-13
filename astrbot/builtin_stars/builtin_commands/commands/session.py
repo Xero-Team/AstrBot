@@ -1,6 +1,10 @@
 from astrbot.api import Subject, star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.platform import MAX_WATCH_TTL_SECONDS, MIN_WATCH_TTL_SECONDS
+from astrbot.api.platform import (
+    MAX_WATCH_TTL_SECONDS,
+    MIN_WATCH_TTL_SECONDS,
+    MessageSession,
+)
 
 from .reply import reply_i18n
 from .target import resolve_target_umo
@@ -26,6 +30,14 @@ def parse_watch_spec(spec: str, current_umo: str) -> tuple[str, str, int | None]
     if not parts[2].isdigit():
         raise ValueError("Invalid watch arguments")
     return _resolve_listener(parts[0], current_umo), parts[1], int(parts[2])
+
+
+def _is_umo(token: str) -> bool:
+    try:
+        MessageSession.from_str(token)
+    except ValueError, KeyError:
+        return False
+    return bool(token)
 
 
 def parse_unwatch_spec(spec: str, current_umo: str) -> tuple[str, str]:
@@ -283,12 +295,74 @@ class SessionCommands:
             ),
         )
 
-    async def send(
-        self, event: AstrMessageEvent, target_umo: str, content: str
-    ) -> None:
-        """Send the event's rich body; parsed text alone loses attachment order."""
+    async def connect(self, event: AstrMessageEvent, target: str) -> None:
+        """Connect the current session to a target, or show the current link."""
+        target = target.strip()
+        if not target:
+            try:
+                item = await self.context.bridges.connection(event)
+            except PermissionError:
+                await reply_i18n(self.context, event, "session.bridge.denied")
+                return
+            if item is None:
+                await reply_i18n(self.context, event, "session.connect.usage")
+                return
+            await reply_i18n(
+                self.context,
+                event,
+                "session.connect.status",
+                umo=item.target_umo,
+            )
+            return
+        if len(target.split()) != 1:
+            await reply_i18n(self.context, event, "session.connect.usage")
+            return
         try:
-            result = await self.context.bridges.send(event, target_umo.strip())
+            item = await self.context.bridges.connect(event, target)
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        except ValueError, LookupError:
+            await reply_i18n(self.context, event, "session.connect.failed")
+            return
+        await reply_i18n(
+            self.context,
+            event,
+            "session.connect.ok",
+            umo=item.target_umo,
+        )
+
+    async def disconnect(self, event: AstrMessageEvent) -> None:
+        """Drop the unbounded link owned by the current actor."""
+        try:
+            removed = await self.context.bridges.disconnect(event)
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        await reply_i18n(
+            self.context,
+            event,
+            "session.disconnect.ok" if removed else "session.disconnect.missing",
+        )
+
+    async def send(self, event: AstrMessageEvent, spec: str) -> None:
+        """Send the event's rich body; parsed text alone loses attachment order."""
+        spec = spec.strip()
+        dest = ""
+        target_in_header = False
+        if spec and _is_umo(spec.split()[0]):
+            dest = spec.split()[0]
+            target_in_header = True
+        try:
+            if not dest:
+                item = await self.context.bridges.connection(event)
+                if item is None:
+                    await reply_i18n(self.context, event, "session.send.invalid")
+                    return
+                dest = item.target_umo
+            result = await self.context.bridges.send(
+                event, dest, target_in_header=target_in_header
+            )
         except PermissionError:
             await reply_i18n(self.context, event, "session.bridge.denied")
             return

@@ -1043,8 +1043,116 @@ async def test_terminate_clears_watches_and_message_maps():
     assert manager._message_ids
     await manager.terminate()
     assert manager._watches == {}
+    assert manager._links == {}
     assert manager._forwarded == {}
     assert manager._message_ids == {}
+
+
+def test_is_umo_accepts_session_strings():
+    from astrbot.builtin_stars.builtin_commands.commands.session import _is_umo
+
+    assert _is_umo("target:GroupMessage:room")
+    assert not _is_umo("hello")
+    assert not _is_umo("")
+
+
+def test_send_projection_strips_command_only_when_target_not_in_header():
+    from astrbot.core.message.components import Plain
+    from astrbot.core.platform.message_projection import envelope_from_send_event
+
+    event = _event(components=[Plain("/send hello there")])
+    envelope = envelope_from_send_event(
+        event, "target:GroupMessage:room", target_in_header=False
+    )
+    assert [
+        part.value for part in envelope.content if part.kind == ContentKind.TEXT
+    ] == ["hello there"]
+    with pytest.raises(ValueError):
+        envelope_from_send_event(event, "target:GroupMessage:room")
+
+
+@pytest.mark.asyncio
+async def test_connect_forwards_without_expiry_and_send_uses_link():
+    from astrbot.core.message.components import Plain
+    from astrbot.core.star.plugin_context import SessionBridgeCapability
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append((str(session), chain.get_plain_text()))
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, authorization, _ = _manager(send)
+    event = _event()
+    target = "target:GroupMessage:room"
+    capability = SessionBridgeCapability(manager)
+    link = await capability.connect(event, target)
+    assert link.expires_at is None
+    assert await capability.connection(event) == link
+    assert [call.args[2].umo for call in authorization.authorize.await_args_list] == [
+        event.unified_msg_origin,
+        target,
+    ]
+    await manager.observe(
+        MessageEnvelope(
+            PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
+            source_message_id="9",
+            sender=SenderSnapshot("1", "Alice", "napcat"),
+            content=(PortablePart(ContentKind.TEXT, "hello"),),
+        )
+    )
+    assert sent[-1][0] == event.unified_msg_origin
+    assert "hello" in sent[-1][1]
+
+    send_event = _event(components=[Plain("/send ping")])
+    receipt = await capability.send(send_event, target, target_in_header=False)
+    assert receipt.status == "accepted"
+    assert await capability.disconnect(event)
+    assert await capability.connection(event) is None
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_session_commands_connect_and_linked_send():
+    from astrbot.builtin_stars.builtin_commands.commands.session import SessionCommands
+
+    replies: list[str] = []
+    link = SimpleNamespace(target_umo="target:GroupMessage:room", expires_at=None)
+
+    async def translate(_event, key, **_kwargs):
+        replies.append(key)
+        return key
+
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(
+            connect=AsyncMock(return_value=link),
+            connection=AsyncMock(return_value=link),
+            disconnect=AsyncMock(return_value=True),
+            send=AsyncMock(return_value=SimpleNamespace(status="accepted")),
+        ),
+        i18n=SimpleNamespace(t=translate),
+    )
+    event = _event()
+    event.set_result = lambda _result: None
+    commands = SessionCommands(context)
+    await commands.connect(event, "")
+    await commands.connect(event, "target:GroupMessage:room")
+    await commands.disconnect(event)
+    await commands.send(event, "")
+    await commands.send(event, "target:GroupMessage:room hello")
+    assert replies == [
+        "session.connect.status",
+        "session.connect.ok",
+        "session.disconnect.ok",
+        "session.send.accepted",
+        "session.send.accepted",
+    ]
+    context.bridges.send.assert_any_await(
+        event, "target:GroupMessage:room", target_in_header=False
+    )
+    context.bridges.send.assert_any_await(
+        event, "target:GroupMessage:room", target_in_header=True
+    )
 
 
 @pytest.mark.asyncio
@@ -1061,6 +1169,9 @@ async def test_session_commands_report_denied_without_actor():
         bridges=SimpleNamespace(
             unwatch=AsyncMock(side_effect=PermissionError("denied")),
             list=AsyncMock(side_effect=PermissionError("denied")),
+            connect=AsyncMock(side_effect=PermissionError("denied")),
+            disconnect=AsyncMock(side_effect=PermissionError("denied")),
+            connection=AsyncMock(side_effect=PermissionError("denied")),
         ),
         i18n=SimpleNamespace(t=translate),
     )
@@ -1069,4 +1180,11 @@ async def test_session_commands_report_denied_without_actor():
     commands = SessionCommands(context)
     await commands.unwatch(event, "target:GroupMessage:room")
     await commands.watches(event)
-    assert replies == ["session.bridge.denied", "session.bridge.denied"]
+    await commands.connect(event, "target:GroupMessage:room")
+    await commands.disconnect(event)
+    assert replies == [
+        "session.bridge.denied",
+        "session.bridge.denied",
+        "session.bridge.denied",
+        "session.bridge.denied",
+    ]

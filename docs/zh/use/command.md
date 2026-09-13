@@ -57,9 +57,10 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### 会话信息
 
-- `/session info`：显示 UMO、用户 ID、授权主体（`im:{platform}:{bot}:{sender}`）、平台 ID、消息类型和会话 ID。
-- `/session name`：显示当前自动名称和已保存别名，需要 `session.manage`。
-- `/session name <名称>`：设置当前 UMO 的展示别名，需要 `session.manage`。名称由 `GreedyStr` 接收，可以包含空格。
+- `/session info [this|UMO]`：显示 UMO、用户 ID、授权主体（`im:{platform}:{bot}:{sender}`）、平台 ID、消息类型和会话 ID。省略参数或使用 `this` 表示当前会话；指定 UMO 时需要 `instance_operator` 及以上权限，并显示目标会话的自动名称和别名。
+- `/session name [--target UMO]`：显示自动名称和已保存别名，需要 `session.manage`。指定 `--target` 时需要 `instance_operator` 及以上权限。
+- `/session name [--target UMO] <名称>`：设置展示别名，需要 `session.manage`。名称由 `GreedyStr` 接收，可以包含空格。
+- `/session name [--target UMO] --clear`：清除展示别名。
 
 唤醒阶段在 `is_wake` 确定后会把自动名写入存储；手动别名优先，自动 upsert 不覆盖 `user_alias`。
 
@@ -68,7 +69,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 ### 跨会话监听与发送
 
 - `/session watch [监听会话|this] <被监听会话> [秒数]`：把被监听会话后续收到的消息转发到监听会话，需要 `session.watch`。监听会话可省略或写 `this`，表示当前会话。时长 60–864000 秒（最多 10 天），默认 43200 秒（12 小时）。到期后会在监听会话发送结束通知。
-- `/session watches`：查看你在当前会话作为监听会话创建的监听和剩余时间。
+- `/session watches [监听会话|this]`：查看你创建的监听和剩余时间。省略参数或写 `this` 表示当前会话作为监听端。
 - `/session unwatch [监听会话|this] <被监听会话>`：停止你创建的指定监听。监听会话可省略或写 `this`。
 - `/send <UMO> [内容]`：借助目标平台的 Bot 账号发送文字和同一条消息中的附件，需要 `session.send`。可以只附图片而不填写正文；不会占用 `reply` 指令。
 
@@ -125,6 +126,14 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 - `/llm disable`：停用当前会话的 LLM 聊天。
 
 这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。
+
+### TTS 状态
+
+- `/tts status`：显示当前会话是否启用 TTS。
+- `/tts enable`：启用当前会话的 TTS。
+- `/tts disable`：停用当前会话的 TTS。
+
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/bot status` 可以同时查看会话、LLM 和 TTS 开关。
 
 ### 会话流式输出
 

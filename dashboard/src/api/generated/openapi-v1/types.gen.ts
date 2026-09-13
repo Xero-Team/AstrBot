@@ -842,6 +842,7 @@ export type BatchSessionServiceRequest = UmoListRequest & {
   session_enabled?: boolean;
   llm_enabled?: boolean;
   tts_enabled?: boolean;
+  session_blocked?: boolean;
 };
 
 export type SessionGroupRequest = {

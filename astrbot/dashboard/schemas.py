@@ -834,6 +834,7 @@ class BatchSessionServiceRequest(UmoListRequest):
     session_enabled: bool | None = None
     llm_enabled: bool | None = None
     tts_enabled: bool | None = None
+    session_blocked: bool | None = None
 
 
 class SessionGroupRequest(OpenModel):

@@ -190,14 +190,20 @@ class SessionBridgeManager:
             task.cancel()
         return removed
 
-    async def list_watches(self, event: AstrMessageEvent) -> tuple[SessionWatch, ...]:
+    async def list_watches(
+        self,
+        event: AstrMessageEvent,
+        *,
+        source_umo: str | None = None,
+    ) -> tuple[SessionWatch, ...]:
         subject, _ = self._actor(event)
+        listener = (source_umo or event.unified_msg_origin).strip()
         async with self._lock:
             expired = self._purge(monotonic())
             items = tuple(
                 grant.watch
                 for key, grant in self._watches.items()
-                if key[:2] == (subject.id, event.unified_msg_origin)
+                if key[:2] == (subject.id, listener)
             )
         await self._notify_expired_watches(expired)
         return items

@@ -25,10 +25,11 @@ UMO 唯一指定某个平台下的一个会话。用 `/session info` 查看。�
 - 是否处理该会话的消息。关掉约等于把这个 UMO 拉黑。
 - 是否对该会话启用 LLM。关掉后不走 AI，指令仍可能执行。
 - 是否对该会话启用 TTS。
+- 是否完全禁用该会话的所有功能（`session_blocked`）。完全禁用后只放行 `/bot status` 和 `/session unblock`。
 - 强制人格。优先级高于对话选择和配置文件默认人格，见 [Persona](./persona#哪个-persona-会生效)。
-- 展示名（`custom_name`）。
+- 展示别名。与 `/session name` 写入同一份 `user_alias`，不是单独的 `custom_name` 字段。
 
-聊天里的 `/bot enable`、`/bot disable`、`/llm enable`、`/llm disable` 写的就是这一套服务规则。`/bot status` 可以查看当前会话的整体开关、LLM 和 TTS。这些指令需要 `session.manage`，见 [内置指令](./command)。
+聊天里的 `/bot enable`、`/bot disable`、`/llm enable`、`/llm disable`、`/tts enable`、`/tts disable`、`/session block`、`/session unblock` 写的就是这一套服务规则。`/bot status` 可以查看当前会话的整体开关、LLM、TTS 和完全禁用状态。这些指令需要 `session.manage` 或 `session.block`，见 [内置指令](./command)。
 
 ### 插件规则（`session_plugin_config`）
 

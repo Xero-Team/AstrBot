@@ -362,6 +362,60 @@ async def test_session_rule_validation_and_provider_override_lifecycle(session_s
 
 
 @pytest.mark.asyncio
+async def test_service_config_custom_name_writes_umo_alias(
+    session_service,
+    temp_db,
+):
+    service, preferences, _providers = session_service
+    umo = "qq:FriendMessage:alice"
+
+    await service.update_session_rule(
+        {
+            "umo": umo,
+            "rule_key": "session_service_config",
+            "rule_value": {
+                "session_enabled": True,
+                "custom_name": "Alice Desk",
+            },
+        }
+    )
+    alias = await temp_db.get_umo_alias(umo)
+    assert alias is not None
+    assert alias.user_alias == "Alice Desk"
+    assert preferences.session_values[(umo, "session_service_config")] == {
+        "session_enabled": True,
+    }
+
+    await service.update_session_rule(
+        {
+            "umo": umo,
+            "rule_key": "session_service_config",
+            "rule_value": {
+                "session_enabled": True,
+                "custom_name": "",
+            },
+        }
+    )
+    cleared = await temp_db.get_umo_alias(umo)
+    assert cleared is not None
+    assert cleared.user_alias is None
+
+    await service.update_session_rule(
+        {
+            "umo": umo,
+            "rule_key": "session_service_config",
+            "rule_value": {"session_enabled": False},
+        }
+    )
+    assert preferences.session_values[(umo, "session_service_config")] == {
+        "session_enabled": False,
+    }
+    unchanged = await temp_db.get_umo_alias(umo)
+    assert unchanged is not None
+    assert unchanged.user_alias is None
+
+
+@pytest.mark.asyncio
 async def test_batch_updates_validate_input_and_report_partial_failures(
     session_service,
     caplog: pytest.LogCaptureFixture,
@@ -394,6 +448,7 @@ async def test_batch_updates_validate_input_and_report_partial_failures(
             "umos": [good_umo, bad_umo],
             "session_enabled": False,
             "llm_enabled": True,
+            "session_blocked": True,
         }
     )
     provider_result = await service.batch_update_provider(
@@ -410,6 +465,7 @@ async def test_batch_updates_validate_input_and_report_partial_failures(
     assert preferences.session_values[(good_umo, "session_service_config")] == {
         "session_enabled": False,
         "llm_enabled": True,
+        "session_blocked": True,
     }
     assert provider_result["success_count"] == 1
     assert provider_result["failed_count"] == 1

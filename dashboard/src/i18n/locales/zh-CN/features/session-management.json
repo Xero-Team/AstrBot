@@ -61,6 +61,7 @@
       "sessionEnabled": "启用该消息会话来源的消息处理",
       "llmEnabled": "启用 LLM",
       "ttsEnabled": "启用 TTS",
+      "sessionBlocked": "完全禁用该会话的所有功能",
       "customName": "消息会话来源备注名称"
     },
     "providerConfig": {

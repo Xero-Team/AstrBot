@@ -292,6 +292,21 @@ def _resource(payload) -> Resource:
             if payload.resource_id == "collection":
                 return Resource.named("filesystem", "collection")
             return object_resource("filesystem", payload.resource_id)
+        if payload.resource_type in {"provider", "provider-source"}:
+            # Provider routes hash caller-supplied ids before authorization so
+            # aggregator model names never become resource keys. Keep step-up
+            # issuance on the same canonical resource as provider mutations.
+            if payload.resource_id in {"schema", "collection"}:
+                return Resource.named(
+                    payload.resource_type,
+                    payload.resource_id,
+                    config_id=payload.config_id,
+                )
+            return object_resource(
+                payload.resource_type,
+                payload.resource_id,
+                config_id=payload.config_id,
+            )
         return Resource.named(
             payload.resource_type, payload.resource_id, config_id=payload.config_id
         )

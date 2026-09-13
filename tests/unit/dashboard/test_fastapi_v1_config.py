@@ -257,6 +257,30 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
 
 
 @pytest.mark.asyncio
+async def test_v1_create_source_provider_accepts_unicode_model_ids(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    provider_id = "openai-source/gcli-假流式/gemini-2.5-flash"
+    response = await asgi_client.post(
+        "/api/v1/provider-sources/openai-source/providers",
+        json={
+            "config": {
+                "id": provider_id,
+                "provider_source_id": "openai-source",
+                "model": "gcli-假流式/gemini-2.5-flash",
+                "enable": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert fake_core_lifecycle.astrbot_config["provider"][-1]["id"] == provider_id
+
+
+@pytest.mark.asyncio
 async def test_v1_create_source_provider_strips_reasoning_metadata(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,

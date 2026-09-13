@@ -337,6 +337,52 @@ def test_dashboard_step_up_resource_parser_hashes_bot_ids_like_bot_routes():
     assert parsed_bot == object_resource("bot", "napcat")
 
 
+def test_dashboard_step_up_resource_parser_hashes_provider_ids_like_provider_routes():
+    parsed_provider = _resource(
+        SimpleNamespace(
+            resource_type="provider",
+            resource_id="openai_chat_completions/gcli-假流式/gemini-2.5-flash",
+            config_id="default",
+        )
+    )
+    parsed_source = _resource(
+        SimpleNamespace(
+            resource_type="provider-source",
+            resource_id="openai_chat_completions",
+            config_id="default",
+        )
+    )
+    parsed_schema = _resource(
+        SimpleNamespace(
+            resource_type="provider",
+            resource_id="schema",
+            config_id="default",
+        )
+    )
+    parsed_collection = _resource(
+        SimpleNamespace(
+            resource_type="provider-source",
+            resource_id="collection",
+            config_id="default",
+        )
+    )
+
+    assert parsed_provider == object_resource(
+        "provider",
+        "openai_chat_completions/gcli-假流式/gemini-2.5-flash",
+        config_id="default",
+    )
+    assert parsed_source == object_resource(
+        "provider-source",
+        "openai_chat_completions",
+        config_id="default",
+    )
+    assert parsed_schema == Resource.named("provider", "schema", config_id="default")
+    assert parsed_collection == Resource.named(
+        "provider-source", "collection", config_id="default"
+    )
+
+
 @pytest.mark.asyncio
 async def test_global_roles_require_an_active_dashboard_account(authorization):
     with pytest.raises(ValueError, match="Dashboard account"):

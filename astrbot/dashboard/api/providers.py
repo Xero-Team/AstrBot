@@ -14,7 +14,7 @@ from astrbot.dashboard.services.config_service import (
     sensitive_config_changed,
 )
 
-from .auth import AuthContext, require_resource_action, require_scope
+from .auth import AuthContext, object_resource, require_resource_action, require_scope
 
 router = APIRouter(tags=["Providers"])
 
@@ -139,11 +139,16 @@ async def _authorize_provider_resource(
         if write
         else "provider.read"
     )
+    resource = (
+        Resource.named(resource_type, resource_id, config_id=config_id)
+        if resource_id in {"schema", "collection"}
+        else object_resource(resource_type, resource_id, config_id=config_id)
+    )
     await require_resource_action(
         request,
         auth,
         action=action,
-        resource=Resource.named(resource_type, resource_id, config_id=config_id),
+        resource=resource,
     )
 
 

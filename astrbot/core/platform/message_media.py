@@ -23,6 +23,13 @@ from .message_protocol import (
     PortablePart,
 )
 
+_CONTENT_KIND_MEDIA_TYPES = {
+    ContentKind.IMAGE: "image",
+    ContentKind.AUDIO: "audio",
+    ContentKind.VIDEO: "video",
+    ContentKind.FILE: "file",
+}
+
 
 @asynccontextmanager
 async def materialize_message_media(
@@ -62,7 +69,10 @@ async def materialize_message_media(
                     if not source:
                         raise ValueError("Media source is unavailable")
                     resolved = await stack.enter_async_context(
-                        MediaResolver(source).as_path()
+                        MediaResolver(
+                            source,
+                            media_type=_CONTENT_KIND_MEDIA_TYPES.get(part.kind, "file"),
+                        ).as_path()
                     )
                     size = resolved.path.stat().st_size
                     limit = capabilities.max_media_size or 50 * 1024 * 1024
@@ -86,12 +96,20 @@ async def materialize_message_media(
                         # The worker must finish before its directory is removed.
                         await task
                         raise
+                    file_name = reference.file_name
+                    if resolved.path.suffix:
+                        source_name = (
+                            Path(file_name).name if file_name else part.kind.value
+                        )
+                        file_name = f"{Path(source_name).stem}{resolved.path.suffix}"
                     content.append(
                         replace(
                             part,
                             value=replace(
                                 reference,
                                 uri=destination.as_uri(),
+                                mime_type=resolved.mime_type or reference.mime_type,
+                                file_name=file_name,
                                 size=size,
                                 resolve_source=None,
                             ),

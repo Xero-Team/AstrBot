@@ -100,6 +100,10 @@ DEFAULT_MEDIA_SUFFIXES = {
     "file": ".bin",
 }
 
+_KNOWN_MEDIA_SUFFIXES = frozenset(
+    {suffix.lower() for suffix in MEDIA_MIME_EXTENSIONS.values()} | {".jpeg", ".tif"}
+)
+
 
 type MediaRefStr = str
 """
@@ -306,6 +310,32 @@ def _extension_from_mime_type(mime_type: str | None) -> str | None:
     )
 
 
+def _has_known_media_suffix(suffix: str) -> bool:
+    """Return whether a path suffix already identifies a known media type."""
+    return bool(suffix) and suffix.lower() in _KNOWN_MEDIA_SUFFIXES
+
+
+def _relabel_temp_image_path(
+    target_path: Path,
+    cleanup_paths: list[Path],
+) -> tuple[Path, str | None]:
+    """Rename an owned temp file when its bytes are a known image type."""
+    detected_mime_type = detect_image_mime_type(
+        target_path,
+        default_mime_type=None,
+    )
+    detected_suffix = _extension_from_mime_type(detected_mime_type)
+    if detected_suffix and detected_suffix != target_path.suffix.lower():
+        detected_path = target_path.with_suffix(detected_suffix)
+        target_path.replace(detected_path)
+        if cleanup_paths and cleanup_paths[-1] == target_path:
+            cleanup_paths[-1] = detected_path
+        else:
+            cleanup_paths.append(detected_path)
+        target_path = detected_path
+    return target_path, detected_mime_type
+
+
 def _temp_media_path(media_type: str, suffix: str) -> Path:
     """Create a unique path under AstrBot's temp directory for materialized media."""
     temp_dir = Path(get_astrbot_temp_path())
@@ -494,17 +524,11 @@ async def _materialize_media_ref(
             _cleanup_paths(cleanup_paths)
             raise
         mime_type = _guess_mime_type(target_path)
-        if media_type == "image" and not source_suffix:
-            detected_mime_type = detect_image_mime_type(
+        if not _has_known_media_suffix(source_suffix):
+            target_path, detected_mime_type = _relabel_temp_image_path(
                 target_path,
-                default_mime_type=None,
+                cleanup_paths,
             )
-            detected_suffix = _extension_from_mime_type(detected_mime_type)
-            if detected_suffix and detected_suffix != target_path.suffix.lower():
-                detected_path = target_path.with_suffix(detected_suffix)
-                target_path.replace(detected_path)
-                cleanup_paths[-1] = detected_path
-                target_path = detected_path
             if detected_mime_type:
                 mime_type = detected_mime_type
         return _LocalMediaFile(

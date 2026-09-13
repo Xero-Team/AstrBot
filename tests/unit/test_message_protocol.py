@@ -604,6 +604,52 @@ async def test_media_lease_resolves_at_source_and_cleans_only_owned_files(
 
 
 @pytest.mark.asyncio
+async def test_media_lease_detects_image_suffix_for_extensionless_http(
+    tmp_path, monkeypatch
+):
+    from io import BytesIO
+    from pathlib import Path
+
+    from PIL import Image as PILImage
+
+    import astrbot.core.utils.media_utils as media_utils
+    from astrbot.core.platform import message_media
+    from astrbot.core.utils.media_utils import file_uri_to_path
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_buffer = BytesIO()
+    PILImage.new("RGB", (1, 1), (255, 0, 0)).save(image_buffer, format="GIF")
+
+    async def fake_download_file(_url: str, target_path: str) -> None:
+        Path(target_path).write_bytes(image_buffer.getvalue())
+
+    monkeypatch.setattr(media_utils, "download_file", fake_download_file)
+
+    envelope = MessageEnvelope(
+        _route(),
+        content=(
+            PortablePart(
+                ContentKind.IMAGE,
+                MediaReference(
+                    "https://multimedia.nt.qq.com.cn/download?fileid=example"
+                ),
+            ),
+        ),
+    )
+    async with message_media.materialize_message_media(
+        envelope, MessageDeliveryCapabilities(media=frozenset({"image"}))
+    ) as resolved:
+        reference = resolved.content[0].value
+        owned = Path(file_uri_to_path(reference.uri))
+        assert owned.suffix == ".gif"
+        assert reference.file_name == "image.gif"
+        assert reference.mime_type == "image/gif"
+        with PILImage.open(owned) as resolved_img:
+            assert resolved_img.format == "GIF"
+    assert not owned.exists()
+
+
+@pytest.mark.asyncio
 async def test_media_resolution_failure_preserves_order_and_hides_credentials():
     from astrbot.core.platform.message_media import materialize_message_media
 

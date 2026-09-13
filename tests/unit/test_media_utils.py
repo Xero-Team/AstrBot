@@ -124,6 +124,57 @@ async def test_http_image_without_suffix_uses_detected_image_suffix(
 
 
 @pytest.mark.asyncio
+async def test_http_file_without_suffix_uses_detected_image_suffix(
+    tmp_path,
+    monkeypatch,
+):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_buffer = BytesIO()
+    PILImage.new("RGB", (1, 1), (255, 0, 0)).save(image_buffer, format="GIF")
+
+    async def fake_download_file(_url: str, target_path: str) -> None:
+        Path(target_path).write_bytes(image_buffer.getvalue())
+
+    monkeypatch.setattr(media_utils, "download_file", fake_download_file)
+
+    image_path = await media_utils.MediaResolver(
+        "https://multimedia.nt.qq.com.cn/download?fileid=example",
+    ).to_path()
+
+    try:
+        assert Path(image_path).suffix == ".gif"
+        with PILImage.open(image_path) as resolved_img:
+            assert resolved_img.format == "GIF"
+    finally:
+        Path(image_path).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_http_file_without_suffix_keeps_bin_when_bytes_are_not_image(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fake_download_file(_url: str, target_path: str) -> None:
+        Path(target_path).write_bytes(b"not-an-image")
+
+    monkeypatch.setattr(media_utils, "download_file", fake_download_file)
+
+    file_path = await media_utils.MediaResolver(
+        "https://multimedia.nt.qq.com.cn/download?fileid=example",
+    ).to_path()
+
+    try:
+        assert Path(file_path).suffix == ".bin"
+        assert Path(file_path).read_bytes() == b"not-an-image"
+    finally:
+        Path(file_path).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
 async def test_resolve_audio_ref_to_base64_data_decodes_base64_scheme(
     tmp_path, monkeypatch
 ):

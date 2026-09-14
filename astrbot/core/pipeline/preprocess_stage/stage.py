@@ -127,15 +127,17 @@ class PreProcessStage(Stage):
         *,
         is_reply: bool,
     ) -> None:
-        """Normalize one media component and retain temporary files for the event."""
+        """Normalize one media component without deleting usable image attachments."""
         try:
             original_path = await component.convert_to_file_path()
-            self._track_temp_media(event, original_path)
             if isinstance(component, Record):
+                self._track_temp_media(event, original_path)
                 media_path = await ensure_wav(original_path)
+                self._track_temp_media(event, media_path)
             else:
                 media_path = await ensure_jpeg(original_path)
-            self._track_temp_media(event, media_path)
+                if media_path != original_path:
+                    self._track_temp_media(event, original_path)
             component.file = media_path
             component.path = media_path
             if isinstance(component, Image):

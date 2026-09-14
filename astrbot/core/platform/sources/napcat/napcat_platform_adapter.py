@@ -1167,6 +1167,19 @@ class NapCatPlatformAdapter(Platform):
             return True
         return False
 
+    @staticmethod
+    async def _portable_media_file(component: Image | Record) -> str | None:
+        """Encode image and audio as self-contained OneBot payloads."""
+        try:
+            encoded = await component.convert_to_base64()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return None
+        if not encoded:
+            return None
+        return f"base64://{encoded}"
+
     async def _append_media_outbound_segment(
         self,
         component: BaseMessageComponent,
@@ -1174,38 +1187,30 @@ class NapCatPlatformAdapter(Platform):
         fallback_parts: list[str],
     ) -> bool:
         """Convert image, audio, video, and file components."""
-        if isinstance(component, Image | Record | Video):
-            file_value = component.file or component.url or component.path
+        if isinstance(component, Image | Record):
+            file_value = await self._portable_media_file(component)
             if not file_value:
                 return False
             if isinstance(component, Image):
-                segments.append(
-                    self.client.image(
-                        file=file_value,
-                        url=component.url or None,
-                        path=component.path or None,
-                    )
-                )
+                segments.append(self.client.image(file=file_value))
                 fallback_parts.append("[Image]")
-            elif isinstance(component, Record):
-                segments.append(
-                    self.client.record(
-                        file=file_value,
-                        url=component.url or None,
-                        path=component.path or None,
-                    )
-                )
-                fallback_parts.append("[Record]")
             else:
-                segments.append(
-                    self.client.video(
-                        file=file_value,
-                        url=component.url or None,
-                        path=component.path or None,
-                        thumb=component.cover or None,
-                    )
+                segments.append(self.client.record(file=file_value))
+                fallback_parts.append("[Record]")
+            return True
+        if isinstance(component, Video):
+            file_value = component.file or component.url or component.path
+            if not file_value:
+                return False
+            segments.append(
+                self.client.video(
+                    file=file_value,
+                    url=component.url or None,
+                    path=component.path or None,
+                    thumb=component.cover or None,
                 )
-                fallback_parts.append("[Video]")
+            )
+            fallback_parts.append("[Video]")
             return True
 
         if not isinstance(component, File):

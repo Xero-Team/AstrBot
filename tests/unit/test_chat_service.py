@@ -1420,6 +1420,7 @@ async def test_get_session_includes_project_threads_and_running_state():
     service.platform_history_mgr.get = AsyncMock(
         return_value=[_history_record(1, {"type": "user", "message": []})]
     )
+    service.platform_history_mgr.count = AsyncMock(return_value=1)
     thread = SimpleNamespace(
         thread_id="thread-1",
         parent_session_id="session-1",
@@ -1437,6 +1438,10 @@ async def test_get_session_includes_project_threads_and_running_state():
     assert result["is_running"] is True
     assert result["history"][0]["id"] == 1
     assert result["history"][0]["content"] == {"type": "user", "message": []}
+    assert result["total"] == 1
+    assert result["page"] == 1
+    assert result["page_size"] == 1000
+    assert result["has_more"] is False
     assert result["project"] == {"project_id": "proj-1", "title": "Alpha", "emoji": "A"}
     assert result["threads"][0]["thread_id"] == "thread-1"
     service.platform_history_mgr.get.assert_awaited_once_with(
@@ -1445,6 +1450,49 @@ async def test_get_session_includes_project_threads_and_running_state():
         page=1,
         page_size=1000,
     )
+    service.platform_history_mgr.count.assert_awaited_once_with(
+        platform_id="webchat",
+        user_id="session-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_session_paginates_history_and_reports_has_more():
+    service = _service()
+    session = _session()
+    service.db.get_platform_session_by_id = AsyncMock(return_value=session)
+    service.db.get_project_by_session = AsyncMock(return_value=None)
+    service.db.get_webchat_threads_by_parent_session = AsyncMock(return_value=[])
+    service.platform_history_mgr.get = AsyncMock(
+        return_value=[_history_record(2, {"type": "bot", "message": []})]
+    )
+    service.platform_history_mgr.count = AsyncMock(return_value=3)
+
+    result = await service.get_session("alice", "session-1", page=2, page_size=1)
+
+    assert [row["id"] for row in result["history"]] == [2]
+    assert result["total"] == 3
+    assert result["page"] == 2
+    assert result["page_size"] == 1
+    assert result["has_more"] is True
+    service.platform_history_mgr.get.assert_awaited_once_with(
+        platform_id="webchat",
+        user_id="session-1",
+        page=2,
+        page_size=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_session_rejects_invalid_pagination():
+    service = _service()
+
+    with pytest.raises(ChatServiceError, match="page must be at least 1"):
+        await service.get_session("alice", "session-1", page=0)
+    with pytest.raises(ChatServiceError, match="page_size must be between 1 and 1000"):
+        await service.get_session("alice", "session-1", page_size=0)
+    with pytest.raises(ChatServiceError, match="page_size must be between 1 and 1000"):
+        await service.get_session("alice", "session-1", page_size=1001)
 
 
 @pytest.mark.asyncio

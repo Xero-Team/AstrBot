@@ -126,6 +126,7 @@ vi.mock('@/composables/useMessages', () => ({
     loadingMessages: ref(false),
     sending: ref(false),
     loadedSessions: testState.loadedSessions,
+    paginationBySession: {},
     sessionProjects: testState.sessionProjects,
     activeMessages: ref(testState.activeMessages),
     isSessionRunning: () => false,
@@ -134,6 +135,7 @@ vi.mock('@/composables/useMessages', () => ({
     messageParts: (message: { content?: { message?: unknown[] } }) =>
       message.content?.message || [],
     loadSessionMessages: vi.fn(),
+    loadEarlierMessages: vi.fn(),
     createLocalExchange: vi.fn(),
     sendMessageStream: vi.fn(),
     editMessage: vi.fn(),

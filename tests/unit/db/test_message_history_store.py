@@ -124,3 +124,5 @@ async def test_get_platform_message_history_is_paginated_and_scoped_by_platform_
 
     assert [row.id for row in page_one] == [second.id]
     assert [row.id for row in page_two] == [first.id]
+    assert await temp_db.count_platform_message_history("webchat", "session-1") == 2
+    assert await temp_db.count_platform_message_history("telegram", "session-1") == 1

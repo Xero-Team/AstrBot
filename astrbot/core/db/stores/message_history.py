@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, delete, desc, select, update
+from sqlmodel import col, delete, desc, func, select, update
 
 from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
@@ -147,6 +147,30 @@ class MessageHistoryStoreMixin(DatabaseStoreMixin):
                 query = query.where(col(PlatformMessageHistory.id) < before_id)
             result = await session.execute(query.offset(offset).limit(page_size))
             return list(result.scalars().all())
+
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records matching the platform/user scope.
+        """
+        async with store_session(self) as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(func.count(col(PlatformMessageHistory.id))).where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+            )
+            return int(result.scalar_one() or 0)
 
     async def get_group_message_history(
         self,

@@ -470,6 +470,25 @@ def test_cleanup_temporary_local_files_includes_message_obj_paths(
     assert not temp_file.exists()
 
 
+def test_untrack_temporary_local_file_keeps_path_after_cleanup(
+    platform_meta,
+    astrbot_message,
+    tmp_path,
+):
+    kept = tmp_path / "kept.bin"
+    kept.write_bytes(b"keep")
+    event = ConcreteAstrMessageEvent(
+        message_str="Hello world",
+        message_obj=astrbot_message,
+        platform_meta=platform_meta,
+        session_id="session123",
+    )
+    event.track_temporary_local_file(str(kept))
+    event.untrack_temporary_local_file(str(kept))
+    event.cleanup_temporary_local_files()
+    assert kept.exists()
+
+
 class TestSetResult:
     """Tests for set_result method."""
 

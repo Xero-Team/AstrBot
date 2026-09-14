@@ -9,7 +9,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
-    ensure_jpeg,
     ensure_wav,
     file_uri_to_path,
     is_file_uri,
@@ -135,9 +134,8 @@ class PreProcessStage(Stage):
                 media_path = await ensure_wav(original_path)
                 self._track_temp_media(event, media_path)
             else:
-                media_path = await ensure_jpeg(original_path)
-                if media_path != original_path:
-                    self._track_temp_media(event, original_path)
+                media_path = original_path
+                event.untrack_temporary_local_file(media_path)
             component.file = media_path
             component.path = media_path
             if isinstance(component, Image):

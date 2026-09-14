@@ -1249,3 +1249,29 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         == "Error occurred during AI execution."
     )
     event.stop_typing.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_refresh_prepared_request_converts_plugin_replaced_images(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    from astrbot.core.utils import media_utils
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    source = tmp_path / "plugin.png"
+    PILImage.new("RGB", (4, 4), (1, 2, 3)).save(source)
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.main_agent_cfg = MainAgentBuildConfig(
+        tool_call_timeout=60,
+        provider_settings={"image_compress_enabled": True},
+    )
+    req = ProviderRequest(prompt="hi", image_urls=[str(source)])
+    provider = SimpleNamespace(provider_config={"modalities": ["image"]})
+
+    await stage._refresh_prepared_request(req, provider)
+
+    assert req.image_urls
+    assert all(url.startswith("data:image/jpeg") for url in req.image_urls)
+    assert source.exists()

@@ -414,6 +414,11 @@ class AstrMessageEvent(abc.ABC):
         self._temporary_local_files.remove(path)
         return True
 
+    def untrack_temporary_local_file(self, path: str) -> None:
+        """Stop owning a temporary file so it can outlive this event."""
+        if path in self._temporary_local_files:
+            self._temporary_local_files.remove(path)
+
     def cleanup_temporary_local_files(self) -> None:
         for path in getattr(self.message_obj, "temporary_file_paths", []):
             self.track_temporary_local_file(path)

@@ -184,13 +184,13 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
     await stage.process(event)
     event.cleanup_temporary_local_files()
 
-    assert image_path.exists() == (image_kind != "png")
+    assert image_path.exists()
     assert not audio_path.exists()
     assert video_path.exists()
     assert document_path.exists()
     assert Path(await image.convert_to_file_path()).exists()
-    if image_kind == "png":
-        assert image.file != str(image_path)
+    if image_kind != "invalid":
+        assert image.file == str(image_path)
 
 
 def test_mattermost_parse_text_components_without_bot_username_falls_back_to_plain():

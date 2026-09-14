@@ -15,6 +15,10 @@ from astrbot.core.agent.message import (
     Message,
     dump_messages_with_checkpoints,
 )
+from astrbot.core.agent.request_preparation import (
+    image_compress_args_from_settings,
+    prepare_provider_request,
+)
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.assistant_history import (
     AssistantHistoryCommitter,
@@ -218,6 +222,29 @@ class InternalAgentSubStage:
 
     async def _send_llm_error_message(self, event: AstrMessageEvent) -> None:
         await event.send(MessageChain().message(get_agent_error_message(event)))
+
+    async def _refresh_prepared_request(
+        self,
+        req: ProviderRequest,
+        provider,
+    ) -> None:
+        """Re-prepare media after OnLLMRequestEvent so plugin replacements are converted."""
+        settings = getattr(self.main_agent_cfg, "provider_settings", None)
+        enabled, max_size, quality = image_compress_args_from_settings(
+            settings if isinstance(settings, dict) else None
+        )
+        prepared = await prepare_provider_request(
+            req,
+            provider=provider,
+            image_compress_enabled=enabled,
+            image_max_size=max_size,
+            image_quality=quality,
+        )
+        req.image_urls = prepared.image_urls
+        req.audio_urls = prepared.audio_urls
+        req.extra_user_content_parts = prepared.extra_user_content_parts
+        req.prepared_content = prepared.prepared_content
+        req.contexts = prepared.contexts
 
     async def _finalize_agent_response(
         self,
@@ -468,6 +495,8 @@ class InternalAgentSubStage:
                         if reset_coro:
                             reset_coro.close()
                         return
+
+                    await self._refresh_prepared_request(req, provider)
 
                     # apply reset
                     if reset_coro:

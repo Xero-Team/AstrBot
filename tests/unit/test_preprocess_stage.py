@@ -39,6 +39,10 @@ class FakeEvent:
         if path not in self.temporary_local_files:
             self.temporary_local_files.append(path)
 
+    def untrack_temporary_local_file(self, path: str) -> None:
+        if path in self.temporary_local_files:
+            self.temporary_local_files.remove(path)
+
     async def react(self, emoji: str) -> None:
         self.reactions.append(emoji)
 
@@ -155,14 +159,9 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
 
     await stage.process(event)
 
-    if source_kind == "png":
-        assert event.temporary_local_files == [str(source_path)]
-        assert image.file == image.path == image.url
-        assert image.file != str(source_path)
-        with PILImage.open(image.file) as processed_img:
-            assert processed_img.format == "JPEG"
-    else:
-        assert event.temporary_local_files == []
+    assert event.temporary_local_files == []
+    if source_kind != "invalid":
+        assert image.file == image.path == image.url == str(source_path)
 
     AstrMessageEvent.cleanup_temporary_local_files(
         SimpleNamespace(
@@ -170,7 +169,7 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
             message_obj=SimpleNamespace(),
         )
     )
-    assert source_path.exists() == (source_kind != "png")
+    assert source_path.exists()
     assert Path(await image.convert_to_file_path()).exists()
 
 

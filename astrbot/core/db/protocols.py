@@ -507,7 +507,8 @@ class MessageHistoryStore(Protocol):
         self,
         platform_id: str,
         user_id: str,
-    ) -> int: ...
+    ) -> int:
+        return 0
 
     async def get_group_message_history(
         self,

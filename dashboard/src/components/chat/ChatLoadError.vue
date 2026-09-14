@@ -8,7 +8,7 @@
       class="chat-load-error-retry"
       size="small"
       variant="text"
-      rounded="pill"
+      rounded="md"
       :loading="loading"
       @click="emit('retry')"
     >

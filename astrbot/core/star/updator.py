@@ -48,7 +48,28 @@ class PluginUpdator(RepoZipUpdator):
         """
         _, repo_name, _ = self.parse_github_url(repo_url)
         repo_name = self.format_name(repo_name)
-        plugin_path = str(target_dir or Path(self.plugin_store_path) / repo_name)
+        if ".." in Path(repo_name).parts:
+            raise Exception("安装失败：仓库名不合法。")
+        if target_dir is not None:
+            destination = Path(target_dir)
+            if ".." in destination.parts:
+                raise Exception("安装失败：目标目录不合法。")
+            plugin_path = str(destination)
+        else:
+            store_root = Path(self.plugin_store_path)
+            destination = store_root / repo_name
+            if ".." in destination.parts:
+                raise Exception("安装失败：目标目录不合法。")
+            resolved = destination.resolve()
+            store_resolved = os.path.normpath(str(store_root.resolve()))
+            resolved_s = os.path.normpath(str(resolved))
+            try:
+                confined = os.path.commonpath([resolved_s, store_resolved])
+            except ValueError:
+                confined = ""
+            if confined != store_resolved:
+                raise Exception("安装失败：目标目录不合法。")
+            plugin_path = resolved_s
         if os.path.exists(plugin_path):
             raise Exception(f"安装失败：目录 {Path(plugin_path).name} 已存在。")
         if download_url:

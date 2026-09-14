@@ -89,6 +89,17 @@ describe('chat history pagination', () => {
     expect(messages.paginationBySession.s1.error).toContain('offline');
   });
 
+  it('rejects prototype-polluting session keys', async () => {
+    const messages = useMessages({ currentSessionId: ref('s1') });
+
+    await expect(messages.loadSessionMessages('__proto__')).rejects.toThrow(
+      'Invalid object key',
+    );
+    await expect(messages.loadEarlierMessages('constructor')).rejects.toThrow(
+      'Invalid object key',
+    );
+  });
+
   it('renders a retry action for history load errors', async () => {
     const wrapper = mountWithVuetify(ChatLoadError, {
       props: { message: 'Could not load messages', loading: false },

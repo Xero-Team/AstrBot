@@ -1725,7 +1725,10 @@ async function loadEarlierWithAnchor() {
   if (!sessionId || activeSessionPagination.value?.loading) return;
   const container = messagesContainer.value;
   const firstMessage = activeMessages.value[0];
-  const firstId = firstMessage?.id == null ? '' : String(firstMessage.id);
+  const firstId =
+    firstMessage?.id === undefined || firstMessage?.id === null
+      ? ''
+      : String(firstMessage.id);
   const beforeTop = firstId
     ? container
         ?.querySelector<HTMLElement>(
@@ -1738,7 +1741,7 @@ async function loadEarlierWithAnchor() {
     await loadEarlierMessages(sessionId);
     if (currSessionId.value !== sessionId) return;
     await nextTick();
-    if (beforeTop == null || !container || !firstId) return;
+    if (beforeTop === undefined || !container || !firstId) return;
     const row = container.querySelector<HTMLElement>(
       `[data-message-id="${CSS.escape(firstId)}"]`,
     );

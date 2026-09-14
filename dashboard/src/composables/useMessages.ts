@@ -103,6 +103,13 @@ export interface HistoryPaginationState {
   error?: string;
 }
 
+function assertSafeObjectKey(key: string): string {
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+    throw new Error('Invalid object key');
+  }
+  return key;
+}
+
 export function useMessages(options: UseMessagesOptions) {
   const loadingMessagesState = ref(false);
   const sending = ref(false);
@@ -240,14 +247,15 @@ export function useMessages(options: UseMessagesOptions) {
     preserveLoadedPages = false,
   ) {
     if (!sessionId) return;
+    const sessionKey = assertSafeObjectKey(sessionId);
     if (showLoading) {
       loadingMessagesState.value = true;
-      loadingSessionId.value = sessionId;
+      loadingSessionId.value = sessionKey;
     }
-    const epoch = (sessionLoadEpochs[sessionId] || 0) + 1;
-    sessionLoadEpochs[sessionId] = epoch;
+    const epoch = (sessionLoadEpochs[sessionKey] || 0) + 1;
+    sessionLoadEpochs[sessionKey] = epoch;
     try {
-      const response = await chatApi.getSession(sessionId, {
+      const response = await chatApi.getSession(sessionKey, {
         page: 1,
         page_size: 50,
       });
@@ -264,31 +272,33 @@ export function useMessages(options: UseMessagesOptions) {
       );
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
-      const previousPagination = paginationBySession[sessionId];
+      if (sessionLoadEpochs[sessionKey] !== epoch) return;
+      const previousPagination = paginationBySession[sessionKey];
       if (preserveLoadedPages && previousPagination?.page > 1) {
         const refreshedById = new Map(
           records
-            .filter((record) => record.id != null)
+            .filter((record) => record.id !== undefined && record.id !== null)
             .map((record) => [String(record.id), record]),
         );
-        const existing = messagesBySession[sessionId] || [];
+        const existing = messagesBySession[sessionKey] || [];
         const merged = existing.map(
           (record) => refreshedById.get(String(record.id)) || record,
         );
         const existingIds = new Set(
           existing
-            .filter((record) => record.id != null)
+            .filter((record) => record.id !== undefined && record.id !== null)
             .map((record) => String(record.id)),
         );
-        messagesBySession[sessionId] = [
+        messagesBySession[sessionKey] = [
           ...merged,
           ...records.filter(
             (record) =>
-              record.id == null || !existingIds.has(String(record.id)),
+              record.id === undefined ||
+              record.id === null ||
+              !existingIds.has(String(record.id)),
           ),
         ];
-        paginationBySession[sessionId] = {
+        paginationBySession[sessionKey] = {
           ...previousPagination,
           total: Number(payload.total) || previousPagination.total,
           has_more: previousPagination.has_more,
@@ -296,8 +306,8 @@ export function useMessages(options: UseMessagesOptions) {
           error: undefined,
         };
       } else {
-        messagesBySession[sessionId] = records;
-        paginationBySession[sessionId] = {
+        messagesBySession[sessionKey] = records;
+        paginationBySession[sessionKey] = {
           page: Number(payload.page) || 1,
           page_size: Number(payload.page_size) || 50,
           total: Number(payload.total) || records.length,
@@ -305,20 +315,21 @@ export function useMessages(options: UseMessagesOptions) {
           loading: false,
         };
       }
-      sessionProjects[sessionId] = normalizeSessionProject(payload.project);
-      loadedSessions[sessionId] = true;
+      sessionProjects[sessionKey] = normalizeSessionProject(payload.project);
+      loadedSessions[sessionKey] = true;
       if (resumeRuns && Array.isArray(payload.active_runs)) {
-        await restoreNextActiveRun(sessionId, payload.active_runs);
+        await restoreNextActiveRun(sessionKey, payload.active_runs);
       }
     } catch (error) {
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      if (sessionLoadEpochs[sessionKey] !== epoch) return;
       console.error('Failed to load session messages:', error);
-      messagesBySession[sessionId] = messagesBySession[sessionId] || [];
-      const previousPagination = paginationBySession[sessionId];
-      paginationBySession[sessionId] = {
+      messagesBySession[sessionKey] = messagesBySession[sessionKey] || [];
+      const previousPagination = paginationBySession[sessionKey];
+      paginationBySession[sessionKey] = {
         page: previousPagination?.page || 1,
         page_size: previousPagination?.page_size || 50,
-        total: previousPagination?.total || messagesBySession[sessionId].length,
+        total:
+          previousPagination?.total || messagesBySession[sessionKey].length,
         has_more: previousPagination?.has_more || false,
         loading: false,
         error: String((error as Error)?.message || error),
@@ -326,8 +337,8 @@ export function useMessages(options: UseMessagesOptions) {
     } finally {
       if (
         showLoading &&
-        sessionLoadEpochs[sessionId] === epoch &&
-        loadingSessionId.value === sessionId
+        sessionLoadEpochs[sessionKey] === epoch &&
+        loadingSessionId.value === sessionKey
       ) {
         loadingMessagesState.value = false;
         loadingSessionId.value = null;
@@ -337,18 +348,19 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function loadEarlierMessages(sessionId: string) {
     if (!sessionId) return;
-    const state = paginationBySession[sessionId];
+    const sessionKey = assertSafeObjectKey(sessionId);
+    const state = paginationBySession[sessionKey];
     if (!state || !state.has_more || state.loading) return;
-    const epoch = sessionLoadEpochs[sessionId] || 0;
+    const epoch = sessionLoadEpochs[sessionKey] || 0;
     const nextPage = state.page + 1;
     state.loading = true;
     state.error = undefined;
     try {
-      const response = await chatApi.getSession(sessionId, {
+      const response = await chatApi.getSession(sessionKey, {
         page: nextPage,
         page_size: state.page_size,
       });
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      if (sessionLoadEpochs[sessionKey] !== epoch) return;
       const status = response.data?.status;
       if (status && status !== 'ok') {
         throw new Error(
@@ -359,27 +371,29 @@ export function useMessages(options: UseMessagesOptions) {
       const records = (payload.history || []).map(normalizeHistoryRecord);
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
-      const existing = messagesBySession[sessionId] || [];
+      if (sessionLoadEpochs[sessionKey] !== epoch) return;
+      const existing = messagesBySession[sessionKey] || [];
       const existingIds = new Set(
         existing
-          .filter((record) => record.id != null)
+          .filter((record) => record.id !== undefined && record.id !== null)
           .map((record) => String(record.id)),
       );
       const freshRecords = records.filter(
         (record: ChatRecord) =>
-          record.id == null || !existingIds.has(String(record.id)),
+          record.id === undefined ||
+          record.id === null ||
+          !existingIds.has(String(record.id)),
       );
-      messagesBySession[sessionId] = [...freshRecords, ...existing];
+      messagesBySession[sessionKey] = [...freshRecords, ...existing];
       state.page = Number(payload.page) || nextPage;
       state.total = Number(payload.total) || state.total;
       state.has_more = Boolean(payload.has_more);
     } catch (error) {
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      if (sessionLoadEpochs[sessionKey] !== epoch) return;
       state.error = String((error as Error)?.message || error);
       console.error('Failed to load earlier session messages:', error);
     } finally {
-      if (sessionLoadEpochs[sessionId] === epoch) state.loading = false;
+      if (sessionLoadEpochs[sessionKey] === epoch) state.loading = false;
     }
   }
 

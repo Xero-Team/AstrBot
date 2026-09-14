@@ -503,12 +503,15 @@ class MockPluginBuilder:
     def create(
         self,
         plugin_config: str | MockPluginConfig | None = None,
+        *,
+        destination: Path | None = None,
         **kwargs,
     ) -> Path:
         """创建模拟插件。
 
         Args:
             plugin_config: 插件名称字符串、MockPluginConfig 对象或 None
+            destination: Optional staging directory. Defaults to the plugin store.
             **kwargs: 如果 plugin_config 是字符串或 None，这些参数用于构建 MockPluginConfig
 
         Returns:
@@ -525,7 +528,7 @@ class MockPluginBuilder:
             raise TypeError(f"Invalid plugin_config type: {type(plugin_config)}")
 
         # 创建插件目录
-        plugin_dir = self.plugin_store_path / config.name
+        plugin_dir = destination or (self.plugin_store_path / config.name)
         plugin_dir.mkdir(parents=True, exist_ok=True)
 
         # 创建 metadata.yaml
@@ -617,8 +620,15 @@ def create_mock_updater_install(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_install(repo_url: str, proxy: str = "") -> str:
+    async def mock_install(
+        repo_url: str,
+        proxy: str = "",
+        download_url: str = "",
+        *,
+        target_dir: Path | str | None = None,
+    ) -> str:
         """Mock updater.install 方法。"""
+        del proxy, download_url
         # 查找插件名称
         plugin_name = None
         if repo_to_plugin:
@@ -632,7 +642,8 @@ def create_mock_updater_install(
 
         # 创建插件目录
         config = MockPluginConfig(name=plugin_name, repo=repo_url)
-        plugin_dir = plugin_builder.create(config)
+        destination = Path(target_dir) if target_dir is not None else None
+        plugin_dir = plugin_builder.create(config, destination=destination)
         return str(plugin_dir)
 
     return mock_install

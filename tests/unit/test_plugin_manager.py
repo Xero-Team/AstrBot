@@ -34,6 +34,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.plugin_catalog import PluginCatalog
 from astrbot.core.star.plugin_extension_coordinator import PluginExtensionCoordinator
 from astrbot.core.star.plugin_lifecycle import PluginLifecycle
+from astrbot.core.star.plugin_package_installer import PluginPackageInstaller
 from astrbot.core.star.plugin_runtime_common import PluginDependencyInstallError
 from astrbot.core.star.plugin_runtime_loader import PluginRuntimeLoader
 from astrbot.core.star.star import StarDeclaration, StarMetadata
@@ -575,6 +576,23 @@ async def test_install_validates_dashboard_manifest_before_dependencies(
         )
 
     ensure_requirements.assert_not_awaited()
+
+
+def test_confine_path_rejects_escape_and_keeps_store_children(tmp_path: Path):
+    root = tmp_path / "plugins"
+    root.mkdir()
+    inner = root / "demo"
+    inner.mkdir()
+
+    assert PluginPackageInstaller._confine_path(inner, root) == inner.resolve()
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._confine_path(root / ".." / "outside", root)
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._confine_path(tmp_path / "outside", root)
+
+
+def test_log_token_strips_line_breaks():
+    assert PluginPackageInstaller._log_token("a\r\nb") == "ab"
 
 
 def test_get_modules_ignores_directory_name_entrypoint(tmp_path: Path):

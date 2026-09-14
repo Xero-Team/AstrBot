@@ -143,6 +143,27 @@ class PluginPackageInstaller:
         temp_root.mkdir(parents=True, exist_ok=True)
         return temp_root
 
+    @staticmethod
+    def _confine_path(path: str | Path, *roots: Path) -> Path:
+        """Resolve `path` and reject values that escape every allowed root."""
+        candidate = Path(path)
+        if ".." in candidate.parts:
+            raise Exception("插件路径不合法。")
+        resolved = candidate.resolve()
+        resolved_s = os.path.normpath(str(resolved))
+        for root in roots:
+            root_s = os.path.normpath(str(root.resolve()))
+            try:
+                if os.path.commonpath([resolved_s, root_s]) == root_s:
+                    return resolved
+            except ValueError:
+                continue
+        raise Exception("插件路径不合法。")
+
+    @staticmethod
+    def _log_token(value: str) -> str:
+        return value.replace("\r", "").replace("\n", "")
+
     async def install_from_repository(
         self,
         *,
@@ -228,16 +249,27 @@ class PluginPackageInstaller:
         terminate_plugin: TerminatePlugin | None,
     ) -> dict[str, str | None] | None:
         """Install a staged plugin directory, restoring old code on update failure."""
+        plugin_path = str(
+            self._confine_path(
+                plugin_path,
+                self._staging_root(),
+                Path(self._plugin_store_path),
+            )
+        )
         desti_dir = plugin_path
         dir_name = Path(plugin_path).name
         track_failed_install = False
         try:
             metadata_dir_name = loader.plugin_dir_name_from_metadata(plugin_path)
             plugin = self._plugin_for_name(metadata_dir_name)
-            target_plugin_path = Path(self._plugin_store_path) / (
-                plugin.root_dir_name
-                if plugin and plugin.root_dir_name
-                else metadata_dir_name
+            target_plugin_path = self._confine_path(
+                Path(self._plugin_store_path)
+                / (
+                    plugin.root_dir_name
+                    if plugin and plugin.root_dir_name
+                    else metadata_dir_name
+                ),
+                Path(self._plugin_store_path),
             )
             if plugin and plugin.reserved:
                 raise Exception("该插件是 AstrBot 保留插件，无法更新。")
@@ -287,7 +319,11 @@ class PluginPackageInstaller:
                     plugin_path=desti_dir,
                     error=exc,
                 )
-            logger.warning("安装插件 %s 失败，插件安装目录：%s", dir_name, desti_dir)
+            logger.warning(
+                "安装插件 %s 失败，插件安装目录：%s",
+                self._log_token(dir_name),
+                self._log_token(desti_dir),
+            )
             raise
 
     async def _replace_installed_plugin(

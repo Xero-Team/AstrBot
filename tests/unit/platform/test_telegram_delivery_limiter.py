@@ -1,10 +1,14 @@
 import asyncio
 from datetime import timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from telegram.error import RetryAfter
 
-from astrbot.core.platform.sources.telegram.rate_limit import TelegramDeliveryLimiter
+from astrbot.core.platform.sources.telegram.rate_limit import (
+    LimitedTelegramClient,
+    TelegramDeliveryLimiter,
+)
 
 
 class FakeClock:
@@ -138,6 +142,32 @@ async def test_limiter_wait_is_cancellation_aware():
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await asyncio.gather(task)
+
+
+@pytest.mark.asyncio
+async def test_limited_client_routes_media_groups_through_limiter():
+    clock = FakeClock()
+    limiter = TelegramDeliveryLimiter(
+        global_interval=0.0,
+        chat_interval=0.0,
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+    client = type("FakeTelegramClient", (), {})()
+    client.send_media_group = AsyncMock(return_value=["sent"])
+    limited_client = LimitedTelegramClient(client, limiter)
+
+    result = await limited_client.send_media_group(
+        chat_id="chat",
+        media=["media-1", "media-2"],
+    )
+
+    assert result == ["sent"]
+    client.send_media_group.assert_awaited_once_with(
+        chat_id="chat",
+        media=["media-1", "media-2"],
+    )
+    assert limiter.diagnostics["sent"] == 1
 
 
 async def _noop() -> None:

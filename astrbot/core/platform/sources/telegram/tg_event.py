@@ -6,7 +6,12 @@ from typing import Any, Literal, cast
 from urllib.parse import quote, unquote, urlsplit
 
 import telegramify_markdown
-from telegram import InputMediaPhoto, ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram import (
+    InputFile,
+    InputMediaPhoto,
+    ReactionTypeCustomEmoji,
+    ReactionTypeEmoji,
+)
 from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import ExtBot
@@ -502,13 +507,23 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 chunk = resolved[start : start + 10]
                 if len(chunk) < 2:
                     break
-                media = [
-                    InputMediaPhoto(
-                        media=path,
-                        caption=caption if start == 0 and offset == 0 else None,
+                media = []
+                for offset, (_image, path) in enumerate(chunk):
+                    # InputMediaPhoto treats local path strings as ``file://``
+                    # URIs, which the hosted Bot API rejects. Attach each
+                    # file as multipart data instead.
+                    with open(path, "rb") as file_handle:
+                        media_file = InputFile(
+                            file_handle,
+                            filename=os.path.basename(path),
+                            attach=True,
+                        )
+                    media.append(
+                        InputMediaPhoto(
+                            media=media_file,
+                            caption=caption if start == 0 and offset == 0 else None,
+                        )
                     )
-                    for offset, (_image, path) in enumerate(chunk)
-                ]
                 try:
                     result = await client.send_media_group(
                         media=media,

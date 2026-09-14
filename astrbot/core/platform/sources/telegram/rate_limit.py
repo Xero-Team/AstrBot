@@ -183,6 +183,7 @@ class LimitedTelegramClient:
         "edit_message_text",
         "send_chat_action",
         "send_photo",
+        "send_media_group",
         "send_animation",
         "send_document",
         "send_voice",

@@ -2273,16 +2273,20 @@ async def test_telegram_send_with_client_preserves_multiple_numeric_mentions():
 
 
 @pytest.mark.asyncio
-async def test_telegram_send_with_client_batches_compatible_images():
+async def test_telegram_send_with_client_batches_compatible_images(tmp_path):
     TelegramPlatformEvent = _load_telegram_platform_event()
     client = MockTelegramBuilder.create_bot()
     first = Comp.Image(file="first.jpg")
     second = Comp.Image(file="second.jpg")
+    first_path = tmp_path / "first.jpg"
+    second_path = tmp_path / "second.jpg"
+    first_path.write_bytes(b"first")
+    second_path.write_bytes(b"second")
 
     with patch.object(
         type(first),
         "convert_to_file_path",
-        AsyncMock(side_effect=["first.jpg", "second.jpg"]),
+        AsyncMock(side_effect=[str(first_path), str(second_path)]),
     ):
         await TelegramPlatformEvent.send_with_client(
             client,
@@ -2293,6 +2297,7 @@ async def test_telegram_send_with_client_batches_compatible_images():
     client.send_media_group.assert_awaited_once()
     media = client.send_media_group.await_args.kwargs["media"]
     assert len(media) == 2
+    assert all(item.media.attach_name for item in media)
     tg_event_module = _load_telegram_module(
         "astrbot.core.platform.sources.telegram.tg_event"
     )

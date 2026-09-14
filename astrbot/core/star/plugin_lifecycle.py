@@ -775,6 +775,8 @@ class PluginLifecycle:
                 download_url=download_url,
                 loader=self._loader,
                 load_plugin=self._load_unlocked,
+                reload_plugin=self._reload_unlocked,
+                terminate_plugin=self.terminate_plugin,
             )
 
     async def install_plugin_from_file(
@@ -789,6 +791,8 @@ class PluginLifecycle:
                 ignore_version_check=ignore_version_check,
                 loader=self._loader,
                 load_plugin=self._load_unlocked,
+                reload_plugin=self._reload_unlocked,
+                terminate_plugin=self.terminate_plugin,
             )
 
     async def update_plugin(

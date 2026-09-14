@@ -125,6 +125,10 @@ class PluginRuntimeLoader:
         """Find packages that use the required ``main.py`` entry point."""
         modules: list[PluginModuleEntry] = []
         for name in os.listdir(path):
+            if name.startswith(
+                (".plugin-install-", ".plugin-upload-", ".plugin-backup-")
+            ):
+                continue
             if not os.path.isdir(os.path.join(path, name)):
                 continue
             if not os.path.exists(os.path.join(path, name, "main.py")):

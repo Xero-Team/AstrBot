@@ -1,5 +1,6 @@
 import os
 import zipfile
+from pathlib import Path
 
 import yaml
 
@@ -23,10 +24,33 @@ class PluginUpdator(RepoZipUpdator):
     def get_plugin_store_path(self) -> str:
         return self.plugin_store_path
 
-    async def install(self, repo_url: str, proxy="", download_url: str = "") -> str:
+    async def install(
+        self,
+        repo_url: str,
+        proxy="",
+        download_url: str = "",
+        *,
+        target_dir: Path | None = None,
+    ) -> str:
+        """Download or clone a plugin into a new directory.
+
+        Args:
+            repo_url: Plugin repository URL.
+            proxy: Optional proxy prefix for repository downloads.
+            download_url: Optional archive URL to use instead of the repository.
+            target_dir: Staging destination supplied by the plugin manager.
+
+        Returns:
+            Path to the extracted or cloned plugin.
+
+        Raises:
+            Exception: If the destination exists or downloading or validation fails.
+        """
         _, repo_name, _ = self.parse_github_url(repo_url)
         repo_name = self.format_name(repo_name)
-        plugin_path = os.path.join(self.plugin_store_path, repo_name)
+        plugin_path = str(target_dir or Path(self.plugin_store_path) / repo_name)
+        if os.path.exists(plugin_path):
+            raise Exception(f"安装失败：目录 {Path(plugin_path).name} 已存在。")
         if download_url:
             logger.info("Downloading plugin archive for %s", repo_name)
             await self._download_file(

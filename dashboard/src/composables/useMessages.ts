@@ -103,6 +103,42 @@ export interface HistoryPaginationState {
   error?: string;
 }
 
+function numericRecordId(id: ChatRecord['id']): number | null {
+  if (id === undefined || id === null || id === '') return null;
+  const value = typeof id === 'number' ? id : Number(id);
+  return Number.isFinite(value) ? value : null;
+}
+
+export function mergeHistoryRecords(
+  existing: ChatRecord[],
+  incoming: ChatRecord[],
+): ChatRecord[] {
+  const merged = [...existing];
+  for (const record of incoming) {
+    if (record.id !== undefined && record.id !== null) {
+      const previous = merged.find(
+        (item) => String(item.id) === String(record.id),
+      );
+      if (previous) {
+        Object.assign(previous, record);
+        continue;
+      }
+    }
+    const incomingId = numericRecordId(record.id);
+    if (incomingId === null) {
+      merged.push(record);
+      continue;
+    }
+    const insertAt = merged.findIndex((item) => {
+      const otherId = numericRecordId(item.id);
+      return otherId !== null && otherId > incomingId;
+    });
+    if (insertAt < 0) merged.push(record);
+    else merged.splice(insertAt, 0, record);
+  }
+  return merged;
+}
+
 export function useMessages(options: UseMessagesOptions) {
   const loadingMessagesState = ref(false);
   const sending = ref(false);
@@ -266,38 +302,19 @@ export function useMessages(options: UseMessagesOptions) {
       await resolveRecordMedia(records);
       if (sessionLoadEpochs.get(sessionId) !== epoch) return;
       const previousPagination = paginationBySession.get(sessionId);
-      if (
-        preserveLoadedPages &&
-        previousPagination &&
-        previousPagination.page > 1
-      ) {
-        const refreshedById = new Map(
-          records
-            .filter((record) => record.id !== undefined && record.id !== null)
-            .map((record) => [String(record.id), record]),
-        );
-        const existing = messagesBySession.get(sessionId) || [];
-        const merged = existing.map(
-          (record) => refreshedById.get(String(record.id)) || record,
-        );
-        const existingIds = new Set(
-          existing
-            .filter((record) => record.id !== undefined && record.id !== null)
-            .map((record) => String(record.id)),
-        );
-        messagesBySession.set(sessionId, [
-          ...merged,
-          ...records.filter(
-            (record) =>
-              record.id === undefined ||
-              record.id === null ||
-              !existingIds.has(String(record.id)),
-          ),
-        ]);
+      const existing = messagesBySession.get(sessionId) || [];
+      if (preserveLoadedPages && existing.length) {
+        const merged = mergeHistoryRecords(existing, records);
+        messagesBySession.set(sessionId, merged);
+        const total =
+          Number(payload.total) || previousPagination?.total || merged.length;
+        const pageSize =
+          Number(payload.page_size) || previousPagination?.page_size || 50;
         paginationBySession.set(sessionId, {
-          ...previousPagination,
-          total: Number(payload.total) || previousPagination.total,
-          has_more: previousPagination.has_more,
+          page: Math.max(1, previousPagination?.page || 1),
+          page_size: pageSize,
+          total,
+          has_more: merged.length < total,
           loading: false,
           error: undefined,
         });
@@ -368,21 +385,11 @@ export function useMessages(options: UseMessagesOptions) {
       await resolveRecordMedia(records);
       if (sessionLoadEpochs.get(sessionId) !== epoch) return;
       const existing = messagesBySession.get(sessionId) || [];
-      const existingIds = new Set(
-        existing
-          .filter((record) => record.id !== undefined && record.id !== null)
-          .map((record) => String(record.id)),
-      );
-      const freshRecords = records.filter(
-        (record: ChatRecord) =>
-          record.id === undefined ||
-          record.id === null ||
-          !existingIds.has(String(record.id)),
-      );
-      messagesBySession.set(sessionId, [...freshRecords, ...existing]);
+      const merged = mergeHistoryRecords(existing, records);
+      messagesBySession.set(sessionId, merged);
       state.page = Number(payload.page) || nextPage;
       state.total = Number(payload.total) || state.total;
-      state.has_more = Boolean(payload.has_more);
+      state.has_more = merged.length < state.total && records.length > 0;
     } catch (error) {
       if (sessionLoadEpochs.get(sessionId) !== epoch) return;
       state.error = String((error as Error)?.message || error);
@@ -564,10 +571,11 @@ export function useMessages(options: UseMessagesOptions) {
     if (payload.truncated_after_message) {
       truncateMessagesAfter(sessionId, record);
       const pagination = paginationBySession.get(sessionId);
-      if (pagination?.has_more) {
+      if (pagination) {
         pagination.page = 0;
         pagination.error = undefined;
       }
+      await loadSessionMessages(sessionId, false, false, true);
     }
     return {
       needsRegenerate: Boolean(payload.needs_regenerate),

@@ -1975,10 +1975,13 @@ async def build_main_agent(
     provider: ChatModel | None = None,
     req: ProviderRequest | None = None,
     apply_reset: bool = True,
+    prepare_request: bool = True,
 ) -> MainAgentBuildResult | None:
     """构建主对话代理（Main Agent），并且自动 reset。
 
     If apply_reset is False, will not call reset on the agent runner.
+    If prepare_request is False, skip JPEG/media preparation so a later
+    OnLLMRequestEvent hook can replace original attachment paths first.
     """
     profile = plugin_context.get_config(umo=event.unified_msg_origin)
     btw = profile.get("btw", {})
@@ -2047,18 +2050,19 @@ async def build_main_agent(
         provider, req, plugin_context, config
     )
 
-    # Main-Agent assembly may add request-scoped text. Prepare the selected
-    # provider request immediately before runner reset.
-    compress_enabled, image_max_size, image_quality = image_compress_args_from_settings(
-        config.provider_settings
-    )
-    req = await prepare_provider_request(
-        req,
-        provider=provider,
-        image_compress_enabled=compress_enabled,
-        image_max_size=image_max_size,
-        image_quality=image_quality,
-    )
+    if prepare_request:
+        # Main-Agent assembly may add request-scoped text. Prepare the selected
+        # provider request immediately before runner reset.
+        compress_enabled, image_max_size, image_quality = (
+            image_compress_args_from_settings(config.provider_settings)
+        )
+        req = await prepare_provider_request(
+            req,
+            provider=provider,
+            image_compress_enabled=compress_enabled,
+            image_max_size=image_max_size,
+            image_quality=image_quality,
+        )
     event.set_extra("provider_request", req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:

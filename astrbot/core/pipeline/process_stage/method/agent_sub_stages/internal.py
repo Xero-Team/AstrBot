@@ -228,7 +228,7 @@ class InternalAgentSubStage:
         req: ProviderRequest,
         provider,
     ) -> None:
-        """Re-prepare media after OnLLMRequestEvent so plugin replacements are converted."""
+        """Prepare media after OnLLMRequestEvent so plugin replacements are converted."""
         settings = getattr(self.main_agent_cfg, "provider_settings", None)
         enabled, max_size, quality = image_compress_args_from_settings(
             settings if isinstance(settings, dict) else None
@@ -314,6 +314,7 @@ class InternalAgentSubStage:
             plugin_context=self.ctx.execution_context,
             config=build_cfg,
             apply_reset=False,
+            prepare_request=False,
         )
         if build_result is None:
             if event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):

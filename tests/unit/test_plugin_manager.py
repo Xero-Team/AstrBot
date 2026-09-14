@@ -1224,6 +1224,56 @@ async def test_install_plugin_from_file_updates_existing_plugin(
 
 
 @pytest.mark.asyncio
+async def test_install_plugin_from_file_restores_previous_files_on_reload_failure(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+    tmp_path: Path,
+):
+    zip_file_path = tmp_path / "plugin_upload_helloworld_v2.zip"
+    zip_file_path.write_text("placeholder", encoding="utf-8")
+    plugin_manager_pm.catalog.runtime_catalogs.plugins.publish(
+        cast(StarMetadata, MockStar())
+    )
+    marker = local_updator / "obsolete.py"
+    marker.write_text("old code", encoding="utf-8")
+    staging = tmp_path / "plugin-staging"
+    staging.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.star.plugin_package_installer.get_astrbot_system_tmp_path",
+        lambda: str(staging),
+    )
+
+    def mock_unzip_file(zip_path: str, target_dir: str) -> None:
+        assert zip_path == str(zip_file_path)
+        _write_local_test_plugin(
+            Path(target_dir),
+            TEST_PLUGIN_REPO,
+            version="2.0.0",
+        )
+
+    reload_plugin = AsyncMock(side_effect=[(False, "load failed"), (True, None)])
+    monkeypatch.setattr(
+        plugin_manager_pm.packages._updator, "unzip_file", mock_unzip_file
+    )
+    monkeypatch.setattr(plugin_manager_pm.lifecycle, "terminate_plugin", AsyncMock())
+    monkeypatch.setattr(
+        plugin_manager_pm.lifecycle,
+        "_reload_unlocked",
+        reload_plugin,
+    )
+
+    with pytest.raises(Exception, match="load failed"):
+        await plugin_manager_pm.lifecycle.install_plugin_from_file(str(zip_file_path))
+
+    assert marker.exists()
+    assert marker.read_text(encoding="utf-8") == "old code"
+    metadata = yaml.safe_load((local_updator / "metadata.yaml").read_text())
+    assert metadata["version"] == "1.0.0"
+    assert reload_plugin.await_count == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_reload_failed_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,

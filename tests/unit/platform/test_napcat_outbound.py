@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -43,6 +45,265 @@ async def test_napcat_outbound_builder_supports_record_video_and_file_segments()
     assert payload[0].to_dict()["data"]["file"] == "https://example.com/demo.wav"
     assert payload[1].to_dict()["data"]["thumb"] == "thumb://cover"
     assert payload[2].to_dict()["data"]["name"] == "demo.txt"
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_encodes_bridged_local_image_as_base64(tmp_path):
+    media = tmp_path / "photo.jpg"
+    image_bytes = b"\xff\xd8\xff\xd9"
+    media.write_bytes(image_bytes)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain([Image.fromFileSystem(media)])
+    )
+
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    data = payload[0].to_dict()["data"]
+    assert data["file"] == "base64://" + base64.b64encode(image_bytes).decode()
+    assert "path" not in data
+    assert "url" not in data
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_encodes_delivery_file_uri_image_as_base64(tmp_path):
+    media = tmp_path / "0.jpg"
+    image_bytes = b"\xff\xd8\xff\xd9"
+    media.write_bytes(image_bytes)
+    uri = media.as_uri()
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain([Image(file=uri, path=uri)])
+    )
+
+    assert isinstance(payload, list)
+    data = payload[0].to_dict()["data"]
+    assert data["file"] == "base64://" + base64.b64encode(image_bytes).decode()
+    assert "path" not in data
+    assert "url" not in data
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_passes_through_http_and_base64_images():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image.fromURL("https://example.com/a.jpg"),
+                Image.fromBase64("dGVzdA=="),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["data"]["file"] for segment in payload] == [
+        "https://example.com/a.jpg",
+        "base64://dGVzdA==",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_prefers_http_url_over_cache_image_name():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image(
+                    file="0d2bb1468a87d64414f8e563cc61c33c.jpg",
+                    url="https://gchat.qpic.cn/demo.jpg",
+                )
+            ]
+        )
+    )
+
+    data = payload[0].to_dict()["data"]
+    assert data["file"] == "https://gchat.qpic.cn/demo.jpg"
+    assert data["url"] == "https://gchat.qpic.cn/demo.jpg"
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_passes_through_bare_napcat_cache_names():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image(file="0d2bb1468a87d64414f8e563cc61c33c.jpg"),
+                Record(file="0d2bb1468a87d64414f8e563cc61c33c.amr"),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["data"] for segment in payload] == [
+        {"file": "0d2bb1468a87d64414f8e563cc61c33c.jpg"},
+        {"file": "0d2bb1468a87d64414f8e563cc61c33c.amr"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_passes_through_unreadable_napcat_cache_paths():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image(
+                    file="napcat-image.png",
+                    url="file:///C:/NapCat/cache/napcat-image.png",
+                ),
+                Record(
+                    file="napcat-record.amr",
+                    url="file:///C:/NapCat/cache/napcat-record.amr",
+                    path="C:/NapCat/cache/napcat-record.amr",
+                ),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["data"] for segment in payload] == [
+        {
+            "file": "napcat-image.png",
+            "url": "file:///C:/NapCat/cache/napcat-image.png",
+        },
+        {
+            "file": "napcat-record.amr",
+            "url": "file:///C:/NapCat/cache/napcat-record.amr",
+            "path": "C:/NapCat/cache/napcat-record.amr",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_passes_through_unreadable_file_uri_image():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Plain("before"),
+                Image(file="file:///missing.jpg"),
+                Plain("after"),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["type"] for segment in payload] == [
+        "text",
+        "image",
+        "text",
+    ]
+    assert payload[1].to_dict()["data"]["file"] == "file:///missing.jpg"
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_encodes_local_record_video_and_file_as_base64(
+    tmp_path,
+):
+    record_bytes = b"#!AMR\nlocal-record"
+    video_bytes = b"\x00\x00\x00\x18ftypmp42"
+    file_bytes = b"attachment-bytes"
+    record_path = tmp_path / "voice.amr"
+    video_path = tmp_path / "clip.mp4"
+    file_path = tmp_path / "note.txt"
+    record_path.write_bytes(record_bytes)
+    video_path.write_bytes(video_bytes)
+    file_path.write_bytes(file_bytes)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Record.fromFileSystem(record_path),
+                Video.fromFileSystem(video_path),
+                File(name="note.txt", file=str(file_path)),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["type"] for segment in payload] == [
+        "record",
+        "video",
+        "file",
+    ]
+    assert payload[0].to_dict()["data"]["file"] == (
+        "base64://" + base64.b64encode(record_bytes).decode()
+    )
+    assert payload[1].to_dict()["data"]["file"] == (
+        "base64://" + base64.b64encode(video_bytes).decode()
+    )
+    assert payload[2].to_dict()["data"]["file"] == (
+        "base64://" + base64.b64encode(file_bytes).decode()
+    )
+    assert payload[2].to_dict()["data"]["name"] == "note.txt"
+    assert "path" not in payload[0].to_dict()["data"]
+    assert "url" not in payload[1].to_dict()["data"]
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_omits_readable_local_path_when_http_url_is_used(
+    tmp_path,
+):
+    media = tmp_path / "photo.jpg"
+    media.write_bytes(b"\xff\xd8\xff\xd9")
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image(
+                    file="https://example.com/a.jpg",
+                    path=str(media),
+                )
+            ]
+        )
+    )
+
+    data = payload[0].to_dict()["data"]
+    assert data["file"] == "https://example.com/a.jpg"
+    assert "path" not in data
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_skips_image_when_base64_encoding_fails(
+    monkeypatch,
+    tmp_path,
+    caplog,
+):
+    media = tmp_path / "photo.jpg"
+    media.write_bytes(b"\xff\xd8\xff\xd9")
+    monkeypatch.setattr(
+        napcat_adapter.MediaResolver,
+        "to_base64",
+        AsyncMock(side_effect=ValueError("unreadable media")),
+    )
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    with caplog.at_level("WARNING"):
+        payload = await adapter._build_outbound_message(
+            MessageChain(
+                [
+                    Plain("before"),
+                    Image.fromFileSystem(media),
+                    Plain("after"),
+                ]
+            )
+        )
+
+    assert isinstance(payload, list)
+    assert [segment.to_dict()["type"] for segment in payload] == [
+        "text",
+        "text",
+        "text",
+    ]
+    assert payload[0].to_dict()["data"]["text"] == "before"
+    assert payload[1].to_dict()["data"]["text"] == "[Image]"
+    assert payload[2].to_dict()["data"]["text"] == "after"
+    assert any(
+        "Failed to encode outbound Image" in message for message in caplog.messages
+    )
 
 
 @pytest.mark.asyncio

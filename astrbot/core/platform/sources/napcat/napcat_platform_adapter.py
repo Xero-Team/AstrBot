@@ -4,7 +4,7 @@ import asyncio
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from time import monotonic
 from typing import Any, cast
 
@@ -63,6 +63,11 @@ from astrbot.core.platform.platform import Platform
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.media_utils import (
+    MediaResolver,
+    file_uri_to_path,
+    is_file_uri,
+)
 
 from ..aiocqhttp.forward_node_splitter import split_long_text_node
 from .codec import (
@@ -156,6 +161,65 @@ from .types import (
 
 _EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
 _SPLIT_SEND_INTERVAL_SECONDS = 0.5
+_PORTABLE_MEDIA_PREFIXES = ("http://", "https://", "base64://")
+_OutboundMedia = Image | Record | Video | File
+
+
+def _outbound_media_candidates(component: _OutboundMedia) -> list[str]:
+    if isinstance(component, File):
+        values = (component.file_, component.url)
+    else:
+        values = (component.file, component.url, component.path)
+    candidates: list[str] = []
+    for value in values:
+        if value and value not in candidates:
+            candidates.append(value)
+    return candidates
+
+
+def _local_media_ref_exists(value: str) -> bool:
+    try:
+        path = Path(file_uri_to_path(value) if is_file_uri(value) else value)
+        return path.exists()
+    except OSError:
+        return False
+
+
+def _first_prefixed_media_ref(
+    candidates: list[str], prefixes: tuple[str, ...]
+) -> str | None:
+    for value in candidates:
+        if value.startswith(prefixes):
+            return value
+    return None
+
+
+def _first_readable_media_ref(candidates: list[str]) -> str | None:
+    for value in candidates:
+        if value.startswith("data:") or _local_media_ref_exists(value):
+            return value
+    return None
+
+
+def _pass_through_media_fields(
+    component: _OutboundMedia, file_value: str
+) -> dict[str, str | None]:
+    if file_value.startswith("base64://"):
+        return {}
+    extra: dict[str, str | None] = {}
+    url = component.url or None
+    if url and (
+        url.startswith(_PORTABLE_MEDIA_PREFIXES)
+        or url == file_value
+        or (is_file_uri(url) and not _local_media_ref_exists(url))
+    ):
+        extra["url"] = url
+    if isinstance(component, File):
+        return extra
+    path = component.path or None
+    if path and not _local_media_ref_exists(path):
+        extra["path"] = path
+    return extra
 
 
 class NapCatOutboundProtocol:
@@ -1167,6 +1231,35 @@ class NapCatPlatformAdapter(Platform):
             return True
         return False
 
+    @staticmethod
+    async def _portable_media_file(component: _OutboundMedia) -> str | None:
+        """Return a OneBot file value NapCat can consume without AstrBot paths."""
+        candidates = _outbound_media_candidates(component)
+        portable = _first_prefixed_media_ref(candidates, _PORTABLE_MEDIA_PREFIXES)
+        if portable:
+            return portable
+        readable = _first_readable_media_ref(candidates)
+        if readable is None:
+            return candidates[0] if candidates else None
+        try:
+            encoded = await MediaResolver(readable, media_type="file").to_base64()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "[NapCat] Failed to encode outbound %s: %s",
+                component.__class__.__name__,
+                safe_error("", exc),
+            )
+            return None
+        if not encoded:
+            logger.warning(
+                "[NapCat] Outbound %s encoding produced an empty payload",
+                component.__class__.__name__,
+            )
+            return None
+        return f"base64://{encoded}"
+
     async def _append_media_outbound_segment(
         self,
         component: BaseMessageComponent,
@@ -1175,54 +1268,50 @@ class NapCatPlatformAdapter(Platform):
     ) -> bool:
         """Convert image, audio, video, and file components."""
         if isinstance(component, Image | Record | Video):
-            file_value = component.file or component.url or component.path
-            if not file_value:
-                return False
+            file_value = await self._portable_media_file(component)
             if isinstance(component, Image):
-                segments.append(
-                    self.client.image(
-                        file=file_value,
-                        url=component.url or None,
-                        path=component.path or None,
-                    )
-                )
-                fallback_parts.append("[Image]")
+                label = "[Image]"
             elif isinstance(component, Record):
-                segments.append(
-                    self.client.record(
-                        file=file_value,
-                        url=component.url or None,
-                        path=component.path or None,
-                    )
-                )
-                fallback_parts.append("[Record]")
+                label = "[Record]"
+            else:
+                label = "[Video]"
+            if not file_value:
+                segments.append(self.client.text(label))
+                fallback_parts.append(label)
+                return True
+            extra = _pass_through_media_fields(component, file_value)
+            if isinstance(component, Image):
+                segments.append(self.client.image(file=file_value, **extra))
+            elif isinstance(component, Record):
+                segments.append(self.client.record(file=file_value, **extra))
             else:
                 segments.append(
                     self.client.video(
                         file=file_value,
-                        url=component.url or None,
-                        path=component.path or None,
                         thumb=component.cover or None,
+                        **extra,
                     )
                 )
-                fallback_parts.append("[Video]")
+            fallback_parts.append(label)
             return True
 
         if not isinstance(component, File):
             return False
-        file_value = await component.get_file(allow_return_url=True)
+        file_value = await self._portable_media_file(component)
+        label = f"[File:{component.name}]" if component.name else "[File]"
         if not file_value:
-            return False
+            segments.append(self.client.text(label))
+            fallback_parts.append(label)
+            return True
+        extra = _pass_through_media_fields(component, file_value)
         segments.append(
             self.client.file(
                 file=file_value,
-                url=component.url or None,
                 name=component.name or None,
+                **extra,
             )
         )
-        fallback_parts.append(
-            f"[File:{component.name}]" if component.name else "[File]"
-        )
+        fallback_parts.append(label)
         return True
 
     async def _build_outbound_message(

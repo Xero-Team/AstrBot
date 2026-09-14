@@ -13,25 +13,9 @@ from tests.unit.platform.napcat_adapter_support import *  # noqa: F403
 
 pytestmark = pytest.mark.platform
 
-_IMAGE_BASE64 = "dGVzdA=="
-_RECORD_BASE64 = "cmVjb3Jk"
-
 
 def _zero_split_send_interval(monkeypatch) -> None:
     monkeypatch.setattr(napcat_adapter, "_SPLIT_SEND_INTERVAL_SECONDS", 0.0)
-
-
-def _patch_media_converters(monkeypatch) -> None:
-    monkeypatch.setattr(
-        Image,
-        "convert_to_base64",
-        AsyncMock(return_value=_IMAGE_BASE64),
-    )
-    monkeypatch.setattr(
-        Record,
-        "convert_to_base64",
-        AsyncMock(return_value=_RECORD_BASE64),
-    )
 
 
 def _napcat_types(call) -> list[str]:
@@ -39,10 +23,7 @@ def _napcat_types(call) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_napcat_outbound_builder_supports_record_video_and_file_segments(
-    monkeypatch,
-):
-    _patch_media_converters(monkeypatch)
+async def test_napcat_outbound_builder_supports_record_video_and_file_segments():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     payload = await adapter._build_outbound_message(
@@ -61,7 +42,7 @@ async def test_napcat_outbound_builder_supports_record_video_and_file_segments(
         "video",
         "file",
     ]
-    assert payload[0].to_dict()["data"] == {"file": f"base64://{_RECORD_BASE64}"}
+    assert payload[0].to_dict()["data"]["file"] == "https://example.com/demo.wav"
     assert payload[1].to_dict()["data"]["thumb"] == "thumb://cover"
     assert payload[2].to_dict()["data"]["name"] == "demo.txt"
 
@@ -86,7 +67,119 @@ async def test_napcat_outbound_encodes_bridged_local_image_as_base64(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_napcat_outbound_skips_image_when_base64_encoding_fails(monkeypatch):
+async def test_napcat_outbound_encodes_delivery_file_uri_image_as_base64(tmp_path):
+    media = tmp_path / "0.jpg"
+    image_bytes = b"\xff\xd8\xff\xd9"
+    media.write_bytes(image_bytes)
+    uri = media.as_uri()
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain([Image(file=uri, path=uri)])
+    )
+
+    assert isinstance(payload, list)
+    data = payload[0].to_dict()["data"]
+    assert data["file"] == "base64://" + base64.b64encode(image_bytes).decode()
+    assert "path" not in data
+    assert "url" not in data
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_passes_through_http_and_base64_images():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image.fromURL("https://example.com/a.jpg"),
+                Image.fromBase64("dGVzdA=="),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["data"]["file"] for segment in payload] == [
+        "https://example.com/a.jpg",
+        "base64://dGVzdA==",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_prefers_http_url_over_cache_image_name():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image(
+                    file="0d2bb1468a87d64414f8e563cc61c33c.jpg",
+                    url="https://gchat.qpic.cn/demo.jpg",
+                )
+            ]
+        )
+    )
+
+    data = payload[0].to_dict()["data"]
+    assert data["file"] == "https://gchat.qpic.cn/demo.jpg"
+    assert data["url"] == "https://gchat.qpic.cn/demo.jpg"
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_passes_through_bare_napcat_cache_names():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain(
+            [
+                Image(file="0d2bb1468a87d64414f8e563cc61c33c.jpg"),
+                Record(file="0d2bb1468a87d64414f8e563cc61c33c.amr"),
+            ]
+        )
+    )
+
+    assert [segment.to_dict()["data"] for segment in payload] == [
+        {"file": "0d2bb1468a87d64414f8e563cc61c33c.jpg"},
+        {"file": "0d2bb1468a87d64414f8e563cc61c33c.amr"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_skips_unreadable_file_uri_image(caplog):
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    with caplog.at_level("WARNING"):
+        payload = await adapter._build_outbound_message(
+            MessageChain(
+                [
+                    Plain("before"),
+                    Image(file="file:///missing.jpg"),
+                    Plain("after"),
+                ]
+            )
+        )
+
+    assert isinstance(payload, list)
+    assert [segment.to_dict()["type"] for segment in payload] == [
+        "text",
+        "text",
+        "text",
+    ]
+    assert payload[0].to_dict()["data"]["text"] == "before"
+    assert payload[1].to_dict()["data"]["text"] == "[Image]"
+    assert payload[2].to_dict()["data"]["text"] == "after"
+    assert any(
+        "Omitting unreadable outbound Image" in message for message in caplog.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_skips_image_when_base64_encoding_fails(
+    monkeypatch,
+    tmp_path,
+    caplog,
+):
+    media = tmp_path / "photo.jpg"
+    media.write_bytes(b"\xff\xd8\xff\xd9")
     monkeypatch.setattr(
         Image,
         "convert_to_base64",
@@ -94,20 +187,29 @@ async def test_napcat_outbound_skips_image_when_base64_encoding_fails(monkeypatc
     )
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
-    payload = await adapter._build_outbound_message(
-        MessageChain(
-            [
-                Plain("before"),
-                Image(file="file:///missing.jpg"),
-                Plain("after"),
-            ]
+    with caplog.at_level("WARNING"):
+        payload = await adapter._build_outbound_message(
+            MessageChain(
+                [
+                    Plain("before"),
+                    Image.fromFileSystem(media),
+                    Plain("after"),
+                ]
+            )
         )
-    )
 
     assert isinstance(payload, list)
-    assert [segment.to_dict()["type"] for segment in payload] == ["text", "text"]
+    assert [segment.to_dict()["type"] for segment in payload] == [
+        "text",
+        "text",
+        "text",
+    ]
     assert payload[0].to_dict()["data"]["text"] == "before"
-    assert payload[1].to_dict()["data"]["text"] == "after"
+    assert payload[1].to_dict()["data"]["text"] == "[Image]"
+    assert payload[2].to_dict()["data"]["text"] == "after"
+    assert any(
+        "Failed to encode outbound Image" in message for message in caplog.messages
+    )
 
 
 @pytest.mark.asyncio
@@ -427,7 +529,6 @@ async def test_napcat_send_by_session_supports_forward_nodes(monkeypatch):
 @pytest.mark.asyncio
 async def test_napcat_send_by_session_splits_video_from_text_and_image(monkeypatch):
     _zero_split_send_interval(monkeypatch)
-    _patch_media_converters(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.send_group_message = AsyncMock()
@@ -464,7 +565,6 @@ async def test_napcat_send_by_session_splits_video_from_text_and_image(monkeypat
 @pytest.mark.asyncio
 async def test_napcat_send_by_session_splits_record_from_text_and_image(monkeypatch):
     _zero_split_send_interval(monkeypatch)
-    _patch_media_converters(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.send_group_message = AsyncMock()
@@ -492,7 +592,7 @@ async def test_napcat_send_by_session_splits_record_from_text_and_image(monkeypa
     assert _napcat_types(record) == ["record"]
     assert (
         record.kwargs["message"][0].to_dict()["data"]["file"]
-        == f"base64://{_RECORD_BASE64}"
+        == "https://example.com/a.wav"
     )
     assert _napcat_types(last) == ["text"]
     assert last.kwargs["message"][0].to_dict()["data"]["text"] == "after"
@@ -503,7 +603,6 @@ async def test_napcat_send_by_session_keeps_mixable_neighbors_around_file(
     monkeypatch,
 ):
     _zero_split_send_interval(monkeypatch)
-    _patch_media_converters(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)
     adapter.client.send_group_message = AsyncMock()

@@ -605,6 +605,19 @@ class StopBetweenChunksExecutor:
         yield "second"
 
 
+class _StopMidRunExecutor:
+    """A local work run stopped mid-flight by the agent stop request.
+
+    ``/task stop`` for a local Agent goes through ``request_agent_stop_all``,
+    which sets the extra and never touches the event's own stop flag.
+    """
+
+    async def process(self, event):
+        yield None
+        event.set_extra("agent_stop_requested", True)
+        yield None
+
+
 @pytest.mark.asyncio
 async def test_stopped_run_never_delivers_the_chunks_after_the_stop(tmp_path):
     """A local run keeps yielding; delivery must stop at the stop flag."""
@@ -668,3 +681,51 @@ async def test_queued_work_never_starts_once_its_request_is_stopped(tmp_path):
 
     assert executor.started == ["running"]
     assert queued_session.status is WorkSessionStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_stopped_third_party_work_stops_on_the_agent_stop_request(tmp_path):
+    """``/task stop`` on a third-party run sets the agent stop, not the flag.
+
+    ``request_agent_stop_all`` is what the command uses for a third-party
+    runner, and it never calls ``stop_event``.  A stop that only reads the
+    event's own flag keeps draining the runner and finishes as ``failed``.
+    """
+    registry = ActiveEventRegistry()
+    event = _work_event(tmp_path)
+    registry.register(event)
+    chunks = [_third_party_chunk(text) for text in ("one", "two", "three")]
+    runner = StoppingThirdPartyRunner(
+        chunks, lambda: registry.request_agent_stop_all(event.unified_msg_origin)
+    )
+    work, dispatcher = _stoppable_work(runner, registry)
+
+    session = await work.schedule(event)
+    await asyncio.wait_for(next(iter(work._tasks)), timeout=5)
+
+    assert runner.consumed < len(chunks)
+    dispatcher.assert_not_awaited()
+    assert event.result is None
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert event.cleaned == 1
+    assert not registry._events
+
+
+@pytest.mark.asyncio
+async def test_stopped_local_work_is_cancelled_not_completed(tmp_path):
+    """An admitted stop request must not read as a finished local run.
+
+    A local non-streaming run consumes every response and yields progress, so
+    the terminal status is the only place the stop can show up.  Reading only
+    ``is_stopped`` reports it as ``completed``.
+    """
+    event = _work_event(tmp_path)
+    sessions = WorkSessionManager()
+    work = WorkLoop(_StopMidRunExecutor(), sessions)
+
+    output = [item async for item in work.process(event)]
+
+    assert output == [None, None]
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.CANCELLED

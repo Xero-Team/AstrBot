@@ -35,7 +35,10 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.llm_types import LLMResponse
     from astrbot.core.agent.runners.base import BaseAgentRunner
-from astrbot.core.agent.btw.types import THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY
+from astrbot.core.agent.btw.types import (
+    THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
+    stop_requested,
+)
 from astrbot.core.agent.llm_types import (
     ProviderRequest,
 )
@@ -249,7 +252,7 @@ class ThirdPartyAgentSubStage:
                     max_step=max_step,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
-                    should_stop=event.is_stopped,
+                    should_stop=lambda: stop_requested(event),
                 ):
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
@@ -267,7 +270,7 @@ class ThirdPartyAgentSubStage:
         )
         yield
 
-        if event.is_stopped():
+        if stop_requested(event):
             # A stopped request did not fail.  Report nothing instead of the
             # fallback error an unfinished runner would otherwise produce.
             return
@@ -299,14 +302,14 @@ class ThirdPartyAgentSubStage:
             max_step=max_step,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
-            should_stop=event.is_stopped,
+            should_stop=lambda: stop_requested(event),
         ):
             aggregator.add_chunk(chain, is_error)
             if is_error:
                 event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
             yield
 
-        if event.is_stopped():
+        if stop_requested(event):
             # A stopped request did not fail.  Report nothing instead of the
             # fallback error an unfinished runner would otherwise produce.
             return

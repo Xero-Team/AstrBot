@@ -372,6 +372,44 @@ async def test_work_loop_records_third_party_runner_error_as_failed():
 
 
 @pytest.mark.asyncio
+async def test_work_loop_records_an_error_that_arrives_with_a_stop_as_failed():
+    """A run that errored and was then stopped is a failure, not a cancel.
+
+    ``run_agent`` skips the rest of a response once a stop is pending, so an
+    ``err`` that arrives with a stop request must be recorded before that gate
+    or the work loop never learns the run failed.  The stop has to land after
+    the run started: one that is already set when the work loop picks the task
+    up cancels it before it ever reaches the executor.
+    """
+    event = WorkEvent()
+    marker_written = []
+
+    class ErrThenStopRunner(FakeRunner):
+        """Deliver the ``err`` response and the stop request together."""
+
+        async def step(self):
+            event.set_extra("agent_stop_requested", True)
+            async for response in super().step():
+                yield response
+
+    runner = ErrThenStopRunner(
+        [SimpleNamespace(type="err", data={"chain": MessageChain().message("boom")})],
+        event=event,
+    )
+    sessions = WorkSessionManager()
+    work_loop = WorkLoop(RunAgentExecutor(runner), sessions)
+
+    _ = [item async for item in work_loop.process(event)]
+    marker_written.append(event.get_extra("btw_work_failed"))
+
+    assert marker_written == [True]
+    assert event.get_extra("agent_stop_requested") is True
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+
+
+@pytest.mark.asyncio
 async def test_work_loop_records_a_run_the_session_refused_as_failed():
     """Session admission can decline a work run before any Agent is built."""
     event = WorkEvent()

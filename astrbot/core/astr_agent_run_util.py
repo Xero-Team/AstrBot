@@ -338,7 +338,10 @@ async def run_agent(
                     if resp.type == "err":
                         # The run turns this into a user-facing error result and
                         # ends normally, so the work loop cannot tell it apart
-                        # from a task that produced an answer.
+                        # from a task that produced an answer.  This is recorded
+                        # before the stop gate below, which would otherwise skip
+                        # an error that arrived together with a stop request and
+                        # leave a failed work run reading as cancelled.
                         mark_work_run_failed(astr_event)
                     if _should_stop_agent(astr_event):
                         continue

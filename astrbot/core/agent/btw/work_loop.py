@@ -17,6 +17,7 @@ from .types import (
     WORK_FAILED_EXTRA,
     WorkSession,
     WorkSessionStatus,
+    stop_requested,
 )
 from .work_sessions import WorkSessionManager
 
@@ -248,7 +249,7 @@ class WorkLoop:
         produced = False
         try:
             async with self._semaphore:
-                if event.is_stopped():
+                if stop_requested(event):
                     # The request was stopped while this run waited its turn, so
                     # it never starts work the user already withdrew.
                     await self.sessions.update_status(
@@ -280,16 +281,7 @@ class WorkLoop:
             failed = bool(event.get_extra(WORK_FAILED_EXTRA)) or bool(
                 event.get_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY)
             )
-            # A stopped event, an admitted stop request, and a run that reported
-            # its own abort are all cancellations.  ``run_agent`` clears
-            # ``agent_stop_requested`` when it reports the abort, and a
-            # third-party stop only sets the event's own flag, so neither signal
-            # alone covers every way a work run is cancelled.
-            cancelled = (
-                event.is_stopped()
-                or bool(event.get_extra("agent_stop_requested"))
-                or bool(event.get_extra("agent_user_aborted"))
-            )
+            cancelled = stop_requested(event)
             # An executor that produced nothing never reached an Agent: a run
             # the session turned away is the reported case.  The generator
             # ending only proves the task ran when something actually ran.
@@ -313,7 +305,7 @@ class WorkLoop:
         try:
             async with aclosing(self._execute(event, session_id)) as execution:
                 async for _ in execution:
-                    if event.is_stopped():
+                    if stop_requested(event):
                         # Closing the execution releases the executor and the
                         # runner behind it.  This ends the local run and its
                         # waiting only: whether the remote service stopped its
